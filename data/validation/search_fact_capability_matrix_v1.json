@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-02",
+  "source_bundle_version": "bangalore-catalog-60-coherent-2026-08-01-run-4f169729-4564-4f33-b552-0d8dc6c562a0",
+  "source_bundle_path": "data/lake/serving/search_bundle/version=bangalore-catalog-60-coherent-2026-08-01-run-4f169729-4564-4f33-b552-0d8dc6c562a0",
+  "bundle_counts": {
+    "entities": 286,
+    "facts": 6901,
+    "search_metadata": 6754,
+    "edges": 1894,
+    "societies": 23,
+    "places": 223
+  },
+  "selection_policy": [
+    "Select societies from the promoted Parquet, never from preferred benchmark answers.",
+    "Cover listing constraints, named areas, direct near_place evidence, lifecycle facts, and sparse environmental facts.",
+    "Keep additional societies as transfer cases so project-specific branches cannot satisfy the suite.",
+    "Treat absent facts as abstention or learning-gap contracts, not failed relevance contracts."
+  ],
+  "selected_societies": [
+    {
+      "entity_id": "society:rera-53c0b81882e6acc6",
+      "name": "PRESTIGE WATERFORD",
+      "area": "Whitefield",
+      "configurations": ["2BHK", "2.5BHK", "3BHK", "4BHK"],
+      "listing_prices": {"1BHK": 14000000, "3BHK": 34750000, "4BHK": 45200000},
+      "direct_proximity": [
+        {"fact_key": "nearby_hospitals", "entity_id": "place:google:chijocj7bfwrrjsrzhab8omuynq", "name": "Manipal Hospital Whitefield", "distance_m": 1600},
+        {"fact_key": "nearby_tech_parks", "entity_id": "place:google:chijbr0arpsrrjsrfy3bmjy-dma", "name": "International Tech Park Bengaluru (ITPB)", "distance_m": 800}
+      ],
+      "project_facts": {"project_land_area_acres": 16.51, "project_open_area_pct": 88.86, "home_state": "delivered", "rera_delay_months": 9},
+      "known_absent_for_contracts": ["nearby_metro_stations", "waterlogging_risk_score", "operating.tanker_dependence"]
+    },
+    {
+      "entity_id": "society:rera-55b9f3b5370894cd",
+      "name": "Purva Westend",
+      "area": "Kudlu Gate",
+      "configurations": ["1BHK", "2BHK", "3BHK"],
+      "listing_prices": {"2BHK": 19000000, "3BHK": 27500000},
+      "direct_proximity": [
+        {"fact_key": "nearby_metro_stations", "entity_id": "place:google:chijiaksxv8vrjsr-uxlc2ykep0", "name": "Kudlu Gate Metro Station", "distance_m": 200},
+        {"fact_key": "nearby_tech_parks", "entity_id": "place:google:chijgvafrl4urjsr9lpqtao95lu", "name": "Ozone Manay Technology Park", "distance_m": 200}
+      ],
+      "project_facts": {"project_land_area_acres": 7.87, "project_open_area_pct": 69.0, "home_state": "delivered"},
+      "known_absent_for_contracts": ["google_rating", "google_review_count"]
+    },
+    {
+      "entity_id": "society:rera-ca22a221f0b66506",
+      "name": "Prestige Southern Star",
+      "area": "Begur Village Begur Hobli Bengaluru South",
+      "configurations": ["1BHK", "2BHK", "3BHK", "4BHK"],
+      "listing_prices": {"1BHK": 8430000, "2BHK": 13900000, "3BHK": 22400000, "4BHK": 33700000},
+      "direct_proximity": [
+        {"fact_key": "nearby_lakes", "entity_id": "place:google:chijv-urjjvrrjsr0uvtij8wyhm", "name": "Begur Lake", "distance_m": 800}
+      ],
+      "project_facts": {"home_state": "under_construction", "stormwater_drain_nearby": "drain (237 m, stormwater_drain, severity: info)"}
+    },
+    {
+      "entity_id": "society:rera-de36720f386e8a3f",
+      "name": "PRESTIGE FALCON CITY",
+      "area": "Kanakapura Road",
+      "configurations": ["2BHK", "2.5BHK", "3BHK", "4BHK"],
+      "listing_prices": {"2BHK": 22500000, "3BHK": 31250000, "4BHK": 65000000},
+      "direct_proximity": [
+        {"fact_key": "nearby_metro_stations", "entity_id": "place:google:chijg1zkzfgvrjsrvmu8w6vku88", "name": "Konanakunte Cross", "distance_m": 300},
+        {"fact_key": "nearby_schools", "entity_id": "place:google:chijmbkhyguzrjsr7lf7mgqbd3c", "name": "Delhi Public School Bengaluru South", "distance_m": 800}
+      ],
+      "project_facts": {"project_land_area_acres": 30.59, "project_open_area_pct": 88.39, "home_state": "delivered"}
+    },
+    {
+      "entity_id": "society:rera-3cf3565aa4739401",
+      "name": "Prestige Park Square",
+      "area": "Bannerghatta Road",
+      "configurations": ["2BHK", "3BHK"],
+      "listing_prices": {"2BHK": 16300000, "3BHK": 25500000, "4BHK": 30000000},
+      "direct_proximity": [
+        {"fact_key": "nearby_lakes", "entity_id": "place:google:chijmsq4i1zrrjsrdlyp-frwyzs", "name": "Basavanpura Lake/Kere", "distance_m": 200},
+        {"fact_key": "nearby_schools", "entity_id": "place:google:chij-xnuketqrjsrivumgy7vjdg", "name": "Sherwood High - Learn. Lead. Succeed", "distance_m": 300},
+        {"fact_key": "nearby_hospitals", "entity_id": "place:google:chijb2-2zwbrrjsr0lupj9lftvq", "name": "Sri Banashankari Hospital", "distance_m": 300}
+      ],
+      "project_facts": {"project_land_area_acres": 8.13, "project_open_area_pct": 81.0, "lake_within_250m": true, "home_state": "delivered"}
+    }
+  ],
+  "milestone_1_societies": [
+    {
+      "selection_rank": 1,
+      "family": "builder_rera",
+      "entity_id": "society:rera-53117ea502ea0cd0",
+      "name": "SNN RAJ SERENITY",
+      "area": "Begur Village",
+      "proved_facts": {
+        "rera_builder_revocations": 0,
+        "rera_builder_projects_count": 2
+      }
+    },
+    {
+      "selection_rank": 2,
+      "family": "lifecycle",
+      "entity_id": "society:rera-699d44c234988565",
+      "name": "SNN Raj Spiritua",
+      "area": "JP Nagar",
+      "proved_facts": {
+        "home_state": "delivered"
+      }
+    },
+    {
+      "selection_rank": 3,
+      "family": "google_reviews",
+      "entity_id": "society:rera-8ccb1e0250853039",
+      "name": "PRESTIGE BAGAMANE TEMPLE BELLS",
+      "area": "Rajarajeshwari Nagar",
+      "proved_facts": {
+        "google_rating": 4.5,
+        "google_review_count": 870,
+        "google_review_snippets": "present"
+      }
+    },
+    {
+      "selection_rank": 4,
+      "family": "listing_price_proof",
+      "entity_id": "society:rera-e68d15500e147ecd",
+      "name": "Brigade 7 Gardens",
+      "area": "Banashankari",
+      "proved_facts": {
+        "listing_3bhk": "present",
+        "listing_price_3bhk": 15100000
+      }
+    },
+    {
+      "selection_rank": 5,
+      "family": "transmission_flood",
+      "entity_id": "society:rera-f5582864641239f3",
+      "name": "SHRIRAM SOUTHERN CREST",
+      "area": "JP Nagar",
+      "proved_facts": {},
+      "known_absent_for_contracts": [
+        "high_voltage_transmission_line_nearby",
+        "waterlogging_risk_score",
+        "flooding_risk"
+      ],
+      "classification": "data_gap"
+    }
+  ],
+  "transfer_societies": [
+    {"entity_id": "society:rera-d3090a201815d30f", "name": "Prestige Botanique", "area": "Basavanagudi", "anchor": "National College", "anchor_distance_m": 800},
+    {"entity_id": "society:rera-dcee93ea77d09eb0", "name": "SNN Raj Grandeur", "area": "Bommanahalli", "anchor": "Bommanahalli Metro Station", "anchor_distance_m": 1000},
+    {"entity_id": "society:rera-d774ef30eda76527", "name": "PRESTIGE LAKE RIDGE PHASE 1", "area": "Uttarahalli", "anchor": "National Public School Uttarahalli", "anchor_distance_m": 1200},
+    {"entity_id": "society:rera-697fbbfce88898f2", "name": "Mantri Tranquil", "area": "Kanakapura Road", "anchor": "Doddakallasandra", "anchor_distance_m": 900},
+    {"entity_id": "society:rera-2a8457298f16cc42", "name": "Sobha Forest Edge", "area": "Kanakapura Road", "anchor": "Turahalli Tree Park", "anchor_distance_m": 300}
+  ]
+}

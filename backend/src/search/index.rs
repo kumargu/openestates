@@ -2,11 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use crate::models::Property;
 use crate::routes::enrichment::society_node_id;
-use crate::serving::TantivyRecallHit;
+use crate::serving::{unique_society_aliases, ServingEntityRecord, TantivyRecallHit};
 
 use super::analyzer;
 use super::intent::SearchIntent;
-use super::semantic::SemanticRecallHit;
 use crate::dag_config::area_alias_entries;
 
 /// In-memory recall index for local search.
@@ -32,6 +31,26 @@ impl SearchIndex {
         let mut index = Self::default();
         for property in properties {
             index.insert(property);
+        }
+        index
+    }
+
+    /// Build property recall mappings with canonical society identities from
+    /// the promoted serving bundle. Runtime properties retain readable society
+    /// slugs, while serving documents use canonical entity IDs.
+    pub fn build_with_serving_entities(
+        properties: &[Property],
+        entities: &[ServingEntityRecord],
+    ) -> Self {
+        let mut index = Self::build(properties);
+        for (alias, canonical_id) in unique_society_aliases(entities) {
+            let Some(property_ids) = index.by_society_node.get(&alias).cloned() else {
+                continue;
+            };
+            let canonical_property_ids = index.by_society_node.entry(canonical_id).or_default();
+            for property_id in property_ids {
+                push_unique(canonical_property_ids, &property_id);
+            }
         }
         index
     }
@@ -115,6 +134,9 @@ impl SearchIndex {
         }
 
         if candidate.is_none() {
+            if !intent.hard_constraints.is_empty() {
+                return self.all_ids.clone();
+            }
             let token_ids = self.token_candidates_ranked(query);
             if !token_ids.is_empty() {
                 return token_ids;
@@ -132,56 +154,25 @@ impl SearchIndex {
     pub fn property_ids_for_entity_hits(&self, hits: &[TantivyRecallHit]) -> Vec<String> {
         let mut ids = Vec::new();
         for hit in hits {
-            if let Some(property_id) = self.by_property_node.get(&hit.entity_id) {
-                push_unique(&mut ids, property_id);
-            } else if hit.entity_id.starts_with("society:") {
-                if let Some(property_ids) = self.by_society_node.get(&hit.entity_id) {
-                    for property_id in property_ids {
-                        push_unique(&mut ids, property_id);
-                    }
-                }
+            for property_id in self.property_ids_for_entity_id(&hit.entity_id) {
+                push_unique(&mut ids, &property_id);
             }
         }
         ids
     }
 
-    pub fn property_scores_for_semantic_hits(
-        &self,
-        hits: &[SemanticRecallHit],
-    ) -> HashMap<String, f64> {
-        let mut scores = HashMap::new();
-        for hit in hits {
-            if let Some(property_id) = self.by_property_node.get(&hit.entity_id) {
-                merge_score(&mut scores, property_id, hit.score);
-                continue;
-            }
-            if hit.entity_id.starts_with("society:") {
-                if let Some(property_ids) = self.by_society_node.get(&hit.entity_id) {
-                    for property_id in property_ids {
-                        merge_score(&mut scores, property_id, hit.score);
-                    }
-                }
-            }
+    pub fn property_ids_for_entity_id(&self, entity_id: &str) -> Vec<String> {
+        if let Some(property_id) = self.by_property_node.get(entity_id) {
+            return vec![property_id.clone()];
         }
-        scores
-    }
-
-    pub fn property_ids_for_semantic_hits(&self, hits: &[SemanticRecallHit]) -> Vec<String> {
-        let mut ids = Vec::new();
-        for hit in hits {
-            if let Some(property_id) = self.by_property_node.get(&hit.entity_id) {
-                push_unique(&mut ids, property_id);
-                continue;
-            }
-            if hit.entity_id.starts_with("society:") {
-                if let Some(property_ids) = self.by_society_node.get(&hit.entity_id) {
-                    for property_id in property_ids {
-                        push_unique(&mut ids, property_id);
-                    }
-                }
-            }
+        if entity_id.starts_with("society:") {
+            return self
+                .by_society_node
+                .get(entity_id)
+                .cloned()
+                .unwrap_or_default();
         }
-        ids
+        Vec::new()
     }
 
     pub fn property_indexes_for_ids(&self, ids: &[String]) -> Vec<usize> {
@@ -304,6 +295,20 @@ pub fn text_field_matches_term(field_lower: &str, term: &str) -> bool {
     if field_lower.contains(term) {
         return true;
     }
+
+    let surface_terms = analyzer::surface_tokens(term, &[]);
+    if surface_terms.iter().any(|term| term.len() >= 4)
+        && analyzer::surface_tokens(field_lower, &[])
+            .iter()
+            .any(|word| {
+                surface_terms
+                    .iter()
+                    .any(|term| token_matches_query(term, word))
+            })
+    {
+        return true;
+    }
+
     let terms = analyzer::stemmed_tokens(term);
     if terms.iter().all(|term| term.len() < 4) {
         return false;
@@ -365,13 +370,6 @@ fn push_unique(ids: &mut Vec<String>, id: &str) {
     }
 }
 
-fn merge_score(scores: &mut HashMap<String, f64>, property_id: &str, score: f64) {
-    scores
-        .entry(property_id.to_string())
-        .and_modify(|existing| *existing = existing.max(score))
-        .or_insert(score);
-}
-
 fn normalize(value: &str) -> String {
     value.trim().to_lowercase()
 }
@@ -424,6 +422,7 @@ mod tests {
     #[test]
     fn text_field_matches_term_handles_society_name() {
         assert!(text_field_matches_term("prestige waterford", "wateford"));
+        assert!(text_field_matches_term("brigade 7 gardens", "brgade"));
     }
 
     #[test]
@@ -452,6 +451,27 @@ mod tests {
     }
 
     #[test]
+    fn recall_ids_handles_single_deletion_in_builder_token() {
+        let property = test_property("prop-1", "brigade-7-gardens");
+        let index = SearchIndex::build(&[property]);
+        let intent = SearchIntent {
+            area: None,
+            excluded_areas: Vec::new(),
+            bhk: None,
+            budget_max: None,
+            hard_constraints: Vec::new(),
+            preferences: Vec::new(),
+            positive_preferences: Vec::new(),
+            negative_preferences: Vec::new(),
+            accepted_tradeoffs: Vec::new(),
+            unsupported_inventory_types: Vec::new(),
+            buyer_archetype: None,
+        };
+
+        assert_eq!(index.recall_ids("brgade", &intent), vec!["prop-1"]);
+    }
+
+    #[test]
     fn exact_society_name_recall_seeds_candidates_before_area_vocab() {
         let mut target = test_property("falcon-3bhk", "prestige-falcon-city");
         target.title = "Prestige Falcon City".to_string();
@@ -466,6 +486,25 @@ mod tests {
         assert_eq!(
             index.recall_ids("Prestige Falcon City", &intent),
             vec!["falcon-3bhk"]
+        );
+    }
+
+    #[test]
+    fn unitless_hard_constraints_recall_the_local_corpus_before_fact_filtering() {
+        let mut alpha = test_property("alpha", "alpha");
+        alpha.area = "Whitefield".to_string();
+        alpha.bhk = 2;
+        let mut beta = test_property("beta", "beta");
+        beta.area = "Electronic City".to_string();
+        let properties = vec![alpha, beta];
+        let index = SearchIndex::build(&properties);
+        let intent = crate::search::intent::parse_intent(
+            "homes with Google rating at least 4.2 and at least 100 reviews",
+        );
+
+        assert_eq!(
+            index.recall_ids("rating and reviews", &intent),
+            ["alpha", "beta"]
         );
     }
 
@@ -496,6 +535,31 @@ mod tests {
         let ids = index.property_ids_for_entity_hits(&hits);
 
         assert_eq!(ids, vec!["prop-1".to_string(), "prop-2".to_string()]);
+    }
+
+    #[test]
+    fn serving_aware_index_maps_canonical_society_hits_to_runtime_properties() {
+        let properties = vec![
+            test_property("prop-2", "century-central"),
+            test_property("prop-1", "century-central"),
+        ];
+        let entities = vec![ServingEntityRecord {
+            entity_id: "society:rera-af36618d49c94b92".to_string(),
+            entity_type: "society".to_string(),
+            name: "Century Central".to_string(),
+            root_source: Some("rera".to_string()),
+            searchable_text: "Century Central".to_string(),
+        }];
+        let index = SearchIndex::build_with_serving_entities(&properties, &entities);
+
+        assert_eq!(
+            index.property_ids_for_entity_id("society:rera-af36618d49c94b92"),
+            vec!["prop-2".to_string(), "prop-1".to_string()]
+        );
+        assert_eq!(
+            index.property_ids_for_entity_id("society:century-central"),
+            vec!["prop-2".to_string(), "prop-1".to_string()]
+        );
     }
 
     fn test_property(id: &str, society_id: &str) -> Property {

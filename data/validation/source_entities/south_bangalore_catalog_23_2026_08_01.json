@@ -1,0 +1,192 @@
+{
+  "source_entities": [
+    {
+      "entity_id": "society:rera-53117ea502ea0cd0",
+      "alias_entity_id": "society:snn-raj-serenity",
+      "name": "SNN RAJ SERENITY",
+      "area": "Begur Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/150622/004987"
+    },
+    {
+      "entity_id": "society:rera-697fbbfce88898f2",
+      "alias_entity_id": "society:mantri-tranquil",
+      "name": "Mantri Tranquil",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/190711/002659"
+    },
+    {
+      "entity_id": "society:rera-d3090a201815d30f",
+      "alias_entity_id": "society:prestige-botanique",
+      "name": "Prestige Botanique",
+      "area": "Basavanagudi",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180627/001936"
+    },
+    {
+      "entity_id": "society:rera-f62a2a3e69fbe1de",
+      "alias_entity_id": "society:salarpuria-sattva-misty-charm",
+      "name": "SALARPURIA SATTVA MISTY CHARM",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180507/001635"
+    },
+    {
+      "entity_id": "society:rera-3cf3565aa4739401",
+      "alias_entity_id": "society:prestige-park-square",
+      "name": "Prestige Park Square",
+      "area": "Bannerghatta Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180313/002634"
+    },
+    {
+      "entity_id": "society:rera-2a8457298f16cc42",
+      "alias_entity_id": "society:sobha-forest-edge",
+      "name": "Sobha Forest Edge",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180227/002592"
+    },
+    {
+      "entity_id": "society:rera-a746aa687e84264d",
+      "alias_entity_id": "society:mantri-serenity1",
+      "name": "Mantri Serenity1",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171019/000494"
+    },
+    {
+      "entity_id": "society:rera-e68d15500e147ecd",
+      "alias_entity_id": "society:brigade-7-gardens",
+      "name": "Brigade 7 Gardens",
+      "area": "Banashankari",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171021/000508"
+    },
+    {
+      "entity_id": "society:rera-9e36c8a04a40e472",
+      "alias_entity_id": "society:prestige-song-of-the-south-phase-i",
+      "name": "PRESTIGE SONG OF THE SOUTH PHASE I",
+      "area": "Begur Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170915/000243"
+    },
+    {
+      "entity_id": "society:rera-8ccb1e0250853039",
+      "alias_entity_id": "society:prestige-bagamane-temple-bells",
+      "name": "PRESTIGE BAGAMANE TEMPLE BELLS",
+      "area": "Rajarajeshwari Nagar",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170915/000281"
+    },
+    {
+      "entity_id": "society:rera-d774ef30eda76527",
+      "alias_entity_id": "society:prestige-lake-ridge-phase-1",
+      "name": "PRESTIGE LAKE RIDGE PHASE 1",
+      "area": "Uttarahalli",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170916/000334"
+    },
+    {
+      "entity_id": "society:rera-af36618d49c94b92",
+      "alias_entity_id": "society:century-central",
+      "name": "Century Central",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171015/000351"
+    },
+    {
+      "entity_id": "society:rera-de36720f386e8a3f",
+      "alias_entity_id": "society:prestige-falcon-city",
+      "name": "PRESTIGE FALCON CITY",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170913/000114"
+    },
+    {
+      "entity_id": "society:rera-55b9f3b5370894cd",
+      "alias_entity_id": "society:purva-westend",
+      "name": "Purva Westend",
+      "area": "Kudlu Gate",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170915/000236"
+    },
+    {
+      "entity_id": "society:rera-699d44c234988565",
+      "alias_entity_id": "society:snn-raj-spiritua",
+      "name": "SNN Raj Spiritua",
+      "area": "JP Nagar",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171014/000342"
+    },
+    {
+      "entity_id": "society:rera-78131c93a2d222cd",
+      "alias_entity_id": "society:prestige-elysian",
+      "name": "Prestige Elysian",
+      "area": "Bannerghatta Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/190722/002709"
+    },
+    {
+      "entity_id": "society:rera-7aebcaf51f604095",
+      "alias_entity_id": "society:sobha-clovelly",
+      "name": "Sobha Clovelly",
+      "area": "Banashankari",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171014/000201"
+    },
+    {
+      "entity_id": "society:rera-9d85c7b323824afe",
+      "alias_entity_id": "society:nitesh-hyde-park-phase-ii",
+      "name": "Nitesh Hyde Park Phase II",
+      "area": "Bannerghatta Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180627/001912"
+    },
+    {
+      "entity_id": "society:rera-b719e74c670a7d43",
+      "alias_entity_id": "society:snn-raj-greenbay",
+      "name": "SNN Raj Greenbay",
+      "area": "Electronic City",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170920/000621"
+    },
+    {
+      "entity_id": "society:rera-dcee93ea77d09eb0",
+      "alias_entity_id": "society:snn-raj-grandeur",
+      "name": "SNN Raj Grandeur",
+      "area": "Bommanahalli",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170918/000681"
+    },
+    {
+      "entity_id": "society:rera-f5582864641239f3",
+      "alias_entity_id": "society:shriram-southern-crest",
+      "name": "SHRIRAM SOUTHERN CREST",
+      "area": "JP Nagar",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171014/000364"
+    },
+    {
+      "entity_id": "society:rera-53c0b81882e6acc6",
+      "alias_entity_id": "society:prestige-waterford",
+      "name": "PRESTIGE WATERFORD",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/200811/003528",
+      "latitude": 12.9819914,
+      "longitude": 77.7421819
+    },
+    {
+      "entity_id": "society:rera-ca22a221f0b66506",
+      "alias_entity_id": "society:prestige-southern-star",
+      "name": "Prestige Southern Star",
+      "area": "Begur Village Begur Hobli Bengaluru South",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/210325/007603",
+      "latitude": 12.873175,
+      "longitude": 77.622547
+    }
+  ]
+}

@@ -10,6 +10,7 @@ use crate::knowledge::search_event::SearchEvent;
 use crate::models::AreaProfile;
 use crate::models::Property;
 use crate::routes::properties::ErrorResponse;
+use crate::scoring::AreaTrackerPolicy;
 use crate::state::AppState;
 
 /// Lightweight area summary for list/card views.
@@ -84,7 +85,12 @@ pub async fn area_tracker(State(state): State<Arc<AppState>>) -> Json<AreaTracke
     let properties = state.properties.read().await;
     let areas = state.areas.read().await;
     let graph = state.knowledge.read().await;
-    Json(build_area_tracker(&areas, &properties, &graph.search_log))
+    Json(build_area_tracker(
+        &areas,
+        &properties,
+        &graph.search_log,
+        crate::scoring::area_tracker_policy(),
+    ))
 }
 
 /// GET /api/areas/:id — returns full area profile.
@@ -109,6 +115,7 @@ fn build_area_tracker(
     areas: &[AreaProfile],
     properties: &[Property],
     search_log: &[SearchEvent],
+    policy: &AreaTrackerPolicy,
 ) -> AreaTrackerResponse {
     let markets = areas
         .iter()
@@ -119,7 +126,7 @@ fn build_area_tracker(
                 .filter(|property| normalize_area(&property.area) == area_key)
                 .collect::<Vec<_>>();
             let listing_count = area_properties.len();
-            if listing_count < 2 {
+            if listing_count < policy.min_listing_count {
                 return None;
             }
             let avg_price_per_sqft = average_price_per_sqft(&area_properties);
@@ -143,11 +150,19 @@ fn build_area_tracker(
                 .collect::<Vec<_>>();
             let ready_to_move = area_properties
                 .iter()
-                .filter(|property| property.possession_status == "ready")
+                .filter(|property| {
+                    policy
+                        .ready_possession_statuses
+                        .iter()
+                        .any(|status| property.possession_status.eq_ignore_ascii_case(status))
+                })
                 .count();
             let near_metro = area_properties
                 .iter()
-                .filter(|property| property.metro_distance_mins <= 15)
+                .filter(|property| {
+                    property.metro_distance_mins > 0
+                        && property.metro_distance_mins <= policy.near_metro_max_minutes
+                })
                 .count();
             let top_builder = top_builder(&area_properties);
             let societies = area_properties
@@ -181,7 +196,8 @@ fn build_area_tracker(
                 .or_else(|| area.infrastructure_tags.first())
                 .cloned()
                 .unwrap_or_else(|| area.livability_summary.clone());
-            let demand_score = demand_score(recent_searches, evidence_gap_count, listing_count);
+            let demand_score =
+                demand_score(recent_searches, evidence_gap_count, listing_count, policy);
 
             Some(AreaTrackerMarket {
                 id: area.id.clone(),
@@ -265,10 +281,19 @@ fn top_builder(properties: &[&Property]) -> String {
         .unwrap_or_default()
 }
 
-fn demand_score(recent_searches: usize, evidence_gap_count: usize, listing_count: usize) -> f32 {
-    let search_pull = (recent_searches as f32 / 10.0).min(0.7);
-    let gap_pull = (evidence_gap_count as f32 / 20.0).min(0.2);
-    let supply_pull = (listing_count as f32 / 50.0).min(0.1);
+fn demand_score(
+    recent_searches: usize,
+    evidence_gap_count: usize,
+    listing_count: usize,
+    policy: &AreaTrackerPolicy,
+) -> f32 {
+    let demand = &policy.demand;
+    let search_pull =
+        (recent_searches as f32 / demand.search_count_normalizer).min(demand.search_count_cap);
+    let gap_pull =
+        (evidence_gap_count as f32 / demand.evidence_gap_normalizer).min(demand.evidence_gap_cap);
+    let supply_pull =
+        (listing_count as f32 / demand.listing_count_normalizer).min(demand.listing_count_cap);
     ((search_pull + gap_pull + supply_pull) * 100.0).round() / 100.0
 }
 
@@ -329,8 +354,8 @@ mod tests {
             floor: 0,
             total_floors: 0,
             facing: String::new(),
-            possession_status: String::new(),
-            metro_distance_mins: 0,
+            possession_status: "ready".to_string(),
+            metro_distance_mins: 15,
             maintenance_cost_monthly: 0,
             society_quality_score: None,
             builder_quality_score: None,
@@ -359,6 +384,8 @@ mod tests {
         second_property.builder_name = "Builder B".to_string();
         second_property.price = 20;
         second_property.price_per_sqft = 20;
+        second_property.possession_status = "under_construction".to_string();
+        second_property.metro_distance_mins = 16;
         let mut event = SearchEvent::new(
             "3BHK Whitefield".to_string(),
             SearchIntent {
@@ -383,7 +410,12 @@ mod tests {
             reason: "area evidence".to_string(),
         });
 
-        let tracker = build_area_tracker(&[area], &[property, second_property], &[event]);
+        let tracker = build_area_tracker(
+            &[area],
+            &[property, second_property],
+            &[event],
+            crate::scoring::area_tracker_policy(),
+        );
 
         assert_eq!(tracker.total_areas, 1);
         assert_eq!(tracker.total_listings, 2);
@@ -392,7 +424,8 @@ mod tests {
         assert_eq!(tracker.markets[0].price_min, 10);
         assert_eq!(tracker.markets[0].price_max, 20);
         assert_eq!(tracker.markets[0].bhks, vec![3]);
-        assert_eq!(tracker.markets[0].near_metro, 2);
+        assert_eq!(tracker.markets[0].ready_to_move, 1);
+        assert_eq!(tracker.markets[0].near_metro, 1);
         assert_eq!(tracker.markets[0].recent_searches, 1);
         assert_eq!(tracker.markets[0].evidence_gap_count, 1);
         assert_eq!(tracker.markets[0].primary_signal, "metro");

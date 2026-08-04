@@ -23,6 +23,8 @@ pub struct NearbyPlaceCategory {
     #[serde(default)]
     pub category_aliases: Vec<String>,
     #[serde(default)]
+    pub collection_sources: Vec<String>,
+    #[serde(default)]
     pub display_label: String,
     #[serde(default)]
     pub answers_preferences: Vec<String>,
@@ -97,21 +99,74 @@ pub fn nearby_place_category_for_fact_key(fact_key: &str) -> Option<&'static str
         .map(|category| category.fact_key.as_str())
 }
 
-pub fn requested_nearby_place_categories(query_lower: &str) -> Vec<&'static str> {
-    let mut requested = Vec::new();
-    for category in &nearby_place_categories_config().categories {
-        if category
-            .query_terms()
+pub fn nearby_place_fact_key_matches_category(fact_key: &str, place_category: &str) -> bool {
+    let place_category = normalize_category_value(place_category);
+    !place_category.is_empty()
+        && nearby_place_categories_config()
+            .categories
             .iter()
-            .any(|term| crate::search::resolver::query_contains_lower_text(query_lower, term))
-            && !requested
+            .find(|category| category.fact_key.eq_ignore_ascii_case(fact_key))
+            .is_some_and(|category| {
+                category
+                    .category_aliases
+                    .iter()
+                    .any(|alias| normalize_category_value(alias) == place_category)
+            })
+}
+
+pub fn requested_nearby_place_categories(query_lower: &str) -> Vec<&'static str> {
+    let query_tokens = crate::search::parser::query_tokens(query_lower);
+    let category_matches = nearby_place_categories_config()
+        .categories
+        .iter()
+        .map(|category| {
+            let ranges = category
+                .query_terms()
                 .iter()
-                .any(|existing| *existing == category.fact_key.as_str())
-        {
-            requested.push(category.fact_key.as_str());
-        }
+                .flat_map(|term| matching_token_ranges(&query_tokens, term))
+                .collect::<Vec<_>>();
+            (category, ranges)
+        })
+        .collect::<Vec<_>>();
+
+    category_matches
+        .iter()
+        .enumerate()
+        .filter(|(category_index, (_, ranges))| {
+            ranges.iter().any(|candidate| {
+                !category_matches
+                    .iter()
+                    .enumerate()
+                    .any(|(other_index, (_, other_ranges))| {
+                        other_index != *category_index
+                            && other_ranges.iter().any(|other_range| {
+                                other_range.0 <= candidate.0
+                                    && other_range.1 >= candidate.1
+                                    && (other_range.1 - other_range.0) > (candidate.1 - candidate.0)
+                            })
+                    })
+            })
+        })
+        .map(|(_, (category, _))| category.fact_key.as_str())
+        .collect()
+}
+
+fn matching_token_ranges(tokens: &[String], term: &str) -> Vec<(usize, usize)> {
+    let term_tokens = crate::search::parser::query_tokens(term);
+    if term_tokens.is_empty() || term_tokens.len() > tokens.len() {
+        return Vec::new();
     }
-    requested
+    tokens
+        .windows(term_tokens.len())
+        .enumerate()
+        .filter(|(_, window)| {
+            window
+                .iter()
+                .zip(term_tokens.iter())
+                .all(|(token, term)| token.eq_ignore_ascii_case(term))
+        })
+        .map(|(start, _)| (start, start + term_tokens.len()))
+        .collect()
 }
 
 impl NearbyPlaceCategory {
@@ -174,6 +229,10 @@ fn push_normalized_term(terms: &mut Vec<String>, value: &str) {
     }
 }
 
+fn normalize_category_value(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace([' ', '-'], "_")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,6 +244,14 @@ mod tests {
             .categories
             .iter()
             .any(|category| category.fact_key == "nearby_breweries"));
+        let stormwater = config
+            .categories
+            .iter()
+            .find(|category| category.fact_key == "stormwater_drain_nearby")
+            .expect("stormwater should be a serving place category");
+        assert_eq!(stormwater.collection_sources, ["openstreetmap"]);
+        assert_eq!(stormwater.relation_class, "risk_externality");
+        assert!(!stormwater.chainable);
     }
 
     #[test]
@@ -197,8 +264,36 @@ mod tests {
         assert!(requested_nearby_place_categories("purple line access")
             .contains(&"nearby_metro_stations"));
         assert_eq!(
+            requested_nearby_place_categories("near a tech park"),
+            vec!["nearby_tech_parks"]
+        );
+        let separate_categories =
+            requested_nearby_place_categories("near a tech park and a public park");
+        assert!(separate_categories.contains(&"nearby_tech_parks"));
+        assert!(separate_categories.contains(&"nearby_public_parks"));
+        assert_eq!(
             nearby_place_category_for_fact_key("nearby_lakes"),
             Some("nearby_lakes")
         );
+    }
+
+    #[test]
+    fn place_category_matches_only_its_configured_fact_family() {
+        assert!(nearby_place_fact_key_matches_category(
+            "nearby_lakes",
+            "water body"
+        ));
+        assert!(nearby_place_fact_key_matches_category(
+            "nearby_metro_stations",
+            "subway-station"
+        ));
+        assert!(nearby_place_fact_key_matches_category(
+            "stormwater_drain_nearby",
+            "stormwater-drain"
+        ));
+        assert!(!nearby_place_fact_key_matches_category(
+            "nearby_public_parks",
+            "lake"
+        ));
     }
 }

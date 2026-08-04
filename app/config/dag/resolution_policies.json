@@ -33,6 +33,11 @@
       "allowed_sources": ["google", "openstreetmap"],
       "denied_sources": ["rera"],
       "source_priority": ["google", "openstreetmap"]
+    },
+    "area": {
+      "allowed_sources": ["source_entity_seed", "google", "openstreetmap"],
+      "denied_sources": ["rera"],
+      "source_priority": ["source_entity_seed", "google", "openstreetmap"]
     }
   },
   "overrides": {

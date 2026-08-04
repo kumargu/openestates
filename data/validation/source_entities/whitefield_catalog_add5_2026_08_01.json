@@ -1,0 +1,44 @@
+{
+  "source_entities": [
+    {
+      "entity_id": "society:rera-53c641b59346cde4",
+      "alias_entity_id": "society:provident-capella-1",
+      "name": "Provident Capella 1",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1250/304/PR/190606/002596"
+    },
+    {
+      "entity_id": "society:rera-e33c7fdcc0d15688",
+      "alias_entity_id": "society:godrej-splendour",
+      "name": "Godrej Splendour",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/160622/005000"
+    },
+    {
+      "entity_id": "society:rera-ccfa353d22484c7b",
+      "alias_entity_id": "society:brigade-lakefront-crimson",
+      "name": "Brigade Lakefront - Crimson",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171016/000503"
+    },
+    {
+      "entity_id": "society:rera-612b8984826874f8",
+      "alias_entity_id": "society:vaswani-starlight",
+      "name": "Vaswani Starlight",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/180424/006808"
+    },
+    {
+      "entity_id": "society:rera-d871b9e8d8bb5c00",
+      "alias_entity_id": "society:pursuit-of-a-radical-rhapsody-phase-2",
+      "name": "PURSUIT OF A RADICAL RHAPSODY PHASE 2",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/190102/002271"
+    }
+  ]
+}

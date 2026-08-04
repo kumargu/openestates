@@ -18,6 +18,14 @@ pub struct FactRegistryFile {
     #[serde(default)]
     pub facts: Vec<FactRegistryEntry>,
     #[serde(default)]
+    pub search_dimensions: Vec<FactRegistrySearchDimension>,
+    #[serde(default)]
+    pub numeric_constraints: Vec<FactRegistryEvidenceDimension>,
+    #[serde(default)]
+    pub text_evidence: Vec<FactRegistryEvidenceDimension>,
+    #[serde(default)]
+    pub numeric_evidence: Vec<FactRegistryEvidenceDimension>,
+    #[serde(default)]
     pub fact_count: Option<u32>,
 }
 
@@ -33,13 +41,54 @@ pub struct FactRegistryEntry {
     #[serde(default)]
     pub label: Option<String>,
     #[serde(default)]
+    pub polarity: Option<String>,
+    #[serde(default)]
     pub answers_preferences: Vec<String>,
+    #[serde(default)]
+    pub enrichment_terms: Vec<String>,
+    #[serde(default)]
+    pub scopes: Vec<String>,
+    #[serde(default)]
+    pub source_types: Vec<String>,
     #[serde(default)]
     pub display_template: Option<String>,
     #[serde(default)]
     pub scoring_hint: Option<FactRegistryScoringHint>,
     #[serde(default)]
     pub never_default: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FactRegistrySearchDimension {
+    pub dimension: String,
+    pub label: String,
+    #[serde(default)]
+    pub intent_terms: Vec<String>,
+    #[serde(default)]
+    pub fact_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FactRegistryEvidenceDimension {
+    pub dimension: String,
+    pub label: String,
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    #[serde(default)]
+    pub fact_keys: Vec<String>,
+    #[serde(default)]
+    pub positive_terms: Vec<String>,
+    #[serde(default)]
+    pub negative_terms: Vec<String>,
+    #[serde(default)]
+    pub query_units: Vec<FactRegistryQueryUnit>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FactRegistryQueryUnit {
+    pub unit: String,
+    #[serde(default)]
+    pub aliases: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

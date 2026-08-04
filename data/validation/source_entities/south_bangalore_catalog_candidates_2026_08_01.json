@@ -1,0 +1,18 @@
+{
+  "source_entities": [
+    {"entity_id":"society:rera-7aebcaf51f604095","alias_entity_id":"society:sobha-clovelly","name":"Sobha Clovelly","area":"Banashankari","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/171014/000201"},
+    {"entity_id":"society:rera-8dae7e2ebcb812f1","alias_entity_id":"society:godrej-eternity","name":"Godrej Eternity","area":"Kanakapura Road","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/171013/000233"},
+    {"entity_id":"society:rera-78131c93a2d222cd","alias_entity_id":"society:prestige-elysian","name":"Prestige Elysian","area":"Bannerghatta Road","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/190722/002709"},
+    {"entity_id":"society:rera-f5582864641239f3","alias_entity_id":"society:shriram-southern-crest","name":"SHRIRAM SOUTHERN CREST","area":"JP Nagar","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/171014/000364"},
+    {"entity_id":"society:rera-b719e74c670a7d43","alias_entity_id":"society:snn-raj-greenbay","name":"SNN Raj Greenbay","area":"Electronic City","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/170920/000621"},
+    {"entity_id":"society:rera-dcee93ea77d09eb0","alias_entity_id":"society:snn-raj-grandeur","name":"SNN Raj Grandeur","area":"Bommanahalli","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/170918/000681"},
+    {"entity_id":"society:rera-bec42c8141cb0b15","alias_entity_id":"society:brigade-komarla-heights","name":"BRIGADE KOMARLA HEIGHTS","area":"Padmanabhanagar","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/140322/004754"},
+    {"entity_id":"society:rera-ced12e7e66ce875d","alias_entity_id":"society:prestige-primrose-hills-phase-1","name":"PRESTIGE PRIMROSE HILLS-PH-I","area":"Kanakapura Road","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/200618/003453"},
+    {"entity_id":"society:rera-55b9f3b5370894cd","alias_entity_id":"society:purva-westend","name":"Purva Westend","area":"Kudlu Gate","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/170915/000236"},
+    {"entity_id":"society:rera-1b14372176e70906","alias_entity_id":"society:snn-raj-etternia","name":"SNN Raj Etternia","area":"Haralur Road","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/170920/000655"},
+    {"entity_id":"society:rera-699d44c234988565","alias_entity_id":"society:snn-raj-spiritua","name":"SNN Raj Spiritua","area":"JP Nagar","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/171014/000342"},
+    {"entity_id":"society:rera-9464b33ae7909dd6","alias_entity_id":"society:mahaveer-ranches-phase-i","name":"MAHAVEER RANCHES PHASE I","area":"Hosa Road","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/171015/000421"},
+    {"entity_id":"society:rera-9d85c7b323824afe","alias_entity_id":"society:nitesh-hyde-park-phase-ii","name":"Nitesh Hyde Park Phase II","area":"Bannerghatta Road","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/180627/001912"},
+    {"entity_id":"society:rera-7cc0afa2066c1721","alias_entity_id":"society:ajmera-nucleus-phase-1","name":"AJMERA NUCLEUS PHASE 1","area":"Electronic City","city":"Bengaluru","project_key":"PRM/KA/RERA/1251/310/PR/181210/002207"}
+  ]
+}

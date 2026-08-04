@@ -1721,10 +1721,22 @@ def nearby_category_label(category: str) -> str:
 def google_nearby_collection_categories() -> Tuple[str, ...]:
     categories = []
     for category in nearby_category_configs():
+        if not nearby_category_supports_collection_source(category, "google"):
+            continue
         aliases = category.get("category_aliases") or []
         if aliases:
             categories.append(str(aliases[0]))
     return tuple(categories)
+
+
+def nearby_category_supports_collection_source(
+    category: Dict[str, Any], source: str
+) -> bool:
+    sources = category.get("collection_sources") or []
+    normalized_source = source.replace("-", "_").strip().lower()
+    return not sources or normalized_source in {
+        str(value).replace("-", "_").strip().lower() for value in sources
+    }
 
 
 def nearby_category_config(category: str) -> Optional[Dict[str, Any]]:

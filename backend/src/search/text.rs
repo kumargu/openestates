@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::OnceLock;
 
 use crate::dag_config::{
@@ -21,7 +21,7 @@ use crate::serving::{
 
 use super::analyzer;
 use super::geo;
-use super::index::{SearchIndex, price_satisfies_budget};
+use super::index::{price_satisfies_budget, SearchIndex};
 use super::intent::{ConstraintOperator, HardConstraint, SearchIntent};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text};
 use super::schema::{self, NumericConstraintSchema, NumericEvidenceSchema, TextEvidenceSchema};
@@ -130,11 +130,10 @@ impl TextSearch {
         intent: &SearchIntent,
         graph: Option<&KnowledgeGraph>,
     ) -> Vec<SearchResultCard> {
-        Self::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
+        Self::search_with_index_extra_recall_geo_serving_facts_and_intent(
             properties,
             search_index,
             extra_candidate_ids,
-            None,
             None,
             serving_facts,
             society_names,
@@ -145,16 +144,12 @@ impl TextSearch {
         )
     }
 
-    /// Indexed local/Tantivy/semantic recall plus deterministic KG-first ranking.
-    ///
-    /// `semantic_scores` may widen recall and gently influence ordering, but
-    /// never creates proof claims or preference coverage on its own.
+    /// Indexed local/Tantivy/geo recall plus deterministic fact-first ranking.
     #[allow(clippy::too_many_arguments)]
-    pub fn search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
+    pub fn search_with_index_extra_recall_geo_serving_facts_and_intent(
         properties: &[Property],
         search_index: Option<&SearchIndex>,
         extra_candidate_ids: Option<&[String]>,
-        semantic_scores: Option<&HashMap<String, f64>>,
         geo_query: Option<&geo::GeoSearchQuery<'_>>,
         serving_facts: Option<&ServingFactIndex>,
         society_names: &std::collections::HashMap<String, String>,
@@ -176,12 +171,11 @@ impl TextSearch {
                 })
                 .filter(|indexes| !indexes.is_empty())
         });
-        Self::search_with_candidate_property_indexes_semantic_scores_serving_facts_and_intent(
+        Self::search_with_candidate_property_indexes_serving_facts_and_intent(
             properties,
             search_index,
             merged_ids.as_deref(),
             candidate_property_indexes,
-            semantic_scores,
             geo_query,
             serving_facts,
             society_names,
@@ -198,12 +192,11 @@ impl TextSearch {
     /// corpus indexes in caller-provided order and keeps the original corpus
     /// ordinal for final tie-breaking.
     #[allow(clippy::too_many_arguments)]
-    pub fn search_with_candidate_property_indexes_semantic_scores_serving_facts_and_intent(
+    pub fn search_with_candidate_property_indexes_serving_facts_and_intent(
         properties: &[Property],
         search_index: Option<&SearchIndex>,
         extra_candidate_ids: Option<&[String]>,
         candidate_property_indexes: Option<Vec<usize>>,
-        semantic_scores: Option<&HashMap<String, f64>>,
         geo_query: Option<&geo::GeoSearchQuery<'_>>,
         serving_facts: Option<&ServingFactIndex>,
         society_names: &std::collections::HashMap<String, String>,
@@ -230,7 +223,7 @@ impl TextSearch {
             .collect::<Vec<_>>();
         let positive_preferences = positive_preference_labels(intent);
         let negative_preferences = negative_preference_labels(intent);
-        let prefix_terms = if scoring_terms.is_empty() && semantic_scores.is_none() {
+        let prefix_terms = if scoring_terms.is_empty() {
             Vec::new()
         } else {
             terms.iter().map(String::as_str).collect::<Vec<_>>()
@@ -254,13 +247,7 @@ impl TextSearch {
             candidate_property_indexes.as_deref(),
             candidate_ids.as_deref(),
         );
-        if should_limit_field_only_structured_results(
-            intent,
-            semantic_scores,
-            geo_query,
-            serving_facts,
-            graph,
-        ) {
+        if should_limit_field_only_structured_results(intent, geo_query, serving_facts, graph) {
             candidate_properties.truncate(FIELD_ONLY_STRUCTURED_RESULT_LIMIT);
         }
 
@@ -293,11 +280,21 @@ impl TextSearch {
                     }
                 }
 
-                let named_place_evidence = geo_query.and_then(|query| {
-                    serving_facts
-                        .and_then(|facts| serving_named_place_evidence(facts, &p.society_id, query))
-                        .or_else(|| query.evidence_for_society(&p.society_id).map(Into::into))
-                });
+                let named_place_evidence = geo_query
+                    .map(|query| {
+                        let mut evidence = serving_facts
+                            .map(|facts| serving_named_place_evidence(facts, &p.society_id, query))
+                            .unwrap_or_default();
+                        for fallback in query.evidence_for_society(&p.society_id) {
+                            if !evidence.iter().any(|existing| {
+                                existing.place_entity_id == fallback.place_entity_id
+                            }) {
+                                evidence.push(fallback.into());
+                            }
+                        }
+                        evidence
+                    })
+                    .unwrap_or_default();
 
                 // Soft constraint: area — exact match keeps full score,
                 // nearby/sub-area match gets a penalty instead of exclusion.
@@ -314,11 +311,6 @@ impl TextSearch {
                             (
                                 schema::ranking_policy().graph_area_score_penalty,
                                 Some(AreaMatchKind::Graph),
-                            )
-                        } else if named_place_evidence.is_some() {
-                            (
-                                schema::ranking_policy().nearby_area_score_penalty,
-                                Some(AreaMatchKind::NamedPlace),
                             )
                         } else {
                             return None; // unrelated area: exclude
@@ -346,7 +338,6 @@ impl TextSearch {
                     score_property(p, society_name, &scoring_terms)
                 };
                 score += area_penalty;
-                let semantic_score = semantic_scores.and_then(|scores| scores.get(&p.id).copied());
 
                 // Boost for preference alignment — collect structured reasons
                 let mut match_reasons: Vec<MatchReason> = Vec::new();
@@ -394,7 +385,7 @@ impl TextSearch {
                     });
                 }
 
-                if let Some(evidence) = named_place_evidence {
+                for evidence in named_place_evidence {
                     total_facts_consulted += 1;
                     graph_count += 1;
                     score += evidence.score_delta;
@@ -751,8 +742,6 @@ impl TextSearch {
                     score *= schema::ranking_policy().no_positive_evidence_score_multiplier;
                 }
 
-                score += semantic_candidate_fit_boost(semantic_score);
-
                 if score <= 0.0 {
                     return None;
                 }
@@ -863,7 +852,6 @@ impl TextSearch {
                         match_reason,
                         match_explanation,
                         proof_focuses,
-                        semantic_score,
                         confidence_score,
                     },
                 })
@@ -871,10 +859,14 @@ impl TextSearch {
             .collect();
 
         results.sort_by(|a, b| {
-            b.result
-                .match_score
-                .partial_cmp(&a.result.match_score)
-                .unwrap_or(Ordering::Equal)
+            b.named_society_match
+                .cmp(&a.named_society_match)
+                .then_with(|| {
+                    b.result
+                        .match_score
+                        .partial_cmp(&a.result.match_score)
+                        .unwrap_or(Ordering::Equal)
+                })
                 .then_with(|| {
                     b.primary_intent_score
                         .partial_cmp(&a.primary_intent_score)
@@ -890,13 +882,6 @@ impl TextSearch {
                 .then_with(|| {
                     b.evidence_strength
                         .partial_cmp(&a.evidence_strength)
-                        .unwrap_or(Ordering::Equal)
-                })
-                .then_with(|| {
-                    b.result
-                        .semantic_score
-                        .unwrap_or(0.0)
-                        .partial_cmp(&a.result.semantic_score.unwrap_or(0.0))
                         .unwrap_or(Ordering::Equal)
                 })
                 .then_with(|| compare_score_and_review(a, b))
@@ -1134,14 +1119,12 @@ fn merged_candidate_ids(
 
 fn should_limit_field_only_structured_results(
     intent: &SearchIntent,
-    semantic_scores: Option<&HashMap<String, f64>>,
     geo_query: Option<&geo::GeoSearchQuery<'_>>,
     serving_facts: Option<&ServingFactIndex>,
     graph: Option<&KnowledgeGraph>,
 ) -> bool {
     graph.is_none()
         && serving_facts.is_none()
-        && semantic_scores.is_none()
         && geo_query.is_none_or(geo::GeoSearchQuery::is_empty)
         && intent.excluded_areas.is_empty()
         && (intent.area.is_some() || intent.bhk.is_some() || intent.budget_max.is_some())
@@ -1212,54 +1195,63 @@ fn serving_named_place_evidence(
     serving_facts: &ServingFactIndex,
     society_id: &str,
     geo_query: &geo::GeoSearchQuery<'_>,
-) -> Option<NamedPlaceEvidence> {
+) -> Vec<NamedPlaceEvidence> {
     let node_id = society_node_id(society_id);
-    let rows = serving_facts.entity(&node_id)?;
-    let mut best: Option<NamedPlaceEvidence> = None;
+    let Some(rows) = serving_facts.entity(&node_id) else {
+        return Vec::new();
+    };
+    let mut matches = Vec::new();
 
-    for fact in &rows.facts {
-        if !geo::is_geo_distance_fact_key(&fact.fact_key)
-            || !evidence_is_confident_enough(
+    for clause in geo_query.resolved_clauses() {
+        let mut best: Option<NamedPlaceEvidence> = None;
+        for fact in &rows.facts {
+            if !evidence_is_confident_enough(
                 &fact.source_type,
                 fact.confidence,
                 geo::NAMED_PLACE_FACT_SCORING_METHOD,
-            )
-        {
-            continue;
-        }
-        let metadata = rows.search_metadata_for_fact_key(&fact.fact_key).next();
-        for snippet in serving_fact_text_snippets(fact) {
-            for place in geo_query.resolved_places() {
-                if !nearby_fact_mentions_place(&snippet, &place.name) {
-                    continue;
-                }
-                let Some(distance_km) = distance_for_nearby_place_snippet(&snippet, &place.name)
-                else {
-                    continue;
-                };
-                if geo_query
-                    .max_distance_km()
-                    .is_some_and(|max_distance| distance_km > max_distance)
-                {
-                    continue;
-                }
-                let Some(evidence) =
-                    named_place_serving_fact_evidence(fact, metadata, place, distance_km)
-                else {
-                    continue;
-                };
-                if best.as_ref().is_none_or(|current| {
-                    evidence.score_delta > current.score_delta
-                        || ((evidence.score_delta - current.score_delta).abs() < f64::EPSILON
-                            && evidence.confidence > current.confidence)
-                }) {
-                    best = Some(evidence);
+            ) {
+                continue;
+            }
+            let metadata = rows.search_metadata_for_fact_key(&fact.fact_key).next();
+            for snippet in serving_fact_text_snippets(fact) {
+                for place in geo_query.places_for_clause(clause) {
+                    if !geo_query.fact_key_matches_resolved_place(&fact.fact_key, place)
+                        || !nearby_fact_mentions_place(&snippet, &place.name)
+                    {
+                        continue;
+                    }
+                    let Some(distance_km) =
+                        distance_for_nearby_place_snippet(&snippet, &place.name)
+                    else {
+                        continue;
+                    };
+                    if geo_query
+                        .max_distance_km()
+                        .is_some_and(|max_distance| distance_km > max_distance)
+                    {
+                        continue;
+                    }
+                    let Some(evidence) =
+                        named_place_serving_fact_evidence(fact, metadata, place, distance_km)
+                    else {
+                        continue;
+                    };
+                    if best.as_ref().is_none_or(|current| {
+                        evidence.score_delta > current.score_delta
+                            || ((evidence.score_delta - current.score_delta).abs() < f64::EPSILON
+                                && evidence.confidence > current.confidence)
+                    }) {
+                        best = Some(evidence);
+                    }
                 }
             }
         }
+        if let Some(best) = best {
+            matches.push(best);
+        }
     }
 
-    best
+    matches
 }
 
 fn named_place_serving_fact_evidence(
@@ -1422,22 +1414,6 @@ fn review_quality_score(card: &crate::models::PropertyCard) -> f64 {
         / total_weight
 }
 
-fn semantic_candidate_fit_boost(semantic_score: Option<f64>) -> f64 {
-    let Some(score) = semantic_score else {
-        return 0.0;
-    };
-    let score = score.clamp(0.0, 1.0);
-    let ranking = schema::ranking_policy();
-    if score < ranking.min_semantic_recall_score {
-        return 0.0;
-    }
-
-    // Semantic recall is deliberately capped below one strong sourced fact.
-    // It can decide which plausible candidate to inspect first, but proof facts
-    // still dominate explanations and final ranking.
-    (score * ranking.semantic_candidate_fit_weight).min(ranking.semantic_candidate_fit_cap)
-}
-
 fn query_name_prefix_score(query_terms: &[&str], title: &str, society_name: &str) -> f64 {
     if query_terms.is_empty() {
         return 0.0;
@@ -1585,7 +1561,7 @@ fn numeric_constraint_evidence(
         let FactValue::Numeric(canonical_value) = &fact.value else {
             continue;
         };
-        if *canonical_value <= 0.0 {
+        if !canonical_value.is_finite() {
             continue;
         }
 
@@ -1657,7 +1633,7 @@ fn serving_numeric_constraint_evidence(
         let FactValue::Numeric(canonical_value) = fact.value else {
             continue;
         };
-        if !canonical_value.is_finite() || canonical_value <= 0.0 {
+        if !canonical_value.is_finite() {
             continue;
         }
         match constraint.operator {
@@ -1710,6 +1686,9 @@ fn graph_textual_preference_evidence(
     let node = graph.get_node(&node_id)?;
 
     for fact in &node.facts {
+        if schema::search_excludes_fact_key(&fact.key) {
+            continue;
+        }
         if !candidate_fact_keys.is_empty()
             && !candidate_fact_keys
                 .iter()
@@ -1757,6 +1736,9 @@ fn serving_preference_evidence(
 
     let mut best_structured: Option<RankedEvidence> = None;
     for fact in &rows.facts {
+        if schema::search_excludes_fact_key(&fact.fact_key) {
+            continue;
+        }
         let Some(metadata) = rows
             .search_metadata_for_fact_key(&fact.fact_key)
             .find(|metadata| {
@@ -1830,6 +1812,9 @@ fn serving_preference_evidence(
     let schema = schema::text_evidence_schema(preference)?;
     let mut best_text: Option<RankedEvidence> = None;
     for fact in &rows.facts {
+        if schema::search_excludes_fact_key(&fact.fact_key) {
+            continue;
+        }
         if !candidate_fact_keys.is_empty()
             && !candidate_fact_keys
                 .iter()
@@ -1919,6 +1904,9 @@ fn graph_negative_preference_evidence(
     let mut best: Option<RankedEvidence> = None;
     for node in candidates {
         for fact in &node.facts {
+            if schema::search_excludes_fact_key(&fact.key) {
+                continue;
+            }
             let Some(evidence) = negative_evidence_from_fact(
                 &fact.key,
                 &fact.value,
@@ -1927,6 +1915,7 @@ fn graph_negative_preference_evidence(
                 fact.display_template.as_deref(),
                 preference,
                 candidate_fact_keys,
+                None,
                 numeric_schema,
                 text_schema,
             ) else {
@@ -1965,6 +1954,9 @@ fn serving_negative_preference_evidence(
     let mut best: Option<RankedEvidence> = None;
 
     for fact in &rows.facts {
+        if schema::search_excludes_fact_key(&fact.fact_key) {
+            continue;
+        }
         let metadata = rows.search_metadata_for_fact_key(&fact.fact_key).next();
         let Some(evidence) = negative_evidence_from_fact(
             &fact.fact_key,
@@ -1974,6 +1966,7 @@ fn serving_negative_preference_evidence(
             metadata.and_then(|metadata| metadata.display_template.as_deref()),
             preference,
             candidate_fact_keys,
+            metadata,
             numeric_schema,
             text_schema,
         ) else {
@@ -2006,11 +1999,44 @@ fn negative_evidence_from_fact(
     display_template: Option<&str>,
     preference: &str,
     candidate_fact_keys: &[String],
+    metadata: Option<&ServingSearchMetadataRecord>,
     numeric_schema: Option<&NumericEvidenceSchema>,
     text_schema: Option<&TextEvidenceSchema>,
 ) -> Option<EvidenceMatch> {
     if !evidence_is_confident_enough(&source_type, confidence, "risk") {
         return None;
+    }
+
+    if candidate_fact_keys
+        .iter()
+        .any(|key| key.eq_ignore_ascii_case(fact_key))
+        && metadata.is_some_and(|metadata| {
+            metadata
+                .scoring_direction
+                .as_deref()
+                .is_some_and(|direction| direction.eq_ignore_ascii_case("Concern"))
+        })
+    {
+        let metadata = metadata.expect("checked above");
+        let snippet = fact_text_snippets(value)
+            .into_iter()
+            .find(|snippet| !snippet.trim().is_empty())?;
+        let score_delta = -f64::from(metadata.scoring_weight.unwrap_or(1.0)).clamp(0.0, 2.0);
+        let display = display_template
+            .unwrap_or("{value}")
+            .replace("{value}", &truncate_snippet(&snippet, 150));
+        return Some(EvidenceMatch {
+            preference: preference.to_string(),
+            fact_key: fact_key.to_string(),
+            fact_key_rank: candidate_fact_key_rank(candidate_fact_keys, fact_key),
+            display,
+            normalized_score: 0.0,
+            score_delta,
+            confidence,
+            source_type,
+            scoring_method: "serving-concern".to_string(),
+            reason: negative_reason(preference, score_delta),
+        });
     }
 
     if let Some(schema) = numeric_schema {
@@ -2197,7 +2223,13 @@ fn negative_no_data_penalty(intent: &SearchIntent, preference: &str) -> f64 {
         .negative_preferences
         .iter()
         .find(|signal| signal.raw_text.eq_ignore_ascii_case(preference))
-        .map(|signal| f64::from(signal.weight).clamp(0.5, 2.0))
+        .map(|signal| {
+            if signal.missing_evidence_neutral {
+                0.0
+            } else {
+                f64::from(signal.weight).clamp(0.5, 2.0)
+            }
+        })
         .unwrap_or(1.0)
         * schema::ranking_policy().negative_no_data_penalty_multiplier
 }
@@ -2220,7 +2252,11 @@ impl RankedEvidence {
             || (self.source_rank == other.source_rank
                 && self.fact_key_rank == other.fact_key_rank
                 && (self.normalized_score - other.normalized_score).abs() < f64::EPSILON
-                && self.confidence > other.confidence)
+                && (self.confidence > other.confidence
+                    || ((self.confidence - other.confidence).abs() < f32::EPSILON
+                        && (self.evidence.fact_key < other.evidence.fact_key
+                            || (self.evidence.fact_key == other.evidence.fact_key
+                                && self.evidence.display < other.evidence.display)))))
     }
 }
 
@@ -3026,7 +3062,6 @@ enum AreaMatchKind {
     Exact,
     Nearby,
     Graph,
-    NamedPlace,
 }
 
 fn build_match_reason(
@@ -3046,7 +3081,6 @@ fn build_match_reason(
             Some(AreaMatchKind::Nearby) => {
                 parts.push(format!("Near {} ({})", area, property_area));
             }
-            Some(AreaMatchKind::NamedPlace) => {}
             Some(AreaMatchKind::Exact | AreaMatchKind::Graph) | None => {
                 parts.push(format!("Matches {}", area));
             }
@@ -3852,7 +3886,8 @@ mod tests {
             ),
         ];
         let index = crate::search::SearchIndex::build(&properties);
-        let intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
+        let mut intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
+        intent.area = Some("Whitefield".to_string());
 
         let ids = index.recall_ids("3BHK Whitefield under 2Cr", &intent);
 
@@ -3909,7 +3944,8 @@ mod tests {
             ),
         ];
         let society_names = local_society_names(&properties);
-        let intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
+        let mut intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
+        intent.area = Some("Whitefield".to_string());
 
         let results = TextSearch::search_with_intent(
             &properties,
@@ -3940,7 +3976,8 @@ mod tests {
         ];
         let society_names = local_society_names(&properties);
         let index = crate::search::SearchIndex::build(&properties);
-        let intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
+        let mut intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
+        intent.area = Some("Whitefield".to_string());
 
         let results = TextSearch::search_with_index_and_intent(
             &properties,
@@ -3986,7 +4023,8 @@ mod tests {
         ];
         let society_names = local_society_names(&properties);
         let index = crate::search::SearchIndex::build(&properties);
-        let intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
+        let mut intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
+        intent.area = Some("Whitefield".to_string());
 
         let results = TextSearch::search_with_index_and_intent(
             &properties,
@@ -4542,20 +4580,18 @@ mod tests {
         let geo_candidate_ids = geo_query.candidate_property_ids(&properties);
         let intent = crate::search::intent::parse_intent("3bhk near Kadugodi Tree Park");
 
-        let results =
-            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
-                &properties,
-                None,
-                Some(&geo_candidate_ids),
-                None,
-                Some(&geo_query),
-                Some(&serving_facts),
-                &society_names,
-                &[],
-                "3bhk near Kadugodi Tree Park",
-                &intent,
-                None,
-            );
+        let results = TextSearch::search_with_index_extra_recall_geo_serving_facts_and_intent(
+            &properties,
+            None,
+            Some(&geo_candidate_ids),
+            Some(&geo_query),
+            Some(&serving_facts),
+            &society_names,
+            &[],
+            "3bhk near Kadugodi Tree Park",
+            &intent,
+            None,
+        );
 
         assert_eq!(results[0].card.id, "close-to-kadugodi");
         assert!(
@@ -4675,20 +4711,18 @@ mod tests {
             let geo_candidate_ids = geo_query.candidate_property_ids(&properties);
             let intent = crate::search::intent::parse_intent(query);
 
-            let results =
-                TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
-                    &properties,
-                    None,
-                    Some(&geo_candidate_ids),
-                    None,
-                    Some(&geo_query),
-                    Some(&serving_facts),
-                    &society_names,
-                    &[],
-                    query,
-                    &intent,
-                    None,
-                );
+            let results = TextSearch::search_with_index_extra_recall_geo_serving_facts_and_intent(
+                &properties,
+                None,
+                Some(&geo_candidate_ids),
+                Some(&geo_query),
+                Some(&serving_facts),
+                &society_names,
+                &[],
+                query,
+                &intent,
+                None,
+            );
 
             assert_eq!(results[0].card.id, "close-home", "query: {query}");
             assert!(
@@ -4801,20 +4835,18 @@ mod tests {
         let geo_candidate_ids = geo_query.candidate_property_ids(&properties);
         let intent = crate::search::intent::parse_intent("whitefield home near deens academy");
 
-        let results =
-            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
-                &properties,
-                None,
-                Some(&geo_candidate_ids),
-                None,
-                Some(&geo_query),
-                Some(&serving_facts),
-                &society_names,
-                &[],
-                "whitefield home near deens academy",
-                &intent,
-                None,
-            );
+        let results = TextSearch::search_with_index_extra_recall_geo_serving_facts_and_intent(
+            &properties,
+            None,
+            Some(&geo_candidate_ids),
+            Some(&geo_query),
+            Some(&serving_facts),
+            &society_names,
+            &[],
+            "whitefield home near deens academy",
+            &intent,
+            None,
+        );
 
         assert_eq!(results[0].card.id, "waterford");
         let reasons = &results[0]
@@ -4880,15 +4912,197 @@ mod tests {
         let loose_query = geo_index
             .query("homes within 1 km of deens academy")
             .expect("query should resolve Deens Academy");
+        let postposed_tight_query = geo_index
+            .query("homes near deens academy within 500m")
+            .expect("postposed distance should stay attached to Deens Academy");
 
         assert!(
-            serving_named_place_evidence(&serving_facts, "outside-limit", &tight_query).is_none(),
+            serving_named_place_evidence(&serving_facts, "outside-limit", &tight_query).is_empty(),
             "0.7 km serving fact should not satisfy a 500m query"
         );
         assert!(
-            serving_named_place_evidence(&serving_facts, "outside-limit", &loose_query).is_some(),
+            !serving_named_place_evidence(&serving_facts, "outside-limit", &loose_query).is_empty(),
             "0.7 km serving fact should satisfy a 1 km query"
         );
+        assert!(
+            serving_named_place_evidence(&serving_facts, "outside-limit", &postposed_tight_query,)
+                .is_empty(),
+            "0.7 km serving fact should not satisfy a postposed 500m query"
+        );
+    }
+
+    #[test]
+    fn named_lake_uses_lake_fact_instead_of_same_name_park_fact() {
+        let place_id = "place:osm:begur-lake";
+        let entities = vec![serving_entity(place_id, "place", "Begur Lake")];
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_entity_fact(
+                    place_id,
+                    "place.category",
+                    FactValue::Text("lake".to_string()),
+                    "OpenStreetMap",
+                    1.0,
+                ),
+                serving_entity_fact(
+                    place_id,
+                    "geo.latitude",
+                    FactValue::Numeric(12.88),
+                    "OpenStreetMap",
+                    1.0,
+                ),
+                serving_entity_fact(
+                    place_id,
+                    "geo.longitude",
+                    FactValue::Numeric(77.62),
+                    "OpenStreetMap",
+                    1.0,
+                ),
+                serving_fact(
+                    "lake-home",
+                    "nearby_public_parks",
+                    FactValue::Text("Nearby parks: Begur Lake (0.1 km)".to_string()),
+                    "Google",
+                    0.99,
+                ),
+                serving_fact(
+                    "lake-home",
+                    "nearby_lakes",
+                    FactValue::Text("Nearby lakes: Begur Lake (0.8 km)".to_string()),
+                    "OpenStreetMap",
+                    0.9,
+                ),
+            ],
+            Vec::new(),
+        );
+        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = geo_index
+            .query("homes near Begur Lake")
+            .expect("named lake should resolve");
+
+        let evidence = serving_named_place_evidence(&serving_facts, "lake-home", &geo_query)
+            .into_iter()
+            .next()
+            .expect("direct lake fact should provide proof");
+
+        assert_eq!(evidence.fact_key, "nearby_lakes");
+        assert_eq!(evidence.place_entity_id, place_id);
+    }
+
+    #[test]
+    fn named_stormwater_drain_uses_direct_risk_fact() {
+        let place_id = "place:stormwater-drain:way-1";
+        let entities = vec![serving_entity(place_id, "place", "drain")];
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_entity_fact(
+                    place_id,
+                    "place.category",
+                    FactValue::Text("stormwater_drain".to_string()),
+                    "OpenStreetMap",
+                    0.74,
+                ),
+                serving_entity_fact(
+                    place_id,
+                    "geo.latitude",
+                    FactValue::Numeric(12.87),
+                    "OpenStreetMap",
+                    0.74,
+                ),
+                serving_entity_fact(
+                    place_id,
+                    "geo.longitude",
+                    FactValue::Numeric(77.62),
+                    "OpenStreetMap",
+                    0.74,
+                ),
+                serving_fact(
+                    "southern-star",
+                    "stormwater_drain_nearby",
+                    FactValue::Text("drain (237 m, stormwater_drain, severity: info)".to_string()),
+                    "OpenStreetMap",
+                    0.74,
+                ),
+            ],
+            Vec::new(),
+        );
+        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = geo_index
+            .query("Prestige Southern Star near stormwater drain")
+            .expect("named stormwater drain should resolve");
+
+        let evidence = serving_named_place_evidence(&serving_facts, "southern-star", &geo_query)
+            .into_iter()
+            .next()
+            .expect("direct stormwater fact should provide proof");
+
+        assert_eq!(evidence.fact_key, "stormwater_drain_nearby");
+        assert_eq!(evidence.place_entity_id, place_id);
+        assert_eq!(distance_m(evidence.distance_km), Some(237));
+    }
+
+    #[test]
+    fn named_metro_ignores_hospital_fact_with_same_locality_token() {
+        let place_id = "place:google:bommanahalli-metro";
+        let entities = vec![serving_entity(
+            place_id,
+            "place",
+            "Bommanahalli Metro Station",
+        )];
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_entity_fact(
+                    place_id,
+                    "place.category",
+                    FactValue::Text("metro_station".to_string()),
+                    "Google",
+                    1.0,
+                ),
+                serving_entity_fact(
+                    place_id,
+                    "geo.latitude",
+                    FactValue::Numeric(12.9),
+                    "Google",
+                    1.0,
+                ),
+                serving_entity_fact(
+                    place_id,
+                    "geo.longitude",
+                    FactValue::Numeric(77.61),
+                    "Google",
+                    1.0,
+                ),
+                serving_fact(
+                    "metro-home",
+                    "nearby_hospitals",
+                    FactValue::Text("Nearby hospital: Bommanahalli Hospital (0.1 km)".to_string()),
+                    "Google",
+                    0.99,
+                ),
+                serving_fact(
+                    "metro-home",
+                    "nearby_metro_stations",
+                    FactValue::Text(
+                        "Nearby metro: Bommanahalli Metro Station (1.0 km)".to_string(),
+                    ),
+                    "Google",
+                    0.9,
+                ),
+            ],
+            Vec::new(),
+        );
+        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = geo_index
+            .query("homes near Bommanahalli Metro Station")
+            .expect("named metro should resolve");
+
+        let evidence = serving_named_place_evidence(&serving_facts, "metro-home", &geo_query)
+            .into_iter()
+            .next()
+            .expect("direct metro fact should provide proof");
+
+        assert_eq!(evidence.fact_key, "nearby_metro_stations");
+        assert_eq!(evidence.place_entity_id, place_id);
     }
 
     #[test]
@@ -4989,20 +5203,18 @@ mod tests {
         let intent =
             crate::search::intent::parse_intent("apartment near gopalan national school hoodi");
 
-        let results =
-            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
-                &properties,
-                None,
-                Some(&geo_candidate_ids),
-                None,
-                Some(&geo_query),
-                Some(&serving_facts),
-                &society_names,
-                &[],
-                "apartment near gopalan national school hoodi",
-                &intent,
-                None,
-            );
+        let results = TextSearch::search_with_index_extra_recall_geo_serving_facts_and_intent(
+            &properties,
+            None,
+            Some(&geo_candidate_ids),
+            Some(&geo_query),
+            Some(&serving_facts),
+            &society_names,
+            &[],
+            "apartment near gopalan national school hoodi",
+            &intent,
+            None,
+        );
 
         assert_eq!(results[0].card.id, "school-fit");
         let reasons = &results[0]
@@ -5019,6 +5231,168 @@ mod tests {
             "specific school fact should be used ahead of locality distance: {:?}",
             reasons
         );
+    }
+
+    #[test]
+    fn multiple_named_anchors_emit_independent_reasons_and_proof_focuses() {
+        let properties = vec![
+            local_property("both", "Whitefield", "both", 3, 20_000_000, 0, 0.2),
+            local_property(
+                "hospital-only",
+                "Whitefield",
+                "hospital-only",
+                3,
+                20_000_000,
+                0,
+                0.2,
+            ),
+        ];
+        let society_names = local_society_names(&properties);
+        let hospital_id = "place:google:manipal";
+        let office_id = "place:google:itpb";
+        let entities = vec![
+            serving_entity(hospital_id, "place", "Manipal Hospital Whitefield"),
+            serving_entity(office_id, "place", "International Tech Park Bengaluru ITPB"),
+        ];
+        let mut facts = vec![
+            serving_entity_fact(
+                hospital_id,
+                "place.category",
+                FactValue::Text("hospital".to_string()),
+                "Google",
+                1.0,
+            ),
+            serving_entity_fact(
+                hospital_id,
+                "geo.latitude",
+                FactValue::Numeric(12.99),
+                "Google",
+                1.0,
+            ),
+            serving_entity_fact(
+                hospital_id,
+                "geo.longitude",
+                FactValue::Numeric(77.72),
+                "Google",
+                1.0,
+            ),
+            serving_entity_fact(
+                office_id,
+                "place.category",
+                FactValue::Text("tech_park".to_string()),
+                "Google",
+                1.0,
+            ),
+            serving_entity_fact(
+                office_id,
+                "geo.latitude",
+                FactValue::Numeric(12.98),
+                "Google",
+                1.0,
+            ),
+            serving_entity_fact(
+                office_id,
+                "geo.longitude",
+                FactValue::Numeric(77.73),
+                "Google",
+                1.0,
+            ),
+            serving_fact(
+                "both",
+                "nearby_hospitals",
+                FactValue::Text(
+                    "Nearby hospitals: Manipal Hospital Whitefield (1.6 km)".to_string(),
+                ),
+                "Google",
+                0.95,
+            ),
+            serving_fact(
+                "both",
+                "nearby_tech_parks",
+                FactValue::Text(
+                    "Nearby tech parks: International Tech Park Bengaluru ITPB (0.8 km)"
+                        .to_string(),
+                ),
+                "Google",
+                0.95,
+            ),
+            serving_fact(
+                "hospital-only",
+                "nearby_hospitals",
+                FactValue::Text(
+                    "Nearby hospitals: Manipal Hospital Whitefield (1.0 km)".to_string(),
+                ),
+                "Google",
+                0.95,
+            ),
+        ];
+        facts.push(serving_entity_fact(
+            "society:both",
+            "geo.latitude",
+            FactValue::Numeric(12.98),
+            "Google",
+            1.0,
+        ));
+        facts.push(serving_entity_fact(
+            "society:both",
+            "geo.longitude",
+            FactValue::Numeric(77.73),
+            "Google",
+            1.0,
+        ));
+        let serving_facts = ServingFactIndex::from_records(facts, Vec::new());
+        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
+        let query =
+            "3BHK near Manipal Hospital Whitefield and near International Tech Park Bengaluru ITPB";
+        let geo_query = geo_index.query(query).expect("both anchors should resolve");
+        let intent = crate::search::intent::parse_intent(query);
+        let results = TextSearch::search_with_index_extra_recall_geo_serving_facts_and_intent(
+            &properties,
+            None,
+            Some(&["both".to_string(), "hospital-only".to_string()]),
+            Some(&geo_query),
+            Some(&serving_facts),
+            &society_names,
+            &[],
+            query,
+            &intent,
+            None,
+        );
+
+        assert_eq!(results[0].card.id, "both");
+        let explanation = results[0]
+            .match_explanation
+            .as_ref()
+            .expect("multi-anchor result should explain both matches");
+        let reason_keys = explanation
+            .reasons
+            .iter()
+            .map(|reason| reason.fact_key.as_str())
+            .collect::<Vec<_>>();
+        assert!(reason_keys.contains(&"nearby_hospitals"));
+        assert!(reason_keys.contains(&"nearby_tech_parks"));
+        let focus_entity_ids = results[0]
+            .proof_focuses
+            .iter()
+            .filter_map(|focus| focus.entity_id.as_deref())
+            .collect::<Vec<_>>();
+        assert!(focus_entity_ids.contains(&hospital_id));
+        assert!(focus_entity_ids.contains(&office_id));
+        let hospital_only = results
+            .iter()
+            .find(|result| result.card.id == "hospital-only")
+            .expect("single-anchor candidate should remain in the comparison");
+        assert!(hospital_only
+            .match_explanation
+            .as_ref()
+            .is_some_and(|explanation| explanation
+                .reasons
+                .iter()
+                .all(|reason| reason.fact_key != "nearby_tech_parks")));
+        assert!(hospital_only
+            .proof_focuses
+            .iter()
+            .all(|focus| focus.entity_id.as_deref() != Some(office_id)));
     }
 
     #[test]
@@ -5089,20 +5463,18 @@ mod tests {
         let intent =
             crate::search::intent::parse_intent("3bhk near example office park whitefield");
 
-        let results =
-            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
-                &properties,
-                None,
-                None,
-                None,
-                Some(&geo_query),
-                Some(&serving_facts),
-                &society_names,
-                &[],
-                "3bhk near example office park whitefield",
-                &intent,
-                None,
-            );
+        let results = TextSearch::search_with_index_extra_recall_geo_serving_facts_and_intent(
+            &properties,
+            None,
+            None,
+            Some(&geo_query),
+            Some(&serving_facts),
+            &society_names,
+            &[],
+            "3bhk near example office park whitefield",
+            &intent,
+            None,
+        );
 
         assert_eq!(
             results[0].card.id, "near-office-park",
@@ -5243,20 +5615,18 @@ mod tests {
         let intent =
             crate::search::intent::parse_intent("3bhk near example office park whitefield");
 
-        let results =
-            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
-                &properties,
-                None,
-                None,
-                None,
-                Some(&geo_query),
-                Some(&serving_facts),
-                &society_names,
-                &[],
-                "3bhk near example office park whitefield",
-                &intent,
-                None,
-            );
+        let results = TextSearch::search_with_index_extra_recall_geo_serving_facts_and_intent(
+            &properties,
+            None,
+            None,
+            Some(&geo_query),
+            Some(&serving_facts),
+            &society_names,
+            &[],
+            "3bhk near example office park whitefield",
+            &intent,
+            None,
+        );
 
         assert_eq!(
             results[0].card.id, "better-reviewed-fit",
@@ -5704,6 +6074,231 @@ mod tests {
     }
 
     #[test]
+    fn curated_review_concerns_are_structural_neutral_when_missing_and_do_not_stack() {
+        let properties = vec![
+            local_property(
+                "curated-water-concern",
+                "Whitefield",
+                "curated-water-concern",
+                3,
+                18_000_000,
+                0,
+                0.2,
+            ),
+            local_property(
+                "raw-review-only",
+                "Whitefield",
+                "raw-review-only",
+                3,
+                18_000_000,
+                0,
+                0.2,
+            ),
+            local_property(
+                "no-review-evidence",
+                "Whitefield",
+                "no-review-evidence",
+                3,
+                18_000_000,
+                0,
+                0.2,
+            ),
+        ];
+        let society_names = local_society_names(&properties);
+        let curated_fact_key = "review_observation.water_reliability.concern";
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "curated-water-concern",
+                    curated_fact_key,
+                    FactValue::Tags(vec![
+                        "Horrible water issues".to_string(),
+                        "Water outages happen repeatedly".to_string(),
+                    ]),
+                    "Google",
+                    0.95,
+                ),
+                serving_fact(
+                    "raw-review-only",
+                    "google_review_snippets",
+                    FactValue::Tags(vec!["Horrible water issues".to_string()]),
+                    "Google",
+                    0.95,
+                ),
+            ],
+            vec![
+                serving_metadata(
+                    "curated-water-concern",
+                    curated_fact_key,
+                    vec!["water issues"],
+                    "Concern",
+                    1.2,
+                    Vec::new(),
+                ),
+                serving_metadata(
+                    "raw-review-only",
+                    "google_review_snippets",
+                    vec!["water issues"],
+                    "Concern",
+                    2.0,
+                    Vec::new(),
+                ),
+            ],
+        );
+        let query = "avoid water issues in Whitefield";
+        let intent = crate::search::intent::parse_intent(query);
+        let review_preference = intent
+            .negative_preferences
+            .iter()
+            .find(|preference| preference.raw_text == "water issues")
+            .expect("review water concern should be config-resolved");
+        assert!(review_preference.missing_evidence_neutral);
+        assert!(review_preference
+            .expanded_keys
+            .iter()
+            .any(|key| key == curated_fact_key));
+
+        let results = TextSearch::search_with_index_extra_recall_serving_facts_and_intent(
+            &properties,
+            None,
+            None,
+            Some(&serving_facts),
+            &society_names,
+            &[],
+            query,
+            &intent,
+            None,
+        );
+        let result_for = |id: &str| {
+            results
+                .iter()
+                .find(|result| result.card.id == id)
+                .unwrap_or_else(|| panic!("missing result {id}"))
+        };
+
+        let concern = result_for("curated-water-concern");
+        let concern_explanation = concern.match_explanation.as_ref().unwrap();
+        let concern_reasons = concern_explanation
+            .reasons
+            .iter()
+            .filter(|reason| reason.fact_key == curated_fact_key)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            concern_reasons.len(),
+            1,
+            "multiple excerpts for one society/concept must contribute once"
+        );
+        assert_eq!(concern_reasons[0].scoring_method, "serving-concern");
+        assert_eq!(concern_reasons[0].score, 0.0);
+        assert!(concern_explanation
+            .preference_coverage
+            .iter()
+            .any(|coverage| {
+                coverage.preference == "avoid water issues" && coverage.status == "risk"
+            }));
+
+        for id in ["raw-review-only", "no-review-evidence"] {
+            let explanation = result_for(id).match_explanation.as_ref().unwrap();
+            assert!(
+                explanation.reasons.iter().all(|reason| {
+                    reason.fact_key != "google_review_snippets"
+                        && reason.fact_key != curated_fact_key
+                }),
+                "raw or absent review evidence must not create proof: {:?}",
+                explanation.reasons
+            );
+            assert!(explanation.preference_coverage.iter().any(|coverage| {
+                coverage.preference == "avoid water issues" && coverage.status == "no_data"
+            }));
+        }
+        assert_eq!(
+            result_for("raw-review-only").match_score,
+            result_for("no-review-evidence").match_score,
+            "missing curated review evidence must remain neutral"
+        );
+    }
+
+    #[test]
+    fn curated_review_facts_cover_each_conjunct_from_shared_config_labels() {
+        let properties = vec![local_property(
+            "curated-conjunction",
+            "Whitefield",
+            "curated-conjunction",
+            3,
+            18_000_000,
+            0,
+            0.2,
+        )];
+        let society_names = local_society_names(&properties);
+        let maintenance_key = "review_observation.maintenance_quality.positive";
+        let quiet_key = "review_observation.noise_exposure.positive";
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "curated-conjunction",
+                    maintenance_key,
+                    FactValue::Tags(vec!["The society is well maintained".to_string()]),
+                    "Google",
+                    0.95,
+                ),
+                serving_fact(
+                    "curated-conjunction",
+                    quiet_key,
+                    FactValue::Tags(vec!["No sound of traffic inside the society".to_string()]),
+                    "Google",
+                    0.95,
+                ),
+            ],
+            vec![
+                serving_metadata(
+                    "curated-conjunction",
+                    maintenance_key,
+                    vec!["maintenance"],
+                    "TextMatch",
+                    1.1,
+                    Vec::new(),
+                ),
+                serving_metadata(
+                    "curated-conjunction",
+                    quiet_key,
+                    vec!["quiet neighborhood"],
+                    "TextMatch",
+                    1.1,
+                    Vec::new(),
+                ),
+            ],
+        );
+        let query = "quiet well maintained society in Whitefield";
+        let intent = crate::search::intent::parse_intent(query);
+        for (preference, fact_key) in [
+            ("maintenance", maintenance_key),
+            ("quiet neighborhood", quiet_key),
+        ] {
+            assert!(intent.positive_preferences.iter().any(|signal| {
+                signal.raw_text == preference
+                    && signal.expanded_keys.iter().any(|key| key == fact_key)
+            }));
+        }
+
+        let results = TextSearch::search_with_index_extra_recall_serving_facts_and_intent(
+            &properties,
+            None,
+            None,
+            Some(&serving_facts),
+            &society_names,
+            &[],
+            query,
+            &intent,
+            None,
+        );
+        let reasons = &results[0].match_explanation.as_ref().unwrap().reasons;
+        assert!(reasons
+            .iter()
+            .any(|reason| reason.fact_key == maintenance_key));
+        assert!(reasons.iter().any(|reason| reason.fact_key == quiet_key));
+    }
+
+    #[test]
     fn builder_trust_negative_query_uses_rera_revocation_evidence() {
         let properties = vec![local_property(
             "clean-builder",
@@ -5840,13 +6435,11 @@ mod tests {
             results[0].match_reason
         );
         let explanation = results[0].match_explanation.as_ref().unwrap();
-        assert!(
-            explanation
-                .reasons
-                .iter()
-                .any(|reason| reason.scoring_method == "rera-proof"
-                    && reason.fact_key == "rera_total_land_area_sqm")
-        );
+        assert!(explanation
+            .reasons
+            .iter()
+            .any(|reason| reason.scoring_method == "rera-proof"
+                && reason.fact_key == "rera_total_land_area_sqm"));
     }
 
     #[test]
@@ -5897,7 +6490,7 @@ mod tests {
             ],
         );
 
-        let query = "3bhk whitefield above 10 acres with 80% open space";
+        let query = "3bhk whitefield above 10 acres with at least 80% open space";
         let intent = crate::search::intent::parse_intent(query);
         assert!(
             intent
@@ -5989,7 +6582,7 @@ mod tests {
     fn nearby_area_result_does_not_claim_an_exact_area_match() {
         let property = local_property(
             "nearby-area",
-            "Varthur",
+            "East Bangalore",
             "nearby-area",
             3,
             19_000_000,
@@ -5998,24 +6591,22 @@ mod tests {
         );
         let properties = vec![property];
         let society_names = local_society_names(&properties);
-        let intent = crate::search::intent::parse_intent("3bhk in whitefield");
+        let intent = crate::search::intent::parse_intent("3bhk in east bengaluru");
 
         let results = TextSearch::search_with_intent(
             &properties,
             &society_names,
             &[],
-            "3bhk in whitefield",
+            "3bhk in east bengaluru",
             &intent,
             None,
         );
 
         assert_eq!(results.len(), 1);
-        assert!(
-            results[0]
-                .match_reason
-                .contains("Near Whitefield (Varthur)")
-        );
-        assert!(!results[0].match_reason.contains("Matches Whitefield"));
+        assert!(results[0]
+            .match_reason
+            .contains("Near East Bengaluru (East Bangalore)"));
+        assert!(!results[0].match_reason.contains("Matches East Bengaluru"));
     }
 
     #[test]
@@ -6040,7 +6631,8 @@ mod tests {
         let society_names = local_society_names(&properties);
         let graph = graph_with_society_in_area("graph-area", "whitefield", "Whitefield");
         let query = "3bhk apartment in whitefield";
-        let intent = crate::search::intent::parse_intent(query);
+        let mut intent = crate::search::intent::parse_intent(query);
+        intent.area = Some("Whitefield".to_string());
 
         let results = TextSearch::search_with_intent(
             &properties,
@@ -6249,7 +6841,8 @@ mod tests {
         let society_names = local_society_names(&properties);
         let index = SearchIndex::build(&properties);
         let query = "near tech parks but quiet not electronic city 3bhk";
-        let intent = crate::search::intent::parse_intent(query);
+        let mut intent = crate::search::intent::parse_intent(query);
+        intent.excluded_areas = vec!["Electronic City".to_string()];
 
         assert_eq!(intent.excluded_areas, vec!["Electronic City".to_string()]);
 
@@ -6311,200 +6904,6 @@ mod tests {
         assert!(
             results.is_empty(),
             "unsupported plot/villa query should not return apartment matches"
-        );
-    }
-
-    #[test]
-    fn test_semantic_recall_does_not_create_preference_proof() {
-        let property = local_property(
-            "semantic-only",
-            "Whitefield",
-            "semantic-only",
-            3,
-            19_000_000,
-            8,
-            0.2,
-        );
-        let properties = vec![property];
-        let society_names = local_society_names(&properties);
-        let mut semantic_scores = std::collections::HashMap::new();
-        semantic_scores.insert("semantic-only".to_string(), 0.92);
-        let extra_candidate_ids = vec!["semantic-only".to_string()];
-        let intent = crate::search::intent::parse_intent("good reviews from actual residents");
-
-        let results =
-            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
-                &properties,
-                None,
-                Some(&extra_candidate_ids),
-                Some(&semantic_scores),
-                None,
-                None,
-                &society_names,
-                &[],
-                "good reviews from actual residents",
-                &intent,
-                None,
-            );
-
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].semantic_score, Some(0.92));
-        let explanation = results[0]
-            .match_explanation
-            .as_ref()
-            .expect("review preference should produce coverage");
-        assert!(
-            explanation.preference_coverage.iter().any(|coverage| {
-                coverage.preference == "review quality" && coverage.status == "no_data"
-            }),
-            "semantic recall must not fake review evidence: {:?}",
-            explanation.preference_coverage
-        );
-    }
-
-    #[test]
-    fn test_semantic_recall_survives_risk_floor_without_becoming_proof() {
-        let mut semantic_fit = local_property(
-            "semantic-fit",
-            "Whitefield",
-            "semantic-fit",
-            3,
-            19_000_000,
-            8,
-            0.7,
-        );
-        semantic_fit.traffic_score = Some(0.9);
-        let mut weak_fit =
-            local_property("weak-fit", "Whitefield", "weak-fit", 3, 19_000_000, 8, 0.7);
-        weak_fit.traffic_score = Some(0.9);
-
-        let properties = vec![weak_fit, semantic_fit];
-        let society_names = local_society_names(&properties);
-        let mut semantic_scores = std::collections::HashMap::new();
-        semantic_scores.insert("semantic-fit".to_string(), 0.84);
-        let extra_candidate_ids = vec!["weak-fit".to_string(), "semantic-fit".to_string()];
-        let intent = crate::search::intent::parse_intent(
-            "peaceful 3bhk for my parents close to hospital not too much traffic",
-        );
-
-        let results =
-            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
-                &properties,
-                None,
-                Some(&extra_candidate_ids),
-                Some(&semantic_scores),
-                None,
-                None,
-                &society_names,
-                &[],
-                "peaceful 3bhk for my parents close to hospital not too much traffic",
-                &intent,
-                None,
-            );
-
-        assert_eq!(results[0].card.id, "semantic-fit");
-        assert_eq!(results[0].semantic_score, Some(0.84));
-        let explanation = results[0]
-            .match_explanation
-            .as_ref()
-            .expect("preferences should produce coverage");
-        assert!(
-            explanation.preference_coverage.iter().any(|coverage| {
-                coverage.preference == "quiet neighborhood" && coverage.status == "no_data"
-            }),
-            "semantic recall should not claim quiet proof: {:?}",
-            explanation.preference_coverage
-        );
-        assert!(
-            explanation.preference_coverage.iter().any(|coverage| {
-                coverage.preference == "social infrastructure" && coverage.status == "no_data"
-            }),
-            "semantic recall should not claim social-infra proof: {:?}",
-            explanation.preference_coverage
-        );
-    }
-
-    #[test]
-    fn test_positive_evidence_survives_risk_floor_ahead_of_semantic_only_fit() {
-        let mut proved_but_risky = local_property(
-            "proved-but-risky",
-            "Whitefield",
-            "proved-but-risky",
-            3,
-            19_000_000,
-            8,
-            0.2,
-        );
-        proved_but_risky.traffic_score = Some(0.9);
-
-        let mut semantic_only = local_property(
-            "semantic-only-risky",
-            "Whitefield",
-            "semantic-only-risky",
-            3,
-            19_000_000,
-            8,
-            0.8,
-        );
-        semantic_only.traffic_score = Some(0.9);
-
-        let properties = vec![semantic_only, proved_but_risky];
-        let society_names = local_society_names(&properties);
-        let mut graph = KnowledgeGraph::new();
-        add_society_facts(
-            &mut graph,
-            "proved-but-risky",
-            vec![
-                preference_fact(
-                    "noise_score",
-                    FactValue::Numeric(0.2),
-                    vec!["quiet neighborhood"],
-                    ScoringDirection::LowerIsBetter,
-                    2.0,
-                    vec![0.3, 0.5],
-                ),
-                numeric_fact("traffic_score", 0.2),
-            ],
-        );
-        add_society_facts(
-            &mut graph,
-            "semantic-only-risky",
-            vec![numeric_fact("traffic_score", 0.9)],
-        );
-        let mut semantic_scores = std::collections::HashMap::new();
-        semantic_scores.insert("semantic-only-risky".to_string(), 0.9);
-        let extra_candidate_ids = vec![
-            "semantic-only-risky".to_string(),
-            "proved-but-risky".to_string(),
-        ];
-        let intent = crate::search::intent::parse_intent("quiet 3bhk avoid traffic");
-
-        let results =
-            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
-                &properties,
-                None,
-                Some(&extra_candidate_ids),
-                Some(&semantic_scores),
-                None,
-                None,
-                &society_names,
-                &[],
-                "quiet 3bhk avoid traffic",
-                &intent,
-                Some(&graph),
-            );
-
-        assert_eq!(results[0].card.id, "proved-but-risky");
-        let explanation = results[0]
-            .match_explanation
-            .as_ref()
-            .expect("preferences should produce coverage");
-        assert!(
-            explanation.preference_coverage.iter().any(|coverage| {
-                coverage.preference == "quiet neighborhood" && coverage.status == "matched"
-            }),
-            "positive evidence should survive risk flooring: {:?}",
-            explanation.preference_coverage
         );
     }
 
@@ -6573,17 +6972,13 @@ mod tests {
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].card.id, "stronger-builder");
-        assert!(
-            results[0]
-                .match_explanation
-                .as_ref()
-                .expect("builder preference should have explanation")
-                .reasons
-                .iter()
-                .any(
-                    |r| r.preference == "reliable builder" && r.fact_key == "builder_quality_score"
-                )
-        );
+        assert!(results[0]
+            .match_explanation
+            .as_ref()
+            .expect("builder preference should have explanation")
+            .reasons
+            .iter()
+            .any(|r| r.preference == "reliable builder" && r.fact_key == "builder_quality_score"));
     }
 
     #[test]
@@ -6636,29 +7031,75 @@ mod tests {
             "prestige-lakeside-3bhk".to_string(),
             "prestige-waterford-3bhk".to_string(),
         ];
-        let mut semantic_scores = std::collections::HashMap::new();
-        semantic_scores.insert("prestige-lakeside-3bhk".to_string(), 0.95);
-        semantic_scores.insert("prestige-waterford-3bhk".to_string(), 0.20);
         let query = "prestige water";
         let intent = crate::search::intent::parse_intent(query);
 
-        let results =
-            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
-                &properties,
-                None,
-                Some(&extra_candidate_ids),
-                Some(&semantic_scores),
-                None,
-                None,
-                &society_names,
-                &[],
-                query,
-                &intent,
-                None,
-            );
+        let results = TextSearch::search_with_index_extra_recall_geo_serving_facts_and_intent(
+            &properties,
+            None,
+            Some(&extra_candidate_ids),
+            None,
+            None,
+            &society_names,
+            &[],
+            query,
+            &intent,
+            None,
+        );
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].card.id, "prestige-waterford-3bhk");
         assert_eq!(results[1].card.id, "prestige-lakeside-3bhk");
+    }
+
+    #[test]
+    fn exact_society_match_ranks_before_loose_text_match() {
+        let target = local_property(
+            "target-3bhk",
+            "South Bengaluru",
+            "snn-raj-serenity",
+            3,
+            20_000_000,
+            8,
+            0.2,
+        );
+        let decoy = local_property(
+            "decoy-3bhk",
+            "South Bengaluru",
+            "snn-raj-grandeur",
+            3,
+            20_000_000,
+            8,
+            0.2,
+        );
+        let properties = vec![decoy, target];
+        let society_names = std::collections::HashMap::from([
+            (
+                "snn-raj-serenity".to_string(),
+                "SNN Raj Serenity".to_string(),
+            ),
+            (
+                "snn-raj-grandeur".to_string(),
+                "SNN Raj Grandeur".to_string(),
+            ),
+        ]);
+        let candidate_ids = vec!["decoy-3bhk".to_string(), "target-3bhk".to_string()];
+        let query = "SNN Raj Serenity trusted builder";
+        let intent = crate::search::intent::parse_intent(query);
+
+        let results = TextSearch::search_with_index_extra_recall_geo_serving_facts_and_intent(
+            &properties,
+            None,
+            Some(&candidate_ids),
+            None,
+            None,
+            &society_names,
+            &[],
+            query,
+            &intent,
+            None,
+        );
+
+        assert_eq!(results[0].card.id, "target-3bhk");
     }
 }

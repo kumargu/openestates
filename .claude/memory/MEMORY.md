@@ -36,7 +36,7 @@ Runtime startup is strict:
 
 - `backend/src/main.rs` builds routes and calls `data_loader::load_app_state`.
 - `backend/src/data_loader.rs` requires a promoted serving bundle and refuses to silently fall back to legacy `data/knowledge`.
-- `backend/src/serving/loader.rs` loads current bundle materialization, Parquet tables, Tantivy index, graph index, geo index, fact index, and optional semantic embeddings.
+- `backend/src/serving/loader.rs` loads current bundle materialization, Parquet tables, Tantivy index, graph index, geo index, and fact index.
 - `backend/src/state.rs` owns shared runtime state behind `Arc` and `RwLock`.
 
 ## Source Of Truth
@@ -150,7 +150,6 @@ Important paths:
 - `backend/src/bin/openestates-plan-assets.rs`
 - `backend/src/bin/openestates-run-assets.rs`
 - `backend/src/bin/openestates-compact-lake.rs`
-- `backend/src/bin/openestates-build-semantic-embeddings.rs`
 
 Rules:
 

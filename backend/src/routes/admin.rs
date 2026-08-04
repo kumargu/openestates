@@ -88,17 +88,13 @@ pub async fn reload_serving_bundle(
 
     match data_loader::load_serving_bundle(&state.project_root).await {
         Ok(Some(bundle)) => {
-            let snapshot = data_loader::runtime_snapshot_from_serving_bundle(
-                bundle,
-                state.semantic_embedder.clone(),
-            );
+            let snapshot = data_loader::runtime_snapshot_from_serving_bundle(bundle);
             let summary = serving_bundle_summary(&snapshot.bundle);
             let legacy_bundle = snapshot.bundle.clone();
             let legacy_properties = snapshot.properties.to_vec();
             let legacy_societies = snapshot.societies.to_vec();
             let legacy_areas = snapshot.areas.to_vec();
             let legacy_search_index = snapshot.search_index.clone();
-            let legacy_semantic_index = snapshot.semantic_index.clone();
 
             state.search_runtime.store(Arc::new(snapshot));
             state.search_cache.clear().await;
@@ -108,14 +104,12 @@ pub async fn reload_serving_bundle(
             let mut societies = state.societies.write().await;
             let mut areas = state.areas.write().await;
             let mut search_index = state.search_index.write().await;
-            let mut semantic_index = state.semantic_index.write().await;
 
             *current_bundle = Some(legacy_bundle);
             *properties = legacy_properties;
             *societies = legacy_societies;
             *areas = legacy_areas;
             *search_index = legacy_search_index;
-            *semantic_index = legacy_semantic_index;
             state.recommendation_cache.write().await.clear();
 
             Json(serde_json::json!({

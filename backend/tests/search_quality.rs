@@ -67,6 +67,8 @@ struct QueryTest {
     query: &'static str,
     scenario: &'static str,
     min_results: usize,
+    // Expected only after the serving-backed resolver runs. The parser must not
+    // contain these named locality instances.
     expect_area: Option<&'static str>,
     expect_bhk: Option<u32>,
     expect_budget: Option<u64>,
@@ -457,10 +459,10 @@ fn customer_queries() -> Vec<QueryTest> {
 // ============================================================================
 
 #[test]
-fn test_intent_parsing_quality() {
+fn test_structured_intent_parsing_without_named_locality_aliases() {
     println!();
     println!("================================================================================");
-    println!("  INTENT PARSING QUALITY REPORT");
+    println!("  STRUCTURED INTENT PARSING REPORT");
     println!("================================================================================");
     println!();
 
@@ -472,10 +474,10 @@ fn test_intent_parsing_quality() {
         let intent = parse_intent(qt.query);
         let mut errors: Vec<String> = Vec::new();
 
-        if intent.area.as_deref() != qt.expect_area {
+        if intent.area.is_some() {
             errors.push(format!(
-                "area: expected {:?}, got {:?}",
-                qt.expect_area, intent.area
+                "named area {:?} bypassed serving-backed resolution as {:?}",
+                qt.expect_area, intent.area,
             ));
         }
         if intent.bhk != qt.expect_bhk {
@@ -516,7 +518,11 @@ fn test_intent_parsing_quality() {
     }
 
     println!();
-    println!("  Intent parsing: {}/{} passed", pass, pass + fail);
+    println!(
+        "  Structured intent parsing: {}/{} passed",
+        pass,
+        pass + fail
+    );
     println!();
     assert_eq!(fail, 0, "{} intent parsing tests failed", fail);
 }

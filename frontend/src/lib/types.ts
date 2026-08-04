@@ -995,7 +995,6 @@ export type SearchResultItem = PropertyCard & {
   match_reason: string;
   match_explanation?: MatchExplanation;
   proof_focuses?: ProofFocus[];
-  semantic_score?: number;
   confidence_score?: ConfidenceScore;
 };
 

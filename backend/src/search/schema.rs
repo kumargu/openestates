@@ -33,6 +33,8 @@ struct FactRegistrySearchFile {
     pub text_evidence: Vec<TextEvidenceSchema>,
     #[serde(default)]
     pub numeric_evidence: Vec<NumericEvidenceSchema>,
+    #[serde(default)]
+    pub excluded_search_fact_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -61,6 +63,8 @@ pub struct SearchSchemaConfig {
     pub text_evidence: Vec<TextEvidenceSchema>,
     #[serde(default)]
     pub numeric_evidence: Vec<NumericEvidenceSchema>,
+    #[serde(default)]
+    pub excluded_search_fact_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -84,8 +88,6 @@ pub struct SearchRuntimePolicy {
     #[serde(default)]
     pub fact_key_derivations: Vec<FactKeyDerivationRule>,
     #[serde(default)]
-    pub semantic_stopwords: Vec<String>,
-    #[serde(default)]
     pub accepted_tradeoffs: Vec<IntentPhraseGroup>,
     #[serde(default)]
     pub unsupported_inventory_types: Vec<IntentPhraseGroup>,
@@ -93,10 +95,6 @@ pub struct SearchRuntimePolicy {
     pub buyer_archetypes: Vec<BuyerArchetypePattern>,
     #[serde(default)]
     pub preference_key_overrides: Vec<PreferenceKeyOverride>,
-    #[serde(default)]
-    pub semantic_expansions: Vec<SemanticExpansionSpec>,
-    #[serde(default)]
-    pub ranking: SearchRankingPolicy,
     #[serde(default)]
     pub lifecycle_value_terms: LifecycleValueTerms,
     #[serde(default)]
@@ -138,205 +136,6 @@ pub struct PreferenceKeyOverride {
     pub expanded_keys: Vec<String>,
     #[serde(default)]
     pub gap_keys: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SemanticExpansionSpec {
-    #[serde(default)]
-    pub patterns: Vec<String>,
-    #[serde(default)]
-    pub expanded_tokens: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SearchRankingPolicy {
-    #[serde(default = "default_min_support_evidence_confidence")]
-    pub min_support_evidence_confidence: f32,
-    #[serde(default = "default_min_llm_evidence_confidence")]
-    pub min_llm_evidence_confidence: f32,
-    #[serde(default = "default_negative_no_data_penalty_multiplier")]
-    pub negative_no_data_penalty_multiplier: f64,
-    #[serde(default = "default_min_semantic_recall_score")]
-    pub min_semantic_recall_score: f64,
-    #[serde(default = "default_semantic_candidate_fit_weight")]
-    pub semantic_candidate_fit_weight: f64,
-    #[serde(default = "default_semantic_candidate_fit_cap")]
-    pub semantic_candidate_fit_cap: f64,
-    #[serde(default = "default_broad_local_recall_multiplier")]
-    pub broad_local_recall_multiplier: usize,
-    #[serde(default = "default_broad_local_recall_min_extra")]
-    pub broad_local_recall_min_extra: usize,
-    #[serde(default = "default_positive_evidence_floor_ratio")]
-    pub positive_evidence_floor_ratio: f64,
-    #[serde(default = "default_no_positive_evidence_score_multiplier")]
-    pub no_positive_evidence_score_multiplier: f64,
-    #[serde(default = "default_nearby_area_score_penalty")]
-    pub nearby_area_score_penalty: f64,
-    #[serde(default = "default_graph_area_score_penalty")]
-    pub graph_area_score_penalty: f64,
-    #[serde(default)]
-    pub geo_distance_fact_keys: Vec<String>,
-    #[serde(default = "default_nearby_distance_full_score_km")]
-    pub nearby_distance_full_score_km: f64,
-    #[serde(default = "default_nearby_distance_zero_score_km")]
-    pub nearby_distance_zero_score_km: f64,
-    #[serde(default = "default_nearby_distance_bonus_cap")]
-    pub nearby_distance_bonus_cap: f64,
-    #[serde(default = "default_named_place_full_score_km")]
-    pub named_place_full_score_km: f64,
-    #[serde(default = "default_named_place_zero_score_km")]
-    pub named_place_zero_score_km: f64,
-    #[serde(default = "default_named_place_score_weight")]
-    pub named_place_score_weight: f64,
-    #[serde(default = "default_named_place_distinctive_token_max_place_count")]
-    pub named_place_distinctive_token_max_place_count: usize,
-    #[serde(default = "default_named_place_distinctive_token_max_place_ratio")]
-    pub named_place_distinctive_token_max_place_ratio: f64,
-    #[serde(default = "default_min_score_with_positive_evidence")]
-    pub min_score_with_positive_evidence: f64,
-    #[serde(default = "default_max_score_with_positive_evidence")]
-    pub max_score_with_positive_evidence: f64,
-    #[serde(default = "default_min_score_with_risk_only_evidence")]
-    pub min_score_with_risk_only_evidence: f64,
-    #[serde(default = "default_min_score_with_constraint_only")]
-    pub min_score_with_constraint_only: f64,
-    #[serde(default = "default_fact_coverage_threshold")]
-    pub fact_coverage_threshold: f64,
-}
-
-impl Default for SearchRankingPolicy {
-    fn default() -> Self {
-        Self {
-            min_support_evidence_confidence: default_min_support_evidence_confidence(),
-            min_llm_evidence_confidence: default_min_llm_evidence_confidence(),
-            negative_no_data_penalty_multiplier: default_negative_no_data_penalty_multiplier(),
-            min_semantic_recall_score: default_min_semantic_recall_score(),
-            semantic_candidate_fit_weight: default_semantic_candidate_fit_weight(),
-            semantic_candidate_fit_cap: default_semantic_candidate_fit_cap(),
-            broad_local_recall_multiplier: default_broad_local_recall_multiplier(),
-            broad_local_recall_min_extra: default_broad_local_recall_min_extra(),
-            positive_evidence_floor_ratio: default_positive_evidence_floor_ratio(),
-            no_positive_evidence_score_multiplier: default_no_positive_evidence_score_multiplier(),
-            nearby_area_score_penalty: default_nearby_area_score_penalty(),
-            graph_area_score_penalty: default_graph_area_score_penalty(),
-            geo_distance_fact_keys: Vec::new(),
-            nearby_distance_full_score_km: default_nearby_distance_full_score_km(),
-            nearby_distance_zero_score_km: default_nearby_distance_zero_score_km(),
-            nearby_distance_bonus_cap: default_nearby_distance_bonus_cap(),
-            named_place_full_score_km: default_named_place_full_score_km(),
-            named_place_zero_score_km: default_named_place_zero_score_km(),
-            named_place_score_weight: default_named_place_score_weight(),
-            named_place_distinctive_token_max_place_count:
-                default_named_place_distinctive_token_max_place_count(),
-            named_place_distinctive_token_max_place_ratio:
-                default_named_place_distinctive_token_max_place_ratio(),
-            min_score_with_positive_evidence: default_min_score_with_positive_evidence(),
-            max_score_with_positive_evidence: default_max_score_with_positive_evidence(),
-            min_score_with_risk_only_evidence: default_min_score_with_risk_only_evidence(),
-            min_score_with_constraint_only: default_min_score_with_constraint_only(),
-            fact_coverage_threshold: default_fact_coverage_threshold(),
-        }
-    }
-}
-
-fn default_min_support_evidence_confidence() -> f32 {
-    0.60
-}
-
-fn default_min_llm_evidence_confidence() -> f32 {
-    0.75
-}
-
-fn default_negative_no_data_penalty_multiplier() -> f64 {
-    1.2
-}
-
-fn default_min_semantic_recall_score() -> f64 {
-    0.08
-}
-
-fn default_semantic_candidate_fit_weight() -> f64 {
-    1.0
-}
-
-fn default_semantic_candidate_fit_cap() -> f64 {
-    0.25
-}
-
-fn default_broad_local_recall_multiplier() -> usize {
-    4
-}
-
-fn default_broad_local_recall_min_extra() -> usize {
-    64
-}
-
-fn default_positive_evidence_floor_ratio() -> f64 {
-    0.60
-}
-
-fn default_no_positive_evidence_score_multiplier() -> f64 {
-    0.40
-}
-
-fn default_nearby_area_score_penalty() -> f64 {
-    -0.35
-}
-
-fn default_graph_area_score_penalty() -> f64 {
-    -0.25
-}
-
-fn default_nearby_distance_full_score_km() -> f64 {
-    0.75
-}
-
-fn default_nearby_distance_zero_score_km() -> f64 {
-    3.0
-}
-
-fn default_nearby_distance_bonus_cap() -> f64 {
-    0.8
-}
-
-fn default_named_place_full_score_km() -> f64 {
-    0.75
-}
-
-fn default_named_place_zero_score_km() -> f64 {
-    5.0
-}
-
-fn default_named_place_score_weight() -> f64 {
-    2.0
-}
-
-fn default_named_place_distinctive_token_max_place_count() -> usize {
-    3
-}
-
-fn default_named_place_distinctive_token_max_place_ratio() -> f64 {
-    0.15
-}
-
-fn default_min_score_with_positive_evidence() -> f64 {
-    0.2
-}
-
-fn default_max_score_with_positive_evidence() -> f64 {
-    0.45
-}
-
-fn default_min_score_with_risk_only_evidence() -> f64 {
-    0.1
-}
-
-fn default_min_score_with_constraint_only() -> f64 {
-    0.01
-}
-
-fn default_fact_coverage_threshold() -> f64 {
-    25.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -400,6 +199,8 @@ pub struct NumericConstraintSchema {
     pub label: String,
     pub fact_keys: Vec<String>,
     pub query_units: Vec<QueryUnit>,
+    #[serde(default)]
+    pub zero_is_max: bool,
     pub proof_sources: Vec<SourceType>,
     pub scoring_method: String,
 }
@@ -413,6 +214,8 @@ pub struct PreferencePatternSpec {
     #[serde(default)]
     pub gap_keys: Vec<String>,
     pub weight: f32,
+    #[serde(default)]
+    pub missing_evidence_neutral: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -458,20 +261,61 @@ fn load_search_schema_config() -> SearchSchemaConfig {
     let path = dag_root().join("fact_registry.json");
     let file = load_json::<FactRegistrySearchFile>(&path)
         .expect("app/config/dag/fact_registry.json is required for search schema");
-    SearchSchemaConfig {
+    let config = SearchSchemaConfig {
         version: SEARCH_SCHEMA_VERSION,
         runtime: file.runtime,
         theme_layers: file.search_dimensions,
         numeric_constraints: file.numeric_constraints,
-        positive_preference_patterns: file.preference_patterns.positive,
-        negative_preference_patterns: file.preference_patterns.negative,
+        positive_preference_patterns: merge_preference_patterns(file.preference_patterns.positive),
+        negative_preference_patterns: merge_preference_patterns(file.preference_patterns.negative),
         text_evidence: file.text_evidence,
         numeric_evidence: file.numeric_evidence,
+        excluded_search_fact_keys: file.excluded_search_fact_keys,
+    };
+    config
+}
+
+fn merge_preference_patterns(patterns: Vec<PreferencePatternSpec>) -> Vec<PreferencePatternSpec> {
+    let mut merged = Vec::<PreferencePatternSpec>::new();
+    for pattern in patterns {
+        let Some(existing) = merged
+            .iter_mut()
+            .find(|existing| existing.label.eq_ignore_ascii_case(&pattern.label))
+        else {
+            merged.push(pattern);
+            continue;
+        };
+        existing.rank = existing.rank.min(pattern.rank);
+        for phrase in pattern.patterns {
+            if !existing.patterns.contains(&phrase) {
+                existing.patterns.push(phrase);
+            }
+        }
+        for fact_key in pattern.expanded_keys {
+            if !existing.expanded_keys.contains(&fact_key) {
+                existing.expanded_keys.push(fact_key);
+            }
+        }
+        for gap_key in pattern.gap_keys {
+            if !existing.gap_keys.contains(&gap_key) {
+                existing.gap_keys.push(gap_key);
+            }
+        }
+        existing.weight = existing.weight.max(pattern.weight);
+        existing.missing_evidence_neutral |= pattern.missing_evidence_neutral;
     }
+    merged
 }
 
 pub fn runtime_policy() -> &'static SearchRuntimePolicy {
     &registry().runtime
+}
+
+pub fn search_excludes_fact_key(fact_key: &str) -> bool {
+    registry()
+        .excluded_search_fact_keys
+        .iter()
+        .any(|excluded| excluded.eq_ignore_ascii_case(fact_key))
 }
 
 pub fn ranking_policy() -> &'static crate::scoring::SearchRankingPolicy {
@@ -510,10 +354,6 @@ pub fn registry_fact_key_required_preferences() -> &'static [String] {
     &runtime_policy().registry_fact_key_required_preferences
 }
 
-pub fn semantic_stopwords() -> &'static [String] {
-    &runtime_policy().semantic_stopwords
-}
-
 pub fn accepted_tradeoffs() -> &'static [IntentPhraseGroup] {
     &runtime_policy().accepted_tradeoffs
 }
@@ -528,26 +368,6 @@ pub fn buyer_archetype_patterns() -> &'static [BuyerArchetypePattern] {
 
 pub fn preference_key_overrides() -> &'static [PreferenceKeyOverride] {
     &runtime_policy().preference_key_overrides
-}
-
-pub fn semantic_expansion_tokens(pattern: &str) -> Vec<&'static str> {
-    runtime_policy()
-        .semantic_expansions
-        .iter()
-        .find(|expansion| {
-            expansion
-                .patterns
-                .iter()
-                .any(|candidate| candidate.eq_ignore_ascii_case(pattern))
-        })
-        .map(|expansion| {
-            expansion
-                .expanded_tokens
-                .iter()
-                .map(String::as_str)
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 pub fn lifecycle_compatibility_rule(
@@ -654,29 +474,8 @@ pub fn detect_hard_constraints(q: &str) -> Vec<HardConstraint> {
     let mut constraints = Vec::new();
 
     for schema in &registry().numeric_constraints {
-        for unit in &schema.query_units {
-            if let Some((value, raw_text)) = detect_min_unit_value(&tokens, unit) {
-                constraints.push(HardConstraint {
-                    field: schema.dimension.clone(),
-                    operator: ConstraintOperator::Min,
-                    value,
-                    unit: unit.unit.clone(),
-                    raw_text,
-                });
-                break;
-            }
-            if schema.dimension.eq_ignore_ascii_case("home_age_years") {
-                if let Some((value, raw_text)) = detect_max_age_value(&tokens, unit) {
-                    constraints.push(HardConstraint {
-                        field: schema.dimension.clone(),
-                        operator: ConstraintOperator::Max,
-                        value,
-                        unit: unit.unit.clone(),
-                        raw_text,
-                    });
-                    break;
-                }
-            }
+        if let Some(constraint) = detect_numeric_constraint(&tokens, schema) {
+            constraints.push(constraint);
         }
     }
 
@@ -693,6 +492,7 @@ pub fn schema_preference_signal(
         expanded_keys: pattern.expanded_keys.clone(),
         gap_keys: pattern.gap_keys.clone(),
         weight: pattern.weight,
+        missing_evidence_neutral: pattern.missing_evidence_neutral,
     }
 }
 
@@ -748,7 +548,56 @@ pub fn preference_signal_for_label(label: &str, polarity: Polarity) -> Preferenc
         expanded_keys: Vec::new(),
         gap_keys: Vec::new(),
         weight: 1.0,
+        missing_evidence_neutral: false,
     }
+}
+
+pub fn preference_signal_for_fact_keys(
+    raw_text: &str,
+    polarity: Polarity,
+    fact_keys: &[String],
+) -> PreferenceSignal {
+    let patterns = match polarity {
+        Polarity::Positive => positive_preference_patterns(),
+        Polarity::Negative => negative_preference_patterns(),
+    };
+    let policy = patterns.iter().find(|pattern| {
+        pattern.expanded_keys.iter().any(|configured| {
+            fact_keys
+                .iter()
+                .any(|selected| selected.eq_ignore_ascii_case(configured))
+        })
+    });
+    PreferenceSignal {
+        raw_text: raw_text.trim().to_string(),
+        polarity,
+        expanded_keys: fact_keys.to_vec(),
+        gap_keys: Vec::new(),
+        weight: policy.map_or(1.0, |pattern| pattern.weight),
+        missing_evidence_neutral: policy.is_some_and(|pattern| pattern.missing_evidence_neutral),
+    }
+}
+
+pub fn configured_polarity_for_fact_keys(fact_keys: &[String]) -> Option<Polarity> {
+    if negative_preference_patterns().iter().any(|pattern| {
+        pattern.expanded_keys.iter().any(|configured| {
+            fact_keys
+                .iter()
+                .any(|selected| selected.eq_ignore_ascii_case(configured))
+        })
+    }) {
+        return Some(Polarity::Negative);
+    }
+    positive_preference_patterns()
+        .iter()
+        .any(|pattern| {
+            pattern.expanded_keys.iter().any(|configured| {
+                fact_keys
+                    .iter()
+                    .any(|selected| selected.eq_ignore_ascii_case(configured))
+            })
+        })
+        .then_some(Polarity::Positive)
 }
 
 pub fn derived_fact_keys_for_bhk(base_key: &str, bhk: u32) -> Vec<String> {
@@ -825,82 +674,248 @@ fn snippet_if_supported(text: &str, schema: &TextEvidenceSchema) -> Option<Strin
     Some(truncate_display(text, 150))
 }
 
-fn detect_min_unit_value(tokens: &[String], unit: &QueryUnit) -> Option<(f64, String)> {
-    for (i, token) in tokens.iter().enumerate() {
-        if unit
-            .aliases
-            .iter()
-            .any(|alias| token.eq_ignore_ascii_case(alias))
-        {
-            if i == 0 {
+const CONSTRAINT_ALIAS_WINDOW: usize = 5;
+const MIN_CONSTRAINT_OPERATOR_PHRASES: &[&str] = &[
+    "at least",
+    "above",
+    "over",
+    "minimum",
+    "min",
+    "more than",
+    "greater than",
+    "plus",
+    "or higher",
+    "or more",
+    "and above",
+    "or greater",
+];
+const MAX_CONSTRAINT_OPERATOR_PHRASES: &[&str] = &[
+    "at most",
+    "below",
+    "under",
+    "maximum",
+    "max",
+    "up to",
+    "less than",
+    "no more than",
+    "or lower",
+    "or less",
+    "or fewer",
+    "old",
+];
+const CONSTRAINT_SYNTAX_FILLERS: &[&str] = &["of", "is", "should", "be", "must"];
+
+fn detect_numeric_constraint(
+    tokens: &[String],
+    schema: &NumericConstraintSchema,
+) -> Option<HardConstraint> {
+    let mut best: Option<(usize, usize, HardConstraint)> = None;
+    for number_start in 0..tokens.len() {
+        let Some((value, number_len, has_plus)) = parse_number_phrase(tokens, number_start) else {
+            continue;
+        };
+        let number_end = number_start + number_len;
+        for unit in &schema.query_units {
+            let Some((distance, alias_start, alias_end)) =
+                nearest_unit_alias(tokens, number_start, number_end, &unit.aliases)
+            else {
+                continue;
+            };
+            if distance > CONSTRAINT_ALIAS_WINDOW {
                 continue;
             }
-            if let Some((value, has_plus)) = parse_number_token(&tokens[i - 1]) {
-                if has_plus || has_min_constraint_prefix(&tokens[..i - 1]) {
-                    return Some((
-                        value,
-                        format!("above {} {}", format_number(value), unit.unit),
-                    ));
-                }
-            }
-            continue;
-        }
-
-        if let Some((value, has_plus)) = parse_unit_compound(token, unit) {
-            if has_plus || has_min_constraint_prefix(&tokens[..i]) {
-                return Some((
-                    value,
-                    format!("above {} {}", format_number(value), unit.unit),
-                ));
+            let operator = detect_constraint_operator(
+                tokens,
+                number_start,
+                number_end,
+                alias_start,
+                alias_end,
+                has_plus,
+            )
+            .or_else(|| (value == 0.0 && schema.zero_is_max).then_some(ConstraintOperator::Max));
+            let Some(operator) = operator else {
+                continue;
+            };
+            let label = match operator {
+                ConstraintOperator::Min => "above",
+                ConstraintOperator::Max => "up to",
+            };
+            let raw_text = format!("{label} {} {}", format_number(value), unit.unit);
+            let constraint = HardConstraint {
+                field: schema.dimension.clone(),
+                operator,
+                value,
+                unit: unit.unit.clone(),
+                raw_text,
+            };
+            let span_start = number_start.min(alias_start);
+            let span_end = number_end.max(alias_end);
+            let candidate = (distance, span_end - span_start, constraint);
+            if best
+                .as_ref()
+                .is_none_or(|current| (candidate.0, candidate.1) < (current.0, current.1))
+            {
+                best = Some(candidate);
             }
         }
     }
-
-    None
+    best.map(|(_, _, constraint)| constraint)
 }
 
-fn detect_max_age_value(tokens: &[String], unit: &QueryUnit) -> Option<(f64, String)> {
-    for (i, token) in tokens.iter().enumerate() {
-        let unit_matches = unit
-            .aliases
-            .iter()
-            .any(|alias| token.eq_ignore_ascii_case(alias));
-        if unit_matches && i > 0 {
-            if let Some((value, _)) = parse_number_token(&tokens[i - 1]) {
-                let after = tokens.get(i + 1).map(String::as_str).unwrap_or("");
-                let before = if i >= 2 { tokens[i - 2].as_str() } else { "" };
-                if after.eq_ignore_ascii_case("old")
-                    || before.eq_ignore_ascii_case("under")
-                    || before.eq_ignore_ascii_case("below")
-                    || before.eq_ignore_ascii_case("within")
-                {
-                    return Some((
-                        value,
-                        format!("up to {} {}", format_number(value), unit.unit),
-                    ));
+fn nearest_unit_alias(
+    tokens: &[String],
+    number_start: usize,
+    number_end: usize,
+    aliases: &[String],
+) -> Option<(usize, usize, usize)> {
+    aliases
+        .iter()
+        .flat_map(|alias| phrase_ranges(tokens, alias))
+        .filter(|(alias_start, alias_end)| {
+            unit_alias_is_bound_to_number(
+                tokens,
+                number_start,
+                number_end,
+                *alias_start,
+                *alias_end,
+            )
+        })
+        .map(|(alias_start, alias_end)| {
+            let distance = if alias_end <= number_start {
+                number_start - alias_end
+            } else {
+                alias_start.saturating_sub(number_end)
+            };
+            (distance, alias_start, alias_end)
+        })
+        .min_by_key(|candidate| (candidate.0, candidate.2 - candidate.1))
+}
+
+fn unit_alias_is_bound_to_number(
+    tokens: &[String],
+    number_start: usize,
+    number_end: usize,
+    alias_start: usize,
+    alias_end: usize,
+) -> bool {
+    let bridge = if alias_end <= number_start {
+        &tokens[alias_end..number_start]
+    } else if number_end <= alias_start {
+        &tokens[number_end..alias_start]
+    } else {
+        return true;
+    };
+    bridge.iter().all(|token| is_constraint_syntax(token))
+}
+
+fn phrase_ranges(tokens: &[String], phrase: &str) -> Vec<(usize, usize)> {
+    let phrase_tokens = constraint_tokens(phrase);
+    if phrase_tokens.is_empty() || phrase_tokens.len() > tokens.len() {
+        return Vec::new();
+    }
+    tokens
+        .windows(phrase_tokens.len())
+        .enumerate()
+        .filter(|(_, window)| {
+            window
+                .iter()
+                .zip(&phrase_tokens)
+                .all(|(token, phrase_token)| token.eq_ignore_ascii_case(phrase_token))
+        })
+        .map(|(start, _)| (start, start + phrase_tokens.len()))
+        .collect()
+}
+
+fn detect_constraint_operator(
+    tokens: &[String],
+    number_start: usize,
+    number_end: usize,
+    alias_start: usize,
+    alias_end: usize,
+    has_plus: bool,
+) -> Option<ConstraintOperator> {
+    if has_plus {
+        return Some(ConstraintOperator::Min);
+    }
+    let expression_start = number_start.min(alias_start);
+    let expression_end = number_end.max(alias_end);
+    let window_start = expression_start.saturating_sub(CONSTRAINT_ALIAS_WINDOW);
+    let window_end = (expression_end + CONSTRAINT_ALIAS_WINDOW).min(tokens.len());
+    let mut best: Option<(usize, usize, ConstraintOperator)> = None;
+
+    for (operator, phrases) in [
+        (ConstraintOperator::Min, MIN_CONSTRAINT_OPERATOR_PHRASES),
+        (ConstraintOperator::Max, MAX_CONSTRAINT_OPERATOR_PHRASES),
+    ] {
+        for phrase in phrases {
+            for (operator_start, operator_end) in phrase_ranges(tokens, phrase) {
+                if operator_start < window_start || operator_end > window_end {
+                    continue;
+                }
+                if !constraint_expression_is_bound(
+                    tokens,
+                    number_start,
+                    number_end,
+                    alias_start,
+                    alias_end,
+                    operator_start,
+                    operator_end,
+                ) {
+                    continue;
+                }
+                let span_start = expression_start.min(operator_start);
+                let span_end = expression_end.max(operator_end);
+                let candidate = (span_end - span_start, operator_end - operator_start);
+                if best.as_ref().is_none_or(|current| {
+                    candidate.0 < current.0 || (candidate.0 == current.0 && candidate.1 > current.1)
+                }) {
+                    best = Some((candidate.0, candidate.1, operator.clone()));
                 }
             }
         }
-        if let Some((value, _)) = parse_unit_compound(token, unit) {
-            let after = tokens.get(i + 1).map(String::as_str).unwrap_or("");
-            let before = if i >= 1 { tokens[i - 1].as_str() } else { "" };
-            if after.eq_ignore_ascii_case("old")
-                || before.eq_ignore_ascii_case("under")
-                || before.eq_ignore_ascii_case("below")
-                || before.eq_ignore_ascii_case("within")
-            {
-                return Some((
-                    value,
-                    format!("up to {} {}", format_number(value), unit.unit),
-                ));
-            }
-        }
     }
-    None
+
+    best.map(|(_, _, operator)| operator)
+}
+
+fn constraint_expression_is_bound(
+    tokens: &[String],
+    number_start: usize,
+    number_end: usize,
+    alias_start: usize,
+    alias_end: usize,
+    operator_start: usize,
+    operator_end: usize,
+) -> bool {
+    let start = number_start.min(alias_start).min(operator_start);
+    let end = number_end.max(alias_end).max(operator_end);
+    (start..end).all(|index| {
+        (number_start..number_end).contains(&index)
+            || (alias_start..alias_end).contains(&index)
+            || (operator_start..operator_end).contains(&index)
+            || is_constraint_syntax(&tokens[index])
+    })
+}
+
+fn is_constraint_syntax(token: &str) -> bool {
+    CONSTRAINT_SYNTAX_FILLERS
+        .iter()
+        .any(|filler| token.eq_ignore_ascii_case(filler))
+        || MIN_CONSTRAINT_OPERATOR_PHRASES
+            .iter()
+            .chain(MAX_CONSTRAINT_OPERATOR_PHRASES)
+            .flat_map(|phrase| phrase.split_whitespace())
+            .any(|syntax| token.eq_ignore_ascii_case(syntax))
 }
 
 fn constraint_tokens(q: &str) -> Vec<String> {
-    q.replace(',', "")
+    q.replace(">=", " at least ")
+        .replace("<=", " at most ")
+        .replace('>', " above ")
+        .replace('<', " below ")
+        .replace('%', " percent ")
+        .replace('-', " ")
+        .replace(',', "")
         .split_whitespace()
         .filter_map(|token| {
             let cleaned: String = token
@@ -916,43 +931,86 @@ fn constraint_tokens(q: &str) -> Vec<String> {
         .collect()
 }
 
-fn has_min_constraint_prefix(tokens_before_number: &[String]) -> bool {
-    let start = tokens_before_number.len().saturating_sub(4);
-    let window = &tokens_before_number[start..];
-
-    if window
-        .iter()
-        .any(|token| matches!(token.as_str(), "above" | "over" | "minimum" | "min"))
-    {
-        return true;
-    }
-
-    window.windows(2).any(|pair| {
-        matches!(
-            (pair[0].as_str(), pair[1].as_str()),
-            ("at", "least") | ("more", "than") | ("greater", "than")
-        )
-    })
-}
-
-fn parse_unit_compound(token: &str, unit: &QueryUnit) -> Option<(f64, bool)> {
-    for alias in &unit.aliases {
-        if let Some(num) = token.strip_suffix(alias.as_str()) {
-            return parse_number_token(num);
-        }
-    }
-    None
-}
-
 fn parse_number_token(token: &str) -> Option<(f64, bool)> {
     let token = token.trim();
     let has_plus = token.ends_with('+');
     let number = token.trim_end_matches('+');
     let value = number.parse::<f64>().ok()?;
-    if value > 0.0 {
+    if value >= 0.0 {
         Some((value, has_plus))
     } else {
         None
+    }
+}
+
+fn parse_number_phrase(tokens: &[String], start: usize) -> Option<(f64, usize, bool)> {
+    let token = tokens.get(start)?;
+    if let Some((value, has_plus)) = parse_number_token(token) {
+        return Some((value, 1, has_plus));
+    }
+    let first = number_word_value(token)?;
+    if token == "hundred" {
+        return Some((100.0, 1, false));
+    }
+    if tokens
+        .get(start + 1)
+        .is_some_and(|token| token == "hundred")
+    {
+        let mut value = first * 100.0;
+        let mut len = 2;
+        if let Some(remainder) = tokens
+            .get(start + 2)
+            .and_then(|token| number_word_value(token))
+        {
+            value += remainder;
+            len += 1;
+        }
+        return Some((value, len, false));
+    }
+    if first >= 20.0 {
+        if let Some(remainder) = tokens
+            .get(start + 1)
+            .and_then(|token| number_word_value(token))
+        {
+            if remainder < 10.0 {
+                return Some((first + remainder, 2, false));
+            }
+        }
+    }
+    Some((first, 1, false))
+}
+
+fn number_word_value(token: &str) -> Option<f64> {
+    match token {
+        "zero" => Some(0.0),
+        "one" => Some(1.0),
+        "two" => Some(2.0),
+        "three" => Some(3.0),
+        "four" => Some(4.0),
+        "five" => Some(5.0),
+        "six" => Some(6.0),
+        "seven" => Some(7.0),
+        "eight" => Some(8.0),
+        "nine" => Some(9.0),
+        "ten" => Some(10.0),
+        "eleven" => Some(11.0),
+        "twelve" => Some(12.0),
+        "thirteen" => Some(13.0),
+        "fourteen" => Some(14.0),
+        "fifteen" => Some(15.0),
+        "sixteen" => Some(16.0),
+        "seventeen" => Some(17.0),
+        "eighteen" => Some(18.0),
+        "nineteen" => Some(19.0),
+        "twenty" => Some(20.0),
+        "thirty" => Some(30.0),
+        "forty" => Some(40.0),
+        "fifty" => Some(50.0),
+        "sixty" => Some(60.0),
+        "seventy" => Some(70.0),
+        "eighty" => Some(80.0),
+        "ninety" => Some(90.0),
+        _ => None,
     }
 }
 
@@ -1003,12 +1061,6 @@ mod tests {
             .runtime
             .registry_fact_key_required_preferences
             .contains(&"delivered society".to_string()));
-        assert!(config
-            .runtime
-            .semantic_stopwords
-            .contains(&"want".to_string()));
-        assert!(config.runtime.ranking.semantic_candidate_fit_cap > 0.0);
-        assert!(config.runtime.ranking.fact_coverage_threshold >= 1.0);
         assert!(!config.runtime.fact_key_derivations.is_empty());
         assert!(!config.runtime.lifecycle_compatibility_rules.is_empty());
     }
@@ -1061,6 +1113,49 @@ mod tests {
     }
 
     #[test]
+    fn detects_configured_rating_review_and_number_word_constraints() {
+        let constraints = detect_hard_constraints(
+            "ready homes with Google rating >= 4.2 and at least one hundred reviews",
+        );
+        assert!(constraints.iter().any(|constraint| {
+            constraint.field == "google_rating"
+                && constraint.operator == ConstraintOperator::Min
+                && constraint.value == 4.2
+        }));
+        assert!(constraints.iter().any(|constraint| {
+            constraint.field == "google_review_count"
+                && constraint.operator == ConstraintOperator::Min
+                && constraint.value == 100.0
+        }));
+
+        let project = detect_hard_constraints(
+            "projects of at least ten acres with at least seventy percent open area",
+        );
+        assert!(project
+            .iter()
+            .any(|constraint| { constraint.field == "land_area" && constraint.value == 10.0 }));
+        assert!(project
+            .iter()
+            .any(|constraint| { constraint.field == "open_area_pct" && constraint.value == 70.0 }));
+    }
+
+    #[test]
+    fn detects_configured_zero_count_constraints_as_maximums() {
+        let constraints =
+            detect_hard_constraints("homes with zero RERA complaints and zero builder revocations");
+        assert!(constraints.iter().any(|constraint| {
+            constraint.field == "rera_complaints_count"
+                && constraint.operator == ConstraintOperator::Max
+                && constraint.value == 0.0
+        }));
+        assert!(constraints.iter().any(|constraint| {
+            constraint.field == "rera_builder_revocations"
+                && constraint.operator == ConstraintOperator::Max
+                && constraint.value == 0.0
+        }));
+    }
+
+    #[test]
     fn detects_property_age_max_constraints_from_registry() {
         let constraints = detect_hard_constraints("give me 1 year old property");
         assert_eq!(constraints.len(), 1);
@@ -1074,6 +1169,25 @@ mod tests {
     fn ignores_plain_measurement_without_min_operator() {
         let constraints = detect_hard_constraints("3bhk whitefield 10 acres");
         assert!(constraints.is_empty());
+    }
+
+    #[test]
+    fn does_not_cross_bind_budget_numbers_to_later_density_units() {
+        let constraints =
+            detect_hard_constraints("3bhk under 4 crore with low homes-per-acre project density");
+
+        assert!(constraints.is_empty());
+
+        let unqualified_acres =
+            detect_hard_constraints("3bhk under 4 crore and 3 acres with low density");
+        assert!(unqualified_acres.is_empty());
+
+        let explicit =
+            detect_hard_constraints("3bhk under 4 crore in a project of at least 4 acres");
+        assert_eq!(explicit.len(), 1);
+        assert_eq!(explicit[0].field, "land_area");
+        assert_eq!(explicit[0].operator, ConstraintOperator::Min);
+        assert_eq!(explicit[0].value, 4.0);
     }
 
     #[test]

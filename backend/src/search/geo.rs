@@ -1,7 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
-use crate::dag_config::CoordinateEntityScope;
+use crate::dag_config::{
+    nearby_place_categories_config, nearby_place_fact_key_matches_category,
+    requested_nearby_place_categories, search_resolution_config, CoordinateEntityScope,
+};
 use crate::knowledge::FactValue;
 use crate::models::Property;
 use crate::serving::{
@@ -97,13 +100,23 @@ pub struct GeoSearchIndex {
 pub struct GeoSearchQuery<'a> {
     index: &'a GeoSearchIndex,
     places: Vec<ResolvedGeoPlace>,
+    clauses: Vec<ResolvedGeoClause>,
+    unresolved_targets: Vec<String>,
     max_distance_km: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ResolvedGeoClause {
+    pub target_text: String,
+    pub place_entity_ids: Vec<String>,
+    pub category_fact_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ResolvedGeoPlace {
     pub entity_id: String,
     pub name: String,
+    pub category: Option<String>,
     pub latitude: f64,
     pub longitude: f64,
     pub confidence: f32,
@@ -125,6 +138,7 @@ pub(crate) struct HaversineEvidence {
 struct GeoPlace {
     entity_id: String,
     name: String,
+    category: Option<String>,
     latitude: f64,
     longitude: f64,
     confidence: f32,
@@ -151,10 +165,13 @@ impl GeoSearchIndex {
             let Some(coordinates) = coordinates_for_entity(fact_index, &entity.entity_id) else {
                 continue;
             };
-            if entity.entity_type.eq_ignore_ascii_case("place") {
+            if entity.entity_type.eq_ignore_ascii_case("place")
+                || entity.entity_type.eq_ignore_ascii_case("area")
+            {
                 places.push(GeoPlace {
                     entity_id: entity.entity_id.clone(),
                     name: entity.name.clone(),
+                    category: place_category_for_entity(fact_index, &entity.entity_id),
                     latitude: coordinates.latitude,
                     longitude: coordinates.longitude,
                     confidence: coordinates.confidence,
@@ -188,16 +205,64 @@ impl GeoSearchIndex {
 
     pub(crate) fn query(&self, query: &str) -> Option<GeoSearchQuery<'_>> {
         let parsed_slots = parser::parse_query_slots(query);
-        let relation = parsed_slots.relation.as_ref()?;
-        let scoped_query = relation_scoped_query(query, relation);
-        let places = self.resolve_query_places(&scoped_query);
-        let max_distance_km = parsed_slots
-            .distance_limit
-            .as_ref()
-            .map(|distance| distance.value_km);
-        (!places.is_empty()).then_some(GeoSearchQuery {
+        if parsed_slots.relations.is_empty() {
+            return None;
+        }
+        let tokens = parser::query_tokens(query);
+        let mut places = Vec::new();
+        let mut clauses = Vec::new();
+        let mut unresolved_targets = Vec::new();
+        for relation in &parsed_slots.relations {
+            let Some(target_text) = parser::relation_target_text(&tokens, relation) else {
+                continue;
+            };
+            let resolved = self.resolve_query_places(&target_text);
+            let category_fact_keys = if resolved.is_empty()
+                && !has_scoped_suffix(&target_text)
+                && has_configured_place_family(&target_text)
+            {
+                requested_nearby_place_categories(&target_text.to_ascii_lowercase())
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
+            if resolved.is_empty() && category_fact_keys.is_empty() {
+                unresolved_targets.push(target_text);
+                continue;
+            }
+            let mut place_entity_ids = Vec::new();
+            for place in resolved {
+                if !place_entity_ids.iter().any(|id| id == &place.entity_id) {
+                    place_entity_ids.push(place.entity_id.clone());
+                }
+                if !places
+                    .iter()
+                    .any(|existing: &ResolvedGeoPlace| existing.entity_id == place.entity_id)
+                {
+                    places.push(place);
+                }
+            }
+            clauses.push(ResolvedGeoClause {
+                target_text,
+                place_entity_ids,
+                category_fact_keys,
+            });
+        }
+        let max_distance_km = (parsed_slots.relations.len() == 1)
+            .then(|| {
+                parsed_slots
+                    .distance_limit
+                    .as_ref()
+                    .map(|distance| distance.value_km)
+            })
+            .flatten();
+        (!clauses.is_empty()).then_some(GeoSearchQuery {
             index: self,
             places,
+            clauses,
+            unresolved_targets,
             max_distance_km,
         })
     }
@@ -217,10 +282,12 @@ impl GeoSearchIndex {
             .places
             .iter()
             .filter(|place| !place.match_tokens.is_empty())
+            .filter(|place| !area_is_only_a_scoped_suffix(query, place))
             .filter(|place| query_contains_lower_text(&query_lower, &place.name))
             .map(|place| ResolvedGeoPlace {
                 entity_id: place.entity_id.clone(),
                 name: place.name.clone(),
+                category: place.category.clone(),
                 latitude: place.latitude,
                 longitude: place.longitude,
                 confidence: place.confidence,
@@ -228,10 +295,13 @@ impl GeoSearchIndex {
             })
             .collect::<Vec<_>>();
         if !exact_resolved.is_empty() {
+            remove_exact_places_contained_in_longer_match(&mut exact_resolved);
             exact_resolved.sort_by(|left, right| {
                 right
-                    .confidence
-                    .total_cmp(&left.confidence)
+                    .name
+                    .len()
+                    .cmp(&left.name.len())
+                    .then_with(|| right.confidence.total_cmp(&left.confidence))
                     .then_with(|| left.name.cmp(&right.name))
             });
             exact_resolved.truncate(3);
@@ -242,6 +312,7 @@ impl GeoSearchIndex {
         let mut resolved = self
             .places
             .iter()
+            .filter(|place| !area_is_only_a_scoped_suffix(query, place))
             .filter_map(|place| {
                 place_query_match_score(
                     place,
@@ -253,6 +324,7 @@ impl GeoSearchIndex {
                 .map(|match_score| ResolvedGeoPlace {
                     entity_id: place.entity_id.clone(),
                     name: place.name.clone(),
+                    category: place.category.clone(),
                     latitude: place.latitude,
                     longitude: place.longitude,
                     confidence: place.confidence,
@@ -284,6 +356,12 @@ impl GeoSearchIndex {
     }
 }
 
+fn area_is_only_a_scoped_suffix(query: &str, place: &GeoPlace) -> bool {
+    place.entity_id.starts_with("area:")
+        && has_scoped_suffix(query)
+        && !query.trim().eq_ignore_ascii_case(place.name.trim())
+}
+
 fn society_entity_id_candidates(society_id: &str) -> Vec<String> {
     let normalized = society_id
         .trim()
@@ -303,7 +381,7 @@ fn society_entity_id_candidates(society_id: &str) -> Vec<String> {
 
 impl<'a> GeoSearchQuery<'a> {
     pub(crate) fn is_empty(&self) -> bool {
-        self.places.is_empty()
+        self.clauses.is_empty()
     }
 
     pub(crate) fn candidate_property_ids(&self, properties: &[Property]) -> Vec<String> {
@@ -362,56 +440,100 @@ impl<'a> GeoSearchQuery<'a> {
             return false;
         };
 
-        rows.facts.iter().any(|fact| {
-            is_geo_distance_fact_key(&fact.fact_key)
-                && fact.confidence >= schema::ranking_policy().min_support_evidence_confidence
-                && serving_fact_text_snippets(fact).iter().any(|snippet| {
-                    self.places.iter().any(|place| {
-                        nearby_fact_mentions_place(snippet, &place.name)
-                            && extract_first_distance_km(snippet).is_some_and(|distance_km| {
-                                self.max_distance_km.unwrap_or_else(|| {
-                                    schema::ranking_policy().named_place_zero_score_km
-                                }) >= distance_km
+        self.clauses.iter().any(|clause| {
+            rows.facts.iter().any(|fact| {
+                fact.confidence >= schema::ranking_policy().min_support_evidence_confidence
+                    && (clause.category_fact_keys.iter().any(|fact_key| {
+                        fact.fact_key.eq_ignore_ascii_case(fact_key)
+                            && serving_fact_distance_km(fact).is_some_and(|distance| {
+                                distance <= category_max_distance_km(fact_key)
                             })
-                    })
-                })
+                    }) || serving_fact_text_snippets(fact).iter().any(|snippet| {
+                        self.places_for_clause(clause).any(|place| {
+                            self.fact_key_matches_resolved_place(&fact.fact_key, place)
+                                && nearby_fact_mentions_place(snippet, &place.name)
+                                && extract_first_distance_km(snippet).is_some_and(|distance_km| {
+                                    self.max_distance_km.unwrap_or_else(|| {
+                                        schema::ranking_policy().named_place_zero_score_km
+                                    }) >= distance_km
+                                })
+                        })
+                    }))
+            })
         })
     }
 
-    pub(crate) fn evidence_for_society(&self, society_id: &str) -> Option<HaversineEvidence> {
-        let coordinates = self.index.society_coordinates(society_id)?;
-        self.places
+    pub(crate) fn evidence_for_society(&self, society_id: &str) -> Vec<HaversineEvidence> {
+        let Some(coordinates) = self.index.society_coordinates(society_id) else {
+            return Vec::new();
+        };
+        self.clauses
             .iter()
-            .filter_map(|place| {
-                let distance_km = haversine_km(
-                    coordinates.latitude,
-                    coordinates.longitude,
-                    place.latitude,
-                    place.longitude,
-                );
-                if self
-                    .max_distance_km
-                    .is_some_and(|max_distance| distance_km > max_distance)
-                {
-                    return None;
-                }
-                named_place_distance_evidence(place, coordinates, distance_km)
-            })
-            .max_by(|left, right| {
-                left.score_delta
-                    .partial_cmp(&right.score_delta)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then_with(|| {
-                        right
-                            .distance_km
-                            .partial_cmp(&left.distance_km)
+            .filter_map(|clause| {
+                self.places_for_clause(clause)
+                    .filter_map(|place| {
+                        let distance_km = haversine_km(
+                            coordinates.latitude,
+                            coordinates.longitude,
+                            place.latitude,
+                            place.longitude,
+                        );
+                        if self
+                            .max_distance_km
+                            .is_some_and(|max_distance| distance_km > max_distance)
+                        {
+                            return None;
+                        }
+                        named_place_distance_evidence(place, coordinates, distance_km)
+                    })
+                    .max_by(|left, right| {
+                        left.score_delta
+                            .partial_cmp(&right.score_delta)
                             .unwrap_or(std::cmp::Ordering::Equal)
+                            .then_with(|| {
+                                right
+                                    .distance_km
+                                    .partial_cmp(&left.distance_km)
+                                    .unwrap_or(std::cmp::Ordering::Equal)
+                            })
                     })
             })
+            .collect()
     }
 
     pub(crate) fn resolved_places(&self) -> &[ResolvedGeoPlace] {
         &self.places
+    }
+
+    pub(crate) fn resolved_clauses(&self) -> &[ResolvedGeoClause] {
+        &self.clauses
+    }
+
+    pub(crate) fn unresolved_targets(&self) -> &[String] {
+        &self.unresolved_targets
+    }
+
+    pub(crate) fn places_for_clause<'b>(
+        &'b self,
+        clause: &'b ResolvedGeoClause,
+    ) -> impl Iterator<Item = &'b ResolvedGeoPlace> + 'b {
+        self.places.iter().filter(|place| {
+            clause
+                .place_entity_ids
+                .iter()
+                .any(|entity_id| entity_id == &place.entity_id)
+        })
+    }
+
+    pub(crate) fn fact_key_matches_resolved_place(
+        &self,
+        fact_key: &str,
+        place: &ResolvedGeoPlace,
+    ) -> bool {
+        place.category.as_deref().map_or_else(
+            || is_geo_distance_fact_key(fact_key),
+            |category| nearby_place_fact_key_matches_category(fact_key, category),
+        )
     }
 
     pub(crate) fn max_distance_km(&self) -> Option<f64> {
@@ -429,6 +551,32 @@ impl<'a> GeoSearchQuery<'a> {
         }
         terms
     }
+}
+
+fn has_scoped_suffix(target: &str) -> bool {
+    let target_lower = target.to_ascii_lowercase();
+    search_resolution_config()
+        .named_entity_scope_prefixes
+        .iter()
+        .any(|prefix| query_contains_lower_text(&target_lower, prefix))
+}
+
+fn has_configured_place_family(target: &str) -> bool {
+    let target_lower = target.to_ascii_lowercase();
+    search_resolution_config()
+        .place_families
+        .iter()
+        .flat_map(|family| family.aliases.iter())
+        .any(|alias| query_contains_lower_text(&target_lower, alias))
+}
+
+fn category_max_distance_km(fact_key: &str) -> f64 {
+    nearby_place_categories_config()
+        .categories
+        .iter()
+        .find(|category| category.fact_key.eq_ignore_ascii_case(fact_key))
+        .and_then(|category| category.max_distance_km)
+        .unwrap_or_else(|| schema::ranking_policy().named_place_zero_score_km)
 }
 
 fn named_place_distance_evidence(
@@ -470,6 +618,8 @@ fn coordinates_for_entity(
     let rows = fact_index.entity(entity_id)?;
     let scope = if entity_id.starts_with("place:") {
         CoordinateEntityScope::Place
+    } else if entity_id.starts_with("area:") {
+        CoordinateEntityScope::Area
     } else {
         CoordinateEntityScope::Society
     };
@@ -480,6 +630,44 @@ fn coordinates_for_entity(
         longitude: coordinates.longitude,
         confidence: coordinates.confidence,
     })
+}
+
+fn place_category_for_entity(fact_index: &ServingFactIndex, entity_id: &str) -> Option<String> {
+    fact_index
+        .entity(entity_id)?
+        .facts
+        .iter()
+        .filter(|fact| fact.fact_key.eq_ignore_ascii_case("place.category"))
+        .filter_map(|fact| match &fact.value {
+            FactValue::Text(value) if !value.trim().is_empty() => {
+                Some((value.trim(), fact.confidence, fact.learned_at))
+            }
+            FactValue::Tags(values) => values
+                .iter()
+                .find(|value| !value.trim().is_empty())
+                .map(|value| (value.trim(), fact.confidence, fact.learned_at)),
+            _ => None,
+        })
+        .max_by(|left, right| {
+            left.1
+                .total_cmp(&right.1)
+                .then_with(|| left.2.cmp(&right.2))
+        })
+        .map(|(category, _, _)| category.to_string())
+}
+
+fn remove_exact_places_contained_in_longer_match(places: &mut Vec<ResolvedGeoPlace>) {
+    let names = places
+        .iter()
+        .map(|place| (place.entity_id.clone(), place.name.to_ascii_lowercase()))
+        .collect::<Vec<_>>();
+    places.retain(|candidate| {
+        !names.iter().any(|(entity_id, name)| {
+            entity_id != &candidate.entity_id
+                && name.len() > candidate.name.len()
+                && query_contains_lower_text(name, &candidate.name)
+        })
+    });
 }
 
 fn place_query_match_score(
@@ -517,16 +705,16 @@ fn place_query_match_score(
         return None;
     }
 
-    let required = if place.match_tokens.len() <= 2 {
-        place.match_tokens.len()
+    let required = if query_tokens.len() == 1 {
+        1
     } else {
-        3
+        place.match_tokens.len().min(2)
     };
     if matched < required {
-        return Some(matched as f64 / place.match_tokens.len() as f64);
+        return None;
     }
     let coverage = matched as f64 / place.match_tokens.len() as f64;
-    (coverage >= 0.6).then_some(coverage)
+    Some(coverage)
 }
 
 fn place_token_document_counts(places: &[GeoPlace]) -> HashMap<String, usize> {
@@ -568,7 +756,12 @@ fn significant_place_tokens(text: &str) -> Vec<String> {
 fn significant_query_tokens(text: &str) -> Vec<String> {
     tokenize(text)
         .into_iter()
-        .filter(|token| !is_query_match_stopword(token))
+        .filter(|token| {
+            !is_query_match_stopword(token)
+                && token
+                    .chars()
+                    .any(|character| character.is_ascii_alphabetic())
+        })
         .collect()
 }
 
@@ -610,14 +803,6 @@ fn token_matches(query_token: &str, place_token: &str) -> bool {
         || (query_token.len() >= 4
             && place_token.len() >= 4
             && (query_token.starts_with(place_token) || place_token.starts_with(query_token)))
-}
-
-fn relation_scoped_query(query: &str, relation: &parser::RelationIntent) -> String {
-    let tokens = parser::query_tokens(query);
-    if relation.end_token >= tokens.len() {
-        return query.to_string();
-    }
-    tokens[relation.end_token..].join(" ")
 }
 
 pub(crate) fn serving_fact_text_snippets(fact: &ServingFactRecord) -> Vec<String> {
@@ -711,11 +896,8 @@ pub(crate) fn extract_first_distance_km(text: &str) -> Option<f64> {
         let Some(value) = parse_number_token(tokens[index - 1]) else {
             continue;
         };
-        if is_km_unit(&unit) {
-            return Some(value);
-        }
-        if is_meter_unit(&unit) {
-            return Some(value / 1000.0);
+        if let Some(multiplier) = parser::distance_unit_multiplier(&unit) {
+            return Some(value * multiplier);
         }
     }
     None
@@ -728,13 +910,7 @@ fn compact_distance_token_km(token: &str) -> Option<f64> {
     let unit_start = token.find(|ch: char| !(ch.is_ascii_digit() || ch == '.'))?;
     let (number, unit) = token.split_at(unit_start);
     let value = number.parse::<f64>().ok()?;
-    if is_km_unit(unit) {
-        Some(value)
-    } else if is_meter_unit(unit) {
-        Some(value / 1000.0)
-    } else {
-        None
-    }
+    parser::distance_unit_multiplier(unit).map(|multiplier| value * multiplier)
 }
 
 fn parse_number_token(token: &str) -> Option<f64> {
@@ -748,14 +924,6 @@ fn clean_unit_token(token: &str) -> String {
     token
         .trim_matches(|ch: char| !ch.is_ascii_alphabetic())
         .to_ascii_lowercase()
-}
-
-fn is_km_unit(unit: &str) -> bool {
-    matches!(unit, "km" | "kms" | "kilometer" | "kilometers")
-}
-
-fn is_meter_unit(unit: &str) -> bool {
-    matches!(unit, "m" | "meter" | "meters" | "metre" | "metres")
 }
 
 #[cfg(test)]
@@ -896,6 +1064,7 @@ mod tests {
                 GeoPlace {
                     entity_id: "place:hm".to_string(),
                     name: "H M Tech Park".to_string(),
+                    category: Some("tech_park".to_string()),
                     latitude: 12.0,
                     longitude: 77.0,
                     confidence: 0.99,
@@ -904,6 +1073,7 @@ mod tests {
                 GeoPlace {
                     entity_id: "place:example".to_string(),
                     name: "Example Tech Park".to_string(),
+                    category: Some("tech_park".to_string()),
                     latitude: 12.1,
                     longitude: 77.1,
                     confidence: 0.82,
@@ -926,6 +1096,7 @@ mod tests {
                 GeoPlace {
                     entity_id: "place:hospital".to_string(),
                     name: "Northstar Hospital Whitefield".to_string(),
+                    category: Some("hospital".to_string()),
                     latitude: 12.0,
                     longitude: 77.0,
                     confidence: 0.93,
@@ -934,6 +1105,7 @@ mod tests {
                 GeoPlace {
                     entity_id: "place:tech".to_string(),
                     name: "Example Tech Park".to_string(),
+                    category: Some("tech_park".to_string()),
                     latitude: 12.1,
                     longitude: 77.1,
                     confidence: 0.82,
@@ -955,12 +1127,39 @@ mod tests {
     }
 
     #[test]
+    fn distinctive_two_token_name_resolves_place_with_long_tagline() {
+        let index = GeoSearchIndex {
+            places: vec![GeoPlace {
+                entity_id: "place:school".to_string(),
+                name: "Northstar High - Learn. Lead. Succeed".to_string(),
+                category: Some("school".to_string()),
+                latitude: 12.0,
+                longitude: 77.0,
+                confidence: 0.93,
+                match_tokens: significant_place_tokens("Northstar High - Learn. Lead. Succeed"),
+            }],
+            society_coordinates: Vec::new(),
+        };
+
+        let query = index
+            .query("2 bhk near northstar high under budget")
+            .expect("two-token place name should resolve despite an indexed tagline");
+
+        assert_eq!(query.resolved_places().len(), 1);
+        assert_eq!(
+            query.resolved_places()[0].name,
+            "Northstar High - Learn. Lead. Succeed"
+        );
+    }
+
+    #[test]
     fn generic_place_family_tokens_do_not_resolve_as_named_places() {
         let index = GeoSearchIndex {
             places: vec![
                 GeoPlace {
                     entity_id: "place:hm".to_string(),
                     name: "H M Tech Park".to_string(),
+                    category: Some("tech_park".to_string()),
                     latitude: 12.0,
                     longitude: 77.0,
                     confidence: 0.99,
@@ -969,6 +1168,7 @@ mod tests {
                 GeoPlace {
                     entity_id: "place:example".to_string(),
                     name: "Example Tech Park".to_string(),
+                    category: Some("tech_park".to_string()),
                     latitude: 12.1,
                     longitude: 77.1,
                     confidence: 0.82,
@@ -978,7 +1178,42 @@ mod tests {
             society_coordinates: Vec::new(),
         };
 
-        assert!(index.query("3bhk near tech park").is_none());
+        let query = index
+            .query("3bhk near tech park")
+            .expect("generic category should remain a fact-backed clause");
+        assert!(query.resolved_places().is_empty());
+        assert_eq!(
+            query.resolved_clauses()[0].category_fact_keys,
+            vec!["nearby_tech_parks"]
+        );
+    }
+
+    #[test]
+    fn generic_place_family_clauses_do_not_fuzzily_resolve_named_places() {
+        let index = GeoSearchIndex {
+            places: vec![GeoPlace {
+                entity_id: "place:montessori".to_string(),
+                name: "Mont Ivy Montessori Preschools Near Me".to_string(),
+                category: Some("school".to_string()),
+                latitude: 12.0,
+                longitude: 77.0,
+                confidence: 0.99,
+                match_tokens: significant_place_tokens("Mont Ivy Montessori Preschools Near Me"),
+            }],
+            society_coordinates: Vec::new(),
+        };
+
+        let query = index
+            .query("homes with both nearby metro-station evidence and nearby school evidence")
+            .expect("generic categories should remain fact-backed clauses");
+        assert!(query.resolved_places().is_empty());
+        assert!(query
+            .resolved_clauses()
+            .iter()
+            .all(|clause| !clause.category_fact_keys.is_empty()));
+        assert!(index
+            .query("projects with school evidence nearby")
+            .is_none());
     }
 
     #[test]
@@ -991,6 +1226,7 @@ mod tests {
             places: vec![GeoPlace {
                 entity_id: "place:generic-tech-park".to_string(),
                 name: "Tech Park".to_string(),
+                category: Some("tech_park".to_string()),
                 latitude: 12.0,
                 longitude: 77.0,
                 confidence: 0.99,
@@ -999,7 +1235,10 @@ mod tests {
             society_coordinates: Vec::new(),
         };
 
-        assert!(index.query("3bhk near tech park").is_none());
+        let query = index
+            .query("3bhk near tech park")
+            .expect("generic category should remain a fact-backed clause");
+        assert!(query.resolved_places().is_empty());
     }
 
     #[test]
@@ -1008,6 +1247,7 @@ mod tests {
             places: vec![GeoPlace {
                 entity_id: "place:deens".to_string(),
                 name: "Deens Academy".to_string(),
+                category: Some("school".to_string()),
                 latitude: 12.0,
                 longitude: 77.0,
                 confidence: 0.99,
@@ -1020,5 +1260,92 @@ mod tests {
         assert!(index.query("homes close to deens academy").is_some());
         assert!(index.query("budget within 2cr for deens academy").is_none());
         assert!(index.query("homes within 500m of deens academy").is_some());
+    }
+
+    #[test]
+    fn unsupported_or_named_targets_do_not_fall_back_to_partial_category_words() {
+        let index = GeoSearchIndex::default();
+
+        assert!(index.query("3bhk near a police station").is_none());
+        assert!(index
+            .query("2bhk near Basavanpura Lake under 2cr")
+            .is_none());
+    }
+
+    #[test]
+    fn mixed_anchor_query_keeps_named_category_and_unresolved_clauses_separate() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "area:whitefield".to_string(),
+            entity_type: "area".to_string(),
+            name: "Whitefield".to_string(),
+            root_source: None,
+            searchable_text: "Whitefield".to_string(),
+        }];
+        let facts = ServingFactIndex::from_records(
+            vec![
+                serving_numeric_fact("area:whitefield", "geo.latitude", 12.9698, "Google"),
+                serving_numeric_fact("area:whitefield", "geo.longitude", 77.75, "Google"),
+            ],
+            Vec::new(),
+        );
+        let index = GeoSearchIndex::from_serving_bundle(&entities, &facts);
+
+        let query = index
+            .query(
+                "3bhk near Whitefield close to kids school and near my wife office in Marathahalli",
+            )
+            .expect("the resolved anchors should remain usable");
+
+        assert_eq!(query.resolved_clauses().len(), 2);
+        assert_eq!(query.resolved_clauses()[0].target_text, "whitefield");
+        assert_eq!(
+            query.resolved_clauses()[1].category_fact_keys,
+            vec!["nearby_schools"]
+        );
+        assert_eq!(
+            query.unresolved_targets(),
+            &["my wife office in marathahalli"]
+        );
+        assert!(query
+            .resolved_places()
+            .iter()
+            .any(|place| { place.entity_id == "area:whitefield" && place.name == "Whitefield" }));
+    }
+
+    #[test]
+    fn longest_exact_place_name_suppresses_contained_entity() {
+        let index = GeoSearchIndex {
+            places: vec![
+                GeoPlace {
+                    entity_id: "place:area:banashankari".to_string(),
+                    name: "Banashankari".to_string(),
+                    category: None,
+                    latitude: 12.0,
+                    longitude: 77.0,
+                    confidence: 1.0,
+                    match_tokens: significant_place_tokens("Banashankari"),
+                },
+                GeoPlace {
+                    entity_id: "place:hospital:sri-banashankari".to_string(),
+                    name: "Sri Banashankari Hospital".to_string(),
+                    category: Some("hospital".to_string()),
+                    latitude: 12.1,
+                    longitude: 77.1,
+                    confidence: 0.9,
+                    match_tokens: significant_place_tokens("Sri Banashankari Hospital"),
+                },
+            ],
+            society_coordinates: Vec::new(),
+        };
+
+        let query = index
+            .query("homes near Sri Banashankari Hospital")
+            .expect("full hospital name should resolve");
+
+        assert_eq!(query.resolved_places().len(), 1);
+        assert_eq!(
+            query.resolved_places()[0].entity_id,
+            "place:hospital:sri-banashankari"
+        );
     }
 }

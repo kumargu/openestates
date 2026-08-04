@@ -74,11 +74,47 @@
   "resolution": {
     "min_resolvable_entity_name_chars": 3,
     "ignored_entity_names": ["a", "an", "the", "in", "near", "for", "with"],
+    "resolvable_entity_types": ["area", "place", "society", "builder"],
+    "named_entity_scope_prefixes": ["in"],
+    "generic_scope_nouns": [
+      "project",
+      "projects",
+      "society",
+      "societies",
+      "community",
+      "communities",
+      "home",
+      "homes",
+      "property",
+      "properties",
+      "apartment",
+      "apartments",
+      "flat",
+      "flats",
+      "inventory",
+      "option",
+      "options"
+    ],
+    "exclusion_prefixes": [
+      "not interested in",
+      "not looking in",
+      "not looking for",
+      "do not want",
+      "don't want",
+      "dont want",
+      "avoid",
+      "exclude",
+      "excluding",
+      "except",
+      "outside",
+      "not in",
+      "not"
+    ],
     "place_families": [
       {
         "id": "metro",
         "label": "metro",
-        "aliases": ["metro", "metro station", "station"]
+        "aliases": ["metro", "metro station"]
       },
       {
         "id": "school",
@@ -110,7 +146,9 @@
   "parser": {
     "bhk": {
       "unit_aliases": [
-        "bhk"
+        "bhk",
+        "bedroom",
+        "bedrooms"
       ],
       "number_words": [
         {
@@ -210,6 +248,8 @@
       ]
     },
     "relations": {
+      "max_clauses": 4,
+      "clause_joiners": ["and", "also", "plus"],
       "aliases": [
         {
           "alias": "near"

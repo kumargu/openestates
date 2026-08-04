@@ -71,10 +71,6 @@ impl SpatialServingIndex {
         Self { points, tree }
     }
 
-    pub fn point_count(&self) -> usize {
-        self.points.len()
-    }
-
     pub fn point_for_entity(&self, entity_id: &str) -> Option<&SpatialPoint> {
         self.points
             .binary_search_by(|point| point.entity_id.as_str().cmp(entity_id))
@@ -82,58 +78,42 @@ impl SpatialServingIndex {
             .and_then(|index| self.points.get(index))
     }
 
-    pub fn points_in_bbox(
-        &self,
-        west: f64,
-        south: f64,
-        east: f64,
-        north: f64,
-    ) -> Vec<&SpatialPoint> {
-        if !west.is_finite()
-            || !south.is_finite()
-            || !east.is_finite()
-            || !north.is_finite()
-            || west > east
-            || south > north
-        {
-            return Vec::new();
-        }
-        let envelope = AABB::from_corners([west, south], [east, north]);
-        self.tree
-            .locate_in_envelope_intersecting(&envelope)
-            .filter_map(|indexed| self.points.get(indexed.index))
-            .collect()
-    }
-
-    pub fn nearest_points(
+    pub fn points_within_radius(
         &self,
         latitude: f64,
         longitude: f64,
-        limit: usize,
-    ) -> Vec<&SpatialPoint> {
-        if limit == 0 || !valid_coordinate_pair(latitude, longitude) {
+        radius_km: f64,
+    ) -> Vec<(&SpatialPoint, f64)> {
+        if !valid_coordinate_pair(latitude, longitude) || !radius_km.is_finite() || radius_km <= 0.0
+        {
             return Vec::new();
         }
-        let mut nearest = self
-            .points
-            .iter()
+
+        const KM_PER_LATITUDE_DEGREE: f64 = 111.32;
+        let latitude_delta = radius_km / KM_PER_LATITUDE_DEGREE;
+        let longitude_scale = latitude.to_radians().cos().abs().max(0.01);
+        let longitude_delta = radius_km / (KM_PER_LATITUDE_DEGREE * longitude_scale);
+        let envelope = AABB::from_corners(
+            [longitude - longitude_delta, latitude - latitude_delta],
+            [longitude + longitude_delta, latitude + latitude_delta],
+        );
+        let mut matches = self
+            .tree
+            .locate_in_envelope_intersecting(&envelope)
+            .filter_map(|indexed| self.points.get(indexed.index))
             .filter_map(|point| {
                 let distance_km =
                     haversine_km(latitude, longitude, point.latitude, point.longitude);
-                distance_km.is_finite().then_some((point, distance_km))
+                (distance_km <= radius_km).then_some((point, distance_km))
             })
             .collect::<Vec<_>>();
-        nearest.sort_by(|(left, left_distance), (right, right_distance)| {
+        matches.sort_by(|(left, left_distance), (right, right_distance)| {
             left_distance
                 .partial_cmp(right_distance)
                 .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| left.entity_id.cmp(&right.entity_id))
         });
-        nearest
-            .into_iter()
-            .take(limit)
-            .map(|(point, _)| point)
-            .collect()
+        matches
     }
 }
 
@@ -141,10 +121,10 @@ fn spatial_point_from_rows(
     entity: &ServingEntityRecord,
     rows: &ServingEntityFactRows,
 ) -> Option<SpatialPoint> {
-    let scope = if entity.entity_type.eq_ignore_ascii_case("place") {
-        CoordinateEntityScope::Place
-    } else {
-        CoordinateEntityScope::Society
+    let scope = match entity.entity_type.to_ascii_lowercase().as_str() {
+        "place" => CoordinateEntityScope::Place,
+        "area" => CoordinateEntityScope::Area,
+        _ => CoordinateEntityScope::Society,
     };
     let coordinates = resolve_serving_coordinates(rows, scope)?;
     Some(SpatialPoint {
@@ -197,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn spatial_index_loads_points_and_queries_bbox() {
+    fn spatial_index_loads_points_for_entity_lookup() {
         let entities = vec![
             entity("society:one", "society", "One"),
             entity("place:metro", "place", "Metro"),
@@ -214,30 +194,46 @@ mod tests {
         let fact_index = ServingFactIndex::from_records(facts, Vec::new());
         let index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
 
-        assert_eq!(index.point_count(), 3);
         assert_eq!(
             index
                 .point_for_entity("society:one")
                 .map(|point| point.latitude),
             Some(12.98)
         );
-        let nearby = index.points_in_bbox(77.7, 12.9, 77.8, 13.0);
-        assert_eq!(
-            nearby
-                .iter()
-                .map(|point| point.entity_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["society:one", "place:metro"]
-        );
+        assert!(index.point_for_entity("place:metro").is_some());
+        assert!(index.point_for_entity("place:far").is_some());
+    }
 
-        let nearest = index.nearest_points(12.98, 77.75, 2);
-        assert_eq!(
-            nearest
-                .iter()
-                .map(|point| point.entity_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["society:one", "place:metro"]
-        );
+    #[test]
+    fn spatial_index_queries_haversine_radius_and_loads_area_anchors() {
+        let entities = vec![
+            entity("area:anchor", "area", "Anchor"),
+            entity("society:near", "society", "Near"),
+            entity("society:far", "society", "Far"),
+        ];
+        let facts = vec![
+            coord("area:anchor", "geo.latitude", 12.98, 0.9),
+            coord("area:anchor", "geo.longitude", 77.75, 0.9),
+            coord("society:near", "geo.latitude", 12.99, 0.9),
+            coord("society:near", "geo.longitude", 77.75, 0.9),
+            coord("society:far", "geo.latitude", 13.08, 0.9),
+            coord("society:far", "geo.longitude", 77.75, 0.9),
+        ];
+        let fact_index = ServingFactIndex::from_records(facts, Vec::new());
+        let index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
+        let anchor = index
+            .point_for_entity("area:anchor")
+            .expect("area coordinate should be indexed");
+
+        let matches = index.points_within_radius(anchor.latitude, anchor.longitude, 2.0);
+        let ids = matches
+            .iter()
+            .map(|(point, _)| point.entity_id.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(ids.contains(&"area:anchor"));
+        assert!(ids.contains(&"society:near"));
+        assert!(!ids.contains(&"society:far"));
     }
 
     #[test]
@@ -249,6 +245,6 @@ mod tests {
         ];
         let fact_index = ServingFactIndex::from_records(facts, Vec::new());
         let index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
-        assert_eq!(index.point_count(), 0);
+        assert!(index.point_for_entity("society:bad").is_none());
     }
 }

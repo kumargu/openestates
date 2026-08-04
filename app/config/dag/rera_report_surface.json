@@ -181,6 +181,30 @@
       "label": "Complaints resolved"
     },
     {
+      "fact_keys": ["rera_project_complaints_count"],
+      "label": "Project complaints"
+    },
+    {
+      "fact_keys": ["rera_project_complaints_disposed_count"],
+      "label": "Project complaints closed"
+    },
+    {
+      "fact_keys": ["rera_project_complaints_open_count"],
+      "label": "Open project complaints"
+    },
+    {
+      "fact_keys": ["rera_promoter_complaints_count"],
+      "label": "Promoter complaints"
+    },
+    {
+      "fact_keys": ["rera_promoter_complaints_disposed_count"],
+      "label": "Promoter complaints closed"
+    },
+    {
+      "fact_keys": ["rera_promoter_complaints_open_count"],
+      "label": "Open promoter complaints"
+    },
+    {
       "fact_keys": ["rera_delay_months"],
       "label": "Delay"
     },
@@ -323,6 +347,18 @@
     {
       "fact_keys": ["site_plan_asset_count"],
       "label": "Site plans"
+    },
+    {
+      "fact_keys": ["rera_affidavit_document_count"],
+      "label": "Affidavits"
+    },
+    {
+      "fact_keys": ["rera_legal_land_document_count"],
+      "label": "Land records"
+    },
+    {
+      "fact_keys": ["rera_noc_document_count"],
+      "label": "NOCs"
     },
     {
       "fact_keys": ["rera_project_address", "rera_address", "project_address", "address"],

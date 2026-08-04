@@ -7,7 +7,7 @@ use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::knowledge::edge::Relation;
-use crate::knowledge::{FactValue, KnowledgeGraph, SourcedFact, google_reviews_url_from_facts};
+use crate::knowledge::{google_reviews_url_from_facts, FactValue, KnowledgeGraph, SourcedFact};
 use crate::models::{AreaProfile, KgEntityRefs, Property, PropertyCard, Society};
 use crate::serving::{ServingFactIndex, SocietyFactProjection};
 

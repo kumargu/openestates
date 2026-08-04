@@ -1,11 +1,10 @@
 # Search Quality Bar
 
-OpenEstates search should understand buyer language without turning embeddings
-into proof. The search stack has three separate jobs: recall enough plausible
-homes, prove why any home is ranked, and explain missing evidence honestly. A
-semantic score can widen the candidate pool and add a soft ranking signal, but
-every buyer-facing reason must still come from DAG-backed serving facts or a
-deterministic computation over those facts.
+OpenEstates search should understand anchored buyer language through configured
+intent, serving entities, geo relationships, and DAG facts. The search stack has
+three separate jobs: recall enough plausible homes, prove why any home is
+ranked, and explain missing evidence honestly. FastEmbed and vector recall are
+not part of the current runtime.
 
 The implementation roadmap lives in `docs/search_engine_roadmap.md`; the active
 ontology cleanup plan lives in `docs/search_ontology_refactor_plan.md`.
@@ -60,22 +59,21 @@ Before each loop, also do a shape audit:
 1. Intent parsing captures hard constraints and soft tradeoffs from natural
    buyer language: BHK, area, budget, positive preferences, negative
    preferences, accepted tradeoffs, and unsupported inventory requests.
-2. Semantic recall handles paraphrases without adding one-off vocabulary for
-   every phrase. The offline embedding model can widen recall, but ontology
-   resolution and DAG-backed proof decide what facts count. Config synonyms stay
-   for domain labels and controlled intent extraction, not named-place aliases.
-3. The runtime never embeds the corpus at API startup. Serving bundles carry
-   precomputed vectors in Parquet, keyed by `model_id`, dimensions, and document
-   text hash.
-4. Proof precision beats recall. A result may be semantically recalled, but it
+2. Configured intent and relation parsing handle credible buyer paraphrases
+   without locality- or landmark-specific code. Named entities come from the
+   serving bundle, not parser aliases.
+3. Multiple proximity clauses remain independent. Each resolved anchor may add
+   ranking evidence and proof; an unresolved secondary anchor records a gap and
+   never invents a destination.
+4. Proof precision beats recall. A result may be lexically or structurally recalled, but it
    must not claim review quality, water safety, builder trust, maintenance
    quality, or legal safety unless the serving facts contain matching evidence.
 5. Over-constrained and negative-only queries must not silently look broken.
    When the local bundle has no proveable candidates, search should return a
    deterministic relaxation or a recorded enrichment gap rather than fake
    evidence.
-6. Warm request latency should stay bounded by in-memory search and local model
-   query embedding only. Batch embedding belongs in DAG/offline tooling.
+6. Warm request latency stays bounded by in-memory structured, Tantivy, geo,
+   and fact lookup.
 
 ## Current Checks
 
@@ -108,11 +106,10 @@ the DAG grows.
 
 The contract tests that encode the product bar are:
 
-- `backend/tests/search_semantic_quality_contract.rs`
 - `backend/tests/search_efficiency_contract.rs`
 - `backend/tests/search_quality_contract.rs`
 
-The previous promoted FastEmbed bundle was
+Historical only: the previous promoted FastEmbed bundle was
 `2026-07-21-generated-context-waterford-brigade-semantic-20260722053602`.
 That profile showed 16,431 entities, 146 properties, 94,032 fact rows, 94,018
 search metadata rows, and 9,930 precomputed semantic embedding rows.
@@ -127,7 +124,7 @@ builder RERA track record, Google/community review evidence, metro access,
 nearby schools/hospitals/tech parks, listing price facts, home state, and
 timeline state. These are fair search-quality benchmark inputs.
 
-Water/tanker/maintenance-negative language is not yet a fair embedding-quality
+Water/tanker/maintenance-negative language is not yet a fair search-quality
 input. The current bundle has only one `operating.tanker_dependence` row with
 confidence `0.4`, no `maintenance_sentiment`, no
 `lifecycle.builder_reputation_negative`, no `water_supply_risk`, no
@@ -135,11 +132,11 @@ confidence `0.4`, no `maintenance_sentiment`, no
 rows. These stay as data-gap sentinels until DAG collection/enrichment promotes
 enough sourced facts.
 
-The old data-backed buyer-language benchmark baseline against the promoted offline
+Historical experiment only: the old data-backed buyer-language benchmark against the promoted offline
 FastEmbed bundle is 55/76 scoreable checks, or 72.4%. Overall, including
 data-gap sentinels, it is 70/99 checks, or 70.7%. Recall is healthy for this
 suite: 19/19 cases returned results. Safety is clean: 19/19 checks pass for
-"semantic score must not become proof." The active quality gaps are:
+"semantic score must not become proof." The quality gaps recorded in that run were:
 
 - Intent parsing misses multi-line and typo-heavy budget phrasing such as
   `budget ideally under 2.5Cr.`, `under 2.8Cr.`, and `undr 2.5cr`.
@@ -169,17 +166,17 @@ ranking weights:
    proof reason appears.
 4. `ranking_gap`: the right candidate is recalled but ranked below weaker
    candidates even with matching proof.
-5. `embedding_gap`: the query and document are semantically related, the data
-   exists, the intent/proof wiring is adequate, but semantic recall still misses
-   the candidate. This is the real model-quality failure bucket.
+5. `embedding_gap`: reserved for an explicitly scoped future embedding
+   experiment. The current deterministic runtime does not assign ordinary
+   misses to this bucket.
 6. `architecture_gap`: the code path works for a case but is in the wrong layer,
    duplicates another layer, bypasses DAG/config ownership, or cannot explain
    itself through the shared proof contract. This bucket blocks more feature
    work until the chain is simplified or documented as a temporary shim.
 
-This matters because embeddings cannot fix missing facts, and DAG collection
-cannot fix weak query parsing. The benchmark report should make that separation
-visible before we decide what to build next.
+This matters because recall mechanics cannot fix missing facts, and DAG
+collection cannot fix weak query parsing. The benchmark report should make that
+separation visible before we decide what to build next.
 
 ## Coordinate Enrichment
 
@@ -198,19 +195,16 @@ source can prove them:
 For a query like "near a named mall" or "close to metro but not cut off from
 hospitals", search should parse the place mention, resolve it to a place/entity
 with coordinates, compute local distances over the serving bundle, and
-rank/explain with those derived distance facts. The embedding document can
-include compact geospatial text such as "1.2 km from named metro station" or
-"near named mall", but the proof reason must come from the coordinate-backed
-derived fact, not from vector similarity.
+rank/explain with those derived distance facts. The proof reason must come from
+the coordinate-backed derived fact.
 
 ## Next Data Work
 
 To make tanker, maintenance, builder-negative, BBMP/OC, and monsoon-drainage
 queries scoreable, collect or enrich those signals through the DAG first, then
-materialize them as sourced facts with search metadata. After promotion, rebuild
-the offline semantic embedding Parquet so the serving bundle carries both proof
-facts and vectors. Only then should those query families move from
-`data_gap` mode to `data_backed` mode.
+materialize them as sourced facts with search metadata. Only after those facts
+are promoted should the query families move from `data_gap` mode to
+`data_backed` mode.
 
 The next enrichment pass should prioritize:
 

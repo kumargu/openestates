@@ -1,9 +1,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use arrow::array::{
-    Array, ArrayRef, Float32Array, Float32Builder, ListArray, ListBuilder, StringArray,
-};
+use arrow::array::{Array, ArrayRef, Float32Array, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use bytes::Bytes;
@@ -22,8 +20,7 @@ use crate::parquet_data::{
 };
 
 use super::{
-    ServingEdgeRecord, ServingEmbeddingRecord, ServingEntityRecord, ServingFactRecord,
-    ServingSearchMetadataRecord,
+    ServingEdgeRecord, ServingEntityRecord, ServingFactRecord, ServingSearchMetadataRecord,
 };
 
 pub fn write_entities_parquet(
@@ -180,47 +177,6 @@ pub fn write_search_metadata_parquet(
     write_batch(batch)
 }
 
-pub fn write_embeddings_parquet(
-    records: &[ServingEmbeddingRecord],
-) -> Result<Vec<u8>, ParquetWriteError> {
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("entity_id", DataType::Utf8, false),
-        Field::new("entity_type", DataType::Utf8, false),
-        Field::new("model_id", DataType::Utf8, false),
-        Field::new("dimensions", DataType::UInt32, false),
-        Field::new("document_text_hash", DataType::Utf8, false),
-        Field::new(
-            "embedding",
-            DataType::List(Arc::new(Field::new_list_field(DataType::Float32, true))),
-            false,
-        ),
-    ]));
-
-    let batch = RecordBatch::try_new(
-        schema.clone(),
-        vec![
-            string_array(records.iter().map(|record| record.entity_id.clone())),
-            string_array(records.iter().map(|record| record.entity_type.clone())),
-            string_array(records.iter().map(|record| record.model_id.clone())),
-            Arc::new(arrow::array::UInt32Array::from(
-                records
-                    .iter()
-                    .map(|record| record.dimensions)
-                    .collect::<Vec<_>>(),
-            )) as ArrayRef,
-            string_array(
-                records
-                    .iter()
-                    .map(|record| record.document_text_hash.clone()),
-            ),
-            float32_list_array(records.iter().map(|record| record.embedding.clone())),
-        ],
-    )
-    .map_err(ParquetWriteError::Arrow)?;
-
-    write_batch(batch)
-}
-
 pub fn read_facts_parquet(bytes: &[u8]) -> Result<Vec<ServingFactRecord>, ParquetReadError> {
     let mut records = Vec::new();
     for batch in ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes))?.build()? {
@@ -262,33 +218,6 @@ pub fn read_facts_parquet(bytes: &[u8]) -> Result<Vec<ServingFactRecord>, Parque
                     "learned_at",
                 )?)?
                 .with_timezone(&Utc),
-            });
-        }
-    }
-    Ok(records)
-}
-
-pub fn read_embeddings_parquet(
-    bytes: &[u8],
-) -> Result<Vec<ServingEmbeddingRecord>, ParquetReadError> {
-    let mut records = Vec::new();
-    for batch in ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes))?.build()? {
-        let batch = batch?;
-        let entity_id = string_column(&batch, "entity_id")?;
-        let entity_type = string_column(&batch, "entity_type")?;
-        let model_id = string_column(&batch, "model_id")?;
-        let dimensions = uint32_column(&batch, "dimensions")?;
-        let document_text_hash = string_column(&batch, "document_text_hash")?;
-        let embeddings = list_float32_column(&batch, "embedding")?;
-
-        for row in 0..batch.num_rows() {
-            records.push(ServingEmbeddingRecord {
-                entity_id: required_string(entity_id, row, "entity_id")?,
-                entity_type: required_string(entity_type, row, "entity_type")?,
-                model_id: required_string(model_id, row, "model_id")?,
-                dimensions: required_u32(dimensions, row, "dimensions")?,
-                document_text_hash: required_string(document_text_hash, row, "document_text_hash")?,
-                embedding: required_float32_list(embeddings, row, "embedding")?,
             });
         }
     }
@@ -353,17 +282,6 @@ fn string_array(values: impl Iterator<Item = String>) -> ArrayRef {
 
 fn optional_string_array(values: Vec<Option<String>>) -> ArrayRef {
     Arc::new(StringArray::from(values))
-}
-
-fn float32_list_array(values: impl Iterator<Item = Vec<f32>>) -> ArrayRef {
-    let mut builder = ListBuilder::new(Float32Builder::new());
-    for items in values {
-        for item in items {
-            builder.values().append_value(item);
-        }
-        builder.append(true);
-    }
-    Arc::new(builder.finish())
 }
 
 fn fact_value_from_batch(
@@ -493,36 +411,6 @@ fn float32_column<'a>(
         })
 }
 
-fn uint32_column<'a>(
-    batch: &'a RecordBatch,
-    name: &str,
-) -> Result<&'a arrow::array::UInt32Array, ParquetReadError> {
-    let index = batch.schema().index_of(name)?;
-    batch
-        .column(index)
-        .as_any()
-        .downcast_ref::<arrow::array::UInt32Array>()
-        .ok_or_else(|| ParquetReadError::InvalidColumn {
-            name: name.to_string(),
-            expected: "UInt32",
-        })
-}
-
-fn list_float32_column<'a>(
-    batch: &'a RecordBatch,
-    name: &str,
-) -> Result<&'a ListArray, ParquetReadError> {
-    let index = batch.schema().index_of(name)?;
-    batch
-        .column(index)
-        .as_any()
-        .downcast_ref::<ListArray>()
-        .ok_or_else(|| ParquetReadError::InvalidColumn {
-            name: name.to_string(),
-            expected: "List<Float32>",
-        })
-}
-
 fn required_string(
     array: &StringArray,
     row: usize,
@@ -553,45 +441,6 @@ fn required_f32(array: &Float32Array, row: usize, column: &str) -> Result<f32, P
         });
     }
     Ok(array.value(row))
-}
-
-fn required_u32(
-    array: &arrow::array::UInt32Array,
-    row: usize,
-    column: &str,
-) -> Result<u32, ParquetReadError> {
-    if array.is_null(row) {
-        return Err(ParquetReadError::UnexpectedNull {
-            column: column.to_string(),
-            row,
-        });
-    }
-    Ok(array.value(row))
-}
-
-fn required_float32_list(
-    array: &ListArray,
-    row: usize,
-    column: &str,
-) -> Result<Vec<f32>, ParquetReadError> {
-    if array.is_null(row) {
-        return Err(ParquetReadError::UnexpectedNull {
-            column: column.to_string(),
-            row,
-        });
-    }
-    let values = array.value(row);
-    let floats = values
-        .as_any()
-        .downcast_ref::<Float32Array>()
-        .ok_or_else(|| ParquetReadError::InvalidColumn {
-            name: column.to_string(),
-            expected: "List<Float32>",
-        })?;
-    Ok((0..floats.len())
-        .filter(|index| !floats.is_null(*index))
-        .map(|index| floats.value(index))
-        .collect())
 }
 
 fn optional_f32(array: &Float32Array, row: usize) -> Option<f32> {
@@ -747,26 +596,4 @@ pub fn read_edges_parquet(bytes: &[u8]) -> Result<Vec<ServingEdgeRecord>, Parque
         }
     }
     Ok(records)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn semantic_embedding_parquet_round_trips_vectors() {
-        let records = vec![ServingEmbeddingRecord {
-            entity_id: "property:one".to_string(),
-            entity_type: "property".to_string(),
-            model_id: "fastembed-all-minilm-l6-v2".to_string(),
-            dimensions: 3,
-            document_text_hash: "abc123".to_string(),
-            embedding: vec![0.1, 0.2, 0.3],
-        }];
-
-        let bytes = write_embeddings_parquet(&records).expect("write embeddings parquet");
-        let actual = read_embeddings_parquet(&bytes).expect("read embeddings parquet");
-
-        assert_eq!(actual, records);
-    }
 }

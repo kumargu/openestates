@@ -8,10 +8,10 @@ use crate::assets::{
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
 use super::{
-    hydrate_tantivy_index, read_edges_parquet, read_embeddings_parquet, read_entities_parquet,
-    read_facts_parquet, read_search_metadata_parquet, ParquetReadError, ServingBundleManifest,
-    ServingEdgeRecord, ServingEmbeddingRecord, ServingEntityRecord, ServingFactIndex,
-    SpatialServingIndex, TantivyIndexError, TantivyRecallIndex, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    hydrate_tantivy_index, read_edges_parquet, read_entities_parquet, read_facts_parquet,
+    read_search_metadata_parquet, ParquetReadError, ServingBundleManifest, ServingEdgeRecord,
+    ServingEntityRecord, ServingFactIndex, SpatialServingIndex, TantivyIndexError,
+    TantivyRecallIndex, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 use crate::graph::GraphIndex;
 use crate::search::geo::GeoSearchIndex;
@@ -32,7 +32,6 @@ pub struct LoadedServingBundle {
     pub fact_index: ServingFactIndex,
     pub geo_index: GeoSearchIndex,
     pub spatial_index: SpatialServingIndex,
-    pub semantic_embeddings: Vec<ServingEmbeddingRecord>,
     pub cache_dir: PathBuf,
 }
 
@@ -116,7 +115,6 @@ impl ServingBundleLoader {
         graph_index.add_entity_aliases(&aliases);
         let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
         let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
-        let semantic_embeddings = load_semantic_embeddings(&self.lake, &manifest).await?;
         Ok(LoadedServingBundle {
             manifest,
             entities,
@@ -126,7 +124,6 @@ impl ServingBundleLoader {
             fact_index,
             geo_index,
             spatial_index,
-            semantic_embeddings,
             cache_dir,
         })
     }
@@ -174,18 +171,6 @@ async fn load_fact_index(
     let facts = read_facts_parquet(&fact_bytes)?;
     let search_metadata = read_search_metadata_parquet(&search_metadata_bytes)?;
     Ok(ServingFactIndex::from_records(facts, search_metadata))
-}
-
-async fn load_semantic_embeddings(
-    lake: &LakeStore,
-    manifest: &ServingBundleManifest,
-) -> Result<Vec<ServingEmbeddingRecord>, ServingBundleLoadError> {
-    let Some(embedding_key) = manifest.semantic_embedding_parquet_key.as_ref() else {
-        return Ok(Vec::new());
-    };
-    let embedding_key = LakeKey::new(embedding_key.clone()).map_err(ServingBundleLoadError::Key)?;
-    let embedding_bytes = lake.get_bytes(&embedding_key).await?;
-    Ok(read_embeddings_parquet(&embedding_bytes)?)
 }
 
 fn manifest_key_for_record(

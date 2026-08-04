@@ -1,0 +1,478 @@
+{
+  "summary": {
+    "status": "passed",
+    "failure_count": 0,
+    "property_count": 3,
+    "search_count": 3,
+    "min_ratio": 0.85
+  },
+  "failures": [],
+  "properties": {
+    "discovered-prestige-waterford-3bhk": [
+      {
+        "metric": "evidence_sections",
+        "baseline": 7,
+        "candidate": 7,
+        "required": 5,
+        "status": "passed"
+      },
+      {
+        "metric": "evidence_items",
+        "baseline": 55,
+        "candidate": 56,
+        "required": 46,
+        "status": "passed"
+      },
+      {
+        "metric": "evidence_sources",
+        "baseline": 110,
+        "candidate": 112,
+        "required": 93,
+        "status": "passed"
+      },
+      {
+        "metric": "rera_sections",
+        "baseline": 9,
+        "candidate": 9,
+        "required": 7,
+        "status": "passed"
+      },
+      {
+        "metric": "rera_facts",
+        "baseline": 41,
+        "candidate": 41,
+        "required": 34,
+        "status": "passed"
+      },
+      {
+        "metric": "surface_count",
+        "baseline": 0,
+        "candidate": 0,
+        "required": 0,
+        "status": "passed"
+      },
+      {
+        "metric": "recommendations",
+        "baseline": 3,
+        "candidate": 3,
+        "required": 2,
+        "status": "passed"
+      },
+      {
+        "metric": "similar_properties",
+        "baseline": 0,
+        "candidate": 3,
+        "required": 0,
+        "status": "passed"
+      },
+      {
+        "metric": "images",
+        "baseline": 0,
+        "candidate": 0,
+        "required": 0,
+        "status": "passed"
+      },
+      {
+        "metric": "detail_keys",
+        "baseline": 20,
+        "candidate": 20,
+        "required": 17,
+        "status": "passed"
+      }
+    ],
+    "discovered-prestige-falcon-city-3bhk": [
+      {
+        "metric": "evidence_sections",
+        "baseline": 7,
+        "candidate": 7,
+        "required": 5,
+        "status": "passed"
+      },
+      {
+        "metric": "evidence_items",
+        "baseline": 40,
+        "candidate": 40,
+        "required": 34,
+        "status": "passed"
+      },
+      {
+        "metric": "evidence_sources",
+        "baseline": 80,
+        "candidate": 80,
+        "required": 68,
+        "status": "passed"
+      },
+      {
+        "metric": "rera_sections",
+        "baseline": 9,
+        "candidate": 9,
+        "required": 7,
+        "status": "passed"
+      },
+      {
+        "metric": "rera_facts",
+        "baseline": 41,
+        "candidate": 41,
+        "required": 34,
+        "status": "passed"
+      },
+      {
+        "metric": "surface_count",
+        "baseline": 0,
+        "candidate": 0,
+        "required": 0,
+        "status": "passed"
+      },
+      {
+        "metric": "recommendations",
+        "baseline": 3,
+        "candidate": 3,
+        "required": 2,
+        "status": "passed"
+      },
+      {
+        "metric": "similar_properties",
+        "baseline": 4,
+        "candidate": 4,
+        "required": 3,
+        "status": "passed"
+      },
+      {
+        "metric": "images",
+        "baseline": 0,
+        "candidate": 0,
+        "required": 0,
+        "status": "passed"
+      },
+      {
+        "metric": "detail_keys",
+        "baseline": 20,
+        "candidate": 20,
+        "required": 17,
+        "status": "passed"
+      }
+    ],
+    "discovered-prestige-southern-star-3bhk": [
+      {
+        "metric": "evidence_sections",
+        "baseline": 7,
+        "candidate": 7,
+        "required": 5,
+        "status": "passed"
+      },
+      {
+        "metric": "evidence_items",
+        "baseline": 35,
+        "candidate": 35,
+        "required": 29,
+        "status": "passed"
+      },
+      {
+        "metric": "evidence_sources",
+        "baseline": 70,
+        "candidate": 70,
+        "required": 59,
+        "status": "passed"
+      },
+      {
+        "metric": "rera_sections",
+        "baseline": 9,
+        "candidate": 9,
+        "required": 7,
+        "status": "passed"
+      },
+      {
+        "metric": "rera_facts",
+        "baseline": 54,
+        "candidate": 54,
+        "required": 45,
+        "status": "passed"
+      },
+      {
+        "metric": "surface_count",
+        "baseline": 0,
+        "candidate": 0,
+        "required": 0,
+        "status": "passed"
+      },
+      {
+        "metric": "recommendations",
+        "baseline": 3,
+        "candidate": 3,
+        "required": 2,
+        "status": "passed"
+      },
+      {
+        "metric": "similar_properties",
+        "baseline": 0,
+        "candidate": 0,
+        "required": 0,
+        "status": "passed"
+      },
+      {
+        "metric": "images",
+        "baseline": 0,
+        "candidate": 0,
+        "required": 0,
+        "status": "passed"
+      },
+      {
+        "metric": "detail_keys",
+        "baseline": 19,
+        "candidate": 19,
+        "required": 16,
+        "status": "passed"
+      }
+    ]
+  },
+  "searches": [
+    {
+      "query": "Prestige Waterford 3BHK",
+      "checks": [
+        {
+          "metric": "results",
+          "baseline": 20,
+          "candidate": 23,
+          "required": 17,
+          "status": "passed"
+        },
+        {
+          "metric": "match_reasons",
+          "baseline": 20,
+          "candidate": 23,
+          "required": 17,
+          "status": "passed"
+        },
+        {
+          "metric": "proof_keys",
+          "baseline": 0,
+          "candidate": 0,
+          "required": 0,
+          "status": "passed"
+        }
+      ],
+      "baseline_top_ids": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "candidate_top_ids": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "query": "Prestige Falcon City",
+      "checks": [
+        {
+          "metric": "results",
+          "baseline": 3,
+          "candidate": 3,
+          "required": 2,
+          "status": "passed"
+        },
+        {
+          "metric": "match_reasons",
+          "baseline": 3,
+          "candidate": 3,
+          "required": 2,
+          "status": "passed"
+        },
+        {
+          "metric": "proof_keys",
+          "baseline": 0,
+          "candidate": 0,
+          "required": 0,
+          "status": "passed"
+        }
+      ],
+      "baseline_top_ids": [
+        null,
+        null,
+        null
+      ],
+      "candidate_top_ids": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "query": "3BHK near metro with proof",
+      "checks": [
+        {
+          "metric": "results",
+          "baseline": 20,
+          "candidate": 23,
+          "required": 17,
+          "status": "passed"
+        },
+        {
+          "metric": "match_reasons",
+          "baseline": 20,
+          "candidate": 23,
+          "required": 17,
+          "status": "passed"
+        },
+        {
+          "metric": "proof_keys",
+          "baseline": 0,
+          "candidate": 0,
+          "required": 0,
+          "status": "passed"
+        }
+      ],
+      "baseline_top_ids": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "candidate_top_ids": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    }
+  ],
+  "candidate": {
+    "captured_at": "2026-08-01T11:42:42Z",
+    "base_url": "http://127.0.0.1:4021",
+    "properties": {
+      "discovered-prestige-waterford-3bhk": {
+        "metrics": {
+          "evidence_sections": 7,
+          "evidence_items": 56,
+          "evidence_sources": 112,
+          "rera_sections": 9,
+          "rera_facts": 41,
+          "surface_count": 0,
+          "recommendations": 3,
+          "similar_properties": 3,
+          "images": 0,
+          "detail_keys": 20
+        },
+        "samples": {
+          "title": null,
+          "society": "PRESTIGE WATERFORD",
+          "evidence_sections": [
+            "Lifecycle",
+            "RERA",
+            "Approach road",
+            "Market trail",
+            "Nearby",
+            "Water context",
+            "Community pulse"
+          ]
+        }
+      },
+      "discovered-prestige-falcon-city-3bhk": {
+        "metrics": {
+          "evidence_sections": 7,
+          "evidence_items": 40,
+          "evidence_sources": 80,
+          "rera_sections": 9,
+          "rera_facts": 41,
+          "surface_count": 0,
+          "recommendations": 3,
+          "similar_properties": 4,
+          "images": 0,
+          "detail_keys": 20
+        },
+        "samples": {
+          "title": null,
+          "society": "PRESTIGE FALCON CITY",
+          "evidence_sections": [
+            "Lifecycle",
+            "RERA",
+            "Approach road",
+            "Market trail",
+            "Nearby",
+            "Water context",
+            "Community pulse"
+          ]
+        }
+      },
+      "discovered-prestige-southern-star-3bhk": {
+        "metrics": {
+          "evidence_sections": 7,
+          "evidence_items": 35,
+          "evidence_sources": 70,
+          "rera_sections": 9,
+          "rera_facts": 54,
+          "surface_count": 0,
+          "recommendations": 3,
+          "similar_properties": 0,
+          "images": 0,
+          "detail_keys": 19
+        },
+        "samples": {
+          "title": null,
+          "society": "Prestige Southern Star",
+          "evidence_sections": [
+            "Lifecycle",
+            "RERA",
+            "Approach road",
+            "Market trail",
+            "Nearby",
+            "Water context",
+            "Community pulse"
+          ]
+        }
+      }
+    },
+    "searches": [
+      {
+        "query": "Prestige Waterford 3BHK",
+        "metrics": {
+          "results": 23,
+          "match_reasons": 23,
+          "proof_keys": 0
+        },
+        "top_ids": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "query": "Prestige Falcon City",
+        "metrics": {
+          "results": 3,
+          "match_reasons": 3,
+          "proof_keys": 0
+        },
+        "top_ids": [
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "query": "3BHK near metro with proof",
+        "metrics": {
+          "results": 23,
+          "match_reasons": 23,
+          "proof_keys": 0
+        },
+        "top_ids": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    ]
+  }
+}

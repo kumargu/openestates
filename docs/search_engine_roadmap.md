@@ -6,6 +6,12 @@ dimensions: constraints, places, preferences, proof requirements, tradeoffs, and
 missing evidence. This is not general web search. It is a layered, local,
 receipt-backed decision engine.
 
+Current decision (2026-08-04): the FastEmbed/semantic-router experiment was
+removed after deterministic parity testing showed no justified buyer value.
+Any later semantic-recall measurements in this document are historical records,
+not active implementation guidance. Current work improves configured intent,
+multi-anchor entity/geo resolution, DAG-fact ranking, and proof.
+
 ## North Star
 
 Search should answer:
@@ -21,8 +27,8 @@ Search should answer:
 
 The runtime stays local: no request-time DAG runs, no network calls, no LLM calls,
 and no corpus embedding at API startup. Serving Parquet is the source of runtime
-truth. Tantivy, structured indexes, semantic vectors, geo indexes, and fact
-indexes are all rebuildable serving caches.
+truth. Tantivy, structured indexes, geo indexes, and fact indexes are all
+rebuildable serving caches.
 
 ## Target Runtime Shape
 
@@ -34,7 +40,6 @@ free text query
   -> parallel recall
        -> in-memory structured recall
        -> Tantivy lexical recall
-       -> semantic vector recall
   -> geo scoring
   -> fact/proof scoring
   -> ranking
@@ -49,10 +54,10 @@ backend/src/search/
   intent.rs        free text -> structured SearchIntent
   resolver.rs      society/place/area alias resolution
   constraints.rs   BHK, budget, area, exclusions, relaxation
-  recall.rs        structured + Tantivy + semantic recall merge
+  recall.rs        structured + Tantivy + geo/fact recall merge
   geo.rs           coordinates, distance math, geo scores
   facts.rs         serving-fact lookup and proof matching
-  rank.rs          combines structured, lexical, semantic, geo, proof signals
+  rank.rs          combines structured, lexical, geo, and proof signals
   explain.rs       reasons, preference coverage, learning gaps
 ```
 
@@ -106,7 +111,6 @@ The ranker should score every candidate with explicit components:
 CandidateScore {
   hard_constraint_score,
   lexical_score,
-  semantic_score,
   geo_score,
   proof_score,
   confidence_score,
@@ -116,8 +120,7 @@ CandidateScore {
 }
 ```
 
-Semantic recall may widen candidates and provide a soft score, but it must never
-create proof. Geo distance must come from coordinates. Legal, review,
+Geo distance must come from coordinates. Legal, review,
 maintenance, water, builder, and price claims must come from serving facts.
 
 ## Latency Targets
@@ -131,8 +134,7 @@ Early product target:
 Long-term local target:
 
 - warm p95 search: `<100ms`
-- p95 without semantic recall: `<50ms`
-- semantic recall should be timeout-bounded and optional
+- deterministic hot-path p95: `<100ms`
 
 Initial layer budget:
 
@@ -142,21 +144,17 @@ Initial layer budget:
 | entity/place resolution | 1-5ms |
 | structured recall | 1-5ms |
 | Tantivy recall | 5-20ms |
-| query embedding | 10-50ms when warm |
-| vector scan | 1-15ms at current scale |
 | geo scoring | 1-10ms |
 | fact/proof scoring | 5-25ms |
 | ranking + response assembly | 5-20ms |
 
 Async strategy:
 
-- Run Tantivy recall, semantic recall, and place resolution as independent
-  futures once intent is parsed.
+- Run Tantivy recall and place resolution independently once intent is parsed
+  when profiling shows a latency benefit.
 - Keep structured filters and final ranking synchronous unless profiling proves
   they are expensive.
-- Timeout semantic recall before it can dominate the request. Return lexical +
-  structured + geo results when semantic is late.
-- Cache repeated query embeddings and place resolutions.
+- Cache repeated place resolutions where profiling justifies it.
 
 ## Milestones
 
@@ -223,7 +221,7 @@ Latency gates:
 - p95 no worse than current baseline by more than 10%.
 - p95 stays under 200ms on the benchmark suite.
 
-Status:
+Historical M1 status (retired semantic experiment):
 
 - Implemented `SearchEngine` as a compatibility facade over the existing
   `TextSearch` ranker.
@@ -284,7 +282,7 @@ Latency gates:
 
 - intent + resolution p95 `<10ms`.
 
-Status:
+Historical M2 status (retired semantic experiment):
 
 - Added punctuation-tolerant budget parsing for buyer phrasing such as `2.5Cr.`
   and typo/colloquial handling such as `witefield`, `undr`, and `gud reviews`.
@@ -548,8 +546,8 @@ Quality gates:
 Use three complementary test layers:
 
 1. Unit tests for intent, resolver, geo math, fact matching, and ranking math.
-2. Contract tests for "semantic is recall, not proof", constraint relaxation,
-   missing evidence, and explanation shape.
+2. Contract tests for fact-backed proof, constraint relaxation, missing
+   evidence, and explanation shape.
 3. Benchmark suites from the query bank for realistic buyer journeys.
 
 Each milestone should improve at least one measured metric without regressing:
@@ -567,9 +565,9 @@ Each milestone should improve at least one measured metric without regressing:
 
 Run the next proof-loop session before adding more search code:
 
-1. Audit the actual local chain on the active branch: ontology-scaling,
-   source-truth/lineage fixes, search facade/timing, intent parser changes,
-   semantic recall behavior, and proof/reason surfacing.
+1. Audit the actual local chain on the active branch: source-truth/lineage
+   fixes, search facade/timing, intent parser changes, multi-anchor resolution,
+   and proof/reason surfacing.
 2. Pin the current promoted bundle and run the benchmark once as the baseline.
 3. Classify remaining failures. If recall/name/place misses dominate, continue
    with M3. If recall is healthy but reasons are missing, take a narrow M5 proof

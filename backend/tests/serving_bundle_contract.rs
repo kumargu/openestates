@@ -104,7 +104,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     let manifest_key =
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/manifest.json").unwrap();
     let manifest_body = lake.get_text(&manifest_key).await.unwrap();
-    assert!(manifest_body.contains("\"format_version\": 3"));
+    assert!(manifest_body.contains("\"format_version\": 5"));
 
     let schema_key =
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/schema.json").unwrap();

@@ -9,7 +9,6 @@ use backend::knowledge::fact::{
 use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::LakeStore;
-use backend::search::{HashSemanticEmbedder, SemanticEmbedder};
 use backend::serving::{SearchServingBundleMaterializer, ServingBundleLoader};
 use backend::state::{SearchCacheKey, SearchResponseCache};
 use chrono::Utc;
@@ -81,7 +80,6 @@ async fn runtime_snapshot_reload_is_atomic() {
     let cache_root = tempdir().unwrap();
     let lake = LakeStore::local(lake_root.path()).unwrap();
     let graph = mock_graph();
-    let embedder: Arc<dyn SemanticEmbedder> = Arc::new(HashSemanticEmbedder::default());
 
     let kg_v1 = KgSocietyViewMaterializer::new(lake.clone())
         .materialize_and_promote(&graph, "bundle-v1", Vec::new(), Vec::new())
@@ -98,7 +96,7 @@ async fn runtime_snapshot_reload_is_atomic() {
             .unwrap()
             .unwrap(),
     );
-    let snapshot_v1 = runtime_snapshot_from_serving_bundle(bundle_v1, embedder.clone());
+    let snapshot_v1 = runtime_snapshot_from_serving_bundle(bundle_v1);
     let runtime = ArcSwap::from_pointee(snapshot_v1);
     let old_request_snapshot = runtime.load_full();
 
@@ -117,7 +115,7 @@ async fn runtime_snapshot_reload_is_atomic() {
             .unwrap()
             .unwrap(),
     );
-    let snapshot_v2 = runtime_snapshot_from_serving_bundle(bundle_v2, embedder);
+    let snapshot_v2 = runtime_snapshot_from_serving_bundle(bundle_v2);
     runtime.store(Arc::new(snapshot_v2));
 
     assert_eq!(
@@ -136,7 +134,6 @@ async fn dag_promotion_reload_smoke_updates_snapshot_and_cache_key() {
     let cache_root = tempdir().unwrap();
     let lake = LakeStore::local(lake_root.path()).unwrap();
     let graph = mock_graph();
-    let embedder: Arc<dyn SemanticEmbedder> = Arc::new(HashSemanticEmbedder::default());
     let cache = SearchResponseCache::new(8);
 
     let kg_v1 = KgSocietyViewMaterializer::new(lake.clone())
@@ -147,16 +144,13 @@ async fn dag_promotion_reload_smoke_updates_snapshot_and_cache_key() {
         .materialize_and_promote_from_kg_view(&kg_v1, "smoke-v1")
         .await
         .unwrap();
-    let snapshot_v1 = runtime_snapshot_from_serving_bundle(
-        Arc::new(
-            ServingBundleLoader::new(lake.clone(), cache_root.path())
-                .load_current_search_bundle()
-                .await
-                .unwrap()
-                .unwrap(),
-        ),
-        embedder.clone(),
-    );
+    let snapshot_v1 = runtime_snapshot_from_serving_bundle(Arc::new(
+        ServingBundleLoader::new(lake.clone(), cache_root.path())
+            .load_current_search_bundle()
+            .await
+            .unwrap()
+            .unwrap(),
+    ));
     let key_v1 = SearchCacheKey::new("whitefield greenery", &snapshot_v1.version_key);
 
     let kg_v2 = KgSocietyViewMaterializer::new(lake.clone())
@@ -167,16 +161,13 @@ async fn dag_promotion_reload_smoke_updates_snapshot_and_cache_key() {
         .materialize_and_promote_from_kg_view(&kg_v2, "smoke-v2")
         .await
         .unwrap();
-    let snapshot_v2 = runtime_snapshot_from_serving_bundle(
-        Arc::new(
-            ServingBundleLoader::new(lake, cache_root.path())
-                .load_current_search_bundle()
-                .await
-                .unwrap()
-                .unwrap(),
-        ),
-        embedder,
-    );
+    let snapshot_v2 = runtime_snapshot_from_serving_bundle(Arc::new(
+        ServingBundleLoader::new(lake, cache_root.path())
+            .load_current_search_bundle()
+            .await
+            .unwrap()
+            .unwrap(),
+    ));
     let key_v2 = SearchCacheKey::new("whitefield greenery", &snapshot_v2.version_key);
 
     assert_eq!(snapshot_v1.version_key.serving_bundle_version, "smoke-v1");

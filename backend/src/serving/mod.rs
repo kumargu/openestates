@@ -23,8 +23,8 @@ pub use materializer::{
     SearchServingBundleMaterializer,
 };
 pub use parquet::{
-    read_edges_parquet, read_embeddings_parquet, read_entities_parquet, read_facts_parquet,
-    read_search_metadata_parquet, write_embeddings_parquet, ParquetReadError,
+    read_edges_parquet, read_entities_parquet, read_facts_parquet, read_search_metadata_parquet,
+    ParquetReadError,
 };
 pub use projection::{GoogleReviewEvidence, ProjectedFact, SocietyFactProjection};
 pub use proximity::{derive_proximity_records, DerivedProximityRecords};
@@ -33,8 +33,8 @@ pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,
 };
 pub use types::{
-    BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingBundleSchema,
-    ServingColumnSchema, ServingEdgeRecord, ServingEmbeddingRecord, ServingEntityFactRows,
+    unique_society_aliases, BundleArtifact, BundleArtifactKind, ServingBundleManifest,
+    ServingBundleSchema, ServingColumnSchema, ServingEdgeRecord, ServingEntityFactRows,
     ServingEntityRecord, ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
     ServingTableSchema, TrustPolicy, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
