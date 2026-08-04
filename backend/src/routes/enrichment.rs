@@ -1084,6 +1084,7 @@ pub fn enrich_property_card(
         super_builtup_sqft: p.super_builtup_sqft,
         society_name,
         builder_name: p.builder_name.clone(),
+        images: p.images.clone(),
         hero_image,
         transparency_tags: compact_transparency_tags(&p.transparency_tags),
         description_summary: p.description_summary.clone(),

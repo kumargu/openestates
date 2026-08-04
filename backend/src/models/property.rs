@@ -106,6 +106,8 @@ pub struct PropertyCard {
     pub super_builtup_sqft: u32,
     pub society_name: String,
     pub builder_name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<String>,
     pub hero_image: String,
     pub transparency_tags: Vec<String>,
     pub description_summary: String,

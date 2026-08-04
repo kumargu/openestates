@@ -782,6 +782,7 @@ impl TextSearch {
                         super_builtup_sqft: p.super_builtup_sqft,
                         society_name: society_name.to_string(),
                         builder_name: p.builder_name.clone(),
+                        images: p.images.clone(),
                         hero_image: p.hero_image.clone(),
                         transparency_tags: crate::routes::enrichment::compact_transparency_tags(
                             &p.transparency_tags,
