@@ -16,11 +16,6 @@ export function useLandingStoryMotion(reducedMotion: boolean) {
     const updateMotion = () => {
       animationFrame = 0;
       const viewportHeight = window.innerHeight;
-      const storyBounds = story.getBoundingClientRect();
-      const storyTravel = Math.max(storyBounds.height - viewportHeight, 1);
-      const storyProgress = clamp(-storyBounds.top / storyTravel);
-
-      story.style.setProperty("--landing-story-progress", storyProgress.toFixed(4));
 
       story.querySelectorAll<HTMLElement>("[data-scene-id]").forEach((scene) => {
         const bounds = scene.getBoundingClientRect();
@@ -34,6 +29,9 @@ export function useLandingStoryMotion(reducedMotion: boolean) {
         scene.style.setProperty("--landing-scene-content-lift", `${(boundedOffset * 4).toFixed(2)}px`);
         scene.style.setProperty("--landing-scene-scale", (0.985 + emphasis * 0.015).toFixed(4));
         scene.style.setProperty("--landing-scene-glint", `${(-48 + sceneProgress * 96).toFixed(2)}%`);
+        scene.style.setProperty("--landing-copy-blur", `${(distance * 4.5).toFixed(2)}px`);
+        scene.style.setProperty("--landing-copy-lift", `${(boundedOffset * 14).toFixed(2)}px`);
+        scene.style.setProperty("--landing-copy-opacity", (0.42 + emphasis * 0.58).toFixed(3));
       });
     };
 
