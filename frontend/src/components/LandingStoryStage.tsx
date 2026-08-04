@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { FocusEvent, ReactNode } from "react";
+import { LayoutGroup, motion } from "motion/react";
 import { Link } from "react-router-dom";
 import { LivingEvidenceTile } from "./evidence/LivingEvidenceTile.tsx";
 import { propertyDetailPath } from "../lib/api.ts";
@@ -224,6 +225,28 @@ function StoryProgress({ activeSceneId }: { activeSceneId: string | null }) {
   );
 }
 
+function JourneyHomeName({
+  active,
+  children,
+  reducedMotion,
+}: {
+  active: boolean;
+  children: ReactNode;
+  reducedMotion: boolean;
+}) {
+  if (!active || reducedMotion) return <strong>{children}</strong>;
+
+  return (
+    <motion.strong
+      className="landing-journey-home"
+      layoutId="landing-journey-home"
+      transition={{ type: "spring", stiffness: 210, damping: 30, mass: 0.8 }}
+    >
+      {children}
+    </motion.strong>
+  );
+}
+
 function ResolveCanvas({
   active,
   homes,
@@ -274,7 +297,11 @@ function ResolveCanvas({
             >
               <span className="landing-resolve__rank">0{index + 1}</span>
               <div className="landing-resolve__home-copy">
-                <strong>{homeName(property)}</strong>
+                {index === 0 ? (
+                  <JourneyHomeName active={active} reducedMotion={reducedMotion}>
+                    {homeName(property)}
+                  </JourneyHomeName>
+                ) : <strong>{homeName(property)}</strong>}
                 {meta.length > 0 ? <span>{meta.join(" · ")}</span> : null}
                 {index === 0 && reasons.length > 0 ? (
                   <div className="landing-resolve__reasons">
@@ -340,7 +367,15 @@ function evidenceFacts(property: PropertyCard): EvidenceFact[] {
   return facts.slice(0, 4);
 }
 
-function RevealCanvas({ property }: { property: PropertyCard }) {
+function RevealCanvas({
+  active,
+  property,
+  reducedMotion,
+}: {
+  active: boolean;
+  property: PropertyCard;
+  reducedMotion: boolean;
+}) {
   const facts = evidenceFacts(property);
   const hasResidentSignal = hasKnownNumber(property.google_rating);
   const checkLabel = property.decision_check_summary?.tileLabel;
@@ -353,7 +388,9 @@ function RevealCanvas({ property }: { property: PropertyCard }) {
     <div className="landing-product landing-product--reveal">
       <header className="landing-reveal__home">
         <div>
-          <strong>{homeName(property)}</strong>
+          <JourneyHomeName active={active} reducedMotion={reducedMotion}>
+            {homeName(property)}
+          </JourneyHomeName>
           <span>{property.area}</span>
         </div>
         {homeMeta.length > 0 ? <p>{homeMeta.join(" · ")}</p> : null}
@@ -413,13 +450,23 @@ function RevealCanvas({ property }: { property: PropertyCard }) {
   );
 }
 
-function NotebookCanvas({ property }: { property: PropertyCard }) {
+function NotebookCanvas({
+  active,
+  property,
+  reducedMotion,
+}: {
+  active: boolean;
+  property: PropertyCard;
+  reducedMotion: boolean;
+}) {
   return (
     <div className="landing-product landing-product--remember">
       <header className="landing-remember__home">
         <div>
           <span>Saved home</span>
-          <strong>{homeName(property)}</strong>
+          <JourneyHomeName active={active} reducedMotion={reducedMotion}>
+            {homeName(property)}
+          </JourneyHomeName>
         </div>
         <i aria-hidden="true">♥</i>
       </header>
@@ -499,7 +546,15 @@ function comparisonCellClass(winner: ComparisonWinner, side: "left" | "right"): 
   return winner === side ? " is-stronger" : "";
 }
 
-function ConvergeCanvas({ homes }: { homes: PropertyCard[] }) {
+function ConvergeCanvas({
+  active,
+  homes,
+  reducedMotion,
+}: {
+  active: boolean;
+  homes: PropertyCard[];
+  reducedMotion: boolean;
+}) {
   const [left, right] = homes;
   if (!left || !right) return null;
   const rows = comparisonRows(left, right);
@@ -517,7 +572,9 @@ function ConvergeCanvas({ homes }: { homes: PropertyCard[] }) {
         <div className="landing-converge__homes">
           <span aria-hidden="true" />
           <div>
-            <strong>{homeName(left)}</strong>
+            <JourneyHomeName active={active} reducedMotion={reducedMotion}>
+              {homeName(left)}
+            </JourneyHomeName>
             <small>{formatPrice(left.price)}</small>
           </div>
           <div>
@@ -549,7 +606,15 @@ function ConvergeCanvas({ homes }: { homes: PropertyCard[] }) {
   );
 }
 
-function ReraCanvas({ property }: { property: PropertyCard }) {
+function ReraCanvas({
+  active,
+  property,
+  reducedMotion,
+}: {
+  active: boolean;
+  property: PropertyCard;
+  reducedMotion: boolean;
+}) {
   const summary = property.decision_check_summary;
   const registeredLabel = summary?.groups
     ?.flatMap((group) => group.labels)
@@ -567,7 +632,9 @@ function ReraCanvas({ property }: { property: PropertyCard }) {
       <header className="landing-record__head">
         <div>
           <span>RERA</span>
-          <strong>{homeName(property)}</strong>
+          <JourneyHomeName active={active} reducedMotion={reducedMotion}>
+            {homeName(property)}
+          </JourneyHomeName>
         </div>
         <em>{registeredLabel ?? "Registration"}</em>
       </header>
@@ -682,27 +749,28 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
 
       <div ref={storyRef} className="landing-stage__story">
         <StoryProgress activeSceneId={controller.activeSceneId} />
-        <StoryScene
-          id="resolve"
-          side="right"
-          title="Start with the life you want"
-          description="A natural-language search becomes a small, ranked set of homes with reasons attached."
-          action={(
-            <button type="button" onClick={() => onSearch(RESOLVE_QUERY)}>
-              Try this search <span aria-hidden="true">→</span>
-            </button>
-          )}
-          canvas={(
-            <ResolveCanvas
-              key={`${resolveIsActive ? "active" : "rest"}-${controller.isReducedMotion ? "reduced" : "motion"}`}
-              active={resolveIsActive}
-              homes={resolveHomes}
-              paused={controller.isPaused("resolve")}
-              reducedMotion={controller.isReducedMotion}
-            />
-          )}
-          controller={controller}
-        />
+        <LayoutGroup id="landing-home-journey">
+          <StoryScene
+            id="resolve"
+            side="right"
+            title="Start with the life you want"
+            description="A natural-language search becomes a small, ranked set of homes with reasons attached."
+            action={(
+              <button type="button" onClick={() => onSearch(RESOLVE_QUERY)}>
+                Try this search <span aria-hidden="true">→</span>
+              </button>
+            )}
+            canvas={(
+              <ResolveCanvas
+                key={`${resolveIsActive ? "active" : "rest"}-${controller.isReducedMotion ? "reduced" : "motion"}`}
+                active={resolveIsActive}
+                homes={resolveHomes}
+                paused={controller.isPaused("resolve")}
+                reducedMotion={controller.isReducedMotion}
+              />
+            )}
+            controller={controller}
+          />
 
         <StoryScene
           id="reveal"
@@ -714,7 +782,13 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
               See the full picture <span aria-hidden="true">→</span>
             </Link>
           )}
-          canvas={<RevealCanvas property={revealHome} />}
+          canvas={(
+            <RevealCanvas
+              active={controller.activeSceneId === "reveal"}
+              property={revealHome}
+              reducedMotion={controller.isReducedMotion}
+            />
+          )}
           controller={controller}
         />
 
@@ -728,7 +802,13 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
               Open notebook <span aria-hidden="true">→</span>
             </Link>
           )}
-          canvas={<NotebookCanvas property={revealHome} />}
+          canvas={(
+            <NotebookCanvas
+              active={controller.activeSceneId === "remember"}
+              property={revealHome}
+              reducedMotion={controller.isReducedMotion}
+            />
+          )}
           controller={controller}
         />
 
@@ -743,7 +823,13 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
                 Open workspace <span aria-hidden="true">→</span>
               </Link>
             )}
-            canvas={<ConvergeCanvas homes={compareHomes} />}
+            canvas={(
+              <ConvergeCanvas
+                active={controller.activeSceneId === "converge"}
+                homes={compareHomes}
+                reducedMotion={controller.isReducedMotion}
+              />
+            )}
             controller={controller}
           />
         ) : null}
@@ -759,9 +845,16 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
               Inspect RERA evidence <span aria-hidden="true">→</span>
             </Link>
           )}
-          canvas={<ReraCanvas property={revealHome} />}
+          canvas={(
+            <ReraCanvas
+              active={controller.activeSceneId === "record"}
+              property={revealHome}
+              reducedMotion={controller.isReducedMotion}
+            />
+          )}
           controller={controller}
         />
+        </LayoutGroup>
       </div>
     </section>
   );
