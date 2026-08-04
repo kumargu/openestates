@@ -5,7 +5,7 @@ function prefersReducedMotion(): boolean {
     && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-export function useLandingSceneController(sceneIds: readonly string[]) {
+export function useLandingSceneController(sceneIds: readonly string[], observationKey?: unknown) {
   const sceneNodes = useRef(new Map<string, HTMLElement>());
   const sceneRatios = useRef(new Map<string, number>());
   const sceneRefCallbacks = useRef(new Map<string, (node: HTMLElement | null) => void>());
@@ -52,8 +52,6 @@ export function useLandingSceneController(sceneIds: readonly string[]) {
   }, [sceneIds]);
 
   useEffect(() => {
-    if (isReducedMotion) return undefined;
-
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         const sceneId = (entry.target as HTMLElement).dataset.sceneId;
@@ -91,7 +89,7 @@ export function useLandingSceneController(sceneIds: readonly string[]) {
     }
 
     return () => observer.disconnect();
-  }, [isReducedMotion, sceneIds]);
+  }, [isReducedMotion, observationKey, sceneIds]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
