@@ -7,6 +7,7 @@ import { filterListableProperties, uniqueSocietiesForDiscovery } from "../lib/pr
 import type { PropertyCard } from "../lib/types.ts";
 import { useLandingSceneController } from "../hooks/useLandingSceneController.ts";
 import { useLandingResolveSequence } from "../hooks/useLandingResolveSequence.ts";
+import { useLandingStoryMotion } from "../hooks/useLandingStoryMotion.ts";
 
 const FEATURED_LIMIT = 6;
 const STORY_SCENE_IDS = ["resolve", "reveal", "remember", "converge", "record"] as const;
@@ -201,12 +202,24 @@ function resolveReasons(property: PropertyCard): string[] {
   return reasons.slice(0, 2);
 }
 
-function JourneyRail({ step }: { step: number }) {
+function StoryProgress({ activeSceneId }: { activeSceneId: string | null }) {
+  const activeIndex = STORY_SCENE_IDS.findIndex((sceneId) => sceneId === activeSceneId);
+
   return (
-    <div className="landing-film__rail" aria-hidden="true">
-      {[0, 1, 2, 3, 4].map((index) => (
-        <i key={index} className={index <= step ? "is-complete" : ""} />
-      ))}
+    <div className="landing-story-progress" aria-hidden="true">
+      <div className="landing-story-progress__body">
+        <span className="landing-story-progress__track"><i /></span>
+        {STORY_SCENE_IDS.map((sceneId, index) => (
+          <i
+            key={sceneId}
+            className={[
+              "landing-story-progress__marker",
+              index < activeIndex ? "is-complete" : "",
+              index === activeIndex ? "is-active" : "",
+            ].filter(Boolean).join(" ")}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -236,7 +249,6 @@ function ResolveCanvas({
       data-selection-visible={sequence.selectionVisible}
       data-proof-visible={sequence.proofVisible}
     >
-      <JourneyRail step={0} />
       <div className="landing-resolve__composer">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="10.8" cy="10.8" r="6.2" />
@@ -339,7 +351,6 @@ function RevealCanvas({ property }: { property: PropertyCard }) {
 
   return (
     <div className="landing-product landing-product--reveal">
-      <JourneyRail step={1} />
       <header className="landing-reveal__home">
         <div>
           <strong>{homeName(property)}</strong>
@@ -405,7 +416,6 @@ function RevealCanvas({ property }: { property: PropertyCard }) {
 function NotebookCanvas({ property }: { property: PropertyCard }) {
   return (
     <div className="landing-product landing-product--remember">
-      <JourneyRail step={2} />
       <header className="landing-remember__home">
         <div>
           <span>Saved home</span>
@@ -496,7 +506,6 @@ function ConvergeCanvas({ homes }: { homes: PropertyCard[] }) {
 
   return (
     <div className="landing-product landing-product--converge">
-      <JourneyRail step={3} />
       <div className="landing-converge__notebook">
         <span>Shortlist</span>
         <strong>2 homes ready to compare</strong>
@@ -555,7 +564,6 @@ function ReraCanvas({ property }: { property: PropertyCard }) {
 
   return (
     <div className="landing-product landing-product--record">
-      <JourneyRail step={4} />
       <header className="landing-record__head">
         <div>
           <span>RERA</span>
@@ -653,6 +661,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
   const listable = filterListableProperties(properties);
   const uniqueHomes = uniqueSocietiesForDiscovery(listable);
   const controller = useLandingSceneController(STORY_SCENE_IDS);
+  const storyRef = useLandingStoryMotion(controller.isReducedMotion);
 
   if (uniqueHomes.length === 0) return null;
 
@@ -671,7 +680,8 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
     >
       <FeaturedSuggestions properties={uniqueHomes} onSearch={onSearch} />
 
-      <div className="landing-stage__story">
+      <div ref={storyRef} className="landing-stage__story">
+        <StoryProgress activeSceneId={controller.activeSceneId} />
         <StoryScene
           id="resolve"
           side="right"
