@@ -6,6 +6,7 @@ pub mod guard;
 pub mod index;
 pub mod intent;
 pub(crate) mod parser;
+pub(crate) mod query_plan;
 pub mod resolver;
 pub mod schema;
 pub mod text;

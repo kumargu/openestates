@@ -14,8 +14,9 @@ use crate::state::SEARCH_ENGINE_VERSION;
 
 use super::geo;
 use super::index::SearchIndex;
-use super::intent::{self, SearchIntent};
+use super::intent::SearchIntent;
 use super::parser;
+use super::query_plan::{self, QueryPlan};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text, slug};
 use super::schema;
 use super::{MatchExplanation, MatchReason, PreferenceCoverage, SearchResultCard, TextSearch};
@@ -194,11 +195,16 @@ impl<'a> SearchEngine<'a> {
     pub fn search(&self, query: &str) -> SearchEngineOutput {
         let mut timer = SearchTimer::start();
 
-        let parsed_intent = timer.measure("intent_parse", || intent::parse_intent(query));
+        let query_plan = timer.measure("query_plan_compile", || {
+            query_plan::compile_query_plan(query)
+        });
+        let parsed_intent = timer.measure("intent_parse", || {
+            query_plan::project_search_intent(query, &query_plan)
+        });
 
         let geo_query = timer.measure("geo_resolve", || {
             self.serving_bundle
-                .and_then(|bundle| bundle.geo_index.query(query))
+                .and_then(|bundle| bundle.geo_index.query_with_plan(&query_plan))
         });
         let serving_resolved_entities = timer.measure("serving_entity_resolution", || {
             resolve_serving_query_entities(
@@ -211,8 +217,12 @@ impl<'a> SearchEngine<'a> {
         let intent = timer.measure("intent_constraints", || {
             apply_resolved_constraints(parsed_intent.clone(), &serving_resolved_entities)
         });
-        let unresolved_entity_clause =
-            unresolved_named_entity_clause(query, &serving_resolved_entities, geo_query.as_ref());
+        let unresolved_entity_clause = unresolved_named_entity_clause(
+            query,
+            &query_plan,
+            &serving_resolved_entities,
+            geo_query.as_ref(),
+        );
 
         let mut structured_candidate_ids = timer.measure("structured_recall", || {
             self.search_index.recall_ids(query, &intent)
@@ -253,7 +263,7 @@ impl<'a> SearchEngine<'a> {
 
         let explicit_geo_distance_limit = geo_query
             .as_ref()
-            .is_some_and(|query| query.max_distance_km().is_some());
+            .is_some_and(|query| query.has_distance_limit());
         let extra_candidate_ids = if explicit_geo_distance_limit {
             optional_non_empty(geo_candidate_ids.clone())
         } else {
@@ -1000,52 +1010,56 @@ fn remove_entities_only_mentioned_inside_longer_match(
 
 fn unresolved_named_entity_clause(
     query: &str,
+    plan: &QueryPlan,
     resolved_entities: &[ResolvedSearchEntity],
     geo_query: Option<&geo::GeoSearchQuery<'_>>,
 ) -> Option<String> {
+    for clause in &plan.clauses {
+        if clause.requirement != query_plan::RelationRequirement::Hard {
+            continue;
+        }
+        let resolved = geo_query.is_some_and(|geo_query| {
+            geo_query.resolved_clauses().iter().any(|resolved| {
+                resolved
+                    .target_text
+                    .eq_ignore_ascii_case(&clause.target_text)
+            })
+        });
+        if !resolved {
+            return Some(clause.target_text.clone());
+        }
+    }
+
+    if let Some(target) = geo_query
+        .and_then(|geo_query| geo_query.unresolved_targets().first())
+        .filter(|target| !target.trim().is_empty())
+    {
+        return Some(target.clone());
+    }
+
     let query_lower = query.to_ascii_lowercase();
-    let parsed_slots = parser::parse_query_slots(query);
-    let budget_start = parsed_slots.budget_max.as_ref().and_then(|budget| {
-        exact_entity_match_ranges(&query_lower, &budget.raw_text)
-            .into_iter()
-            .map(|(start, _)| start)
-            .next()
-    });
-    let relation_range = parsed_slots.relations.first().and_then(|relation| {
-        exact_entity_match_ranges(&query_lower, &relation.raw_text)
-            .into_iter()
-            .next()
-    });
-
-    for prefix in &search_resolution_config().named_entity_scope_prefixes {
-        for (_, prefix_end) in scope_prefix_match_ranges(&query_lower, prefix) {
-            if relation_range.is_some_and(|(relation_start, _)| prefix_end > relation_start) {
-                continue;
-            }
-            let clause_end = [budget_start, relation_range.map(|(start, _)| start)]
-                .into_iter()
-                .flatten()
-                .filter(|end| *end > prefix_end)
-                .min()
-                .unwrap_or(query.len());
-            if unresolved_clause(query, prefix_end, clause_end, resolved_entities, false) {
-                return Some(query[prefix_end..clause_end].trim().to_string());
-            }
-        }
-    }
-
-    if let Some((_, relation_end)) = relation_range {
-        let clause_end = budget_start
-            .filter(|start| *start > relation_end)
-            .unwrap_or(query.len());
-        if geo_query.is_none()
-            && unresolved_clause(query, relation_end, clause_end, resolved_entities, true)
-        {
-            return Some(query[relation_end..clause_end].trim().to_string());
-        }
-    }
-
-    None
+    query_plan::unresolved_named_entity_clause(
+        query,
+        plan,
+        |clause| {
+            geo_query.is_some_and(|geo_query| {
+                geo_query.resolved_clauses().iter().any(|resolved| {
+                    resolved
+                        .target_text
+                        .eq_ignore_ascii_case(&clause.target_text)
+                })
+            })
+        },
+        |span| {
+            resolved_entities.iter().any(|entity| {
+                exact_entity_match_ranges(&query_lower, &entity.name)
+                    .iter()
+                    .any(|(entity_start, entity_end)| {
+                        *entity_start >= span.start && *entity_end <= span.end
+                    })
+            })
+        },
+    )
 }
 
 fn unresolved_proximity_gaps(
@@ -1065,77 +1079,6 @@ fn unresolved_proximity_gaps(
             ),
         })
         .collect()
-}
-
-fn scope_prefix_match_ranges(query_lower: &str, prefix: &str) -> Vec<(usize, usize)> {
-    exact_entity_match_ranges(query_lower, prefix)
-        .into_iter()
-        .filter(|(start, end)| {
-            query_lower[..*start].chars().next_back() != Some('-')
-                && query_lower[*end..].chars().next() != Some('-')
-        })
-        .collect()
-}
-
-fn unresolved_clause(
-    query: &str,
-    start: usize,
-    end: usize,
-    resolved_entities: &[ResolvedSearchEntity],
-    allow_place_family: bool,
-) -> bool {
-    let clause = query[start..end].trim();
-    if clause.is_empty()
-        || !clause
-            .chars()
-            .any(|character| character.is_ascii_alphabetic())
-    {
-        return false;
-    }
-    if !allow_place_family && is_generic_scope_clause(clause) {
-        return false;
-    }
-    let query_lower = query.to_ascii_lowercase();
-    let has_resolved_entity = resolved_entities.iter().any(|entity| {
-        exact_entity_match_ranges(&query_lower, &entity.name)
-            .iter()
-            .any(|(entity_start, entity_end)| *entity_start >= start && *entity_end <= end)
-    });
-    if has_resolved_entity {
-        return false;
-    }
-    if allow_place_family
-        && search_resolution_config()
-            .place_families
-            .iter()
-            .flat_map(|family| family.aliases.iter())
-            .any(|alias| {
-                exact_entity_match_ranges(&query_lower, alias)
-                    .iter()
-                    .any(|(alias_start, alias_end)| *alias_start >= start && *alias_end <= end)
-            })
-    {
-        return false;
-    }
-    true
-}
-
-fn is_generic_scope_clause(clause: &str) -> bool {
-    let config = search_resolution_config();
-    parser::query_tokens(clause)
-        .into_iter()
-        .find(|token| {
-            !config
-                .ignored_entity_names
-                .iter()
-                .any(|ignored| ignored.eq_ignore_ascii_case(token))
-        })
-        .is_some_and(|token| {
-            config
-                .generic_scope_nouns
-                .iter()
-                .any(|noun| noun.eq_ignore_ascii_case(&token))
-        })
 }
 
 fn resolve_runtime_area_query_entities(
@@ -2203,7 +2146,7 @@ mod tests {
     #[test]
     fn unresolved_named_area_clause_abstains() {
         assert_eq!(
-            unresolved_named_entity_clause("3BHK in Atlantis Enclave", &[], None),
+            test_unresolved_named_entity_clause("3BHK in Atlantis Enclave", &[], None),
             Some("Atlantis Enclave".to_string())
         );
     }
@@ -2221,7 +2164,7 @@ mod tests {
         }];
 
         assert_eq!(
-            unresolved_named_entity_clause("3BHK in Whitefield under 2cr", &resolved, None),
+            test_unresolved_named_entity_clause("3BHK in Whitefield under 2cr", &resolved, None),
             None
         );
     }
@@ -2229,18 +2172,21 @@ mod tests {
     #[test]
     fn unsupported_proximity_family_abstains_without_stealing_generic_suffix() {
         assert_eq!(
-            unresolved_named_entity_clause("3BHK near a police station", &[], None),
+            test_unresolved_named_entity_clause("3BHK near a police station", &[], None),
             Some("a police station".to_string())
         );
         assert_eq!(
-            unresolved_named_entity_clause("3BHK near metro", &[], None),
+            test_unresolved_named_entity_clause("3BHK near metro", &[], None),
             None
         );
     }
 
     #[test]
-    fn unresolved_secondary_personal_anchor_records_gap_without_discarding_resolved_clauses() {
-        let entities = vec![serving_entity("area:whitefield", "area", "Whitefield")];
+    fn contextual_personal_anchor_resolves_without_discarding_other_clauses() {
+        let entities = vec![
+            serving_entity("area:whitefield", "area", "Whitefield"),
+            serving_entity("area:marathahalli", "area", "Marathahalli"),
+        ];
         let facts = ServingFactIndex::from_records(
             vec![
                 coordinate_fact("area:whitefield", "geo.latitude", 12.9698),
@@ -2271,11 +2217,9 @@ mod tests {
 
         let gaps = unresolved_proximity_gaps(Some(&geo_query));
 
-        assert_eq!(gaps.len(), 1);
-        assert_eq!(gaps[0].missing_fact, "geo.proximity_anchor");
-        assert!(gaps[0].reason.contains("my wife office in marathahalli"));
+        assert!(gaps.is_empty());
         assert_eq!(
-            unresolved_named_entity_clause(query, &resolved, Some(&geo_query)),
+            test_unresolved_named_entity_clause(query, &resolved, Some(&geo_query)),
             None
         );
     }
@@ -2283,7 +2227,7 @@ mod tests {
     #[test]
     fn hyphenated_status_words_do_not_create_named_entity_scopes() {
         assert_eq!(
-            unresolved_named_entity_clause(
+            test_unresolved_named_entity_clause(
                 "move-in-ready 3 BHK backed by a current listing price",
                 &[],
                 None,
@@ -2295,7 +2239,7 @@ mod tests {
     #[test]
     fn generic_project_phrases_do_not_create_named_entity_scopes() {
         assert_eq!(
-            unresolved_named_entity_clause(
+            test_unresolved_named_entity_clause(
                 "three-bedroom inventory with asking-price proof in a project whose RERA complaint count is zero",
                 &[],
                 None,
@@ -2307,7 +2251,7 @@ mod tests {
     #[test]
     fn generic_community_phrases_do_not_create_named_entity_scopes() {
         assert_eq!(
-            unresolved_named_entity_clause(
+            test_unresolved_named_entity_clause(
                 "Whitefield homes with a clearly stated total number of homes in the community",
                 &[],
                 None,
@@ -2359,5 +2303,14 @@ mod tests {
             vec!["Electronic City".to_string()]
         );
         assert_eq!(negative[0].polarity, "exclusion");
+    }
+
+    fn test_unresolved_named_entity_clause(
+        query: &str,
+        resolved_entities: &[ResolvedSearchEntity],
+        geo_query: Option<&geo::GeoSearchQuery<'_>>,
+    ) -> Option<String> {
+        let plan = query_plan::compile_query_plan(query);
+        unresolved_named_entity_clause(query, &plan, resolved_entities, geo_query)
     }
 }

@@ -14,6 +14,7 @@ use crate::serving::{
 
 use super::analyzer;
 use super::parser;
+use super::query_plan::{QueryPlan, QueryRelationClause, RelationRequirement};
 use super::resolver::query_contains_lower_text;
 use super::schema;
 
@@ -21,6 +22,7 @@ pub(crate) const GEO_DISTANCE_SCORING_METHOD: &str = "serving-geo-distance";
 pub(crate) const HAVERSINE_SCORING_METHOD: &str = "serving-haversine";
 pub(crate) const NAMED_PLACE_FACT_SCORING_METHOD: &str = "serving-named-place";
 pub(crate) const DISTANCE_TO_PLACE_FACT_KEY: &str = "geo.distance_to_place";
+const MAX_FUZZY_RESOLVED_PLACES_PER_CLAUSE: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct GeoDistanceScore {
@@ -110,6 +112,8 @@ pub(crate) struct ResolvedGeoClause {
     pub target_text: String,
     pub place_entity_ids: Vec<String>,
     pub category_fact_keys: Vec<String>,
+    pub distance_limit_km: Option<f64>,
+    pub requirement: RelationRequirement,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -203,25 +207,38 @@ impl GeoSearchIndex {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn query(&self, query: &str) -> Option<GeoSearchQuery<'_>> {
-        let parsed_slots = parser::parse_query_slots(query);
-        if parsed_slots.relations.is_empty() {
+        let plan = super::query_plan::compile_query_plan(query);
+        self.query_with_plan(&plan)
+    }
+
+    pub(crate) fn query_with_plan(&self, plan: &QueryPlan) -> Option<GeoSearchQuery<'_>> {
+        if plan.clauses.is_empty() {
             return None;
         }
-        let tokens = parser::query_tokens(query);
         let mut places = Vec::new();
         let mut clauses = Vec::new();
         let mut unresolved_targets = Vec::new();
-        for relation in &parsed_slots.relations {
-            let Some(target_text) = parser::relation_target_text(&tokens, relation) else {
-                continue;
-            };
-            let resolved = self.resolve_query_places(&target_text);
-            let category_fact_keys = if resolved.is_empty()
-                && !has_scoped_suffix(&target_text)
-                && has_configured_place_family(&target_text)
-            {
-                requested_nearby_place_categories(&target_text.to_ascii_lowercase())
+        for relation in &plan.clauses {
+            let mut resolved = self.resolve_query_places(&relation.target_text);
+            let resolved_from_target = !resolved.is_empty();
+            let mut resolved_from_scoped_anchor = false;
+            if resolved.is_empty() {
+                if let Some(scoped_anchor) = scoped_anchor_text(&relation.target_text) {
+                    resolved = self.resolve_query_places(scoped_anchor);
+                    resolved_from_scoped_anchor = !resolved.is_empty();
+                }
+            }
+            let unresolved_named_hard_clause = relation.requirement == RelationRequirement::Hard
+                && !resolved_from_target
+                && !resolved_from_scoped_anchor
+                && target_has_identity_tokens(&relation.target_text);
+            let allow_category_fallback = relation.place_family_id.is_some()
+                && !unresolved_named_hard_clause
+                && (!resolved_from_target || resolved_from_scoped_anchor);
+            let category_fact_keys = if allow_category_fallback {
+                requested_nearby_place_categories(&relation.target_text.to_ascii_lowercase())
                     .into_iter()
                     .map(str::to_string)
                     .collect::<Vec<_>>()
@@ -229,7 +246,7 @@ impl GeoSearchIndex {
                 Vec::new()
             };
             if resolved.is_empty() && category_fact_keys.is_empty() {
-                unresolved_targets.push(target_text);
+                unresolved_targets.push(relation.target_text.clone());
                 continue;
             }
             let mut place_entity_ids = Vec::new();
@@ -245,19 +262,14 @@ impl GeoSearchIndex {
                 }
             }
             clauses.push(ResolvedGeoClause {
-                target_text,
+                target_text: relation.target_text.clone(),
                 place_entity_ids,
                 category_fact_keys,
+                distance_limit_km: relation.distance_limit_km,
+                requirement: relation.requirement,
             });
         }
-        let max_distance_km = (parsed_slots.relations.len() == 1)
-            .then(|| {
-                parsed_slots
-                    .distance_limit
-                    .as_ref()
-                    .map(|distance| distance.value_km)
-            })
-            .flatten();
+        let max_distance_km = relation_distance_limit(plan.clauses.as_slice());
         (!clauses.is_empty()).then_some(GeoSearchQuery {
             index: self,
             places,
@@ -340,7 +352,7 @@ impl GeoSearchIndex {
                 .then_with(|| right.confidence.total_cmp(&left.confidence))
                 .then_with(|| left.name.cmp(&right.name))
         });
-        resolved.truncate(3);
+        resolved.truncate(MAX_FUZZY_RESOLVED_PLACES_PER_CLAUSE);
         resolved
     }
 
@@ -354,6 +366,13 @@ impl GeoSearchIndex {
                     .and_then(|index| self.society_coordinates.get(index))
             })
     }
+}
+
+fn relation_distance_limit(clauses: &[QueryRelationClause]) -> Option<f64> {
+    clauses
+        .iter()
+        .filter_map(|clause| clause.distance_limit_km)
+        .min_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal))
 }
 
 fn area_is_only_a_scoped_suffix(query: &str, place: &GeoPlace) -> bool {
@@ -386,9 +405,7 @@ impl<'a> GeoSearchQuery<'a> {
 
     pub(crate) fn candidate_property_ids(&self, properties: &[Property]) -> Vec<String> {
         let mut ids = Vec::new();
-        let max_distance = self
-            .max_distance_km
-            .unwrap_or_else(|| schema::ranking_policy().named_place_zero_score_km);
+        let has_hard_clauses = self.has_hard_clauses();
         for property in properties {
             if !property.is_listable() {
                 continue;
@@ -396,14 +413,17 @@ impl<'a> GeoSearchQuery<'a> {
             let Some(coordinates) = self.index.society_coordinates(&property.society_id) else {
                 continue;
             };
-            if self.places.iter().any(|place| {
-                haversine_km(
-                    coordinates.latitude,
-                    coordinates.longitude,
-                    place.latitude,
-                    place.longitude,
-                ) <= max_distance
-            }) {
+            let matches = if has_hard_clauses {
+                self.clauses
+                    .iter()
+                    .filter(|clause| clause.requirement == RelationRequirement::Hard)
+                    .all(|clause| self.coordinates_match_clause(coordinates, clause))
+            } else {
+                self.clauses
+                    .iter()
+                    .any(|clause| self.coordinates_match_clause(coordinates, clause))
+            };
+            if matches {
                 ids.push(property.id.clone());
             }
         }
@@ -440,26 +460,39 @@ impl<'a> GeoSearchQuery<'a> {
             return false;
         };
 
-        self.clauses.iter().any(|clause| {
-            rows.facts.iter().any(|fact| {
-                fact.confidence >= schema::ranking_policy().min_support_evidence_confidence
-                    && (clause.category_fact_keys.iter().any(|fact_key| {
-                        fact.fact_key.eq_ignore_ascii_case(fact_key)
-                            && serving_fact_distance_km(fact).is_some_and(|distance| {
-                                distance <= category_max_distance_km(fact_key)
-                            })
-                    }) || serving_fact_text_snippets(fact).iter().any(|snippet| {
-                        self.places_for_clause(clause).any(|place| {
-                            self.fact_key_matches_resolved_place(&fact.fact_key, place)
-                                && nearby_fact_mentions_place(snippet, &place.name)
-                                && extract_first_distance_km(snippet).is_some_and(|distance_km| {
-                                    self.max_distance_km.unwrap_or_else(|| {
-                                        schema::ranking_policy().named_place_zero_score_km
-                                    }) >= distance_km
-                                })
+        if self.has_hard_clauses() {
+            self.clauses
+                .iter()
+                .filter(|clause| clause.requirement == RelationRequirement::Hard)
+                .all(|clause| self.society_rows_match_clause(rows, clause))
+        } else {
+            self.clauses
+                .iter()
+                .any(|clause| self.society_rows_match_clause(rows, clause))
+        }
+    }
+
+    fn society_rows_match_clause(
+        &self,
+        rows: &crate::serving::ServingEntityFactRows,
+        clause: &ResolvedGeoClause,
+    ) -> bool {
+        rows.facts.iter().any(|fact| {
+            fact.confidence >= schema::ranking_policy().min_support_evidence_confidence
+                && (clause.category_fact_keys.iter().any(|fact_key| {
+                    fact.fact_key.eq_ignore_ascii_case(fact_key)
+                        && serving_fact_distance_km(fact).is_some_and(|distance| {
+                            distance <= self.clause_category_max_distance_km(clause, fact_key)
                         })
-                    }))
-            })
+                }) || serving_fact_text_snippets(fact).iter().any(|snippet| {
+                    self.places_for_clause(clause).any(|place| {
+                        self.fact_key_matches_resolved_place(&fact.fact_key, place)
+                            && nearby_fact_mentions_place(snippet, &place.name)
+                            && extract_first_distance_km(snippet).is_some_and(|distance_km| {
+                                distance_km <= self.clause_max_distance_km(clause)
+                            })
+                    })
+                }))
         })
     }
 
@@ -479,7 +512,7 @@ impl<'a> GeoSearchQuery<'a> {
                             place.longitude,
                         );
                         if self
-                            .max_distance_km
+                            .clause_distance_limit_km(clause)
                             .is_some_and(|max_distance| distance_km > max_distance)
                         {
                             return None;
@@ -536,8 +569,28 @@ impl<'a> GeoSearchQuery<'a> {
         )
     }
 
-    pub(crate) fn max_distance_km(&self) -> Option<f64> {
-        self.max_distance_km
+    pub(crate) fn has_distance_limit(&self) -> bool {
+        self.max_distance_km.is_some()
+    }
+
+    pub(crate) fn clause_distance_limit_km(&self, clause: &ResolvedGeoClause) -> Option<f64> {
+        clause.distance_limit_km
+    }
+
+    pub(crate) fn clause_max_distance_km(&self, clause: &ResolvedGeoClause) -> f64 {
+        clause
+            .distance_limit_km
+            .unwrap_or_else(|| schema::ranking_policy().named_place_zero_score_km)
+    }
+
+    pub(crate) fn clause_category_max_distance_km(
+        &self,
+        clause: &ResolvedGeoClause,
+        fact_key: &str,
+    ) -> f64 {
+        clause
+            .distance_limit_km
+            .unwrap_or_else(|| category_max_distance_km(fact_key))
     }
 
     pub(crate) fn resolved_place_terms(&self) -> Vec<String> {
@@ -551,6 +604,27 @@ impl<'a> GeoSearchQuery<'a> {
         }
         terms
     }
+
+    fn has_hard_clauses(&self) -> bool {
+        self.clauses
+            .iter()
+            .any(|clause| clause.requirement == RelationRequirement::Hard)
+    }
+
+    fn coordinates_match_clause(
+        &self,
+        coordinates: &EntityCoordinates,
+        clause: &ResolvedGeoClause,
+    ) -> bool {
+        self.places_for_clause(clause).any(|place| {
+            haversine_km(
+                coordinates.latitude,
+                coordinates.longitude,
+                place.latitude,
+                place.longitude,
+            ) <= self.clause_max_distance_km(clause)
+        })
+    }
 }
 
 fn has_scoped_suffix(target: &str) -> bool {
@@ -561,13 +635,22 @@ fn has_scoped_suffix(target: &str) -> bool {
         .any(|prefix| query_contains_lower_text(&target_lower, prefix))
 }
 
-fn has_configured_place_family(target: &str) -> bool {
+fn scoped_anchor_text(target: &str) -> Option<&str> {
     let target_lower = target.to_ascii_lowercase();
     search_resolution_config()
-        .place_families
+        .named_entity_scope_prefixes
         .iter()
-        .flat_map(|family| family.aliases.iter())
-        .any(|alias| query_contains_lower_text(&target_lower, alias))
+        .filter_map(|prefix| {
+            let pattern = format!(" {prefix} ");
+            target_lower
+                .find(&pattern)
+                .map(|index| target[index + pattern.len()..].trim())
+        })
+        .find(|anchor| !anchor.is_empty())
+}
+
+fn target_has_identity_tokens(target: &str) -> bool {
+    !significant_query_tokens(target).is_empty()
 }
 
 fn category_max_distance_km(fact_key: &str) -> f64 {
@@ -701,10 +784,6 @@ fn place_query_match_score(
         .iter()
         .filter(|token| is_distinctive_place_token(token, token_document_counts, place_count))
         .count();
-    if distinctive_matched == 0 {
-        return None;
-    }
-
     let required = if query_tokens.len() == 1 {
         1
     } else {
@@ -714,6 +793,9 @@ fn place_query_match_score(
         return None;
     }
     let coverage = matched as f64 / place.match_tokens.len() as f64;
+    if distinctive_matched == 0 {
+        return Some(coverage * schema::ranking_policy().ambiguous_named_place_score_multiplier);
+    }
     Some(coverage)
 }
 
@@ -1057,6 +1139,73 @@ mod tests {
         }
     }
 
+    fn serving_text_fact(
+        entity_id: &str,
+        fact_key: &str,
+        value: &str,
+        source_type: &str,
+    ) -> ServingFactRecord {
+        ServingFactRecord {
+            entity_id: entity_id.to_string(),
+            fact_key: fact_key.to_string(),
+            value_type: "text".to_string(),
+            value_text: Some(value.to_string()),
+            value: FactValue::Text(value.to_string()),
+            confidence: 1.0,
+            source_type: source_type.to_string(),
+            source_url: None,
+            model: None,
+            skill_id: None,
+            learned_at: chrono::Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+        }
+    }
+
+    fn local_property(id: &str, society_id: &str) -> Property {
+        Property {
+            id: id.to_string(),
+            title: "3 BHK apartment".to_string(),
+            area: "Whitefield".to_string(),
+            area_id: "whitefield".to_string(),
+            city: "Bengaluru".to_string(),
+            society_id: society_id.to_string(),
+            builder_name: "Test Builder".to_string(),
+            property_type: "Apartment".to_string(),
+            listing_type: "Resale".to_string(),
+            bhk: 3,
+            price: 20_000_000,
+            price_per_sqft: 12_000,
+            carpet_area_sqft: 1_200,
+            super_builtup_sqft: 1_550,
+            floor: 8,
+            total_floors: 20,
+            facing: "East".to_string(),
+            possession_status: "Ready to Move".to_string(),
+            metro_distance_mins: 0,
+            maintenance_cost_monthly: 6_000,
+            society_quality_score: Some(0.7),
+            builder_quality_score: Some(0.7),
+            document_completeness_score: Some(0.8),
+            litigation_risk: Some(0.1),
+            noise_score: Some(0.2),
+            sunlight_score: Some(0.7),
+            airport_noise_score: Some(0.1),
+            waterlogging_risk_score: Some(0.1),
+            traffic_score: Some(0.6),
+            days_on_market: 20,
+            greenery_score: Some(0.6),
+            open_space_score: Some(0.6),
+            resale_strength_score: Some(0.7),
+            interest_level: None,
+            saves_last_7d: None,
+            offers_last_7d: None,
+            images: Vec::new(),
+            hero_image: String::new(),
+            description_summary: "Local test listing".to_string(),
+            transparency_tags: Vec::new(),
+            source_reference: "unit-test".to_string(),
+        }
+    }
+
     #[test]
     fn exact_place_mentions_do_not_expand_to_generic_place_family_matches() {
         let index = GeoSearchIndex {
@@ -1274,17 +1423,28 @@ mod tests {
 
     #[test]
     fn mixed_anchor_query_keeps_named_category_and_unresolved_clauses_separate() {
-        let entities = vec![ServingEntityRecord {
-            entity_id: "area:whitefield".to_string(),
-            entity_type: "area".to_string(),
-            name: "Whitefield".to_string(),
-            root_source: None,
-            searchable_text: "Whitefield".to_string(),
-        }];
+        let entities = vec![
+            ServingEntityRecord {
+                entity_id: "area:whitefield".to_string(),
+                entity_type: "area".to_string(),
+                name: "Whitefield".to_string(),
+                root_source: None,
+                searchable_text: "Whitefield".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: "area:marathahalli".to_string(),
+                entity_type: "area".to_string(),
+                name: "Marathahalli".to_string(),
+                root_source: None,
+                searchable_text: "Marathahalli".to_string(),
+            },
+        ];
         let facts = ServingFactIndex::from_records(
             vec![
                 serving_numeric_fact("area:whitefield", "geo.latitude", 12.9698, "Google"),
                 serving_numeric_fact("area:whitefield", "geo.longitude", 77.75, "Google"),
+                serving_numeric_fact("area:marathahalli", "geo.latitude", 12.9569, "Google"),
+                serving_numeric_fact("area:marathahalli", "geo.longitude", 77.7011, "Google"),
             ],
             Vec::new(),
         );
@@ -1296,20 +1456,314 @@ mod tests {
             )
             .expect("the resolved anchors should remain usable");
 
-        assert_eq!(query.resolved_clauses().len(), 2);
+        assert_eq!(query.resolved_clauses().len(), 3);
         assert_eq!(query.resolved_clauses()[0].target_text, "whitefield");
         assert_eq!(
             query.resolved_clauses()[1].category_fact_keys,
             vec!["nearby_schools"]
         );
         assert_eq!(
-            query.unresolved_targets(),
-            &["my wife office in marathahalli"]
+            query.resolved_clauses()[2].target_text,
+            "my wife office in marathahalli"
         );
+        assert_eq!(
+            query.resolved_clauses()[2].category_fact_keys,
+            vec!["nearby_tech_parks"]
+        );
+        assert!(query.unresolved_targets().is_empty());
         assert!(query
             .resolved_places()
             .iter()
             .any(|place| { place.entity_id == "area:whitefield" && place.name == "Whitefield" }));
+        assert!(query.resolved_places().iter().any(|place| {
+            place.entity_id == "area:marathahalli" && place.name == "Marathahalli"
+        }));
+    }
+
+    #[test]
+    fn hard_multi_clause_recall_requires_every_distance_bound_clause() {
+        let hospital_id = "place:google:manipal";
+        let office_id = "place:google:itpb";
+        let entities = vec![
+            ServingEntityRecord {
+                entity_id: hospital_id.to_string(),
+                entity_type: "place".to_string(),
+                name: "Manipal Hospital Whitefield".to_string(),
+                root_source: None,
+                searchable_text: "Manipal Hospital Whitefield".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: office_id.to_string(),
+                entity_type: "place".to_string(),
+                name: "International Tech Park Bengaluru ITPB".to_string(),
+                root_source: None,
+                searchable_text: "International Tech Park Bengaluru ITPB".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: "place:google:manipal-hebbal".to_string(),
+                entity_type: "place".to_string(),
+                name: "Manipal Hospital Hebbal".to_string(),
+                root_source: None,
+                searchable_text: "Manipal Hospital Hebbal".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: "place:google:manipal-epip".to_string(),
+                entity_type: "place".to_string(),
+                name: "Manipal Hospital EPIP Whitefield".to_string(),
+                root_source: None,
+                searchable_text: "Manipal Hospital EPIP Whitefield".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: "place:google:manipal-begur".to_string(),
+                entity_type: "place".to_string(),
+                name: "Manipal Clinics Begur".to_string(),
+                root_source: None,
+                searchable_text: "Manipal Clinics Begur".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: "place:google:manipal-varthur".to_string(),
+                entity_type: "place".to_string(),
+                name: "Manipal Hospital Varthur Road".to_string(),
+                root_source: None,
+                searchable_text: "Manipal Hospital Varthur Road".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: "place:google:manipal-yeshwanthpur".to_string(),
+                entity_type: "place".to_string(),
+                name: "Manipal Hospital Yeshwanthpur".to_string(),
+                root_source: None,
+                searchable_text: "Manipal Hospital Yeshwanthpur".to_string(),
+            },
+        ];
+        let facts = ServingFactIndex::from_records(
+            vec![
+                serving_text_fact(hospital_id, "place.category", "hospital", "Google"),
+                serving_numeric_fact(hospital_id, "geo.latitude", 12.99, "Google"),
+                serving_numeric_fact(hospital_id, "geo.longitude", 77.72, "Google"),
+                serving_text_fact(office_id, "place.category", "tech_park", "Google"),
+                serving_numeric_fact(office_id, "geo.latitude", 12.98, "Google"),
+                serving_numeric_fact(office_id, "geo.longitude", 77.73, "Google"),
+                serving_text_fact(
+                    "society:both",
+                    "nearby_hospitals",
+                    "Nearby hospitals: Manipal Hospital Whitefield (0.9 km)",
+                    "Google",
+                ),
+                serving_text_fact(
+                    "society:both",
+                    "nearby_tech_parks",
+                    "Nearby tech parks: International Tech Park Bengaluru ITPB (2.5 km)",
+                    "Google",
+                ),
+                serving_text_fact(
+                    "society:hospital-only",
+                    "nearby_hospitals",
+                    "Nearby hospitals: Manipal Hospital Whitefield (0.8 km)",
+                    "Google",
+                ),
+                serving_text_fact(
+                    "society:outside-office-limit",
+                    "nearby_hospitals",
+                    "Nearby hospitals: Manipal Hospital Whitefield (0.8 km)",
+                    "Google",
+                ),
+                serving_text_fact(
+                    "society:outside-office-limit",
+                    "nearby_tech_parks",
+                    "Nearby tech parks: International Tech Park Bengaluru ITPB (3.5 km)",
+                    "Google",
+                ),
+                serving_text_fact(
+                    "society:wrong-hospital",
+                    "nearby_hospitals",
+                    "Nearby hospitals: Example Clinic (0.4 km)",
+                    "Google",
+                ),
+                serving_text_fact(
+                    "society:wrong-hospital",
+                    "nearby_tech_parks",
+                    "Nearby tech parks: International Tech Park Bengaluru ITPB (2.5 km)",
+                    "Google",
+                ),
+            ],
+            Vec::new(),
+        );
+        let properties = vec![
+            local_property("both", "both"),
+            local_property("hospital-only", "hospital-only"),
+            local_property("outside-office-limit", "outside-office-limit"),
+            local_property("wrong-hospital", "wrong-hospital"),
+        ];
+        let index = GeoSearchIndex::from_serving_bundle(&entities, &facts);
+        let query = index
+            .query("3bhk within 1 km of Manipal Hospital Whitefield and within 3 km of ITPB")
+            .expect("both hard anchors should resolve");
+
+        let candidate_ids = query.serving_fact_candidate_property_ids(&properties, &facts);
+
+        assert_eq!(candidate_ids, vec!["both"]);
+        assert_eq!(query.resolved_clauses().len(), 2);
+        assert!(
+            query.resolved_clauses()[0].category_fact_keys.is_empty(),
+            "named place clauses must not fall back to unrelated same-category facts"
+        );
+        assert!(query.has_distance_limit());
+        assert_eq!(query.resolved_clauses()[0].distance_limit_km, Some(1.0));
+        assert_eq!(query.resolved_clauses()[1].distance_limit_km, Some(3.0));
+    }
+
+    #[test]
+    fn hard_named_clause_coordinate_recall_requires_that_named_anchor() {
+        let hospital_id = "place:google:manipal";
+        let office_id = "place:google:itpb";
+        let entities = vec![
+            ServingEntityRecord {
+                entity_id: hospital_id.to_string(),
+                entity_type: "place".to_string(),
+                name: "Manipal Hospital Whitefield".to_string(),
+                root_source: None,
+                searchable_text: "Manipal Hospital Whitefield".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: office_id.to_string(),
+                entity_type: "place".to_string(),
+                name: "International Tech Park Bengaluru ITPB".to_string(),
+                root_source: None,
+                searchable_text: "International Tech Park Bengaluru ITPB".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: "place:google:manipal-hebbal".to_string(),
+                entity_type: "place".to_string(),
+                name: "Manipal Hospital Hebbal".to_string(),
+                root_source: None,
+                searchable_text: "Manipal Hospital Hebbal".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: "place:google:manipal-epip".to_string(),
+                entity_type: "place".to_string(),
+                name: "Manipal Hospital EPIP Whitefield".to_string(),
+                root_source: None,
+                searchable_text: "Manipal Hospital EPIP Whitefield".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: "place:google:manipal-begur".to_string(),
+                entity_type: "place".to_string(),
+                name: "Manipal Clinics Begur".to_string(),
+                root_source: None,
+                searchable_text: "Manipal Clinics Begur".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: "place:google:manipal-varthur".to_string(),
+                entity_type: "place".to_string(),
+                name: "Manipal Hospital Varthur Road".to_string(),
+                root_source: None,
+                searchable_text: "Manipal Hospital Varthur Road".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: "place:google:manipal-yeshwanthpur".to_string(),
+                entity_type: "place".to_string(),
+                name: "Manipal Hospital Yeshwanthpur".to_string(),
+                root_source: None,
+                searchable_text: "Manipal Hospital Yeshwanthpur".to_string(),
+            },
+        ];
+        let facts = ServingFactIndex::from_records(
+            vec![
+                serving_text_fact(hospital_id, "place.category", "hospital", "Google"),
+                serving_numeric_fact(hospital_id, "geo.latitude", 12.9880554, "Google"),
+                serving_numeric_fact(hospital_id, "geo.longitude", 77.7287744, "Google"),
+                serving_text_fact(office_id, "place.category", "tech_park", "Google"),
+                serving_numeric_fact(office_id, "geo.latitude", 12.9858421, "Google"),
+                serving_numeric_fact(office_id, "geo.longitude", 77.7355549, "Google"),
+                serving_numeric_fact(
+                    "place:google:manipal-hebbal",
+                    "geo.latitude",
+                    13.0509,
+                    "Google",
+                ),
+                serving_numeric_fact(
+                    "place:google:manipal-hebbal",
+                    "geo.longitude",
+                    77.5939,
+                    "Google",
+                ),
+                serving_numeric_fact(
+                    "place:google:manipal-epip",
+                    "geo.latitude",
+                    12.9581,
+                    "Google",
+                ),
+                serving_numeric_fact(
+                    "place:google:manipal-epip",
+                    "geo.longitude",
+                    77.7456,
+                    "Google",
+                ),
+                serving_numeric_fact(
+                    "place:google:manipal-begur",
+                    "geo.latitude",
+                    12.8625,
+                    "Google",
+                ),
+                serving_numeric_fact(
+                    "place:google:manipal-begur",
+                    "geo.longitude",
+                    77.6146,
+                    "Google",
+                ),
+                serving_numeric_fact(
+                    "place:google:manipal-varthur",
+                    "geo.latitude",
+                    12.9581,
+                    "Google",
+                ),
+                serving_numeric_fact(
+                    "place:google:manipal-varthur",
+                    "geo.longitude",
+                    77.7456,
+                    "Google",
+                ),
+                serving_numeric_fact(
+                    "place:google:manipal-yeshwanthpur",
+                    "geo.latitude",
+                    13.0142,
+                    "Google",
+                ),
+                serving_numeric_fact(
+                    "place:google:manipal-yeshwanthpur",
+                    "geo.longitude",
+                    77.5560,
+                    "Google",
+                ),
+                serving_numeric_fact(
+                    "society:waterford-like",
+                    "geo.latitude",
+                    12.9819914,
+                    "Google",
+                ),
+                serving_numeric_fact(
+                    "society:waterford-like",
+                    "geo.longitude",
+                    77.7421819,
+                    "Google",
+                ),
+                serving_numeric_fact("society:both", "geo.latitude", 12.9875, "Google"),
+                serving_numeric_fact("society:both", "geo.longitude", 77.7335, "Google"),
+            ],
+            Vec::new(),
+        );
+        let index = GeoSearchIndex::from_serving_bundle(&entities, &facts);
+        let query = index
+            .query("3bhk within 1 km of Manipal Hospital and within 3 km of ITPB")
+            .expect("both hard anchors should resolve");
+        let properties = vec![
+            local_property("waterford-like", "waterford-like"),
+            local_property("both", "both"),
+        ];
+        let candidate_ids = query.candidate_property_ids(&properties);
+
+        assert_eq!(candidate_ids, vec!["both"]);
+        assert!(query.unresolved_targets().is_empty());
     }
 
     #[test]

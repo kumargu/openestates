@@ -126,3 +126,27 @@ No test writes production serving pointers or promotes fixture data.
 | Read-only Google source pool inspected for fixture review | `2831535e-36fd-4545-a357-82b7a22a962b` |
 
 None of these pointers was mutated.
+
+## QueryPlan compiler pass — 2026-08-05
+
+Implemented the first deterministic compiler slice for ontology-driven search:
+
+- Added internal `QueryPlan` with token byte spans, structural slots, broad-region mentions, typed relation clauses, place-family roles, per-clause distance binding, and span ownership.
+- Projected `QueryPlan` into the existing buyer API `SearchIntent`; no API/UI shape changed.
+- Routed production search through one compiled plan for intent projection, geo resolution, and unresolved named-clause abstention.
+- Fixed parser bugs found during the proof loop:
+  - `within 1 km of X` now binds the distance to `X`;
+  - `near X within 500m` now keeps `X` as the anchor and applies the trailing distance;
+  - repeated trailing modifiers such as `near X within 1 km and near Y within 3 km` bind independently per clause;
+  - undistanced uses of `within`, such as `within a gated community`, do not create hard proximity clauses;
+  - final relation targets stop before budget phrases such as `under 4 crore`.
+- Removed the replaced private intent parsing helpers and stale geo place-family helper.
+
+Verification:
+
+- Baseline before change: Python benchmark evaluator `5/5`; production-search hardcoding audit `0` findings.
+- After change: `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo test --manifest-path backend/Cargo.toml search:: -- --nocapture` passed `245` search-filtered unit tests.
+- After change: `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check --manifest-path backend/Cargo.toml` passed.
+- After change: `PYTHONPATH=. python3 tests/test_search_quality_benchmark.py` passed `5/5`.
+- After change: `python3 scripts/audit_search_hardcoding.py --mode production-search` reported `0` findings and `0` blocked search-config alias findings.
+- After change: `./tests/smoke_test.sh 4000` passed `47/47` against the already-running local API.

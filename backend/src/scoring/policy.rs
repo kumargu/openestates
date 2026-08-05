@@ -197,6 +197,8 @@ pub struct SearchRankingPolicy {
     pub named_place_distinctive_token_max_place_count: usize,
     #[serde(default = "default_named_place_distinctive_token_max_place_ratio")]
     pub named_place_distinctive_token_max_place_ratio: f64,
+    #[serde(default = "default_ambiguous_named_place_score_multiplier")]
+    pub ambiguous_named_place_score_multiplier: f64,
     #[serde(default)]
     pub named_place_generic_tokens: Vec<String>,
     #[serde(default)]
@@ -245,6 +247,8 @@ impl Default for SearchRankingPolicy {
                 default_named_place_distinctive_token_max_place_count(),
             named_place_distinctive_token_max_place_ratio:
                 default_named_place_distinctive_token_max_place_ratio(),
+            ambiguous_named_place_score_multiplier: default_ambiguous_named_place_score_multiplier(
+            ),
             named_place_generic_tokens: Vec::new(),
             named_place_query_stopwords: Vec::new(),
             review_rating_weight: default_review_rating_weight(),
@@ -797,6 +801,9 @@ fn default_named_place_distinctive_token_max_place_count() -> usize {
 }
 fn default_named_place_distinctive_token_max_place_ratio() -> f64 {
     0.15
+}
+fn default_ambiguous_named_place_score_multiplier() -> f64 {
+    0.4
 }
 fn default_review_rating_weight() -> f64 {
     0.75

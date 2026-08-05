@@ -50,6 +50,7 @@
     "named_place_score_weight": 2.0,
     "named_place_distinctive_token_max_place_count": 3,
     "named_place_distinctive_token_max_place_ratio": 0.15,
+    "ambiguous_named_place_score_multiplier": 0.4,
     "named_place_generic_tokens": [
       "the",
       "and",
@@ -77,6 +78,10 @@
       "to",
       "with",
       "within",
+      "kid",
+      "kids",
+      "child",
+      "children",
       "km",
       "kms",
       "kilometer",
