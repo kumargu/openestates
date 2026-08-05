@@ -2,20 +2,43 @@ import { useEffect, useMemo, useState } from "react";
 import type { FocusEvent, ReactNode } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { Link } from "react-router-dom";
+import { ImageWithFallback } from "./ImageWithFallback.tsx";
 import { LivingEvidenceTile } from "./evidence/LivingEvidenceTile.tsx";
-import { propertyDetailPath } from "../lib/api.ts";
+import { getProperty, getPropertyRera, propertyDetailPath } from "../lib/api.ts";
+import { availableLayers, layerLabel } from "../lib/nearbyPlateProjection.ts";
 import { filterListableProperties, uniqueSocietiesForDiscovery } from "../lib/property-filters.ts";
-import type { PropertyCard } from "../lib/types.ts";
+import type {
+  MapPlacePin,
+  PropertyCard,
+  PropertyDetailResponse,
+  PropertyMapContext,
+  ReraComplaintSection,
+  ReraDocumentSection,
+  ReraDossier,
+} from "../lib/types.ts";
 import { useLandingSceneController } from "../hooks/useLandingSceneController.ts";
-import { useLandingChapterSequence } from "../hooks/useLandingChapterSequence.ts";
+import {
+  useLandingChapterSequence,
+  useLandingLoopSequence,
+} from "../hooks/useLandingChapterSequence.ts";
 import { useLandingResolveSequence } from "../hooks/useLandingResolveSequence.ts";
 import { useLandingStoryMotion } from "../hooks/useLandingStoryMotion.ts";
 
 const FEATURED_LIMIT = 6;
 const STORY_SCENE_IDS = ["resolve", "reveal", "remember", "converge", "record"] as const;
 const RESOLVE_QUERY = "3BHK under 2Cr with strong reviews and generous open space";
-const NOTEBOOK_SEQUENCE_DELAYS = [1_050, 720] as const;
-const COMPARE_SEQUENCE_DELAYS = [1_150, 900] as const;
+const REVEAL_SEQUENCE_DELAYS = [620, 760] as const;
+const NOTEBOOK_SEQUENCE_DURATIONS = [1_400, 1_100, 2_200] as const;
+const COMPARE_SEQUENCE_DURATIONS = [1_800, 1_500, 2_200] as const;
+const RERA_SEQUENCE_DURATIONS = [1_800, 1_800, 1_800, 2_200] as const;
+const RESOLVE_STORY_DURATION_MS = 5_400;
+const CARD_UNFOLD_TRANSITION = {
+  type: "spring",
+  visualDuration: 0.55,
+  damping: 25.5,
+  bounce: 0.05,
+  restDelta: 0.01,
+} as const;
 
 type StorySceneId = typeof STORY_SCENE_IDS[number];
 type FeaturedLensId = "metro" | "family" | "township" | "feedback";
@@ -30,6 +53,19 @@ type EvidenceFact = {
   id: string;
   label: string;
   value: string;
+};
+
+type LandingMapStory = {
+  id: string;
+  label: string;
+  places: MapPlacePin[];
+  visual: "places" | "metro" | "lakes" | "water" | "lines";
+};
+
+type ResolveStory = {
+  id: string;
+  query: string;
+  homes: PropertyCard[];
 };
 
 function useDesktopStory(): boolean {
@@ -81,6 +117,114 @@ function formatPrice(price: number): string {
 
 function homeName(property: PropertyCard): string {
   return isKnownText(property.society_name) ? property.society_name : property.title;
+}
+
+function landingMapStories(context?: PropertyMapContext): LandingMapStory[] {
+  if (!context) return [];
+
+  const stories = availableLayers(context).map((layer): LandingMapStory => ({
+    id: layer,
+    label: layerLabel(layer, context),
+    places: context.places.filter((place) => place.layer === layer),
+    visual: layer === "metro"
+      ? "metro"
+      : layer === "lakes"
+        ? "lakes"
+        : layer === "red_flags"
+          ? "lines"
+          : "places",
+  }));
+
+  if ((context.metro_lines?.length ?? 0) > 0 && !stories.some((story) => story.id === "metro")) {
+    stories.unshift({ id: "metro", label: layerLabel("metro", context), places: [], visual: "metro" });
+  }
+  if ((context.lakes?.length ?? 0) > 0 && !stories.some((story) => story.id === "lakes")) {
+    stories.push({ id: "lakes", label: layerLabel("lakes", context), places: [], visual: "lakes" });
+  }
+  if (context.water) {
+    stories.push({ id: "water", label: "Groundwater", places: [], visual: "water" });
+  }
+
+  return stories;
+}
+
+function useLandingMapStoryIndex(
+  storyCount: number,
+  active: boolean,
+  paused: boolean,
+  reducedMotion: boolean,
+): number {
+  const [storyIndex, setStoryIndex] = useState(0);
+
+  useEffect(() => {
+    if (!active || paused || reducedMotion || storyCount <= 1) return undefined;
+    const timer = window.setInterval(() => {
+      setStoryIndex((current) => (current + 1) % storyCount);
+    }, 2_500);
+    return () => window.clearInterval(timer);
+  }, [active, paused, reducedMotion, storyCount]);
+
+  return storyCount > 0 ? storyIndex % storyCount : 0;
+}
+
+function usePropertyDetail(propertyId?: string): PropertyDetailResponse | undefined {
+  const [loaded, setLoaded] = useState<{
+    propertyId: string;
+    detail?: PropertyDetailResponse;
+  }>();
+
+  useEffect(() => {
+    if (!propertyId) return undefined;
+    const controller = new AbortController();
+    getProperty(propertyId, { signal: controller.signal })
+      .then((detail) => setLoaded({ propertyId, detail }))
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setLoaded({ propertyId, detail: undefined });
+        }
+      });
+    return () => controller.abort();
+  }, [propertyId]);
+
+  return loaded && loaded.propertyId === propertyId ? loaded.detail : undefined;
+}
+
+function usePropertyReraDossier(propertyId?: string): ReraDossier | undefined {
+  const [loaded, setLoaded] = useState<{
+    propertyId: string;
+    dossier?: ReraDossier;
+  }>();
+
+  useEffect(() => {
+    if (!propertyId) return undefined;
+    let cancelled = false;
+    getPropertyRera(propertyId)
+      .then((response) => {
+        if (!cancelled) setLoaded({ propertyId, dossier: response });
+      })
+      .catch(() => {
+        if (!cancelled) setLoaded({ propertyId, dossier: undefined });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [propertyId]);
+
+  return loaded && loaded.propertyId === propertyId ? loaded.dossier : undefined;
+}
+
+function buyerFacingDetail(value: string): string {
+  return value
+    .replace(/\s*·\s*parsed with caveats/gi, "")
+    .replace(/\bparsed with caveats\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function toneLabel(tone?: string): string {
+  if (tone === "risk" || tone === "watch" || tone === "caution") return "Attention";
+  if (tone === "positive") return "Clear";
+  return "Neutral";
 }
 
 function rankHomesForLens(properties: PropertyCard[], lensId: FeaturedLensId): PropertyCard[] {
@@ -204,6 +348,42 @@ function storyHomesForResolve(properties: PropertyCard[]): PropertyCard[] {
     .slice(0, 3);
 }
 
+function resolveStories(properties: PropertyCard[]): ResolveStory[] {
+  const candidates: ResolveStory[] = [
+    {
+      id: "family-budget",
+      query: RESOLVE_QUERY,
+      homes: storyHomesForResolve(properties),
+    },
+    ...FEATURED_LENSES
+      .filter((lens) => lens.id !== "family")
+      .map((lens) => ({
+        id: lens.id,
+        query: lens.query,
+        homes: rankHomesForLens(properties, lens.id).slice(0, 3),
+      })),
+  ];
+  const seenResults = new Set<string>();
+
+  return candidates.filter((story) => {
+    if (story.homes.length === 0) return false;
+    const signature = story.homes.map((home) => home.id).join("|");
+    if (seenResults.has(signature)) return false;
+    seenResults.add(signature);
+    return true;
+  });
+}
+
+function querySegments(query: string): string[] {
+  const words = query.split(/\s+/).filter(Boolean);
+  const segmentSize = Math.max(1, Math.ceil(words.length / 3));
+  const segments: string[] = [];
+  for (let index = 0; index < words.length; index += segmentSize) {
+    segments.push(words.slice(index, index + segmentSize).join(" "));
+  }
+  return segments;
+}
+
 function resolveReasons(property: PropertyCard): EvidenceFact[] {
   const reasons: EvidenceFact[] = [];
   if (hasKnownNumber(property.metro_distance_mins)) {
@@ -244,11 +424,13 @@ function ResolveCanvas({
   active,
   homes,
   paused,
+  query,
   reducedMotion,
 }: {
   active: boolean;
   homes: PropertyCard[];
   paused: boolean;
+  query: string;
   reducedMotion: boolean;
 }) {
   const focusHome = homes[0];
@@ -271,23 +453,28 @@ function ResolveCanvas({
           <path d="m15.4 15.4 4.1 4.1" />
         </svg>
         <p className="landing-resolve__query">
-          <span>3BHK under 2Cr,</span> <span>with strong reviews,</span> <span>and generous open space</span>
+          {querySegments(query).map((segment) => <span key={segment}>{segment} </span>)}
         </p>
         <i aria-hidden="true">→</i>
       </div>
-      <p className="landing-resolve__result-count">3 strongest homes</p>
       <div className="landing-resolve__homes">
         {homes.map((property, index) => {
           const meta = [
             property.bhk > 0 ? `${property.bhk} BHK` : null,
             formatPrice(property.price) || null,
           ].filter((value): value is string => Boolean(value));
+          const image = property.hero_image
+            || property.images?.find((candidate) => candidate && !candidate.startsWith("placeholder://"))
+            || null;
 
           return (
             <article
               key={property.id}
               className={`landing-resolve__home${index === 0 ? " is-focus" : ""}`}
             >
+              <div className="landing-resolve__home-media" aria-hidden="true">
+                <ImageWithFallback src={image} alt="" loading={index === 0 ? "eager" : "lazy"} />
+              </div>
               <span className="landing-resolve__rank">0{index + 1}</span>
               <div className="landing-resolve__home-copy">
                 {index === 0 ? (
@@ -367,13 +554,31 @@ function evidenceFacts(property: PropertyCard): EvidenceFact[] {
 
 function RevealCanvas({
   active,
+  mapContext,
+  paused,
   property,
   reducedMotion,
 }: {
   active: boolean;
+  mapContext?: PropertyMapContext;
+  paused: boolean;
   property: PropertyCard;
   reducedMotion: boolean;
 }) {
+  const phase = useLandingChapterSequence({
+    active,
+    delays: REVEAL_SEQUENCE_DELAYS,
+    paused,
+    reducedMotion,
+  });
+  const mapStories = useMemo(() => landingMapStories(mapContext), [mapContext]);
+  const mapStoryIndex = useLandingMapStoryIndex(
+    mapStories.length,
+    active,
+    paused,
+    reducedMotion,
+  );
+  const mapStory = mapStories[mapStoryIndex];
   const facts = evidenceFacts(property);
   const hasResidentSignal = hasKnownNumber(property.google_rating);
   const checkLabel = property.decision_check_summary?.tileLabel;
@@ -383,7 +588,11 @@ function RevealCanvas({
   ].filter((value): value is string => Boolean(value));
 
   return (
-    <div className="landing-product landing-product--reveal">
+    <div
+      className="landing-product landing-product--reveal"
+      data-active={active ? "true" : "false"}
+      data-phase={phase}
+    >
       <header className="landing-reveal__home">
         <div>
           <JourneyHomeName active={active} reducedMotion={reducedMotion}>
@@ -398,23 +607,52 @@ function RevealCanvas({
         <section className="landing-reveal__field">
           <header>
             <h3>Around this home</h3>
-            <div aria-hidden="true">
-              <span>Schools</span>
-              <span>Hospitals</span>
-              <span>Parks</span>
-            </div>
+            {mapStory ? <span className="landing-reveal__map-label">{mapStory.label}</span> : null}
           </header>
           <div className="landing-reveal__map" aria-hidden="true">
-            <span className="landing-reveal__route landing-reveal__route--one" />
-            <span className="landing-reveal__route landing-reveal__route--two" />
-            <svg className="landing-reveal__metro-line" viewBox="0 0 320 220" preserveAspectRatio="none">
-              <path d="M-14 56 C50 80, 70 142, 136 130 S214 64, 336 92" />
-            </svg>
-            <span className="landing-reveal__pin" />
-            <span className="landing-reveal__marker landing-reveal__marker--one">1</span>
-            <span className="landing-reveal__marker landing-reveal__marker--two">2</span>
-            <span className="landing-reveal__marker landing-reveal__marker--three">3</span>
-            <span className="landing-reveal__transit">M</span>
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.div
+                key={mapStory?.id ?? "home"}
+                className="landing-reveal__map-frame"
+                data-visual={mapStory?.visual ?? "places"}
+                initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
+                transition={{
+                  ...CARD_UNFOLD_TRANSITION,
+                  visualDuration: reducedMotion ? 0 : CARD_UNFOLD_TRANSITION.visualDuration,
+                }}
+              >
+                {mapStory?.visual === "places" || mapStory?.visual === "metro" ? (
+                  <>
+                    <span className="landing-reveal__route landing-reveal__route--one" />
+                    <span className="landing-reveal__route landing-reveal__route--two" />
+                  </>
+                ) : null}
+                {mapStory?.visual === "metro" ? (
+                  <svg className="landing-reveal__metro-line" viewBox="0 0 320 220" preserveAspectRatio="none">
+                    <path d="M-14 56 C50 80, 70 142, 136 130 S214 64, 336 92" />
+                  </svg>
+                ) : null}
+                {mapStory?.visual === "lakes" ? <span className="landing-reveal__lake" /> : null}
+                {mapStory?.visual === "water" ? <span className="landing-reveal__water-zone" /> : null}
+                {mapStory?.visual === "lines" ? (
+                  <span className="landing-reveal__power-line">
+                    <i /><i /><i />
+                  </span>
+                ) : null}
+                <span className="landing-reveal__pin" />
+                {(mapStory?.places ?? []).slice(0, 3).map((place, index) => (
+                  <span
+                    key={place.feature_id ?? place.place_entity_id ?? `${place.name}-${index}`}
+                    className={`landing-reveal__marker landing-reveal__marker--${["one", "two", "three"][index]}`}
+                  >
+                    {index + 1}
+                  </span>
+                ))}
+                {mapStory?.visual === "metro" ? <span className="landing-reveal__transit">M</span> : null}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </section>
 
@@ -459,9 +697,9 @@ function NotebookCanvas({
   property: PropertyCard;
   reducedMotion: boolean;
 }) {
-  const phase = useLandingChapterSequence({
+  const phase = useLandingLoopSequence({
     active,
-    delays: NOTEBOOK_SEQUENCE_DELAYS,
+    durations: NOTEBOOK_SEQUENCE_DURATIONS,
     paused,
     reducedMotion,
   });
@@ -490,11 +728,11 @@ function NotebookCanvas({
               <motion.div
                 key={note.id}
                 initial={false}
-                animate={active ? { opacity: 1, y: 0 } : { opacity: 0.45, y: 7 }}
+                animate={active && index <= phase ? { opacity: 1, y: 0 } : { opacity: 0, y: 80 }}
                 transition={{
-                  delay: reducedMotion ? 0 : index * 0.1,
-                  duration: reducedMotion ? 0 : 0.28,
-                  ease: [0.16, 1, 0.3, 1],
+                  ...CARD_UNFOLD_TRANSITION,
+                  delay: reducedMotion ? 0 : 0.02 + index * 0.06,
+                  visualDuration: reducedMotion ? 0 : CARD_UNFOLD_TRANSITION.visualDuration,
                 }}
               >
                 <span className={`is-${note.id}`}>{note.label}</span>
@@ -504,15 +742,18 @@ function NotebookCanvas({
           </div>
         </div>
         <div className="landing-remember__action-sheet">
-          <AnimatePresence mode="wait" initial={false}>
+          <AnimatePresence mode="popLayout" initial={false}>
             {phase === 0 ? (
               <motion.div
                 key="commands"
                 className="landing-remember__command-menu"
-                initial={{ opacity: 0, y: 8 }}
+                initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, x: 16 }}
-                transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
+                transition={{
+                  ...CARD_UNFOLD_TRANSITION,
+                  visualDuration: reducedMotion ? 0 : CARD_UNFOLD_TRANSITION.visualDuration,
+                }}
               >
                 <p><span>/visit</span><strong>Visit</strong></p>
                 <p><span>/budget</span><strong>Budget</strong></p>
@@ -521,9 +762,13 @@ function NotebookCanvas({
             ) : (
               <motion.div
                 key="visit-checklist"
-                initial={{ opacity: 0, y: 12 }}
+                initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
+                transition={{
+                  ...CARD_UNFOLD_TRANSITION,
+                  visualDuration: reducedMotion ? 0 : CARD_UNFOLD_TRANSITION.visualDuration,
+                }}
               >
                 <div className="landing-remember__command">
                   <span>/visit</span>
@@ -532,9 +777,12 @@ function NotebookCanvas({
                 {phase >= 2 ? (
                   <motion.div
                     className="landing-remember__checklist"
-                    initial={{ opacity: 0, y: 18, scale: 0.98 }}
+                    initial={reducedMotion ? false : { opacity: 0, y: "70%", scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                    transition={{
+                      ...CARD_UNFOLD_TRANSITION,
+                      visualDuration: reducedMotion ? 0 : CARD_UNFOLD_TRANSITION.visualDuration,
+                    }}
                   >
                     <header>
                       <strong>Visit</strong>
@@ -579,9 +827,9 @@ function ConvergeCanvas({
   paused: boolean;
   reducedMotion: boolean;
 }) {
-  const phase = useLandingChapterSequence({
+  const phase = useLandingLoopSequence({
     active,
-    delays: COMPARE_SEQUENCE_DELAYS,
+    durations: COMPARE_SEQUENCE_DURATIONS,
     paused,
     reducedMotion,
   });
@@ -590,7 +838,11 @@ function ConvergeCanvas({
   const comparedHomes = [left, right];
 
   return (
-    <div className="landing-product landing-product--converge" data-phase={phase}>
+    <div
+      className="landing-product landing-product--converge"
+      data-active={active ? "true" : "false"}
+      data-phase={phase}
+    >
       <div className="landing-converge__toolbar">
         <span>{left.bhk} BHK</span>
       </div>
@@ -611,14 +863,18 @@ function ConvergeCanvas({
           ))}
         </div>
 
-        <AnimatePresence mode="sync" initial={false}>
+        <AnimatePresence mode="popLayout" initial={false}>
           {phase === 0 ? (
             <motion.section
               key="society"
               className="landing-converge__society"
-              initial={{ opacity: 0, y: 8 }}
+              initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, x: -14 }}
+              exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
+              transition={{
+                ...CARD_UNFOLD_TRANSITION,
+                visualDuration: reducedMotion ? 0 : CARD_UNFOLD_TRANSITION.visualDuration,
+              }}
             >
               <h3>Society</h3>
               <div>
@@ -639,9 +895,13 @@ function ConvergeCanvas({
             <motion.section
               key="labels"
               className="landing-converge__labels"
-              initial={{ opacity: 0, x: 14 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
+              transition={{
+                ...CARD_UNFOLD_TRANSITION,
+                visualDuration: reducedMotion ? 0 : CARD_UNFOLD_TRANSITION.visualDuration,
+              }}
             >
               <h3>Buyer notes</h3>
               <div><span className="is-commute">Commute</span><p>Test evening traffic</p><p>Time the office route</p></div>
@@ -651,9 +911,13 @@ function ConvergeCanvas({
             <motion.section
               key="plan"
               className="landing-converge__plan-full"
-              initial={{ opacity: 0, y: 14 }}
+              initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+              exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
+              transition={{
+                ...CARD_UNFOLD_TRANSITION,
+                visualDuration: reducedMotion ? 0 : CARD_UNFOLD_TRANSITION.visualDuration,
+              }}
             >
               <header><span>Buy vs Rent</span><strong>Follow both paths to year 20</strong></header>
               <svg viewBox="0 0 560 120" preserveAspectRatio="none" aria-hidden="true">
@@ -686,29 +950,91 @@ function ConvergeCanvas({
   );
 }
 
+function formatRecordDate(value?: string): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(date);
+}
+
 function ReraCanvas({
   active,
+  detail,
+  dossier,
+  paused,
   property,
   reducedMotion,
 }: {
   active: boolean;
+  detail?: PropertyDetailResponse;
+  dossier?: ReraDossier;
+  paused: boolean;
   property: PropertyCard;
   reducedMotion: boolean;
 }) {
+  const phase = useLandingLoopSequence({
+    active,
+    durations: RERA_SEQUENCE_DURATIONS,
+    paused,
+    reducedMotion,
+  });
   const summary = property.decision_check_summary;
-  const registeredLabel = summary?.groups
-    ?.flatMap((group) => group.labels)
-    .find((label) => label.key === "rera_registration_available")
-    ?.label;
-  const cautionLabels = summary?.groups
-    ?.find((group) => group.id === "attention")
-    ?.labels.slice(0, 2) ?? [];
-  const documentLabels = summary?.groups
+  const rera = detail?.rera;
+  const portfolio = detail?.builder_portfolio;
+  const activeDossier = dossier ?? detail?.rera_dossier;
+  const registration = activeDossier?.source.registration_number
+    ?? rera?.registration_number
+    ?? summary?.registrationNumberCompact;
+  const status = activeDossier?.source.status ?? rera?.status;
+  const documentFallback = summary?.groups
     ?.find((group) => group.id === "documents")
-    ?.labels.slice(0, 3) ?? [];
+    ?.labels.slice(0, 3)
+    .map((label) => ({ group: label.key, label: label.label, count: 1 })) ?? [];
+  const summaryCards = (activeDossier?.summary_cards ?? [])
+    .filter((card) => isKnownText(card.title) || isKnownText(card.detail))
+    .filter((card) => !(isKnownText(registration) && /rera registered|registration/i.test(card.title)))
+    .slice(0, 3);
+  const glanceCards = summaryCards.length > 0
+    ? summaryCards
+    : (summary?.primaryLabels ?? []).slice(0, 3).map((label) => ({
+      id: label.key,
+      title: label.label,
+      detail: label.valueText ?? "",
+      tone: label.severity,
+    }));
+  const documentSections: Array<Pick<ReraDocumentSection, "group" | "label" | "count">> = (() => {
+    const sections = (activeDossier?.document_sections ?? [])
+      .filter((section) => (section.count ?? section.items?.length ?? 0) > 0)
+      .slice(0, 4)
+      .map((section) => ({
+        group: section.group,
+        label: section.label,
+        count: section.count ?? section.items?.length ?? 0,
+      }));
+    return sections.length > 0 ? sections : documentFallback;
+  })();
+  const complaintSections: Array<Pick<ReraComplaintSection, "scope" | "label" | "total" | "open" | "top_themes">> =
+    (activeDossier?.complaint_sections ?? [])
+      .filter((section) => section.total > 0 || section.open > 0 || section.disposed > 0)
+      .slice(0, 2);
+  const timeline = activeDossier?.timeline ?? {
+    start_date: rera?.start_date,
+    original_completion_date: rera?.original_completion_date,
+    completion_date: rera?.completion_date,
+    delay_months: rera?.delay_months,
+  };
+  const legalChecks = (activeDossier?.legal_checks ?? [])
+    .filter((check) => isKnownText(check.value))
+    .slice(0, 3);
+  const builderProjects = (portfolio?.projects ?? []).slice(0, 3);
+  const phaseLabels = ["At a glance", "Documents", "Builder record", "Schedule"];
+  const sceneTransition = {
+    ...CARD_UNFOLD_TRANSITION,
+    visualDuration: reducedMotion ? 0 : CARD_UNFOLD_TRANSITION.visualDuration,
+  };
 
   return (
-    <div className="landing-product landing-product--record">
+    <div className="landing-product landing-product--record" data-phase={phase}>
       <header className="landing-record__head">
         <div>
           <span>RERA</span>
@@ -716,29 +1042,148 @@ function ReraCanvas({
             {homeName(property)}
           </JourneyHomeName>
         </div>
-        <em>{registeredLabel ?? "Registration"}</em>
+        <em>{phaseLabels[phase]}</em>
       </header>
 
-      {isKnownText(summary?.registrationNumberCompact) ? (
-        <div className="landing-record__registration">
-          <span>Registration</span>
-          <strong>{summary?.registrationNumberCompact}</strong>
-        </div>
-      ) : null}
+      <div className="landing-record__movie">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {phase === 0 ? (
+            <motion.section
+              key="glance"
+              className="landing-record__scene landing-record__glance"
+              initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
+              transition={sceneTransition}
+            >
+              {(isKnownText(registration) || isKnownText(status)) ? (
+                <div className="landing-record__registry">
+                  {isKnownText(registration) ? <strong>{registration}</strong> : null}
+                  {isKnownText(status) ? <span>{status}</span> : null}
+                </div>
+              ) : null}
+              <div className="landing-record__summary-rows">
+                {glanceCards.map((card) => (
+                  <article key={card.id} className={`is-${toneLabel(card.tone).toLowerCase()}`}>
+                    <span>{toneLabel(card.tone)}</span>
+                    <strong>{card.title}</strong>
+                    {isKnownText(card.detail) ? <p>{buyerFacingDetail(card.detail)}</p> : null}
+                  </article>
+                ))}
+              </div>
+            </motion.section>
+          ) : phase === 1 ? (
+            <motion.section
+              key="documents"
+              className="landing-record__scene landing-record__documents"
+              initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
+              transition={sceneTransition}
+            >
+              <div className="landing-record__tabs" aria-hidden="true">
+                <span className="is-active">All</span>
+                {documentSections.map((section) => (
+                  <span key={section.group}>{section.label}</span>
+                ))}
+              </div>
+              <div className="landing-record__document-list">
+                {documentSections.map((section) => (
+                  <p key={section.group}>
+                    <i aria-hidden="true" />
+                    <strong>{section.label}</strong>
+                    <small>{section.count}</small>
+                  </p>
+                ))}
+              </div>
+            </motion.section>
+          ) : phase === 2 ? (
+            <motion.section
+              key="builder"
+              className="landing-record__scene landing-record__builder"
+              initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
+              transition={sceneTransition}
+            >
+              <div className="landing-record__builder-name">
+                <strong>{portfolio?.builder_name || property.builder_name}</strong>
+              </div>
+              <div className="landing-record__builder-stats">
+                {portfolio ? (
+                  <>
+                    <p><strong>{portfolio.tracked_projects}</strong><span>tracked projects</span></p>
+                    <p><strong>{portfolio.rera_registered_projects}/{portfolio.tracked_projects}</strong><span>RERA linked</span></p>
+                    <p><strong>{portfolio.delayed_projects}</strong><span>delayed</span></p>
+                    {typeof portfolio.revocations === "number" ? (
+                      <p><strong>{portfolio.revocations}</strong><span>revocations</span></p>
+                    ) : null}
+                  </>
+                ) : null}
+                {complaintSections.map((section) => (
+                  <p key={section.scope}>
+                    <strong>{section.total}{section.open > 0 ? ` · ${section.open} open` : ""}</strong>
+                    <span>{section.label}</span>
+                  </p>
+                ))}
+              </div>
+              {builderProjects.length > 0 ? (
+                <div className="landing-record__builder-projects">
+                  {builderProjects.map((project) => (
+                    <article key={`${project.property_id}-${project.project_name}`}>
+                      <strong>{project.project_name}</strong>
+                      <span>
+                        {project.area}
+                        {project.current ? " · This home" : ""}
+                        {hasKnownNumber(project.delay_months) ? ` · ${project.delay_months} mo` : ""}
+                      </span>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </motion.section>
+          ) : (
+            <motion.section
+              key="schedule"
+              className="landing-record__scene landing-record__schedule"
+              initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
+              transition={sceneTransition}
+            >
+              <div className="landing-record__metrics">
+                {formatRecordDate(timeline?.start_date) ? (
+                  <p><span>Start</span><strong>{formatRecordDate(timeline?.start_date)}</strong></p>
+                ) : null}
+                {formatRecordDate(timeline?.original_completion_date) ? (
+                  <p><span>Original target</span><strong>{formatRecordDate(timeline?.original_completion_date)}</strong></p>
+                ) : null}
+                {formatRecordDate(timeline?.completion_date) ? (
+                  <p><span>Current target</span><strong>{formatRecordDate(timeline?.completion_date)}</strong></p>
+                ) : null}
+                {hasKnownNumber(timeline?.delay_months) ? (
+                  <p className="is-attention"><span>Movement</span><strong>{timeline?.delay_months} months</strong></p>
+                ) : null}
+              </div>
+              {legalChecks.length > 0 ? (
+                <div className="landing-record__legal">
+                  {legalChecks.map((check) => (
+                    <article key={check.key}>
+                      <span>{check.label}</span>
+                      <strong>{check.value}</strong>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </motion.section>
+          )}
+        </AnimatePresence>
+      </div>
 
-      <div className="landing-record__body">
-        <section className="landing-record__documents">
-          <span>Documents</span>
-          {documentLabels.map((label) => (
-            <p key={label.key}><i aria-hidden="true" />{label.label}</p>
-          ))}
-        </section>
-        <section className="landing-record__checks">
-          <span>Decision checks</span>
-          {cautionLabels.map((label) => (
-            <p key={label.key}>{label.label}</p>
-          ))}
-        </section>
+      <div className="landing-record__progress" aria-hidden="true">
+        {phaseLabels.map((label, index) => (
+          <span key={label} className={index === phase ? "is-active" : ""} />
+        ))}
       </div>
     </div>
   );
@@ -828,11 +1273,27 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
   const isDesktopStory = useDesktopStory();
   const controller = useLandingSceneController(STORY_SCENE_IDS, isDesktopStory);
   const storyRef = useLandingStoryMotion(controller.isReducedMotion);
-
-  if (uniqueHomes.length === 0) return null;
-
-  const resolveHomes = storyHomesForResolve(uniqueHomes);
+  const stories = resolveStories(uniqueHomes);
+  const resolveStoryDurations = Array.from(
+    { length: stories.length },
+    () => RESOLVE_STORY_DURATION_MS,
+  );
+  const resolveStoryIndex = useLandingLoopSequence({
+    active: controller.activeSceneId === "resolve",
+    durations: resolveStoryDurations,
+    paused: controller.isPaused("resolve"),
+    reducedMotion: controller.isReducedMotion,
+  });
+  const resolveStory = stories.length > 0
+    ? stories[resolveStoryIndex % stories.length]
+    : undefined;
+  const resolveHomes = stories[0]?.homes ?? [];
   const revealHome = resolveHomes[0] ?? selectEvidenceHome(uniqueHomes);
+  const revealDetail = usePropertyDetail(revealHome?.id);
+  const revealRera = usePropertyReraDossier(revealHome?.id);
+
+  if (!revealHome || !resolveStory) return null;
+
   const rankedStoryHomes = rankEvidenceHomes(uniqueHomes);
   const notebookHome = resolveHomes.find((home) => home.id !== revealHome.id)
     ?? rankedStoryHomes.find((home) => home.id !== revealHome.id)
@@ -851,16 +1312,17 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
       title: "Start with the life you want",
       description: "A natural-language search becomes a small, ranked set of homes with reasons attached.",
       action: (
-        <button type="button" onClick={() => onSearch(RESOLVE_QUERY)}>
+        <button type="button" onClick={() => onSearch(resolveStory.query)}>
           Try this search <span aria-hidden="true">→</span>
         </button>
       ),
       canvas: (
         <ResolveCanvas
-          key={`${resolveIsActive ? "active" : "rest"}-${controller.isReducedMotion ? "reduced" : "motion"}`}
+          key={`${resolveStory.id}-${resolveIsActive ? "active" : "rest"}-${controller.isReducedMotion ? "reduced" : "motion"}`}
           active={resolveIsActive}
-          homes={resolveHomes}
+          homes={resolveStory.homes}
           paused={controller.isPaused("resolve")}
+          query={resolveStory.query}
           reducedMotion={controller.isReducedMotion}
         />
       ),
@@ -878,6 +1340,8 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
       canvas: (
         <RevealCanvas
           active={controller.activeSceneId === "reveal" || middleChaptersActive}
+          mapContext={revealDetail?.map_context}
+          paused={controller.isPaused("reveal")}
           property={revealHome}
           reducedMotion={controller.isReducedMotion}
         />
@@ -925,7 +1389,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
       id: "record",
       side: "right",
       title: "Read the official record",
-      description: "Registration, documents, delays and complaint history stay connected to the same home.",
+      description: "At a glance, documents, builder record and schedule stay connected to the same home.",
       action: (
         <Link to={`${propertyDetailPath(revealHome.id)}/rera`}>
           Inspect RERA evidence <span aria-hidden="true">→</span>
@@ -934,6 +1398,9 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
       canvas: (
         <ReraCanvas
           active={controller.activeSceneId === "record"}
+          detail={revealDetail}
+          dossier={revealRera}
+          paused={controller.isPaused("record")}
           property={revealHome}
           reducedMotion={controller.isReducedMotion}
         />
