@@ -1104,6 +1104,7 @@ export type ReraDossier = {
   compare_items: ReraCompareItem[];
   complaint_sections: ReraComplaintSection[];
   document_sections: ReraDocumentSection[];
+  schedule_sections: ReraScheduleSection[];
   timeline: ReraTimeline;
   legal_checks: ReraLegalCheck[];
   source: ReraDossierSource;
@@ -1169,6 +1170,20 @@ export type ReraDocumentLink = {
   kind: string;
   source_url: string;
   source_field_label?: string;
+};
+
+export type ReraScheduleSection = {
+  group: string;
+  label: string;
+  rows: ReraScheduleRow[];
+};
+
+export type ReraScheduleRow = {
+  label: string;
+  available?: boolean;
+  area_sqm?: number;
+  value?: string;
+  confidence?: number;
 };
 
 export type ReraTimeline = {
