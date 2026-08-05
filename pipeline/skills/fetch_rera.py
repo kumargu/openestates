@@ -140,6 +140,22 @@ class ReraUnitConfiguration:
 
 
 @dataclass
+class ReraScheduleRow:
+    label: str
+    available: Optional[bool] = None
+    area_sqm: Optional[float] = None
+    value: Optional[str] = None
+    confidence: float = 0.7
+
+
+@dataclass
+class ReraScheduleSection:
+    group: str
+    label: str
+    rows: List[ReraScheduleRow] = field(default_factory=list)
+
+
+@dataclass
 class ReraProjectDetail:
     # From search result
     ack_number: str = ""
@@ -217,6 +233,7 @@ class ReraProjectDetail:
     borewell_yield_lph: Optional[float] = None
     document_artifacts: List[ReraDocumentArtifact] = field(default_factory=list)
     configurations: List[ReraUnitConfiguration] = field(default_factory=list)
+    schedule_sections: List[ReraScheduleSection] = field(default_factory=list)
 
     # Certificate
     certificate_url: Optional[str] = None
@@ -1056,6 +1073,106 @@ def _extract_configurations(
     return sorted(by_label.values(), key=lambda item: (item.bedroom_count or 99, item.configuration_type))
 
 
+def _extract_schedule_sections(detail_html: str) -> List[ReraScheduleSection]:
+    sections: Dict[str, ReraScheduleSection] = {}
+    for table_match in re.finditer(r"<table\b[^>]*>(.*?)</table>", detail_html, re.IGNORECASE | re.DOTALL):
+        table_html = table_match.group(1)
+        rows = _extract_schedule_rows(table_html)
+        for row in rows:
+            group, label = _schedule_group_for_row(row)
+            if group == "other_schedules":
+                continue
+            section = sections.setdefault(group, ReraScheduleSection(group=group, label=label))
+            if not any(existing.label.lower() == row.label.lower() for existing in section.rows):
+                section.rows.append(row)
+    return [section for section in sections.values() if section.rows]
+
+
+def _extract_schedule_rows(table_html: str) -> List[ReraScheduleRow]:
+    parsed: List[ReraScheduleRow] = []
+    for row_match in re.finditer(r"<tr\b[^>]*>(.*?)</tr>", table_html, re.IGNORECASE | re.DOTALL):
+        cells = [
+            _clean_html(cell.group(1))
+            for cell in re.finditer(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", row_match.group(1), re.IGNORECASE | re.DOTALL)
+        ]
+        cells = [cell for cell in cells if cell]
+        row = _schedule_row_from_cells(cells)
+        if row:
+            parsed.append(row)
+    return parsed
+
+
+def _schedule_row_from_cells(cells: List[str]) -> Optional[ReraScheduleRow]:
+    if len(cells) < 3:
+        return None
+    label_index, label = _schedule_label_from_cells(cells)
+    if not label:
+        return None
+    available = _schedule_available_from_cells(cells)
+    if available is None:
+        return None
+    value_cells = cells[label_index + 1:]
+    numeric_values = [_parse_float(cell) for cell in value_cells]
+    numeric_values = [value for value in numeric_values if value is not None]
+    area_sqm = numeric_values[-1] if numeric_values else None
+    if available is None and area_sqm is None:
+        return None
+    return ReraScheduleRow(
+        label=label,
+        available=available,
+        area_sqm=area_sqm,
+        confidence=0.78 if available is not None and area_sqm is not None else 0.62,
+    )
+
+
+def _schedule_label_from_cells(cells: List[str]) -> Tuple[int, Optional[str]]:
+    for index, cell in enumerate(cells):
+        normalized = re.sub(r"\s+", " ", cell).strip(" :-")
+        if not normalized:
+            continue
+        if re.fullmatch(r"\d+(?:\.\d+)?", normalized):
+            continue
+        if normalized.lower() in {"yes", "no", "true", "false", "available", "not available"}:
+            continue
+        if len(normalized) > 80:
+            continue
+        return index, normalized
+    return -1, None
+
+
+def _schedule_available_from_cells(cells: List[str]) -> Optional[bool]:
+    for cell in cells:
+        value = cell.strip().lower()
+        if value in {"yes", "true", "available", "provided", "applicable"}:
+            return True
+        if value in {"no", "false", "not available", "not applicable", "na", "n/a"}:
+            return False
+    return None
+
+
+def _parse_float(value: str) -> Optional[float]:
+    normalized = value.replace(",", "").strip()
+    if not re.fullmatch(r"\d+(?:\.\d+)?", normalized):
+        return None
+    try:
+        return float(normalized)
+    except ValueError:
+        return None
+
+
+def _schedule_group_for_row(row: ReraScheduleRow) -> Tuple[str, str]:
+    label = row.label.lower()
+    if any(term in label for term in ("lift", "stair", "corridor", "lobb", "fire escape", "basement", "terrace")):
+        return "common_areas", "Common areas"
+    if "parking" in label:
+        return "parking", "Parking"
+    if any(term in label for term in ("stp", "sewage", "borewell", "water", "storm water", "rain water")):
+        return "water_infra", "Water / STP"
+    if any(term in label for term in ("club", "cctv", "swimming", "gym", "sports", "park", "power backup", "automation")):
+        return "amenities", "Amenities"
+    return "other_schedules", "RERA schedules"
+
+
 def _extract_open_area_pct(project_details: str, total_land_area_sqm: Optional[float]) -> Optional[float]:
     explicit = _extract_number(project_details, r"Open Area.*?%") or _extract_number(
         project_details, r"Percentage of Open Area"
@@ -1533,6 +1650,7 @@ def parse_rera_detail(detail_html: str, search_result: ReraSearchResult) -> Rera
         "{} {} {}".format(project_details, menu3, _clean_html(detail_html)),
         detail.document_artifacts,
     )
+    detail.schedule_sections = _extract_schedule_sections(detail_html)
 
     return detail
 
@@ -2033,6 +2151,31 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
             ["rera documents", "site plan", "floor plan", "legal documents", "noc"],
         )
 
+    if detail.schedule_sections:
+        schedule_manifest = [
+            {
+                "group": section.group,
+                "label": section.label,
+                "rows": [
+                    {
+                        "label": row.label,
+                        "available": row.available,
+                        "area_sqm": row.area_sqm,
+                        "value": row.value,
+                        "confidence": row.confidence,
+                    }
+                    for row in section.rows
+                ],
+            }
+            for section in detail.schedule_sections
+        ]
+        add_fact(
+            "rera_schedule_manifest",
+            {"type": "Text", "data": json.dumps(schedule_manifest, sort_keys=True, separators=(",", ":"))},
+            "RERA schedules available",
+            ["rera schedules", "project specs", "common areas", "lifts", "staircases"],
+        )
+
     if detail.configurations:
         labels = [config.configuration_type for config in detail.configurations]
         add_fact(
@@ -2116,6 +2259,7 @@ class FetchReraSkill(BaseSkill):
         "rera_affidavit_document_count", "rera_plan_artifact_manifest",
         "rera_document_manifest", "rera_total_carpet_area_sqm",
         "rera_total_builtup_area_sqm", "rera_far_sanctioned",
+        "rera_schedule_manifest",
     ]
 
     def __init__(self, **kwargs):

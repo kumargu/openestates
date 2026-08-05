@@ -44,6 +44,7 @@ pub struct ReraInfo {
     pub complaint_summaries: Vec<ReraComplaintScopeSummary>,
     pub document_manifest: Vec<ReraDocumentManifestItem>,
     pub document_groups: Vec<ReraDocumentGroupSummary>,
+    pub schedule_sections: Vec<ReraScheduleSection>,
     pub affidavit_only_visible: Option<bool>,
     pub builder_total_projects: Option<i32>,
     pub builder_revocations: Option<i32>,
@@ -131,6 +132,30 @@ pub struct ReraDocumentManifestItem {
 pub struct ReraDocumentGroupSummary {
     pub group: String,
     pub count: i32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct ReraScheduleSection {
+    #[serde(default)]
+    pub group: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub rows: Vec<ReraScheduleRow>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct ReraScheduleRow {
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub available: Option<bool>,
+    #[serde(default)]
+    pub area_sqm: Option<f64>,
+    #[serde(default)]
+    pub value: Option<String>,
+    #[serde(default)]
+    pub confidence: Option<f64>,
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -649,6 +674,9 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
     let complaint_summaries = get_text_fact(facts, "rera_complaint_summary_manifest")
         .and_then(|value| parse_rera_json::<Vec<ReraComplaintScopeSummary>>(&value))
         .unwrap_or_default();
+    let schedule_sections = get_text_fact(facts, "rera_schedule_manifest")
+        .and_then(|value| parse_rera_json::<Vec<ReraScheduleSection>>(&value))
+        .unwrap_or_default();
 
     let mut info = ReraInfo {
         registered,
@@ -696,6 +724,7 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
         )
         .map(|n| n as i32),
         complaint_summaries,
+        schedule_sections,
         document_groups: rera_document_groups(&document_manifest),
         affidavit_only_visible: rera_affidavit_only_visible(&document_manifest),
         document_manifest,

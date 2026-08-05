@@ -1,17 +1,17 @@
 .rera-report-page {
-  width: min(1040px, calc(100% - 2rem));
+  width: min(1080px, calc(100% - 2rem));
   padding: 1.4rem 0 4rem;
 }
 
 .rera-report-hero {
-  padding: 1rem 0 1.5rem;
+  padding: 1rem 0 1.4rem;
   border-bottom: 1px solid var(--color-border);
 }
 
 .rera-report-back {
   display: inline-flex;
   width: fit-content;
-  margin-bottom: 1.4rem;
+  margin-bottom: 1.25rem;
   color: var(--color-text-secondary);
   font-size: 0.85rem;
   font-weight: 720;
@@ -40,8 +40,6 @@
   line-height: 1.13;
   letter-spacing: 0;
   overflow-wrap: break-word;
-  white-space: normal;
-  word-break: normal;
 }
 
 .rera-report-subline,
@@ -55,11 +53,11 @@
 .rera-report-subline {
   margin-top: 0.75rem;
   color: var(--color-text-secondary);
-  font-size: 0.95rem;
+  font-size: 0.94rem;
 }
 
 .rera-report-registry {
-  margin-top: 1.15rem;
+  margin-top: 1rem;
 }
 
 .rera-report-registry__number {
@@ -67,8 +65,7 @@
   min-width: 0;
   max-width: 100%;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.46rem 0.7rem;
+  padding: 0.42rem 0.68rem;
   border: 1px solid var(--color-border);
   border-radius: 7px;
   background: #fff;
@@ -85,6 +82,13 @@
   white-space: nowrap;
 }
 
+.rera-report-registry a,
+.rera-report-document-link a,
+.rera-report-table a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
 .rera-report-registry a {
   display: inline-flex;
   align-items: center;
@@ -93,12 +97,15 @@
   color: var(--color-text-secondary);
   font-size: 0.85rem;
   font-weight: 760;
-  text-decoration: none;
 }
 
 .rera-report-registry a:hover,
-.rera-report-registry a:focus-visible {
-  color: var(--color-text);
+.rera-report-registry a:focus-visible,
+.rera-report-document-link a:hover,
+.rera-report-document-link a:focus-visible,
+.rera-report-table a:hover,
+.rera-report-table a:focus-visible {
+  color: var(--color-accent);
 }
 
 .rera-report-section {
@@ -123,16 +130,259 @@
   letter-spacing: 0;
 }
 
-.rera-report-facts,
-.rera-report-notes {
+.rera-report-section__head > span {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  font-weight: 720;
+}
+
+.rera-report-summary__rows {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid rgba(38, 35, 32, 0.08);
+}
+
+.rera-report-summary__row,
+.rera-report-record__row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 7rem minmax(11rem, 0.85fr) minmax(0, 1.25fr);
+  gap: 0.6rem 1rem;
+  align-items: baseline;
+  padding: 0.78rem 0;
+  border-bottom: 1px solid rgba(38, 35, 32, 0.08);
+}
+
+.rera-report-summary__row span,
+.rera-report-record dt,
+.rera-report-metrics span,
+.rera-report-complaint-read dt,
+.rera-report-table th {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 820;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.rera-report-summary__row strong,
+.rera-report-record dd,
+.rera-report-metrics strong,
+.rera-report-complaint-read dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 0.94rem;
+  font-weight: 760;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.rera-report-summary__row p {
+  margin: 0;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rera-report-summary__row.is-watch span,
+.rera-report-summary__row.is-risk span,
+.rera-report-summary__row.is-caution span,
+.rera-report-record__row.is-watch dt,
+.rera-report-record__row.is-risk dt,
+.rera-report-record__row.is-caution dt,
+.rera-report-metrics .is-watch span,
+.rera-report-complaint-read .is-watch dt,
+.rera-report-table .is-watch {
+  color: #9b5d13;
+}
+
+.rera-report-summary__row.is-positive span,
+.rera-report-record__row.is-positive dt {
+  color: #247346;
+}
+
+.rera-report-tabs {
+  display: flex;
+  gap: 0.45rem;
+  margin-bottom: 0.9rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+  scrollbar-width: thin;
+}
+
+.rera-report-tabs button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.15rem;
+  padding: 0.42rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 720;
+}
+
+.rera-report-tabs button strong {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+}
+
+.rera-report-tabs button.is-active {
+  border-color: rgba(38, 35, 32, 0.28);
+  background: #fff;
+  color: var(--color-text);
+}
+
+.rera-report-document-table {
+  display: grid;
+  max-height: 34rem;
+  gap: 1rem;
+  overflow: auto;
+  padding-right: 0.3rem;
+}
+
+.rera-report-document-group {
+  display: grid;
+  gap: 0.48rem;
+}
+
+.rera-report-document-group h3 {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 820;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.rera-report-document-links {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid rgba(38, 35, 32, 0.08);
+}
+
+.rera-report-document-link {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 0.45fr) auto;
+  gap: 0.5rem 0.8rem;
+  align-items: center;
+  padding: 0.58rem 0;
+  border-bottom: 1px solid rgba(38, 35, 32, 0.08);
+}
+
+.rera-report-document-link a {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.38rem;
+  font-size: 0.9rem;
+  font-weight: 740;
+  line-height: 1.3;
+}
+
+.rera-report-document-link a span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rera-report-document-link small {
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.rera-report-document-link__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+}
+
+.rera-report-complaint-read {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.rera-report-complaint-read dl,
+.rera-report-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.8rem;
+  margin: 0;
+}
+
+.rera-report-complaint-read dl > div,
+.rera-report-metrics > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.18rem;
+  padding: 0.72rem 0;
+  border-top: 1px solid rgba(38, 35, 32, 0.08);
+  border-bottom: 1px solid rgba(38, 35, 32, 0.08);
+}
+
+.rera-report-theme-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
-  align-items: stretch;
+  gap: 0.38rem;
+}
+
+.rera-report-theme-list span {
+  max-width: 100%;
+  padding: 0.25rem 0.48rem;
+  border-radius: 7px;
+  background: var(--color-bg-soft);
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 680;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.rera-report-list {
+  display: grid;
+  gap: 0.38rem;
+  margin: 0;
+  padding-left: 1.15rem;
+  color: var(--color-text-secondary);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.rera-report-record {
+  display: grid;
+  margin: 0;
+  border-top: 1px solid rgba(38, 35, 32, 0.08);
+}
+
+.rera-report-record__row {
+  grid-template-columns: minmax(10rem, 0.45fr) minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.rera-report-record__pin {
+  display: inline-flex;
+  justify-self: end;
 }
 
 .rera-report-location {
-  max-width: 46rem;
+  max-width: 52rem;
 }
 
 .rera-report-location__row {
@@ -144,8 +394,8 @@
 
 .rera-report-location__copy {
   display: grid;
-  gap: 0.28rem;
   min-width: 0;
+  gap: 0.28rem;
 }
 
 .rera-report-location__address {
@@ -163,132 +413,24 @@
   font-size: 0.82rem;
   font-weight: 520;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
   line-height: 1.35;
 }
 
-.rera-report-location-section .rera-report-facts {
-  margin-top: 0.75rem;
+.rera-report-location-section .rera-report-record {
+  margin-top: 0.8rem;
 }
 
-.rera-report-fact,
-.rera-report-note {
-  min-width: 0;
-  padding: 0.72rem 0.78rem;
-  border: 1px solid rgba(38, 35, 32, 0.08);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.7);
-}
-
-.rera-report-fact,
-.rera-report-note__head {
+.rera-report-schedule-groups {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 0.45rem 0.65rem;
+  gap: 1rem;
 }
 
-.rera-report-fact {
-  flex: 1 1 18rem;
-  max-width: 28rem;
-}
-
-.rera-report-fact.is-compact {
-  flex: 0 1 14rem;
-  max-width: 18rem;
-}
-
-.rera-report-fact.is-long {
-  flex: 1 1 100%;
-  max-width: 100%;
-}
-
-.rera-report-fact__copy,
-.rera-report-note__head > div:first-child {
+.rera-report-schedule-group {
   display: grid;
-  min-width: 0;
-  gap: 0.16rem;
+  gap: 0.45rem;
 }
 
-.rera-report-fact__copy span,
-.rera-report-note__head span {
-  color: var(--color-text-muted);
-  font-size: 0.7rem;
-  font-weight: 820;
-  letter-spacing: 0.04em;
-  line-height: 1.2;
-  text-transform: uppercase;
-}
-
-.rera-report-fact__copy strong,
-.rera-report-note__head strong {
-  min-width: 0;
-  color: var(--color-text);
-  font-size: 0.95rem;
-  font-weight: 760;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.rera-report-fact__copy small,
-.rera-report-note__head small {
-  color: var(--color-text-secondary);
-  font-size: 0.82rem;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.rera-report-fact.is-risk .rera-report-fact__copy strong,
-.rera-report-fact.is-watch .rera-report-fact__copy strong {
-  color: #9b5d13;
-}
-
-.rera-report-fact.is-positive .rera-report-fact__copy strong {
-  color: #247346;
-}
-
-.rera-report-fact__actions {
-  display: inline-flex;
-  align-items: center;
-  justify-self: end;
-  gap: 0.34rem;
-}
-
-.rera-report-source {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.22rem;
-  min-height: 1.55rem;
-  color: var(--color-text-secondary);
-  font-size: 0.72rem;
-  font-weight: 760;
-  text-decoration: none;
-}
-
-.rera-report-source:hover,
-.rera-report-source:focus-visible {
-  color: var(--color-text);
-}
-
-.rera-report-pin.notebook-pin {
-  opacity: 1;
-}
-
-.rera-report-documents {
-  padding-top: 1.2rem;
-}
-
-.rera-report-document-groups {
-  display: grid;
-  gap: 0.85rem;
-}
-
-.rera-report-document-group {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.rera-report-document-group h3 {
+.rera-report-schedule-group h3 {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: 0.78rem;
@@ -298,92 +440,67 @@
   text-transform: uppercase;
 }
 
-.rera-report-document-links {
+.rera-report-table-wrap {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.rera-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 660px;
+}
+
+.rera-report-table th,
+.rera-report-table td {
+  padding: 0.62rem 0.75rem 0.62rem 0;
+  border-bottom: 1px solid rgba(38, 35, 32, 0.08);
+  text-align: left;
+  vertical-align: top;
+}
+
+.rera-report-table td {
+  color: var(--color-text);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.rera-report-table td span {
+  display: block;
+  margin-top: 0.16rem;
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+}
+
+.rera-report-complete__groups {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 0.6rem;
 }
 
-.rera-report-document-link {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.14rem 0.65rem;
-  align-items: center;
-  padding: 0.72rem 0.78rem;
-  border: 1px solid rgba(38, 35, 32, 0.08);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
+.rera-report-complete__group {
+  border-bottom: 1px solid rgba(38, 35, 32, 0.08);
 }
 
-.rera-report-document-link a {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 0.38rem;
-  color: var(--color-text);
-  font-size: 0.92rem;
-  font-weight: 760;
-  line-height: 1.25;
-  text-decoration: none;
-}
-
-.rera-report-document-link a span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rera-report-document-link a:hover,
-.rera-report-document-link a:focus-visible {
-  color: var(--color-accent);
-}
-
-.rera-report-document-link small {
-  min-width: 0;
-  grid-column: 1;
-  color: var(--color-text-secondary);
-  font-size: 0.76rem;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.rera-report-document-link__actions {
-  display: inline-flex;
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-items: center;
-  gap: 0.32rem;
-}
-
-.rera-report-chips {
+.rera-report-complete__group summary {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.65rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 780;
 }
 
-.rera-report-chips span {
-  max-width: 100%;
-  padding: 0.22rem 0.48rem;
-  border-radius: 7px;
-  background: var(--color-bg-soft);
-  color: var(--color-text-secondary);
-  font-size: 0.76rem;
-  font-weight: 680;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
+.rera-report-complete__group summary strong {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 720;
 }
 
-.rera-report-list {
-  display: grid;
-  gap: 0.38rem;
-  margin: 0.65rem 0 0;
-  padding-left: 1.15rem;
-  color: var(--color-text-secondary);
-  font-size: 0.84rem;
-  line-height: 1.45;
+.rera-report-complete__group .rera-report-record {
+  margin-bottom: 0.8rem;
 }
 
 .rera-report-empty {
@@ -394,16 +511,18 @@
   line-height: 1.5;
 }
 
+.rera-report-pin.notebook-pin {
+  opacity: 1;
+}
+
 @media (max-width: 720px) {
   .rera-report-page.page-container-wide {
     box-sizing: border-box;
-    width: min(calc(100% - 2rem), 21rem);
-    max-width: min(calc(100% - 2rem), 21rem);
-    margin-right: 0.75rem;
-    margin-left: 0.75rem;
+    width: calc(100% - 2rem);
+    max-width: none;
+    margin-right: auto;
+    margin-left: auto;
     padding-top: 0.75rem;
-    padding-right: 0;
-    padding-left: 0;
     overflow-x: hidden;
   }
 
@@ -433,32 +552,15 @@
     overflow-wrap: anywhere;
   }
 
-  .rera-report-document-links {
-    grid-template-columns: 1fr;
-  }
-
-  .rera-report-fact,
-  .rera-report-fact.is-compact,
-  .rera-report-fact.is-long {
-    flex-basis: 100%;
-    max-width: 100%;
-  }
-
-  .rera-report-fact,
-  .rera-report-note__head {
-    grid-template-columns: 1fr;
-    align-items: start;
-    gap: 0.55rem;
-  }
-
-  .rera-report-fact__actions {
-    justify-self: start;
-    justify-content: flex-start;
-  }
-
+  .rera-report-summary__row,
+  .rera-report-record__row,
   .rera-report-document-link {
     grid-template-columns: 1fr;
-    max-width: 100%;
+    gap: 0.24rem;
+  }
+
+  .rera-report-document-table {
+    max-height: 28rem;
   }
 
   .rera-report-document-link a {
@@ -473,8 +575,11 @@
   }
 
   .rera-report-document-link__actions,
-  .rera-report-document-link small {
-    grid-column: 1;
-    grid-row: auto;
+  .rera-report-record__pin {
+    justify-self: start;
+  }
+
+  .rera-report-location__row {
+    grid-template-columns: 1fr;
   }
 }

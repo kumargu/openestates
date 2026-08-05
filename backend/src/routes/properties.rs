@@ -48,6 +48,7 @@ use super::enrichment::{
     overlay_project_scale_facts, rera_affidavit_only_visible, rera_decision_cards,
     rera_document_groups, society_node_id, units_per_acre, AreaIntelligence, BuilderTrust,
     DataFreshness, ReraComplaintScopeSummary, ReraDecisionCard, ReraDocumentManifestItem, ReraInfo,
+    ReraScheduleSection,
 };
 use super::property_map::property_map_context_from_surface_scene;
 
@@ -168,6 +169,7 @@ pub struct ReraDossier {
     pub compare_items: Vec<ReraCompareItem>,
     pub complaint_sections: Vec<ReraComplaintSection>,
     pub document_sections: Vec<ReraDocumentSection>,
+    pub schedule_sections: Vec<ReraScheduleSection>,
     pub timeline: ReraTimeline,
     pub legal_checks: Vec<ReraLegalCheck>,
     pub source: ReraDossierSource,
@@ -4003,6 +4005,7 @@ fn rera_dossier_for_property(
         compare_items,
         complaint_sections,
         document_sections,
+        schedule_sections: info.schedule_sections.clone(),
         timeline: ReraTimeline {
             start_date: info.start_date.clone(),
             original_completion_date: info.original_completion_date.clone(),
@@ -4156,6 +4159,10 @@ fn rera_info_for(
         info.complaint_summaries =
             parse_rera_projection_json::<Vec<ReraComplaintScopeSummary>>(&fact.value)
                 .unwrap_or_default();
+    }
+    if let Some(fact) = projection.latest_text("rera_schedule_manifest") {
+        info.schedule_sections =
+            parse_rera_projection_json::<Vec<ReraScheduleSection>>(&fact.value).unwrap_or_default();
     }
     if let Some(fact) = projection.latest_text("rera_document_manifest") {
         info.document_manifest = parse_rera_document_manifest_value(&fact.value);
