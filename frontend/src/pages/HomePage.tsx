@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import type { AreaTrackerResponse, PropertyCard } from "../lib/types.ts";
 import { getAreaTracker, getProperties } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
 import { SearchExperience as InlineSearchExperience } from "./SearchExperience.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { LandingStoryStage } from "../components/LandingStoryStage.tsx";
+import { OpenEstatesMark } from "../components/brand/OpenEstatesMark.tsx";
 import { consumeDiscoveryReturn } from "../lib/navigationContext.ts";
 
 const SEARCH_SUGGESTIONS = [
@@ -15,6 +16,43 @@ const SEARCH_SUGGESTIONS = [
   { label: "Ready to move", query: "Ready-to-move homes with delivery proof" },
   { label: "Whitefield", query: "Low commute-pain home near Whitefield tech parks" },
 ];
+
+const HERO_THEMES = [
+  "proof you can trust",
+  "risks made visible",
+  "prices in context",
+  "clear tradeoffs",
+] as const;
+
+function RotatingHeroTheme() {
+  const [index, setIndex] = useState(0);
+  const [fading, setFading] = useState(false);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    let swapTimer: number | undefined;
+    const interval = window.setInterval(() => {
+      setFading(true);
+      swapTimer = window.setTimeout(() => {
+        setIndex((current) => (current + 1) % HERO_THEMES.length);
+        setFading(false);
+      }, 240);
+    }, 3_000);
+    return () => {
+      window.clearInterval(interval);
+      if (swapTimer) window.clearTimeout(swapTimer);
+    };
+  }, []);
+
+  return (
+    <span
+      className={`home-hero__rotating${fading ? " is-fading" : ""}`}
+      aria-hidden="true"
+    >
+      {HERO_THEMES[index]}
+    </span>
+  );
+}
 
 type ViewTransitionDocument = Document & {
   startViewTransition?: (update: () => void) => { finished: Promise<void> };
@@ -36,6 +74,28 @@ function LandingLoadingState() {
         ))}
       </div>
     </section>
+  );
+}
+
+function HomeClosingFooter() {
+  return (
+    <footer className="home-closing">
+      <div className="home-closing__inner">
+        <div className="home-closing__brand">
+          <span aria-hidden="true">
+            <OpenEstatesMark size={30} />
+          </span>
+          <div>
+            <strong>OpenEstates</strong>
+            <span>Fewer homes. Better reasons.</span>
+          </div>
+        </div>
+        <nav aria-label="Footer">
+          <a href="#home-search">Search homes</a>
+          <Link to="/workspace">Workspace</Link>
+        </nav>
+      </div>
+    </footer>
   );
 }
 
@@ -164,6 +224,7 @@ export function HomePage() {
   return (
     <div className={`home-page${hasActiveSearch ? " home-page--searching" : ""}`}>
       <section
+        id="home-search"
         className={`home-hero${hasActiveSearch ? " home-hero--search-active" : ""}`}
         aria-label="Explore"
       >
@@ -172,10 +233,10 @@ export function HomePage() {
         {!hasActiveSearch && (
           <div className="fade-up home-hero__copy">
             <h1 className="home-hero__title">
-              <span>Tell us the life you want.</span>
-              <span>We'll show homes with receipts.</span>
+              <span>Find homes with</span>
+              <RotatingHeroTheme />
+              <span className="sr-only">proof you can trust</span>
             </h1>
-            <p className="home-hero__promise">Fewer homes. Better reasons.</p>
           </div>
         )}
       </section>
@@ -301,6 +362,7 @@ export function HomePage() {
                 onSearch={commitSearch}
                 maxMarkets={6}
               />
+              <HomeClosingFooter />
             </>
           ) : propertiesLoading ? <LandingLoadingState /> : null}
         </div>

@@ -11,9 +11,9 @@ type ResolveSequenceInput = {
 };
 
 const PHASE_DELAY_MS: Partial<Record<ResolvePhase, number>> = {
-  query: 460,
-  candidates: 520,
-  selection: 440,
+  query: 520,
+  candidates: 820,
+  selection: 640,
 };
 
 function nextPhase(phase: ResolvePhase): ResolvePhase {
