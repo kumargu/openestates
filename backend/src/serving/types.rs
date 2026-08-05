@@ -214,6 +214,8 @@ pub enum BundleArtifactKind {
     SchemaJson,
     TrustPolicyJson,
     TantivyIndexFile,
+    #[serde(other)]
+    Other,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

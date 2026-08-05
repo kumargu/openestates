@@ -385,6 +385,10 @@ impl TextSearch {
                     });
                 }
 
+                let named_place_fact_keys = named_place_evidence
+                    .iter()
+                    .map(|evidence| evidence.fact_key.clone())
+                    .collect::<Vec<_>>();
                 for evidence in named_place_evidence {
                     total_facts_consulted += 1;
                     graph_count += 1;
@@ -430,6 +434,12 @@ impl TextSearch {
 
                 for pref in &positive_preferences {
                     let candidate_fact_keys = positive_preference_keys(intent, pref);
+                    if positive_preference_covered_by_named_place(
+                        &candidate_fact_keys,
+                        &named_place_fact_keys,
+                    ) {
+                        continue;
+                    }
                     // Graph-first: check if the society's facts declare scoring for this preference
                     if let Some(g) = graph {
                         if let Some((gs, detail)) = graph_preference_score_for_keys(
@@ -1226,7 +1236,7 @@ fn serving_named_place_evidence(
                         continue;
                     };
                     if geo_query
-                        .max_distance_km()
+                        .clause_distance_limit_km(clause)
                         .is_some_and(|max_distance| distance_km > max_distance)
                     {
                         continue;
@@ -1389,6 +1399,17 @@ fn evidence_intent_score(evidence: &EvidenceMatch) -> f64 {
 
 fn named_place_intent_score(evidence: &NamedPlaceEvidence) -> f64 {
     evidence.normalized_score.clamp(0.0, 1.0) * f64::from(evidence.confidence.clamp(0.0, 1.0))
+}
+
+fn positive_preference_covered_by_named_place(
+    candidate_fact_keys: &[String],
+    named_place_fact_keys: &[String],
+) -> bool {
+    candidate_fact_keys.iter().any(|candidate| {
+        named_place_fact_keys
+            .iter()
+            .any(|named| candidate.eq_ignore_ascii_case(named))
+    })
 }
 
 fn review_quality_score(card: &crate::models::PropertyCard) -> f64 {
@@ -3072,9 +3093,7 @@ fn build_match_reason(
 ) -> String {
     let mut parts = Vec::new();
 
-    if let Some(named_place_reason) = named_place_match_reason(reasons) {
-        parts.push(named_place_reason);
-    }
+    parts.extend(named_place_match_reasons(reasons));
 
     if let Some(ref area) = intent.area {
         match area_match_kind {
@@ -3126,15 +3145,31 @@ fn build_match_reason(
     }
 }
 
-fn named_place_match_reason(reasons: &[String]) -> Option<String> {
-    reasons.iter().find_map(|reason| {
-        let (preference, _) = reason.split_once(':')?;
+fn named_place_match_reasons(reasons: &[String]) -> Vec<String> {
+    let mut named_places = Vec::new();
+    for reason in reasons {
+        let Some((preference, _)) = reason.split_once(':') else {
+            continue;
+        };
         let preference = preference.trim();
-        preference
-            .strip_prefix("near ")
-            .filter(|place| !place.trim().is_empty())
-            .map(|place| format!("Near {}", place.trim()))
-    })
+        let Some(place) = preference.strip_prefix("near ") else {
+            continue;
+        };
+        let place = place.trim();
+        if place.is_empty()
+            || named_places
+                .iter()
+                .any(|existing: &String| existing.eq_ignore_ascii_case(place))
+        {
+            continue;
+        }
+        named_places.push(place.to_string());
+    }
+
+    named_places
+        .into_iter()
+        .map(|place| format!("Near {place}"))
+        .collect()
 }
 
 fn preference_was_matched(reasons: &[String], preference: &str) -> bool {
@@ -4863,6 +4898,14 @@ mod tests {
             "top result should be backed by exact nearby school fact: {:?}",
             reasons
         );
+        assert!(
+            !reasons.iter().any(|reason| {
+                reason.fact_key == "nearby_schools"
+                    && reason.scoring_method == geo::GEO_DISTANCE_SCORING_METHOD
+            }),
+            "named-place proof should not be duplicated by generic preference proof for the same fact key: {:?}",
+            reasons
+        );
     }
 
     #[test]
@@ -5360,6 +5403,20 @@ mod tests {
         );
 
         assert_eq!(results[0].card.id, "both");
+        assert!(
+            results[0]
+                .match_reason
+                .contains("Near Manipal Hospital Whitefield"),
+            "card reason should retain the hospital anchor: {}",
+            results[0].match_reason
+        );
+        assert!(
+            results[0]
+                .match_reason
+                .contains("Near International Tech Park Bengaluru ITPB"),
+            "card reason should retain the tech-park anchor: {}",
+            results[0].match_reason
+        );
         let explanation = results[0]
             .match_explanation
             .as_ref()

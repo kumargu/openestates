@@ -4,8 +4,8 @@ use winnow::prelude::ModalResult;
 use winnow::Parser;
 
 use crate::dag_config::{
-    search_parser_config, BhkParserConfig, RelationParserConfig, UnitAliasConfig,
-    UnitValueParserConfig,
+    search_parser_config, search_resolution_config, BhkParserConfig, RelationParserConfig,
+    UnitAliasConfig, UnitValueParserConfig,
 };
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -196,20 +196,37 @@ fn parse_relations(
             index += 1;
             continue;
         };
+        let target_start_token = if relation_alias.requires_distance_limit {
+            let Some(target_start_token) =
+                relation_target_start_after_distance(tokens, index + token_count, config)
+            else {
+                index += token_count;
+                continue;
+            };
+            target_start_token
+        } else {
+            index + token_count
+        };
         relations.push(RelationIntent {
             alias: relation_alias.alias.clone(),
             raw_text: relation_alias.alias.clone(),
             start_token: index,
             end_token: index + token_count,
-            target_start_token: index + token_count,
+            target_start_token,
             target_end_token: tokens.len(),
         });
         index += token_count;
     }
     for relation_index in 0..relations.len() {
-        relations[relation_index].target_end_token = relations
+        let next_relation_start = relations
             .get(relation_index + 1)
             .map_or(tokens.len(), |next| next.start_token);
+        relations[relation_index].target_end_token = first_relation_target_boundary_index(
+            tokens,
+            relations[relation_index].target_start_token,
+            next_relation_start,
+        )
+        .unwrap_or(next_relation_start);
     }
     if let Some(distance_limit) = distance_limit {
         let distance_tokens = query_tokens(&distance_limit.raw_text);
@@ -223,6 +240,140 @@ fn parse_relations(
         });
     }
     relations
+}
+
+fn relation_target_start_after_distance(
+    tokens: &[String],
+    start: usize,
+    config: &RelationParserConfig,
+) -> Option<usize> {
+    let mut index = start;
+    let mut found_distance = false;
+    while index < tokens.len() {
+        let current = &tokens[index];
+        let compact_distance =
+            parse_compound_decimal_unit(current, &search_parser_config().distance.units).is_some();
+        let split_distance = parse_decimal_token(current).is_some()
+            && tokens
+                .get(index + 1)
+                .and_then(|unit| matching_unit_alias(unit, &search_parser_config().distance.units))
+                .is_some();
+        if compact_distance {
+            index += 1;
+            found_distance = true;
+            break;
+        }
+        if split_distance {
+            index += 2;
+            found_distance = true;
+            break;
+        }
+        if config
+            .clause_joiners
+            .iter()
+            .any(|joiner| joiner.eq_ignore_ascii_case(current))
+        {
+            return None;
+        }
+        index += 1;
+    }
+    if !found_distance {
+        return None;
+    }
+    while index < tokens.len()
+        && matches!(
+            tokens[index].as_str(),
+            "of" | "from" | "to" | "near" | "nearby"
+        )
+    {
+        index += 1;
+    }
+    if index >= tokens.len()
+        || config
+            .clause_joiners
+            .iter()
+            .any(|joiner| joiner.eq_ignore_ascii_case(&tokens[index]))
+    {
+        None
+    } else {
+        Some(index)
+    }
+}
+
+fn first_unit_operator_index(
+    tokens: &[String],
+    start: usize,
+    end: usize,
+    config: &UnitValueParserConfig,
+) -> Option<usize> {
+    let mut index = start.min(tokens.len());
+    let end = end.min(tokens.len());
+    while index < end {
+        for operator in &config.operators {
+            let operator_tokens = query_tokens(operator);
+            if operator_tokens.is_empty() || index + operator_tokens.len() > end {
+                continue;
+            }
+            if tokens[index..index + operator_tokens.len()]
+                .iter()
+                .zip(operator_tokens.iter())
+                .all(|(token, operator)| token.eq_ignore_ascii_case(operator))
+            {
+                return Some(index);
+            }
+        }
+        index += 1;
+    }
+    None
+}
+
+fn first_relation_target_boundary_index(
+    tokens: &[String],
+    start: usize,
+    end: usize,
+) -> Option<usize> {
+    let budget_boundary =
+        first_unit_operator_index(tokens, start, end, &search_parser_config().budget);
+    let exclusion_boundary = first_phrase_index(
+        tokens,
+        start,
+        end,
+        search_resolution_config()
+            .exclusion_prefixes
+            .iter()
+            .map(String::as_str),
+    );
+    let contrast_boundary = first_phrase_index(tokens, start, end, ["but"].into_iter());
+
+    [budget_boundary, exclusion_boundary, contrast_boundary]
+        .into_iter()
+        .flatten()
+        .min()
+}
+
+fn first_phrase_index<'a>(
+    tokens: &[String],
+    start: usize,
+    end: usize,
+    phrases: impl Iterator<Item = &'a str>,
+) -> Option<usize> {
+    let start = start.min(tokens.len());
+    let end = end.min(tokens.len());
+    phrases
+        .filter_map(|phrase| {
+            let phrase_tokens = query_tokens(phrase);
+            if phrase_tokens.is_empty() {
+                return None;
+            }
+            (start..end).find(|index| {
+                index + phrase_tokens.len() <= end
+                    && tokens[*index..*index + phrase_tokens.len()]
+                        .iter()
+                        .zip(phrase_tokens.iter())
+                        .all(|(token, phrase_token)| token.eq_ignore_ascii_case(phrase_token))
+            })
+        })
+        .min()
 }
 
 fn trimmed_relation_target_tokens<'a>(
@@ -249,7 +400,8 @@ fn trimmed_relation_target_tokens<'a>(
     &tokens[start..end]
 }
 
-pub(crate) fn relation_target_text(tokens: &[String], relation: &RelationIntent) -> Option<String> {
+#[cfg(test)]
+fn relation_target_text(tokens: &[String], relation: &RelationIntent) -> Option<String> {
     if relation.target_start_token >= relation.target_end_token
         || relation.target_end_token > tokens.len()
     {
@@ -547,6 +699,48 @@ mod tests {
             slots.distance_limit.map(|distance| distance.value_km),
             Some(0.5)
         );
+    }
+
+    #[test]
+    fn trailing_distance_modifiers_do_not_become_empty_relations() {
+        let query = "near Deens Academy within 1 km and near ITPB within 3 km";
+        let slots = parse_query_slots(query);
+        let tokens = query_tokens(query);
+        let targets = slots
+            .relations
+            .iter()
+            .filter_map(|relation| relation_target_text(&tokens, relation))
+            .collect::<Vec<_>>();
+
+        assert_eq!(targets, vec!["deens academy", "itpb"]);
+    }
+
+    #[test]
+    fn relation_targets_stop_before_exclusion_boundaries() {
+        let query = "3bhk near Marathahalli but away from a stormwater drain";
+        let slots = parse_query_slots(query);
+        let tokens = query_tokens(query);
+        let targets = slots
+            .relations
+            .iter()
+            .filter_map(|relation| relation_target_text(&tokens, relation))
+            .collect::<Vec<_>>();
+
+        assert_eq!(targets, vec!["marathahalli"]);
+    }
+
+    #[test]
+    fn undistanced_within_phrase_is_not_a_hard_relation() {
+        let query = "within a gated community and near school within 2 km";
+        let slots = parse_query_slots(query);
+        let tokens = query_tokens(query);
+        let targets = slots
+            .relations
+            .iter()
+            .filter_map(|relation| relation_target_text(&tokens, relation))
+            .collect::<Vec<_>>();
+
+        assert_eq!(targets, vec!["school"]);
     }
 
     #[test]

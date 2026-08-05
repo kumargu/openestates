@@ -1,155 +1,5 @@
 [
   {
-    "entity_id": "society:prestige-falcon-city",
-    "intent_area": null,
-    "intent_bhk": 3,
-    "intent_budget_max": null,
-    "missing_fact": "resident_sentiment",
-    "query": "Prestige Waterford 3BHK with no tanker dependence",
-    "query_categories": [
-      "positive:3bhk configuration",
-      "negative:water issues"
-    ],
-    "reason": "Avoid preference: water issues",
-    "recorded_at": "2026-08-02T18:21:10.091007+00:00",
-    "results_returned": 22,
-    "top_candidate_society_ids": [
-      "soc-prestige-waterford",
-      "soc-prestige-elysian",
-      "soc-prestige-falcon-city",
-      "soc-prestige-bagamane-temple-bells",
-      "soc-prestige-song-of-the-south-phase-i"
-    ]
-  },
-  {
-    "entity_id": "society:prestige-bagamane-temple-bells",
-    "intent_area": null,
-    "intent_bhk": 3,
-    "intent_budget_max": null,
-    "missing_fact": "operating.tanker_dependence",
-    "query": "Prestige Waterford 3BHK with no tanker dependence",
-    "query_categories": [
-      "positive:3bhk configuration",
-      "negative:water issues"
-    ],
-    "reason": "Avoid preference: water issues",
-    "recorded_at": "2026-08-02T18:21:10.091007+00:00",
-    "results_returned": 22,
-    "top_candidate_society_ids": [
-      "soc-prestige-waterford",
-      "soc-prestige-elysian",
-      "soc-prestige-falcon-city",
-      "soc-prestige-bagamane-temple-bells",
-      "soc-prestige-song-of-the-south-phase-i"
-    ]
-  },
-  {
-    "entity_id": "society:prestige-bagamane-temple-bells",
-    "intent_area": null,
-    "intent_bhk": 3,
-    "intent_budget_max": null,
-    "missing_fact": "water_supply_risk",
-    "query": "Prestige Waterford 3BHK with no tanker dependence",
-    "query_categories": [
-      "positive:3bhk configuration",
-      "negative:water issues"
-    ],
-    "reason": "Avoid preference: water issues",
-    "recorded_at": "2026-08-02T18:21:10.091007+00:00",
-    "results_returned": 22,
-    "top_candidate_society_ids": [
-      "soc-prestige-waterford",
-      "soc-prestige-elysian",
-      "soc-prestige-falcon-city",
-      "soc-prestige-bagamane-temple-bells",
-      "soc-prestige-song-of-the-south-phase-i"
-    ]
-  },
-  {
-    "entity_id": "society:prestige-bagamane-temple-bells",
-    "intent_area": null,
-    "intent_bhk": 3,
-    "intent_budget_max": null,
-    "missing_fact": "operating.summer_water_shortage",
-    "query": "Prestige Waterford 3BHK with no tanker dependence",
-    "query_categories": [
-      "positive:3bhk configuration",
-      "negative:water issues"
-    ],
-    "reason": "Avoid preference: water issues",
-    "recorded_at": "2026-08-02T18:21:10.091007+00:00",
-    "results_returned": 22,
-    "top_candidate_society_ids": [
-      "soc-prestige-waterford",
-      "soc-prestige-elysian",
-      "soc-prestige-falcon-city",
-      "soc-prestige-bagamane-temple-bells",
-      "soc-prestige-song-of-the-south-phase-i"
-    ]
-  },
-  {
-    "entity_id": "society:prestige-bagamane-temple-bells",
-    "intent_area": null,
-    "intent_bhk": 3,
-    "intent_budget_max": null,
-    "missing_fact": "project.water_supply_mode",
-    "query": "Prestige Waterford 3BHK with no tanker dependence",
-    "query_categories": [
-      "positive:3bhk configuration",
-      "negative:water issues"
-    ],
-    "reason": "Avoid preference: water issues",
-    "recorded_at": "2026-08-02T18:21:10.091007+00:00",
-    "results_returned": 22,
-    "top_candidate_society_ids": [
-      "soc-prestige-waterford",
-      "soc-prestige-elysian",
-      "soc-prestige-falcon-city",
-      "soc-prestige-bagamane-temple-bells",
-      "soc-prestige-song-of-the-south-phase-i"
-    ]
-  },
-  {
-    "entity_id": "society:prestige-bagamane-temple-bells",
-    "intent_area": null,
-    "intent_bhk": 3,
-    "intent_budget_max": null,
-    "missing_fact": "resident_sentiment",
-    "query": "Prestige Waterford 3BHK with no tanker dependence",
-    "query_categories": [
-      "positive:3bhk configuration",
-      "negative:water issues"
-    ],
-    "reason": "Avoid preference: water issues",
-    "recorded_at": "2026-08-02T18:21:10.091007+00:00",
-    "results_returned": 22,
-    "top_candidate_society_ids": [
-      "soc-prestige-waterford",
-      "soc-prestige-elysian",
-      "soc-prestige-falcon-city",
-      "soc-prestige-bagamane-temple-bells",
-      "soc-prestige-song-of-the-south-phase-i"
-    ]
-  },
-  {
-    "entity_id": "society:prestige-waterford",
-    "intent_area": "Whitefield",
-    "intent_bhk": 3,
-    "intent_budget_max": null,
-    "missing_fact": "waterlogging_risk_score",
-    "query": "3BHK in Whitefield with low flooding risk",
-    "query_categories": [
-      "positive:3bhk configuration",
-      "negative:waterlogging risk"
-    ],
-    "reason": "Avoid preference: waterlogging risk",
-    "recorded_at": "2026-08-02T18:21:10.140681+00:00",
-    "results_returned": 1,
-    "top_candidate_society_ids": [
-      "soc-prestige-waterford"
-    ]
-  },
-  {
     "entity_id": "society:prestige-waterford",
     "intent_area": "Whitefield",
     "intent_bhk": 2,
@@ -10436,5 +10286,145 @@
       "soc-snn-clermont",
       "soc-century-ethos"
     ]
+  },
+  {
+    "entity_id": "query:proximity:my-wife-s-office-in-marathahalli-under-4-crore",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 40000000,
+    "missing_fact": "geo.proximity_anchor",
+    "query": "3BHK near Whitefield close to kids school and near my wife's office in Marathahalli under 4 crore",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:3bhk configuration",
+      "buyer_archetype:Family"
+    ],
+    "reason": "Proximity target 'my wife's office in marathahalli under 4 crore' did not resolve to a serving entity with usable location evidence",
+    "recorded_at": "2026-08-04T20:07:28.718344+00:00",
+    "results_returned": 6,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-capitol-residences",
+      "soc-godrej-air",
+      "soc-brigade-lakefront-crimson",
+      "soc-vaswani-starlight",
+      "soc-prestige-waterford"
+    ]
+  },
+  {
+    "entity_id": "query:proximity:my-wife-s-office-in-marathahalli-under-4-crore",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 40000000,
+    "missing_fact": "geo.proximity_anchor",
+    "query": "3BHK near Whitefield close to kids school and near my wife's office in Marathahalli under 4 crore",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:3bhk configuration",
+      "buyer_archetype:Family"
+    ],
+    "reason": "Proximity target 'my wife's office in marathahalli under 4 crore' did not resolve to a serving entity with usable location evidence",
+    "recorded_at": "2026-08-04T20:07:39.195384+00:00",
+    "results_returned": 6,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-capitol-residences",
+      "soc-godrej-air",
+      "soc-brigade-lakefront-crimson",
+      "soc-vaswani-starlight",
+      "soc-prestige-waterford"
+    ]
+  },
+  {
+    "entity_id": "query:proximity:my-wife-office-in-marathahalli",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 40000000,
+    "missing_fact": "geo.proximity_anchor",
+    "query": "3BHK near Whitefield close to kids school and near my wife office in Marathahalli under 4 crore",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:3bhk configuration",
+      "buyer_archetype:Family"
+    ],
+    "reason": "Proximity target 'my wife office in marathahalli' did not resolve to a serving entity with usable location evidence",
+    "recorded_at": "2026-08-05T06:10:41.753747+00:00",
+    "results_returned": 6,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-capitol-residences",
+      "soc-godrej-air",
+      "soc-brigade-lakefront-crimson",
+      "soc-vaswani-starlight",
+      "soc-prestige-waterford"
+    ]
+  },
+  {
+    "entity_id": "query:proximity:my-wife-office-in-marathahalli",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 40000000,
+    "missing_fact": "geo.proximity_anchor",
+    "query": "3BHK near Whitefield close to kids school and near my wife office in Marathahalli under 4 crore",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:3bhk configuration",
+      "buyer_archetype:Family"
+    ],
+    "reason": "Proximity target 'my wife office in marathahalli' did not resolve to a serving entity with usable location evidence",
+    "recorded_at": "2026-08-05T06:15:32.591851+00:00",
+    "results_returned": 6,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-capitol-residences",
+      "soc-godrej-air",
+      "soc-brigade-lakefront-crimson",
+      "soc-vaswani-starlight",
+      "soc-prestige-waterford"
+    ]
+  },
+  {
+    "entity_id": "query:proximity:manipal-hospital",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "geo.proximity_anchor",
+    "query": "3BHK within 1 km of Manipal Hospital and within 3 km of ITPB",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:3bhk configuration"
+    ],
+    "reason": "Proximity target 'manipal hospital' did not resolve to a serving entity with usable location evidence",
+    "recorded_at": "2026-08-05T06:54:59.230434+00:00",
+    "results_returned": 0,
+    "top_candidate_society_ids": []
+  },
+  {
+    "entity_id": "query:proximity:manipal-hospital",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "geo.proximity_anchor",
+    "query": "3BHK within 2 km of Manipal Hospital and within 3 km of ITPB",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:3bhk configuration"
+    ],
+    "reason": "Proximity target 'manipal hospital' did not resolve to a serving entity with usable location evidence",
+    "recorded_at": "2026-08-05T06:54:59.349093+00:00",
+    "results_returned": 0,
+    "top_candidate_society_ids": []
+  },
+  {
+    "entity_id": "query:proximity:deens-academy",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "geo.proximity_anchor",
+    "query": "3BHK near Deens Academy within 1 km and near ITPB within 3 km",
+    "query_categories": [
+      "positive:3bhk configuration",
+      "positive:social infrastructure"
+    ],
+    "reason": "Proximity target 'deens academy' did not resolve to a serving entity with usable location evidence",
+    "recorded_at": "2026-08-05T06:54:59.444518+00:00",
+    "results_returned": 0,
+    "top_candidate_society_ids": []
   }
 ]

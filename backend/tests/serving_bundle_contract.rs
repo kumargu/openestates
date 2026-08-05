@@ -12,7 +12,7 @@ use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::{LakeKey, LakeStore};
 use backend::serving::{
     hydrate_tantivy_index, read_facts_parquet, read_search_metadata_parquet, BundleArtifactKind,
-    ServingBundleBuilder, TantivyRecallIndex,
+    ServingBundleBuilder, ServingBundleManifest, TantivyRecallIndex,
 };
 use chrono::Utc;
 use parquet::arrow::ArrowWriter;
@@ -127,6 +127,59 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert_eq!(hits[0].name, "Green Acre Whitefield");
     assert!(hits[0].matched_fields.iter().any(|field| field == "name"));
     assert!(hits[0].matched_fields.iter().any(|field| field == "body"));
+}
+
+#[test]
+fn serving_manifest_allows_optional_sidecar_artifact_kinds() {
+    let manifest_body = r#"{
+      "bundle_version": "bundle-with-sidecar",
+      "format_version": 5,
+      "created_at": "2026-08-03T18:25:24.188555Z",
+      "entity_count": 1,
+      "fact_count": 1,
+      "search_metadata_count": 1,
+      "edge_count": 0,
+      "entity_parquet_key": "serving/search_bundle/version=bundle/entities/part-00000.parquet",
+      "fact_parquet_key": "serving/search_bundle/version=bundle/facts/part-00000.parquet",
+      "search_metadata_parquet_key": "serving/search_bundle/version=bundle/search_metadata/part-00000.parquet",
+      "edge_parquet_key": null,
+      "semantic_embedding_parquet_key": null,
+      "ontology_embedding_parquet_key": "serving/search_bundle/version=bundle/ontology_embeddings/part-00000.parquet",
+      "schema_key": "serving/search_bundle/version=bundle/schema.json",
+      "trust_policy_key": "serving/search_bundle/version=bundle/trust_policy.json",
+      "tantivy_index_prefix": "serving/search_bundle/version=bundle/tantivy_index",
+      "artifacts": [
+        {
+          "kind": "ontology_embeddings_parquet",
+          "key": "serving/search_bundle/version=bundle/ontology_embeddings/part-00000.parquet",
+          "format": "application/vnd.apache.parquet",
+          "content_hash": "hash",
+          "hash_algorithm": "sha256",
+          "size_bytes": 10,
+          "row_count": 1
+        },
+        {
+          "kind": "tantivy_index_file",
+          "key": "serving/search_bundle/version=bundle/tantivy_index/meta.json",
+          "format": "application/octet-stream",
+          "content_hash": "hash",
+          "hash_algorithm": "sha256",
+          "size_bytes": 10,
+          "row_count": null
+        }
+      ]
+    }"#;
+
+    let manifest: ServingBundleManifest = serde_json::from_str(manifest_body).unwrap();
+
+    assert!(manifest
+        .artifacts
+        .iter()
+        .any(|artifact| artifact.kind == BundleArtifactKind::Other));
+    assert_eq!(
+        manifest.artifacts[1].kind,
+        BundleArtifactKind::TantivyIndexFile
+    );
 }
 
 #[test]
