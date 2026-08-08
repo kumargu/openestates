@@ -1,5 +1,6 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use arrow::array::{Array, ArrayRef, Float64Array, StringArray, UInt64Array};
@@ -27,6 +28,32 @@ pub const EXTERNAL_IMAGES_WEEKLY_ASSET_ID: &str = "external_images_weekly";
 pub const IMAGE_MEDIA_FACTS_ASSET_ID: &str = "image_media_facts";
 
 const EXTERNAL_IMAGE_FORMAT_VERSION: u32 = 1;
+const STAGED_MEDIA_PREFIX: &str = "/_staged_media/";
+const CONTENT_ADDRESSED_MEDIA_PREFIX: &str = "media/images/sha256";
+const MAX_RETAINED_MEDIA_PER_ENTITY: usize = 8;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocalMediaInventoryEntry {
+    pub source_path: String,
+    pub media_url: String,
+    pub content_sha256: String,
+    pub content_type: String,
+    pub size_bytes: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct LocalMediaInventory {
+    version: u32,
+    entries: Vec<LocalMediaInventoryEntry>,
+}
+
+#[derive(Debug, Clone)]
+struct IngestedMedia {
+    media_url: String,
+    content_sha256: String,
+    content_type: &'static str,
+    size_bytes: usize,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExternalImageObservationRecord {
@@ -144,7 +171,10 @@ impl MediaAssetMaterializer {
         dag_run_id: MaterializationId,
         record_partition: AssetPartition,
     ) -> Result<MaterializationRecord, MediaAssetError> {
-        validate_external_images_input(input)?;
+        let input = self
+            .with_current_lake_media(input, &record_partition)
+            .await?;
+        validate_external_images_input(&input)?;
         let run_id = dag_run_id.to_string();
         let artifact_partition = AssetPartition::new([("dt", input.snapshot_date.as_str())]);
         let parquet_key = AssetPathBuilder::raw_snapshot_key(
@@ -191,6 +221,311 @@ impl MediaAssetMaterializer {
         self.materializations.write_materialization(&record).await?;
         Ok(record)
     }
+
+    async fn with_current_lake_media(
+        &self,
+        input: &ExternalImagesWeeklyInput,
+        partition: &AssetPartition,
+    ) -> Result<ExternalImagesWeeklyInput, MediaAssetError> {
+        let asset_id = asset_id_value(EXTERNAL_IMAGES_WEEKLY_ASSET_ID);
+        let current = match self
+            .materializations
+            .current_record(&asset_id, partition)
+            .await
+        {
+            Ok(record) => record,
+            Err(error) if error.is_not_found() => return Ok(input.clone()),
+            Err(error) => return Err(MediaAssetError::Lake(error)),
+        };
+        let previous = read_external_image_rows(&self.lake, &current).await?;
+        let mut by_entity =
+            BTreeMap::<String, BTreeMap<String, ExternalImageObservationRecord>>::new();
+        let mut refreshed_sources = HashSet::<(String, String)>::new();
+        for record in &input.records {
+            refreshed_sources.insert((record.entity_id.clone(), media_source_identity(record)));
+            by_entity
+                .entry(record.entity_id.clone())
+                .or_default()
+                .insert(media_identity(record), record.clone());
+        }
+        for record in previous.into_iter().filter(|record| {
+            record.storage_policy.as_deref() == Some("lake_content_addressed")
+                && record.image_url.starts_with("/media/images/sha256/")
+                && !refreshed_sources
+                    .contains(&(record.entity_id.clone(), media_source_identity(record)))
+        }) {
+            by_entity
+                .entry(record.entity_id.clone())
+                .or_default()
+                .entry(media_identity(&record))
+                .or_insert(record);
+        }
+        let mut records = Vec::new();
+        for (_, unique) in by_entity {
+            let mut entity_records = unique.into_values().collect::<Vec<_>>();
+            sort_image_rows(&mut entity_records);
+            entity_records.truncate(MAX_RETAINED_MEDIA_PER_ENTITY);
+            records.extend(entity_records);
+        }
+        let mut merged = input.clone();
+        merged.records = records;
+        Ok(merged)
+    }
+}
+
+fn media_identity(record: &ExternalImageObservationRecord) -> String {
+    record
+        .content_sha256
+        .as_deref()
+        .map(|hash| format!("sha256:{}", hash.to_ascii_lowercase()))
+        .unwrap_or_else(|| format!("url:{}", record.image_url))
+}
+
+/// Identify the upstream photo independently from its current delivery bytes.
+///
+/// Re-encoding an image changes its content hash and immutable lake URL, but it
+/// must replace the previous delivery copy rather than consume another gallery
+/// slot. Collector observations retain the original URL for this purpose. The
+/// source handle fallback keeps locally staged and older records deterministic.
+fn media_source_identity(record: &ExternalImageObservationRecord) -> String {
+    record
+        .original_image_url
+        .as_deref()
+        .filter(|url| !url.is_empty())
+        .map(|url| format!("original:{url}"))
+        .unwrap_or_else(|| {
+            format!(
+                "source:{}|{}|{}",
+                record.source_name,
+                record.source_page_url,
+                record.rank.unwrap_or_default()
+            )
+        })
+}
+
+/// Move local collector output into the durable, backend-neutral media keyspace.
+///
+/// The source collector may stage files locally, but raw Parquet and all
+/// downstream facts only receive immutable `/media/images/sha256/*` URLs. The
+/// selected bytes are verified and copied to the configured local/S3 lake.
+pub async fn ingest_local_media_assets(
+    lake: &LakeStore,
+    project_root: &Path,
+    input: &ExternalImagesWeeklyInput,
+) -> Result<ExternalImagesWeeklyInput, MediaAssetError> {
+    let staged_root = project_root.join("data/cache/media_ingest");
+    let staged = archive_local_media_tree(
+        lake,
+        project_root,
+        &staged_root,
+        STAGED_MEDIA_PREFIX,
+        "staged-media",
+    )
+    .await?;
+
+    let mut normalized = input.clone();
+    for record in &mut normalized.records {
+        let storage_policy = record.storage_policy.as_deref().unwrap_or_default();
+        if storage_policy == "static_public_asset" || record.image_url.starts_with("/societies/") {
+            return Err(MediaAssetError::InvalidInput(format!(
+                "frontend-packaged media {} is retired; stage it under data/cache/media_ingest",
+                record.image_url
+            )));
+        }
+        let ingested = if storage_policy == "staged_local_asset"
+            || record.image_url.starts_with(STAGED_MEDIA_PREFIX)
+        {
+            staged.get(&record.image_url).cloned().ok_or_else(|| {
+                MediaAssetError::InvalidInput(format!(
+                    "staged media record {} does not resolve under data/cache/media_ingest",
+                    record.image_url
+                ))
+            })?
+        } else {
+            continue;
+        };
+
+        verify_declared_media_hash(record, &ingested.content_sha256)?;
+        let previous_url = record.image_url.clone();
+        record.image_url = ingested.media_url.clone();
+        if record.source_page_url.starts_with(STAGED_MEDIA_PREFIX) {
+            record.source_page_url = ingested.media_url.clone();
+        }
+        if record.original_image_url.as_deref() == Some(previous_url.as_str())
+            || record
+                .original_image_url
+                .as_deref()
+                .is_some_and(|url| url.starts_with(STAGED_MEDIA_PREFIX))
+        {
+            record.original_image_url = Some(ingested.media_url.clone());
+        }
+        record.storage_policy = Some("lake_content_addressed".to_string());
+        record.content_sha256 = Some(ingested.content_sha256.clone());
+        record.dedupe_key = Some(format!("sha256:{}", ingested.content_sha256));
+    }
+    Ok(normalized)
+}
+
+fn verify_declared_media_hash(
+    record: &ExternalImageObservationRecord,
+    actual_sha256: &str,
+) -> Result<(), MediaAssetError> {
+    let Some(expected) = record.content_sha256.as_deref() else {
+        return Ok(());
+    };
+    if expected.eq_ignore_ascii_case(actual_sha256) {
+        return Ok(());
+    }
+    Err(MediaAssetError::InvalidInput(format!(
+        "media {} declared sha256 {}, got {}",
+        record.image_url, expected, actual_sha256
+    )))
+}
+
+async fn archive_local_media_tree(
+    lake: &LakeStore,
+    project_root: &Path,
+    root: &Path,
+    url_prefix: &str,
+    inventory_name: &str,
+) -> Result<HashMap<String, IngestedMedia>, MediaAssetError> {
+    let files = local_media_files(root).await?;
+    let mut by_url = HashMap::new();
+    let mut inventory = Vec::with_capacity(files.len());
+    for path in files {
+        let relative = path.strip_prefix(root).map_err(|_| {
+            MediaAssetError::InvalidInput(format!(
+                "media path {} escaped {}",
+                path.display(),
+                root.display()
+            ))
+        })?;
+        let relative_url = relative
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        let source_url = format!("{}{}", url_prefix, relative_url);
+        let ingested = ingest_file(lake, &path).await?;
+        inventory.push(LocalMediaInventoryEntry {
+            source_path: path
+                .strip_prefix(project_root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .to_string(),
+            media_url: ingested.media_url.clone(),
+            content_sha256: ingested.content_sha256.clone(),
+            content_type: ingested.content_type.to_string(),
+            size_bytes: ingested.size_bytes,
+        });
+        by_url.insert(source_url, ingested);
+    }
+    if !inventory.is_empty() {
+        inventory.sort_by(|left, right| left.source_path.cmp(&right.source_path));
+        let key =
+            crate::lake::LakeKey::join(&["media", "inventory", &format!("{inventory_name}.json")])?;
+        lake.put_json(
+            &key,
+            &LocalMediaInventory {
+                version: 1,
+                entries: inventory,
+            },
+        )
+        .await?;
+    }
+    Ok(by_url)
+}
+
+async fn local_media_files(root: &Path) -> Result<Vec<PathBuf>, MediaAssetError> {
+    let mut files = Vec::new();
+    let mut directories = vec![root.to_path_buf()];
+    while let Some(directory) = directories.pop() {
+        let mut entries = match tokio::fs::read_dir(&directory).await {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(MediaAssetError::Io(error)),
+        };
+        while let Some(entry) = entries.next_entry().await.map_err(MediaAssetError::Io)? {
+            let file_type = entry.file_type().await.map_err(MediaAssetError::Io)?;
+            if file_type.is_symlink() {
+                return Err(MediaAssetError::InvalidInput(format!(
+                    "media staging tree cannot contain symlink {}",
+                    entry.path().display()
+                )));
+            }
+            if file_type.is_dir() {
+                directories.push(entry.path());
+            } else if file_type.is_file() {
+                files.push(entry.path());
+            }
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+async fn ingest_file(lake: &LakeStore, path: &Path) -> Result<IngestedMedia, MediaAssetError> {
+    let bytes = tokio::fs::read(path).await.map_err(MediaAssetError::Io)?;
+    ingest_image_bytes(lake, bytes).await
+}
+
+async fn ingest_image_bytes(
+    lake: &LakeStore,
+    bytes: Vec<u8>,
+) -> Result<IngestedMedia, MediaAssetError> {
+    let (extension, content_type) = canonical_image_format(&bytes).ok_or_else(|| {
+        MediaAssetError::InvalidInput("local media bytes are not a supported image".to_string())
+    })?;
+    let content_sha256 = sha256_hex(&Sha256::digest(&bytes));
+    let size_bytes = bytes.len();
+    let key = crate::lake::LakeKey::join(&[
+        CONTENT_ADDRESSED_MEDIA_PREFIX,
+        &content_sha256[..2],
+        &format!("{content_sha256}.{extension}"),
+    ])?;
+    match lake
+        .verify_artifact(&key, size_bytes, &content_sha256)
+        .await
+    {
+        Ok(_) => {}
+        Err(error) if error.is_not_found() => {
+            let metadata = lake.put_bytes(&key, bytes).await?;
+            if metadata.content_hash != content_sha256 {
+                return Err(MediaAssetError::InvalidInput(format!(
+                    "lake write changed media content for {key}"
+                )));
+            }
+        }
+        Err(error) => return Err(MediaAssetError::Lake(error)),
+    }
+    Ok(IngestedMedia {
+        media_url: format!("/{key}"),
+        content_sha256,
+        content_type,
+        size_bytes,
+    })
+}
+
+fn canonical_image_format(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
+    if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        return Some(("jpg", "image/jpeg"));
+    }
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some(("png", "image/png"));
+    }
+    if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        return Some(("webp", "image/webp"));
+    }
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        return Some(("gif", "image/gif"));
+    }
+    if bytes.len() >= 12
+        && &bytes[4..8] == b"ftyp"
+        && (&bytes[8..12] == b"avif" || &bytes[8..12] == b"avis")
+    {
+        return Some(("avif", "image/avif"));
+    }
+    None
 }
 
 pub async fn image_media_facts_input_with_aliases(
@@ -864,6 +1199,7 @@ fn asset_id_value(value: &str) -> AssetId {
 pub enum MediaAssetError {
     Arrow(arrow::error::ArrowError),
     Chrono(chrono::ParseError),
+    Io(std::io::Error),
     InvalidInput(String),
     InvalidSchema(String),
     MissingArtifact(AssetId),
@@ -879,6 +1215,7 @@ impl fmt::Display for MediaAssetError {
         match self {
             Self::Arrow(error) => write!(f, "media asset Arrow error: {error}"),
             Self::Chrono(error) => write!(f, "media asset timestamp error: {error}"),
+            Self::Io(error) => write!(f, "media asset IO error: {error}"),
             Self::InvalidInput(message) => write!(f, "invalid media asset input: {message}"),
             Self::InvalidSchema(column) => write!(f, "invalid media Parquet column: {column}"),
             Self::MissingArtifact(asset_id) => {
@@ -915,6 +1252,8 @@ from_error!(crate::lake::keys::KeyError, Key);
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use tempfile::tempdir;
 
     use super::*;
@@ -958,6 +1297,191 @@ mod tests {
             )
             .await
             .is_err());
+    }
+
+    #[tokio::test]
+    async fn local_media_is_content_addressed_deduplicated_and_rewritten() {
+        let temp = tempdir().unwrap();
+        let project_root = temp.path().join("project");
+        let lake = LakeStore::local(temp.path().join("lake")).unwrap();
+        let photo_dir = project_root.join("data/cache/media_ingest/societies/example");
+        fs::create_dir_all(&photo_dir).unwrap();
+        let bytes = b"\xff\xd8\xffshared-jpeg";
+        fs::write(photo_dir.join("1.jpg"), bytes).unwrap();
+        fs::write(photo_dir.join("2.jpeg"), bytes).unwrap();
+        let expected_hash = sha256_hex(&Sha256::digest(bytes));
+        let mut first = test_row(
+            "/_staged_media/societies/example/1.jpg",
+            "exterior",
+            vec!["hero", "gallery"],
+            None,
+            Some(0.9),
+            Some(0.9),
+            Some(1200),
+            Some(800),
+        );
+        first.storage_policy = Some("staged_local_asset".to_string());
+        first.content_sha256 = Some(expected_hash.clone());
+        let mut second = first.clone();
+        second.image_url = "/_staged_media/societies/example/2.jpeg".to_string();
+        let input = ExternalImagesWeeklyInput {
+            snapshot_date: "2026-08-07".to_string(),
+            records: vec![first, second],
+            source_health: Vec::new(),
+            media_qa_report: None,
+            source_watermarks: Vec::new(),
+        };
+
+        let normalized = ingest_local_media_assets(&lake, &project_root, &input)
+            .await
+            .unwrap();
+        let expected_url = format!(
+            "/media/images/sha256/{}/{}.jpg",
+            &expected_hash[..2],
+            expected_hash
+        );
+        assert!(normalized
+            .records
+            .iter()
+            .all(|record| record.image_url == expected_url));
+        assert!(normalized
+            .records
+            .iter()
+            .all(|record| { record.storage_policy.as_deref() == Some("lake_content_addressed") }));
+        let keys = lake
+            .list_keys(&crate::lake::LakePrefix::new("media/images/sha256").unwrap())
+            .await
+            .unwrap();
+        assert_eq!(keys.len(), 1, "identical bytes must share one lake object");
+        let inventory: LocalMediaInventory = lake
+            .get_json(&crate::lake::LakeKey::new("media/inventory/staged-media.json").unwrap())
+            .await
+            .unwrap();
+        assert_eq!(inventory.entries.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn local_media_rejects_a_declared_hash_mismatch() {
+        let temp = tempdir().unwrap();
+        let project_root = temp.path().join("project");
+        let lake = LakeStore::local(temp.path().join("lake")).unwrap();
+        let photo_dir = project_root.join("data/cache/media_ingest/societies/example");
+        fs::create_dir_all(&photo_dir).unwrap();
+        fs::write(photo_dir.join("1.jpg"), b"\xff\xd8\xffjpeg").unwrap();
+        let mut row = test_row(
+            "/_staged_media/societies/example/1.jpg",
+            "exterior",
+            vec!["hero"],
+            None,
+            Some(0.9),
+            Some(0.9),
+            Some(1200),
+            Some(800),
+        );
+        row.storage_policy = Some("staged_local_asset".to_string());
+        row.content_sha256 = Some("0".repeat(64));
+        let input = ExternalImagesWeeklyInput {
+            snapshot_date: "2026-08-07".to_string(),
+            records: vec![row],
+            source_health: Vec::new(),
+            media_qa_report: None,
+            source_watermarks: Vec::new(),
+        };
+
+        let error = ingest_local_media_assets(&lake, &project_root, &input)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("declared sha256"));
+    }
+
+    #[tokio::test]
+    async fn weekly_snapshot_carries_forward_promoted_lake_media() {
+        let temp = tempdir().unwrap();
+        let lake = LakeStore::local(temp.path()).unwrap();
+        let partition = AssetPartition::new([("source", "external_image")]);
+        let mut retained = test_row(
+            "/media/images/sha256/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webp",
+            "exterior",
+            vec!["hero", "gallery"],
+            None,
+            Some(0.9),
+            Some(0.9),
+            Some(1200),
+            Some(800),
+        );
+        retained.storage_policy = Some("lake_content_addressed".to_string());
+        retained.content_sha256 = Some("a".repeat(64));
+        retained.original_image_url = Some("https://img.example.com/exterior.jpg".to_string());
+        let materializer = MediaAssetMaterializer::new(lake.clone());
+        let first = materializer
+            .materialize_external_images(
+                &ExternalImagesWeeklyInput {
+                    snapshot_date: "2026-08-01".to_string(),
+                    records: vec![retained],
+                    source_health: Vec::new(),
+                    media_qa_report: None,
+                    source_watermarks: Vec::new(),
+                },
+                Vec::new(),
+                MaterializationId::new(),
+                partition.clone(),
+            )
+            .await
+            .unwrap();
+        AssetMaterializationStore::new(lake.clone())
+            .force_promote_current(&first)
+            .await
+            .unwrap();
+
+        let mut new_record = test_row(
+            "https://img.example.com/new.webp",
+            "exterior",
+            vec!["hero"],
+            None,
+            Some(0.8),
+            Some(0.8),
+            Some(1000),
+            Some(700),
+        );
+        new_record.entity_id = "society:new".to_string();
+        let mut replacement = test_row(
+            "/media/images/sha256/bb/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+            "exterior",
+            vec!["hero", "gallery"],
+            None,
+            Some(0.9),
+            Some(0.9),
+            Some(1200),
+            Some(800),
+        );
+        replacement.storage_policy = Some("lake_content_addressed".to_string());
+        replacement.content_sha256 = Some("b".repeat(64));
+        replacement.original_image_url = Some("https://img.example.com/exterior.jpg".to_string());
+        let second = materializer
+            .materialize_external_images(
+                &ExternalImagesWeeklyInput {
+                    snapshot_date: "2026-08-08".to_string(),
+                    records: vec![new_record, replacement],
+                    source_health: Vec::new(),
+                    media_qa_report: None,
+                    source_watermarks: Vec::new(),
+                },
+                Vec::new(),
+                MaterializationId::new(),
+                partition,
+            )
+            .await
+            .unwrap();
+        let rows = read_external_image_rows(&lake, &second).await.unwrap();
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().any(|row| row.entity_id == "society:new"));
+        assert!(rows.iter().any(|row| {
+            row.entity_id == "society:example-green"
+                && row.content_sha256.as_deref()
+                    == Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        }));
+        assert!(!rows.iter().any(|row| row.content_sha256.as_deref()
+            == Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")));
     }
 
     #[test]

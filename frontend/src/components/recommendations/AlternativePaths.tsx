@@ -107,7 +107,6 @@ function RecommendationCard({
 }) {
   const { images } = usePropertySceneImages({
     heroImage: property.hero_image,
-    societyId: property.kg_entity_refs?.society_entity_id,
   });
   const cardImage = propertySceneImageAt(
     images,
@@ -132,6 +131,7 @@ function RecommendationCard({
             alt={property.title}
             className="catalog-card__image alt-paths__image"
             loading="lazy"
+            fetchPriority="low"
           />
           <span className="alt-paths__vignette" aria-hidden="true" />
           <span className="alt-paths__grain" aria-hidden="true" />

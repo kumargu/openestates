@@ -2,13 +2,16 @@ use std::fs;
 use std::path::PathBuf;
 
 use backend::assets::{
-    AssetId, CatalogEnvironment, CatalogMembership, CatalogRelease, CatalogReleaseId,
-    CatalogReleaseStore, CatalogTombstone, CatalogValidationStatus, DerivedCatalogAssets,
-    PinnedMaterialization, PromoteCatalogReleaseOptions,
+    AssetId, AssetMaterializationStore, CatalogEnvironment, CatalogMembership, CatalogRelease,
+    CatalogReleaseId, CatalogReleaseStore, CatalogTombstone, CatalogValidationStatus,
+    DerivedCatalogAssets, PinnedMaterialization, PromoteCatalogReleaseOptions,
 };
 use backend::data_loader::properties_from_serving_bundle;
 use backend::lake::{LakeStoreLocation, LAKE_URL_ENV};
-use backend::serving::ServingBundleLoader;
+use backend::serving::{
+    validate_search_serving_candidate, write_frontend_media_manifest, ServingBundleLoader,
+    SEARCH_SERVING_BUNDLE_ASSET_ID,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -64,6 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::Validate { release_id } => {
             let release = store.validate_release(&release_id).await?;
+            validate_release_artifacts(&store, &lake, &project_root, &release_id, false).await?;
             println!("{}", serde_json::to_string_pretty(&release)?);
             if release.validation_status == CatalogValidationStatus::Rejected {
                 std::process::exit(1);
@@ -76,6 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             approve_production,
             force_legacy_pointer,
         } => {
+            validate_release_artifacts(&store, &lake, &project_root, &release_id, true).await?;
             let pointer = store
                 .promote_environment(
                     &release_id,
@@ -96,6 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             approve_production,
             force_legacy_pointer,
         } => {
+            validate_release_artifacts(&store, &lake, &project_root, &release_id, true).await?;
             let pointer = store
                 .rollback_environment(
                     environment,
@@ -117,6 +123,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let pointer = store.current_pointer(environment).await?;
             println!("{}", serde_json::to_string_pretty(&pointer)?);
         }
+    }
+    Ok(())
+}
+
+async fn validate_release_artifacts(
+    releases: &CatalogReleaseStore,
+    lake: &backend::lake::LakeStore,
+    project_root: &std::path::Path,
+    release_id: &CatalogReleaseId,
+    sync_frontend_manifest: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let release = releases.release(release_id).await?;
+    let asset_id = AssetId::new(SEARCH_SERVING_BUNDLE_ASSET_ID).expect("static asset id is valid");
+    let materializations = AssetMaterializationStore::new(lake.clone());
+    let record = materializations
+        .record_by_id_for_asset(
+            &asset_id,
+            &release.derived_assets.serving_materialization_id,
+        )
+        .await?
+        .ok_or_else(|| {
+            format!(
+                "serving materialization {} was not found",
+                release.derived_assets.serving_materialization_id
+            )
+        })?;
+    let report = validate_search_serving_candidate(lake, &record).await?;
+    if !report.passed {
+        return Err(format!(
+            "catalog release {release_id} failed {} serving artifact gate(s): {}",
+            report.issues.len(),
+            report
+                .issues
+                .iter()
+                .take(5)
+                .map(|issue| match issue.reference.as_deref() {
+                    Some(reference) => format!("{} ({reference})", issue.message),
+                    None => issue.message.clone(),
+                })
+                .collect::<Vec<_>>()
+                .join("; ")
+        )
+        .into());
+    }
+    if sync_frontend_manifest {
+        write_frontend_media_manifest(project_root, &report)?;
     }
     Ok(())
 }

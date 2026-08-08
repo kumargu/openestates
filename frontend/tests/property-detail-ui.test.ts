@@ -15,7 +15,10 @@ import {
   scaleForStory,
 } from "../src/lib/nearbyPlateProjection.ts";
 import { resolveBuyerProjectStatus } from "../src/lib/projectStatus.ts";
-import { propertySceneImageAt } from "../src/lib/propertyScene.ts";
+import {
+  initialPropertySceneUrls,
+  propertySceneImageAt,
+} from "../src/lib/propertyScene.ts";
 import { propertyMapContextFromSurfaceScene } from "../src/lib/surfaceSceneProjection.ts";
 import type { PropertyMapContext, ProofFocus, SurfaceSceneResponse } from "../src/lib/types.ts";
 
@@ -529,4 +532,20 @@ test("recommendation scenes are stable and wrap after exhaustion", () => {
   assert.equal(propertySceneImageAt(scenes, 4), "two.jpg");
   assert.equal(propertySceneImageAt(scenes, -1), "one.jpg");
   assert.equal(propertySceneImageAt([], 2, "fallback.jpg"), "fallback.jpg");
+});
+
+test("property scene URLs are returned immediately from the serving payload", () => {
+  assert.deepEqual(
+    initialPropertySceneUrls({
+      heroImage: "/media/images/sha256/aa/hero.avif",
+      images: [
+        "/media/images/sha256/aa/hero.avif",
+        "/media/images/sha256/bb/gallery.avif",
+      ],
+    }),
+    [
+      "/media/images/sha256/aa/hero.avif",
+      "/media/images/sha256/bb/gallery.avif",
+    ],
+  );
 });

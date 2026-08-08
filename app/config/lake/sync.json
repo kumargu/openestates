@@ -23,7 +23,7 @@
     "lake_root": {
       "sync": true,
       "direction": "bidirectional_with_care",
-      "scope": "entire lake root — raw, silver, gold, serving, manifests",
+      "scope": "entire lake root — raw, silver, gold, serving, manifests, and content-addressed media",
       "rule": "Same relative keys locally and on S3. No path rewrites on promote."
     },
     "never_sync": [
@@ -69,13 +69,16 @@
       "note": "Prefer OPENESTATES_LAKE_URL=s3:// for production runtime. Use aws sync for bulk seed/migration only."
     },
     "promotion": {
-      "description": "Promoting a serving bundle updates manifests/assets/search_serving_bundle/.../current.json in the lake. Sync propagates the pointer + new version folder.",
-      "runtime_reads": "current.json pointer → serving/search_bundle/version={version}/"
+      "description": "Promoting a serving bundle first validates immutable lake artifacts, Parquet counts, lake media references, and content hashes; only then does it update manifests/assets/search_serving_bundle/.../current.json.",
+      "runtime_reads": "current.json pointer → serving/search_bundle/version={version}/",
+      "frontend_media_manifest": "frontend/media-manifest.json is regenerated from the validated candidate and every frontend production build verifies it before emitting dist/."
     }
   },
   "integrity": {
     "content_hash": "Parquet artifacts record sha256 in asset manifests",
     "immutability": "Never overwrite a version= folder in place. Write new version, update current.json pointer.",
-    "lineage": "materialization_id links raw → silver → gold → serving"
+    "lineage": "materialization_id links raw → silver → gold → serving",
+    "promotion_gate": "Promotion is fail-closed for missing/corrupt bundle artifacts, every /media reference carried by serving facts, and any retired /societies reference.",
+    "deployment_gate": "The frontend build is fail-closed if a bundle tries to package media from frontend/public."
   }
 }
