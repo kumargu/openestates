@@ -20,6 +20,8 @@ import {
   calculateProjection,
   formatCurrency,
   type ConstructionProfile,
+  updatePlanInput,
+  type EditablePlanInput,
   type PlanInputs,
 } from "../features/home-plan/model.ts";
 import "../features/home-plan/home-plan.css";
@@ -217,7 +219,7 @@ export function HomePlanPage() {
     ) : !id ? (
       <section className="home-plan-empty">
         <h1>Choose a home to plan.</h1>
-        <p>Buy vs Rent uses the price and status of one home from your workspace.</p>
+        <p>Rent vs buy uses the price and status of one home from your workspace.</p>
         <Link to="/">Explore</Link>
       </section>
     ) : status === "loading" || propertyIsChanging ? (
@@ -225,7 +227,7 @@ export function HomePlanPage() {
     ) : status === "not_found" ? (
       <section className="home-plan-empty">
         <h1>This home is no longer available.</h1>
-        <p>Add another home to your workspace and its Buy vs Rent plan will be ready here.</p>
+        <p>Add another home to your workspace and its rent vs buy plan will be ready here.</p>
         <Link to="/">Explore</Link>
       </section>
     ) : (
@@ -276,15 +278,13 @@ export function HomePlanPage() {
     projection.loanFreeYear ?? "open",
     Math.round(verdict.advantage),
   ].join(":");
-  const updateInput = <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => {
+  const updateInput = (key: EditablePlanInput, value: number) => {
     setPreviewYear(null);
-    setPinnedYear(null);
-    setInputs((current) => current ? { ...current, [key]: value } : current);
+    setInputs((current) => current ? updatePlanInput(current, key, value) : current);
   };
 
   const updateExtraEmisPerYear = (count: number) => {
     setPreviewYear(null);
-    setPinnedYear(null);
     setExtraEmisPerYear(count);
   };
 
@@ -299,7 +299,7 @@ export function HomePlanPage() {
     <div className="home-plan-shell home-plan-shell--workspace">
       <Helmet>
         <title>{property.title} — {BUY_VS_RENT.pageTitle} | OpenEstates</title>
-        <meta name="description" content={`Compare buying ${property.title} with renting and investing over time.`} />
+        <meta name="description" content={`Compare renting with buying ${property.title} over time.`} />
       </Helmet>
 
       <WorkspaceHeader
@@ -327,6 +327,7 @@ export function HomePlanPage() {
             <PlanAssumptionRail
               inputs={inputs}
               extraEmisPerYear={extraEmisPerYear}
+              loanFreeYear={projection.loanFreeYear}
               onInputChange={updateInput}
               onExtraEmisChange={updateExtraEmisPerYear}
               onReset={resetInputs}

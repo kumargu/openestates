@@ -21,8 +21,8 @@ const GRAPH_INSET = { left: 72, right: 172, top: 40, bottom: 44 };
 
 function graphSeries(projection: PlanProjection): GraphSeries[] {
   return [
-    { id: "buy", label: "Value of your home", values: projection.points.map((point) => point.buyNetWorth) },
-    { id: "rent", label: "Your savings", values: projection.points.map((point) => point.rentNetWorth) },
+    { id: "buy", label: "Buy", values: projection.points.map((point) => point.buyNetWorth) },
+    { id: "rent", label: "Rent", values: projection.points.map((point) => point.rentNetWorth) },
   ];
 }
 
@@ -92,7 +92,7 @@ export function PlanGraph({
   return (
     <div className="home-plan-graph">
       <div className="home-plan-graph__heading">
-        <h2>Buying vs Renting</h2>
+        <h2>Rent vs buy</h2>
         <div className="home-plan-graph__assumptions" aria-label="Projection assumptions">
           <span>{rateLabel(projection.assumptions.homeAppreciationRate)} yearly home appreciation</span>
           <span>{rateLabel(projection.assumptions.rentInflationRate)} yearly rent increase</span>
@@ -190,13 +190,13 @@ export function PlanGraph({
             <rect width="206" height="98" rx="14" />
             <text x="16" y="20" className="home-plan-tooltip-year">Year {displayYear}</text>
             <circle cx="19" cy="40" r="4.5" className="home-plan-tooltip-buy" />
-            <text x="32" y="43">Home equity</text>
+            <text x="32" y="43">Buy</text>
             <text x="190" y="43" className="home-plan-tooltip-value">{formatCurrency(buyValue, true)}</text>
             <circle cx="19" cy="61" r="4.5" className="home-plan-tooltip-rent" />
-            <text x="32" y="64">Savings</text>
+            <text x="32" y="64">Rent</text>
             <text x="190" y="64" className="home-plan-tooltip-value">{formatCurrency(rentValue, true)}</text>
             <line x1="16" x2="190" y1="76" y2="76" />
-            <text x="16" y="90" className="home-plan-tooltip-lead">{gapLeader === "buy" ? "Buy ahead" : "Rent path ahead"}</text>
+            <text x="16" y="90" className="home-plan-tooltip-lead">{gapLeader === "buy" ? "Buy ahead" : "Rent ahead"}</text>
             <text x="190" y="90" className="home-plan-tooltip-value">{formatCurrency(Math.abs(buyValue - rentValue), true)}</text>
           </g>
         )}

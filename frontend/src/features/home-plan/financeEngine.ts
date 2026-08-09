@@ -6,7 +6,7 @@ import type {
 } from "./model.ts";
 
 /**
- * Buy vs rent algorithm (monthly)
+ * Rent vs buy algorithm (monthly)
  *
  * User levers:
  * - monthly EMI

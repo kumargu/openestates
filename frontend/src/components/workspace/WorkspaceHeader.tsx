@@ -43,7 +43,7 @@ export function WorkspaceHeader({
             className={mode === "buy-vs-rent" ? "is-active" : undefined}
             aria-current={mode === "buy-vs-rent" ? "page" : undefined}
           >
-            Buy vs Rent
+            Rent vs buy
           </Link>
         </nav>
       </div>
