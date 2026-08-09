@@ -1126,7 +1126,9 @@ function PropertyPageBody({
     ?.trim();
   const reviewsSections = reviewEvidenceSections(detailEvidenceSections);
   const displayTitle = displayName(p.title);
-  const reraReport = data.rera_report_ref;
+  const reraReport = data.rera_report_ref.availability === "unavailable"
+    ? undefined
+    : data.rera_report_ref;
 
   function handleAreaSelect(area: string) {
     navigate(`/?q=${encodeURIComponent(area)}`);
@@ -1217,20 +1219,22 @@ function PropertyPageBody({
                 variant="compact"
               />
             )}
-            <Link className="property-popup-action" to={reraReport.href}>
-              <span><strong>RERA report</strong></span>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                aria-hidden="true"
-              >
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </Link>
+            {reraReport && (
+              <Link className="property-popup-action" to={reraReport.href}>
+                <span><strong>RERA report</strong></span>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </Link>
+            )}
           </section>
         )}
 
