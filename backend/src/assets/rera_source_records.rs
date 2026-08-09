@@ -349,12 +349,13 @@ pub async fn read_rera_source_records(
     Ok(rows)
 }
 
-fn all_record_kinds() -> [ReraSourceRecordKind; 11] {
+fn all_record_kinds() -> [ReraSourceRecordKind; 12] {
     [
         ReraSourceRecordKind::RegistrationSummary,
         ReraSourceRecordKind::PromoterDeclaration,
         ReraSourceRecordKind::Completion,
         ReraSourceRecordKind::QuarterlyProgress,
+        ReraSourceRecordKind::Inventory,
         ReraSourceRecordKind::TowerInventory,
         ReraSourceRecordKind::ComplaintOrder,
         ReraSourceRecordKind::DocumentApproval,
@@ -652,8 +653,8 @@ mod tests {
                 ReraSourceRecordInput {
                     kind: ReraSourceRecordKind::Unknown,
                     registration_number: "PRM/KA/RERA/1251/446/PR/200811/003528".to_string(),
-                    receipt_id,
-                    capture_id,
+                    receipt_id: receipt_id.clone(),
+                    capture_id: capture_id.clone(),
                     source_locator: "futureField[0]".to_string(),
                     raw_label: "Future field".to_string(),
                     raw_value: "preserved raw value".to_string(),
@@ -661,6 +662,19 @@ mod tests {
                     effective_at: None,
                     filing_at: None,
                     parser_version: "rera_listing.v1".to_string(),
+                },
+                ReraSourceRecordInput {
+                    kind: ReraSourceRecordKind::Inventory,
+                    registration_number: "PRM/KA/RERA/1251/446/PR/200811/003528".to_string(),
+                    receipt_id,
+                    capture_id,
+                    source_locator: "#menu2/development-inventory/row-1".to_string(),
+                    raw_label: "Declared inventory configuration".to_string(),
+                    raw_value: r#"{"inventory_type":"2BHK+2T","unit_count":42}"#.to_string(),
+                    observed_at: now,
+                    effective_at: None,
+                    filing_at: None,
+                    parser_version: "rera_project_detail_source_records.v1".to_string(),
                 },
             ],
             source_watermarks: Vec::new(),
@@ -708,7 +722,7 @@ mod tests {
             .unwrap();
         let rows = read_rera_source_records(&lake, &record).await.unwrap();
 
-        assert_eq!(rows.len(), 2);
+        assert_eq!(rows.len(), 3);
         assert!(record
             .artifacts
             .iter()
@@ -717,6 +731,10 @@ mod tests {
             .artifacts
             .iter()
             .any(|artifact| artifact.key.contains("records/unknown/")));
+        assert!(record
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.key.contains("records/inventory/")));
         assert_eq!(
             rows[0].registration_id,
             rera_registration_identity("PRM/KA/RERA/1251/446/PR/200811/003528")
@@ -730,6 +748,9 @@ mod tests {
                 .raw_value,
             "preserved raw value"
         );
+        assert!(rows
+            .iter()
+            .any(|row| row.kind == ReraSourceRecordKind::Inventory));
     }
 
     #[tokio::test]
