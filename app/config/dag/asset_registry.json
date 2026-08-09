@@ -29,6 +29,20 @@
       }
     },
     {
+      "id": "rera_claims",
+      "stage": "gold",
+      "description": "Scoped RERA source assertions with deterministic receipt lineage.",
+      "dependencies": [
+        "rera_source_records"
+      ],
+      "refresh": "manual",
+      "cost_tier": "free",
+      "trust_tier": "derived",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
       "id": "rera_registry_monthly",
       "stage": "raw",
       "description": "Monthly RERA registry snapshot for canonical project discovery.",

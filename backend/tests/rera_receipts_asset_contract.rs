@@ -2,8 +2,8 @@ use backend::assets::{
     default_openestates_registry, read_rera_receipt_records, read_rera_source_records,
     AssetDagExecutionOptions, AssetDagExecutor, AssetId, AssetMaterializationStore, AssetPartition,
     AssetSourceInputs, ReraReceiptKind, ReraReceiptSourceRecord, ReraReceiptsSourceInput,
-    ReraSourceRecordInput, ReraSourceRecordKind, ReraSourceRecordsInput, RERA_RECEIPTS_ASSET_ID,
-    RERA_SOURCE_RECORDS_ASSET_ID,
+    ReraSourceRecordInput, ReraSourceRecordKind, ReraSourceRecordsInput, RERA_CLAIMS_ASSET_ID,
+    RERA_RECEIPTS_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
 };
 use backend::knowledge::KnowledgeGraph;
 use backend::lake::LakeStore;
@@ -71,6 +71,7 @@ async fn source_records_can_only_materialize_from_the_receipt_backfill() {
     let now = Utc.with_ymd_and_hms(2026, 8, 9, 12, 0, 0).unwrap();
     let receipts_asset = AssetId::new(RERA_RECEIPTS_ASSET_ID).unwrap();
     let source_records_asset = AssetId::new(RERA_SOURCE_RECORDS_ASSET_ID).unwrap();
+    let claims_asset = AssetId::new(RERA_CLAIMS_ASSET_ID).unwrap();
     let receipt_inputs = AssetSourceInputs {
         rera_receipts: Some(ReraReceiptsSourceInput {
             snapshot_date: "2026-08-09".to_string(),
@@ -116,9 +117,9 @@ async fn source_records_can_only_materialize_from_the_receipt_backfill() {
                 registration_number: "PRM/KA/RERA/1251/446/PR/200811/003528".to_string(),
                 receipt_id: receipt.receipt_id,
                 capture_id: receipt.capture_id,
-                source_locator: "projectDetails.registrationNumber".to_string(),
-                raw_label: "Registration Number".to_string(),
-                raw_value: "PRM/KA/RERA/1251/446/PR/200811/003528".to_string(),
+                source_locator: "applicationNameList[0]".to_string(),
+                raw_label: "K-RERA listing row".to_string(),
+                raw_value: "{\"acknowledgement_number\":\"ACK-1\",\"registration_number\":\"PRM/KA/RERA/1251/446/PR/200811/003528\",\"project_name\":\"Fixture Project\",\"promoter_name\":\"Fixture Promoter\"}".to_string(),
                 observed_at: now,
                 effective_at: None,
                 filing_at: None,
@@ -154,5 +155,25 @@ async fn source_records_can_only_materialize_from_the_receipt_backfill() {
             .unwrap()
             .len(),
         1
+    );
+
+    let report = executor
+        .execute(
+            &KnowledgeGraph::new(),
+            AssetDagExecutionOptions::new(AssetPartition::global(), now)
+                .with_forced_assets(vec![claims_asset.clone()])
+                .with_only_forced_assets(true),
+        )
+        .await
+        .unwrap();
+    assert_eq!(report.executed_assets, vec![claims_asset.clone()]);
+    let claims_record = materializations
+        .current_record(&claims_asset, &AssetPartition::global())
+        .await
+        .unwrap();
+    assert_eq!(claims_record.row_count, 4);
+    assert_eq!(
+        claims_record.parent_materializations,
+        vec![record.materialization_id]
     );
 }

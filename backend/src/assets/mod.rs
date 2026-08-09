@@ -131,9 +131,10 @@ pub use rera::{
     CANONICAL_SOCIETY_NODES_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 pub use rera_claims::{
-    ReraAssertionMode, ReraClaimDerivation, ReraClaimEffectiveTime, ReraClaimError,
-    ReraClaimEvidence, ReraClaimInput, ReraClaimSubject, ReraClaimV1, ReraClaimValidationState,
-    ReraClaimValue, ReraClaimVisibility, ReraSourceTrust,
+    claims_from_source_records, ReraAssertionMode, ReraClaimDerivation, ReraClaimEffectiveTime,
+    ReraClaimError, ReraClaimEvidence, ReraClaimInput, ReraClaimMaterializeError, ReraClaimSubject,
+    ReraClaimV1, ReraClaimValidationState, ReraClaimValue, ReraClaimVisibility, ReraClaimsManifest,
+    ReraClaimsMaterializer, ReraClaimsQualityReport, ReraSourceTrust, RERA_CLAIMS_ASSET_ID,
 };
 pub use rera_evidence::{
     read_rera_receipt_records, rera_registration_identity, ReraEvidenceError, ReraReceiptInput,

@@ -545,6 +545,15 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Root,
         ),
         asset(
+            "rera_claims",
+            AssetStage::Gold,
+            "Scoped RERA source assertions with deterministic receipt lineage.",
+            &["rera_source_records"],
+            RefreshCadence::Manual,
+            CostTier::Free,
+            TrustTier::Derived,
+        ),
+        asset(
             "rera_registry_monthly",
             AssetStage::Raw,
             "Monthly RERA registry snapshot for canonical project discovery.",

@@ -22,21 +22,21 @@ use super::{
     KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, KgViewRecords,
     MaterializationId, MaterializationRecord, MediaAssetError, MediaAssetMaterializer,
     OsmPowerAssetError, PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
-    ProjectEnrichmentMaterializer, ReraAssetError, ReraEvidenceError, ReraPlanFramesAssetError,
-    ReraReceiptsMaterializer, ReraRegistryMaterializer, ReraSourceRecordsError,
-    ReraSourceRecordsMaterializer, RunManifestError, SkillFactMaterializeError,
-    SkillFactMaterializer, SkillFactsInput, SourceEntityResolutionScope, SourceWatermark,
-    StormwaterAssetError, TransitAssetError, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
-    BENGALURU_METRO_STATION_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
-    CANONICAL_SOCIETY_NODES_ASSET_ID, CURRENT_PROJECT_FACTS_ASSET_ID,
-    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
-    KG_SOCIETY_VIEW_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
-    RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
-    RERA_SOURCE_RECORDS_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
-    STORMWATER_DRAIN_FACTS_ASSET_ID,
+    ProjectEnrichmentMaterializer, ReraAssetError, ReraClaimMaterializeError,
+    ReraClaimsMaterializer, ReraEvidenceError, ReraPlanFramesAssetError, ReraReceiptsMaterializer,
+    ReraRegistryMaterializer, ReraSourceRecordsError, ReraSourceRecordsMaterializer,
+    RunManifestError, SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput,
+    SourceEntityResolutionScope, SourceWatermark, StormwaterAssetError, TransitAssetError,
+    APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
+    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    CURRENT_PROJECT_FACTS_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
+    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID,
+    RERA_CLAIMS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
+    RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
+    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID, STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 
 const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
@@ -1178,6 +1178,10 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::ReraSourceRecords,
         );
         executors.insert(
+            static_asset_id(RERA_CLAIMS_ASSET_ID),
+            BuiltInAssetExecutor::ReraClaims,
+        );
+        executors.insert(
             static_asset_id(RERA_REGISTRY_MONTHLY_ASSET_ID),
             BuiltInAssetExecutor::ReraRegistryMonthly,
         );
@@ -1277,6 +1281,7 @@ impl BuiltInAssetExecutorRegistry {
 enum BuiltInAssetExecutor {
     ReraReceipts,
     ReraSourceRecords,
+    ReraClaims,
     ReraRegistryMonthly,
     CanonicalSocietyNodes,
     ReraLegalFacts,
@@ -1352,6 +1357,31 @@ impl BuiltInAssetExecutor {
                     .materialize_for_run(
                         input,
                         receipts_record,
+                        context.run_id.clone(),
+                        context.asset_partition.clone(),
+                    )
+                    .await?;
+                Ok(ExecutedAsset::Record(record))
+            }
+            Self::ReraClaims => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let source_records = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    RERA_SOURCE_RECORDS_ASSET_ID,
+                )?;
+                let record = ReraClaimsMaterializer::new(context.dag.lake.clone())
+                    .materialize_from_source_records_for_run(
+                        source_records,
                         context.run_id.clone(),
                         context.asset_partition.clone(),
                     )
@@ -2198,6 +2228,7 @@ pub enum AssetDagExecutorError {
     CurrentProjectFacts(CurrentProjectFactsError),
     ReraEvidence(ReraEvidenceError),
     ReraSourceRecords(ReraSourceRecordsError),
+    ReraClaims(ReraClaimMaterializeError),
     Rera(ReraAssetError),
     ReraPlanFrames(ReraPlanFramesAssetError),
     CanonicalNodes(super::CanonicalNodesError),
@@ -2293,6 +2324,7 @@ impl fmt::Display for AssetDagExecutorError {
             Self::ReraSourceRecords(err) => {
                 write!(f, "RERA source record asset execution failed: {err}")
             }
+            Self::ReraClaims(err) => write!(f, "RERA claim asset execution failed: {err}"),
             Self::GooglePlace(err) => write!(f, "Google place source execution failed: {err}"),
             Self::ProjectEnrichment(err) => {
                 write!(f, "project enrichment execution failed: {err}")
@@ -2550,6 +2582,12 @@ impl From<ReraEvidenceError> for AssetDagExecutorError {
 impl From<ReraSourceRecordsError> for AssetDagExecutorError {
     fn from(err: ReraSourceRecordsError) -> Self {
         Self::ReraSourceRecords(err)
+    }
+}
+
+impl From<ReraClaimMaterializeError> for AssetDagExecutorError {
+    fn from(err: ReraClaimMaterializeError) -> Self {
+        Self::ReraClaims(err)
     }
 }
 

@@ -212,7 +212,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
             .iter()
             .filter(|step| step.status == AssetRunStepStatus::Skipped)
             .count(),
-        8
+        9
     );
 }
 
