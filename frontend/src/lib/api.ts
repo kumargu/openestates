@@ -3,7 +3,7 @@ import type {
   PropertyDetailResponse,
   PropertyEvidenceBatchResponse,
   PropertyEvidenceResponse,
-  ReraDossier,
+  ReraEvidenceReportResponse,
   ProofFocus,
   PropertySurfacesResponse,
   RecommendationResponse,
@@ -109,7 +109,7 @@ export function getPropertyEvidence(id: string): Promise<PropertyEvidenceRespons
   return fetchJson(`/api/properties/${encodeURIComponent(id)}/evidence`);
 }
 
-export function getPropertyRera(id: string): Promise<ReraDossier> {
+export function getPropertyRera(id: string): Promise<ReraEvidenceReportResponse> {
   return fetchJson(`/api/properties/${encodeURIComponent(id)}/rera`);
 }
 

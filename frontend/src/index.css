@@ -5835,7 +5835,6 @@ body {
 
 .property-decision-main > .nearby-plate,
 .property-decision-main > .area-trail,
-.property-decision-main > .evidence-stack,
 .property-decision-main > .alt-paths {
   margin-bottom: 0;
 }
@@ -6164,7 +6163,7 @@ body {
   height: 15px;
 }
 
-.property-popup-row .area-trail__tile--compact:hover:not(.is-open):not(.ev-fold--open),
+.property-popup-row .area-trail__tile--compact:hover:not(.is-open),
 .property-popup-row .area-trail__tile--compact:focus-visible {
   border: 0;
   background: #eaeaea;

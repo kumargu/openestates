@@ -261,7 +261,7 @@ export type PropertyDetailResponse = {
   recommendation_branches?: RecommendationBranch[];
   recommendations?: RecommendationEnvelope;
   rera?: ReraInfo;
-  rera_dossier?: ReraDossier;
+  rera_report_ref: ReraReportRef;
   area_intelligence?: AreaIntelligence;
   transparency_score?: TransparencyScore;
   area_price_range_low?: number;
@@ -1096,116 +1096,134 @@ export type ReraInfo = {
   decision_cards?: ReraDecisionCard[];
 };
 
-export type ReraDossier = {
-  property_id: string;
-  society_id: string;
-  fact_sections?: ReraReportSection[];
-  summary_cards: ReraDecisionCard[];
-  compare_items: ReraCompareItem[];
-  complaint_sections: ReraComplaintSection[];
-  document_sections: ReraDocumentSection[];
-  schedule_sections: ReraScheduleSection[];
-  timeline: ReraTimeline;
-  legal_checks: ReraLegalCheck[];
-  source: ReraDossierSource;
+export type ReraReportRef = {
+  registration_ids: string[];
+  href: string;
+  availability: "available" | "partial" | "unavailable";
 };
 
-export type ReraReportSection = {
+export type ReraEvidenceReportResponse = {
+  availability: "available" | "partial" | "unavailable";
+  evidence: ReraEvidenceProjection;
+  surface: ReraReportSurface;
+};
+
+export type ReraEvidenceProjection = {
+  schema_version: string;
+  property_id: string;
+  bundle_id: string;
+  generated_at: string;
+  registration_ids: string[];
+  entities: ReraEvidenceEntity[];
+  claims: ReraEvidenceClaim[];
+  events: ReraEvidenceEvent[];
+  series: ReraEvidenceSeries[];
+  discrepancies: ReraEvidenceDiscrepancy[];
+  coverage: ReraEvidenceCoverage[];
+  source_index: ReraEvidenceSource[];
+};
+
+export type ReraEvidenceEntity = {
+  entity_id: string;
+  entity_type: string;
+  label?: string;
+  registration_id?: string;
+};
+
+export type ReraEvidenceClaimValue =
+  | { type: "boolean"; data: boolean }
+  | { type: "number"; data: number }
+  | { type: "text" | "date" | "document_ref"; data: string }
+  | { type: "money"; data: { amount: string; currency: string } }
+  | { type: "entity_ref"; data: { entity_id: string; entity_type: string } };
+
+export type ReraEvidenceClaim = {
+  claim_id: string;
+  subject: { entity_id: string; entity_type: string };
+  predicate: string;
+  value: ReraEvidenceClaimValue;
+  unit?: string;
+  effective_time?: { start?: string; end?: string; precision: string };
+  assertion_mode: "registry_record" | "promoter_declaration" | "complainant_allegation" | "authority_order" | "system_derivation";
+  source_trust: string;
+  extraction_confidence: number;
+  validation_state: "accepted" | "quarantined";
+  visibility: "public" | "restricted";
+  evidence: Array<{
+    source_record_id: string;
+    receipt_id: string;
+    capture_id: string;
+    locator: string;
+    parser_version: string;
+  }>;
+  derivation?: { rule_id: string; rule_version: string; input_claim_ids: string[] };
+};
+
+export type ReraEvidenceEvent = {
+  event_id: string;
+  registration_id: string;
+  event_type: string;
+  date: string;
+  claim_ids: string[];
+};
+
+export type ReraEvidenceSeries = {
+  series_id: string;
+  registration_id: string;
+  series_type: string;
+  points: Array<{
+    point_id: string;
+    effective_at: string;
+    quarter?: string;
+    financial_year?: string;
+    tower_count?: number;
+    total_units?: number;
+    booked_units?: number;
+    unsold_units?: number;
+    claim_ids: string[];
+  }>;
+};
+
+export type ReraEvidenceDiscrepancy = {
+  registration_id: string;
+  rule_id: string;
+  rule_version: string;
+  comparisons: Array<{
+    id: string;
+    unit: string;
+    relationship: "matching_values" | "different_values";
+    left: Array<{ claim_id: string; predicate: string; value: number }>;
+    right: Array<{ claim_id: string; predicate: string; value: number }>;
+    observed_deltas: number[];
+    input_claim_ids: string[];
+  }>;
+};
+
+export type ReraEvidenceCoverage = {
+  source_section: string;
+  record_count: number;
+  latest_observed_at: string;
+};
+
+export type ReraEvidenceSource = {
+  receipt_id: string;
+  capture_id: string;
+  source_url: string;
+  captured_at: string;
+  content_type: string;
+};
+
+export type ReraReportSurface = {
+  version: number;
+  sections: ReraReportSurfaceSection[];
+};
+
+export type ReraReportSurfaceSection = {
   id: string;
   title: string;
-  facts: ReraReportFact[];
-};
-
-export type ReraReportFact = {
-  key: string;
-  label: string;
-  value: string;
-  tone: "positive" | "watch" | "neutral" | "risk" | "caution" | string;
-  labels: string[];
-  source_url?: string;
-  confidence: number;
-  learned_at: string;
-};
-
-export type ReraCompareItem = {
-  key: string;
-  label: string;
-  value: string;
-  tone: "positive" | "watch" | "neutral" | string;
-  labels: string[];
-  source_card_id?: string;
-};
-
-export type ReraComplaintSection = {
-  scope: string;
-  label: string;
-  total: number;
-  open: number;
-  disposed: number;
-  top_themes: ReraComplaintTheme[];
-  fine_theme_counts: Record<string, number>;
-  sample_subjects: string[];
-  confidence: number;
-  validation_notes: string[];
-};
-
-export type ReraComplaintTheme = {
-  label: string;
-  count: number;
-};
-
-export type ReraDocumentSection = {
-  group: string;
-  label: string;
-  count: number;
-  kinds: string[];
-  preview_available_count: number;
-  hidden_count: number;
-  items: ReraDocumentLink[];
-};
-
-export type ReraDocumentLink = {
-  artifact_id: string;
-  label: string;
-  kind: string;
-  source_url: string;
-  source_field_label?: string;
-};
-
-export type ReraScheduleSection = {
-  group: string;
-  label: string;
-  rows: ReraScheduleRow[];
-};
-
-export type ReraScheduleRow = {
-  label: string;
-  available?: boolean;
-  area_sqm?: number;
-  value?: string;
-  confidence?: number;
-};
-
-export type ReraTimeline = {
-  start_date?: string;
-  original_completion_date?: string;
-  completion_date?: string;
-  delay_months?: number;
-};
-
-export type ReraLegalCheck = {
-  key: string;
-  label: string;
-  value: string;
-  tone: "positive" | "watch" | "neutral" | string;
-};
-
-export type ReraDossierSource = {
-  registered: boolean;
-  registration_number?: string;
-  status?: string;
-  portal_url?: string;
-  last_verified?: string;
+  renderer: "fact_list" | "timeline" | "series" | "table" | "documents";
+  selectors: Array<{ key: string; label: string; format?: string }>;
+  empty_behavior: "omit";
 };
 
 export type ReraDecisionCard = {

@@ -1,11 +1,17 @@
 import type {
-  ReraCompareItem,
-  ReraDossier,
-  ReraDocumentSection,
-  ReraReportFact,
-  ReraReportSection,
+  ReraEvidenceClaim,
+  ReraEvidenceClaimValue,
+  ReraEvidenceProjection,
+  ReraReportSurfaceSection,
 } from "./types.ts";
-import type { NotebookLabelId } from "./notebook.ts";
+
+export type ReraDisplayFact = {
+  id: string;
+  label: string;
+  value: string;
+  assertion: string;
+  claims: ReraEvidenceClaim[];
+};
 
 export function knownText(value?: string | null): string | null {
   const normalized = value?.trim();
@@ -26,15 +32,6 @@ export function displayName(value: string): string {
     });
 }
 
-function titleLabel(value: string): string {
-  const keepUpper = new Set(["bhk", "itpl", "jp", "kr", "noc", "rera", "bbmp", "bda"]);
-  return value.split(/\s+/).map((word) => {
-    const lower = word.toLowerCase();
-    if (keepUpper.has(lower)) return lower.toUpperCase();
-    return lower.charAt(0).toUpperCase() + lower.slice(1);
-  }).join(" ");
-}
-
 export function httpUrl(value?: string): string | null {
   const known = knownText(value);
   if (!known) return null;
@@ -46,96 +43,101 @@ export function httpUrl(value?: string): string | null {
   }
 }
 
-export function toneClass(tone?: string): string {
-  if (!tone || tone === "neutral" || tone === "default") return "";
-  return `is-${tone}`;
-}
-
-export function kindLabel(value: string): string {
-  const normalized = value.replace(/[_-]+/g, " ").trim();
-  return normalized ? titleLabel(displayName(normalized)) : "Document";
-}
-
-export function safeLabels(labels: string[] | undefined, key: string): NotebookLabelId[] {
-  const next = labels?.filter(Boolean) ?? [];
-  if (next.length > 0) return [...new Set(next)].slice(0, 4);
-  const keyText = key.toLowerCase();
-  if (keyText.includes("complaint")) return ["complaints", "risk", "legal"];
-  if (keyText.includes("delay") || keyText.includes("litigation")) return ["risk", "legal"];
-  return ["legal"];
-}
-
-function compareItemToFact(item: ReraCompareItem, dossier: ReraDossier): ReraReportFact {
-  return {
-    key: item.key,
-    label: item.label,
-    value: item.value,
-    tone: item.tone,
-    labels: safeLabels(item.labels, item.key),
-    confidence: 1,
-    learned_at: dossier.source.last_verified ?? "",
-  };
-}
-
-export function reportSections(dossier: ReraDossier): ReraReportSection[] {
-  if (dossier.fact_sections?.length) return dossier.fact_sections;
-
-  const facts = dossier.compare_items
-    .filter((item) => knownText(item.value))
-    .map((item) => compareItemToFact(item, dossier));
-
-  return facts.length > 0 ? [{ id: "facts", title: "Facts", facts }] : [];
-}
-
-function isAddressFact(fact: ReraReportFact): boolean {
-  const hay = `${fact.key} ${fact.label}`.toLowerCase();
-  return hay.includes("address") || hay.includes("locality");
-}
-
-function isCoordinateFact(fact: ReraReportFact): boolean {
-  const hay = `${fact.key} ${fact.label}`.toLowerCase();
-  return /lat|lng|coord/.test(hay);
-}
-
-/** Round noisy portal coordinates for a calm secondary line. */
-export function formatReraCoordinates(value: string): string | null {
-  const known = knownText(value);
-  if (!known) return null;
-  const parts = known.split(/[,\s]+/).map((part) => Number(part)).filter((n) => Number.isFinite(n));
-  if (parts.length >= 2) {
-    return `${parts[0]!.toFixed(5)}, ${parts[1]!.toFixed(5)}`;
+export function selectorMatches(selector: string, candidate: string): boolean {
+  const normalizedSelector = selector.trim().toLowerCase();
+  const normalizedCandidate = candidate.trim().toLowerCase();
+  if (normalizedSelector.endsWith("*")) {
+    return normalizedCandidate.startsWith(normalizedSelector.slice(0, -1));
   }
-  return known;
+  return normalizedSelector === normalizedCandidate;
 }
 
-export type LocationPresentation = {
-  address: ReraReportFact | null;
-  coordinates: ReraReportFact | null;
-  coordinatesDisplay: string | null;
-  otherFacts: ReraReportFact[];
-};
-
-export function presentLocationFacts(facts: ReraReportFact[]): LocationPresentation {
-  const address = facts.find(isAddressFact) ?? null;
-  const coordinates = facts.find((fact) => fact !== address && isCoordinateFact(fact)) ?? null;
-  const otherFacts = facts.filter((fact) => fact !== address && fact !== coordinates);
-  return {
-    address,
-    coordinates,
-    coordinatesDisplay: coordinates ? formatReraCoordinates(coordinates.value) : null,
-    otherFacts,
-  };
+export function sectionHasEvidence(
+  section: ReraReportSurfaceSection,
+  evidence: ReraEvidenceProjection,
+): boolean {
+  return section.selectors.some(({ key }) => {
+    if (key.startsWith("claim:")) {
+      return evidence.claims.some((claim) => selectorMatches(key, `claim:${claim.predicate}`));
+    }
+    if (key.startsWith("event:")) {
+      return evidence.events.some((event) => selectorMatches(key, `event:${event.event_type}`));
+    }
+    if (key.startsWith("series:")) {
+      const seriesKey = key.split(".", 1)[0]!;
+      return evidence.series.some((series) => selectorMatches(seriesKey, `series:${series.series_type}`));
+    }
+    if (key.startsWith("entity:")) {
+      return evidence.entities.some((entity) => selectorMatches(key, `entity:${entity.entity_type}`));
+    }
+    return false;
+  });
 }
 
-export function visibleDocumentSections(sections: ReraDocumentSection[]): ReraDocumentSection[] {
-  return sections
-    .map((section) => {
-      const items = section.items?.filter((item) => httpUrl(item.source_url)) ?? [];
-      return {
-        ...section,
-        count: items.length,
-        items,
-      };
-    })
-    .filter((section) => section.items.length > 0);
+export function claimsForSelector(
+  claims: ReraEvidenceClaim[],
+  selector: string,
+  subjectId?: string,
+): ReraEvidenceClaim[] {
+  return claims.filter((claim) => (
+    (!subjectId || claim.subject.entity_id === subjectId)
+    && selectorMatches(selector, `claim:${claim.predicate}`)
+  ));
+}
+
+export function claimValueText(value: ReraEvidenceClaimValue, format?: string): string {
+  if (value.type === "boolean") return value.data ? "Yes" : "No";
+  if (value.type === "number") {
+    const number = value.data.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+    return format === "square_metres" ? `${number} m²` : number;
+  }
+  if (value.type === "money") return `${value.data.currency} ${value.data.amount}`;
+  if (value.type === "entity_ref") return value.data.entity_id;
+  return value.data;
+}
+
+export function assertionLabel(mode: ReraEvidenceClaim["assertion_mode"]): string {
+  switch (mode) {
+    case "registry_record": return "Registry record";
+    case "promoter_declaration": return "Promoter declaration";
+    case "complainant_allegation": return "Allegation";
+    case "authority_order": return "Authority order";
+    case "system_derivation": return "Calculated from filed records";
+  }
+}
+
+export function displayFactsForSection(
+  section: ReraReportSurfaceSection,
+  evidence: ReraEvidenceProjection,
+): ReraDisplayFact[] {
+  const grouped = new Map<string, ReraDisplayFact>();
+  for (const selector of section.selectors.filter(({ key }) => key.startsWith("claim:"))) {
+    for (const claim of claimsForSelector(evidence.claims, selector.key)) {
+      const value = claimValueText(claim.value, selector.format);
+      const key = `${claim.subject.entity_id}\u0000${claim.predicate}\u0000${value}`;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.claims.push(claim);
+      } else {
+        grouped.set(key, {
+          id: claim.claim_id,
+          label: selector.label,
+          value,
+          assertion: assertionLabel(claim.assertion_mode),
+          claims: [claim],
+        });
+      }
+    }
+  }
+  return [...grouped.values()].sort((left, right) => left.label.localeCompare(right.label));
+}
+
+export function formatReraDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
 }

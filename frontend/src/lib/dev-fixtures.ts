@@ -674,6 +674,11 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
       community_notes: area.community_notes,
     },
     similar_properties: fixtureProperties.filter((property) => property.id !== card.id && property.area === card.area).slice(0, 3),
+    rera_report_ref: {
+      registration_ids: [],
+      href: `/property/${card.id}/rera`,
+      availability: card.root_source === "rera" ? "partial" : "unavailable",
+    },
     transparency_score: {
       overall: Math.round(trust.overall * 100),
       components: [
