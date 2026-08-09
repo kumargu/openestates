@@ -13,22 +13,26 @@ The graph reports what the registry and parties recorded, when they recorded
 it, and where records differ. It does not produce legal, safety, title, or
 investment verdicts.
 
-## Implemented foundations
+## Implemented pipeline
 
 - **L0 `rera_receipts`** stores content-addressed raw bytes, canonical URLs,
-  capture times, crawl runs, and stable registration identities.
+  capture times, crawl runs, and stable registration identities. Scoped runs
+  reuse provenance-complete captures unless refresh is explicitly forced.
 - **L1 `rera_source_records`** preserves raw labels and values in typed Parquet
   tables. Every accepted row requires a registration number, parser version,
-  source locator, and exact receipt/capture lineage.
-- Both assets are manual, parallel backfill roots. They do not alter the
-  legacy serving bundle or property pages.
-
-## Next: L2 canonical claims
-
-Each claim will contain a typed subject, predicate, scalar or relation value,
-effective time, assertion mode, source trust, validation state, visibility,
-and receipt evidence. Source claims are immutable assertions; derived claims
-will name their rule version and every input claim.
+  source locator, and exact receipt/capture lineage. Exact catalog relations
+  are stored separately from registration facts.
+- **L2 `rera_claims`** materializes typed, registration-scoped public claims
+  with assertion mode, trust, validation state, visibility, and complete
+  receipt evidence.
+- **Serving projection** stores RERA evidence inside the existing versioned
+  search bundle. It contains entities, claims, timelines, quarterly series,
+  inventory reconciliation, coverage, and a public source index.
+- **Rust API** serves `GET /api/properties/{id}/rera` as `{ evidence, surface }`.
+  Property Detail receives only `rera_report_ref` and no longer reconstructs
+  a flattened dossier.
+- **Dedicated report** renders only configured, present sections and provides
+  keyboard-accessible source drill-down. Property Detail keeps one link to it.
 
 Rules:
 
@@ -61,13 +65,48 @@ Every product must expose its rule version and input claim IDs. Missing input
 means the product is omitted or marked partial; it never becomes a favourable
 default.
 
-## Evidence migration comparison
+## Ten-project proof
 
-Before the new report replaces the legacy RERA model, each backfill emits a
-machine-readable comparison artifact. It is an audit tool, not a production
-fallback and not a requirement that the old flattened data "wins."
+An unpromoted scoped run proved the pipeline over ten registrations while
+retaining the current knowledge-graph snapshot in the same serving bundle:
 
-For each registration and supported facet, it records:
+```text
+run_id: ea929fb4-0a0e-4274-9607-36a88d97e0bf
+receipts: 11
+source records: 152
+claims: 597
+RERA serving rows: 10
+promoted: false
+```
+
+Observed richness:
+
+| Project | Claims | Inventory configurations | QPR points | Documents | Differences |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Godrej Lakeside Orchard | 107 | 7 | 3 | 7 | 1 |
+| Birla Tisya | 69 | 4 | 3 | 4 | 0 |
+| SNN Clermont | 336 | 55 | 0 | 0 | 0 |
+| Seven other registrations | 85 | 6 | 0 | 0 | 0 |
+
+Godrej demonstrates the intended neutral correlation behavior: 698 declared
+homes reconcile exactly, while 65,100 m² project carpet and 65,096 m²
+inventory carpet remain separate source claims with a displayed 4 m²
+difference. No score or legal/investment conclusion is produced.
+
+Eight of the ten registrations map to societies in the current runtime
+catalog. Godrej Lakeside Orchard and Prestige Jindal City Phase-I remain
+data-only until those entities enter the canonical catalog; the pipeline does
+not fabricate property listings for them.
+
+## Remaining expansion
+
+The current parser deliberately records partial coverage. Next source-depth
+work should extend the same typed path for complaints and authority orders,
+extensions, approvals beyond QPR document metadata, and allowlisted financial
+declarations. Unknown source rows must remain retained or explicitly covered
+by a source warning.
+
+When comparing old and new output, use a machine-readable audit artifact with:
 
 ```text
 registration_id
@@ -86,16 +125,22 @@ Any difference that changes a buyer-facing value needs an explicit resolution;
 the new evidence pipeline may correctly retain multiple values where the old
 model had flattened one.
 
-## Cutover sequence
+The old flattened value is diagnostic input only; it is never authoritative
+and no compatibility adapter is required.
 
-1. Backfill K-RERA listing, detail, QPR, and document receipts.
-2. Extend L1 parsers for every receipt type and retain unknown rows.
-3. Promote L2 claims only after lineage, identity, privacy, and fixture gates.
-4. Materialize correlation products and a consumer-neutral evidence bundle.
-5. Human-review evidence richness against the fixture corpus.
-6. Replace `/property/:id/rera` with the dedicated report.
-7. Remove `ReraInfo`, `ReraDossier`, legacy decision labels, and their
-   flattened fact materializers once the new report is promoted.
+## Promotion sequence
+
+1. Extend L1 coverage while preserving all unknown rows and source warnings.
+2. Add complaint/order and extension fixtures with privacy assertions.
+3. Run the scoped proof against existing catalog societies and review the
+   resulting report at desktop and mobile widths.
+4. Compare supported facets against the old flattened fields and explain each
+   difference without requiring parity.
+5. Run full Rust, Python, frontend, deterministic, privacy, and smoke gates.
+6. Promote the complete search bundle atomically; do not publish a separate
+   RERA pointer.
+7. Remove the remaining flattened `ReraInfo` and decision-label consumers when
+   unrelated Home Plan work has migrated to durable generic facts.
 
 Property Detail keeps only a compact link to the report until the dedicated
 report proves the data is rich enough for carefully selected reuse.
