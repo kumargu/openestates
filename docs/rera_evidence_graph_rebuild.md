@@ -61,6 +61,31 @@ Every product must expose its rule version and input claim IDs. Missing input
 means the product is omitted or marked partial; it never becomes a favourable
 default.
 
+## Evidence migration comparison
+
+Before the new report replaces the legacy RERA model, each backfill emits a
+machine-readable comparison artifact. It is an audit tool, not a production
+fallback and not a requirement that the old flattened data "wins."
+
+For each registration and supported facet, it records:
+
+```text
+registration_id
+facet
+legacy_value / legacy_fact_ids
+new_source_values / source_record_ids
+new_claim_ids
+classification
+resolution
+```
+
+Classifications are `legacy_missing`, `new_missing`, `same_value`,
+`normalization_change`, `scope_correction`, `source_changed`, `conflict`, or
+`requires_review`. Counts are reported by parser version and receipt capture.
+Any difference that changes a buyer-facing value needs an explicit resolution;
+the new evidence pipeline may correctly retain multiple values where the old
+model had flattened one.
+
 ## Cutover sequence
 
 1. Backfill K-RERA listing, detail, QPR, and document receipts.
