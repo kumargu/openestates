@@ -527,6 +527,15 @@ pub fn openestates_registry() -> AssetRegistry {
 pub fn default_openestates_registry() -> AssetRegistry {
     AssetRegistry::new(vec![
         asset(
+            "rera_receipts",
+            AssetStage::Raw,
+            "Immutable, content-addressed K-RERA listing, detail, QPR, and document receipts.",
+            &[],
+            RefreshCadence::Manual,
+            CostTier::Free,
+            TrustTier::Root,
+        ),
+        asset(
             "rera_registry_monthly",
             AssetStage::Raw,
             "Monthly RERA registry snapshot for canonical project discovery.",

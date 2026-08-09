@@ -93,11 +93,6 @@ pub use media::{
     ExternalImageSnapshotManifest, ExternalImagesWeeklyInput, MediaAssetError,
     MediaAssetMaterializer, EXTERNAL_IMAGES_WEEKLY_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
 };
-pub use rera_evidence::{
-    read_rera_receipt_records, rera_registration_identity, ReraEvidenceError, ReraReceiptInput,
-    ReraReceiptKind, ReraReceiptRecord, ReraReceiptsInput, ReraReceiptsMaterializer,
-    ReraReceiptsQualityReport, RERA_RECEIPTS_ASSET_ID,
-};
 pub use osm_power::{
     canonicalize_osm_power_infrastructure_input, osm_power_line_facts_input, OsmPowerAssetError,
     OsmPowerInfrastructureInput, OsmPowerLineObservationRecord, OSM_POWER_LINE_FACTS_ASSET_ID,
@@ -132,6 +127,12 @@ pub use rera::{
     CanonicalSocietyMaterializer, CanonicalSocietyRows, ReraAssetError, ReraCanonicalMappingRecord,
     ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
     CANONICAL_SOCIETY_NODES_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+};
+pub use rera_evidence::{
+    read_rera_receipt_records, rera_registration_identity, ReraEvidenceError, ReraReceiptInput,
+    ReraReceiptKind, ReraReceiptRecord, ReraReceiptSourceRecord, ReraReceiptsInput,
+    ReraReceiptsMaterializer, ReraReceiptsQualityReport, ReraReceiptsSourceInput,
+    RERA_RECEIPTS_ASSET_ID,
 };
 pub use rera_plans::{
     rera_project_plan_frames_input, ReraPlanFramesAssetError, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,

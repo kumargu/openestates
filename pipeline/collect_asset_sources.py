@@ -20,7 +20,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-from pipeline.skills.fetch_rera import LISTING_CACHE_PATH, LISTING_URL, scrape_rera_listing
+from pipeline.skills.fetch_rera import (
+    LISTING_CACHE_PATH,
+    LISTING_RAW_CACHE_PATH,
+    LISTING_URL,
+    scrape_rera_listing,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -115,6 +120,7 @@ def annotation_from_registry(fact_key, skill_scoring=None):
     }
 
 RERA_REGISTRY_MONTHLY = "rera_registry_monthly"
+RERA_RECEIPTS = "rera_receipts"
 GOOGLE_PLACES_WEEKLY = "google_places_weekly"
 GOOGLE_NEARBY_PLACES_WEEKLY = "google_nearby_places_weekly"
 EXTERNAL_LISTINGS_WEEKLY = "external_listings_weekly"
@@ -136,6 +142,7 @@ out body;
 """.strip()
 SUPPORTED_ASSETS = frozenset(
     (
+        RERA_RECEIPTS,
         RERA_REGISTRY_MONTHLY,
         GOOGLE_PLACES_WEEKLY,
         GOOGLE_NEARBY_PLACES_WEEKLY,
@@ -168,6 +175,11 @@ def collect_asset_sources(
             output[RERA_REGISTRY_MONTHLY] = collect_rera_registry(request, rera_fetch)
         except Exception as error:
             record_source_failure(source_failures, [RERA_REGISTRY_MONTHLY], error)
+    if RERA_RECEIPTS in requested:
+        try:
+            output[RERA_RECEIPTS] = collect_rera_receipts(request)
+        except Exception as error:
+            record_source_failure(source_failures, [RERA_RECEIPTS], error)
     google_address_input = None
     google_requested = (
         GOOGLE_PLACES_WEEKLY in requested or GOOGLE_NEARBY_PLACES_WEEKLY in requested
@@ -2274,6 +2286,46 @@ def fetch_rera_listing_snapshot():
         except (OSError, ValueError, TypeError):
             logger.warning("Could not read RERA cache observation timestamp")
     return entries, observed_at
+
+
+def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Emit raw K-RERA listing evidence for the manual receipt backfill asset.
+
+    The content-addressed Rust materializer owns durable writes. Detail, QPR,
+    and document receipts will join this payload only after their parsers read
+    the new L1 contract; legacy fact rows are never reconstructed as receipts.
+    """
+    if not LISTING_RAW_CACHE_PATH.exists():
+        scrape_rera_listing(force=True)
+    if not LISTING_RAW_CACHE_PATH.exists():
+        raise ValueError("K-RERA listing raw receipt was not captured")
+
+    observed_at = datetime.now(timezone.utc).isoformat()
+    if LISTING_CACHE_PATH.exists():
+        try:
+            cached = json.loads(LISTING_CACHE_PATH.read_text())
+            observed_at = str(cached.get("cached_at") or observed_at)
+        except (OSError, ValueError, TypeError):
+            logger.warning("Could not read K-RERA listing receipt timestamp")
+    body = LISTING_RAW_CACHE_PATH.read_bytes()
+    if not body:
+        raise ValueError("K-RERA listing raw receipt is empty")
+    return {
+        "snapshot_date": observed_at[:10],
+        "receipts": [
+            {
+                "kind": "registry_listing",
+                "source_url": LISTING_URL,
+                "content_type": "text/html",
+                "body_hex": body.hex(),
+                "captured_at": observed_at,
+                "crawl_run_id": "rera-listing-{}".format(observed_at[:10]),
+            }
+        ],
+        "source_watermarks": [
+            {"source": "karnataka_rera_listing_receipt", "high_watermark": observed_at}
+        ],
+    }
 
 
 def collect_reddit_assets(

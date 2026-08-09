@@ -21,6 +21,7 @@ from pipeline.collect_asset_sources import (
     google_nearby_collection_categories,
     groundwater_zones_from_kml,
     collect_reddit_assets,
+    collect_rera_receipts,
     collect_rera_registry,
     google_society_inputs,
     reddit_society_inputs,
@@ -85,6 +86,28 @@ class CollectAssetSourcesTest(unittest.TestCase):
             os.environ["OPENESTATES_SKIP_LOCAL_SOCIETY_PHOTO_COLLECTION"] = (
                 self._old_skip_local_society_photo_collection
             )
+
+    def test_manual_rera_receipt_source_preserves_raw_listing_bytes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            listing_cache = root / "listing.json"
+            listing_raw = root / "listing.html"
+            listing_cache.write_text(
+                json.dumps({"cached_at": "2026-08-09T10:30:00Z"}),
+                encoding="utf-8",
+            )
+            listing_raw.write_bytes(b"<html>official receipt</html>")
+            with patch("pipeline.collect_asset_sources.LISTING_CACHE_PATH", listing_cache), patch(
+                "pipeline.collect_asset_sources.LISTING_RAW_CACHE_PATH", listing_raw
+            ):
+                payload = collect_rera_receipts({"planned_at": "2026-08-09T11:00:00Z"})
+
+        self.assertEqual(payload["snapshot_date"], "2026-08-09")
+        self.assertEqual(payload["receipts"][0]["kind"], "registry_listing")
+        self.assertEqual(
+            bytes.fromhex(payload["receipts"][0]["body_hex"]),
+            b"<html>official receipt</html>",
+        )
 
     def test_rera_detail_collection_is_scoped_and_preserves_alias_lineage(self):
         request = {
