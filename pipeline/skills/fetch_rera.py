@@ -38,6 +38,7 @@ SEARCH_URL = f"{RERA_BASE}/projectViewDetails"
 DETAIL_URL = f"{RERA_BASE}/projectDetails"
 
 LISTING_CACHE_PATH = Path("data/cache/skills/rera_listing.json")
+LISTING_RAW_CACHE_PATH = Path("data/cache/skills/rera_listing.html")
 LISTING_CACHE_TTL_DAYS = 7
 
 DETAIL_CACHE_DIR = Path("data/cache/skills/rera_details")
@@ -278,14 +279,17 @@ class ReraSession:
             logger.error("Failed to initialize RERA session: %s", e)
             raise
 
-    def get(self, url: str, timeout: int = 60) -> str:
+    def get_bytes(self, url: str, timeout: int = 60) -> bytes:
         """GET request with session cookies."""
         self._ensure_session()
         req = Request(url, headers={"User-Agent": self._USER_AGENT})
         with self.opener.open(req, timeout=timeout) as resp:
-            return resp.read().decode("utf-8", errors="replace")
+            return resp.read()
 
-    def post(self, url: str, data: dict, ajax: bool = False, timeout: int = 60) -> str:
+    def get(self, url: str, timeout: int = 60) -> str:
+        return self.get_bytes(url, timeout=timeout).decode("utf-8", errors="replace")
+
+    def post_bytes(self, url: str, data: dict, ajax: bool = False, timeout: int = 60) -> bytes:
         """POST request with session cookies."""
         self._ensure_session()
         encoded = urlencode(data).encode()
@@ -299,7 +303,12 @@ class ReraSession:
             headers["Accept"] = "text/html, */*; q=0.01"
         req = Request(url, data=encoded, headers=headers, method="POST")
         with self.opener.open(req, timeout=timeout) as resp:
-            return resp.read().decode("utf-8", errors="replace")
+            return resp.read()
+
+    def post(self, url: str, data: dict, ajax: bool = False, timeout: int = 60) -> str:
+        return self.post_bytes(url, data, ajax=ajax, timeout=timeout).decode(
+            "utf-8", errors="replace"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -537,7 +546,8 @@ def scrape_rera_listing(force: bool = False) -> List[ReraListingEntry]:
     # Fetch fresh listing page (can be ~6MB)
     logger.info("Fetching RERA listing page (this may take a moment)...")
     session = ReraSession()
-    body = session.get(LISTING_URL, timeout=120)
+    body_bytes = session.get_bytes(LISTING_URL, timeout=120)
+    body = body_bytes.decode("utf-8", errors="replace")
 
     # Parse the four JS arrays
     lists = {}
@@ -583,6 +593,7 @@ def scrape_rera_listing(force: bool = False) -> List[ReraListingEntry]:
             for e in entries
         ],
     }, indent=2))
+    LISTING_RAW_CACHE_PATH.write_bytes(body_bytes)
 
     logger.info("Scraped RERA listing: %d entries", len(entries))
     return entries

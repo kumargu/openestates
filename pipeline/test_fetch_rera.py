@@ -1,15 +1,45 @@
 import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from pipeline.skills.fetch_rera import (
     ReraProjectDetail,
     ReraSearchResult,
     parse_rera_detail,
     rera_detail_to_facts,
+    scrape_rera_listing,
 )
 
 
 class FetchReraSkillTest(unittest.TestCase):
+    def test_listing_cache_preserves_exact_raw_receipt_bytes(self):
+        body = b"""
+        applicationNameList.push('ACK-1')
+        applicationNameList2.push('PRM-1')
+        applicationNameList3.push('Evidence Project')
+        applicationNameList4.push('Evidence Builder')
+        """
+
+        class FakeSession:
+            def get_bytes(self, url, timeout=60):
+                assert url == "https://rera.karnataka.gov.in/viewAllProjects?language=en"
+                assert timeout == 120
+                return body
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_dir = Path(temp_dir)
+            listing_cache = cache_dir / "listing.json"
+            listing_raw = cache_dir / "listing.html"
+            with patch("pipeline.skills.fetch_rera.LISTING_CACHE_PATH", listing_cache), patch(
+                "pipeline.skills.fetch_rera.LISTING_RAW_CACHE_PATH", listing_raw
+            ), patch("pipeline.skills.fetch_rera.ReraSession", FakeSession):
+                entries = scrape_rera_listing(force=True)
+
+            self.assertEqual(entries[0].registration_number, "PRM-1")
+            self.assertEqual(listing_raw.read_bytes(), body)
+
     def test_rera_records_are_qualified_and_do_not_emit_sensitive_finance(self):
         detail = ReraProjectDetail(
             registration_number="PRM/KA/RERA/1251/446/PR/200811/003528",
