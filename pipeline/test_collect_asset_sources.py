@@ -244,7 +244,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
             declaration_values,
             [{"unit_count": 698}, {"total_carpet_area_sqm": 65100.0}],
         )
-        inventory_values = [json.loads(row["raw_value"]) for row in by_kind["tower_inventory"]]
+        inventory_values = [json.loads(row["raw_value"]) for row in by_kind["inventory"]]
         self.assertEqual(
             inventory_values,
             [

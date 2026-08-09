@@ -497,7 +497,7 @@ pub fn claims_from_source_records(
             | ReraSourceRecordKind::WaterServiceDeclaration
             | ReraSourceRecordKind::Completion
             | ReraSourceRecordKind::QuarterlyProgress
-            | ReraSourceRecordKind::TowerInventory => {
+            | ReraSourceRecordKind::Inventory => {
                 claims.extend(project_detail_claims(record)?);
             }
             _ => {}
@@ -690,7 +690,7 @@ fn project_detail_claims(
                 }
             }
         }
-        ReraSourceRecordKind::TowerInventory => {
+        ReraSourceRecordKind::Inventory => {
             let Some(label) = fields
                 .get("inventory_type")
                 .and_then(serde_json::Value::as_str)
@@ -1133,7 +1133,7 @@ mod tests {
         let registration_id = "rera_registration:in-ka:fixture";
         let configuration = ReraSourceRecord {
             record_id: "rera_source_record:sha256:inventory-configuration".to_string(),
-            kind: ReraSourceRecordKind::TowerInventory,
+            kind: ReraSourceRecordKind::Inventory,
             registration_id: registration_id.to_string(),
             normalized_registration_number: "PRM/KA/RERA/FIXTURE".to_string(),
             receipt_id: "rera_receipt:sha256:fixture".to_string(),

@@ -2747,14 +2747,14 @@ def rera_project_detail_source_records(snapshot: Dict[str, Any]) -> List[Dict[st
         row_number = inventory.pop("row_number") or "unknown"
         if inventory["inventory_type"].strip().upper() == "TOTAL":
             add(
-                "tower_inventory",
+                "inventory",
                 "#menu2/development-inventory/total",
                 "Declared inventory aggregate",
                 inventory,
             )
             continue
         add(
-            "tower_inventory",
+            "inventory",
             "#menu2/development-inventory/row-{}".format(row_number),
             "Declared inventory configuration",
             inventory,
