@@ -10,6 +10,7 @@ import json
 import logging
 import math
 import os
+import re
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -121,6 +122,7 @@ def annotation_from_registry(fact_key, skill_scoring=None):
 
 RERA_REGISTRY_MONTHLY = "rera_registry_monthly"
 RERA_RECEIPTS = "rera_receipts"
+RERA_SOURCE_RECORDS = "rera_source_records"
 GOOGLE_PLACES_WEEKLY = "google_places_weekly"
 GOOGLE_NEARBY_PLACES_WEEKLY = "google_nearby_places_weekly"
 EXTERNAL_LISTINGS_WEEKLY = "external_listings_weekly"
@@ -143,6 +145,7 @@ out body;
 SUPPORTED_ASSETS = frozenset(
     (
         RERA_RECEIPTS,
+        RERA_SOURCE_RECORDS,
         RERA_REGISTRY_MONTHLY,
         GOOGLE_PLACES_WEEKLY,
         GOOGLE_NEARBY_PLACES_WEEKLY,
@@ -180,6 +183,11 @@ def collect_asset_sources(
             output[RERA_RECEIPTS] = collect_rera_receipts(request)
         except Exception as error:
             record_source_failure(source_failures, [RERA_RECEIPTS], error)
+    if RERA_SOURCE_RECORDS in requested:
+        try:
+            output[RERA_SOURCE_RECORDS] = collect_rera_source_records(request)
+        except Exception as error:
+            record_source_failure(source_failures, [RERA_SOURCE_RECORDS], error)
     google_address_input = None
     google_requested = (
         GOOGLE_PLACES_WEEKLY in requested or GOOGLE_NEARBY_PLACES_WEEKLY in requested
@@ -2324,6 +2332,81 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
         ],
         "source_watermarks": [
             {"source": "karnataka_rera_listing_receipt", "high_watermark": observed_at}
+        ],
+    }
+
+
+def collect_rera_source_records(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize the immutable listing receipt into registration-summary rows.
+
+    This is intentionally a new L1 parser, not a conversion from old RERA
+    facts. Detail, QPR, document, and order parsers will add their own typed
+    rows as their raw receipts are captured.
+    """
+    if not LISTING_RAW_CACHE_PATH.exists():
+        scrape_rera_listing(force=True)
+    if not LISTING_RAW_CACHE_PATH.exists():
+        raise ValueError("K-RERA listing raw receipt was not captured")
+
+    observed_at = datetime.now(timezone.utc).isoformat()
+    if LISTING_CACHE_PATH.exists():
+        try:
+            cached = json.loads(LISTING_CACHE_PATH.read_text())
+            observed_at = str(cached.get("cached_at") or observed_at)
+        except (OSError, ValueError, TypeError):
+            logger.warning("Could not read K-RERA listing source-record timestamp")
+    body = LISTING_RAW_CACHE_PATH.read_bytes()
+    if not body:
+        raise ValueError("K-RERA listing raw receipt is empty")
+
+    receipt_id = "rera_receipt:sha256:{}".format(hashlib.sha256(body).hexdigest())
+    capture_observed_at = observed_at[:-1] + "+00:00" if observed_at.endswith("Z") else observed_at
+    capture_material = "rera_capture.v1\n{}\n{}\n{}".format(
+        receipt_id, LISTING_URL, capture_observed_at
+    )
+    capture_id = "rera_capture:sha256:{}".format(
+        hashlib.sha256(capture_material.encode("utf-8")).hexdigest()
+    )
+    listing_text = body.decode("utf-8", errors="replace")
+    arrays = {}
+    for suffix in ("", "2", "3", "4"):
+        name = "applicationNameList{}".format(suffix)
+        arrays[name] = re.findall(r"{}\s*\.push\('([^']*)'\)".format(name), listing_text)
+    counts = {name: len(values) for name, values in arrays.items()}
+    if len(set(counts.values())) != 1 or not next(iter(counts.values()), 0):
+        raise ValueError("K-RERA listing arrays are incomplete: {}".format(counts))
+
+    records = []
+    for index, registration_number in enumerate(arrays["applicationNameList2"]):
+        if not registration_number.strip():
+            raise ValueError("K-RERA listing row {} has no registration number".format(index))
+        records.append(
+            {
+                "kind": "registration_summary",
+                "registration_number": registration_number,
+                "receipt_id": receipt_id,
+                "capture_id": capture_id,
+                "source_locator": "applicationNameList[{}]".format(index),
+                "raw_label": "K-RERA listing row",
+                "raw_value": json.dumps(
+                    {
+                        "acknowledgement_number": arrays["applicationNameList"][index],
+                        "registration_number": registration_number,
+                        "project_name": arrays["applicationNameList3"][index],
+                        "promoter_name": arrays["applicationNameList4"][index],
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                "observed_at": observed_at,
+                "parser_version": "rera_listing_source_records.v1",
+            }
+        )
+    return {
+        "snapshot_date": observed_at[:10],
+        "records": records,
+        "source_watermarks": [
+            {"source": "karnataka_rera_listing_source_records", "high_watermark": observed_at}
         ],
     }
 

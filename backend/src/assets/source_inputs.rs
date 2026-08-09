@@ -11,13 +11,13 @@ use super::{
     AssetDagPlan, AssetDagRunManifest, AssetId, AssetRunStepStatus, ExternalImagesWeeklyInput,
     ExternalListingsWeeklyInput, GoogleNearbyPlacesWeeklyInput, GooglePlacesWeeklyInput,
     PlanReason, RedditThreadSnapshotRecord, ReraReceiptsSourceInput, ReraRegistryMonthlyInput,
-    SkillFactAnnotationRecord, SkillFactRecord, SourceWatermark,
+    ReraSourceRecordsInput, SkillFactAnnotationRecord, SkillFactRecord, SourceWatermark,
     BENGALURU_METRO_STATION_FACTS_ASSET_ID, CURRENT_PROJECT_FACTS_ASSET_ID,
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
     EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
     GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
     GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID,
-    RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
     SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID, STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 
@@ -35,6 +35,8 @@ pub struct AssetSourceInputs {
     pub rera_registry_monthly: Option<ReraRegistryMonthlyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rera_receipts: Option<ReraReceiptsSourceInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rera_source_records: Option<ReraSourceRecordsInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reddit_threads_daily: Option<RedditThreadsDailyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -68,6 +70,7 @@ impl AssetSourceInputs {
     pub fn supported_asset_ids() -> Vec<AssetId> {
         [
             RERA_RECEIPTS_ASSET_ID,
+            RERA_SOURCE_RECORDS_ASSET_ID,
             RERA_REGISTRY_MONTHLY_ASSET_ID,
             GOOGLE_PLACES_WEEKLY_ASSET_ID,
             GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
@@ -87,6 +90,7 @@ impl AssetSourceInputs {
         matches!(
             asset_id.as_str(),
             RERA_RECEIPTS_ASSET_ID
+                | RERA_SOURCE_RECORDS_ASSET_ID
                 | RERA_REGISTRY_MONTHLY_ASSET_ID
                 | GOOGLE_PLACES_WEEKLY_ASSET_ID
                 | GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID

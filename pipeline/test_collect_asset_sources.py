@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import tempfile
@@ -22,6 +23,7 @@ from pipeline.collect_asset_sources import (
     groundwater_zones_from_kml,
     collect_reddit_assets,
     collect_rera_receipts,
+    collect_rera_source_records,
     collect_rera_registry,
     google_society_inputs,
     reddit_society_inputs,
@@ -107,6 +109,42 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(
             bytes.fromhex(payload["receipts"][0]["body_hex"]),
             b"<html>official receipt</html>",
+        )
+
+    def test_rera_source_records_parse_the_raw_listing_with_receipt_lineage(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            listing_cache = root / "listing.json"
+            listing_raw = root / "listing.html"
+            listing_cache.write_text(
+                json.dumps({"cached_at": "2026-08-09T10:30:00Z"}),
+                encoding="utf-8",
+            )
+            listing_raw.write_bytes(
+                b"applicationNameList.push('ACK-1');"
+                b"applicationNameList2.push('PRM/KA/RERA/1251/446/PR/200811/003528');"
+                b"applicationNameList3.push('Fixture Project');"
+                b"applicationNameList4.push('Fixture Promoter');"
+            )
+            with patch("pipeline.collect_asset_sources.LISTING_CACHE_PATH", listing_cache), patch(
+                "pipeline.collect_asset_sources.LISTING_RAW_CACHE_PATH", listing_raw
+            ):
+                payload = collect_rera_source_records({"planned_at": "2026-08-09T11:00:00Z"})
+
+        self.assertEqual(payload["snapshot_date"], "2026-08-09")
+        self.assertEqual(len(payload["records"]), 1)
+        row = payload["records"][0]
+        self.assertEqual(row["kind"], "registration_summary")
+        self.assertTrue(row["receipt_id"].startswith("rera_receipt:sha256:"))
+        receipt_id = row["receipt_id"]
+        expected_capture = hashlib.sha256(
+            "rera_capture.v1\n{}\n{}\n2026-08-09T10:30:00+00:00".format(
+                receipt_id, "https://rera.karnataka.gov.in/viewAllProjects?language=en"
+            ).encode("utf-8")
+        ).hexdigest()
+        self.assertEqual(row["capture_id"], "rera_capture:sha256:{}".format(expected_capture))
+        self.assertEqual(
+            json.loads(row["raw_value"])["project_name"], "Fixture Project"
         )
 
     def test_rera_detail_collection_is_scoped_and_preserves_alias_lineage(self):

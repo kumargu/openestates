@@ -31,6 +31,7 @@ pub mod registry;
 pub mod rera;
 pub mod rera_evidence;
 pub mod rera_plans;
+pub mod rera_source_records;
 pub mod run_manifest;
 pub mod skill_facts;
 pub mod source_inputs;
@@ -136,6 +137,11 @@ pub use rera_evidence::{
 };
 pub use rera_plans::{
     rera_project_plan_frames_input, ReraPlanFramesAssetError, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
+};
+pub use rera_source_records::{
+    read_rera_source_records, ReraSourceRecord, ReraSourceRecordInput, ReraSourceRecordKind,
+    ReraSourceRecordsError, ReraSourceRecordsInput, ReraSourceRecordsManifest,
+    ReraSourceRecordsMaterializer, ReraSourceRecordsQualityReport, RERA_SOURCE_RECORDS_ASSET_ID,
 };
 pub use run_manifest::{
     AssetDagResumeLease, AssetDagRunManifest, AssetRunAttempt, AssetRunManifestStore, AssetRunStep,

@@ -23,9 +23,10 @@ use super::{
     MaterializationId, MaterializationRecord, MediaAssetError, MediaAssetMaterializer,
     OsmPowerAssetError, PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
     ProjectEnrichmentMaterializer, ReraAssetError, ReraEvidenceError, ReraPlanFramesAssetError,
-    ReraReceiptsMaterializer, ReraRegistryMaterializer, RunManifestError,
-    SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceEntityResolutionScope,
-    SourceWatermark, StormwaterAssetError, TransitAssetError, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
+    ReraReceiptsMaterializer, ReraRegistryMaterializer, ReraSourceRecordsError,
+    ReraSourceRecordsMaterializer, RunManifestError, SkillFactMaterializeError,
+    SkillFactMaterializer, SkillFactsInput, SourceEntityResolutionScope, SourceWatermark,
+    StormwaterAssetError, TransitAssetError, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
     BENGALURU_METRO_STATION_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
     CANONICAL_SOCIETY_NODES_ASSET_ID, CURRENT_PROJECT_FACTS_ASSET_ID,
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
@@ -34,7 +35,8 @@ use super::{
     GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
     KG_SOCIETY_VIEW_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
     RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
-    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID, STORMWATER_DRAIN_FACTS_ASSET_ID,
+    RERA_SOURCE_RECORDS_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+    STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 
 const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
@@ -1172,6 +1174,10 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::ReraReceipts,
         );
         executors.insert(
+            static_asset_id(RERA_SOURCE_RECORDS_ASSET_ID),
+            BuiltInAssetExecutor::ReraSourceRecords,
+        );
+        executors.insert(
             static_asset_id(RERA_REGISTRY_MONTHLY_ASSET_ID),
             BuiltInAssetExecutor::ReraRegistryMonthly,
         );
@@ -1270,6 +1276,7 @@ impl BuiltInAssetExecutorRegistry {
 #[derive(Clone)]
 enum BuiltInAssetExecutor {
     ReraReceipts,
+    ReraSourceRecords,
     ReraRegistryMonthly,
     CanonicalSocietyNodes,
     ReraLegalFacts,
@@ -1316,6 +1323,35 @@ impl BuiltInAssetExecutor {
                 let record = ReraReceiptsMaterializer::new(context.dag.lake.clone())
                     .materialize_for_run(
                         &input,
+                        context.run_id.clone(),
+                        context.asset_partition.clone(),
+                    )
+                    .await?;
+                Ok(ExecutedAsset::Record(record))
+            }
+            Self::ReraSourceRecords => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let input = context
+                    .options
+                    .source_inputs
+                    .rera_source_records
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let receipts_record =
+                    dependency_record(context.asset_id, &parent_records, RERA_RECEIPTS_ASSET_ID)?;
+                let record = ReraSourceRecordsMaterializer::new(context.dag.lake.clone())
+                    .materialize_for_run(
+                        input,
+                        receipts_record,
                         context.run_id.clone(),
                         context.asset_partition.clone(),
                     )
@@ -2161,6 +2197,7 @@ pub enum AssetDagExecutorError {
     Stormwater(StormwaterAssetError),
     CurrentProjectFacts(CurrentProjectFactsError),
     ReraEvidence(ReraEvidenceError),
+    ReraSourceRecords(ReraSourceRecordsError),
     Rera(ReraAssetError),
     ReraPlanFrames(ReraPlanFramesAssetError),
     CanonicalNodes(super::CanonicalNodesError),
@@ -2253,6 +2290,9 @@ impl fmt::Display for AssetDagExecutorError {
                 write!(f, "current project facts compaction failed: {err}")
             }
             Self::ReraEvidence(err) => write!(f, "RERA evidence asset execution failed: {err}"),
+            Self::ReraSourceRecords(err) => {
+                write!(f, "RERA source record asset execution failed: {err}")
+            }
             Self::GooglePlace(err) => write!(f, "Google place source execution failed: {err}"),
             Self::ProjectEnrichment(err) => {
                 write!(f, "project enrichment execution failed: {err}")
@@ -2507,6 +2547,12 @@ impl From<ReraEvidenceError> for AssetDagExecutorError {
     }
 }
 
+impl From<ReraSourceRecordsError> for AssetDagExecutorError {
+    fn from(err: ReraSourceRecordsError) -> Self {
+        Self::ReraSourceRecords(err)
+    }
+}
+
 impl From<ReraPlanFramesAssetError> for AssetDagExecutorError {
     fn from(err: ReraPlanFramesAssetError) -> Self {
         Self::ReraPlanFrames(err)
@@ -2575,6 +2621,7 @@ fn should_skip_missing_source_input(asset_id: &AssetId, source_inputs: &AssetSou
     }
     match asset_id.as_str() {
         RERA_RECEIPTS_ASSET_ID => source_inputs.rera_receipts.is_none(),
+        RERA_SOURCE_RECORDS_ASSET_ID => source_inputs.rera_source_records.is_none(),
         RERA_REGISTRY_MONTHLY_ASSET_ID => source_inputs.rera_registry_monthly.is_none(),
         GOOGLE_PLACES_WEEKLY_ASSET_ID => source_inputs.google_places_weekly.is_none(),
         GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID => source_inputs.google_nearby_places_weekly.is_none(),

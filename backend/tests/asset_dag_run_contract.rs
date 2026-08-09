@@ -114,6 +114,13 @@ async fn manual_rera_receipts_stay_out_of_normal_runs_until_forced() {
     assert_eq!(receipt_entry.decision, PlanDecision::Skip);
     assert_eq!(receipt_entry.reason, None);
     assert_eq!(receipt_entry.freshness.cadence, RefreshCadence::Manual);
+    let source_record_entry = plan_entry(&normal, "rera_source_records");
+    assert_eq!(source_record_entry.decision, PlanDecision::Skip);
+    assert_eq!(source_record_entry.reason, None);
+    assert_eq!(
+        source_record_entry.freshness.cadence,
+        RefreshCadence::Manual
+    );
 
     let forced_assets = HashSet::from([asset_id("rera_receipts")]);
     let forced = planner

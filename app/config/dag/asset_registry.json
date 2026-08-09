@@ -15,6 +15,20 @@
       }
     },
     {
+      "id": "rera_source_records",
+      "stage": "silver",
+      "description": "Typed, source-preserving K-RERA records with receipt-level lineage.",
+      "dependencies": [
+        "rera_receipts"
+      ],
+      "refresh": "manual",
+      "cost_tier": "free",
+      "trust_tier": "root",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
       "id": "rera_registry_monthly",
       "stage": "raw",
       "description": "Monthly RERA registry snapshot for canonical project discovery.",

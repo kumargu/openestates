@@ -212,7 +212,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
             .iter()
             .filter(|step| step.status == AssetRunStepStatus::Skipped)
             .count(),
-        7
+        8
     );
 }
 
@@ -1743,6 +1743,7 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
         source_entities: Vec::new(),
         source_failures: Default::default(),
         rera_receipts: None,
+        rera_source_records: None,
         rera_registry_monthly: Some(mock_rera_input(now)),
         external_listings_weekly: Some(ExternalListingsWeeklyInput {
             snapshot_date: "2026-07-13".to_string(),
