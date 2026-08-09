@@ -71,16 +71,6 @@ function compactLifecycleLabel(value: string): string {
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
-function displayName(value: string): string {
-  const keepUpper = new Set(["BHK", "ITPL", "JP", "KR"]);
-  return value
-    .replace(/^(\d+(?:\.\d+)?)\s+BHK\s+(?:in|at)\s+/i, "$1 BHK ")
-    .replace(/\b[A-Z][A-Z0-9&.'-]*\b/g, (word) => {
-      if (keepUpper.has(word) || /\d/.test(word)) return word;
-      return word.charAt(0) + word.slice(1).toLowerCase();
-    });
-}
-
 function truncateCopy(value: string, limit = 220): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= limit) return normalized;
@@ -661,7 +651,7 @@ function NearbyHomeCard({
     societyId: property.kg_entity_refs?.society_entity_id,
   });
   const image = propertySceneImageAt(images, sceneIndex, property.hero_image);
-  const title = displayName(property.title);
+  const title = property.title.trim();
   const note = `${property.area} · ${property.bhk} BHK`;
 
   return (
@@ -1125,7 +1115,7 @@ function PropertyPageBody({
     ?.split("·")[0]
     ?.trim();
   const reviewsSections = reviewEvidenceSections(detailEvidenceSections);
-  const displayTitle = displayName(p.title);
+  const displayTitle = p.title.trim();
   const reraReport = data.rera_report_ref.availability === "unavailable"
     ? undefined
     : data.rera_report_ref;

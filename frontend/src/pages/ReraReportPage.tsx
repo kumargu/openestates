@@ -8,7 +8,6 @@ import {
   claimValueText,
   claimsForSelector,
   displayFactsForSection,
-  displayName,
   formatReraDate,
   httpUrl,
   sectionHasEvidence,
@@ -402,7 +401,7 @@ export function ReraReportPage() {
 
   const property = state.detail.property;
   const report = state.report;
-  const title = displayName(property.title);
+  const title = property.title.trim();
   const latestCapture = report.evidence.coverage
     .map((coverage) => coverage.latest_observed_at)
     .sort()

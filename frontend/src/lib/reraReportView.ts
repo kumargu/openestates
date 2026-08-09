@@ -22,16 +22,6 @@ export function knownText(value?: string | null): string | null {
   return normalized;
 }
 
-export function displayName(value: string): string {
-  const keepUpper = new Set(["BHK", "ITPL", "JP", "KR", "NOC", "RERA", "BBMP", "BDA"]);
-  return value
-    .replace(/^(\d+(?:\.\d+)?)\s+BHK\s+(?:in|at)\s+/i, "$1 BHK ")
-    .replace(/\b[A-Z][A-Z0-9&.'-]*\b/g, (word) => {
-      if (keepUpper.has(word) || /\d/.test(word)) return word;
-      return word.charAt(0) + word.slice(1).toLowerCase();
-    });
-}
-
 export function httpUrl(value?: string): string | null {
   const known = knownText(value);
   if (!known) return null;
