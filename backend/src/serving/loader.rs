@@ -9,9 +9,9 @@ use crate::lake::{LakeError, LakeKey, LakeStore};
 
 use super::{
     hydrate_tantivy_index, read_edges_parquet, read_entities_parquet, read_facts_parquet,
-    read_search_metadata_parquet, ParquetReadError, ServingBundleManifest, ServingEdgeRecord,
-    ServingEntityRecord, ServingFactIndex, SpatialServingIndex, TantivyIndexError,
-    TantivyRecallIndex, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    read_rera_evidence_parquet, read_search_metadata_parquet, ParquetReadError, ReraEvidenceIndex,
+    ServingBundleManifest, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex,
+    SpatialServingIndex, TantivyIndexError, TantivyRecallIndex, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 use crate::graph::GraphIndex;
 use crate::search::geo::GeoSearchIndex;
@@ -30,6 +30,7 @@ pub struct LoadedServingBundle {
     pub graph_index: GraphIndex,
     pub recall_index: TantivyRecallIndex,
     pub fact_index: ServingFactIndex,
+    pub rera_evidence_index: ReraEvidenceIndex,
     pub geo_index: GeoSearchIndex,
     pub spatial_index: SpatialServingIndex,
     pub cache_dir: PathBuf,
@@ -111,6 +112,8 @@ impl ServingBundleLoader {
         let aliases = super::types::unique_society_aliases(&entities);
         let mut fact_index = load_fact_index(&self.lake, &manifest).await?;
         fact_index.add_society_aliases(&entities);
+        let mut rera_evidence_index = load_rera_evidence_index(&self.lake, &manifest).await?;
+        rera_evidence_index.add_aliases(&aliases);
         let mut graph_index = GraphIndex::from_serving_edges(&edges);
         graph_index.add_entity_aliases(&aliases);
         let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
@@ -122,6 +125,7 @@ impl ServingBundleLoader {
             graph_index,
             recall_index,
             fact_index,
+            rera_evidence_index,
             geo_index,
             spatial_index,
             cache_dir,
@@ -171,6 +175,20 @@ async fn load_fact_index(
     let facts = read_facts_parquet(&fact_bytes)?;
     let search_metadata = read_search_metadata_parquet(&search_metadata_bytes)?;
     Ok(ServingFactIndex::from_records(facts, search_metadata))
+}
+
+async fn load_rera_evidence_index(
+    lake: &LakeStore,
+    manifest: &ServingBundleManifest,
+) -> Result<ReraEvidenceIndex, ServingBundleLoadError> {
+    let Some(key) = manifest.rera_evidence_parquet_key.as_ref() else {
+        return Ok(ReraEvidenceIndex::default());
+    };
+    let key = LakeKey::new(key.clone()).map_err(ServingBundleLoadError::Key)?;
+    let bytes = lake.get_bytes(&key).await?;
+    Ok(ReraEvidenceIndex::from_records(read_rera_evidence_parquet(
+        &bytes,
+    )?))
 }
 
 fn manifest_key_for_record(

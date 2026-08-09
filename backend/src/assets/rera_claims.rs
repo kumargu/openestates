@@ -8,16 +8,18 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
 use std::sync::Arc;
 
-use arrow::array::{ArrayRef, StringArray};
+use arrow::array::{Array, ArrayRef, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
+use bytes::Bytes;
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::lake::LakeStore;
+use crate::lake::{LakeKey, LakeStore};
 
 use super::{
     read_rera_source_records, ArtifactRef, AssetId, AssetMaterializationStore, AssetPartition,
@@ -516,6 +518,19 @@ impl ReraClaimsMaterializer {
     }
 }
 
+pub async fn read_rera_claims(
+    lake: &LakeStore,
+    record: &MaterializationRecord,
+) -> Result<Vec<ReraClaimV1>, ReraClaimMaterializeError> {
+    let artifact = record
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.key.ends_with("claims/part-00000.parquet"))
+        .ok_or(ReraClaimMaterializeError::MissingClaimsArtifact)?;
+    let bytes = lake.get_bytes(&LakeKey::new(&artifact.key)?).await?;
+    read_claims(bytes)
+}
+
 pub fn claims_from_source_records(
     records: &[ReraSourceRecord],
 ) -> Result<Vec<ReraClaimV1>, ReraClaimMaterializeError> {
@@ -529,7 +544,8 @@ pub fn claims_from_source_records(
             | ReraSourceRecordKind::WaterServiceDeclaration
             | ReraSourceRecordKind::Completion
             | ReraSourceRecordKind::QuarterlyProgress
-            | ReraSourceRecordKind::Inventory => {
+            | ReraSourceRecordKind::Inventory
+            | ReraSourceRecordKind::DocumentApproval => {
                 claims.extend(project_detail_claims(record)?);
             }
             _ => {}
@@ -623,8 +639,9 @@ fn project_detail_claims(
     let effective_time = record
         .filing_at
         .as_ref()
-        .map(|filing_at| ReraClaimEffectiveTime {
-            start: Some(filing_at.clone()),
+        .or(record.effective_at.as_ref())
+        .map(|effective_at| ReraClaimEffectiveTime {
+            start: Some(effective_at.clone()),
             end: None,
             precision: "day".to_string(),
         });
@@ -708,6 +725,20 @@ fn project_detail_claims(
         }
         ReraSourceRecordKind::QuarterlyProgress => {
             for (field, predicate) in [
+                ("quarter", "quarterly_filing_quarter"),
+                ("financial_year", "quarterly_filing_financial_year"),
+            ] {
+                if let Some(value) = fields.get(field).and_then(serde_json::Value::as_str) {
+                    claims.push(declaration(
+                        subject.clone(),
+                        predicate,
+                        ReraClaimValue::Text(value.to_string()),
+                        None,
+                    )?);
+                }
+            }
+            for (field, predicate) in [
+                ("tower_count", "quarterly_reported_tower_count"),
                 ("total_units", "quarterly_reported_total_units"),
                 ("booked_units", "quarterly_reported_booked_units"),
                 ("unsold_units", "quarterly_reported_unsold_units"),
@@ -801,6 +832,21 @@ fn project_detail_claims(
                     "declared_inventory_total_open_terrace_area",
                     Some("square_metres"),
                 ),
+                (
+                    "filed_carpet_area_sqm",
+                    "declared_inventory_filed_carpet_area",
+                    Some("square_metres"),
+                ),
+                (
+                    "filed_balcony_verandah_area_sqm",
+                    "declared_inventory_filed_balcony_verandah_area",
+                    Some("square_metres"),
+                ),
+                (
+                    "filed_open_terrace_area_sqm",
+                    "declared_inventory_filed_open_terrace_area",
+                    Some("square_metres"),
+                ),
             ] {
                 if let Some(value) = fields.get(field).and_then(serde_json::Value::as_f64) {
                     claims.push(declaration(
@@ -808,6 +854,56 @@ fn project_detail_claims(
                         predicate,
                         ReraClaimValue::Number(value),
                         unit,
+                    )?);
+                }
+            }
+            if let Some(value) = fields.get("area_scope").and_then(serde_json::Value::as_str) {
+                claims.push(declaration(
+                    configuration_subject,
+                    "declared_inventory_area_scope",
+                    ReraClaimValue::Text(value.to_string()),
+                    None,
+                )?);
+            }
+        }
+        ReraSourceRecordKind::DocumentApproval => {
+            let Some(url) = fields
+                .get("official_url")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+            else {
+                return Ok(claims);
+            };
+            let document_subject = ReraClaimSubject {
+                entity_id: rera_document_id(&record.registration_id, url),
+                entity_type: "document".to_string(),
+            };
+            claims.push(declaration(
+                document_subject.clone(),
+                "part_of_registration",
+                ReraClaimValue::EntityRef {
+                    entity_id: subject.entity_id,
+                    entity_type: subject.entity_type,
+                },
+                None,
+            )?);
+            claims.push(declaration(
+                document_subject.clone(),
+                "official_document_url",
+                ReraClaimValue::DocumentRef(url.trim().to_string()),
+                None,
+            )?);
+            for (field, predicate) in [
+                ("label", "document_label"),
+                ("quarter", "document_quarter"),
+                ("financial_year", "document_financial_year"),
+            ] {
+                if let Some(value) = fields.get(field).and_then(serde_json::Value::as_str) {
+                    claims.push(declaration(
+                        document_subject.clone(),
+                        predicate,
+                        ReraClaimValue::Text(value.to_string()),
+                        None,
                     )?);
                 }
             }
@@ -832,6 +928,15 @@ fn inventory_configuration_id(registration_id: &str, label: &str) -> String {
         "rera_inventory_configuration:sha256:{}",
         sha256_hex(material.as_bytes())
     )
+}
+
+fn rera_document_id(registration_id: &str, url: &str) -> String {
+    let material = format!(
+        "rera_document.v1\n{}\n{}",
+        registration_id.trim(),
+        url.trim()
+    );
+    format!("rera_document:sha256:{}", sha256_hex(material.as_bytes()))
 }
 
 /// Compare independently filed aggregate project and inventory totals without
@@ -1073,6 +1178,95 @@ fn write_claims(claims: &[ReraClaimV1]) -> Result<Vec<u8>, ReraClaimMaterializeE
     Ok(bytes)
 }
 
+fn read_claims(bytes: Vec<u8>) -> Result<Vec<ReraClaimV1>, ReraClaimMaterializeError> {
+    let mut reader = ParquetRecordBatchReaderBuilder::try_new(Bytes::from(bytes))?.build()?;
+    let mut claims = Vec::new();
+    for batch in &mut reader {
+        let batch = batch?;
+        for row in 0..batch.num_rows() {
+            claims.push(ReraClaimV1 {
+                claim_id: required_claim_string(&batch, "claim_id", row)?,
+                subject: ReraClaimSubject {
+                    entity_id: required_claim_string(&batch, "subject_id", row)?,
+                    entity_type: required_claim_string(&batch, "subject_type", row)?,
+                },
+                predicate: required_claim_string(&batch, "predicate", row)?,
+                value: serde_json::from_str(&required_claim_string(&batch, "value_json", row)?)?,
+                unit: optional_claim_string(&batch, "unit", row)?,
+                effective_time: optional_claim_string(&batch, "effective_time_json", row)?
+                    .map(|value| serde_json::from_str(&value))
+                    .transpose()?,
+                assertion_mode: assertion_mode_from_name(&required_claim_string(
+                    &batch,
+                    "assertion_mode",
+                    row,
+                )?)?,
+                source_trust: source_trust_from_name(&required_claim_string(
+                    &batch,
+                    "source_trust",
+                    row,
+                )?)?,
+                extraction_confidence: required_claim_string(&batch, "extraction_confidence", row)?
+                    .parse()
+                    .map_err(ReraClaimMaterializeError::Confidence)?,
+                validation_state: validation_state_from_name(&required_claim_string(
+                    &batch,
+                    "validation_state",
+                    row,
+                )?)?,
+                visibility: visibility_from_name(&required_claim_string(
+                    &batch,
+                    "visibility",
+                    row,
+                )?)?,
+                evidence: serde_json::from_str(&required_claim_string(
+                    &batch,
+                    "evidence_json",
+                    row,
+                )?)?,
+                derivation: optional_claim_string(&batch, "derivation_json", row)?
+                    .map(|value| serde_json::from_str(&value))
+                    .transpose()?,
+            });
+        }
+    }
+    claims.sort_by(|left, right| left.claim_id.cmp(&right.claim_id));
+    Ok(claims)
+}
+
+fn required_claim_string(
+    batch: &RecordBatch,
+    name: &str,
+    row: usize,
+) -> Result<String, ReraClaimMaterializeError> {
+    let column = claim_string_column(batch, name)?;
+    if column.is_null(row) {
+        return Err(ReraClaimMaterializeError::NullColumn(name.to_string()));
+    }
+    Ok(column.value(row).to_string())
+}
+
+fn optional_claim_string(
+    batch: &RecordBatch,
+    name: &str,
+    row: usize,
+) -> Result<Option<String>, ReraClaimMaterializeError> {
+    let column = claim_string_column(batch, name)?;
+    Ok((!column.is_null(row)).then(|| column.value(row).to_string()))
+}
+
+fn claim_string_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<&'a StringArray, ReraClaimMaterializeError> {
+    batch
+        .column_by_name(name)
+        .ok_or_else(|| ReraClaimMaterializeError::MissingColumn(name.to_string()))?
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .ok_or_else(|| ReraClaimMaterializeError::InvalidColumn(name.to_string()))
+}
+
 fn strings(values: impl Iterator<Item = String>) -> ArrayRef {
     Arc::new(StringArray::from(values.collect::<Vec<_>>()))
 }
@@ -1091,10 +1285,51 @@ fn source_trust_name(value: ReraSourceTrust) -> &'static str {
     }
 }
 
+fn assertion_mode_from_name(value: &str) -> Result<ReraAssertionMode, ReraClaimMaterializeError> {
+    match value {
+        "registry_record" => Ok(ReraAssertionMode::RegistryRecord),
+        "promoter_declaration" => Ok(ReraAssertionMode::PromoterDeclaration),
+        "complainant_allegation" => Ok(ReraAssertionMode::ComplainantAllegation),
+        "authority_order" => Ok(ReraAssertionMode::AuthorityOrder),
+        "system_derivation" => Ok(ReraAssertionMode::SystemDerivation),
+        _ => Err(ReraClaimMaterializeError::InvalidEnumValue(
+            "assertion_mode",
+            value.to_string(),
+        )),
+    }
+}
+
+fn source_trust_from_name(value: &str) -> Result<ReraSourceTrust, ReraClaimMaterializeError> {
+    match value {
+        "primary_authority" => Ok(ReraSourceTrust::PrimaryAuthority),
+        "promoter_filing" => Ok(ReraSourceTrust::PromoterFiling),
+        "party_filing" => Ok(ReraSourceTrust::PartyFiling),
+        "licensed_dataset" => Ok(ReraSourceTrust::LicensedDataset),
+        "derived" => Ok(ReraSourceTrust::Derived),
+        _ => Err(ReraClaimMaterializeError::InvalidEnumValue(
+            "source_trust",
+            value.to_string(),
+        )),
+    }
+}
+
 fn validation_state_name(value: ReraClaimValidationState) -> &'static str {
     match value {
         ReraClaimValidationState::Accepted => "accepted",
         ReraClaimValidationState::Quarantined => "quarantined",
+    }
+}
+
+fn validation_state_from_name(
+    value: &str,
+) -> Result<ReraClaimValidationState, ReraClaimMaterializeError> {
+    match value {
+        "accepted" => Ok(ReraClaimValidationState::Accepted),
+        "quarantined" => Ok(ReraClaimValidationState::Quarantined),
+        _ => Err(ReraClaimMaterializeError::InvalidEnumValue(
+            "validation_state",
+            value.to_string(),
+        )),
     }
 }
 
@@ -1105,15 +1340,33 @@ fn visibility_name(value: ReraClaimVisibility) -> &'static str {
     }
 }
 
+fn visibility_from_name(value: &str) -> Result<ReraClaimVisibility, ReraClaimMaterializeError> {
+    match value {
+        "public" => Ok(ReraClaimVisibility::Public),
+        "restricted" => Ok(ReraClaimVisibility::Restricted),
+        _ => Err(ReraClaimMaterializeError::InvalidEnumValue(
+            "visibility",
+            value.to_string(),
+        )),
+    }
+}
+
 #[derive(Debug)]
 pub enum ReraClaimMaterializeError {
     Arrow(arrow::error::ArrowError),
     Claim(ReraClaimError),
+    Confidence(std::num::ParseFloatError),
     DuplicateClaimId(String),
+    InvalidColumn(String),
+    InvalidEnumValue(&'static str, String),
     Json(serde_json::Error),
+    Key(crate::lake::keys::KeyError),
     Lake(crate::lake::LakeError),
     MalformedRegistrationSummary(String),
     MalformedProjectDetail(String),
+    MissingClaimsArtifact,
+    MissingColumn(String),
+    NullColumn(String),
     Parquet(parquet::errors::ParquetError),
     SourceRecords(ReraSourceRecordsError),
 }
@@ -1123,8 +1376,16 @@ impl fmt::Display for ReraClaimMaterializeError {
         match self {
             Self::Arrow(error) => write!(f, "RERA claim Arrow error: {error}"),
             Self::Claim(error) => write!(f, "invalid RERA claim: {error}"),
+            Self::Confidence(error) => write!(f, "invalid RERA claim confidence: {error}"),
             Self::DuplicateClaimId(claim_id) => write!(f, "duplicate RERA claim ID {claim_id}"),
+            Self::InvalidColumn(column) => {
+                write!(f, "RERA claim column {column} has an invalid type")
+            }
+            Self::InvalidEnumValue(field, value) => {
+                write!(f, "RERA claim {field} has invalid value {value}")
+            }
             Self::Json(error) => write!(f, "RERA claim JSON serialization failed: {error}"),
+            Self::Key(error) => write!(f, "RERA claim lake key error: {error}"),
             Self::Lake(error) => write!(f, "RERA claim lake error: {error}"),
             Self::MalformedRegistrationSummary(record_id) => write!(
                 f,
@@ -1133,6 +1394,9 @@ impl fmt::Display for ReraClaimMaterializeError {
             Self::MalformedProjectDetail(record_id) => {
                 write!(f, "RERA project detail {record_id} is not structured JSON")
             }
+            Self::MissingClaimsArtifact => f.write_str("RERA claims Parquet artifact is missing"),
+            Self::MissingColumn(column) => write!(f, "RERA claim column {column} is missing"),
+            Self::NullColumn(column) => write!(f, "RERA claim column {column} is null"),
             Self::Parquet(error) => write!(f, "RERA claim Parquet error: {error}"),
             Self::SourceRecords(error) => write!(f, "RERA source record read failed: {error}"),
         }
@@ -1159,6 +1423,11 @@ impl From<serde_json::Error> for ReraClaimMaterializeError {
 impl From<crate::lake::LakeError> for ReraClaimMaterializeError {
     fn from(value: crate::lake::LakeError) -> Self {
         Self::Lake(value)
+    }
+}
+impl From<crate::lake::keys::KeyError> for ReraClaimMaterializeError {
+    fn from(value: crate::lake::keys::KeyError) -> Self {
+        Self::Key(value)
     }
 }
 impl From<parquet::errors::ParquetError> for ReraClaimMaterializeError {
@@ -1270,17 +1539,23 @@ mod tests {
 
         let claims = project_detail_claims(&record).unwrap();
 
-        assert_eq!(claims.len(), 3);
+        assert_eq!(claims.len(), 4);
         assert!(claims.iter().all(|claim| {
             claim.assertion_mode == ReraAssertionMode::PromoterDeclaration
                 && claim.source_trust == ReraSourceTrust::PromoterFiling
-                && claim.unit.as_deref() == Some("units")
                 && claim
                     .effective_time
                     .as_ref()
                     .and_then(|time| time.start.as_deref())
                     == Some("2026-07-13")
         }));
+        assert_eq!(
+            claims
+                .iter()
+                .filter(|claim| claim.unit.as_deref() == Some("units"))
+                .count(),
+            3
+        );
     }
 
     #[test]
@@ -1349,6 +1624,57 @@ mod tests {
         assert!(aggregate_claims.iter().any(|claim| {
             claim.predicate == "declared_inventory_total_unit_count"
                 && claim.value == ReraClaimValue::Number(698.0)
+        }));
+
+        let legacy = ReraSourceRecord {
+            record_id: "rera_source_record:sha256:inventory-legacy".to_string(),
+            raw_value: r#"{"inventory_type":"Flats","unit_count":356,"filed_carpet_area_sqm":53728,"area_scope":"source_unspecified"}"#.to_string(),
+            ..aggregate
+        };
+        let legacy_claims = project_detail_claims(&legacy).unwrap();
+        assert!(legacy_claims.iter().any(|claim| {
+            claim.predicate == "declared_inventory_filed_carpet_area"
+                && claim.value == ReraClaimValue::Number(53_728.0)
+        }));
+        assert!(legacy_claims.iter().any(|claim| {
+            claim.predicate == "declared_inventory_area_scope"
+                && claim.value == ReraClaimValue::Text("source_unspecified".to_string())
+        }));
+        assert!(!legacy_claims
+            .iter()
+            .any(|claim| { claim.predicate == "declared_inventory_total_carpet_area" }));
+    }
+
+    #[test]
+    fn document_claims_keep_label_period_url_and_registration_scope() {
+        let registration_id = "rera_registration:in-ka:fixture";
+        let record = ReraSourceRecord {
+            record_id: "rera_source_record:sha256:document".to_string(),
+            kind: ReraSourceRecordKind::DocumentApproval,
+            registration_id: registration_id.to_string(),
+            normalized_registration_number: "PRM/KA/RERA/FIXTURE".to_string(),
+            receipt_id: "rera_receipt:sha256:fixture".to_string(),
+            capture_id: "rera_capture:sha256:fixture".to_string(),
+            source_locator: "#quarterly-update/q1-2026-27/document".to_string(),
+            raw_label: "Quarterly supporting document".to_string(),
+            raw_value: r#"{"quarter":"Q1","financial_year":"2026-27","label":"Form 6","official_url":"https://rera.example/form-6"}"#.to_string(),
+            observed_at: chrono::Utc::now(),
+            effective_at: None,
+            filing_at: Some("2026-07-13".to_string()),
+            parser_version: "fixture.v1".to_string(),
+        };
+
+        let claims = project_detail_claims(&record).unwrap();
+        let document_id = rera_document_id(registration_id, "https://rera.example/form-6");
+
+        assert_eq!(claims.len(), 5);
+        assert!(claims
+            .iter()
+            .all(|claim| claim.subject.entity_id == document_id));
+        assert!(claims.iter().any(|claim| {
+            claim.predicate == "official_document_url"
+                && claim.value
+                    == ReraClaimValue::DocumentRef("https://rera.example/form-6".to_string())
         }));
     }
 

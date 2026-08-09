@@ -8,20 +8,22 @@ use serde::{Deserialize, Serialize};
 use crate::knowledge::KnowledgeGraph;
 use crate::lake::{LakeError, LakeStore};
 use crate::serving::{
-    SearchServingBundleMaterialization, SearchServingBundleMaterializeError,
-    SearchServingBundleMaterializer, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    project_rera_evidence, ReraServingProjectionError, SearchServingBundleMaterialization,
+    SearchServingBundleMaterializeError, SearchServingBundleMaterializer,
+    SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 
 use super::{
+    read_rera_claims, read_rera_receipt_records, read_rera_source_records,
     read_skill_fact_artifact_rows, sort_materialization_records, ApproachRoadGraphError,
     ApproachRoadGraphMaterializer, AssetDagPlan, AssetDagRunManifest, AssetDefinition,
     AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition, AssetPlanner,
     AssetRunManifestStore, AssetSourceInputs, AssetStage, CurrentProjectFactsError,
     CurrentProjectFactsMaterializer, DependencyFanInPolicy, EnvironmentalAssetError,
     GooglePlaceAssetError, GooglePlaceSnapshotMaterializer, KgSocietyViewMaterialization,
-    KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, KgViewRecords,
-    MaterializationId, MaterializationRecord, MediaAssetError, MediaAssetMaterializer,
-    OsmPowerAssetError, PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
+    KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, MaterializationId,
+    MaterializationRecord, MediaAssetError, MediaAssetMaterializer, OsmPowerAssetError,
+    PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
     ProjectEnrichmentMaterializer, ReraAssetError, ReraClaimMaterializeError,
     ReraClaimsMaterializer, ReraEvidenceError, ReraPlanFramesAssetError, ReraReceiptsMaterializer,
     ReraRegistryMaterializer, ReraSourceRecordsError, ReraSourceRecordsMaterializer,
@@ -413,8 +415,13 @@ impl AssetDagExecutor {
                     .iter()
                     .any(|dependency| dependency.as_str() == KG_SOCIETY_VIEW_ASSET_ID)
         }) {
-            self.restore_kg_view_runtime(graph, &records_by_asset)
-                .await?
+            self.restore_kg_view_runtime(
+                graph,
+                &records_by_asset,
+                &dependency_snapshot,
+                &options.partition,
+            )
+            .await?
         } else {
             None
         };
@@ -429,7 +436,12 @@ impl AssetDagExecutor {
                     records_by_asset.insert(step.asset_id.clone(), record);
                     if step.asset_id.as_str() == KG_SOCIETY_VIEW_ASSET_ID {
                         kg_view = self
-                            .restore_kg_view_runtime(graph, &records_by_asset)
+                            .restore_kg_view_runtime(
+                                graph,
+                                &records_by_asset,
+                                &dependency_snapshot,
+                                &options.partition,
+                            )
                             .await?;
                     }
                     continue;
@@ -449,7 +461,12 @@ impl AssetDagExecutor {
                         records_by_asset.insert(step.asset_id.clone(), record);
                         if step.asset_id.as_str() == KG_SOCIETY_VIEW_ASSET_ID {
                             kg_view = self
-                                .restore_kg_view_runtime(graph, &records_by_asset)
+                                .restore_kg_view_runtime(
+                                    graph,
+                                    &records_by_asset,
+                                    &dependency_snapshot,
+                                    &options.partition,
+                                )
                                 .await?;
                         }
                     }
@@ -579,7 +596,12 @@ impl AssetDagExecutor {
                             records_by_asset.insert(asset_id.clone(), record);
                             if asset_id.as_str() == KG_SOCIETY_VIEW_ASSET_ID {
                                 kg_view = self
-                                    .restore_kg_view_runtime(graph, &records_by_asset)
+                                    .restore_kg_view_runtime(
+                                        graph,
+                                        &records_by_asset,
+                                        &dependency_snapshot,
+                                        &options.partition,
+                                    )
                                     .await?;
                             }
                             executed_assets.push(asset_id.clone());
@@ -600,7 +622,12 @@ impl AssetDagExecutor {
                                 records_by_asset.insert(asset_id.clone(), record);
                                 if asset_id.as_str() == KG_SOCIETY_VIEW_ASSET_ID {
                                     kg_view = self
-                                        .restore_kg_view_runtime(graph, &records_by_asset)
+                                        .restore_kg_view_runtime(
+                                            graph,
+                                            &records_by_asset,
+                                            &dependency_snapshot,
+                                            &options.partition,
+                                        )
                                         .await?;
                                 }
                                 executed_assets.push(asset_id.clone());
@@ -814,67 +841,24 @@ impl AssetDagExecutor {
 
     async fn restore_kg_view_runtime(
         &self,
-        graph: &KnowledgeGraph,
+        _graph: &KnowledgeGraph,
         records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+        dependency_snapshot: &HashMap<AssetId, Vec<MaterializationRecord>>,
+        run_partition: &AssetPartition,
     ) -> Result<Option<KgSocietyViewMaterialization>, AssetDagExecutorError> {
         let asset_id = static_asset_id(KG_SOCIETY_VIEW_ASSET_ID);
-        let Some(record) = records_by_asset.get(&asset_id) else {
+        let expected_partition = self.asset_partition(&asset_id, run_partition)?;
+        let record = records_by_asset.get(&asset_id).or_else(|| {
+            dependency_snapshot.get(&asset_id).and_then(|records| {
+                records
+                    .iter()
+                    .find(|record| record.partition == expected_partition)
+            })
+        });
+        let Some(record) = record else {
             return Ok(None);
         };
-        let definition =
-            self.registry
-                .get(&asset_id)
-                .ok_or_else(|| AssetDagExecutorError::UnknownAsset {
-                    asset_id: asset_id.clone(),
-                })?;
-        let mut parent_records = Vec::new();
-        for parent_id in &record.parent_materializations {
-            let mut found = None;
-            for dependency in &definition.dependencies {
-                match self
-                    .materializations
-                    .record_by_id_for_asset(dependency, parent_id)
-                    .await
-                {
-                    Ok(Some(parent)) => {
-                        found = Some(parent);
-                        break;
-                    }
-                    Ok(None) => continue,
-                    Err(err) => return Err(err.into()),
-                }
-            }
-            parent_records.push(found.ok_or_else(|| {
-                AssetDagExecutorError::ResumeMissingParentMaterialization {
-                    asset_id: asset_id.clone(),
-                    parent_id: parent_id.clone(),
-                }
-            })?);
-        }
-        let support_records = support_fact_records(definition, &parent_records);
-        let support_rows = read_skill_fact_artifact_rows(&self.lake, &support_records).await?;
-        let canonical_record =
-            dependency_record(&asset_id, &parent_records, CANONICAL_SOCIETY_NODES_ASSET_ID)?;
-        let mut canonical_rows =
-            super::read_canonical_society_rows(&self.lake, canonical_record).await?;
-        if let Some(approach_record) = parent_records
-            .iter()
-            .find(|record| record.asset_id.as_str() == APPROACH_ROAD_GRAPH_FACTS_ASSET_ID)
-        {
-            let approach_rows =
-                super::read_approach_road_graph_rows(&self.lake, approach_record).await?;
-            canonical_rows
-                .entities
-                .extend(approach_rows.canonical.entities);
-            canonical_rows.edges.extend(approach_rows.canonical.edges);
-        }
-        let records = KgViewRecords::from_graph_with_asset_rows(
-            graph,
-            &canonical_rows.entities,
-            &canonical_rows.edges,
-            &support_rows.facts,
-            &support_rows.fact_annotations,
-        )?;
+        self.validate_restored_artifacts(&asset_id, record).await?;
         let manifest_artifact = record
             .artifacts
             .iter()
@@ -885,6 +869,7 @@ impl AssetDagExecutor {
         let manifest_key =
             crate::lake::LakeKey::new(manifest_artifact.key.clone()).map_err(LakeError::Key)?;
         let manifest: KgViewManifest = self.lake.get_json(&manifest_key).await?;
+        let records = super::load_kg_view_records(&self.lake, &manifest).await?;
         if manifest.graph_content_hash != records.content_hash {
             return Err(AssetDagExecutorError::ResumeKgViewContentMismatch {
                 materialization_id: record.materialization_id.clone(),
@@ -2022,15 +2007,69 @@ impl BuiltInAssetExecutor {
                 let kg_view = context
                     .kg_view
                     .ok_or(AssetDagExecutorError::MissingRuntimeKgView)?;
-                let materialization =
-                    SearchServingBundleMaterializer::new(context.dag.lake.clone())
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let rera_parents = parent_records
+                    .iter()
+                    .filter(|record| {
+                        matches!(
+                            record.asset_id.as_str(),
+                            RERA_RECEIPTS_ASSET_ID
+                                | RERA_SOURCE_RECORDS_ASSET_ID
+                                | RERA_CLAIMS_ASSET_ID
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let materializer = SearchServingBundleMaterializer::new(context.dag.lake.clone());
+                let materialization = if rera_parents.is_empty() {
+                    materializer
                         .materialize_from_kg_view_for_run(
                             kg_view,
                             context.options.version.clone(),
                             context.run_id.clone(),
                             context.asset_partition.clone(),
                         )
-                        .await?;
+                        .await?
+                } else {
+                    let receipt_record = dependency_record(
+                        context.asset_id,
+                        &parent_records,
+                        RERA_RECEIPTS_ASSET_ID,
+                    )?;
+                    let source_record = dependency_record(
+                        context.asset_id,
+                        &parent_records,
+                        RERA_SOURCE_RECORDS_ASSET_ID,
+                    )?;
+                    let claims_record =
+                        dependency_record(context.asset_id, &parent_records, RERA_CLAIMS_ASSET_ID)?;
+                    let receipts =
+                        read_rera_receipt_records(&context.dag.lake, receipt_record).await?;
+                    let source_records =
+                        read_rera_source_records(&context.dag.lake, source_record).await?;
+                    let claims = read_rera_claims(&context.dag.lake, claims_record).await?;
+                    let rera_evidence = project_rera_evidence(&source_records, &claims, &receipts)?;
+                    materializer
+                        .materialize_from_kg_view_and_rera_for_run(
+                            kg_view,
+                            rera_evidence,
+                            rera_parents
+                                .into_iter()
+                                .map(|record| record.materialization_id.clone())
+                                .collect(),
+                            context.options.version.clone(),
+                            context.run_id.clone(),
+                            context.asset_partition.clone(),
+                        )
+                        .await?
+                };
                 Ok(ExecutedAsset::SearchServingBundle(materialization))
             }
             #[cfg(test)]
@@ -2229,6 +2268,7 @@ pub enum AssetDagExecutorError {
     ReraEvidence(ReraEvidenceError),
     ReraSourceRecords(ReraSourceRecordsError),
     ReraClaims(ReraClaimMaterializeError),
+    ReraServingProjection(ReraServingProjectionError),
     Rera(ReraAssetError),
     ReraPlanFrames(ReraPlanFramesAssetError),
     CanonicalNodes(super::CanonicalNodesError),
@@ -2325,6 +2365,9 @@ impl fmt::Display for AssetDagExecutorError {
                 write!(f, "RERA source record asset execution failed: {err}")
             }
             Self::ReraClaims(err) => write!(f, "RERA claim asset execution failed: {err}"),
+            Self::ReraServingProjection(err) => {
+                write!(f, "RERA serving projection failed: {err}")
+            }
             Self::GooglePlace(err) => write!(f, "Google place source execution failed: {err}"),
             Self::ProjectEnrichment(err) => {
                 write!(f, "project enrichment execution failed: {err}")
@@ -2558,6 +2601,12 @@ impl From<MediaAssetError> for AssetDagExecutorError {
 impl From<SearchServingBundleMaterializeError> for AssetDagExecutorError {
     fn from(err: SearchServingBundleMaterializeError) -> Self {
         Self::SearchServingBundle(err)
+    }
+}
+
+impl From<ReraServingProjectionError> for AssetDagExecutorError {
+    fn from(err: ReraServingProjectionError) -> Self {
+        Self::ReraServingProjection(err)
     }
 }
 

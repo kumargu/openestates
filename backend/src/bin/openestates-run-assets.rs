@@ -624,6 +624,7 @@ struct CliOptions {
     source_command: Option<PathBuf>,
     source_args: Vec<OsString>,
     source_timeout_seconds: Option<u64>,
+    source_max_output_mib: Option<usize>,
     source_entity_ids: Vec<String>,
     source_entity_seed_paths: Vec<PathBuf>,
     source_collection_asset_ids: Vec<AssetId>,
@@ -696,6 +697,20 @@ impl CliOptions {
                         );
                     }
                     options.source_timeout_seconds = Some(seconds);
+                }
+                "--source-max-output-mib" => {
+                    let value = args.next().ok_or_else(|| {
+                        "--source-max-output-mib requires an integer from 1 to 512".to_string()
+                    })?;
+                    let mebibytes = value.parse::<usize>().map_err(|_| {
+                        "--source-max-output-mib requires an integer from 1 to 512".to_string()
+                    })?;
+                    if !(1..=512).contains(&mebibytes) {
+                        return Err(
+                            "--source-max-output-mib requires an integer from 1 to 512".to_string()
+                        );
+                    }
+                    options.source_max_output_mib = Some(mebibytes);
                 }
                 "--source-entity" => {
                     let value = args
@@ -782,6 +797,9 @@ impl CliOptions {
         if options.source_timeout_seconds.is_some() && options.source_command.is_none() {
             return Err("--source-timeout-seconds requires --source-command".to_string());
         }
+        if options.source_max_output_mib.is_some() && options.source_command.is_none() {
+            return Err("--source-max-output-mib requires --source-command".to_string());
+        }
         if options.dry_run && options.resume_run_id.is_some() {
             return Err("--resume-run cannot be combined with --dry-run".to_string());
         }
@@ -814,6 +832,9 @@ impl CliOptions {
                 CommandSourceInputProvider::new(program).with_args(self.source_args.clone());
             if let Some(seconds) = self.source_timeout_seconds {
                 provider = provider.with_timeout(Duration::from_secs(seconds));
+            }
+            if let Some(mebibytes) = self.source_max_output_mib {
+                provider = provider.with_max_stdout_bytes(mebibytes * 1024 * 1024);
             }
             return Ok(Some(Box::new(provider)));
         }
@@ -860,6 +881,7 @@ fn print_help() {
     println!("  --source-command Run a collector that reads SourceInputRequest JSON on stdin");
     println!("  --source-arg     Pass one literal argument to the source collector program");
     println!("  --source-timeout-seconds Override the collector timeout (default: 1800)");
+    println!("  --source-max-output-mib Override the collector output cap (default: 16)");
     println!("  --source-entity Limit source collection to one entity, alias, or project key");
     println!("  --source-entity-seeds Add source entities from a JSON file");
     println!("  --source-collection-asset Restrict source collection to one collectable asset id");

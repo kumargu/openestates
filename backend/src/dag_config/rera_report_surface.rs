@@ -73,6 +73,12 @@ pub struct ReraReportSectionRule {
     pub id: String,
     pub title: String,
     pub rank: u32,
+    #[serde(default = "default_rera_renderer")]
+    pub renderer: String,
+    #[serde(default)]
+    pub selectors: Vec<ReraReportSelectorRule>,
+    #[serde(default = "default_empty_behavior")]
+    pub empty_behavior: String,
     #[serde(default)]
     pub key_contains: Vec<String>,
     #[serde(default)]
@@ -81,6 +87,22 @@ pub struct ReraReportSectionRule {
     pub key_suffixes: Vec<String>,
     #[serde(default)]
     pub fact_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReraReportSelectorRule {
+    pub key: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+}
+
+fn default_rera_renderer() -> String {
+    "fact_list".to_string()
+}
+
+fn default_empty_behavior() -> String {
+    "omit".to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -211,6 +233,32 @@ fn validate_rera_report_surface(config: &ReraReportSurfaceFile) -> Result<(), Da
                 section.id
             )));
         }
+        if section.selectors.is_empty()
+            || section
+                .selectors
+                .iter()
+                .any(|selector| selector.key.trim().is_empty() || selector.label.trim().is_empty())
+        {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "RERA report section {} must define non-blank selectors",
+                section.id
+            )));
+        }
+        if !matches!(
+            section.renderer.as_str(),
+            "fact_list" | "timeline" | "series" | "table" | "documents"
+        ) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "RERA report section {} has unsupported renderer {}",
+                section.id, section.renderer
+            )));
+        }
+        if section.empty_behavior != "omit" {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "RERA report section {} must omit empty evidence",
+                section.id
+            )));
+        }
     }
 
     for rule in &config.display_rules {
@@ -276,8 +324,8 @@ mod tests {
             .iter()
             .any(|section| section.id == "complaints"));
         assert!(config
-            .candidate_rules
-            .include_key_prefixes
-            .contains(&"rera_".to_string()));
+            .sections
+            .iter()
+            .all(|section| { !section.selectors.is_empty() && section.empty_behavior == "omit" }));
     }
 }

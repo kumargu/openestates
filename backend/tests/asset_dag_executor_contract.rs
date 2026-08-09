@@ -18,7 +18,9 @@ use backend::assets::{
     GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
     MaterializationId, MaterializationRecord, OsmPowerInfrastructureInput,
     OsmPowerLineObservationRecord, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
-    RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
+    RefreshCadence, ReraProjectSnapshotRecord, ReraReceiptInput, ReraReceiptKind,
+    ReraReceiptSourceRecord, ReraReceiptsSourceInput, ReraRegistryMaterializer,
+    ReraRegistryMonthlyInput, ReraSourceRecordInput, ReraSourceRecordKind, ReraSourceRecordsInput,
     SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord, SkillFactsInput,
     SourceWatermark, StormwaterDrainObservationRecord, StormwaterDrainRiskInput, TrustTier,
     APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
@@ -26,7 +28,8 @@ use backend::assets::{
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
     EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
     HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
-    RERA_LEGAL_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    RERA_CLAIMS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
+    RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -472,9 +475,88 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     let store = AssetMaterializationStore::new(lake.clone());
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
     let run_partition = source_run_partition();
+    let registration_number = "PRM/KA/RERA/1251/446/PR/130726/008888";
+    let source_url = "https://rera.karnataka.gov.in/projectDetails?action=fixture";
+    let body = b"<html>fixture RERA evidence</html>";
+    let receipt = ReraReceiptInput {
+        kind: ReraReceiptKind::ProjectDetail,
+        source_url: source_url.to_string(),
+        content_type: "text/html".to_string(),
+        body: body.to_vec(),
+        captured_at: now,
+        registration_number: Some(registration_number.to_string()),
+        parent_receipt_id: None,
+        crawl_run_id: "fixture-rera-proof-chain".to_string(),
+    }
+    .to_record()
+    .unwrap();
+    let mut source_inputs = mock_source_inputs(now);
+    source_inputs.rera_receipts = Some(ReraReceiptsSourceInput {
+        snapshot_date: "2026-07-13".to_string(),
+        receipts: vec![ReraReceiptSourceRecord {
+            kind: ReraReceiptKind::ProjectDetail,
+            source_url: source_url.to_string(),
+            content_type: "text/html".to_string(),
+            body_hex: "3c68746d6c3e6669787475726520524552412065766964656e63653c2f68746d6c3e"
+                .to_string(),
+            captured_at: now,
+            registration_number: Some(registration_number.to_string()),
+            parent_receipt_id: None,
+            crawl_run_id: "fixture-rera-proof-chain".to_string(),
+        }],
+        source_watermarks: Vec::new(),
+    });
+    source_inputs.rera_source_records = Some(ReraSourceRecordsInput {
+        snapshot_date: "2026-07-13".to_string(),
+        records: vec![
+            ReraSourceRecordInput {
+                kind: ReraSourceRecordKind::RegistrationRelation,
+                registration_number: registration_number.to_string(),
+                receipt_id: receipt.receipt_id.clone(),
+                capture_id: receipt.capture_id.clone(),
+                source_locator: "catalog.project_key".to_string(),
+                raw_label: "Exact catalog project key".to_string(),
+                raw_value: serde_json::json!({
+                    "entity_id": "rera-meadows",
+                    "entity_type": "society",
+                    "resolution_method": "catalog_project_key_exact",
+                    "resolution_confidence": 1.0
+                })
+                .to_string(),
+                observed_at: now,
+                effective_at: None,
+                filing_at: None,
+                parser_version: "fixture.v1".to_string(),
+            },
+            ReraSourceRecordInput {
+                kind: ReraSourceRecordKind::RegistrationSummary,
+                registration_number: registration_number.to_string(),
+                receipt_id: receipt.receipt_id,
+                capture_id: receipt.capture_id,
+                source_locator: "project.registration".to_string(),
+                raw_label: "Registration summary".to_string(),
+                raw_value: serde_json::json!({
+                    "registration_number": registration_number,
+                    "project_name": "RERA Meadows",
+                    "promoter_name": "Fixture Promoter"
+                })
+                .to_string(),
+                observed_at: now,
+                effective_at: None,
+                filing_at: None,
+                parser_version: "fixture.v1".to_string(),
+            },
+        ],
+        source_watermarks: Vec::new(),
+    });
     let options = AssetDagExecutionOptions::new(run_partition.clone(), now)
         .with_version("2026-07-13T06:00Z")
-        .with_source_inputs(mock_source_inputs(now));
+        .with_source_inputs(source_inputs)
+        .with_forced_assets(vec![
+            asset_id(RERA_RECEIPTS_ASSET_ID),
+            asset_id(RERA_SOURCE_RECORDS_ASSET_ID),
+            asset_id(RERA_CLAIMS_ASSET_ID),
+        ]);
 
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
@@ -482,8 +564,8 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 22);
-    assert_eq!(report.executed_assets.len(), 21);
+    assert_eq!(report.manifest.planned_count, 25);
+    assert_eq!(report.executed_assets.len(), 24);
     for id in [
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
         EXTERNAL_LISTING_FACTS_ASSET_ID,
@@ -491,6 +573,9 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         IMAGE_MEDIA_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
         RERA_REGISTRY_MONTHLY_ASSET_ID,
+        RERA_RECEIPTS_ASSET_ID,
+        RERA_SOURCE_RECORDS_ASSET_ID,
+        RERA_CLAIMS_ASSET_ID,
         CANONICAL_SOCIETY_NODES_ASSET_ID,
         RERA_LEGAL_FACTS_ASSET_ID,
         RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
@@ -1246,6 +1331,69 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
         .is_ok());
 }
 
+#[tokio::test]
+async fn only_forced_serving_rebuild_restores_the_current_kg_snapshot() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let store = AssetMaterializationStore::new(lake.clone());
+    let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    let run_partition = source_run_partition();
+    seed_current_upstreams_for_partition(&lake, &store, now, &run_partition).await;
+
+    let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+    executor
+        .execute(
+            &mock_graph(),
+            AssetDagExecutionOptions::new(run_partition.clone(), now)
+                .with_version("current-kg-baseline")
+                .with_source_inputs(mock_source_inputs(now))
+                .with_forced_assets(vec![
+                    asset_id(RERA_RECEIPTS_ASSET_ID),
+                    asset_id(RERA_SOURCE_RECORDS_ASSET_ID),
+                    asset_id(RERA_CLAIMS_ASSET_ID),
+                ]),
+        )
+        .await
+        .unwrap();
+
+    let report = executor
+        .execute(
+            &KnowledgeGraph::new(),
+            AssetDagExecutionOptions::new(run_partition, now + Duration::minutes(5))
+                .with_version("only-forced-serving")
+                .with_forced_assets(vec![asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID)])
+                .with_only_forced_assets(true)
+                .with_promote_current(false),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        report.executed_assets,
+        vec![asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID)]
+    );
+    assert_eq!(
+        run_step(&report.manifest, KG_SOCIETY_VIEW_ASSET_ID).status,
+        AssetRunStepStatus::Skipped
+    );
+    let serving_step = run_step(&report.manifest, SEARCH_SERVING_BUNDLE_ASSET_ID);
+    let loaded = ServingBundleLoader::new(lake, root.path().join("cache"))
+        .load_search_bundle_by_materialization(
+            serving_step
+                .materialization_id
+                .as_ref()
+                .expect("forced serving rebuild should materialize a bundle"),
+        )
+        .await
+        .unwrap()
+        .expect("forced serving bundle should be loadable");
+
+    assert!(loaded.entities.iter().any(|entity| {
+        entity.entity_id == "society:green-acre-whitefield"
+            && entity.name == "Green Acre Whitefield"
+    }));
+}
+
 async fn seed_authoritative_upstreams(
     lake: &LakeStore,
     store: &AssetMaterializationStore,
@@ -1739,11 +1887,83 @@ fn executed_position(executed_assets: &[AssetId], id: &str) -> usize {
 }
 
 fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
+    let registration_number = "PRM/KA/RERA/1251/446/PR/130726/008888";
+    let source_url = "https://rera.karnataka.gov.in/projectDetails?action=fixture";
+    let body = b"<html>fixture RERA evidence</html>";
+    let receipt = ReraReceiptInput {
+        kind: ReraReceiptKind::ProjectDetail,
+        source_url: source_url.to_string(),
+        content_type: "text/html".to_string(),
+        body: body.to_vec(),
+        captured_at: now,
+        registration_number: Some(registration_number.to_string()),
+        parent_receipt_id: None,
+        crawl_run_id: "fixture-rera-proof-chain".to_string(),
+    }
+    .to_record()
+    .unwrap();
+
     AssetSourceInputs {
         source_entities: Vec::new(),
         source_failures: Default::default(),
-        rera_receipts: None,
-        rera_source_records: None,
+        rera_receipts: Some(ReraReceiptsSourceInput {
+            snapshot_date: "2026-07-13".to_string(),
+            receipts: vec![ReraReceiptSourceRecord {
+                kind: ReraReceiptKind::ProjectDetail,
+                source_url: source_url.to_string(),
+                content_type: "text/html".to_string(),
+                body_hex: "3c68746d6c3e6669787475726520524552412065766964656e63653c2f68746d6c3e"
+                    .to_string(),
+                captured_at: now,
+                registration_number: Some(registration_number.to_string()),
+                parent_receipt_id: None,
+                crawl_run_id: "fixture-rera-proof-chain".to_string(),
+            }],
+            source_watermarks: Vec::new(),
+        }),
+        rera_source_records: Some(ReraSourceRecordsInput {
+            snapshot_date: "2026-07-13".to_string(),
+            records: vec![
+                ReraSourceRecordInput {
+                    kind: ReraSourceRecordKind::RegistrationRelation,
+                    registration_number: registration_number.to_string(),
+                    receipt_id: receipt.receipt_id.clone(),
+                    capture_id: receipt.capture_id.clone(),
+                    source_locator: "catalog.project_key".to_string(),
+                    raw_label: "Exact catalog project key".to_string(),
+                    raw_value: serde_json::json!({
+                        "entity_id": "rera-meadows",
+                        "entity_type": "society",
+                        "resolution_method": "catalog_project_key_exact",
+                        "resolution_confidence": 1.0
+                    })
+                    .to_string(),
+                    observed_at: now,
+                    effective_at: None,
+                    filing_at: None,
+                    parser_version: "fixture.v1".to_string(),
+                },
+                ReraSourceRecordInput {
+                    kind: ReraSourceRecordKind::RegistrationSummary,
+                    registration_number: registration_number.to_string(),
+                    receipt_id: receipt.receipt_id,
+                    capture_id: receipt.capture_id,
+                    source_locator: "project.registration".to_string(),
+                    raw_label: "Registration summary".to_string(),
+                    raw_value: serde_json::json!({
+                        "registration_number": registration_number,
+                        "project_name": "RERA Meadows",
+                        "promoter_name": "Fixture Promoter"
+                    })
+                    .to_string(),
+                    observed_at: now,
+                    effective_at: None,
+                    filing_at: None,
+                    parser_version: "fixture.v1".to_string(),
+                },
+            ],
+            source_watermarks: Vec::new(),
+        }),
         rera_registry_monthly: Some(mock_rera_input(now)),
         external_listings_weekly: Some(ExternalListingsWeeklyInput {
             snapshot_date: "2026-07-13".to_string(),

@@ -34,6 +34,7 @@ const RERA_SOURCE_RECORDS_FORMAT_VERSION: u32 = 1;
 #[serde(rename_all = "snake_case")]
 pub enum ReraSourceRecordKind {
     RegistrationSummary,
+    RegistrationRelation,
     PromoterDeclaration,
     Completion,
     QuarterlyProgress,
@@ -51,6 +52,7 @@ impl ReraSourceRecordKind {
     fn as_str(self) -> &'static str {
         match self {
             Self::RegistrationSummary => "registration_summary",
+            Self::RegistrationRelation => "registration_relation",
             Self::PromoterDeclaration => "promoter_declaration",
             Self::Completion => "completion",
             Self::QuarterlyProgress => "quarterly_progress",
@@ -68,6 +70,7 @@ impl ReraSourceRecordKind {
     fn from_str(value: &str) -> Result<Self, ReraSourceRecordsError> {
         match value {
             "registration_summary" => Ok(Self::RegistrationSummary),
+            "registration_relation" => Ok(Self::RegistrationRelation),
             "promoter_declaration" => Ok(Self::PromoterDeclaration),
             "completion" => Ok(Self::Completion),
             "quarterly_progress" => Ok(Self::QuarterlyProgress),
@@ -349,9 +352,10 @@ pub async fn read_rera_source_records(
     Ok(rows)
 }
 
-fn all_record_kinds() -> [ReraSourceRecordKind; 12] {
+fn all_record_kinds() -> [ReraSourceRecordKind; 13] {
     [
         ReraSourceRecordKind::RegistrationSummary,
+        ReraSourceRecordKind::RegistrationRelation,
         ReraSourceRecordKind::PromoterDeclaration,
         ReraSourceRecordKind::Completion,
         ReraSourceRecordKind::QuarterlyProgress,

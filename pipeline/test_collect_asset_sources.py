@@ -114,6 +114,62 @@ class CollectAssetSourcesTest(unittest.TestCase):
             b"<html>official receipt</html>",
         )
 
+    def test_rera_receipts_reuse_provenance_complete_scoped_captures(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            listing_cache = root / "listing.json"
+            listing_raw = root / "listing.html"
+            listing_cache.write_text(
+                json.dumps({"cached_at": "2026-08-09T10:30:00Z"}),
+                encoding="utf-8",
+            )
+            listing_raw.write_bytes(b"<html>official receipt</html>")
+            snapshot = {
+                "registration_number": "PRM/KA/RERA/1251/446/PR/300924/007105",
+                "source_url": "https://rera.karnataka.gov.in/projectDetails?action=12638",
+                "captured_at": "2026-08-09T10:31:00Z",
+                "parent_receipt_id": "rera_receipt:sha256:listing",
+                "crawl_run_id": "rera-project-detail-2026-08-09",
+                "body_hex": b"<html>detail</html>".hex(),
+                "body_sha256": hashlib.sha256(b"<html>detail</html>").hexdigest(),
+            }
+            with patch("pipeline.collect_asset_sources.LISTING_CACHE_PATH", listing_cache), patch(
+                "pipeline.collect_asset_sources.LISTING_RAW_CACHE_PATH", listing_raw
+            ), patch(
+                "pipeline.collect_asset_sources.load_scoped_rera_detail_receipts",
+                return_value=[snapshot],
+            ) as load_cached, patch(
+                "pipeline.collect_asset_sources.capture_scoped_rera_detail_receipts"
+            ) as capture:
+                payload = collect_rera_receipts({"source_entities": [{"name": "Fixture"}]})
+
+        load_cached.assert_called_once()
+        capture.assert_not_called()
+        self.assertEqual(len(payload["receipts"]), 2)
+
+    def test_forced_rera_receipts_refresh_scoped_captures(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            listing_cache = root / "listing.json"
+            listing_raw = root / "listing.html"
+            listing_cache.write_text(
+                json.dumps({"cached_at": "2026-08-09T10:30:00Z"}),
+                encoding="utf-8",
+            )
+            listing_raw.write_bytes(b"<html>official receipt</html>")
+            with patch("pipeline.collect_asset_sources.LISTING_CACHE_PATH", listing_cache), patch(
+                "pipeline.collect_asset_sources.LISTING_RAW_CACHE_PATH", listing_raw
+            ), patch(
+                "pipeline.collect_asset_sources.load_scoped_rera_detail_receipts"
+            ) as load_cached, patch(
+                "pipeline.collect_asset_sources.capture_scoped_rera_detail_receipts",
+                return_value=[],
+            ) as capture:
+                collect_rera_receipts({"force_refresh_assets": ["rera_receipts"]})
+
+        load_cached.assert_not_called()
+        capture.assert_called_once()
+
     def test_rera_source_records_parse_the_raw_listing_with_receipt_lineage(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -187,10 +243,21 @@ class CollectAssetSourcesTest(unittest.TestCase):
             ):
                 payload = collect_rera_source_records(request)
 
-        self.assertEqual(len(payload["records"]), 1)
+        self.assertEqual(len(payload["records"]), 2)
         self.assertEqual(
             payload["records"][0]["registration_number"],
             "PRM/KA/RERA/1251/446/PR/300924/007105",
+        )
+        relation = payload["records"][1]
+        self.assertEqual(relation["kind"], "registration_relation")
+        self.assertEqual(
+            json.loads(relation["raw_value"]),
+            {
+                "entity_id": "society:godrej-lakeside-orchard",
+                "entity_type": "society",
+                "resolution_method": "catalog_project_key_exact",
+                "resolution_confidence": 1.0,
+            },
         )
 
     def test_rera_project_detail_records_preserve_declarations_and_qpr_inventory(self):
@@ -316,9 +383,10 @@ class CollectAssetSourcesTest(unittest.TestCase):
                     "row_number": "1",
                     "inventory_type": "Flats",
                     "unit_count": 1463,
-                    "total_carpet_area_sqm": 1355269.0,
-                    "total_balcony_verandah_area_sqm": 12345.0,
-                    "total_open_terrace_area_sqm": None,
+                    "filed_carpet_area_sqm": 1355269.0,
+                    "filed_balcony_verandah_area_sqm": 12345.0,
+                    "filed_open_terrace_area_sqm": None,
+                    "area_scope": "source_unspecified",
                     "filed_values": {
                         "unit_count": "1,463",
                         "carpet_area": "1355269SqMtr",

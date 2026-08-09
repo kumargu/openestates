@@ -447,7 +447,15 @@
       "stage": "serving",
       "description": "Local request-path bundle for KG facts, schema config, aliases, and indexes.",
       "dependencies": [
-        "kg_society_view"
+        "kg_society_view",
+        "rera_receipts",
+        "rera_source_records",
+        "rera_claims"
+      ],
+      "optional_dependencies": [
+        "rera_receipts",
+        "rera_source_records",
+        "rera_claims"
       ],
       "refresh": "on_change",
       "cost_tier": "free",

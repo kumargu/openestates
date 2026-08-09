@@ -823,11 +823,19 @@ pub fn default_openestates_registry() -> AssetRegistry {
             "search_serving_bundle",
             AssetStage::Serving,
             "Local request-path bundle for KG facts, schema config, aliases, and indexes.",
-            &["kg_society_view"],
+            &[
+                "kg_society_view",
+                "rera_receipts",
+                "rera_source_records",
+                "rera_claims",
+            ],
             RefreshCadence::OnChange,
             CostTier::Free,
             TrustTier::Serving,
-        ),
+        )
+        .with_optional_dependency("rera_receipts")
+        .with_optional_dependency("rera_source_records")
+        .with_optional_dependency("rera_claims"),
     ])
     .expect("default asset registry is valid")
 }

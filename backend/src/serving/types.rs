@@ -211,6 +211,7 @@ pub enum BundleArtifactKind {
     FactsParquet,
     EdgesParquet,
     SearchMetadataParquet,
+    ReraEvidenceParquet,
     SchemaJson,
     TrustPolicyJson,
     TantivyIndexFile,
@@ -303,10 +304,14 @@ pub struct ServingBundleManifest {
     pub fact_count: u64,
     pub search_metadata_count: u64,
     #[serde(default)]
+    pub rera_evidence_count: u64,
+    #[serde(default)]
     pub edge_count: u64,
     pub entity_parquet_key: String,
     pub fact_parquet_key: String,
     pub search_metadata_parquet_key: String,
+    #[serde(default)]
+    pub rera_evidence_parquet_key: Option<String>,
     #[serde(default)]
     pub edge_parquet_key: Option<String>,
     pub schema_key: String,

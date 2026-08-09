@@ -3,10 +3,12 @@ use std::fmt;
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use arrow::array::{ArrayRef, Float32Array, StringArray, UInt32Array};
+use arrow::array::{Array, ArrayRef, Float32Array, StringArray, UInt32Array};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
@@ -17,11 +19,12 @@ use crate::dag_config::{
     better_source_type_for_fact, load_fact_registry, load_resolution_policies,
 };
 use crate::knowledge::{FactValue, KnowledgeGraph};
-use crate::lake::{ArtifactMetadata, LakeError, LakeStore};
+use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
 use crate::parquet_data::{
-    float64_list_array, float64_list_field, string_list_array, string_list_field,
-    typed_value_arrays, typed_value_fields, TypedFactValue, ANSWERS_PREFERENCES_COLUMN,
-    SCORING_THRESHOLDS_COLUMN,
+    float64_list_array, float64_list_field, optional_f64_list_column_value,
+    optional_string_list_column_value, string_list_array, string_list_field, typed_value_arrays,
+    typed_value_fields, typed_value_from_batch, OptionalListColumn, TypedFactValue,
+    ANSWERS_PREFERENCES_COLUMN, SCORING_THRESHOLDS_COLUMN,
 };
 
 use super::{
@@ -431,6 +434,43 @@ impl KgViewRecords {
                 .unwrap_or(0);
         }
     }
+}
+
+pub async fn load_kg_view_records(
+    lake: &LakeStore,
+    manifest: &KgViewManifest,
+) -> Result<KgViewRecords, KgSocietyViewMaterializeError> {
+    let entities = read_entities_parquet(
+        &lake
+            .get_bytes(&LakeKey::new(manifest.entity_parquet_key.clone()).map_err(LakeError::Key)?)
+            .await?,
+    )?;
+    let facts = read_facts_parquet(
+        &lake
+            .get_bytes(&LakeKey::new(manifest.fact_parquet_key.clone()).map_err(LakeError::Key)?)
+            .await?,
+    )?;
+    let fact_annotations = read_fact_annotations_parquet(
+        &lake
+            .get_bytes(
+                &LakeKey::new(manifest.fact_annotation_parquet_key.clone())
+                    .map_err(LakeError::Key)?,
+            )
+            .await?,
+    )?;
+    let edges = read_edges_parquet(
+        &lake
+            .get_bytes(&LakeKey::new(manifest.edge_parquet_key.clone()).map_err(LakeError::Key)?)
+            .await?,
+    )?;
+    let content_hash = content_hash(&entities, &facts, &fact_annotations, &edges)?;
+    Ok(KgViewRecords {
+        entities,
+        facts,
+        fact_annotations,
+        edges,
+        content_hash,
+    })
 }
 
 fn merge_synthesized_entities(
@@ -1150,6 +1190,280 @@ fn write_edges_parquet(
     write_batch(batch)
 }
 
+fn read_entities_parquet(
+    bytes: &[u8],
+) -> Result<Vec<KgViewEntityRecord>, KgSocietyViewMaterializeError> {
+    let mut records = Vec::new();
+    for batch in parquet_batches(bytes)? {
+        let entity_id = string_column(&batch, "entity_id")?;
+        let entity_type = string_column(&batch, "entity_type")?;
+        let name = string_column(&batch, "name")?;
+        let root_source = string_column(&batch, "root_source")?;
+        let fact_count = uint32_column(&batch, "fact_count")?;
+        let created_at = string_column(&batch, "created_at")?;
+        let updated_at = string_column(&batch, "updated_at")?;
+        for row in 0..batch.num_rows() {
+            records.push(KgViewEntityRecord {
+                entity_id: required_string(entity_id, row, "entity_id")?,
+                entity_type: required_string(entity_type, row, "entity_type")?,
+                name: required_string(name, row, "name")?,
+                root_source: optional_string(root_source, row),
+                fact_count: required_u32(fact_count, row, "fact_count")?,
+                created_at: parse_timestamp(&required_string(created_at, row, "created_at")?)?,
+                updated_at: parse_timestamp(&required_string(updated_at, row, "updated_at")?)?,
+            });
+        }
+    }
+    Ok(records)
+}
+
+fn read_facts_parquet(
+    bytes: &[u8],
+) -> Result<Vec<KgViewFactRecord>, KgSocietyViewMaterializeError> {
+    let mut records = Vec::new();
+    for batch in parquet_batches(bytes)? {
+        let entity_id = string_column(&batch, "entity_id")?;
+        let fact_key = string_column(&batch, "fact_key")?;
+        let fact_version = uint32_column(&batch, "fact_version")?;
+        let value_type = string_column(&batch, "value_type")?;
+        let confidence = float32_column(&batch, "confidence")?;
+        let source_type = string_column(&batch, "source_type")?;
+        let source_url = string_column(&batch, "source_url")?;
+        let model = string_column(&batch, "model")?;
+        let skill_id = string_column(&batch, "skill_id")?;
+        let triggered_by = string_column(&batch, "triggered_by")?;
+        let learned_at = string_column(&batch, "learned_at")?;
+        for row in 0..batch.num_rows() {
+            let value_type = required_string(value_type, row, "value_type")?;
+            let typed = typed_value_from_batch(&batch, row).ok_or_else(|| {
+                KgSocietyViewMaterializeError::Read(format!(
+                    "KG fact row {row} has no typed value columns"
+                ))
+            })?;
+            let value = typed.to_fact_value(&value_type).ok_or_else(|| {
+                KgSocietyViewMaterializeError::Read(format!(
+                    "KG fact row {row} typed value does not match {value_type}"
+                ))
+            })?;
+            records.push(KgViewFactRecord {
+                entity_id: required_string(entity_id, row, "entity_id")?,
+                fact_key: required_string(fact_key, row, "fact_key")?,
+                fact_version: required_u32(fact_version, row, "fact_version")?,
+                value_type,
+                value_text: typed.value_text,
+                value_json: serde_json::to_string(&value)?,
+                confidence: required_f32(confidence, row, "confidence")?,
+                source_type: required_string(source_type, row, "source_type")?,
+                source_url: optional_string(source_url, row),
+                model: optional_string(model, row),
+                skill_id: optional_string(skill_id, row),
+                triggered_by: optional_string(triggered_by, row),
+                learned_at: parse_timestamp(&required_string(learned_at, row, "learned_at")?)?,
+            });
+        }
+    }
+    Ok(records)
+}
+
+fn read_fact_annotations_parquet(
+    bytes: &[u8],
+) -> Result<Vec<KgViewFactAnnotationRecord>, KgSocietyViewMaterializeError> {
+    let mut records = Vec::new();
+    for batch in parquet_batches(bytes)? {
+        let entity_id = string_column(&batch, "entity_id")?;
+        let fact_key = string_column(&batch, "fact_key")?;
+        let display_template = string_column(&batch, "display_template")?;
+        let scoring_direction = string_column(&batch, "scoring_direction")?;
+        let scoring_weight = float32_column(&batch, "scoring_weight")?;
+        for row in 0..batch.num_rows() {
+            let answers_preferences =
+                required_string_list(&batch, ANSWERS_PREFERENCES_COLUMN, row)?;
+            let scoring_thresholds = required_f64_list(&batch, SCORING_THRESHOLDS_COLUMN, row)?;
+            records.push(KgViewFactAnnotationRecord {
+                entity_id: required_string(entity_id, row, "entity_id")?,
+                fact_key: required_string(fact_key, row, "fact_key")?,
+                display_template: optional_string(display_template, row),
+                answers_preferences_json: serde_json::to_string(&answers_preferences)?,
+                scoring_direction: optional_string(scoring_direction, row),
+                scoring_weight: optional_f32(scoring_weight, row),
+                scoring_thresholds_json: serde_json::to_string(&scoring_thresholds)?,
+            });
+        }
+    }
+    Ok(records)
+}
+
+fn read_edges_parquet(
+    bytes: &[u8],
+) -> Result<Vec<KgViewEdgeRecord>, KgSocietyViewMaterializeError> {
+    let mut records = Vec::new();
+    for batch in parquet_batches(bytes)? {
+        let from_entity_id = string_column(&batch, "from_entity_id")?;
+        let to_entity_id = string_column(&batch, "to_entity_id")?;
+        let relation = string_column(&batch, "relation")?;
+        let weight = float32_column(&batch, "weight")?;
+        let metadata_json = string_column(&batch, "metadata_json")?;
+        let source_type = string_column(&batch, "source_type")?;
+        let source_url = string_column(&batch, "source_url")?;
+        let model = string_column(&batch, "model")?;
+        let skill_id = string_column(&batch, "skill_id")?;
+        let triggered_by = string_column(&batch, "triggered_by")?;
+        for row in 0..batch.num_rows() {
+            records.push(KgViewEdgeRecord {
+                from_entity_id: required_string(from_entity_id, row, "from_entity_id")?,
+                to_entity_id: required_string(to_entity_id, row, "to_entity_id")?,
+                relation: required_string(relation, row, "relation")?,
+                weight: required_f32(weight, row, "weight")?,
+                metadata_json: required_string(metadata_json, row, "metadata_json")?,
+                source_type: required_string(source_type, row, "source_type")?,
+                source_url: optional_string(source_url, row),
+                model: optional_string(model, row),
+                skill_id: optional_string(skill_id, row),
+                triggered_by: optional_string(triggered_by, row),
+            });
+        }
+    }
+    Ok(records)
+}
+
+fn parquet_batches(bytes: &[u8]) -> Result<Vec<RecordBatch>, KgSocietyViewMaterializeError> {
+    let reader = ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes))
+        .map_err(KgSocietyViewMaterializeError::Parquet)?
+        .build()
+        .map_err(KgSocietyViewMaterializeError::Parquet)?;
+    reader
+        .map(|batch| batch.map_err(KgSocietyViewMaterializeError::Arrow))
+        .collect()
+}
+
+fn string_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<&'a StringArray, KgSocietyViewMaterializeError> {
+    let index = batch
+        .schema()
+        .index_of(name)
+        .map_err(|error| KgSocietyViewMaterializeError::Read(error.to_string()))?;
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .ok_or_else(|| KgSocietyViewMaterializeError::Read(format!("{name} is not Utf8")))
+}
+
+fn float32_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<&'a Float32Array, KgSocietyViewMaterializeError> {
+    let index = batch
+        .schema()
+        .index_of(name)
+        .map_err(|error| KgSocietyViewMaterializeError::Read(error.to_string()))?;
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<Float32Array>()
+        .ok_or_else(|| KgSocietyViewMaterializeError::Read(format!("{name} is not Float32")))
+}
+
+fn uint32_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<&'a UInt32Array, KgSocietyViewMaterializeError> {
+    let index = batch
+        .schema()
+        .index_of(name)
+        .map_err(|error| KgSocietyViewMaterializeError::Read(error.to_string()))?;
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<UInt32Array>()
+        .ok_or_else(|| KgSocietyViewMaterializeError::Read(format!("{name} is not UInt32")))
+}
+
+fn required_string(
+    array: &StringArray,
+    row: usize,
+    column: &str,
+) -> Result<String, KgSocietyViewMaterializeError> {
+    if array.is_null(row) {
+        return Err(KgSocietyViewMaterializeError::Read(format!(
+            "{column} is null at row {row}"
+        )));
+    }
+    Ok(array.value(row).to_string())
+}
+
+fn optional_string(array: &StringArray, row: usize) -> Option<String> {
+    (!array.is_null(row)).then(|| array.value(row).to_string())
+}
+
+fn required_f32(
+    array: &Float32Array,
+    row: usize,
+    column: &str,
+) -> Result<f32, KgSocietyViewMaterializeError> {
+    if array.is_null(row) {
+        return Err(KgSocietyViewMaterializeError::Read(format!(
+            "{column} is null at row {row}"
+        )));
+    }
+    Ok(array.value(row))
+}
+
+fn optional_f32(array: &Float32Array, row: usize) -> Option<f32> {
+    (!array.is_null(row)).then(|| array.value(row))
+}
+
+fn required_u32(
+    array: &UInt32Array,
+    row: usize,
+    column: &str,
+) -> Result<u32, KgSocietyViewMaterializeError> {
+    if array.is_null(row) {
+        return Err(KgSocietyViewMaterializeError::Read(format!(
+            "{column} is null at row {row}"
+        )));
+    }
+    Ok(array.value(row))
+}
+
+fn required_string_list(
+    batch: &RecordBatch,
+    column: &str,
+    row: usize,
+) -> Result<Vec<String>, KgSocietyViewMaterializeError> {
+    match optional_string_list_column_value(batch, column, row)
+        .map_err(KgSocietyViewMaterializeError::Read)?
+    {
+        OptionalListColumn::Values(values) => Ok(values),
+        OptionalListColumn::Missing | OptionalListColumn::Null => Err(
+            KgSocietyViewMaterializeError::Read(format!("{column} is missing at row {row}")),
+        ),
+    }
+}
+
+fn required_f64_list(
+    batch: &RecordBatch,
+    column: &str,
+    row: usize,
+) -> Result<Vec<f64>, KgSocietyViewMaterializeError> {
+    match optional_f64_list_column_value(batch, column, row)
+        .map_err(KgSocietyViewMaterializeError::Read)?
+    {
+        OptionalListColumn::Values(values) => Ok(values),
+        OptionalListColumn::Missing | OptionalListColumn::Null => Err(
+            KgSocietyViewMaterializeError::Read(format!("{column} is missing at row {row}")),
+        ),
+    }
+}
+
+fn parse_timestamp(value: &str) -> Result<DateTime<Utc>, KgSocietyViewMaterializeError> {
+    DateTime::parse_from_rfc3339(value)
+        .map(|value| value.with_timezone(&Utc))
+        .map_err(|error| KgSocietyViewMaterializeError::Read(error.to_string()))
+}
+
 fn write_batch(batch: RecordBatch) -> Result<Vec<u8>, KgSocietyViewMaterializeError> {
     let props = WriterProperties::builder()
         .set_compression(Compression::ZSTD(ZstdLevel::default()))
@@ -1409,6 +1723,7 @@ pub enum KgSocietyViewMaterializeError {
     Json(serde_json::Error),
     Lake(LakeError),
     Parquet(parquet::errors::ParquetError),
+    Read(String),
     Coordinate(super::CurrentProjectFactsError),
 }
 
@@ -1426,6 +1741,7 @@ impl fmt::Display for KgSocietyViewMaterializeError {
             Self::Json(err) => write!(f, "KG view JSON error: {err}"),
             Self::Lake(err) => write!(f, "KG view lake error: {err}"),
             Self::Parquet(err) => write!(f, "KG view Parquet error: {err}"),
+            Self::Read(err) => write!(f, "KG view read error: {err}"),
             Self::Coordinate(err) => write!(f, "KG view coordinate resolution error: {err}"),
         }
     }

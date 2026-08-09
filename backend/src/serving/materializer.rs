@@ -10,7 +10,7 @@ use crate::lake::{LakeError, LakeStore};
 
 use super::{
     ServingBundleBuilder, ServingBundleError, ServingBundleManifest, ServingEdgeRecord,
-    ServingEntityRecord, ServingFactRecord, ServingSearchMetadataRecord,
+    ServingEntityRecord, ServingFactRecord, ServingReraEvidenceRecord, ServingSearchMetadataRecord,
     SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 
@@ -96,6 +96,33 @@ impl SearchServingBundleMaterializer {
                 high_watermark: kg_view.record.materialization_id.to_string(),
             }],
             vec![kg_view.record.materialization_id.clone()],
+            run_id,
+            partition,
+        )
+        .await
+    }
+
+    pub async fn materialize_from_kg_view_and_rera_for_run(
+        &self,
+        kg_view: &KgSocietyViewMaterialization,
+        rera_evidence: Vec<ServingReraEvidenceRecord>,
+        rera_parent_materializations: Vec<MaterializationId>,
+        bundle_version: impl Into<String>,
+        run_id: MaterializationId,
+        partition: AssetPartition,
+    ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
+        let mut parent_materializations = vec![kg_view.record.materialization_id.clone()];
+        parent_materializations.extend(rera_parent_materializations);
+        let manifest = ServingBundleBuilder::new(self.lake.clone())
+            .build_from_kg_view_records_with_rera(&kg_view.records, rera_evidence, bundle_version)
+            .await?;
+        self.write_unpromoted_record(
+            manifest,
+            vec![SourceWatermark {
+                source: KG_SOCIETY_VIEW_ASSET_ID.to_string(),
+                high_watermark: kg_view.record.materialization_id.to_string(),
+            }],
+            parent_materializations,
             run_id,
             partition,
         )

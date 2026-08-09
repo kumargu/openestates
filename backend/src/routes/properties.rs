@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
@@ -19,8 +19,9 @@ use crate::scoring::{
 use crate::search::text::compute_confidence_for_detail;
 use crate::search::ConfidenceScore;
 use crate::serving::{
-    GoogleReviewEvidence, LoadedServingBundle, ServingFactIndex, ServingFactRecord,
-    SocietyFactProjection,
+    GoogleReviewEvidence, LoadedServingBundle, ReraEvidenceCoverage, ReraEvidenceEntity,
+    ReraEvidenceEvent, ReraEvidenceSeries, ReraEvidenceSource, ServingFactIndex,
+    ServingReraEvidenceRecord, SocietyFactProjection, RERA_EVIDENCE_SCHEMA_VERSION,
 };
 use crate::state::AppState;
 
@@ -29,11 +30,9 @@ use crate::community::{
     deterministic_community_summarizer, CommunityPulse,
 };
 use crate::dag_config::{
-    evidence_sections_config, fact_registry_index_config, rera_report_surface_config,
-    ui_surfaces_config, ContextFactDefinition, EvidenceSectionDefinition,
-    EvidenceSectionPresentation, FactRegistryIndex, ReraReportDisplayRule,
-    ReraReportNotebookLabelRule, ReraReportSectionRule, ReraReportSurfaceFile,
-    ReraReportToneCondition, ReraReportToneRule,
+    evidence_sections_config, rera_report_surface_config, ui_surfaces_config,
+    ContextFactDefinition, EvidenceSectionDefinition, EvidenceSectionPresentation,
+    ReraReportSurfaceFile,
 };
 use crate::knowledge::node::NodeType;
 use crate::knowledge::{google_reviews_url_from_facts, FactValue, SourcedFact};
@@ -47,7 +46,7 @@ use super::enrichment::{
     extract_builder_trust, extract_data_freshness, extract_rera_info, kg_entity_refs_for_property,
     overlay_project_scale_facts, rera_affidavit_only_visible, rera_decision_cards,
     rera_document_groups, society_node_id, units_per_acre, AreaIntelligence, BuilderTrust,
-    DataFreshness, ReraComplaintScopeSummary, ReraDecisionCard, ReraDocumentManifestItem, ReraInfo,
+    DataFreshness, ReraComplaintScopeSummary, ReraDocumentManifestItem, ReraInfo,
     ReraScheduleSection,
 };
 use super::property_map::property_map_context_from_surface_scene;
@@ -97,10 +96,8 @@ pub struct PropertyDetail {
     /// RERA regulatory data from the knowledge graph (None if not yet enriched).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rera: Option<ReraInfo>,
-    /// Buyer-facing RERA dossier. This keeps first paint rich while
-    /// `/api/properties/{id}/rera` remains the async boundary for future files.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rera_dossier: Option<ReraDossier>,
+    /// Compact link to the dedicated RERA evidence report.
+    pub rera_report_ref: ReraReportRef,
     /// Config-derived labels intended for notes and compare surfaces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub decision_labels: Vec<DecisionLabel>,
@@ -160,124 +157,57 @@ pub struct PropertyDetail {
     pub plans: Option<crate::plans::ProjectPlansView>,
 }
 
-#[derive(Serialize, Clone, Debug)]
-pub struct ReraDossier {
-    pub property_id: String,
-    pub society_id: String,
-    pub fact_sections: Vec<ReraReportSection>,
-    pub summary_cards: Vec<ReraDecisionCard>,
-    pub compare_items: Vec<ReraCompareItem>,
-    pub complaint_sections: Vec<ReraComplaintSection>,
-    pub document_sections: Vec<ReraDocumentSection>,
-    pub schedule_sections: Vec<ReraScheduleSection>,
-    pub timeline: ReraTimeline,
-    pub legal_checks: Vec<ReraLegalCheck>,
-    pub source: ReraDossierSource,
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReraEvidenceAvailability {
+    Available,
+    Partial,
+    Unavailable,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+pub struct ReraReportRef {
+    pub registration_ids: Vec<String>,
+    pub href: String,
+    pub availability: ReraEvidenceAvailability,
 }
 
 #[derive(Serialize, Clone, Debug)]
-pub struct ReraReportSection {
+pub struct ReraEvidenceReportResponse {
+    pub availability: ReraEvidenceAvailability,
+    pub evidence: ReraEvidenceProjectionResponse,
+    pub surface: ReraReportSurfaceResponse,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraEvidenceProjectionResponse {
+    pub schema_version: String,
+    pub property_id: String,
+    pub bundle_id: String,
+    pub generated_at: chrono::DateTime<chrono::Utc>,
+    pub registration_ids: Vec<String>,
+    pub entities: Vec<ReraEvidenceEntity>,
+    pub claims: Vec<crate::assets::ReraClaimV1>,
+    pub events: Vec<ReraEvidenceEvent>,
+    pub series: Vec<ReraEvidenceSeries>,
+    pub discrepancies: Vec<crate::assets::ReraInventoryReconciliationV1>,
+    pub coverage: Vec<ReraEvidenceCoverage>,
+    pub source_index: Vec<ReraEvidenceSource>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraReportSurfaceResponse {
+    pub version: u32,
+    pub sections: Vec<ReraReportSurfaceSectionResponse>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraReportSurfaceSectionResponse {
     pub id: String,
     pub title: String,
-    pub facts: Vec<ReraReportFact>,
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct ReraReportFact {
-    pub key: String,
-    pub label: String,
-    pub value: String,
-    pub tone: String,
-    pub labels: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_url: Option<String>,
-    pub confidence: f32,
-    pub learned_at: String,
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct ReraCompareItem {
-    pub key: String,
-    pub label: String,
-    pub value: String,
-    pub tone: String,
-    pub labels: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_card_id: Option<String>,
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct ReraComplaintSection {
-    pub scope: String,
-    pub label: String,
-    pub total: i32,
-    pub open: i32,
-    pub disposed: i32,
-    pub top_themes: Vec<ReraComplaintTheme>,
-    pub fine_theme_counts: std::collections::BTreeMap<String, i32>,
-    pub sample_subjects: Vec<String>,
-    pub confidence: f64,
-    pub validation_notes: Vec<String>,
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct ReraComplaintTheme {
-    pub label: String,
-    pub count: i32,
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct ReraDocumentSection {
-    pub group: String,
-    pub label: String,
-    pub count: i32,
-    pub kinds: Vec<String>,
-    pub preview_available_count: i32,
-    pub hidden_count: i32,
-    pub items: Vec<ReraDocumentLink>,
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct ReraDocumentLink {
-    pub artifact_id: String,
-    pub label: String,
-    pub kind: String,
-    pub source_url: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_field_label: Option<String>,
-}
-
-#[derive(Serialize, Clone, Debug, Default)]
-pub struct ReraTimeline {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub original_completion_date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub completion_date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub delay_months: Option<i32>,
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct ReraLegalCheck {
-    pub key: String,
-    pub label: String,
-    pub value: String,
-    pub tone: String,
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct ReraDossierSource {
-    pub registered: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub registration_number: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub portal_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_verified: Option<String>,
+    pub renderer: String,
+    pub selectors: Vec<crate::dag_config::ReraReportSelectorRule>,
+    pub empty_behavior: String,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -2548,15 +2478,7 @@ pub async fn get_property(
         &graph,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
     );
-    let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
-    let rera_dossier = rera.as_ref().map(|info| {
-        rera_dossier_for_property(
-            &property.id,
-            &property.society_id,
-            info.clone(),
-            serving_facts,
-        )
-    });
+    let rera_report_ref = rera_report_ref_for_property(&property, serving_bundle.as_deref());
     let (decision_labels, decision_check_summary) =
         if let Some(serving_bundle) = serving_bundle.as_ref() {
             (
@@ -2770,7 +2692,7 @@ pub async fn get_property(
         recommendation_branches: Vec::new(),
         recommendations,
         rera,
-        rera_dossier,
+        rera_report_ref,
         decision_labels,
         decision_check_summary,
         area_intelligence,
@@ -3153,37 +3075,6 @@ pub(crate) fn overlay_serving_google_reviews(
     card
 }
 
-fn rera_group_buyer_label(group: &str) -> String {
-    let normalized = group.trim().to_ascii_lowercase().replace(['_', '-'], " ");
-    if normalized.contains("plan") {
-        "Plans".to_string()
-    } else if normalized.contains("approval") || normalized.contains("noc") {
-        "Approvals/NOCs".to_string()
-    } else if normalized.contains("legal") || normalized.contains("land") {
-        "Land files".to_string()
-    } else if normalized.contains("promoter") || normalized.contains("financial") {
-        "Promoter financials".to_string()
-    } else if normalized.contains("affidavit") {
-        "Affidavits".to_string()
-    } else if normalized.contains("buyer") || normalized.contains("agreement") {
-        "Buyer templates".to_string()
-    } else if normalized.is_empty() {
-        "Other files".to_string()
-    } else {
-        normalized
-            .split_whitespace()
-            .map(|part| {
-                let mut chars = part.chars();
-                match chars.next() {
-                    Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
-                    None => String::new(),
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
-    }
-}
-
 fn rera_manifest_group(item: &ReraDocumentManifestItem) -> String {
     let group = item.document_group.trim();
     if !group.is_empty() {
@@ -3212,745 +3103,6 @@ fn rera_manifest_group(item: &ReraDocumentManifestItem) -> String {
         "brochure".to_string()
     } else {
         "other".to_string()
-    }
-}
-
-fn rera_document_label(item: &ReraDocumentManifestItem) -> String {
-    for candidate in [
-        item.label.as_str(),
-        item.source_field_label.as_deref().unwrap_or(""),
-        item.kind.as_str(),
-    ] {
-        let candidate = candidate.trim();
-        if !candidate.is_empty() {
-            return candidate.to_string();
-        }
-    }
-    "Document".to_string()
-}
-
-fn rera_public_document_url(item: &ReraDocumentManifestItem) -> Option<String> {
-    let visibility = item
-        .buyer_visibility
-        .as_deref()
-        .unwrap_or("")
-        .trim()
-        .to_ascii_lowercase();
-    let preview = item
-        .preview_policy
-        .as_deref()
-        .unwrap_or("")
-        .trim()
-        .to_ascii_lowercase();
-    if matches!(
-        visibility.as_str(),
-        "hidden" | "private" | "private_or_sensitive"
-    ) || matches!(
-        preview.as_str(),
-        "hidden" | "private" | "private_or_sensitive"
-    ) {
-        return None;
-    }
-
-    let url = item.source_url.as_deref()?.trim();
-    (url.starts_with("https://") || url.starts_with("http://")).then(|| url.to_string())
-}
-
-fn rera_document_link(item: &ReraDocumentManifestItem) -> Option<ReraDocumentLink> {
-    Some(ReraDocumentLink {
-        artifact_id: item.artifact_id.clone(),
-        label: rera_document_label(item),
-        kind: item.kind.clone(),
-        source_url: rera_public_document_url(item)?,
-        source_field_label: item
-            .source_field_label
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string),
-    })
-}
-
-fn rera_scope_label(scope: &str) -> String {
-    match scope.trim().to_ascii_lowercase().as_str() {
-        "project" => "Project complaints".to_string(),
-        "promoter" => "Promoter complaints".to_string(),
-        other if !other.is_empty() => format!("{other} complaints"),
-        _ => "Complaints".to_string(),
-    }
-}
-
-fn rera_rollup_theme(theme: &str) -> String {
-    let normalized = theme.trim().to_ascii_lowercase();
-    if normalized.contains("refund") || normalized.contains("money") {
-        "Refund / money back".to_string()
-    } else if normalized.contains("delay")
-        || normalized.contains("possession")
-        || normalized.contains("completion")
-    {
-        "Delay / possession".to_string()
-    } else if normalized.contains("legal")
-        || normalized.contains("title")
-        || normalized.contains("litigation")
-        || normalized.contains("land")
-    {
-        "Legal / land".to_string()
-    } else if normalized.contains("payment")
-        || normalized.contains("demand")
-        || normalized.contains("interest")
-    {
-        "Payment demand".to_string()
-    } else if normalized.contains("amenit") || normalized.contains("maintenance") {
-        "Amenities / upkeep".to_string()
-    } else if normalized.contains("quality") || normalized.contains("defect") {
-        "Quality".to_string()
-    } else if normalized.contains("builder") || normalized.contains("conduct") {
-        "Builder conduct".to_string()
-    } else if normalized.is_empty() {
-        "Other".to_string()
-    } else {
-        normalized
-    }
-}
-
-fn rera_complaint_sections(info: &ReraInfo) -> Vec<ReraComplaintSection> {
-    let mut sections: Vec<ReraComplaintSection> = info
-        .complaint_summaries
-        .iter()
-        .map(|summary| {
-            let mut fine = std::collections::BTreeMap::new();
-            let mut rolled = std::collections::BTreeMap::<String, i32>::new();
-            for (theme, count) in &summary.theme_counts {
-                if *count <= 0 {
-                    continue;
-                }
-                fine.insert(theme.clone(), *count);
-                *rolled.entry(rera_rollup_theme(theme)).or_insert(0) += *count;
-            }
-            let mut top_themes: Vec<ReraComplaintTheme> = rolled
-                .into_iter()
-                .map(|(label, count)| ReraComplaintTheme { label, count })
-                .collect();
-            top_themes.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.label.cmp(&b.label)));
-            let total = summary
-                .total_count_from_tab_label
-                .unwrap_or(summary.row_count_parsed);
-            ReraComplaintSection {
-                scope: summary.scope.clone(),
-                label: rera_scope_label(&summary.scope),
-                total,
-                open: summary.open_count,
-                disposed: summary.disposed_count,
-                top_themes: top_themes.into_iter().take(4).collect(),
-                fine_theme_counts: fine,
-                sample_subjects: summary.sample_subjects.iter().take(3).cloned().collect(),
-                confidence: summary.confidence,
-                validation_notes: summary.validation_notes.clone(),
-            }
-        })
-        .collect();
-    sections.sort_by(|a, b| {
-        let a_rank = if a.scope == "project" { 0 } else { 1 };
-        let b_rank = if b.scope == "project" { 0 } else { 1 };
-        a_rank.cmp(&b_rank).then_with(|| b.total.cmp(&a.total))
-    });
-    sections
-}
-
-fn rera_document_sections(info: &ReraInfo) -> Vec<ReraDocumentSection> {
-    let mut by_group: std::collections::BTreeMap<String, Vec<&ReraDocumentManifestItem>> =
-        std::collections::BTreeMap::new();
-    for item in &info.document_manifest {
-        let group = rera_manifest_group(item);
-        by_group.entry(group).or_default().push(item);
-    }
-    if by_group.is_empty() {
-        for group in &info.document_groups {
-            by_group.entry(group.group.clone()).or_default();
-        }
-    }
-    by_group
-        .into_iter()
-        .map(|(group, items)| {
-            let mut kinds: Vec<String> = items
-                .iter()
-                .map(|item| item.kind.trim())
-                .filter(|kind| !kind.is_empty())
-                .map(str::to_string)
-                .collect();
-            kinds.sort();
-            kinds.dedup();
-            let preview_available_count = items
-                .iter()
-                .filter(|item| {
-                    matches!(
-                        item.preview_policy.as_deref(),
-                        Some("preview")
-                            | Some("preview_allowed")
-                            | Some("thumbnail")
-                            | Some("inline")
-                    )
-                })
-                .count() as i32;
-            let hidden_count = items
-                .iter()
-                .filter(|item| rera_public_document_url(item).is_none())
-                .count() as i32;
-            let mut link_items = items
-                .iter()
-                .filter_map(|item| rera_document_link(item))
-                .collect::<Vec<_>>();
-            link_items.sort_by(|a, b| a.label.cmp(&b.label).then_with(|| a.kind.cmp(&b.kind)));
-            link_items.dedup_by(|left, right| {
-                left.source_url == right.source_url
-                    || (!left.artifact_id.is_empty() && left.artifact_id == right.artifact_id)
-            });
-            ReraDocumentSection {
-                group: group.clone(),
-                label: rera_group_buyer_label(&group),
-                count: items.len() as i32,
-                kinds,
-                preview_available_count,
-                hidden_count,
-                items: link_items,
-            }
-        })
-        .filter(|section| section.count > 0)
-        .collect()
-}
-
-fn format_rera_number(value: f64, suffix: &str) -> String {
-    if (value.fract()).abs() < 0.05 {
-        format!("{}{suffix}", value.round() as i64)
-    } else {
-        format!("{value:.1}{suffix}")
-    }
-}
-
-fn push_rera_compare(
-    items: &mut Vec<ReraCompareItem>,
-    key: &str,
-    label: &str,
-    value: Option<String>,
-    tone: &str,
-    labels: Vec<&str>,
-    source_card_id: Option<&str>,
-) {
-    if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
-        items.push(ReraCompareItem {
-            key: key.to_string(),
-            label: label.to_string(),
-            value,
-            tone: tone.to_string(),
-            labels: labels.into_iter().map(str::to_string).collect(),
-            source_card_id: source_card_id.map(str::to_string),
-        });
-    }
-}
-
-fn rera_compare_items(
-    info: &ReraInfo,
-    complaints: &[ReraComplaintSection],
-) -> Vec<ReraCompareItem> {
-    let mut items = Vec::new();
-    push_rera_compare(
-        &mut items,
-        "registration",
-        "RERA registration",
-        info.registration_number.as_ref().map(|number| {
-            format!(
-                "{}{}",
-                number,
-                info.status
-                    .as_ref()
-                    .map(|s| format!(" · {s}"))
-                    .unwrap_or_default()
-            )
-        }),
-        if info.registered {
-            "positive"
-        } else {
-            "neutral"
-        },
-        vec!["legal"],
-        Some("registration"),
-    );
-    push_rera_compare(
-        &mut items,
-        "delay_months",
-        "Delivery movement",
-        info.delay_months
-            .filter(|months| *months > 0)
-            .map(|months| format!("{months} months")),
-        "watch",
-        vec!["legal", "risk"],
-        Some("delivery_movement"),
-    );
-    let complaint_total: i32 = complaints.iter().map(|section| section.total).sum();
-    push_rera_compare(
-        &mut items,
-        "complaints",
-        "RERA complaints",
-        (complaint_total > 0).then(|| format!("{complaint_total} recorded")),
-        "watch",
-        vec!["legal", "risk"],
-        Some("complaints_project"),
-    );
-    push_rera_compare(
-        &mut items,
-        "documents",
-        "Official files",
-        (!info.document_manifest.is_empty()).then(|| {
-            let group_count = info.document_groups.len();
-            format!(
-                "{} files · {} groups",
-                info.document_manifest.len(),
-                group_count
-            )
-        }),
-        "neutral",
-        vec!["legal", "layout"],
-        Some("official_files"),
-    );
-    push_rera_compare(
-        &mut items,
-        "density",
-        "Project density",
-        info.units_per_acre
-            .map(|value| format_rera_number(value, " homes/acre")),
-        "neutral",
-        vec!["open-space"],
-        Some("project_scale"),
-    );
-    push_rera_compare(
-        &mut items,
-        "open_area",
-        "Open area",
-        info.open_area_pct
-            .map(|value| format_rera_number(value, "%")),
-        "neutral",
-        vec!["open-space"],
-        Some("project_scale"),
-    );
-    push_rera_compare(
-        &mut items,
-        "land_litigation",
-        "Land litigation",
-        info.land_litigation
-            .map(|value| if value { "Recorded" } else { "Not recorded" }.to_string()),
-        if info.land_litigation == Some(true) {
-            "watch"
-        } else {
-            "positive"
-        },
-        vec!["legal", "risk"],
-        Some("legal_follow_up"),
-    );
-    items
-}
-
-fn rera_legal_checks(info: &ReraInfo) -> Vec<ReraLegalCheck> {
-    let mut checks = Vec::new();
-    if let Some(value) = info.land_litigation {
-        checks.push(ReraLegalCheck {
-            key: "land_litigation".to_string(),
-            label: "Land litigation".to_string(),
-            value: if value { "Recorded" } else { "Not recorded" }.to_string(),
-            tone: if value { "watch" } else { "positive" }.to_string(),
-        });
-    }
-    if let Some(value) = info.has_mortgage {
-        checks.push(ReraLegalCheck {
-            key: "mortgage".to_string(),
-            label: "Mortgage".to_string(),
-            value: if value { "Reported" } else { "Not reported" }.to_string(),
-            tone: if value { "watch" } else { "positive" }.to_string(),
-        });
-    }
-    if let Some(value) = info.has_borrowing {
-        checks.push(ReraLegalCheck {
-            key: "borrowing".to_string(),
-            label: "Borrowing".to_string(),
-            value: if value { "Reported" } else { "Not reported" }.to_string(),
-            tone: if value { "watch" } else { "positive" }.to_string(),
-        });
-    }
-    if let Some(bank) = info
-        .escrow_bank
-        .as_ref()
-        .filter(|bank| !bank.trim().is_empty())
-    {
-        checks.push(ReraLegalCheck {
-            key: "escrow_bank".to_string(),
-            label: "Escrow bank".to_string(),
-            value: bank.clone(),
-            tone: "neutral".to_string(),
-        });
-    }
-    checks
-}
-
-fn rera_key_matches(
-    key_lower: &str,
-    fact_keys: &[String],
-    key_prefixes: &[String],
-    key_contains: &[String],
-    key_suffixes: &[String],
-) -> bool {
-    fact_keys
-        .iter()
-        .any(|value| key_lower == value.trim().to_ascii_lowercase())
-        || key_prefixes
-            .iter()
-            .any(|value| key_lower.starts_with(&value.trim().to_ascii_lowercase()))
-        || key_contains
-            .iter()
-            .any(|value| key_lower.contains(&value.trim().to_ascii_lowercase()))
-        || key_suffixes
-            .iter()
-            .any(|value| key_lower.ends_with(&value.trim().to_ascii_lowercase()))
-}
-
-fn rera_section_for_key<'a>(
-    config: &'a ReraReportSurfaceFile,
-    key: &str,
-) -> (&'a str, &'a str, u32) {
-    let key_lower = key.to_ascii_lowercase();
-    config
-        .sections
-        .iter()
-        .find(|section| rera_section_matches(section, &key_lower))
-        .map(|section| (section.id.as_str(), section.title.as_str(), section.rank))
-        .unwrap_or_else(|| {
-            let fallback = &config.default_section;
-            (fallback.id.as_str(), fallback.title.as_str(), fallback.rank)
-        })
-}
-
-fn rera_section_matches(section: &ReraReportSectionRule, key_lower: &str) -> bool {
-    rera_key_matches(
-        key_lower,
-        &section.fact_keys,
-        &section.key_prefixes,
-        &section.key_contains,
-        &section.key_suffixes,
-    )
-}
-
-fn rera_report_fact_candidate(config: &ReraReportSurfaceFile, fact: &ServingFactRecord) -> bool {
-    let key = fact.fact_key.to_ascii_lowercase();
-    if config
-        .candidate_rules
-        .exclude_key_contains
-        .iter()
-        .any(|value| key.contains(&value.trim().to_ascii_lowercase()))
-        || config
-            .candidate_rules
-            .exclude_key_suffixes
-            .iter()
-            .any(|value| key.ends_with(&value.trim().to_ascii_lowercase()))
-    {
-        return false;
-    }
-    config
-        .candidate_rules
-        .include_source_types
-        .iter()
-        .any(|source_type| source_type.eq_ignore_ascii_case(&fact.source_type))
-        || config
-            .candidate_rules
-            .include_fact_keys
-            .iter()
-            .any(|fact_key| key == fact_key.trim().to_ascii_lowercase())
-        || config
-            .candidate_rules
-            .include_key_prefixes
-            .iter()
-            .any(|prefix| key.starts_with(&prefix.trim().to_ascii_lowercase()))
-}
-
-fn rera_fact_label(
-    config: &ReraReportSurfaceFile,
-    fact_registry: Option<&FactRegistryIndex>,
-    key: &str,
-) -> String {
-    let normalized_key = key.trim().to_ascii_lowercase();
-    if let Some(rule) = config
-        .display_rules
-        .iter()
-        .find(|rule| rera_display_rule_matches(rule, &normalized_key))
-    {
-        return rule.label.clone();
-    }
-    if let Some(entry) = fact_registry.and_then(|registry| registry.lookup(key)) {
-        if let Some(label) = entry.label.as_deref() {
-            if !label.trim().is_empty() {
-                return label.trim().to_string();
-            }
-        }
-    }
-    key.to_string()
-}
-
-fn rera_display_rule_matches(rule: &ReraReportDisplayRule, key_lower: &str) -> bool {
-    rera_key_matches(key_lower, &rule.fact_keys, &[], &rule.key_contains, &[])
-}
-
-fn compact_rera_number(value: f64) -> String {
-    if value.is_finite() && value.fract().abs() < 0.05 {
-        format!("{}", value.round() as i64)
-    } else if value.is_finite() {
-        format!("{value:.1}")
-    } else {
-        String::new()
-    }
-}
-
-fn rera_fact_value(config: &ReraReportSurfaceFile, fact: &ServingFactRecord) -> Option<String> {
-    let key = fact.fact_key.to_ascii_lowercase();
-    let value = match &fact.value {
-        FactValue::Numeric(value) => {
-            let base = compact_rera_number(*value);
-            if base.is_empty() {
-                return None;
-            }
-            if let Some(unit) = rera_numeric_unit_suffix(config, &key) {
-                format!("{base}{unit}")
-            } else {
-                base
-            }
-        }
-        FactValue::Text(value) => {
-            if config.value_rules.skip_json_containers
-                && serde_json::from_str::<serde_json::Value>(value)
-                    .ok()
-                    .is_some_and(|parsed| parsed.is_array() || parsed.is_object())
-            {
-                return None;
-            }
-            value.clone()
-        }
-        FactValue::Bool(value) => {
-            if *value {
-                "Yes".to_string()
-            } else {
-                "No".to_string()
-            }
-        }
-        FactValue::Tags(values) => values
-            .iter()
-            .map(String::as_str)
-            .filter(|value| !value.trim().is_empty())
-            .collect::<Vec<_>>()
-            .join(", "),
-        FactValue::Score { value, explanation } => {
-            let score = compact_rera_number(*value);
-            if explanation.trim().is_empty() {
-                score
-            } else {
-                format!("{score} · {}", explanation.trim())
-            }
-        }
-    };
-    let value = value.trim();
-    if value.is_empty()
-        || config
-            .value_rules
-            .skip_text_values
-            .iter()
-            .any(|skip| value.eq_ignore_ascii_case(skip.trim()))
-    {
-        None
-    } else {
-        Some(value.to_string())
-    }
-}
-
-fn rera_numeric_unit_suffix<'a>(
-    config: &'a ReraReportSurfaceFile,
-    key_lower: &str,
-) -> Option<&'a str> {
-    config
-        .value_rules
-        .numeric_units
-        .iter()
-        .find(|rule| rera_key_matches(key_lower, &[], &[], &rule.key_contains, &rule.key_suffixes))
-        .map(|rule| rule.suffix.as_str())
-}
-
-fn rera_fact_tone(config: &ReraReportSurfaceFile, key: &str, value: &FactValue) -> String {
-    let key = key.to_ascii_lowercase();
-    config
-        .tone_rules
-        .iter()
-        .find(|rule| rera_tone_rule_matches(rule, &key, value))
-        .map(|rule| rule.tone.clone())
-        .unwrap_or_else(|| "neutral".to_string())
-}
-
-fn rera_tone_rule_matches(rule: &ReraReportToneRule, key_lower: &str, value: &FactValue) -> bool {
-    rera_key_matches(
-        key_lower,
-        &rule.fact_keys,
-        &rule.key_prefixes,
-        &rule.key_contains,
-        &[],
-    ) && rera_tone_condition_matches(&rule.when, value)
-}
-
-fn rera_tone_condition_matches(condition: &ReraReportToneCondition, value: &FactValue) -> bool {
-    if let Some(present) = condition.present {
-        if !present {
-            return false;
-        }
-    }
-    if let Some(expected) = condition.bool_value {
-        if !matches!(value, FactValue::Bool(value) if *value == expected) {
-            return false;
-        }
-    }
-    if let Some(threshold) = condition.numeric_gt {
-        if !matches!(value, FactValue::Numeric(value) if *value > threshold) {
-            return false;
-        }
-    }
-    if let Some(threshold) = condition.numeric_lte {
-        if !matches!(value, FactValue::Numeric(value) if *value <= threshold) {
-            return false;
-        }
-    }
-    true
-}
-
-fn rera_fact_notebook_labels(
-    config: &ReraReportSurfaceFile,
-    section_id: &str,
-    key: &str,
-) -> Vec<String> {
-    let mut labels = Vec::new();
-    let hay = format!("{section_id} {key}").to_ascii_lowercase();
-    for rule in &config.notebook_label_rules {
-        if rera_notebook_label_rule_matches(rule, section_id, key, &hay) {
-            labels.extend(rule.labels.iter().cloned());
-        }
-    }
-    labels.sort();
-    labels.dedup();
-    labels.truncate(4);
-    labels
-}
-
-fn rera_notebook_label_rule_matches(
-    rule: &ReraReportNotebookLabelRule,
-    section_id: &str,
-    key: &str,
-    haystack_lower: &str,
-) -> bool {
-    let has_matchers =
-        !rule.section_ids.is_empty() || !rule.fact_keys.is_empty() || !rule.key_contains.is_empty();
-    if !has_matchers {
-        return true;
-    }
-    rule.section_ids
-        .iter()
-        .any(|value| value.eq_ignore_ascii_case(section_id))
-        || rule
-            .fact_keys
-            .iter()
-            .any(|value| value.eq_ignore_ascii_case(key))
-        || rule
-            .key_contains
-            .iter()
-            .any(|value| haystack_lower.contains(&value.trim().to_ascii_lowercase()))
-}
-
-fn rera_report_sections_for_society(
-    society_id: &str,
-    serving_facts: Option<&ServingFactIndex>,
-) -> Vec<ReraReportSection> {
-    let Some(serving_facts) = serving_facts else {
-        return Vec::new();
-    };
-    let Ok(config) = rera_report_surface_config() else {
-        return Vec::new();
-    };
-    let fact_registry = fact_registry_index_config().ok();
-    let rows = rera_report_society_entity_id_candidates(society_id)
-        .into_iter()
-        .filter_map(|entity_id| serving_facts.entity(&entity_id))
-        .collect::<Vec<_>>();
-    if rows.is_empty() {
-        return Vec::new();
-    }
-    let mut latest_by_key_value = BTreeMap::<(String, String), (&ServingFactRecord, String)>::new();
-    for fact in rows
-        .iter()
-        .flat_map(|rows| rows.facts.iter())
-        .filter(|fact| rera_report_fact_candidate(config, fact))
-    {
-        let Some(value) = rera_fact_value(config, fact) else {
-            continue;
-        };
-        latest_by_key_value
-            .entry((fact.fact_key.clone(), value.clone()))
-            .and_modify(|existing| {
-                if fact.learned_at > existing.0.learned_at
-                    || (fact.learned_at == existing.0.learned_at
-                        && fact.confidence > existing.0.confidence)
-                {
-                    *existing = (fact, value.clone());
-                }
-            })
-            .or_insert((fact, value));
-    }
-
-    let mut by_section = BTreeMap::<String, (String, u32, Vec<ReraReportFact>)>::new();
-    for (fact, value) in latest_by_key_value.into_values() {
-        let (section_id, section_title, section_rank) =
-            rera_section_for_key(config, &fact.fact_key);
-        by_section
-            .entry(section_id.to_string())
-            .or_insert_with(|| (section_title.to_string(), section_rank, Vec::new()))
-            .2
-            .push(ReraReportFact {
-                key: fact.fact_key.clone(),
-                label: rera_fact_label(config, fact_registry, &fact.fact_key),
-                value,
-                tone: rera_fact_tone(config, &fact.fact_key, &fact.value),
-                labels: rera_fact_notebook_labels(config, section_id, &fact.fact_key),
-                source_url: fact.source_url.clone(),
-                confidence: fact.confidence,
-                learned_at: fact.learned_at.to_rfc3339(),
-            });
-    }
-
-    let mut sections: Vec<(u32, ReraReportSection)> = by_section
-        .into_iter()
-        .map(|(id, (title, rank, mut facts))| {
-            facts.sort_by(|a, b| a.label.cmp(&b.label).then_with(|| a.key.cmp(&b.key)));
-            facts.dedup_by(|left, right| {
-                left.label.eq_ignore_ascii_case(&right.label)
-                    && left.value.eq_ignore_ascii_case(&right.value)
-            });
-            (rank, ReraReportSection { title, id, facts })
-        })
-        .collect();
-    sections.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.title.cmp(&b.1.title)));
-    sections.into_iter().map(|(_, section)| section).collect()
-}
-
-fn rera_report_society_entity_id_candidates(society_id: &str) -> Vec<String> {
-    let raw = society_id.trim().to_lowercase().replace(['_', ' '], "-");
-    let slug = raw
-        .strip_prefix("society:")
-        .or_else(|| raw.strip_prefix("soc-"))
-        .unwrap_or(&raw);
-    let canonical = format!("society:{slug}");
-
-    if raw == canonical {
-        vec![canonical]
-    } else {
-        vec![canonical, raw]
     }
 }
 
@@ -3987,50 +3139,51 @@ fn refresh_rera_document_summary(info: &mut ReraInfo) {
     info.affidavit_only_visible = rera_affidavit_only_visible(&info.document_manifest);
 }
 
-fn rera_dossier_for_property(
-    property_id: &str,
-    society_id: &str,
-    info: ReraInfo,
-    serving_facts: Option<&ServingFactIndex>,
-) -> ReraDossier {
-    let complaint_sections = rera_complaint_sections(&info);
-    let document_sections = rera_document_sections(&info);
-    let compare_items = rera_compare_items(&info, &complaint_sections);
-    let legal_checks = rera_legal_checks(&info);
-    ReraDossier {
-        property_id: property_id.to_string(),
-        society_id: society_id.to_string(),
-        fact_sections: rera_report_sections_for_society(society_id, serving_facts),
-        summary_cards: info.decision_cards.clone(),
-        compare_items,
-        complaint_sections,
-        document_sections,
-        schedule_sections: info.schedule_sections.clone(),
-        timeline: ReraTimeline {
-            start_date: info.start_date.clone(),
-            original_completion_date: info.original_completion_date.clone(),
-            completion_date: info.completion_date.clone(),
-            delay_months: info.delay_months,
-        },
-        legal_checks,
-        source: ReraDossierSource {
-            registered: info.registered,
-            registration_number: info.registration_number.clone(),
-            status: info.status.clone(),
-            portal_url: info.rera_portal_url.clone(),
-            last_verified: info.last_verified.clone(),
-        },
+fn rera_evidence_availability(record: &ServingReraEvidenceRecord) -> ReraEvidenceAvailability {
+    if record
+        .coverage
+        .iter()
+        .any(|coverage| coverage.source_section == "source_warning")
+    {
+        ReraEvidenceAvailability::Partial
+    } else {
+        ReraEvidenceAvailability::Available
     }
 }
 
-/// GET /api/properties/:id/rera — returns a buyer-facing RERA dossier. This is
-/// intentionally separate from generic evidence so the UI can treat regulatory
-/// records like Google/Reddit review surfaces: own loading state, own notebook
-/// pins, own future async document fetches.
+fn rera_report_ref_for_property(
+    property: &crate::models::Property,
+    bundle: Option<&LoadedServingBundle>,
+) -> ReraReportRef {
+    let record = bundle.and_then(|bundle| rera_evidence_for_property(bundle, property));
+    ReraReportRef {
+        registration_ids: record
+            .map(|record| record.registration_ids.clone())
+            .unwrap_or_default(),
+        href: format!("/property/{}/rera", property.id),
+        availability: record
+            .map(rera_evidence_availability)
+            .unwrap_or(ReraEvidenceAvailability::Unavailable),
+    }
+}
+
+fn rera_evidence_for_property<'a>(
+    bundle: &'a LoadedServingBundle,
+    property: &crate::models::Property,
+) -> Option<&'a ServingReraEvidenceRecord> {
+    let canonical_id = society_node_id(&property.society_id);
+    bundle
+        .rera_evidence_index
+        .society(&canonical_id)
+        .or_else(|| bundle.rera_evidence_index.society(&property.society_id))
+}
+
+/// GET /api/properties/:id/rera — serves the accepted public RERA evidence
+/// projection already loaded from the promoted serving bundle.
 pub async fn get_property_rera(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-) -> Result<Json<ReraDossier>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Json<ReraEvidenceReportResponse>, (StatusCode, Json<ErrorResponse>)> {
     let serving_bundle = state.serving_bundle.read().await.clone();
     let properties = state.properties.read().await;
     let property = find_property_by_request_id(&properties, &id).ok_or_else(|| {
@@ -4041,26 +3194,100 @@ pub async fn get_property_rera(
             }),
         )
     })?;
-    let graph = state.knowledge.read().await;
-    let rera = rera_info_for(
-        &property.society_id,
-        &graph,
-        serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
-    )
-    .ok_or_else(|| {
+    let config = rera_report_surface_config().map_err(|_| {
         (
-            StatusCode::NOT_FOUND,
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
-                error: "rera_not_found".to_string(),
+                error: "rera_surface_config_invalid".to_string(),
             }),
         )
     })?;
-    Ok(Json(rera_dossier_for_property(
-        &property.id,
-        &property.society_id,
-        rera,
-        serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
-    )))
+    let surface = rera_surface_response(config);
+    let response = if let Some(bundle) = serving_bundle {
+        rera_evidence_report_for_property(
+            &property.id,
+            &bundle.manifest.bundle_version,
+            bundle.manifest.created_at,
+            rera_evidence_for_property(&bundle, property),
+            surface,
+        )
+    } else {
+        rera_evidence_report_for_property(&property.id, "", chrono::Utc::now(), None, surface)
+    };
+    Ok(Json(response))
+}
+
+fn rera_evidence_report_for_property(
+    property_id: &str,
+    bundle_id: &str,
+    generated_at: chrono::DateTime<chrono::Utc>,
+    record: Option<&ServingReraEvidenceRecord>,
+    surface: ReraReportSurfaceResponse,
+) -> ReraEvidenceReportResponse {
+    let Some(record) = record else {
+        return ReraEvidenceReportResponse {
+            availability: ReraEvidenceAvailability::Unavailable,
+            evidence: empty_rera_evidence_projection(property_id, bundle_id, generated_at),
+            surface,
+        };
+    };
+    ReraEvidenceReportResponse {
+        availability: rera_evidence_availability(record),
+        evidence: ReraEvidenceProjectionResponse {
+            schema_version: RERA_EVIDENCE_SCHEMA_VERSION.to_string(),
+            property_id: property_id.to_string(),
+            bundle_id: bundle_id.to_string(),
+            generated_at,
+            registration_ids: record.registration_ids.clone(),
+            entities: record.entities.clone(),
+            claims: record.claims.clone(),
+            events: record.events.clone(),
+            series: record.series.clone(),
+            discrepancies: record.discrepancies.clone(),
+            coverage: record.coverage.clone(),
+            source_index: record.source_index.clone(),
+        },
+        surface,
+    }
+}
+
+fn rera_surface_response(config: &ReraReportSurfaceFile) -> ReraReportSurfaceResponse {
+    let mut sections = config.sections.clone();
+    sections.sort_by_key(|section| section.rank);
+    ReraReportSurfaceResponse {
+        version: config.version,
+        sections: sections
+            .into_iter()
+            .map(|section| ReraReportSurfaceSectionResponse {
+                id: section.id,
+                title: section.title,
+                renderer: section.renderer,
+                selectors: section.selectors,
+                empty_behavior: section.empty_behavior,
+            })
+            .collect(),
+    }
+}
+
+fn empty_rera_evidence_projection(
+    property_id: &str,
+    bundle_id: &str,
+    generated_at: chrono::DateTime<chrono::Utc>,
+) -> ReraEvidenceProjectionResponse {
+    ReraEvidenceProjectionResponse {
+        schema_version: RERA_EVIDENCE_SCHEMA_VERSION.to_string(),
+        property_id: property_id.to_string(),
+        bundle_id: bundle_id.to_string(),
+        generated_at,
+        registration_ids: Vec::new(),
+        entities: Vec::new(),
+        claims: Vec::new(),
+        events: Vec::new(),
+        series: Vec::new(),
+        discrepancies: Vec::new(),
+        coverage: Vec::new(),
+        source_index: Vec::new(),
+    }
 }
 
 fn rera_info_for(
@@ -4243,6 +3470,78 @@ mod serving_state_tests {
     use crate::models::{Property, Society};
     use crate::routes::enrichment::enrich_property_card;
     use crate::serving::{ServingFactRecord, ServingSearchMetadataRecord};
+
+    #[test]
+    fn rera_evidence_report_distinguishes_available_partial_and_unavailable() {
+        let captured_at = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
+        let surface = ReraReportSurfaceResponse {
+            version: 1,
+            sections: Vec::new(),
+        };
+        let available = rera_record_with_coverage("registration_summary", captured_at);
+        let response = rera_evidence_report_for_property(
+            "sample-3bhk",
+            "bundle-1",
+            captured_at,
+            Some(&available),
+            surface.clone(),
+        );
+        assert_eq!(response.availability, ReraEvidenceAvailability::Available);
+        assert_eq!(response.evidence.registration_ids, vec!["reg-1"]);
+
+        let partial = rera_record_with_coverage("source_warning", captured_at);
+        let response = rera_evidence_report_for_property(
+            "sample-3bhk",
+            "bundle-1",
+            captured_at,
+            Some(&partial),
+            surface.clone(),
+        );
+        assert_eq!(response.availability, ReraEvidenceAvailability::Partial);
+
+        let response = rera_evidence_report_for_property(
+            "sample-3bhk",
+            "bundle-1",
+            captured_at,
+            None,
+            surface,
+        );
+        assert_eq!(response.availability, ReraEvidenceAvailability::Unavailable);
+        assert!(response.evidence.registration_ids.is_empty());
+        assert!(response.evidence.claims.is_empty());
+    }
+
+    #[test]
+    fn property_detail_rera_reference_is_stable_without_evidence() {
+        let reference = rera_report_ref_for_property(&property(), None);
+        assert_eq!(reference.href, "/property/sample-3bhk/rera");
+        assert_eq!(
+            reference.availability,
+            ReraEvidenceAvailability::Unavailable
+        );
+        assert!(reference.registration_ids.is_empty());
+    }
+
+    fn rera_record_with_coverage(
+        source_section: &str,
+        latest_observed_at: chrono::DateTime<Utc>,
+    ) -> ServingReraEvidenceRecord {
+        ServingReraEvidenceRecord {
+            society_id: "sample".to_string(),
+            registration_ids: vec!["reg-1".to_string()],
+            entities: Vec::new(),
+            claims: Vec::new(),
+            events: Vec::new(),
+            series: Vec::new(),
+            discrepancies: Vec::new(),
+            coverage: vec![ReraEvidenceCoverage {
+                source_section: source_section.to_string(),
+                record_count: 1,
+                latest_observed_at,
+            }],
+            source_index: Vec::new(),
+        }
+    }
 
     #[test]
     fn search_card_and_property_detail_project_the_same_current_review_facts() {
@@ -4565,22 +3864,6 @@ mod serving_state_tests {
                 && item.source_url.as_deref()
                     == Some("https://rera.karnataka.gov.in/download_jc?DOC_ID=site")
         }));
-        let dossier = rera_dossier_for_property(
-            "property-sample",
-            "soc-sample",
-            detail.clone(),
-            Some(&serving),
-        );
-        let plan_links = dossier
-            .document_sections
-            .iter()
-            .find(|section| section.group == "plans")
-            .map(|section| &section.items)
-            .expect("plan documents should have their own section");
-        assert!(plan_links.iter().any(|item| item.label == "Site Plan.pdf"));
-        assert!(plan_links
-            .iter()
-            .any(|item| item.source_url.contains("DOC_ID=sanction")));
         let complaints = detail
             .decision_cards
             .iter()
@@ -5206,96 +4489,6 @@ mod serving_state_tests {
                 && item.value == "INR 90K - 1.4L"
                 && item.source_type == "ExternalListing"
         }));
-    }
-
-    #[test]
-    fn rera_report_sections_scan_canonical_society_rows_and_skip_empty_values() {
-        let serving = ServingFactIndex::from_records(
-            vec![
-                serving_fact("rera_number", FactValue::Text("PRM/123".to_string()), 10),
-                serving_fact("rera_delay_months", FactValue::Numeric(8.0), 10),
-                serving_fact("rera_land_litigation", FactValue::Bool(false), 10),
-                serving_fact(
-                    "rera_complaints_resolved_pct",
-                    FactValue::Numeric(100.0),
-                    10,
-                ),
-                serving_fact("rera_status", FactValue::Text("unknown".to_string()), 11),
-                serving_fact(
-                    "rera_document_manifest",
-                    FactValue::Text(r#"[{"label":"file"}]"#.to_string()),
-                    10,
-                ),
-                serving_fact(
-                    "rera_portal_url",
-                    FactValue::Text("https://rera.example".to_string()),
-                    10,
-                ),
-                serving_fact(
-                    "rera_survey_numbers",
-                    FactValue::Text("16/4".to_string()),
-                    9,
-                ),
-                serving_fact(
-                    "rera_survey_numbers",
-                    FactValue::Text("16/5".to_string()),
-                    10,
-                ),
-                typed_serving_fact(
-                    "project_land_area_acres",
-                    FactValue::Numeric(5.3),
-                    "Computed",
-                    None,
-                    10,
-                ),
-            ],
-            Vec::<ServingSearchMetadataRecord>::new(),
-        );
-
-        let sections = rera_report_sections_for_society("soc-sample", Some(&serving));
-        let facts = sections
-            .iter()
-            .flat_map(|section| section.facts.iter())
-            .collect::<Vec<_>>();
-
-        assert!(sections.iter().any(|section| section.id == "registration"));
-        assert!(sections.iter().any(|section| section.id == "timeline"));
-        assert!(sections.iter().any(|section| section.id == "project"));
-        let section_ids = sections
-            .iter()
-            .map(|section| section.id.as_str())
-            .collect::<Vec<_>>();
-        assert_eq!(
-            section_ids,
-            vec![
-                "registration",
-                "project",
-                "checks",
-                "complaints",
-                "timeline"
-            ]
-        );
-        assert!(facts
-            .iter()
-            .any(|fact| fact.key == "rera_number" && fact.label == "RERA number"));
-        assert!(facts
-            .iter()
-            .any(|fact| fact.key == "project_land_area_acres" && fact.value == "5.3 acres"));
-        assert!(facts
-            .iter()
-            .any(|fact| { fact.key == "rera_complaints_resolved_pct" && fact.tone == "positive" }));
-        assert!(!facts.iter().any(|fact| fact.key == "rera_status"));
-        assert!(!facts
-            .iter()
-            .any(|fact| fact.key == "rera_document_manifest"));
-        assert!(!facts.iter().any(|fact| fact.key == "rera_portal_url"));
-        assert_eq!(
-            facts
-                .iter()
-                .filter(|fact| fact.key == "rera_survey_numbers")
-                .count(),
-            2
-        );
     }
 
     fn legacy_graph() -> crate::knowledge::KnowledgeGraph {

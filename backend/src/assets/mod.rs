@@ -84,10 +84,10 @@ pub use google::{
 };
 pub use home_state::{home_state_signals_input, HOME_STATE_SIGNALS_ASSET_ID};
 pub use kg_view::{
-    KgSocietyViewMaterialization, KgSocietyViewMaterializeError, KgSocietyViewMaterializer,
-    KgViewArtifact, KgViewArtifactKind, KgViewEdgeRecord, KgViewEntityRecord,
-    KgViewFactAnnotationRecord, KgViewFactRecord, KgViewManifest, KgViewRecords,
-    KG_SOCIETY_VIEW_ASSET_ID,
+    load_kg_view_records, KgSocietyViewMaterialization, KgSocietyViewMaterializeError,
+    KgSocietyViewMaterializer, KgViewArtifact, KgViewArtifactKind, KgViewEdgeRecord,
+    KgViewEntityRecord, KgViewFactAnnotationRecord, KgViewFactRecord, KgViewManifest,
+    KgViewRecords, KG_SOCIETY_VIEW_ASSET_ID,
 };
 pub use materialization::AssetMaterializationStore;
 pub use media::{
@@ -131,8 +131,8 @@ pub use rera::{
     CANONICAL_SOCIETY_NODES_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 pub use rera_claims::{
-    claims_from_source_records, inventory_reconciliations, ReraAssertionMode, ReraClaimDerivation,
-    ReraClaimEffectiveTime, ReraClaimError, ReraClaimEvidence, ReraClaimInput,
+    claims_from_source_records, inventory_reconciliations, read_rera_claims, ReraAssertionMode,
+    ReraClaimDerivation, ReraClaimEffectiveTime, ReraClaimError, ReraClaimEvidence, ReraClaimInput,
     ReraClaimMaterializeError, ReraClaimSubject, ReraClaimV1, ReraClaimValidationState,
     ReraClaimValue, ReraClaimVisibility, ReraClaimsManifest, ReraClaimsMaterializer,
     ReraClaimsQualityReport, ReraInventoryComparisonV1, ReraInventoryMeasurementV1,

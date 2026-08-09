@@ -2335,9 +2335,18 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
             "crawl_run_id": "rera-listing-{}".format(observed_at[:10]),
         }
     ]
-    detail_snapshots = capture_scoped_rera_detail_receipts(
-        request, listing_receipt_id
-    )
+    force_refresh = RERA_RECEIPTS in set(request.get("force_refresh_assets") or [])
+    if force_refresh:
+        detail_snapshots = capture_scoped_rera_detail_receipts(
+            request, listing_receipt_id
+        )
+    else:
+        try:
+            detail_snapshots = load_scoped_rera_detail_receipts(request)
+        except ValueError:
+            detail_snapshots = capture_scoped_rera_detail_receipts(
+                request, listing_receipt_id
+            )
     for snapshot in detail_snapshots:
         receipts.append(
             {
@@ -2402,9 +2411,11 @@ def collect_rera_source_records(request: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("K-RERA listing arrays are incomplete: {}".format(counts))
 
     records = []
-    scoped_registrations = {
-        entity["registration_number"] for entity in scoped_rera_entities(request)
+    scoped_entities = scoped_rera_entities(request)
+    scoped_by_registration = {
+        entity["registration_number"]: entity for entity in scoped_entities
     }
+    scoped_registrations = set(scoped_by_registration)
     for index, registration_number in enumerate(arrays["applicationNameList2"]):
         normalized_registration = normalized_registration_number(registration_number)
         if scoped_registrations and normalized_registration not in scoped_registrations:
@@ -2433,6 +2444,30 @@ def collect_rera_source_records(request: Dict[str, Any]) -> Dict[str, Any]:
                 "parser_version": "rera_listing_source_records.v1",
             }
         )
+        scoped_entity = scoped_by_registration.get(normalized_registration)
+        if scoped_entity:
+            records.append(
+                {
+                    "kind": "registration_relation",
+                    "registration_number": registration_number,
+                    "receipt_id": receipt_id,
+                    "capture_id": capture_id,
+                    "source_locator": "applicationNameList[{}]".format(index),
+                    "raw_label": "Catalog project key exact registration match",
+                    "raw_value": json.dumps(
+                        {
+                            "entity_id": scoped_entity["entity_id"],
+                            "entity_type": "society",
+                            "resolution_method": "catalog_project_key_exact",
+                            "resolution_confidence": 1.0,
+                        },
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                    "observed_at": observed_at,
+                    "parser_version": "rera_registration_relation.v1",
+                }
+            )
     if scoped_registrations:
         found_registrations = {
             normalized_registration_number(record["registration_number"])
@@ -2489,9 +2524,16 @@ def scoped_rera_entities(request: Dict[str, Any]) -> List[Dict[str, str]]:
         if registration_number in seen:
             continue
         name = str(entity.get("name") or "").strip()
+        entity_id = str(entity.get("entity_id") or "").strip()
         if not name:
             raise ValueError(
                 "RERA detail collection requires a project name for {}".format(
+                    registration_number
+                )
+            )
+        if not entity_id:
+            raise ValueError(
+                "RERA detail collection requires an entity ID for {}".format(
                     registration_number
                 )
             )
@@ -2500,6 +2542,7 @@ def scoped_rera_entities(request: Dict[str, Any]) -> List[Dict[str, str]]:
             {
                 "registration_number": registration_number,
                 "project_name": name,
+                "entity_id": entity_id,
             }
         )
     return entities
@@ -2716,9 +2759,10 @@ def rera_legacy_declared_inventory_rows(detail_html: str) -> List[Dict[str, Any]
             "row_number": str(index + 1),
             "inventory_type": inventory_type,
             "unit_count": int(unit_text.replace(",", "")),
-            "total_carpet_area_sqm": rera_square_metres(carpet_text) if carpet_text else None,
-            "total_balcony_verandah_area_sqm": rera_square_metres(balcony_text) if balcony_text else None,
-            "total_open_terrace_area_sqm": rera_square_metres(terrace_text) if terrace_text else None,
+            "filed_carpet_area_sqm": rera_square_metres(carpet_text) if carpet_text else None,
+            "filed_balcony_verandah_area_sqm": rera_square_metres(balcony_text) if balcony_text else None,
+            "filed_open_terrace_area_sqm": rera_square_metres(terrace_text) if terrace_text else None,
+            "area_scope": "source_unspecified",
             "filed_values": {
                 "unit_count": unit_text,
                 "carpet_area": carpet_text,

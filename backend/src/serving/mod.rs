@@ -11,6 +11,7 @@ pub mod materializer;
 pub mod parquet;
 pub mod projection;
 pub mod proximity;
+pub mod rera;
 pub mod spatial_index;
 pub mod tantivy_index;
 pub mod types;
@@ -23,11 +24,16 @@ pub use materializer::{
     SearchServingBundleMaterializer,
 };
 pub use parquet::{
-    read_edges_parquet, read_entities_parquet, read_facts_parquet, read_search_metadata_parquet,
-    ParquetReadError,
+    read_edges_parquet, read_entities_parquet, read_facts_parquet, read_rera_evidence_parquet,
+    read_search_metadata_parquet, write_rera_evidence_parquet, ParquetReadError,
 };
 pub use projection::{GoogleReviewEvidence, ProjectedFact, SocietyFactProjection};
 pub use proximity::{derive_proximity_records, DerivedProximityRecords};
+pub use rera::{
+    project_rera_evidence, ReraEvidenceCoverage, ReraEvidenceEntity, ReraEvidenceEvent,
+    ReraEvidenceIndex, ReraEvidenceSeries, ReraEvidenceSeriesPoint, ReraEvidenceSource,
+    ReraServingProjectionError, ServingReraEvidenceRecord, RERA_EVIDENCE_SCHEMA_VERSION,
+};
 pub use spatial_index::{SpatialPoint, SpatialServingIndex};
 pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,
