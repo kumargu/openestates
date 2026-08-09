@@ -10,7 +10,6 @@ type Props = {
   societyName?: string;
   heroImage?: string | null;
   images?: string[];
-  societyId?: string;
   chips: SceneChip[];
 };
 
@@ -27,13 +26,11 @@ export function PropertySceneCard({
   societyName,
   heroImage,
   images,
-  societyId,
   chips,
 }: Props) {
   const { images: sceneImages, loading, hasImages } = usePropertySceneImages({
     heroImage,
     images,
-    societyId,
   });
 
   const [active, setActive] = useState(0);
@@ -78,6 +75,7 @@ export function PropertySceneCard({
                 alt={`${title} — ${sceneLabelForIndex(index)}`}
                 className="property-scene__image"
                 loading={index === 0 ? "eager" : "lazy"}
+                fetchPriority={index === 0 ? "high" : "low"}
               />
             </div>
           ))
@@ -125,6 +123,7 @@ export function PropertySceneCard({
                 src={src}
                 alt={`${title} — ${sceneLabelForIndex(index)}`}
                 loading="lazy"
+                fetchPriority="low"
               />
               <span>{sceneLabelForIndex(index)}</span>
               {position === mosaicImages.length - 1 && sceneImages.length > 5 && (

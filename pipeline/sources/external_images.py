@@ -10,6 +10,8 @@ import os
 import re
 import hashlib
 import io
+import shutil
+import tempfile
 import urllib.parse
 import urllib.request
 import subprocess
@@ -142,7 +144,7 @@ def records_for_entity(
             if optimized:
                 optimized_count += 1
                 image_url = optimized["preview_url"]
-                storage_policy = "optimized_preview"
+                storage_policy = "staged_local_asset"
                 content_sha256 = optimized["content_sha256"]
                 width = optimized["width"]
                 height = optimized["height"]
@@ -215,8 +217,13 @@ def ensure_local_society_photos(
         return
 
     target_images = positive_int(policy.get("target_images"), 5)
-    photo_dir = project_root / "frontend" / "public" / "societies" / entity_slug(
-        entity_id, society_name
+    photo_dir = (
+        project_root
+        / "data"
+        / "cache"
+        / "media_ingest"
+        / "societies"
+        / entity_slug(entity_id, society_name)
     )
     if len(local_society_photo_paths(photo_dir)) >= target_images:
         return
@@ -256,9 +263,8 @@ def local_society_photo_records(
 ) -> List[Dict[str, Any]]:
     """Promote previously downloaded high-quality society photos into DAG media.
 
-    These files are produced by the legacy fetch_images skill. They are still
-    useful as curated local assets while the newer DAG collector backfills
-    optimized remote previews.
+    Collector files are rebuildable staging inputs. The Rust materializer moves
+    their bounded delivery copies into immutable content-addressed lake keys.
     """
     photo_dir = local_society_photo_dir(project_root, entity_id, society_name)
     if not photo_dir.exists():
@@ -267,7 +273,7 @@ def local_society_photo_records(
     records = []
     provenance_by_file = local_society_photo_provenance(project_root, photo_dir.name)
     for rank, path in enumerate(local_society_photo_paths(photo_dir), start=1):
-        image_url = public_society_photo_url(photo_dir.name, path.name)
+        image_url, storage_policy = local_society_photo_reference(project_root, path)
         provenance = provenance_by_file.get(path.name) or {}
         original_image_url = optional_string(provenance.get("original_image_url")) or image_url
         source_page_url = optional_string(provenance.get("source_page_url")) or image_url
@@ -276,6 +282,22 @@ def local_society_photo_records(
         )
         width, height = image_dimensions(path)
         content_sha256 = file_sha256(path)
+        try:
+            optimized = write_optimized_preview(
+                project_root,
+                entity_id,
+                image_url,
+                source_page_url,
+                path.read_bytes(),
+            )
+        except OSError:
+            optimized = None
+        if optimized:
+            image_url = optimized["preview_url"]
+            storage_policy = "staged_local_asset"
+            content_sha256 = optimized["content_sha256"]
+            width = optimized["width"]
+            height = optimized["height"]
         qa = classify_media_candidate(
             image_url=image_url,
             original_image_url=original_image_url,
@@ -314,7 +336,7 @@ def local_society_photo_records(
                 "rank": rank,
                 "score": 100.0 + max(0, 10 - rank),
                 "alt_text": "{} photo {}".format(society_name, rank),
-                "storage_policy": "static_public_asset",
+                "storage_policy": storage_policy,
                 "content_sha256": content_sha256,
                 "observed_at": observed_at,
             }
@@ -350,15 +372,8 @@ def local_society_photo_paths(photo_dir: Path) -> List[Path]:
 
 
 def local_society_photo_dir(project_root: Path, entity_id: str, society_name: str) -> Path:
-    societies_dir = project_root / "frontend" / "public" / "societies"
-    preferred = societies_dir / entity_slug(entity_id, society_name)
-    if preferred.exists():
-        return preferred
-    if entity_id.startswith("society:"):
-        legacy = societies_dir / slug(entity_id.split(":", 1)[1])
-        if legacy.exists():
-            return legacy
-    return preferred
+    staged_dir = project_root / "data" / "cache" / "media_ingest" / "societies"
+    return staged_dir / entity_slug(entity_id, society_name)
 
 
 def local_society_photo_sort_key(path: Path) -> tuple:
@@ -369,8 +384,10 @@ def local_society_photo_sort_key(path: Path) -> tuple:
         return (1, stem, path.name)
 
 
-def public_society_photo_url(slug_value: str, filename: str) -> str:
-    return "/societies/{}/{}".format(slug_value, filename)
+def local_society_photo_reference(project_root: Path, path: Path) -> Tuple[str, str]:
+    staged_root = project_root / "data" / "cache" / "media_ingest"
+    relative = path.relative_to(staged_root)
+    return "/_staged_media/{}".format(relative.as_posix()), "staged_local_asset"
 
 
 def image_dimensions(path: Path) -> Tuple[Optional[int], Optional[int]]:
@@ -477,7 +494,7 @@ def image_optimizer_available() -> bool:
 
         return True
     except Exception:
-        return False
+        return shutil.which("sips") is not None
 
 
 def write_optimized_preview(
@@ -490,42 +507,37 @@ def write_optimized_preview(
     try:
         from PIL import Image, ImageOps
     except Exception:
-        return None
+        return write_sips_preview(project_root, entity_id, image_url, image_bytes)
 
-    content_sha256 = hashlib.sha256(image_bytes).hexdigest()
     entity_slug = slug(entity_id.split(":", 1)[-1])
     url_slug = slug(urllib.parse.urlparse(image_url).path)[:48] or "image"
-    filename = "{}-{}.webp".format(url_slug, content_sha256[:16])
     preview_dir = (
         project_root
         / "data"
-        / "lake"
-        / "media"
-        / "previews"
+        / "cache"
+        / "media_ingest"
         / "external_images"
         / entity_slug
     )
-    preview_path = preview_dir / filename
-    preview_url = "/media/previews/external_images/{}/{}".format(entity_slug, filename)
 
     try:
-        if preview_path.exists():
-            with Image.open(preview_path) as existing:
-                return {
-                    "preview_url": preview_url,
-                    "preview_path": str(preview_path),
-                    "content_sha256": content_sha256,
-                    "width": existing.width,
-                    "height": existing.height,
-                }
-
         with Image.open(io.BytesIO(image_bytes)) as image:
             image = ImageOps.exif_transpose(image)
             image.thumbnail(PREVIEW_MAX_SIZE)
             if image.mode not in ("RGB", "RGBA"):
                 image = image.convert("RGB")
+            output = io.BytesIO()
+            image.save(output, format="WEBP", quality=PREVIEW_QUALITY, method=6)
+            encoded = output.getvalue()
+            content_sha256 = hashlib.sha256(encoded).hexdigest()
+            filename = "{}-{}.webp".format(url_slug, content_sha256[:16])
+            preview_path = preview_dir / filename
+            preview_url = "/_staged_media/external_images/{}/{}".format(
+                entity_slug, filename
+            )
             preview_dir.mkdir(parents=True, exist_ok=True)
-            image.save(preview_path, format="WEBP", quality=PREVIEW_QUALITY, method=6)
+            if not preview_path.exists():
+                preview_path.write_bytes(encoded)
             return {
                 "preview_url": preview_url,
                 "preview_path": str(preview_path),
@@ -534,6 +546,86 @@ def write_optimized_preview(
                 "height": image.height,
             }
     except Exception:
+        return None
+
+
+def write_sips_preview(
+    project_root: Path,
+    entity_id: str,
+    image_url: str,
+    image_bytes: bytes,
+) -> Optional[Dict[str, Any]]:
+    """Write a browser-safe JPEG when Pillow is unavailable on macOS.
+
+    Apple ImageIO can emit AVIF files that its own decoders accept while
+    Chromium exposes dimensions but renders transparent pixels. JPEG is the
+    conservative fallback here; the normal Pillow path continues to emit WebP.
+    """
+    if shutil.which("sips") is None:
+        return None
+    entity_slug = slug(entity_id.split(":", 1)[-1])
+    url_slug = slug(urllib.parse.urlparse(image_url).path)[:48] or "image"
+    try:
+        with tempfile.TemporaryDirectory(prefix="openestates-media-") as temp_dir:
+            input_path = Path(temp_dir) / "input-image"
+            output_path = Path(temp_dir) / "output.jpg"
+            input_path.write_bytes(image_bytes)
+            subprocess.run(
+                [
+                    "sips",
+                    "-s",
+                    "format",
+                    "jpeg",
+                    "-s",
+                    "formatOptions",
+                    "78",
+                    "--resampleHeightWidthMax",
+                    "1280",
+                    str(input_path),
+                    "--out",
+                    str(output_path),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=60,
+            )
+            encoded = output_path.read_bytes()
+            dimensions = subprocess.run(
+                ["sips", "-g", "pixelWidth", "-g", "pixelHeight", str(output_path)],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            ).stdout
+        width_match = re.search(r"pixelWidth:\s*(\d+)", dimensions)
+        height_match = re.search(r"pixelHeight:\s*(\d+)", dimensions)
+        if not width_match or not height_match:
+            return None
+        content_sha256 = hashlib.sha256(encoded).hexdigest()
+        filename = "{}-{}.jpg".format(url_slug, content_sha256[:16])
+        preview_dir = (
+            project_root
+            / "data"
+            / "cache"
+            / "media_ingest"
+            / "external_images"
+            / entity_slug
+        )
+        preview_path = preview_dir / filename
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        if not preview_path.exists():
+            preview_path.write_bytes(encoded)
+        return {
+            "preview_url": "/_staged_media/external_images/{}/{}".format(
+                entity_slug, filename
+            ),
+            "preview_path": str(preview_path),
+            "content_sha256": content_sha256,
+            "width": int(width_match.group(1)),
+            "height": int(height_match.group(1)),
+        }
+    except (OSError, subprocess.SubprocessError):
         return None
 
 

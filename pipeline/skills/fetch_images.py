@@ -10,7 +10,8 @@ Features:
 - Image type classification: exterior, interior, amenities, master_plan, floor_plan, unknown
 - SerpAPI response caching to data/cache/serpapi/
 - Provenance metadata per image
-- Downloads to frontend/public/societies/{slug}/
+- Downloads to the rebuildable data/cache/media_ingest staging area. The Rust
+  media materializer promotes selected bytes into the content-addressed lake.
 
 Usage:
   python3 -m pipeline.skills.fetch_images                    # all societies
@@ -38,7 +39,7 @@ from pipeline.skills.base import BaseSkill, SkillCost, SkillResult
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-PHOTOS_DIR = PROJECT_ROOT / "frontend" / "public" / "societies"
+PHOTOS_DIR = PROJECT_ROOT / "data" / "cache" / "media_ingest" / "societies"
 SERPAPI_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "serpapi" / "image_search"
 DDG_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "ddg" / "image_search"
 METADATA_DIR = PROJECT_ROOT / "data" / "cache" / "image_metadata"
@@ -595,7 +596,7 @@ def _build_metadata(
     sources: List[dict],
 ) -> dict:
     """Build the structured metadata dict."""
-    photos = [f"/societies/{slug}/{p.name}" for p in downloaded]
+    photos = [f"/_staged_media/societies/{slug}/{p.name}" for p in downloaded]
     hero = photos[0] if photos else ""
     gallery = photos[1:] if len(photos) > 1 else []
 
@@ -653,7 +654,9 @@ def populate_property_images():
             if d.is_dir():
                 photos = sorted(d.glob("*.*"))
                 if photos:
-                    slug_to_photos[d.name] = [f"/societies/{d.name}/{p.name}" for p in photos]
+                    slug_to_photos[d.name] = [
+                        f"/_staged_media/societies/{d.name}/{p.name}" for p in photos
+                    ]
 
     updated = 0
     for prop in properties:
@@ -779,7 +782,7 @@ def main():
         with_images = sum(1 for m in results.values() if m.get("all_photos"))
         print(f"\n  {'='*50}")
         print(f"  Summary: {total_images} images for {with_images}/{len(societies)} societies")
-        print(f"  Location: frontend/public/societies/")
+        print(f"  Staging: data/cache/media_ingest/societies/")
         print(f"  Metadata: data/cache/image_metadata/")
 
         # Update property hero images

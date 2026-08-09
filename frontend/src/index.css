@@ -5999,7 +5999,60 @@ body {
 }
 
 .property-photo-mosaic__lead {
+  position: relative;
+  isolation: isolate;
   aspect-ratio: 16 / 9;
+}
+
+.property-photo-mosaic__lead::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: linear-gradient(110deg, #e7e1da 20%, #f3efea 42%, #e7e1da 64%);
+  background-size: 220% 100%;
+  animation: property-photo-lead-loading 1.3s ease-in-out infinite;
+  content: "";
+  opacity: 1;
+  transition: opacity 180ms var(--ease-out);
+}
+
+.property-photo-mosaic__lead.is-ready::before {
+  animation: none;
+  opacity: 0;
+}
+
+.property-photo-mosaic__lead > img {
+  position: relative;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 180ms var(--ease-out);
+}
+
+.property-photo-mosaic__lead.is-ready > img {
+  opacity: 1;
+}
+
+.property-photo-mosaic__lead > .image-placeholder {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes property-photo-lead-loading {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .property-photo-mosaic__lead::before {
+    animation: none;
+  }
 }
 
 .property-photo-mosaic img {

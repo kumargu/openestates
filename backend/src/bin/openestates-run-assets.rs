@@ -30,7 +30,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let lake_location = LakeStoreLocation::from_env(&project_root)?;
     let lake = lake_location.open()?;
-    let executor = AssetDagExecutor::new(openestates_registry(), lake.clone());
+    let executor = AssetDagExecutor::new(openestates_registry(), lake.clone())
+        .with_project_root(project_root.clone());
     let requested_at = Utc::now();
     let mut resume_manifest = if let Some(run_id) = &cli.resume_run_id {
         let manifest = AssetRunManifestStore::new(lake.clone())

@@ -3,11 +3,11 @@ use std::sync::Arc;
 
 use axum::extract::State;
 use axum::routing::{get, post};
-use axum::{Json, Router};
+use axum::{Extension, Json, Router};
 use serde::Serialize;
 use tower_http::cors::{Any, CorsLayer};
-use tower_http::services::ServeDir;
 
+use crate::lake::{LakeStore, LakeStoreLocation};
 use crate::recommendations::RECOMMENDATION_ENGINE_VERSION;
 use crate::routes;
 use crate::scoring::scoring_policy;
@@ -44,6 +44,13 @@ async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
 /// builder so route extraction, query parsing, state, and response shaping are
 /// exercised without binding a TCP port.
 pub fn build_app_router(state: Arc<AppState>, project_root: &Path) -> Router {
+    let lake = LakeStoreLocation::from_env(project_root)
+        .and_then(|location| location.open())
+        .unwrap_or_else(|error| panic!("media lake startup contract failed: {error}"));
+    build_app_router_with_lake(state, lake)
+}
+
+pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
@@ -52,10 +59,7 @@ pub fn build_app_router(state: Arc<AppState>, project_root: &Path) -> Router {
     Router::new()
         .route("/", get(health))
         .route("/api/health", get(health))
-        .nest_service(
-            "/media",
-            ServeDir::new(project_root.join("data/lake/media")),
-        )
+        .route("/media/{*path}", get(routes::media::get_media))
         .route("/api/properties", get(routes::properties::list_properties))
         .route(
             "/api/properties/{id}",
@@ -120,5 +124,6 @@ pub fn build_app_router(state: Arc<AppState>, project_root: &Path) -> Router {
             post(routes::admin::trigger_asset_run),
         )
         .layer(cors)
+        .layer(Extension(lake))
         .with_state(state)
 }

@@ -4,7 +4,9 @@ use std::fmt::Write as _;
 use std::path::{Path as FsPath, PathBuf};
 use std::sync::{Arc, RwLock};
 
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
+use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use object_store::local::LocalFileSystem;
 use object_store::path::Path as ObjectPath;
@@ -43,6 +45,12 @@ pub struct ArtifactMetadata {
     pub content_hash: String,
     pub hash_algorithm: String,
     pub size_bytes: usize,
+}
+
+pub(crate) struct LakeObjectStream {
+    pub stream: BoxStream<'static, Result<Bytes, object_store::Error>>,
+    pub size_bytes: usize,
+    pub e_tag: Option<String>,
 }
 
 #[derive(Debug)]
@@ -214,6 +222,23 @@ impl LakeStore {
             .await
             .map(|bytes| bytes.to_vec())
             .map_err(LakeError::ObjectStore)
+    }
+
+    pub(crate) async fn get_stream(&self, key: &LakeKey) -> Result<LakeObjectStream, LakeError> {
+        let result = self
+            .store
+            .get(&object_path(key))
+            .await
+            .map_err(LakeError::ObjectStore)?;
+        let size_bytes = usize::try_from(result.meta.size).map_err(|_| {
+            LakeError::InvalidMetadata(format!("artifact {key} is too large for this platform"))
+        })?;
+        let e_tag = result.meta.e_tag.clone();
+        Ok(LakeObjectStream {
+            stream: result.into_stream(),
+            size_bytes,
+            e_tag,
+        })
     }
 
     pub async fn artifact_metadata(&self, key: &LakeKey) -> Result<ArtifactMetadata, LakeError> {
