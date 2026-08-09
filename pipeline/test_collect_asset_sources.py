@@ -210,6 +210,17 @@ class CollectAssetSourcesTest(unittest.TestCase):
         detail_html = """
             <div><p>Total Number of Inventories/Flats/Villas<span>:</span></p></div>
             <div><p>698</p></div>
+            <div><p>Total Carpet Area of all the Floors (Sq Mtr)<span>:</span></p></div>
+            <div><p>65100</p></div>
+            <div>Development <span>Details (Bifurcation of Type of Inventories/Flats/Villas)</span></div>
+            <table><thead><tr>
+                <th>Sl No</th><th>Type of Inventory</th><th>No. of Units</th>
+                <th>Carpet Area</th><th>Balcony/Verandah Area</th><th>Open Terrace Area</th>
+            </tr></thead><tbody>
+                <tr><td>1</td><td>3BHK+3T</td><td>135</td><td>14832.5</td><td>1986</td><td></td></tr>
+                <tr><td>2</td><td>2BHK+2T</td><td>154</td><td>11053</td><td>1695</td><td>0</td></tr>
+                <tr><td></td><td>TOTAL</td><td>289</td><td>25885</td><td>3681</td><td></td></tr>
+            </tbody></table>
             <div><p>Source of Water<span>:</span></p></div><div><p>Local Authority,</p></div>
             <div><p>Local Authority<span>:</span></p></div><div><p>Kodathi Grama Panchayath</p></div>
             <tr><td>At the time of Registration</td><td>01-11-2024</td><td>30-09-2030</td></tr>
@@ -228,7 +239,38 @@ class CollectAssetSourcesTest(unittest.TestCase):
         for row in rows:
             by_kind.setdefault(row["kind"], []).append(row)
 
-        self.assertEqual(json.loads(by_kind["promoter_declaration"][0]["raw_value"]), {"unit_count": 698})
+        declaration_values = [json.loads(row["raw_value"]) for row in by_kind["promoter_declaration"]]
+        self.assertEqual(
+            declaration_values,
+            [{"unit_count": 698}, {"total_carpet_area_sqm": 65100.0}],
+        )
+        inventory_values = [json.loads(row["raw_value"]) for row in by_kind["tower_inventory"]]
+        self.assertEqual(
+            inventory_values,
+            [
+                {
+                    "inventory_type": "3BHK+3T",
+                    "unit_count": 135,
+                    "total_carpet_area_sqm": 14832.5,
+                    "total_balcony_verandah_area_sqm": 1986,
+                    "total_open_terrace_area_sqm": None,
+                },
+                {
+                    "inventory_type": "2BHK+2T",
+                    "unit_count": 154,
+                    "total_carpet_area_sqm": 11053,
+                    "total_balcony_verandah_area_sqm": 1695,
+                    "total_open_terrace_area_sqm": 0,
+                },
+                {
+                    "inventory_type": "TOTAL",
+                    "unit_count": 289,
+                    "total_carpet_area_sqm": 25885,
+                    "total_balcony_verandah_area_sqm": 3681,
+                    "total_open_terrace_area_sqm": None,
+                },
+            ],
+        )
         self.assertEqual(
             json.loads(by_kind["water_service_declaration"][0]["raw_value"]),
             {"source": "Local Authority"},

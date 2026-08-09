@@ -2617,10 +2617,65 @@ def iso_rera_date(value: str) -> Optional[str]:
     return None
 
 
+def rera_square_metres(value: str) -> Optional[float]:
+    """Parse a structured K-RERA square-metre value without guessing text."""
+    normalized = value.replace(",", "").strip()
+    try:
+        parsed = float(normalized)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
 def project_detail_receipt_ids(snapshot: Dict[str, Any]) -> Tuple[str, str]:
     body = bytes.fromhex(snapshot["body_hex"])
     receipt_id = rera_receipt_id(body)
     return receipt_id, rera_capture_id(receipt_id, snapshot["source_url"], snapshot["captured_at"])
+
+
+def rera_declared_inventory_rows(detail_html: str) -> List[Dict[str, Any]]:
+    """Read the project-level inventory table without confusing it with QPR tables."""
+    heading = re.search(
+        r"Development\s*<span>\s*Details\s*\(\s*Bifurcation of Type of Inventories",
+        detail_html,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if not heading:
+        return []
+    table_start = detail_html.find("<table", heading.end())
+    if table_start < 0:
+        return []
+    table_end = detail_html.find("</table>", table_start)
+    if table_end < 0:
+        return []
+    table_html = detail_html[table_start : table_end + len("</table>")]
+    header = clean_html_fragment(table_html[: table_html.find("</thead>")])
+    if "Type of Inventory" not in header or "Carpet Area" not in header:
+        return []
+    rows = []
+    for row_html in re.findall(r"<tr[^>]*>(.*?)</tr>", table_html, re.IGNORECASE | re.DOTALL):
+        cells = [
+            clean_html_fragment(cell)
+            for cell in re.findall(r"<td[^>]*>(.*?)</td>", row_html, re.IGNORECASE | re.DOTALL)
+        ]
+        if len(cells) != 6:
+            continue
+        label = cells[1].strip()
+        if not label:
+            continue
+        unit_count_value = cells[2].replace(",", "").strip()
+        area_values = [rera_square_metres(cell) for cell in cells[3:]]
+        rows.append(
+            {
+                "row_number": cells[0].strip(),
+                "inventory_type": label,
+                "unit_count": int(unit_count_value) if unit_count_value.isdigit() else None,
+                "total_carpet_area_sqm": area_values[0],
+                "total_balcony_verandah_area_sqm": area_values[1],
+                "total_open_terrace_area_sqm": area_values[2],
+            }
+        )
+    return rows
 
 
 def rera_project_detail_source_records(snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -2670,6 +2725,39 @@ def rera_project_detail_source_records(snapshot: Dict[str, Any]) -> List[Dict[st
             "#menu2/project-summary/total-inventories",
             "Total Number of Inventories/Flats/Villas",
             {"unit_count": int(declared_units.replace(",", "").strip())},
+        )
+
+    declared_total_carpet_area = rera_detail_labeled_value(
+        detail_html, "Total Carpet Area of all the Floors (Sq Mtr)"
+    )
+    total_carpet_area_sqm = (
+        rera_square_metres(declared_total_carpet_area)
+        if declared_total_carpet_area
+        else None
+    )
+    if total_carpet_area_sqm is not None:
+        add(
+            "promoter_declaration",
+            "#menu2/project-summary/total-carpet-area",
+            "Total Carpet Area of all the Floors (Sq Mtr)",
+            {"total_carpet_area_sqm": total_carpet_area_sqm},
+        )
+
+    for inventory in rera_declared_inventory_rows(detail_html):
+        row_number = inventory.pop("row_number") or "unknown"
+        if inventory["inventory_type"].strip().upper() == "TOTAL":
+            add(
+                "tower_inventory",
+                "#menu2/development-inventory/total",
+                "Declared inventory aggregate",
+                inventory,
+            )
+            continue
+        add(
+            "tower_inventory",
+            "#menu2/development-inventory/row-{}".format(row_number),
+            "Declared inventory configuration",
+            inventory,
         )
 
     water_source = rera_detail_labeled_value(detail_html, "Source of Water")
@@ -2785,7 +2873,7 @@ def rera_project_detail_source_records(snapshot: Dict[str, Any]) -> List[Dict[st
         "source_warning",
         "#project-detail/parser-coverage",
         "Parser coverage",
-        "Partial parser coverage: project summary, schedule, water declaration, QPR inventory totals, and QPR document metadata only.",
+        "Partial parser coverage: project summary, declared inventory table, schedule, water declaration, QPR inventory totals, and QPR document metadata only.",
     )
     return records
 

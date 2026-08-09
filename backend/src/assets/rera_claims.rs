@@ -496,7 +496,8 @@ pub fn claims_from_source_records(
             ReraSourceRecordKind::PromoterDeclaration
             | ReraSourceRecordKind::WaterServiceDeclaration
             | ReraSourceRecordKind::Completion
-            | ReraSourceRecordKind::QuarterlyProgress => {
+            | ReraSourceRecordKind::QuarterlyProgress
+            | ReraSourceRecordKind::TowerInventory => {
                 claims.extend(project_detail_claims(record)?);
             }
             _ => {}
@@ -595,9 +596,12 @@ fn project_detail_claims(
             end: None,
             precision: "day".to_string(),
         });
-    let declaration = |predicate: &str, value: ReraClaimValue, unit: Option<&str>| {
+    let declaration = |claim_subject: ReraClaimSubject,
+                       predicate: &str,
+                       value: ReraClaimValue,
+                       unit: Option<&str>| {
         ReraClaimInput {
-            subject: subject.clone(),
+            subject: claim_subject,
             predicate: predicate.to_string(),
             value,
             unit: unit.map(ToString::to_string),
@@ -618,15 +622,28 @@ fn project_detail_claims(
         ReraSourceRecordKind::PromoterDeclaration => {
             if let Some(value) = fields.get("unit_count").and_then(serde_json::Value::as_f64) {
                 claims.push(declaration(
+                    subject.clone(),
                     "declared_unit_count",
                     ReraClaimValue::Number(value),
                     Some("units"),
+                )?);
+            }
+            if let Some(value) = fields
+                .get("total_carpet_area_sqm")
+                .and_then(serde_json::Value::as_f64)
+            {
+                claims.push(declaration(
+                    subject.clone(),
+                    "declared_project_total_carpet_area",
+                    ReraClaimValue::Number(value),
+                    Some("square_metres"),
                 )?);
             }
         }
         ReraSourceRecordKind::WaterServiceDeclaration => {
             if let Some(value) = fields.get("source").and_then(serde_json::Value::as_str) {
                 claims.push(declaration(
+                    subject.clone(),
                     "declared_water_source",
                     ReraClaimValue::Text(value.to_string()),
                     None,
@@ -634,6 +651,7 @@ fn project_detail_claims(
             }
             if let Some(value) = fields.get("authority").and_then(serde_json::Value::as_str) {
                 claims.push(declaration(
+                    subject.clone(),
                     "declared_water_local_authority",
                     ReraClaimValue::Text(value.to_string()),
                     None,
@@ -650,6 +668,7 @@ fn project_detail_claims(
                 _ => return Ok(claims),
             };
             claims.push(declaration(
+                subject.clone(),
                 predicate,
                 ReraClaimValue::Date(value.to_string()),
                 None,
@@ -663,6 +682,7 @@ fn project_detail_claims(
             ] {
                 if let Some(value) = fields.get(field).and_then(serde_json::Value::as_f64) {
                     claims.push(declaration(
+                        subject.clone(),
                         predicate,
                         ReraClaimValue::Number(value),
                         Some("units"),
@@ -670,9 +690,116 @@ fn project_detail_claims(
                 }
             }
         }
+        ReraSourceRecordKind::TowerInventory => {
+            let Some(label) = fields
+                .get("inventory_type")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+            else {
+                return Ok(claims);
+            };
+            if label.trim().eq_ignore_ascii_case("total") {
+                for (field, predicate, unit) in [
+                    (
+                        "unit_count",
+                        "declared_inventory_total_unit_count",
+                        Some("units"),
+                    ),
+                    (
+                        "total_carpet_area_sqm",
+                        "declared_inventory_total_carpet_area",
+                        Some("square_metres"),
+                    ),
+                    (
+                        "total_balcony_verandah_area_sqm",
+                        "declared_inventory_total_balcony_verandah_area",
+                        Some("square_metres"),
+                    ),
+                    (
+                        "total_open_terrace_area_sqm",
+                        "declared_inventory_total_open_terrace_area",
+                        Some("square_metres"),
+                    ),
+                ] {
+                    if let Some(value) = fields.get(field).and_then(serde_json::Value::as_f64) {
+                        claims.push(declaration(
+                            subject.clone(),
+                            predicate,
+                            ReraClaimValue::Number(value),
+                            unit,
+                        )?);
+                    }
+                }
+                return Ok(claims);
+            }
+
+            let configuration_subject = ReraClaimSubject {
+                entity_id: inventory_configuration_id(&record.registration_id, label),
+                entity_type: "inventory_configuration".to_string(),
+            };
+            claims.push(declaration(
+                configuration_subject.clone(),
+                "part_of_registration",
+                ReraClaimValue::EntityRef {
+                    entity_id: subject.entity_id.clone(),
+                    entity_type: subject.entity_type.clone(),
+                },
+                None,
+            )?);
+            claims.push(declaration(
+                configuration_subject.clone(),
+                "inventory_configuration_label",
+                ReraClaimValue::Text(label.trim().to_string()),
+                None,
+            )?);
+            for (field, predicate, unit) in [
+                ("unit_count", "declared_inventory_unit_count", Some("units")),
+                (
+                    "total_carpet_area_sqm",
+                    "declared_inventory_total_carpet_area",
+                    Some("square_metres"),
+                ),
+                (
+                    "total_balcony_verandah_area_sqm",
+                    "declared_inventory_total_balcony_verandah_area",
+                    Some("square_metres"),
+                ),
+                (
+                    "total_open_terrace_area_sqm",
+                    "declared_inventory_total_open_terrace_area",
+                    Some("square_metres"),
+                ),
+            ] {
+                if let Some(value) = fields.get(field).and_then(serde_json::Value::as_f64) {
+                    claims.push(declaration(
+                        configuration_subject.clone(),
+                        predicate,
+                        ReraClaimValue::Number(value),
+                        unit,
+                    )?);
+                }
+            }
+        }
         _ => {}
     }
     Ok(claims)
+}
+
+fn inventory_configuration_id(registration_id: &str, label: &str) -> String {
+    let normalized_label = label
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_uppercase();
+    let material = format!(
+        "rera_inventory_configuration.v1\n{}\n{}",
+        registration_id.trim(),
+        normalized_label
+    );
+    format!(
+        "rera_inventory_configuration:sha256:{}",
+        sha256_hex(material.as_bytes())
+    )
 }
 
 fn claims_quality(records: &[ReraSourceRecord], claims: &[ReraClaimV1]) -> ReraClaimsQualityReport {
@@ -998,6 +1125,75 @@ mod tests {
                     .as_ref()
                     .and_then(|time| time.start.as_deref())
                     == Some("2026-07-13")
+        }));
+    }
+
+    #[test]
+    fn inventory_claims_keep_configuration_scope_and_optional_areas() {
+        let registration_id = "rera_registration:in-ka:fixture";
+        let configuration = ReraSourceRecord {
+            record_id: "rera_source_record:sha256:inventory-configuration".to_string(),
+            kind: ReraSourceRecordKind::TowerInventory,
+            registration_id: registration_id.to_string(),
+            normalized_registration_number: "PRM/KA/RERA/FIXTURE".to_string(),
+            receipt_id: "rera_receipt:sha256:fixture".to_string(),
+            capture_id: "rera_capture:sha256:fixture".to_string(),
+            source_locator: "#menu2/development-inventory/row-1".to_string(),
+            raw_label: "Declared inventory configuration".to_string(),
+            raw_value:
+                r#"{"inventory_type":"3BHK+3T","unit_count":135,"total_carpet_area_sqm":14832}"#
+                    .to_string(),
+            observed_at: chrono::Utc::now(),
+            effective_at: None,
+            filing_at: None,
+            parser_version: "fixture.v1".to_string(),
+        };
+
+        let claims = project_detail_claims(&configuration).unwrap();
+        let configuration_id = inventory_configuration_id(registration_id, " 3BHK+3T ");
+        assert_eq!(claims.len(), 4);
+        assert!(claims.iter().all(|claim| {
+            claim.assertion_mode == ReraAssertionMode::PromoterDeclaration
+                && claim.source_trust == ReraSourceTrust::PromoterFiling
+                && claim.subject.entity_type == "inventory_configuration"
+                && claim.subject.entity_id == configuration_id
+        }));
+        assert!(claims.iter().any(|claim| {
+            claim.predicate == "part_of_registration"
+                && claim.value
+                    == ReraClaimValue::EntityRef {
+                        entity_id: registration_id.to_string(),
+                        entity_type: "registration".to_string(),
+                    }
+        }));
+        assert!(claims.iter().any(|claim| {
+            claim.predicate == "declared_inventory_total_carpet_area"
+                && claim.unit.as_deref() == Some("square_metres")
+        }));
+        assert!(!claims.iter().any(|claim| {
+            matches!(
+                claim.predicate.as_str(),
+                "declared_inventory_total_balcony_verandah_area"
+                    | "declared_inventory_total_open_terrace_area"
+            )
+        }));
+
+        let aggregate = ReraSourceRecord {
+            record_id: "rera_source_record:sha256:inventory-total".to_string(),
+            source_locator: "#menu2/development-inventory/total".to_string(),
+            raw_label: "Declared inventory aggregate".to_string(),
+            raw_value:
+                r#"{"inventory_type":"TOTAL","unit_count":698,"total_carpet_area_sqm":65096}"#
+                    .to_string(),
+            ..configuration
+        };
+        let aggregate_claims = project_detail_claims(&aggregate).unwrap();
+        assert!(aggregate_claims
+            .iter()
+            .all(|claim| claim.subject.entity_type == "registration"));
+        assert!(aggregate_claims.iter().any(|claim| {
+            claim.predicate == "declared_inventory_total_unit_count"
+                && claim.value == ReraClaimValue::Number(698.0)
         }));
     }
 }
