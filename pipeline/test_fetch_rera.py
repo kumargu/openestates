@@ -10,6 +10,39 @@ from pipeline.skills.fetch_rera import (
 
 
 class FetchReraSkillTest(unittest.TestCase):
+    def test_rera_records_are_qualified_and_do_not_emit_sensitive_finance(self):
+        detail = ReraProjectDetail(
+            registration_number="PRM/KA/RERA/1251/446/PR/200811/003528",
+            status="Approved",
+            land_litigation=False,
+            has_borrowing=True,
+            has_mortgage=False,
+            escrow_bank="Example Bank",
+            escrow_account="1234567890",
+            escrow_ifsc="EXAM0001234",
+        )
+
+        facts = {fact.key: fact for fact in rera_detail_to_facts(detail)}
+
+        self.assertEqual(facts["rera_registered"].confidence, 0.95)
+        self.assertEqual(
+            facts["rera_registered"].answers_preferences,
+            ["rera registration", "rera number"],
+        )
+        self.assertEqual(
+            facts["rera_land_litigation"].display_template,
+            "Promoter land-litigation declaration: {value}",
+        )
+        self.assertEqual(facts["rera_land_litigation"].confidence, 0.70)
+        self.assertEqual(facts["rera_has_borrowing"].confidence, 0.70)
+        self.assertNotIn("rera_escrow_account", facts)
+        self.assertNotIn("rera_escrow_ifsc", facts)
+
+        safety_terms = ("safe", "verified", "clear title", "financially safe")
+        for fact in facts.values():
+            text = " ".join([fact.display_template] + (fact.answers_preferences or [])).lower()
+            self.assertFalse(any(term in text for term in safety_terms), text)
+
     def test_rera_cost_fields_are_not_promoted(self):
         detail = ReraProjectDetail(
             total_project_cost_inr=500_000_000,

@@ -2,7 +2,9 @@
 fetch_rera — scrape Karnataka RERA portal for real project data.
 
 Replaces the old guessed RERA verifier.
-This skill fetches actual government-sourced data with confidence=1.0.
+This skill fetches Karnataka RERA records. The portal is authoritative about
+what it records, but many fields are promoter-filed declarations; source
+presence must not be turned into a blanket truth or safety claim.
 
 Karnataka RERA portal flow:
   1. GET /viewAllProjects — 6MB HTML with 9,469 projects in JS arrays
@@ -40,6 +42,13 @@ LISTING_CACHE_TTL_DAYS = 7
 
 DETAIL_CACHE_DIR = Path("data/cache/skills/rera_details")
 DETAIL_CACHE_TTL_DAYS = 30
+
+# A successfully parsed registry record is strong evidence that the portal
+# contains that registration. It is not independent verification of every
+# field filed against the registration.
+RERA_REGISTRATION_CONFIDENCE = 0.95
+RERA_RECORD_FIELD_CONFIDENCE = 0.85
+RERA_PROMOTER_DECLARATION_CONFIDENCE = 0.70
 
 # Rate limiting: 1 second between detail page fetches
 _last_detail_fetch_time = 0.0
@@ -1678,7 +1687,10 @@ def _compute_delay_months(original_date_str: str, current_date_str: str) -> Opti
 def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
     """Convert parsed RERA data into self-describing SourcedFacts.
 
-    Every fact has confidence=1.0 because the source is a government portal.
+    Confidence here measures extraction and record fidelity, not whether a
+    promoter-filed declaration is independently true. The evidence graph
+    introduced by Issue #62 carries the full assertion mode and receipt
+    lineage; these legacy facts deliberately stay conservative until then.
     """
     source = FactSource(
         source_type="Rera",
@@ -1694,11 +1706,12 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
         display_template: str,
         answers_prefs: Optional[List[str]] = None,
         scoring_hint: Optional[dict] = None,
+        confidence: float = RERA_RECORD_FIELD_CONFIDENCE,
     ):
         facts.append(SourcedFact(
             key=key,
             value=value,
-            confidence=1.0,
+            confidence=confidence,
             source=source,
             display_template=display_template,
             answers_preferences=answers_prefs,
@@ -1711,6 +1724,7 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
         display_template: str,
         answers_prefs: Optional[List[str]] = None,
         scoring_hint: Optional[dict] = None,
+        confidence: float = RERA_RECORD_FIELD_CONFIDENCE,
     ):
         if value is None:
             return
@@ -1722,6 +1736,7 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
             display_template,
             answers_prefs,
             scoring_hint,
+            confidence,
         )
 
     def add_text_fact(
@@ -1730,6 +1745,7 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
         display_template: str,
         answers_prefs: Optional[List[str]] = None,
         scoring_hint: Optional[dict] = None,
+        confidence: float = RERA_RECORD_FIELD_CONFIDENCE,
     ):
         if value:
             add_fact(
@@ -1738,15 +1754,16 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
                 display_template,
                 answers_prefs,
                 scoring_hint,
+                confidence,
             )
 
     # --- Core registration ---
     add_fact(
         "rera_registered",
         {"type": "Bool", "data": True},
-        "RERA Registered: Yes",
-        ["rera verified", "legally verified", "safe investment", "verified project"],
-        {"direction": "TextMatch", "weight": 3.0},
+        "RERA registration record: Yes",
+        ["rera registration", "rera number"],
+        confidence=RERA_REGISTRATION_CONFIDENCE,
     )
 
     add_fact(
@@ -1766,7 +1783,6 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
             "rera_status",
             {"type": "Text", "data": detail.status},
             "RERA Status: {value}",
-            ["rera verified", "safe investment"],
         )
 
     if detail.promoter_name:
@@ -1932,21 +1948,23 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
     # cost values are unreliable; price facts must come from listing or
     # transaction evidence.
 
-    # --- Financial safety ---
+    # --- Promoter financial declarations ---
     if detail.has_borrowing is not None:
         add_fact(
             "rera_has_borrowing",
             {"type": "Bool", "data": detail.has_borrowing},
-            "Has Borrowing: {value}",
-            ["financially safe", "debt"],
+            "Promoter declared borrowing: {value}",
+            ["borrowing declaration", "debt"],
+            confidence=RERA_PROMOTER_DECLARATION_CONFIDENCE,
         )
 
     if detail.has_mortgage is not None:
         add_fact(
             "rera_has_mortgage",
             {"type": "Bool", "data": detail.has_mortgage},
-            "Has Mortgage: {value}",
-            ["financially safe", "mortgage"],
+            "Promoter declared mortgage: {value}",
+            ["mortgage declaration"],
+            confidence=RERA_PROMOTER_DECLARATION_CONFIDENCE,
         )
 
     # --- Escrow ---
@@ -1955,32 +1973,18 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
             "rera_escrow_bank",
             {"type": "Text", "data": detail.escrow_bank},
             "Escrow Bank: {value}",
-            ["financially safe", "escrow"],
-        )
-
-    if detail.escrow_account:
-        add_fact(
-            "rera_escrow_account",
-            {"type": "Text", "data": detail.escrow_account},
-            "Escrow Account: {value}",
-        )
-
-    if detail.escrow_ifsc:
-        add_fact(
-            "rera_escrow_ifsc",
-            {"type": "Text", "data": detail.escrow_ifsc},
-            "Escrow IFSC: {value}",
+            ["escrow declaration"],
+            confidence=RERA_PROMOTER_DECLARATION_CONFIDENCE,
         )
 
     # --- Land ---
     if detail.land_litigation is not None:
-        lit_text = "Yes" if detail.land_litigation else "No"
         add_fact(
             "rera_land_litigation",
             {"type": "Bool", "data": detail.land_litigation},
-            f"Land Litigation: {lit_text}",
-            ["legal issues", "litigation", "safe", "clear title"],
-            {"direction": "LowerIsBetter", "weight": 3.0},
+            "Promoter land-litigation declaration: {value}",
+            ["land litigation declaration"],
+            confidence=RERA_PROMOTER_DECLARATION_CONFIDENCE,
         )
 
     if detail.survey_numbers:
@@ -1995,8 +1999,7 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
         "rera_complaints_count",
         {"type": "Numeric", "data": detail.complaints_count},
         "{value} complaints filed",
-        ["complaints", "legal issues", "problems", "safe"],
-        {"direction": "LowerIsBetter", "weight": 2.0, "thresholds": [0.0, 3.0]},
+        ["complaints"],
     )
 
     if detail.complaints_count > 0 and detail.complaints_resolved > 0:
@@ -2023,8 +2026,7 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
                 "{}_complaints_count".format(prefix),
                 total,
                 "{{value}} {} complaints filed".format(label_scope),
-                ["complaints", "legal issues", "builder record"],
-                {"direction": "LowerIsBetter", "weight": 2.0, "thresholds": [0.0, 3.0]},
+            ["complaints"],
             )
             add_numeric_fact(
                 "{}_complaints_disposed_count".format(prefix),
@@ -2036,8 +2038,7 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
                 "{}_complaints_open_count".format(prefix),
                 summary.open_count,
                 "{{value}} {} complaints open".format(label_scope),
-                ["complaints", "legal issues"],
-                {"direction": "LowerIsBetter", "weight": 2.0, "thresholds": [0.0, 2.0]},
+                ["complaints"],
             )
             summary_manifest.append(
                 {
@@ -2066,16 +2067,14 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
             "rera_builder_projects_count",
             {"type": "Numeric", "data": detail.builder_other_rera_projects},
             "Builder has {value} RERA projects",
-            ["trusted builder", "experienced builder", "track record"],
-            {"direction": "HigherIsBetter", "weight": 1.5},
+            ["builder RERA projects", "track record"],
         )
 
     add_fact(
         "rera_builder_revocations",
         {"type": "Numeric", "data": detail.builder_revocations},
         "{value} revocations",
-        ["safe builder", "trusted builder"],
-        {"direction": "LowerIsBetter", "weight": 3.0},
+        ["builder revocations"],
     )
 
     if detail.builder_states:
@@ -2233,7 +2232,7 @@ class FetchReraSkill(BaseSkill):
 
     skill_id = "fetch_rera"
     description = "Scrape Karnataka RERA portal for real project registration data"
-    version = "3.3"  # v3.3 tightens placeholder document filtering and source labels.
+    version = "3.4"  # v3.4 qualifies portal records and removes safety semantics.
     output_keys = [
         "rera_registered", "rera_number", "rera_ack_number", "rera_status",
         "rera_promoter_name", "rera_approved_on", "rera_completion_date",
@@ -2300,8 +2299,7 @@ class FetchReraSkill(BaseSkill):
                         confidence=0.8,  # Not 1.0: might be a name mismatch
                         source=not_found_source,
                         display_template="RERA Registration: Not Found",
-                        answers_preferences=["rera verified"],
-                        scoring_hint={"direction": "TextMatch", "weight": 3.0},
+                        answers_preferences=["rera registration"],
                     )],
                     confidence=0.8,
                     cost=SkillCost(api_calls=api_calls),
@@ -2326,7 +2324,7 @@ class FetchReraSkill(BaseSkill):
 
             return SkillResult(
                 facts=facts,
-                confidence=1.0,
+                confidence=RERA_RECORD_FIELD_CONFIDENCE,
                 cost=SkillCost(api_calls=api_calls),
             )
 

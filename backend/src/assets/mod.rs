@@ -29,6 +29,7 @@ pub mod promotion;
 pub mod reddit;
 pub mod registry;
 pub mod rera;
+pub mod rera_evidence;
 pub mod rera_plans;
 pub mod run_manifest;
 pub mod skill_facts;
@@ -91,6 +92,11 @@ pub use media::{
     image_media_facts_input_with_aliases, ExternalImageObservationRecord,
     ExternalImageSnapshotManifest, ExternalImagesWeeklyInput, MediaAssetError,
     MediaAssetMaterializer, EXTERNAL_IMAGES_WEEKLY_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
+};
+pub use rera_evidence::{
+    read_rera_receipt_records, rera_registration_identity, ReraEvidenceError, ReraReceiptInput,
+    ReraReceiptKind, ReraReceiptRecord, ReraReceiptsInput, ReraReceiptsMaterializer,
+    ReraReceiptsQualityReport, RERA_RECEIPTS_ASSET_ID,
 };
 pub use osm_power::{
     canonicalize_osm_power_infrastructure_input, osm_power_line_facts_input, OsmPowerAssetError,

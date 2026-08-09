@@ -42,7 +42,9 @@
       "promoted",
       "debug",
       "pipeline",
-      "confidence_reason"
+      "confidence_reason",
+      "escrow_account",
+      "escrow_ifsc"
     ],
     "exclude_key_suffixes": ["_url"]
   },

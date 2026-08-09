@@ -13,36 +13,6 @@
   },
   "labels": [
     {
-      "key": "rera_registration_available",
-      "scope": "project",
-      "source": { "type": "fact", "fact_key": "rera_registered" },
-      "condition": { "eq_bool": true },
-      "severity": "positive",
-      "label_template": "Registered project",
-      "surfaces": ["property_context", "compare_secondary", "note_suggestion"],
-      "priority": 34,
-      "visual_id": "legal",
-      "notebook_labels": ["legal", "rera_registered"],
-      "compare_group": "project_checks",
-      "group_id": "project_facts",
-      "placement": "more"
-    },
-    {
-      "key": "rera_no_land_litigation",
-      "scope": "project",
-      "source": { "type": "fact", "fact_key": "rera_land_litigation" },
-      "condition": { "eq_bool": false },
-      "severity": "positive",
-      "label_template": "No land litigation",
-      "surfaces": ["compare_secondary", "note_suggestion"],
-      "priority": 36,
-      "visual_id": "legal",
-      "notebook_labels": ["legal", "rera_land_litigation"],
-      "compare_group": "legal_risk",
-      "group_id": "project_facts",
-      "placement": "more"
-    },
-    {
       "key": "rera_land_litigation",
       "scope": "project",
       "source": { "type": "fact", "fact_key": "rera_land_litigation" },

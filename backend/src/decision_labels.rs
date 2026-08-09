@@ -459,7 +459,7 @@ mod tests {
         assert!(keys.contains(&"rera_land_litigation"));
         assert!(keys.contains(&"project_major_delay"));
         assert!(keys.contains(&"low_parking_coverage"));
-        assert!(keys.contains(&"rera_registration_available"));
+        assert!(!keys.contains(&"rera_registration_available"));
         assert!(!keys.contains(&"project_delay"));
         assert_eq!(
             labels

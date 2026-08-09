@@ -22,6 +22,19 @@ impl AssetPathBuilder {
         LakeKey::new(parts.join("/")).expect("valid raw snapshot key")
     }
 
+    /// Immutable content-addressed evidence belongs outside a crawler run so
+    /// repeated captures of the same bytes share one durable receipt body.
+    pub fn raw_receipt_key(source: &str, content_sha256: &str, file_name: &str) -> LakeKey {
+        LakeKey::join(&[
+            "raw",
+            "receipts",
+            &format!("source={}", slug_segment(source)),
+            &format!("sha256={}", slug_segment(content_sha256)),
+            file_name,
+        ])
+        .expect("valid content-addressed receipt key")
+    }
+
     pub fn silver_fact_key(
         entity_type: &str,
         fact_key: &str,
