@@ -131,10 +131,13 @@ pub use rera::{
     CANONICAL_SOCIETY_NODES_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 pub use rera_claims::{
-    claims_from_source_records, ReraAssertionMode, ReraClaimDerivation, ReraClaimEffectiveTime,
-    ReraClaimError, ReraClaimEvidence, ReraClaimInput, ReraClaimMaterializeError, ReraClaimSubject,
-    ReraClaimV1, ReraClaimValidationState, ReraClaimValue, ReraClaimVisibility, ReraClaimsManifest,
-    ReraClaimsMaterializer, ReraClaimsQualityReport, ReraSourceTrust, RERA_CLAIMS_ASSET_ID,
+    claims_from_source_records, inventory_reconciliations, ReraAssertionMode, ReraClaimDerivation,
+    ReraClaimEffectiveTime, ReraClaimError, ReraClaimEvidence, ReraClaimInput,
+    ReraClaimMaterializeError, ReraClaimSubject, ReraClaimV1, ReraClaimValidationState,
+    ReraClaimValue, ReraClaimVisibility, ReraClaimsManifest, ReraClaimsMaterializer,
+    ReraClaimsQualityReport, ReraInventoryComparisonV1, ReraInventoryMeasurementV1,
+    ReraInventoryReconciliationV1, ReraSourceTrust, RERA_CLAIMS_ASSET_ID,
+    RERA_INVENTORY_RECONCILIATION_RULE_ID, RERA_INVENTORY_RECONCILIATION_RULE_VERSION,
 };
 pub use rera_evidence::{
     read_rera_receipt_records, rera_registration_identity, ReraEvidenceError, ReraReceiptInput,

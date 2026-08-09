@@ -4,7 +4,7 @@
 //! whose identity includes their source evidence (or, for derivations, every
 //! input claim and the versioned rule that produced them).
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
 use std::sync::Arc;
 
@@ -26,6 +26,8 @@ use super::{
 };
 
 pub const RERA_CLAIMS_ASSET_ID: &str = "rera_claims";
+pub const RERA_INVENTORY_RECONCILIATION_RULE_ID: &str = "rera.inventory_reconciliation";
+pub const RERA_INVENTORY_RECONCILIATION_RULE_VERSION: &str = "1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReraClaimSubject {
@@ -128,6 +130,36 @@ pub struct ReraClaimV1 {
     pub evidence: Vec<ReraClaimEvidence>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub derivation: Option<ReraClaimDerivation>,
+}
+
+/// A deterministic comparison of two accepted RERA measurements. It preserves
+/// every source assertion and never selects an authoritative value.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReraInventoryReconciliationV1 {
+    pub registration_id: String,
+    pub rule_id: String,
+    pub rule_version: String,
+    pub comparisons: Vec<ReraInventoryComparisonV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReraInventoryComparisonV1 {
+    pub id: String,
+    pub unit: String,
+    pub relationship: String,
+    pub left: Vec<ReraInventoryMeasurementV1>,
+    pub right: Vec<ReraInventoryMeasurementV1>,
+    pub observed_deltas: Vec<f64>,
+    pub input_claim_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReraInventoryMeasurementV1 {
+    pub claim_id: String,
+    pub predicate: String,
+    pub value: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_time: Option<ReraClaimEffectiveTime>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -802,6 +834,129 @@ fn inventory_configuration_id(registration_id: &str, label: &str) -> String {
     )
 }
 
+/// Compare independently filed aggregate project and inventory totals without
+/// flattening conflicting assertions. The absence of either side omits the
+/// comparison; coverage is reported by a separate evidence product.
+pub fn inventory_reconciliations(claims: &[ReraClaimV1]) -> Vec<ReraInventoryReconciliationV1> {
+    let mut by_registration = BTreeMap::<String, BTreeMap<String, Vec<&ReraClaimV1>>>::new();
+    for claim in claims {
+        if claim.validation_state != ReraClaimValidationState::Accepted
+            || claim.subject.entity_type != "registration"
+            || !matches!(&claim.value, ReraClaimValue::Number(value) if value.is_finite())
+        {
+            continue;
+        }
+        if let Some(expected_unit) = inventory_reconciliation_unit(&claim.predicate) {
+            if claim.unit.as_deref() == Some(expected_unit) {
+                by_registration
+                    .entry(claim.subject.entity_id.clone())
+                    .or_default()
+                    .entry(claim.predicate.clone())
+                    .or_default()
+                    .push(claim);
+            }
+        }
+    }
+
+    by_registration
+        .into_iter()
+        .filter_map(|(registration_id, predicates)| {
+            let comparisons = inventory_reconciliation_pairs()
+                .iter()
+                .filter_map(|(id, left_predicate, right_predicate, unit)| {
+                    let left = predicates.get(*left_predicate)?;
+                    let right = predicates.get(*right_predicate)?;
+                    Some(inventory_comparison(id, unit, left, right))
+                })
+                .collect::<Vec<_>>();
+            (!comparisons.is_empty()).then_some(ReraInventoryReconciliationV1 {
+                registration_id,
+                rule_id: RERA_INVENTORY_RECONCILIATION_RULE_ID.to_string(),
+                rule_version: RERA_INVENTORY_RECONCILIATION_RULE_VERSION.to_string(),
+                comparisons,
+            })
+        })
+        .collect()
+}
+
+fn inventory_reconciliation_unit(predicate: &str) -> Option<&'static str> {
+    inventory_reconciliation_pairs()
+        .iter()
+        .find_map(|(_, left, right, unit)| {
+            (predicate == *left || predicate == *right).then_some(*unit)
+        })
+}
+
+fn inventory_reconciliation_pairs() -> [(&'static str, &'static str, &'static str, &'static str); 2]
+{
+    [
+        (
+            "project_units_vs_inventory_units",
+            "declared_unit_count",
+            "declared_inventory_total_unit_count",
+            "units",
+        ),
+        (
+            "project_carpet_vs_inventory_carpet",
+            "declared_project_total_carpet_area",
+            "declared_inventory_total_carpet_area",
+            "square_metres",
+        ),
+    ]
+}
+
+fn inventory_comparison(
+    id: &str,
+    unit: &str,
+    left: &[&ReraClaimV1],
+    right: &[&ReraClaimV1],
+) -> ReraInventoryComparisonV1 {
+    let mut left = left.iter().map(inventory_measurement).collect::<Vec<_>>();
+    let mut right = right.iter().map(inventory_measurement).collect::<Vec<_>>();
+    left.sort_by(|a, b| a.claim_id.cmp(&b.claim_id));
+    right.sort_by(|a, b| a.claim_id.cmp(&b.claim_id));
+    let mut input_claim_ids = left
+        .iter()
+        .chain(&right)
+        .map(|measurement| measurement.claim_id.clone())
+        .collect::<Vec<_>>();
+    input_claim_ids.sort();
+
+    let mut observed_deltas = left
+        .iter()
+        .flat_map(|left| right.iter().map(move |right| left.value - right.value))
+        .collect::<Vec<_>>();
+    observed_deltas.sort_by(f64::total_cmp);
+    observed_deltas.dedup_by(|left, right| left.total_cmp(right).is_eq());
+    let relationship = if observed_deltas.len() == 1 && observed_deltas[0] == 0.0 {
+        "matching_values"
+    } else {
+        "different_values"
+    };
+
+    ReraInventoryComparisonV1 {
+        id: id.to_string(),
+        unit: unit.to_string(),
+        relationship: relationship.to_string(),
+        left,
+        right,
+        observed_deltas,
+        input_claim_ids,
+    }
+}
+
+fn inventory_measurement(claim: &&ReraClaimV1) -> ReraInventoryMeasurementV1 {
+    let ReraClaimValue::Number(value) = &claim.value else {
+        unreachable!("inventory reconciliation filters to numeric claims")
+    };
+    ReraInventoryMeasurementV1 {
+        claim_id: claim.claim_id.clone(),
+        predicate: claim.predicate.clone(),
+        value: *value,
+        effective_time: claim.effective_time.clone(),
+    }
+}
+
 fn claims_quality(records: &[ReraSourceRecord], claims: &[ReraClaimV1]) -> ReraClaimsQualityReport {
     let mut claim_counts_by_predicate = std::collections::BTreeMap::new();
     for claim in claims {
@@ -1195,5 +1350,89 @@ mod tests {
             claim.predicate == "declared_inventory_total_unit_count"
                 && claim.value == ReraClaimValue::Number(698.0)
         }));
+    }
+
+    fn accepted_registration_number_claim(
+        claim_id: &str,
+        predicate: &str,
+        value: f64,
+        unit: &str,
+    ) -> ReraClaimV1 {
+        ReraClaimV1 {
+            claim_id: claim_id.to_string(),
+            subject: ReraClaimSubject {
+                entity_id: "rera_registration:in-ka:fixture".to_string(),
+                entity_type: "registration".to_string(),
+            },
+            predicate: predicate.to_string(),
+            value: ReraClaimValue::Number(value),
+            unit: Some(unit.to_string()),
+            effective_time: None,
+            assertion_mode: ReraAssertionMode::PromoterDeclaration,
+            source_trust: ReraSourceTrust::PromoterFiling,
+            extraction_confidence: 0.9,
+            validation_state: ReraClaimValidationState::Accepted,
+            visibility: ReraClaimVisibility::Public,
+            evidence: Vec::new(),
+            derivation: None,
+        }
+    }
+
+    #[test]
+    fn inventory_reconciliation_preserves_competing_claims_and_deltas() {
+        let claims = vec![
+            accepted_registration_number_claim(
+                "claim-project-carpet",
+                "declared_project_total_carpet_area",
+                65_100.0,
+                "square_metres",
+            ),
+            accepted_registration_number_claim(
+                "claim-inventory-carpet",
+                "declared_inventory_total_carpet_area",
+                65_096.0,
+                "square_metres",
+            ),
+            accepted_registration_number_claim(
+                "claim-project-units",
+                "declared_unit_count",
+                698.0,
+                "units",
+            ),
+            accepted_registration_number_claim(
+                "claim-inventory-units",
+                "declared_inventory_total_unit_count",
+                698.0,
+                "units",
+            ),
+        ];
+
+        let reconciliations = inventory_reconciliations(&claims);
+        assert_eq!(reconciliations.len(), 1);
+        assert_eq!(
+            reconciliations[0].rule_id,
+            RERA_INVENTORY_RECONCILIATION_RULE_ID
+        );
+        let carpet = reconciliations[0]
+            .comparisons
+            .iter()
+            .find(|comparison| comparison.id == "project_carpet_vs_inventory_carpet")
+            .unwrap();
+        assert_eq!(carpet.relationship, "different_values");
+        assert_eq!(carpet.observed_deltas, vec![4.0]);
+        assert_eq!(
+            carpet.input_claim_ids,
+            vec![
+                "claim-inventory-carpet".to_string(),
+                "claim-project-carpet".to_string(),
+            ]
+        );
+        let units = reconciliations[0]
+            .comparisons
+            .iter()
+            .find(|comparison| comparison.id == "project_units_vs_inventory_units")
+            .unwrap();
+        assert_eq!(units.relationship, "matching_values");
+        assert_eq!(units.observed_deltas, vec![0.0]);
     }
 }
