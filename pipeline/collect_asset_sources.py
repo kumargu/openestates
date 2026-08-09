@@ -2619,7 +2619,14 @@ def iso_rera_date(value: str) -> Optional[str]:
 
 def rera_square_metres(value: str) -> Optional[float]:
     """Parse a structured K-RERA square-metre value without guessing text."""
-    normalized = value.replace(",", "").strip()
+    match = re.fullmatch(
+        r"\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*(?:sq\.?\s*m(?:tr|etre)?s?)?\s*",
+        value,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    normalized = match.group(1).replace(",", "")
     try:
         parsed = float(normalized)
     except (TypeError, ValueError):
@@ -2641,7 +2648,7 @@ def rera_declared_inventory_rows(detail_html: str) -> List[Dict[str, Any]]:
         re.IGNORECASE | re.DOTALL,
     )
     if not heading:
-        return []
+        return rera_legacy_declared_inventory_rows(detail_html)
     table_start = detail_html.find("<table", heading.end())
     if table_start < 0:
         return []
@@ -2675,6 +2682,61 @@ def rera_declared_inventory_rows(detail_html: str) -> List[Dict[str, Any]]:
                 "total_open_terrace_area_sqm": area_values[2],
             }
         )
+    return rows
+
+
+def rera_legacy_declared_inventory_rows(detail_html: str) -> List[Dict[str, Any]]:
+    """Read older K-RERA inventory label/value blocks and retain filed values."""
+    matches = list(re.finditer(r"Type of Inventory\s*<span[^>]*>.*?</p>", detail_html, re.I | re.S))
+    rows = []
+    seen = set()
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else min(
+            len(detail_html), match.start() + 5_000
+        )
+        block = detail_html[match.start() : end]
+
+        def value_after(label: str) -> Optional[str]:
+            found = re.search(
+                re.escape(label)
+                + r"\s*<span[^>]*>.*?</p>\s*</div>\s*<div[^>]*>\s*<p[^>]*>(.*?)</p>",
+                block,
+                re.I | re.S,
+            )
+            return clean_html_fragment(found.group(1)) if found else None
+
+        inventory_type = value_after("Type of Inventory")
+        unit_text = value_after("No of Inventory")
+        carpet_text = value_after("Carpet Area (Sq Mtr)")
+        if not inventory_type or not unit_text or not unit_text.replace(",", "").isdigit():
+            continue
+        balcony_text = value_after("Area of exclusive balcony/verandah (Sq Mtr)")
+        terrace_text = value_after("Area of exclusive open Terrace (Sq Mtr)")
+        row = {
+            "row_number": str(index + 1),
+            "inventory_type": inventory_type,
+            "unit_count": int(unit_text.replace(",", "")),
+            "total_carpet_area_sqm": rera_square_metres(carpet_text) if carpet_text else None,
+            "total_balcony_verandah_area_sqm": rera_square_metres(balcony_text) if balcony_text else None,
+            "total_open_terrace_area_sqm": rera_square_metres(terrace_text) if terrace_text else None,
+            "filed_values": {
+                "unit_count": unit_text,
+                "carpet_area": carpet_text,
+                "balcony_verandah_area": balcony_text,
+                "open_terrace_area": terrace_text,
+            },
+        }
+        identity = json.dumps(
+            {
+                key: value
+                for key, value in row.items()
+                if key not in {"row_number", "filed_values"}
+            },
+            sort_keys=True,
+        )
+        if identity not in seen:
+            seen.add(identity)
+            rows.append(row)
     return rows
 
 

@@ -28,7 +28,9 @@ from pipeline.collect_asset_sources import (
     google_society_inputs,
     reddit_society_inputs,
     request_with_rera_detail_facts,
+    rera_declared_inventory_rows,
     rera_project_detail_source_records,
+    rera_square_metres,
 )
 from pipeline.skills.base import FactSource, SkillCost, SkillResult, SourcedFact
 from pipeline.skills.fetch_google_review_links import (
@@ -286,6 +288,55 @@ class CollectAssetSourcesTest(unittest.TestCase):
         )
         self.assertEqual(len(by_kind["document_approval"]), 3)
         self.assertEqual(len(by_kind["source_warning"]), 1)
+
+    def test_rera_square_metres_accepts_only_structured_area_values(self):
+        self.assertEqual(rera_square_metres("53,728SqMtr"), 53728.0)
+        self.assertEqual(rera_square_metres("65,100 sq. metres"), 65100.0)
+        self.assertEqual(rera_square_metres("0 Sq Mtr"), 0.0)
+        self.assertIsNone(rera_square_metres("about 53,728 SqMtr"))
+        self.assertIsNone(rera_square_metres("53,728 sq ft"))
+        self.assertIsNone(rera_square_metres("not filed"))
+
+    def test_rera_legacy_inventory_preserves_filed_values_and_deduplicates_blocks(self):
+        block = """
+            <div><p>Type of Inventory<span>:</span></p></div><div><p>Flats</p></div>
+            <div><p>No of Inventory<span>:</span></p></div><div><p>1,463</p></div>
+            <div><p>Carpet Area (Sq Mtr)<span>:</span></p></div><div><p>1355269SqMtr</p></div>
+            <div><p>Area of exclusive balcony/verandah (Sq Mtr)<span>:</span></p></div><div><p>12,345 SqMtr</p></div>
+            <div><p>Area of exclusive open Terrace (Sq Mtr)<span>:</span></p></div><div><p>Not Filed</p></div>
+        """
+
+        repeated_with_spacing = block.replace("SqMtr", " Sq Mtr")
+        rows = rera_declared_inventory_rows(block + repeated_with_spacing)
+
+        self.assertEqual(
+            rows,
+            [
+                {
+                    "row_number": "1",
+                    "inventory_type": "Flats",
+                    "unit_count": 1463,
+                    "total_carpet_area_sqm": 1355269.0,
+                    "total_balcony_verandah_area_sqm": 12345.0,
+                    "total_open_terrace_area_sqm": None,
+                    "filed_values": {
+                        "unit_count": "1,463",
+                        "carpet_area": "1355269SqMtr",
+                        "balcony_verandah_area": "12,345 SqMtr",
+                        "open_terrace_area": "Not Filed",
+                    },
+                }
+            ],
+        )
+
+    def test_rera_legacy_inventory_requires_a_typed_unit_count(self):
+        detail_html = """
+            <div><p>Type of Inventory<span>:</span></p></div><div><p>Flats</p></div>
+            <div><p>No of Inventory<span>:</span></p></div><div><p>Not Filed</p></div>
+            <div><p>Carpet Area (Sq Mtr)<span>:</span></p></div><div><p>53728SqMtr</p></div>
+        """
+
+        self.assertEqual(rera_declared_inventory_rows(detail_html), [])
 
     def test_rera_detail_collection_is_scoped_and_preserves_alias_lineage(self):
         request = {
