@@ -15,6 +15,7 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from html import unescape
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -22,9 +23,13 @@ from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from pipeline.skills.fetch_rera import (
+    DETAIL_URL,
     LISTING_CACHE_PATH,
     LISTING_RAW_CACHE_PATH,
     LISTING_URL,
+    RERA_BASE,
+    ReraSession,
+    search_rera_project,
     scrape_rera_listing,
 )
 
@@ -131,6 +136,7 @@ SOCIETY_GROUNDWATER_POTENTIAL_FACTS = "society_groundwater_potential_facts"
 BENGALURU_METRO_STATION_FACTS = "bengaluru_metro_station_facts"
 OSM_POWER_LINE_FACTS = "osm_power_line_facts"
 STORMWATER_DRAIN_FACTS = "stormwater_drain_facts"
+RERA_DETAIL_RECEIPT_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_detail_receipts"
 GROUNDWATER_KML_URL = (
     "https://data.opencity.in/dataset/035c1d40-8f4e-4780-90c5-ff1ce2281849/"
     "resource/d3ae3603-d786-4782-ae71-a034ad4ebc0b/download/"
@@ -2297,11 +2303,11 @@ def fetch_rera_listing_snapshot():
 
 
 def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
-    """Emit raw K-RERA listing evidence for the manual receipt backfill asset.
+    """Emit raw K-RERA listing and explicitly scoped project-detail receipts.
 
-    The content-addressed Rust materializer owns durable writes. Detail, QPR,
-    and document receipts will join this payload only after their parsers read
-    the new L1 contract; legacy fact rows are never reconstructed as receipts.
+    Project details are fetched again from K-RERA before entering L0. Old HTML
+    cache files without their URL and capture metadata are deliberately not
+    admitted as evidence receipts.
     """
     if not LISTING_RAW_CACHE_PATH.exists():
         scrape_rera_listing(force=True)
@@ -2318,31 +2324,50 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
     body = LISTING_RAW_CACHE_PATH.read_bytes()
     if not body:
         raise ValueError("K-RERA listing raw receipt is empty")
+    listing_receipt_id = "rera_receipt:sha256:{}".format(hashlib.sha256(body).hexdigest())
+    receipts = [
+        {
+            "kind": "registry_listing",
+            "source_url": LISTING_URL,
+            "content_type": "text/html",
+            "body_hex": body.hex(),
+            "captured_at": observed_at,
+            "crawl_run_id": "rera-listing-{}".format(observed_at[:10]),
+        }
+    ]
+    detail_snapshots = capture_scoped_rera_detail_receipts(
+        request, listing_receipt_id
+    )
+    for snapshot in detail_snapshots:
+        receipts.append(
+            {
+                "kind": "project_detail",
+                "source_url": snapshot["source_url"],
+                "content_type": "text/html",
+                "body_hex": snapshot["body_hex"],
+                "captured_at": snapshot["captured_at"],
+                "registration_number": snapshot["registration_number"],
+                "parent_receipt_id": snapshot["parent_receipt_id"],
+                "crawl_run_id": snapshot["crawl_run_id"],
+            }
+        )
     return {
         "snapshot_date": observed_at[:10],
-        "receipts": [
-            {
-                "kind": "registry_listing",
-                "source_url": LISTING_URL,
-                "content_type": "text/html",
-                "body_hex": body.hex(),
-                "captured_at": observed_at,
-                "crawl_run_id": "rera-listing-{}".format(observed_at[:10]),
-            }
-        ],
+        "receipts": receipts,
         "source_watermarks": [
             {"source": "karnataka_rera_listing_receipt", "high_watermark": observed_at}
+        ] + [
+            {
+                "source": "karnataka_rera_project_detail_receipt",
+                "high_watermark": snapshot["captured_at"],
+            }
+            for snapshot in detail_snapshots
         ],
     }
 
 
 def collect_rera_source_records(request: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize the immutable listing receipt into registration-summary rows.
-
-    This is intentionally a new L1 parser, not a conversion from old RERA
-    facts. Detail, QPR, document, and order parsers will add their own typed
-    rows as their raw receipts are captured.
-    """
+    """Normalize L0 listing and scoped project-detail receipts into L1 rows."""
     if not LISTING_RAW_CACHE_PATH.exists():
         scrape_rera_listing(force=True)
     if not LISTING_RAW_CACHE_PATH.exists():
@@ -2377,7 +2402,13 @@ def collect_rera_source_records(request: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("K-RERA listing arrays are incomplete: {}".format(counts))
 
     records = []
+    scoped_registrations = {
+        entity["registration_number"] for entity in scoped_rera_entities(request)
+    }
     for index, registration_number in enumerate(arrays["applicationNameList2"]):
+        normalized_registration = normalized_registration_number(registration_number)
+        if scoped_registrations and normalized_registration not in scoped_registrations:
+            continue
         if not registration_number.strip():
             raise ValueError("K-RERA listing row {} has no registration number".format(index))
         records.append(
@@ -2402,13 +2433,361 @@ def collect_rera_source_records(request: Dict[str, Any]) -> Dict[str, Any]:
                 "parser_version": "rera_listing_source_records.v1",
             }
         )
+    if scoped_registrations:
+        found_registrations = {
+            normalized_registration_number(record["registration_number"])
+            for record in records
+        }
+        missing_registrations = sorted(scoped_registrations - found_registrations)
+        if missing_registrations:
+            raise ValueError(
+                "K-RERA listing is missing scoped registration(s): {}".format(
+                    ", ".join(missing_registrations)
+                )
+            )
+    detail_snapshots = load_scoped_rera_detail_receipts(request)
+    for snapshot in detail_snapshots:
+        records.extend(rera_project_detail_source_records(snapshot))
     return {
         "snapshot_date": observed_at[:10],
         "records": records,
         "source_watermarks": [
             {"source": "karnataka_rera_listing_source_records", "high_watermark": observed_at}
+        ] + [
+            {
+                "source": "karnataka_rera_project_detail_source_records",
+                "high_watermark": snapshot["captured_at"],
+            }
+            for snapshot in detail_snapshots
         ],
     }
+
+
+def normalized_registration_number(value: str) -> str:
+    return " ".join(str(value or "").strip().upper().split())
+
+
+def rera_receipt_id(body: bytes) -> str:
+    return "rera_receipt:sha256:{}".format(hashlib.sha256(body).hexdigest())
+
+
+def rera_capture_id(receipt_id: str, source_url: str, captured_at: str) -> str:
+    timestamp = captured_at[:-1] + "+00:00" if captured_at.endswith("Z") else captured_at
+    material = "rera_capture.v1\n{}\n{}\n{}".format(receipt_id, source_url, timestamp)
+    return "rera_capture:sha256:{}".format(
+        hashlib.sha256(material.encode("utf-8")).hexdigest()
+    )
+
+
+def scoped_rera_entities(request: Dict[str, Any]) -> List[Dict[str, str]]:
+    entities = []
+    seen = set()
+    for entity in request.get("source_entities") or []:
+        registration_number = normalized_registration_number(entity.get("project_key"))
+        if not registration_number:
+            continue
+        if registration_number in seen:
+            continue
+        name = str(entity.get("name") or "").strip()
+        if not name:
+            raise ValueError(
+                "RERA detail collection requires a project name for {}".format(
+                    registration_number
+                )
+            )
+        seen.add(registration_number)
+        entities.append(
+            {
+                "registration_number": registration_number,
+                "project_name": name,
+            }
+        )
+    return entities
+
+
+def detail_receipt_metadata_path(registration_number: str) -> Path:
+    digest = hashlib.sha256(registration_number.encode("utf-8")).hexdigest()
+    return RERA_DETAIL_RECEIPT_CACHE_DIR / "{}.json".format(digest)
+
+
+def capture_scoped_rera_detail_receipts(
+    request: Dict[str, Any], parent_receipt_id: str
+) -> List[Dict[str, Any]]:
+    """Fetch only registration-scoped project-detail pages and persist capture metadata."""
+    snapshots = []
+    for entity in scoped_rera_entities(request):
+        session = ReraSession()
+        search_result = search_rera_project(session, entity["project_name"])
+        if search_result is None:
+            raise ValueError(
+                "K-RERA did not return a project detail for {}".format(
+                    entity["registration_number"]
+                )
+            )
+        found_registration = normalized_registration_number(search_result.registration_number)
+        if found_registration != entity["registration_number"]:
+            raise ValueError(
+                "K-RERA project search for {!r} returned {}, not requested {}".format(
+                    entity["project_name"],
+                    found_registration or "no registration number",
+                    entity["registration_number"],
+                )
+            )
+        body = session.post_bytes(
+            DETAIL_URL, {"action": search_result.numeric_id}, ajax=True, timeout=120
+        )
+        if not body:
+            raise ValueError(
+                "K-RERA returned an empty project-detail receipt for {}".format(
+                    entity["registration_number"]
+                )
+            )
+        captured_at = datetime.now(timezone.utc).isoformat()
+        source_url = "{}?action={}".format(DETAIL_URL, search_result.numeric_id)
+        snapshot = {
+            "registration_number": entity["registration_number"],
+            "source_url": source_url,
+            "captured_at": captured_at,
+            "parent_receipt_id": parent_receipt_id,
+            "crawl_run_id": "rera-project-detail-{}".format(captured_at[:10]),
+            "body_hex": body.hex(),
+            "body_sha256": hashlib.sha256(body).hexdigest(),
+        }
+        metadata_path = detail_receipt_metadata_path(entity["registration_number"])
+        metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        metadata_path.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+        snapshots.append(snapshot)
+    return snapshots
+
+
+def load_scoped_rera_detail_receipts(request: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Load only captures whose provenance and body hash are intact."""
+    snapshots = []
+    for entity in scoped_rera_entities(request):
+        metadata_path = detail_receipt_metadata_path(entity["registration_number"])
+        if not metadata_path.exists():
+            raise ValueError(
+                "No provenance-complete K-RERA detail receipt exists for {}; "
+                "run rera_receipts first".format(entity["registration_number"])
+            )
+        snapshot = json.loads(metadata_path.read_text(encoding="utf-8"))
+        required = (
+            "registration_number",
+            "source_url",
+            "captured_at",
+            "parent_receipt_id",
+            "crawl_run_id",
+            "body_hex",
+            "body_sha256",
+        )
+        if any(not snapshot.get(key) for key in required):
+            raise ValueError("K-RERA detail capture metadata is incomplete: {}".format(metadata_path))
+        if normalized_registration_number(snapshot["registration_number"]) != entity["registration_number"]:
+            raise ValueError("K-RERA detail capture registration scope mismatch: {}".format(metadata_path))
+        try:
+            body = bytes.fromhex(snapshot["body_hex"])
+        except ValueError as error:
+            raise ValueError("K-RERA detail capture has invalid body encoding: {}".format(metadata_path)) from error
+        if hashlib.sha256(body).hexdigest() != snapshot["body_sha256"]:
+            raise ValueError("K-RERA detail capture body hash does not match metadata: {}".format(metadata_path))
+        snapshots.append(snapshot)
+    return snapshots
+
+
+def clean_html_fragment(value: str) -> str:
+    return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", value or ""))).strip()
+
+
+def rera_detail_labeled_value(detail_html: str, label: str) -> Optional[str]:
+    pattern = re.compile(
+        re.escape(label)
+        + r".{0,300}?</p>\s*</div>\s*<div[^>]*>\s*<p[^>]*>\s*(.*?)\s*</p>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    match = pattern.search(detail_html)
+    return clean_html_fragment(match.group(1)) if match else None
+
+
+def iso_rera_date(value: str) -> Optional[str]:
+    for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value.strip(), fmt).date().isoformat()
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def project_detail_receipt_ids(snapshot: Dict[str, Any]) -> Tuple[str, str]:
+    body = bytes.fromhex(snapshot["body_hex"])
+    receipt_id = rera_receipt_id(body)
+    return receipt_id, rera_capture_id(receipt_id, snapshot["source_url"], snapshot["captured_at"])
+
+
+def rera_project_detail_source_records(snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Parse source-preserving RERA detail records needed by the first report slice.
+
+    This deliberately covers the project summary, water declaration, QPR
+    inventory totals, and document metadata. Other page sections remain in the
+    immutable receipt and are reported as partial parser coverage, never as
+    silent absence.
+    """
+    body = bytes.fromhex(snapshot["body_hex"])
+    detail_html = body.decode("utf-8", errors="replace")
+    receipt_id, capture_id = project_detail_receipt_ids(snapshot)
+    registration_number = snapshot["registration_number"]
+    observed_at = snapshot["captured_at"]
+    base = {
+        "registration_number": registration_number,
+        "receipt_id": receipt_id,
+        "capture_id": capture_id,
+        "observed_at": observed_at,
+        "parser_version": "rera_project_detail_source_records.v1",
+    }
+    records = []
+
+    def add(kind: str, locator: str, label: str, value: Any, effective_at=None, filing_at=None):
+        record = dict(base)
+        record.update(
+            {
+                "kind": kind,
+                "source_locator": locator,
+                "raw_label": label,
+                "raw_value": value if isinstance(value, str) else json.dumps(value, separators=(",", ":")),
+            }
+        )
+        if effective_at:
+            record["effective_at"] = effective_at
+        if filing_at:
+            record["filing_at"] = filing_at
+        records.append(record)
+
+    declared_units = rera_detail_labeled_value(
+        detail_html, "Total Number of Inventories/Flats/Villas"
+    )
+    if declared_units and declared_units.replace(",", "").strip().isdigit():
+        add(
+            "promoter_declaration",
+            "#menu2/project-summary/total-inventories",
+            "Total Number of Inventories/Flats/Villas",
+            {"unit_count": int(declared_units.replace(",", "").strip())},
+        )
+
+    water_source = rera_detail_labeled_value(detail_html, "Source of Water")
+    if water_source:
+        add(
+            "water_service_declaration",
+            "#menu2/source-of-water/source",
+            "Source of Water",
+            {"source": water_source.rstrip(", ")},
+        )
+    water_authority = rera_detail_labeled_value(detail_html, "Local Authority")
+    if water_authority:
+        add(
+            "water_service_declaration",
+            "#menu2/source-of-water/local-authority",
+            "Local Authority",
+            {"authority": water_authority.rstrip(", ")},
+        )
+
+    registration_row = re.search(
+        r"At the time of Registration.*?(\d{2}-\d{2}-\d{4}).*?(\d{2}-\d{2}-\d{4})",
+        detail_html,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if registration_row:
+        start_date = iso_rera_date(registration_row.group(1))
+        completion_date = iso_rera_date(registration_row.group(2))
+        if start_date:
+            add(
+                "completion",
+                "#menu2/registration-schedule/at-registration/start-date",
+                "Registration start date",
+                {"date": start_date},
+                effective_at=start_date,
+            )
+        if completion_date:
+            add(
+                "completion",
+                "#menu2/registration-schedule/at-registration/proposed-completion-date",
+                "Proposed completion date",
+                {"date": completion_date},
+                effective_at=completion_date,
+            )
+
+    quarter_headers = list(
+        re.finditer(
+            r"<b[^>]*>\s*Quarter\s+(Q[1-4])\s*\(\s*(\d{4}-\d{2})\s*\)"
+            r".*?Submitted on\s+(\d{2}-\d{2}-\d{4})",
+            detail_html,
+            re.IGNORECASE | re.DOTALL,
+        )
+    )
+    for index, header in enumerate(quarter_headers):
+        block_end = quarter_headers[index + 1].start() if index + 1 < len(quarter_headers) else len(detail_html)
+        block = detail_html[header.start() : block_end]
+        totals = []
+        for table in re.findall(r"<table\b[^>]*>(.*?)</table>", block, re.IGNORECASE | re.DOTALL):
+            if "Total No of Units Booked" not in clean_html_fragment(table):
+                continue
+            total_row = re.search(
+                r"<tr[^>]*>\s*<td[^>]*>\s*Total\s*</td>\s*"
+                r"<td[^>]*>\s*(\d+)\s*</td>\s*<td[^>]*>\s*(\d+)\s*</td>\s*"
+                r"<td[^>]*>\s*(\d+)\s*</td>",
+                table,
+                re.IGNORECASE | re.DOTALL,
+            )
+            if total_row:
+                totals.append(tuple(int(value) for value in total_row.groups()))
+        if not totals:
+            continue
+        filing_at = iso_rera_date(header.group(3))
+        quarter = header.group(1).upper()
+        financial_year = header.group(2)
+        add(
+            "quarterly_progress",
+            "#quarterly-update/{}-{}".format(quarter.lower(), financial_year),
+            "Quarterly inventory totals",
+            {
+                "quarter": quarter,
+                "financial_year": financial_year,
+                "tower_count": len(totals),
+                "total_units": sum(row[0] for row in totals),
+                "booked_units": sum(row[1] for row in totals),
+                "unsold_units": sum(row[2] for row in totals),
+            },
+            filing_at=filing_at,
+        )
+        for href, label in re.findall(
+            r"<a[^>]+href=['\"]([^'\"]*download_jc\?DOC_ID=[^'\"]+)['\"][^>]*>\s*(.*?)\s*</a>",
+            block,
+            re.IGNORECASE | re.DOTALL,
+        ):
+            document_label = clean_html_fragment(label)
+            if not re.search(r"\bForm[- ]?[456]\b", document_label, re.IGNORECASE):
+                continue
+            document_url = href if href.startswith("http") else "{}{}".format(RERA_BASE, href)
+            add(
+                "document_approval",
+                "#quarterly-update/{}/{}/{}".format(
+                    quarter.lower(), financial_year, hashlib.sha256(document_url.encode("utf-8")).hexdigest()[:12]
+                ),
+                "Quarterly supporting document",
+                {
+                    "quarter": quarter,
+                    "financial_year": financial_year,
+                    "label": document_label,
+                    "official_url": document_url,
+                },
+                filing_at=filing_at,
+            )
+
+    add(
+        "source_warning",
+        "#project-detail/parser-coverage",
+        "Parser coverage",
+        "Partial parser coverage: project summary, schedule, water declaration, QPR inventory totals, and QPR document metadata only.",
+    )
+    return records
 
 
 def collect_reddit_assets(

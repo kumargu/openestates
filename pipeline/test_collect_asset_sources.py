@@ -28,6 +28,7 @@ from pipeline.collect_asset_sources import (
     google_society_inputs,
     reddit_society_inputs,
     request_with_rera_detail_facts,
+    rera_project_detail_source_records,
 )
 from pipeline.skills.base import FactSource, SkillCost, SkillResult, SourcedFact
 from pipeline.skills.fetch_google_review_links import (
@@ -146,6 +147,103 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(
             json.loads(row["raw_value"])["project_name"], "Fixture Project"
         )
+
+    def test_rera_source_records_scoped_run_ignores_unrelated_malformed_listing_rows(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            listing_cache = root / "listing.json"
+            listing_raw = root / "listing.html"
+            listing_cache.write_text(
+                json.dumps({"cached_at": "2026-08-09T10:30:00Z"}),
+                encoding="utf-8",
+            )
+            listing_raw.write_bytes(
+                b"applicationNameList.push('ACK-BLANK');"
+                b"applicationNameList2.push('');"
+                b"applicationNameList3.push('Malformed Project');"
+                b"applicationNameList4.push('Malformed Promoter');"
+                b"applicationNameList.push('ACK-GODREJ');"
+                b"applicationNameList2.push('PRM/KA/RERA/1251/446/PR/300924/007105');"
+                b"applicationNameList3.push('GODREJ LAKESIDE ORCHARD');"
+                b"applicationNameList4.push('Godrej Properties Limited');"
+            )
+            request = {
+                "planned_at": "2026-08-09T11:00:00Z",
+                "source_entities": [
+                    {
+                        "entity_id": "society:godrej-lakeside-orchard",
+                        "name": "GODREJ LAKESIDE ORCHARD",
+                        "project_key": "PRM/KA/RERA/1251/446/PR/300924/007105",
+                    }
+                ],
+            }
+            with patch("pipeline.collect_asset_sources.LISTING_CACHE_PATH", listing_cache), patch(
+                "pipeline.collect_asset_sources.LISTING_RAW_CACHE_PATH", listing_raw
+            ), patch(
+                "pipeline.collect_asset_sources.load_scoped_rera_detail_receipts",
+                return_value=[],
+            ):
+                payload = collect_rera_source_records(request)
+
+        self.assertEqual(len(payload["records"]), 1)
+        self.assertEqual(
+            payload["records"][0]["registration_number"],
+            "PRM/KA/RERA/1251/446/PR/300924/007105",
+        )
+
+    def test_rera_project_detail_records_preserve_declarations_and_qpr_inventory(self):
+        def quarter(quarter, year, submitted, booked, unsold):
+            return """
+                <b>Quarter {quarter} ( {year} )<span> Details (Submitted on {submitted})</span></b>
+                <table><thead><tr><th>Total No of Units Booked</th></tr></thead><tbody>
+                <tr><td>Total</td><td>970</td><td>{booked}</td><td>{unsold}</td></tr>
+                </tbody></table>
+                <a href='/download_jc?DOC_ID=form-{quarter}'>Form 6 {quarter}.pdf</a>
+            """.format(
+                quarter=quarter,
+                year=year,
+                submitted=submitted,
+                booked=booked,
+                unsold=unsold,
+            )
+
+        detail_html = """
+            <div><p>Total Number of Inventories/Flats/Villas<span>:</span></p></div>
+            <div><p>698</p></div>
+            <div><p>Source of Water<span>:</span></p></div><div><p>Local Authority,</p></div>
+            <div><p>Local Authority<span>:</span></p></div><div><p>Kodathi Grama Panchayath</p></div>
+            <tr><td>At the time of Registration</td><td>01-11-2024</td><td>30-09-2030</td></tr>
+        """ + quarter("Q3", "2025-26", "12-01-2026", 678, 292) + quarter(
+            "Q4", "2025-26", "13-04-2026", 678, 292
+        ) + quarter("Q1", "2026-27", "13-07-2026", 837, 133)
+        snapshot = {
+            "registration_number": "PRM/KA/RERA/1251/446/PR/300924/007105",
+            "source_url": "https://rera.karnataka.gov.in/projectDetails?action=12638",
+            "captured_at": "2026-08-09T10:30:00+00:00",
+            "body_hex": detail_html.encode("utf-8").hex(),
+        }
+
+        rows = rera_project_detail_source_records(snapshot)
+        by_kind = {}
+        for row in rows:
+            by_kind.setdefault(row["kind"], []).append(row)
+
+        self.assertEqual(json.loads(by_kind["promoter_declaration"][0]["raw_value"]), {"unit_count": 698})
+        self.assertEqual(
+            json.loads(by_kind["water_service_declaration"][0]["raw_value"]),
+            {"source": "Local Authority"},
+        )
+        qpr_rows = [json.loads(row["raw_value"]) for row in by_kind["quarterly_progress"]]
+        self.assertEqual(
+            qpr_rows,
+            [
+                {"quarter": "Q3", "financial_year": "2025-26", "tower_count": 1, "total_units": 970, "booked_units": 678, "unsold_units": 292},
+                {"quarter": "Q4", "financial_year": "2025-26", "tower_count": 1, "total_units": 970, "booked_units": 678, "unsold_units": 292},
+                {"quarter": "Q1", "financial_year": "2026-27", "tower_count": 1, "total_units": 970, "booked_units": 837, "unsold_units": 133},
+            ],
+        )
+        self.assertEqual(len(by_kind["document_approval"]), 3)
+        self.assertEqual(len(by_kind["source_warning"]), 1)
 
     def test_rera_detail_collection_is_scoped_and_preserves_alias_lineage(self):
         request = {
