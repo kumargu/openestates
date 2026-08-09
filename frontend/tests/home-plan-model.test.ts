@@ -5,6 +5,7 @@ import {
   buildBaselinePlanInputs,
   calculateLoanJourney,
   calculateProjection,
+  updatePlanInput,
 } from "../src/features/home-plan/model.ts";
 import { buildPlanSnapshotNote } from "../src/features/home-plan/planSnapshot.ts";
 import { buildMonthlyPlanVerdict, defaultPlanFocusYear } from "../src/features/home-plan/monthlyPlanView.ts";
@@ -206,7 +207,18 @@ test("monthly SIP grows only the rent and invest path", () => {
   assert.ok(Math.abs(withEnd.buyNetWorth - withoutEnd.buyNetWorth) < 1);
 });
 
-test("rent path contains only the stated SIP", () => {
+test("plan input edits change only the selected variable", () => {
+  const higherRent = updatePlanInput(ready, "currentRentThousands", 65);
+  const higherEmi = updatePlanInput(ready, "monthlyEmiThousands", 155);
+
+  assert.equal(higherRent.currentRentThousands, 65);
+  assert.equal(higherRent.monthlySipThousands, ready.monthlySipThousands);
+  assert.equal(higherEmi.monthlyEmiThousands, 155);
+  assert.equal(higherEmi.monthlySipThousands, ready.monthlySipThousands);
+  assert.throws(() => updatePlanInput(ready, "monthlyEmiThousands", 0), /monthlyEmiThousands/);
+});
+
+test("rent path compounds the stated monthly SIP", () => {
   const inputs = {
     ...ready,
     currentRentThousands: 35,
@@ -273,6 +285,30 @@ test("payoff journey matches financing interest for a ready home", () => {
   assert.ok(Math.abs(journey.totalInterest! - projection.totalInterest!) < 1);
 });
 
+test("construction-stage draws and extra EMIs keep the graph balance aligned with payoff math", () => {
+  const inputs = {
+    ...ready,
+    holdingPeriodYears: 20,
+    construction: {
+      state: "under_construction" as const,
+      asOfDate: "2026-01-01",
+      startDate: "2025-01-01",
+      completionDate: "2028-01-01",
+      dateSource: "rera" as const,
+    },
+  };
+  const projection = calculateProjection(inputs, 3);
+  const journey = calculateLoanJourney(inputs, 3);
+
+  for (const point of projection.points) {
+    const payoffPoint = journey.points.find((candidate) => candidate.year === point.year);
+    if (payoffPoint) {
+      assert.ok(Math.abs(point.loanBalance - payoffPoint.balance) < 1);
+    }
+  }
+  assert.equal(projection.loanFreeYear, Math.ceil(journey.loanFreeMonths / 12));
+});
+
 test("extra EMIs update payoff, total interest, snapshot, and top insight together", () => {
   const inputs = {
     ...ready,
@@ -296,14 +332,14 @@ test("extra EMIs update payoff, total interest, snapshot, and top insight togeth
   assert.notEqual(prepaid.totalInterest, null);
   assert.ok(prepaid.loanFreeYear! < base.loanFreeYear!);
   assert.ok(prepaid.totalInterest! < base.totalInterest!);
-  assert.match(view.insight, /At 12 years, (buying|the rent path) leads by ₹/);
+  assert.match(view.insight, /At 12 years, (buying|renting) leads by ₹/);
   assert.match(view.insight, /3 extra EMIs\/year closes the loan/);
   assert.match(view.insight, /Total interest lands near/);
   assert.match(note.detail, /3 extra EMIs\/year/);
   assert.equal(note.catalogKey, "plan:home-1:current");
 });
 
-test("default plan focus follows the current loan-free milestone when it is visible", () => {
+test("default plan focus stays on the selected holding period", () => {
   const inputs = {
     ...ready,
     monthlyEmiThousands: 160,
@@ -313,8 +349,8 @@ test("default plan focus follows the current loan-free milestone when it is visi
   const focusYear = defaultPlanFocusYear(projection, inputs.holdingPeriodYears);
   const view = buildMonthlyPlanVerdict(projection, focusYear);
 
-  assert.equal(focusYear, projection.loanFreeYear);
-  assert.match(view.timeLabel, new RegExp(`After ${projection.loanFreeYear} years`));
+  assert.equal(focusYear, inputs.holdingPeriodYears);
+  assert.match(view.timeLabel, new RegExp(`After ${inputs.holdingPeriodYears} years`));
   assert.match(view.insight, /4 extra EMIs\/year closes the loan/);
 });
 
@@ -341,7 +377,7 @@ test("low EMI plan returns explicit non-closing state without fake interest", ()
 
   assert.equal(projection.loanFreeYear, null);
   assert.equal(projection.totalInterest, null);
-  assert.match(view.insight, /At 10 years, (buying|the rent path) leads by ₹/);
+  assert.match(view.insight, /At 10 years, (buying|renting) leads by ₹/);
   assert.match(view.insight, /loan does not close at this EMI/);
   assert.ok(projection.points.at(-1)!.loanBalance > projection.loanAmount);
 });
@@ -453,6 +489,8 @@ test("monthly plan rejects invalid numeric inputs at the algorithm boundary", ()
       rentInflationRate: Number.POSITIVE_INFINITY,
     },
   }), /rentInflationRate/);
+  assert.throws(() => calculateProjection(ready, Number.NaN), /extraEmisPerYear/);
+  assert.throws(() => calculateProjection(ready, 1.5), /extraEmisPerYear/);
 });
 
 test("payment and principal formulas are inverses", () => {

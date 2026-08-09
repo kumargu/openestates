@@ -6,7 +6,7 @@ export type MonthlyPlanVerdict = Readonly<{
   buyWins: boolean;
   advantage: number;
   timeLabel: string;
-  choiceLabel: "buy" | "rent and invest";
+  choiceLabel: "buy" | "rent";
   insight: string;
 }>;
 
@@ -35,13 +35,6 @@ export function defaultPlanFocusYear(
   holdingPeriodYears: number,
 ): number {
   const maxYear = Math.max(0, projection.points.length - 1);
-  if (
-    projection.loanFreeYear !== null
-    && projection.loanFreeYear > 0
-    && projection.loanFreeYear <= maxYear
-  ) {
-    return projection.loanFreeYear;
-  }
   return Math.min(holdingPeriodYears, maxYear);
 }
 
@@ -57,7 +50,7 @@ export function buildMonthlyPlanVerdict(
 
   const buyWins = activePoint.buyNetWorth >= activePoint.rentNetWorth;
   const advantage = Math.abs(activePoint.buyNetWorth - activePoint.rentNetWorth);
-  const choiceLabel = buyWins ? "buy" : "rent and invest";
+  const choiceLabel = buyWins ? "buy" : "rent";
   const timeLabel = inspectedYear === 0
     ? "Today"
     : `After ${inspectedYear} ${inspectedYear === 1 ? "year" : "years"}`;
@@ -84,7 +77,7 @@ export function monthlyPlanInsight(
   const advantage = activePoint
     ? Math.abs(activePoint.buyNetWorth - activePoint.rentNetWorth)
     : 0;
-  const lead = `${sentenceYearLabel(activeYear)}, ${buyWins ? "buying" : "the rent path"} leads by ${formatCurrency(advantage, true)}`;
+  const lead = `${sentenceYearLabel(activeYear)}, ${buyWins ? "buying" : "renting"} leads by ${formatCurrency(advantage, true)}`;
   if (projection.loanFreeYear == null) {
     return `${lead}; loan does not close at this EMI.`;
   }
