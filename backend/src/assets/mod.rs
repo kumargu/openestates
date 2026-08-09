@@ -29,6 +29,7 @@ pub mod promotion;
 pub mod reddit;
 pub mod registry;
 pub mod rera;
+pub mod rera_claims;
 pub mod rera_evidence;
 pub mod rera_plans;
 pub mod rera_source_records;
@@ -128,6 +129,11 @@ pub use rera::{
     CanonicalSocietyMaterializer, CanonicalSocietyRows, ReraAssetError, ReraCanonicalMappingRecord,
     ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
     CANONICAL_SOCIETY_NODES_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+};
+pub use rera_claims::{
+    ReraAssertionMode, ReraClaimDerivation, ReraClaimEffectiveTime, ReraClaimError,
+    ReraClaimEvidence, ReraClaimInput, ReraClaimSubject, ReraClaimV1, ReraClaimValidationState,
+    ReraClaimValue, ReraClaimVisibility, ReraSourceTrust,
 };
 pub use rera_evidence::{
     read_rera_receipt_records, rera_registration_identity, ReraEvidenceError, ReraReceiptInput,
