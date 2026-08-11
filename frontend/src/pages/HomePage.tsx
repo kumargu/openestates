@@ -244,7 +244,7 @@ export function HomePage() {
       <div className="home-scroll-shell">
         <form
           onSubmit={handleSearch}
-          className={`home-composer${hasActiveSearch ? " home-composer--search-active" : " home-composer--landing-sticky fade-up fade-up-delay-1"}${searchFocused ? " home-composer--focused" : ""}`}
+          className={`home-composer${hasActiveSearch ? " home-composer--search-active" : " home-composer--landing fade-up fade-up-delay-1"}${searchFocused ? " home-composer--focused" : ""}`}
           aria-label="Search homes"
           role="search"
         >

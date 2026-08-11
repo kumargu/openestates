@@ -1835,25 +1835,30 @@
   font-size: 0.6rem;
 }
 
-.compare-theme__cell--grouped {
+.compare-tag-matrix {
   display: grid;
-  gap: 0.8rem;
+  gap: 0;
 }
 
-.compare-item-cluster {
-  display: grid;
-  gap: 0.42rem;
-  min-width: 0;
+.compare-tag-row {
+  padding: 0.68rem 0 0.82rem;
+  border-top: 1px solid rgba(50, 38, 30, 0.055);
 }
 
-.compare-item-cluster__head {
+.compare-tag-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.compare-tag-row__head {
   display: flex;
   align-items: center;
   gap: 0.34rem;
   min-width: 0;
+  margin-bottom: 0.42rem;
 }
 
-.compare-item-cluster__label.oe-label-pill--compare {
+.compare-tag-row__label.oe-label-pill--compare {
   min-height: 1.62rem;
   padding: 0 0.62rem 0 0.48rem;
   font-size: 0.62rem;

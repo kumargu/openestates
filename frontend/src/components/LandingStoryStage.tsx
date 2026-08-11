@@ -28,7 +28,6 @@ const REVEAL_SEQUENCE_DELAYS = [620, 760] as const;
 const NOTEBOOK_SEQUENCE_DURATIONS = [1_400, 1_100, 2_200] as const;
 const COMPARE_SEQUENCE_DURATIONS = [1_800, 1_500, 2_200] as const;
 const RERA_SEQUENCE_DURATIONS = [1_800, 1_800, 1_800, 2_200] as const;
-const RESOLVE_STORY_DURATION_MS = 5_400;
 const CARD_UNFOLD_TRANSITION = {
   type: "spring",
   visualDuration: 0.55,
@@ -57,12 +56,6 @@ type LandingMapStory = {
   label: string;
   places: MapPlacePin[];
   visual: "places" | "metro" | "lakes" | "water" | "lines";
-};
-
-type ResolveStory = {
-  id: string;
-  query: string;
-  homes: PropertyCard[];
 };
 
 function useDesktopStory(): boolean {
@@ -321,32 +314,6 @@ function storyHomesForResolve(properties: PropertyCard[]): PropertyCard[] {
     .slice(0, 3);
 }
 
-function resolveStories(properties: PropertyCard[]): ResolveStory[] {
-  const candidates: ResolveStory[] = [
-    {
-      id: "family-budget",
-      query: RESOLVE_QUERY,
-      homes: storyHomesForResolve(properties),
-    },
-    ...FEATURED_LENSES
-      .filter((lens) => lens.id !== "family")
-      .map((lens) => ({
-        id: lens.id,
-        query: lens.query,
-        homes: rankHomesForLens(properties, lens.id).slice(0, 3),
-      })),
-  ];
-  const seenResults = new Set<string>();
-
-  return candidates.filter((story) => {
-    if (story.homes.length === 0) return false;
-    const signature = story.homes.map((home) => home.id).join("|");
-    if (seenResults.has(signature)) return false;
-    seenResults.add(signature);
-    return true;
-  });
-}
-
 function querySegments(query: string): string[] {
   const words = query.split(/\s+/).filter(Boolean);
   const segmentSize = Math.max(1, Math.ceil(words.length / 3));
@@ -420,15 +387,17 @@ function ResolveCanvas({
       data-selection-visible={sequence.selectionVisible}
       data-proof-visible={sequence.proofVisible}
     >
-      <div className="landing-resolve__composer">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="10.8" cy="10.8" r="6.2" />
-          <path d="m15.4 15.4 4.1 4.1" />
-        </svg>
-        <p className="landing-resolve__query">
-          {querySegments(query).map((segment) => <span key={segment}>{segment} </span>)}
+      <div className="landing-resolve__world" aria-hidden="true">
+        <span className="landing-resolve__orbit landing-resolve__orbit--one" />
+        <span className="landing-resolve__orbit landing-resolve__orbit--two" />
+        <span className="landing-resolve__node landing-resolve__node--one" />
+        <span className="landing-resolve__node landing-resolve__node--two" />
+        <span className="landing-resolve__node landing-resolve__node--three" />
+      </div>
+      <div className="landing-resolve__intent">
+        <p className="landing-resolve__query" aria-label={query}>
+          {querySegments(query).map((segment) => <span key={segment}>{segment}</span>)}
         </p>
-        <i aria-hidden="true">→</i>
       </div>
       <div className="landing-resolve__homes">
         {homes.map((property, index) => {
@@ -1224,25 +1193,11 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
   const isDesktopStory = useDesktopStory();
   const controller = useLandingSceneController(STORY_SCENE_IDS, isDesktopStory);
   const storyRef = useLandingStoryMotion(controller.isReducedMotion);
-  const stories = resolveStories(uniqueHomes);
-  const resolveStoryDurations = Array.from(
-    { length: stories.length },
-    () => RESOLVE_STORY_DURATION_MS,
-  );
-  const resolveStoryIndex = useLandingLoopSequence({
-    active: controller.activeSceneId === "resolve",
-    durations: resolveStoryDurations,
-    paused: controller.isPaused("resolve"),
-    reducedMotion: controller.isReducedMotion,
-  });
-  const resolveStory = stories.length > 0
-    ? stories[resolveStoryIndex % stories.length]
-    : undefined;
-  const resolveHomes = stories[0]?.homes ?? [];
+  const resolveHomes = storyHomesForResolve(uniqueHomes);
   const revealHome = resolveHomes[0] ?? selectEvidenceHome(uniqueHomes);
   const revealDetail = usePropertyDetail(revealHome?.id);
 
-  if (!revealHome || !resolveStory) return null;
+  if (!revealHome || resolveHomes.length === 0) return null;
 
   const rankedStoryHomes = rankEvidenceHomes(uniqueHomes);
   const notebookHome = resolveHomes.find((home) => home.id !== revealHome.id)
@@ -1262,17 +1217,17 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
       title: "Start with the life you want",
       description: "A natural-language search becomes a small, ranked set of homes with reasons attached.",
       action: (
-        <button type="button" onClick={() => onSearch(resolveStory.query)}>
+        <button type="button" onClick={() => onSearch(RESOLVE_QUERY)}>
           Try this search <span aria-hidden="true">→</span>
         </button>
       ),
       canvas: (
         <ResolveCanvas
-          key={`${resolveStory.id}-${resolveIsActive ? "active" : "rest"}-${controller.isReducedMotion ? "reduced" : "motion"}`}
+          key={`${resolveIsActive ? "active" : "rest"}-${controller.isReducedMotion ? "reduced" : "motion"}`}
           active={resolveIsActive}
-          homes={resolveStory.homes}
+          homes={resolveHomes}
           paused={controller.isPaused("resolve")}
-          query={resolveStory.query}
+          query={RESOLVE_QUERY}
           reducedMotion={controller.isReducedMotion}
         />
       ),
