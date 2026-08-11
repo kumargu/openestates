@@ -1,5 +1,5 @@
 #!/usr/bin/env python3.11
-"""Promote RERA site overview + floor plan previews into lake media facts.
+"""Promote RERA project-plan previews into lake media facts.
 
 This offline writer materializes `media.project_plan_frames` from a small
 project manifest and already-rendered RERA document preview images.
@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_MANIFEST = REPO_ROOT / "app" / "config" / "dag" / "rera_project_plan_targets.json"
 PROJECT_PLAN_FACT_KEY = "media.project_plan_frames"
 
 
@@ -40,6 +39,7 @@ class DocumentArtifact:
     configuration_type: Optional[str]
     bedroom_count: Optional[float]
     confidence: float
+    source_hash: Optional[str]
 
 
 def _string(value: Any, field: str) -> str:
@@ -95,6 +95,7 @@ def _artifact_from_raw(raw: dict[str, Any]) -> DocumentArtifact:
         configuration_type=_optional_string(raw.get("configuration_type")),
         bedroom_count=_optional_number(raw.get("bedroom_count"), "document_artifacts[].bedroom_count"),
         confidence=_optional_number(raw.get("confidence"), "document_artifacts[].confidence") or 0.7,
+        source_hash=_optional_string(raw.get("source_hash")),
     )
 
 
@@ -205,6 +206,7 @@ def _site_overview(
     source = _find_source_image(_source_dirs(repo_root, project, manifest_path), source_name)
     dest_name = _optional_string(raw.get("dest_name")) or "site-overview.png"
     preview_url = _copy_preview(source, preview_dir, society_slug, dest_name)
+    preview_hash = _sha256(source)
 
     return {
         "id": _optional_string(raw.get("id")) or "site-overview",
@@ -214,8 +216,11 @@ def _site_overview(
         "preview_url": preview_url,
         "thumbnail_url": preview_url,
         "source_url": _source_url(project, artifact, raw.get("source_url")),
-        "source_hash": _sha256(source),
+        "source_hash": artifact.source_hash or preview_hash,
+        "preview_hash": preview_hash,
         "page": _optional_int(raw.get("page"), "site_overview.page"),
+        "role": _optional_string(raw.get("role")),
+        "selection_reason": _optional_string(raw.get("selection_reason")),
         "confidence": _optional_number(raw.get("confidence"), "site_overview.confidence") or artifact.confidence,
     }
 
@@ -249,6 +254,7 @@ def _floor_plan(
     )
     dest_name = _optional_string(raw.get("dest_name")) or f"{_slug(plan_id)}.png"
     preview_url = _copy_preview(source, preview_dir, society_slug, dest_name)
+    preview_hash = _sha256(source)
 
     carpet_sqft = _optional_int(raw.get("carpet_area_sqft"), "floor_plans[].carpet_area_sqft")
     sale_sqft = _optional_int(raw.get("sale_area_sqft"), "floor_plans[].sale_area_sqft")
@@ -272,7 +278,8 @@ def _floor_plan(
         "preview_url": preview_url,
         "thumbnail_url": preview_url,
         "source_url": _source_url(project, artifact, raw.get("source_url")),
-        "source_hash": _sha256(source),
+        "source_hash": artifact.source_hash or preview_hash,
+        "preview_hash": preview_hash,
         "page": _optional_int(raw.get("page"), "floor_plans[].page"),
         "carpet_area_sqft": carpet_sqft,
         "carpet_area_sqm": _optional_number(raw.get("carpet_area_sqm"), "floor_plans[].carpet_area_sqm"),
@@ -280,6 +287,45 @@ def _floor_plan(
         "sale_area_sqm": _optional_number(raw.get("sale_area_sqm"), "floor_plans[].sale_area_sqm"),
         "usable_area_ratio": usable_ratio,
         "confidence": _optional_number(raw.get("confidence"), "floor_plans[].confidence") or artifact.confidence,
+    }
+
+
+def _filed_plan_preview(
+    repo_root: Path,
+    manifest_path: Path,
+    project: dict[str, Any],
+    artifacts: dict[str, DocumentArtifact],
+    preview_dir: Path,
+    raw: dict[str, Any],
+) -> dict[str, Any]:
+    society_slug = _string(project.get("society_slug"), "society_slug")
+    artifact_id = _string(raw.get("artifact_id"), "filed_plan_previews[].artifact_id")
+    artifact = artifacts.get(artifact_id)
+    if artifact is None:
+        raise ManifestError(f"{artifact_id!r} is not present in RERA document_artifacts")
+    source_name = _string(raw.get("source_name"), "filed_plan_previews[].source_name")
+    source = _find_source_image(_source_dirs(repo_root, project, manifest_path), source_name)
+    page = _optional_int(raw.get("page"), "filed_plan_previews[].page")
+    preview_id = _optional_string(raw.get("id")) or _slug(
+        " ".join(part for part in [artifact.kind, artifact.label, str(page or "")] if part)
+    )
+    dest_name = _optional_string(raw.get("dest_name")) or f"{preview_id}.png"
+    preview_url = _copy_preview(source, preview_dir, society_slug, dest_name)
+    preview_hash = _sha256(source)
+    return {
+        "artifact_id": artifact_id,
+        "kind": artifact.kind,
+        "label": _optional_string(raw.get("label")) or artifact.label,
+        "preview_url": preview_url,
+        "thumbnail_url": preview_url,
+        "source_url": _source_url(project, artifact, raw.get("source_url")),
+        "source_hash": artifact.source_hash or preview_hash,
+        "preview_hash": preview_hash,
+        "page": page,
+        "role": _optional_string(raw.get("role")),
+        "selection_reason": _optional_string(raw.get("selection_reason")),
+        "confidence": _optional_number(raw.get("confidence"), "filed_plan_previews[].confidence")
+        or artifact.confidence,
     }
 
 
@@ -297,7 +343,7 @@ def materialize_project(
     project: dict[str, Any],
 ) -> dict[str, Any]:
     if _optional_string(project.get("provider")) not in (None, "RERA"):
-        raise ManifestError("rera_project_plan_targets only accepts provider=RERA")
+        raise ManifestError("project plan manifests only accept provider=RERA")
 
     society_slug = _string(project.get("society_slug"), "society_slug")
     society_entity_id = _string(project.get("society_entity_id"), "society_entity_id")
@@ -306,9 +352,16 @@ def materialize_project(
     raw_floor_plans = project.get("floor_plans", [])
     if not isinstance(raw_floor_plans, list):
         raise ManifestError("floor_plans must be a list")
+    raw_filed_plan_previews = project.get("filed_plan_previews", [])
+    if not isinstance(raw_filed_plan_previews, list):
+        raise ManifestError("filed_plan_previews must be a list")
     artifacts = _document_artifacts(
         project,
-        required=project.get("site_overview") is not None or bool(raw_floor_plans),
+        required=(
+            project.get("site_overview") is not None
+            or bool(raw_floor_plans)
+            or bool(raw_filed_plan_previews)
+        ),
     )
     preview_dir = repo_root / "data" / "lake" / "media" / "previews" / "rera_plans" / society_slug
     fact_dir = repo_root / "data" / "lake" / "media" / "rera_plans" / society_slug
@@ -318,6 +371,11 @@ def materialize_project(
     floor_plans = [
         _floor_plan(repo_root, manifest_path, project, artifacts, preview_dir, raw)
         for raw in raw_floor_plans
+        if isinstance(raw, dict)
+    ]
+    filed_plan_previews = [
+        _filed_plan_preview(repo_root, manifest_path, project, artifacts, preview_dir, raw)
+        for raw in raw_filed_plan_previews
         if isinstance(raw, dict)
     ]
 
@@ -330,6 +388,7 @@ def materialize_project(
             "society_entity_id": society_entity_id,
             "site_overview": site_overview,
             "floor_plans": floor_plans,
+            "filed_plan_previews": filed_plan_previews,
         }
     )
 
@@ -337,6 +396,7 @@ def materialize_project(
     fact_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     confidences = [plan["confidence"] for plan in floor_plans]
+    confidences.extend(plan["confidence"] for plan in filed_plan_previews)
     if site_overview:
         confidences.append(site_overview["confidence"])
 
@@ -362,6 +422,7 @@ def materialize_project(
         "serving_fact_path": str(serving_path),
         "preview_dir": str(preview_dir),
         "floor_plan_count": len(floor_plans),
+        "filed_plan_preview_count": len(filed_plan_previews),
         "site_overview": site_overview["preview_url"] if site_overview else None,
     }
 
@@ -379,7 +440,7 @@ def load_manifest(path: Path) -> list[dict[str, Any]]:
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--project", default="all", help="Society slug to promote, or all")
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
     args = parser.parse_args(argv)

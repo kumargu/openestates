@@ -1,0 +1,149 @@
+{
+  "version": 2,
+  "description": "Promotion and privacy policy for K-RERA regulatory records. Product vocabulary stays in config; pipeline code applies these rules generically.",
+  "covered_sources": [
+    {
+      "id": "K-RERA",
+      "base_url": "https://rera.karnataka.gov.in",
+      "authority_hosts": ["rera.karnataka.gov.in"],
+      "refresh_hours": 24,
+      "structured_lists": [
+        { "id": "complaints", "path": "/viewAllComplaints" },
+        { "id": "complaints_under_process", "path": "/viewAllComplaintDetails" },
+        { "id": "judgments", "path": "/viewAllJudgements" },
+        { "id": "interim_orders", "path": "/viewAllInterimOrders" },
+        {
+          "id": "project_orders",
+          "path": "/viewAllProjectOrders",
+          "exact_registration_table": {
+            "table_id": "projectList",
+            "registration_header": "PROJECT NO",
+            "project_name_header": "PROJECT NAME",
+            "event_type_header": "ORDER CATEGORY",
+            "occurred_at_header": "K-RERA ORDER DATE",
+            "document_header": "K-RERA ORDER COPY",
+            "date_format": "%d-%m-%Y",
+            "decision_stage": "registry_order",
+            "assertion_mode": "authority_order",
+            "event_mappings": [
+              {
+                "source_value": "PROJECT REGISTRATION",
+                "event_class": "historical",
+                "event_type": "registration_order",
+                "current_effect": "K-RERA recorded a project registration order."
+              },
+              {
+                "source_value": "PROJECT EXTENSION",
+                "event_class": "registration_status",
+                "event_type": "registration_extended",
+                "current_effect": "K-RERA recorded a project extension."
+              },
+              {
+                "source_value": "PROJECT MODIFICATION",
+                "event_class": "historical",
+                "event_type": "project_modified",
+                "current_effect": "K-RERA recorded a project modification."
+              },
+              {
+                "source_value": "PROJECT WITHDRAWL",
+                "event_class": "registration_restriction",
+                "event_type": "registration_withdrawn",
+                "current_effect": "K-RERA lists the project registration as withdrawn."
+              },
+              {
+                "source_value": "PROJECT REVOKED",
+                "event_class": "registration_restriction",
+                "event_type": "registration_revoked",
+                "current_effect": "K-RERA lists the project registration as revoked."
+              },
+              {
+                "source_value": "PROJECT TOR",
+                "event_class": "historical",
+                "event_type": "project_tor_order",
+                "current_effect": "K-RERA recorded a project TOR order."
+              },
+              {
+                "source_value": "PROJECT CHANGE REQUEST",
+                "event_class": "historical",
+                "event_type": "project_change_request",
+                "current_effect": "K-RERA recorded a project change request."
+              },
+              {
+                "source_value": "OTHERS",
+                "event_class": "historical",
+                "event_type": "project_order_other",
+                "current_effect": "K-RERA recorded another project order."
+              }
+            ]
+          }
+        },
+        { "id": "ao_orders", "path": "/viewAllAOorders" },
+        { "id": "revenue_recovery", "path": "/viewRevenueRecoveryList" },
+        { "id": "promoter_complaint_report", "path": "/promoterComplaintReport" },
+        { "id": "project_complaint_report", "path": "/projectComplaintReport" },
+        { "id": "complaint_realization", "path": "/complaintRealizationList" }
+      ]
+    }
+  ],
+  "outside_release": ["High Court", "eCourts"],
+  "receipt_kinds": [
+    "regulatory_list",
+    "proceeding",
+    "promoter_affidavit"
+  ],
+  "resolution_methods": [
+    "exact_registration",
+    "official_proceeding_relationship",
+    "unregistered_triplet_exact"
+  ],
+  "relationship_types": [
+    "appeals",
+    "stays",
+    "affirms",
+    "modifies",
+    "sets_aside",
+    "enforces",
+    "supersedes"
+  ],
+  "promotion_gates": {
+    "common": [
+      "official_source",
+      "issuer_verified",
+      "stage_verified",
+      "structured_fields_valid",
+      "privacy_validated",
+      "no_unresolved_contradiction"
+    ],
+    "pdf": [
+      "extractor_verifier_agreement",
+      "supporting_quote",
+      "page"
+    ],
+    "structured_list": []
+  },
+  "current_effect_states": [
+    "active",
+    "stayed",
+    "affirmed",
+    "modified",
+    "set_aside",
+    "superseded",
+    "resolved",
+    "historical"
+  ],
+  "initial_item_limit": 3,
+  "privacy": {
+    "replacement": "[redacted]",
+    "redact_labels": [
+      "name",
+      "address",
+      "mobile",
+      "phone",
+      "email",
+      "aadhaar",
+      "pan",
+      "account",
+      "signature"
+    ]
+  }
+}

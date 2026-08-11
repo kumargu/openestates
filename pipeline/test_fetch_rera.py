@@ -266,7 +266,8 @@ class FetchReraSkillTest(unittest.TestCase):
         by_kind = {item["kind"]: item for item in manifest}
 
         self.assertEqual(by_kind["site_plan"]["document_group"], "plans")
-        self.assertEqual(by_kind["site_plan"]["preview_policy"], "preview_allowed")
+        self.assertEqual(by_kind["site_plan"]["preview_policy"], "content_review_required")
+        self.assertEqual(by_kind["site_plan"]["preview_role"], "site_plan")
         self.assertEqual(by_kind["encumbrance_certificate"]["document_group"], "legal_land")
         self.assertEqual(by_kind["noc"]["source_field_label"], "BESCOM")
         self.assertEqual(by_kind["affidavit"]["document_group"], "affidavits")
@@ -454,7 +455,6 @@ class FetchReraSkillTest(unittest.TestCase):
         self.assertEqual(facts["parking_total_car_count"].value, {"type": "Numeric", "data": 492})
         self.assertEqual(facts["parking_offered_for_sale_count"].value, {"type": "Numeric", "data": 106})
         self.assertEqual(facts["stp_count"].value, {"type": "Numeric", "data": 1})
-        self.assertEqual(facts["project_units_per_acre"].value, {"type": "Numeric", "data": 41.73})
 
 
 if __name__ == "__main__":

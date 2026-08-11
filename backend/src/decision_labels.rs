@@ -456,7 +456,7 @@ mod tests {
             .map(|label| label.key.as_str())
             .collect::<Vec<_>>();
 
-        assert!(keys.contains(&"rera_land_litigation"));
+        assert!(!keys.contains(&"rera_land_litigation"));
         assert!(keys.contains(&"project_major_delay"));
         assert!(keys.contains(&"low_parking_coverage"));
         assert!(!keys.contains(&"rera_registration_available"));
@@ -473,7 +473,7 @@ mod tests {
             .expect("summary should be present");
         assert_eq!(summary.tile_label, "RERA");
         assert_eq!(summary.tone, "risk");
-        assert_eq!(summary.primary_count, 2);
+        assert_eq!(summary.primary_count, 1);
         assert_eq!(
             summary.registration_number_compact.as_deref(),
             Some("PRM/KA/.../003528")
@@ -500,7 +500,7 @@ mod tests {
     }
 
     #[test]
-    fn complaint_labels_can_fall_back_to_legacy_total_fact() {
+    fn legacy_complaint_totals_do_not_become_decision_cards() {
         let index = index(vec![fact(
             "society:sample",
             "rera_complaints_count",
@@ -509,10 +509,7 @@ mod tests {
 
         let labels = rera_decision_labels_for_society(&index, "sample");
 
-        assert!(labels
-            .iter()
-            .any(|label| label.key == "project_high_complaints"
-                && label.source_fact_keys == vec!["rera_complaints_count"]));
+        assert!(labels.is_empty());
     }
 
     fn index(facts: Vec<ServingFactRecord>) -> ServingFactIndex {

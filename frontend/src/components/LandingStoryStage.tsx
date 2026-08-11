@@ -1050,9 +1050,6 @@ function ReraCanvas({
                     <p><strong>{portfolio.tracked_projects}</strong><span>tracked projects</span></p>
                     <p><strong>{portfolio.rera_registered_projects}/{portfolio.tracked_projects}</strong><span>RERA linked</span></p>
                     <p><strong>{portfolio.delayed_projects}</strong><span>delayed</span></p>
-                    {typeof portfolio.revocations === "number" ? (
-                      <p><strong>{portfolio.revocations}</strong><span>revocations</span></p>
-                    ) : null}
                   </>
                 ) : null}
                 {complaintSections.map((section) => (

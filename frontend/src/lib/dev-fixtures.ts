@@ -695,7 +695,6 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
       delivery_rate: card.root_source === "rera" ? 0.84 : 0.62,
       project_count: 12,
       delivery_display: card.builder_delivery_display,
-      zero_revocations: card.root_source === "rera",
     },
     data_freshness: card.data_freshness,
     confidence_score: trust,

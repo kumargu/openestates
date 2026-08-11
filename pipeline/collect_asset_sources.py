@@ -5,6 +5,7 @@ only ``AssetSourceInputs`` JSON to stdout; progress and diagnostics go to
 stderr. Durable Parquet writes, lineage, and promotion remain Rust-owned.
 """
 
+import gzip
 import hashlib
 import json
 import logging
@@ -29,8 +30,16 @@ from pipeline.skills.fetch_rera import (
     LISTING_URL,
     RERA_BASE,
     ReraSession,
+    extract_rera_complaints,
     search_rera_project,
     scrape_rera_listing,
+)
+from pipeline.skills.rera_regulatory_intelligence import (
+    DocumentScope,
+    build_regulatory_source_records,
+    load_policy as load_rera_regulatory_policy,
+    redacted_document,
+    structured_list_event_candidates,
 )
 
 
@@ -137,6 +146,10 @@ BENGALURU_METRO_STATION_FACTS = "bengaluru_metro_station_facts"
 OSM_POWER_LINE_FACTS = "osm_power_line_facts"
 STORMWATER_DRAIN_FACTS = "stormwater_drain_facts"
 RERA_DETAIL_RECEIPT_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_detail_receipts"
+RERA_REGULATORY_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_records"
+RERA_REGULATORY_LIST_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_lists"
+RERA_REGULATORY_DOCUMENT_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_documents"
+RERA_REGULATORY_CACHE_VERSION = "rera_regulatory_cache.v1"
 GROUNDWATER_KML_URL = (
     "https://data.opencity.in/dataset/035c1d40-8f4e-4780-90c5-ff1ce2281849/"
     "resource/d3ae3603-d786-4782-ae71-a034ad4ebc0b/download/"
@@ -2360,6 +2373,28 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
                 "crawl_run_id": snapshot["crawl_run_id"],
             }
         )
+    if force_refresh and scoped_rera_entities(request):
+        regulatory_payloads = capture_scoped_rera_regulatory_payloads(request)
+    else:
+        regulatory_payloads = load_scoped_rera_regulatory_payloads(request)
+        if len(regulatory_payloads) < len(scoped_rera_entities(request)):
+            regulatory_payloads = capture_scoped_rera_regulatory_payloads(request)
+    regulatory_receipt_keys = set()
+    for payload in regulatory_payloads:
+        for receipt in payload["receipts"]:
+            body = bytes.fromhex(str(receipt.get("body_hex") or ""))
+            key = (
+                rera_receipt_id(body),
+                rera_capture_id(
+                    rera_receipt_id(body),
+                    str(receipt.get("source_url") or ""),
+                    str(receipt.get("captured_at") or ""),
+                ),
+            )
+            if key in regulatory_receipt_keys:
+                continue
+            regulatory_receipt_keys.add(key)
+            receipts.append(receipt)
     return {
         "snapshot_date": observed_at[:10],
         "receipts": receipts,
@@ -2371,6 +2406,12 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
                 "high_watermark": snapshot["captured_at"],
             }
             for snapshot in detail_snapshots
+        ] + [
+            {
+                "source": "karnataka_regulatory_receipts",
+                "high_watermark": payload["checked_at"],
+            }
+            for payload in regulatory_payloads
         ],
     }
 
@@ -2483,6 +2524,9 @@ def collect_rera_source_records(request: Dict[str, Any]) -> Dict[str, Any]:
     detail_snapshots = load_scoped_rera_detail_receipts(request)
     for snapshot in detail_snapshots:
         records.extend(rera_project_detail_source_records(snapshot))
+    regulatory_payloads = load_scoped_rera_regulatory_payloads(request)
+    for payload in regulatory_payloads:
+        records.extend(payload["records"])
     return {
         "snapshot_date": observed_at[:10],
         "records": records,
@@ -2494,6 +2538,12 @@ def collect_rera_source_records(request: Dict[str, Any]) -> Dict[str, Any]:
                 "high_watermark": snapshot["captured_at"],
             }
             for snapshot in detail_snapshots
+        ] + [
+            {
+                "source": "karnataka_regulatory_source_records",
+                "high_watermark": payload["checked_at"],
+            }
+            for payload in regulatory_payloads
         ],
     }
 
@@ -2551,6 +2601,330 @@ def scoped_rera_entities(request: Dict[str, Any]) -> List[Dict[str, str]]:
 def detail_receipt_metadata_path(registration_number: str) -> Path:
     digest = hashlib.sha256(registration_number.encode("utf-8")).hexdigest()
     return RERA_DETAIL_RECEIPT_CACHE_DIR / "{}.json".format(digest)
+
+
+def regulatory_payload_path(registration_number: str) -> Path:
+    digest = hashlib.sha256(registration_number.encode("utf-8")).hexdigest()
+    return RERA_REGULATORY_CACHE_DIR / "{}.json".format(digest)
+
+
+def rera_regulatory_policy_sha256(policy: Dict[str, Any]) -> str:
+    body = json.dumps(
+        policy,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(body).hexdigest()
+
+
+def fetch_rera_regulatory_bytes(url: str) -> bytes:
+    request = Request(
+        url,
+        headers={"User-Agent": "OpenEstates regulatory record collector"},
+    )
+    for attempt in range(1, 4):
+        try:
+            with urlopen(request, timeout=120) as response:
+                body = response.read()
+            if not body:
+                raise ValueError("official regulatory response was empty: {}".format(url))
+            return body
+        except HTTPError as error:
+            if attempt >= 3 or error.code not in (429, 500, 502, 503, 504):
+                raise
+        except URLError:
+            if attempt >= 3:
+                raise
+        time.sleep(float(attempt * 2))
+    raise RuntimeError("official regulatory request exhausted retries: {}".format(url))
+
+
+def cache_regulatory_source_bytes(cache_dir: Path, body: bytes, suffix: str) -> Path:
+    digest = hashlib.sha256(body).hexdigest()
+    path = cache_dir / digest[:2] / "{}{}".format(digest, suffix)
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+    return path
+
+
+def capture_scoped_rera_regulatory_payloads(
+    request: Dict[str, Any],
+    fetch: Callable[[str], bytes] = None,
+) -> List[Dict[str, Any]]:
+    """Capture configured official K-RERA lists and exact-registration orders.
+
+    All configured lists must succeed before K-RERA coverage is marked checked.
+    Name-only rows are deliberately not converted into scoped events.
+    """
+
+    entities = scoped_rera_entities(request)
+    if not entities:
+        return []
+    policy = load_rera_regulatory_policy()
+    policy_sha256 = rera_regulatory_policy_sha256(policy)
+    source = next(
+        (
+            item
+            for item in policy.get("covered_sources") or []
+            if isinstance(item, dict) and item.get("id") == "K-RERA"
+        ),
+        None,
+    )
+    if source is None:
+        raise ValueError("RERA regulatory policy does not configure K-RERA")
+    base_url = str(source.get("base_url") or "").rstrip("/")
+    list_configs = source.get("structured_lists") or []
+    if not base_url or not list_configs:
+        raise ValueError("K-RERA structured list collection is not configured")
+
+    checked_at = normalized_planned_at(request)
+    crawl_run_id = "rera-regulatory-lists-{}".format(checked_at[:10])
+    source_fetch = fetch or fetch_rera_regulatory_bytes
+    captures = []
+    for list_config in list_configs:
+        list_id = str(list_config.get("id") or "").strip()
+        path = str(list_config.get("path") or "").strip()
+        if not list_id or not path.startswith("/"):
+            raise ValueError("K-RERA structured list requires id and absolute path")
+        source_url = "{}{}".format(base_url, path)
+        body = source_fetch(source_url)
+        cache_regulatory_source_bytes(
+            RERA_REGULATORY_LIST_CACHE_DIR,
+            body,
+            ".html",
+        )
+        compressed_body = gzip.compress(body, compresslevel=9, mtime=0)
+        receipt_id = rera_receipt_id(compressed_body)
+        capture_id = rera_capture_id(receipt_id, source_url, checked_at)
+        captures.append(
+            {
+                "config": list_config,
+                "list_id": list_id,
+                "source_url": source_url,
+                "body": body,
+                "receipt": {
+                    "kind": "regulatory_list",
+                    "source_url": source_url,
+                    "content_type": "application/gzip",
+                    "body_hex": compressed_body.hex(),
+                    "captured_at": checked_at,
+                    "parent_receipt_id": None,
+                    "crawl_run_id": crawl_run_id,
+                },
+                "receipt_id": receipt_id,
+                "capture_id": capture_id,
+            }
+        )
+
+    first_capture = captures[0]
+    payloads = []
+    downloaded_documents = {}
+    for entity in entities:
+        registration_number = entity["registration_number"]
+        scope = DocumentScope(registration_number=registration_number)
+        receipts = [capture["receipt"] for capture in captures]
+        coverage_document = redacted_document(
+            source_url=first_capture["source_url"],
+            issuer="K-RERA",
+            pages=["Configured K-RERA structured lists checked."],
+            document_format="structured_list",
+        )
+        records = build_regulatory_source_records(
+            registration_number=registration_number,
+            receipt_id=first_capture["receipt_id"],
+            capture_id=first_capture["capture_id"],
+            observed_at=checked_at,
+            document=coverage_document,
+            scope=scope,
+            extracted_events=[],
+            verified_events=[],
+            policy=policy,
+        )
+
+        candidates = []
+        for capture in captures:
+            candidates.extend(
+                structured_list_event_candidates(
+                    registration_number=registration_number,
+                    issuer="K-RERA",
+                    base_url=base_url,
+                    list_config=capture["config"],
+                    html=capture["body"].decode("utf-8", errors="replace"),
+                )
+            )
+        for candidate in candidates:
+            document_body = downloaded_documents.get(candidate.document_url)
+            if document_body is None:
+                document_body = source_fetch(candidate.document_url)
+                if not document_body.startswith(b"%PDF"):
+                    raise ValueError(
+                        "K-RERA order link did not return a PDF: {}".format(
+                            candidate.document_url
+                        )
+                    )
+                cache_regulatory_source_bytes(
+                    RERA_REGULATORY_DOCUMENT_CACHE_DIR,
+                    document_body,
+                    ".pdf",
+                )
+                downloaded_documents[candidate.document_url] = document_body
+            document_receipt_id = rera_receipt_id(document_body)
+            document_capture_id = rera_capture_id(
+                document_receipt_id,
+                candidate.document_url,
+                checked_at,
+            )
+            parent_capture = next(
+                capture
+                for capture in captures
+                if capture["list_id"] == candidate.list_id
+            )
+            receipts.append(
+                {
+                    "kind": "proceeding",
+                    "source_url": candidate.document_url,
+                    "content_type": "application/pdf",
+                    "body_hex": document_body.hex(),
+                    "captured_at": checked_at,
+                    "registration_number": registration_number,
+                    "parent_receipt_id": parent_capture["receipt_id"],
+                    "crawl_run_id": crawl_run_id,
+                }
+            )
+            event_document = redacted_document(
+                source_url=candidate.document_url,
+                issuer="K-RERA",
+                pages=[
+                    "{} {} {}".format(
+                        registration_number,
+                        candidate.event.event_type,
+                        candidate.event.occurred_at,
+                    )
+                ],
+                document_format="structured_list",
+            )
+            records.extend(
+                build_regulatory_source_records(
+                    registration_number=registration_number,
+                    receipt_id=document_receipt_id,
+                    capture_id=document_capture_id,
+                    observed_at=checked_at,
+                    document=event_document,
+                    scope=scope,
+                    extracted_events=[candidate.event],
+                    verified_events=[],
+                    policy=policy,
+                    include_coverage=False,
+                )
+            )
+
+        payload = {
+            "cache_version": RERA_REGULATORY_CACHE_VERSION,
+            "policy_sha256": policy_sha256,
+            "registration_number": registration_number,
+            "checked_at": checked_at,
+            "receipts": receipts,
+            "records": records,
+        }
+        cache_path = regulatory_payload_path(registration_number)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        payloads.append(payload)
+    return payloads
+
+
+def load_scoped_rera_regulatory_payloads(request: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Load only exact-registration regulatory records from the shared RERA cache.
+
+    The offline intelligence skill owns OCR, redaction, extractor/verifier
+    passes, and content-hash caching. This collector only validates lineage and
+    joins the resulting receipts and L1 rows into the existing RERA DAG.
+    """
+
+    payloads = []
+    policy = load_rera_regulatory_policy()
+    policy_sha256 = rera_regulatory_policy_sha256(policy)
+    k_rera = next(
+        (
+            item
+            for item in policy.get("covered_sources") or []
+            if isinstance(item, dict) and item.get("id") == "K-RERA"
+        ),
+        {},
+    )
+    refresh_hours = max(1, int(k_rera.get("refresh_hours") or 24))
+    as_of = datetime.fromisoformat(normalized_planned_at(request).replace("Z", "+00:00"))
+    for entity in scoped_rera_entities(request):
+        registration_number = entity["registration_number"]
+        path = regulatory_payload_path(registration_number)
+        if not path.exists():
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            payload.get("cache_version") != RERA_REGULATORY_CACHE_VERSION
+            or payload.get("policy_sha256") != policy_sha256
+        ):
+            continue
+        if normalized_registration_number(payload.get("registration_number")) != registration_number:
+            raise ValueError("RERA regulatory cache registration mismatch: {}".format(path))
+        checked_at = str(payload.get("checked_at") or "").strip()
+        receipts = payload.get("receipts")
+        records = payload.get("records")
+        if not checked_at or not isinstance(receipts, list) or not isinstance(records, list):
+            raise ValueError("RERA regulatory cache is incomplete: {}".format(path))
+        checked_at_value = datetime.fromisoformat(checked_at.replace("Z", "+00:00"))
+        age_seconds = max(0.0, (as_of - checked_at_value).total_seconds())
+        if age_seconds > refresh_hours * 60 * 60:
+            continue
+        receipt_keys = set()
+        normalized_receipts = []
+        for receipt in receipts:
+            if not isinstance(receipt, dict):
+                raise ValueError("RERA regulatory receipt must be an object: {}".format(path))
+            receipt_scope = normalized_registration_number(receipt.get("registration_number"))
+            if receipt.get("kind") != "regulatory_list" and receipt_scope != registration_number:
+                raise ValueError("RERA regulatory receipt scope mismatch: {}".format(path))
+            if receipt.get("kind") == "regulatory_list" and receipt_scope:
+                raise ValueError("RERA regulatory list receipt must remain globally scoped: {}".format(path))
+            try:
+                body = bytes.fromhex(str(receipt.get("body_hex") or ""))
+            except ValueError as error:
+                raise ValueError("RERA regulatory receipt body is invalid: {}".format(path)) from error
+            if not body:
+                raise ValueError("RERA regulatory receipt body is empty: {}".format(path))
+            receipt_id = rera_receipt_id(body)
+            receipt_keys.add(
+                (
+                    receipt_id,
+                    rera_capture_id(
+                        receipt_id,
+                        str(receipt.get("source_url") or ""),
+                        str(receipt.get("captured_at") or ""),
+                    ),
+                )
+            )
+            normalized_receipts.append(receipt)
+        for record in records:
+            if not isinstance(record, dict):
+                raise ValueError("RERA regulatory source record must be an object: {}".format(path))
+            if normalized_registration_number(record.get("registration_number")) != registration_number:
+                raise ValueError("RERA regulatory source record scope mismatch: {}".format(path))
+            if (record.get("receipt_id"), record.get("capture_id")) not in receipt_keys:
+                raise ValueError("RERA regulatory source record lacks receipt lineage: {}".format(path))
+        payloads.append(
+            {
+                "registration_number": registration_number,
+                "checked_at": checked_at,
+                "receipts": normalized_receipts,
+                "records": records,
+            }
+        )
+    return payloads
 
 
 def capture_scoped_rera_detail_receipts(
@@ -2639,6 +3013,63 @@ def load_scoped_rera_detail_receipts(request: Dict[str, Any]) -> List[Dict[str, 
 
 def clean_html_fragment(value: str) -> str:
     return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", value or ""))).strip()
+
+
+def rera_html_table_rows(table_html: str) -> List[List[str]]:
+    rows = []
+    for row_html in re.findall(
+        r"<tr\b[^>]*>(.*?)</tr>", table_html or "", re.IGNORECASE | re.DOTALL
+    ):
+        cells = [
+            clean_html_fragment(cell)
+            for cell in re.findall(
+                r"<t[hd]\b[^>]*>(.*?)</t[hd]>",
+                row_html,
+                re.IGNORECASE | re.DOTALL,
+            )
+        ]
+        if cells:
+            rows.append(cells)
+    return rows
+
+
+def normalized_rera_column(value: str) -> str:
+    return re.sub(r"[^a-z0-9%]+", " ", (value or "").lower()).strip()
+
+
+def rera_table_column(headers: List[str], *labels: str) -> Optional[int]:
+    normalized_headers = [normalized_rera_column(header) for header in headers]
+    normalized_labels = [normalized_rera_column(label) for label in labels]
+    for index, header in enumerate(normalized_headers):
+        if header in normalized_labels:
+            return index
+    return None
+
+
+def rera_table_value(row: List[str], index: Optional[int]) -> Optional[str]:
+    if index is None or index >= len(row):
+        return None
+    value = row[index].strip()
+    return value or None
+
+
+def rera_integer(value: Optional[str]) -> Optional[int]:
+    text = str(value or "").replace(",", "").strip()
+    return int(text) if re.fullmatch(r"\d+", text) else None
+
+
+def rera_percentage(value: Optional[str]) -> Optional[float]:
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*%", str(value or "").strip())
+    return float(match.group(1)) if match else None
+
+
+def rera_yes_no(value: Optional[str]) -> Optional[bool]:
+    normalized = str(value or "").strip().lower()
+    if normalized == "yes":
+        return True
+    if normalized == "no":
+        return False
+    return None
 
 
 def rera_detail_labeled_value(detail_html: str, label: str) -> Optional[str]:
@@ -2788,9 +3219,10 @@ def rera_project_detail_source_records(snapshot: Dict[str, Any]) -> List[Dict[st
     """Parse source-preserving RERA detail records needed by the first report slice.
 
     This deliberately covers the project summary, water declaration, QPR
-    inventory totals, and document metadata. Other page sections remain in the
-    immutable receipt and are reported as partial parser coverage, never as
-    silent absence.
+    inventory, work progress, parking, approval status, structured project
+    costs, complaint tabs, and document metadata. Other page sections remain in the immutable
+    receipt and are reported as partial parser coverage, never as silent
+    absence.
     """
     body = bytes.fromhex(snapshot["body_hex"])
     detail_html = body.decode("utf-8", errors="replace")
@@ -2802,7 +3234,7 @@ def rera_project_detail_source_records(snapshot: Dict[str, Any]) -> List[Dict[st
         "receipt_id": receipt_id,
         "capture_id": capture_id,
         "observed_at": observed_at,
-        "parser_version": "rera_project_detail_source_records.v1",
+        "parser_version": "rera_project_detail_source_records.v3",
     }
     records = []
 
@@ -2908,6 +3340,56 @@ def rera_project_detail_source_records(snapshot: Dict[str, Any]) -> List[Dict[st
                 effective_at=completion_date,
             )
 
+    complaint_rows, complaint_summaries = extract_rera_complaints(detail_html)
+    for summary in complaint_summaries:
+        tab_total = summary.total_count_from_tab_label
+        recorded_total = (
+            tab_total if tab_total is not None else summary.row_count_parsed
+        )
+        add(
+            "complaint_order",
+            "#complaints/{}/summary".format(summary.scope),
+            "Complaint scope summary",
+            {
+                "record_type": "scope_summary",
+                "scope": summary.scope,
+                "recorded_total": recorded_total,
+                "total_count_source": (
+                    "tab_label" if tab_total is not None else "parsed_rows"
+                ),
+                "row_count_parsed": summary.row_count_parsed,
+                "open_count_in_parsed_rows": summary.open_count,
+                "disposed_count_in_parsed_rows": summary.disposed_count,
+                "status_counts_complete": recorded_total
+                == summary.row_count_parsed,
+                "theme_counts_in_parsed_rows": summary.theme_counts,
+                "extraction_confidence": summary.confidence,
+                "validation_notes": summary.validation_notes,
+            },
+        )
+    for row_index, complaint in enumerate(complaint_rows, 1):
+        complaint_date = (
+            iso_rera_date(complaint.complaint_date)
+            if complaint.complaint_date
+            else None
+        )
+        add(
+            "complaint_order",
+            "#complaints/{}/row-{}".format(complaint.scope, row_index),
+            "Complaint record",
+            {
+                "record_type": "complaint_record",
+                "scope": complaint.scope,
+                "complaint_number": complaint.complaint_number,
+                "complaint_date": complaint_date,
+                "complaint_subject": complaint.complaint_subject,
+                "status": complaint.status_raw,
+                "status_group": complaint.status_group,
+                "theme_tags": complaint.theme_tags,
+            },
+            effective_at=complaint_date,
+        )
+
     quarter_headers = list(
         re.finditer(
             r"<b[^>]*>\s*Quarter\s+(Q[1-4])\s*\(\s*(\d{4}-\d{2})\s*\)"
@@ -2920,7 +3402,10 @@ def rera_project_detail_source_records(snapshot: Dict[str, Any]) -> List[Dict[st
         block_end = quarter_headers[index + 1].start() if index + 1 < len(quarter_headers) else len(detail_html)
         block = detail_html[header.start() : block_end]
         totals = []
-        for table in re.findall(r"<table\b[^>]*>(.*?)</table>", block, re.IGNORECASE | re.DOTALL):
+        tables = re.findall(
+            r"<table\b[^>]*>(.*?)</table>", block, re.IGNORECASE | re.DOTALL
+        )
+        for table in tables:
             if "Total No of Units Booked" not in clean_html_fragment(table):
                 continue
             total_row = re.search(
@@ -2932,25 +3417,178 @@ def rera_project_detail_source_records(snapshot: Dict[str, Any]) -> List[Dict[st
             )
             if total_row:
                 totals.append(tuple(int(value) for value in total_row.groups()))
-        if not totals:
-            continue
         filing_at = iso_rera_date(header.group(3))
         quarter = header.group(1).upper()
         financial_year = header.group(2)
-        add(
-            "quarterly_progress",
-            "#quarterly-update/{}-{}".format(quarter.lower(), financial_year),
-            "Quarterly inventory totals",
-            {
-                "quarter": quarter,
-                "financial_year": financial_year,
-                "tower_count": len(totals),
-                "total_units": sum(row[0] for row in totals),
-                "booked_units": sum(row[1] for row in totals),
-                "unsold_units": sum(row[2] for row in totals),
-            },
-            filing_at=filing_at,
-        )
+        if totals:
+            add(
+                "quarterly_progress",
+                "#quarterly-update/{}-{}".format(quarter.lower(), financial_year),
+                "Quarterly inventory totals",
+                {
+                    "record_type": "inventory_totals",
+                    "quarter": quarter,
+                    "financial_year": financial_year,
+                    "tower_count": len(totals),
+                    "total_units": sum(row[0] for row in totals),
+                    "booked_units": sum(row[1] for row in totals),
+                    "unsold_units": sum(row[2] for row in totals),
+                },
+                filing_at=filing_at,
+            )
+        for table_index, table in enumerate(tables, 1):
+            rows = rera_html_table_rows(table)
+            if len(rows) < 2:
+                continue
+            headers = rows[0]
+
+            work_index = rera_table_column(headers, "Project Work", "Work")
+            completion_index = rera_table_column(headers, "% of Completion")
+            if work_index is not None and completion_index is not None:
+                estimated_from_index = rera_table_column(headers, "Estimated From Date")
+                estimated_to_index = rera_table_column(headers, "Estimated To Date")
+                actual_from_index = rera_table_column(headers, "Actual From Date")
+                actual_to_index = rera_table_column(headers, "Actual To Date")
+                for row_index, row in enumerate(rows[1:], 1):
+                    work = rera_table_value(row, work_index)
+                    completion_pct = rera_percentage(
+                        rera_table_value(row, completion_index)
+                    )
+                    if not work or completion_pct is None:
+                        continue
+                    value = {
+                        "record_type": "work_progress",
+                        "quarter": quarter,
+                        "financial_year": financial_year,
+                        "work": work,
+                        "completion_pct": completion_pct,
+                    }
+                    for key, column_index in (
+                        ("estimated_start_date", estimated_from_index),
+                        ("estimated_end_date", estimated_to_index),
+                        ("actual_start_date", actual_from_index),
+                        ("actual_end_date", actual_to_index),
+                    ):
+                        raw_date = rera_table_value(row, column_index)
+                        parsed_date = iso_rera_date(raw_date) if raw_date else None
+                        if parsed_date:
+                            value[key] = parsed_date
+                    add(
+                        "quarterly_progress",
+                        "#quarterly-update/{}-{}/table-{}/work-{}".format(
+                            quarter.lower(), financial_year, table_index, row_index
+                        ),
+                        "Quarterly work progress",
+                        value,
+                        filing_at=filing_at,
+                    )
+                continue
+
+            parking_total_index = rera_table_column(headers, "Total No of Parkings")
+            parking_booked_index = rera_table_column(
+                headers, "Total No Of Parkings Booked"
+            )
+            parking_available_index = rera_table_column(
+                headers, "Total No of Parkings Available"
+            )
+            if (
+                parking_total_index is not None
+                and parking_booked_index is not None
+                and parking_available_index is not None
+            ):
+                for row_index, row in enumerate(rows[1:], 1):
+                    total = rera_integer(rera_table_value(row, parking_total_index))
+                    booked = rera_integer(rera_table_value(row, parking_booked_index))
+                    available = rera_integer(
+                        rera_table_value(row, parking_available_index)
+                    )
+                    if total is None or booked is None or available is None:
+                        continue
+                    add(
+                        "quarterly_progress",
+                        "#quarterly-update/{}-{}/table-{}/parking-{}".format(
+                            quarter.lower(), financial_year, table_index, row_index
+                        ),
+                        "Quarterly parking totals",
+                        {
+                            "record_type": "parking_totals",
+                            "quarter": quarter,
+                            "financial_year": financial_year,
+                            "total_parkings": total,
+                            "booked_parkings": booked,
+                            "available_parkings": available,
+                        },
+                        filing_at=filing_at,
+                    )
+                continue
+
+            approval_name_index = rera_table_column(headers, "NOC Name")
+            applicable_index = rera_table_column(headers, "Is Applicable ?")
+            approval_status_index = rera_table_column(headers, "Status Of Approval")
+            application_date_index = rera_table_column(headers, "Date of Application")
+            if approval_name_index is not None and applicable_index is not None:
+                for row_index, row in enumerate(rows[1:], 1):
+                    approval_name = rera_table_value(row, approval_name_index)
+                    applicable = rera_yes_no(rera_table_value(row, applicable_index))
+                    if not approval_name or applicable is None:
+                        continue
+                    value = {
+                        "record_type": "approval_status",
+                        "quarter": quarter,
+                        "financial_year": financial_year,
+                        "approval_name": approval_name,
+                        "applicable": applicable,
+                    }
+                    status = rera_table_value(row, approval_status_index)
+                    if status:
+                        value["approval_status"] = status
+                    raw_date = rera_table_value(row, application_date_index)
+                    application_date = iso_rera_date(raw_date) if raw_date else None
+                    if application_date:
+                        value["application_date"] = application_date
+                    add(
+                        "quarterly_progress",
+                        "#quarterly-update/{}-{}/table-{}/approval-{}".format(
+                            quarter.lower(), financial_year, table_index, row_index
+                        ),
+                        "Quarterly approval status",
+                        value,
+                        filing_at=filing_at,
+                    )
+                continue
+
+            particulars_index = rera_table_column(headers, "Particulars")
+            estimated_cost_index = rera_table_column(headers, "Estimated Cost (in INR)")
+            actual_cost_index = rera_table_column(headers, "Actual Cost (in INR)")
+            if (
+                particulars_index is not None
+                and estimated_cost_index is not None
+                and actual_cost_index is not None
+            ):
+                for row_index, row in enumerate(rows[1:], 1):
+                    particulars = rera_table_value(row, particulars_index)
+                    estimated_cost = rera_integer(
+                        rera_table_value(row, estimated_cost_index)
+                    )
+                    actual_cost = rera_integer(rera_table_value(row, actual_cost_index))
+                    if not particulars or estimated_cost is None or actual_cost is None:
+                        continue
+                    add(
+                        "finance_declaration",
+                        "#quarterly-update/{}-{}/table-{}/cost-{}".format(
+                            quarter.lower(), financial_year, table_index, row_index
+                        ),
+                        "Quarterly project cost declaration",
+                        {
+                            "record_type": "project_cost",
+                            "quarter": quarter,
+                            "financial_year": financial_year,
+                            "particulars": particulars,
+                            "estimated_cost_inr": str(estimated_cost),
+                            "actual_cost_inr": str(actual_cost),
+                        },
+                        filing_at=filing_at,
+                    )
         for href, label in re.findall(
             r"<a[^>]+href=['\"]([^'\"]*download_jc\?DOC_ID=[^'\"]+)['\"][^>]*>\s*(.*?)\s*</a>",
             block,
@@ -2979,7 +3617,7 @@ def rera_project_detail_source_records(snapshot: Dict[str, Any]) -> List[Dict[st
         "source_warning",
         "#project-detail/parser-coverage",
         "Parser coverage",
-        "Partial parser coverage: project summary, declared inventory table, schedule, water declaration, QPR inventory totals, and QPR document metadata only.",
+        "Partial parser coverage: project summary, declared inventory table, schedule, water declaration, complaint tabs, QPR inventory, work progress, parking, approval status, structured project costs, and document metadata. Unmapped source content remains in the immutable receipt.",
     )
     return records
 

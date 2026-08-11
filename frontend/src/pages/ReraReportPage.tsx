@@ -1,24 +1,34 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useParams } from "react-router-dom";
 import { PageState } from "../components/PageState.tsx";
 import { getProperty, getPropertyRera } from "../lib/api.ts";
 import {
-  assertionLabel,
   claimValueText,
   claimsForSelector,
   displayFactsForSection,
   formatReraDate,
   httpUrl,
-  sectionHasEvidence,
-  selectorMatches,
+  orderReraDocuments,
+  orderReraRegulatoryEvents,
+  previewReraRegulatoryEvents,
+  regulatoryCoverageNote,
+  regulatoryEventPresentation,
+  selectReraPlanPreviews,
 } from "../lib/reraReportView.ts";
 import type {
+  BuilderPortfolio,
+  BuilderProjectRecord,
   PropertyDetailResponse,
+  ProjectPlansView,
+  ReraBuyerDocument,
+  ReraBuyerFact,
+  ReraBuyerFactSection,
   ReraEvidenceClaim,
   ReraEvidenceProjection,
   ReraEvidenceReportResponse,
   ReraReportSurfaceSection,
+  ReraScheduleSection,
 } from "../lib/types.ts";
 
 type LoadState =
@@ -26,27 +36,66 @@ type LoadState =
   | { status: "ready"; detail: PropertyDetailResponse; report: ReraEvidenceReportResponse }
   | { status: "error"; message: string };
 
-function EvidenceButton({ claims, onOpen }: {
-  claims: ReraEvidenceClaim[];
-  onOpen: (claims: ReraEvidenceClaim[]) => void;
-}) {
-  if (claims.length === 0) return null;
+function sectionById(
+  sections: ReraBuyerFactSection[] | undefined,
+  id: string,
+): ReraBuyerFactSection | undefined {
+  return sections?.find((section) => section.id === id);
+}
+
+function surfaceById(
+  sections: ReraReportSurfaceSection[],
+  id: string,
+): ReraReportSurfaceSection | undefined {
+  return sections.find((section) => section.id === id);
+}
+
+function humanize(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/(^|\s)\S/g, (letter) => letter.toUpperCase());
+}
+
+function buyerFactValue(fact: ReraBuyerFact): string {
+  const key = fact.key.toLowerCase();
+  return key.endsWith("_date") || key.endsWith("_on")
+    ? formatReraDate(fact.value)
+    : fact.value;
+}
+
+function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <button type="button" className="rera-source-button" onClick={() => onOpen(claims)}>
-      Source
-    </button>
+    <section className="rera-section" id={`rera-${id}`}>
+      <h2>{title}</h2>
+      {children}
+    </section>
   );
 }
 
-function FactList({
+function BuyerFactList({ facts }: { facts: ReraBuyerFact[] }) {
+  if (facts.length === 0) return null;
+  return (
+    <dl className="rera-fact-list">
+      {facts.map((fact) => (
+        <div key={`${fact.key}:${fact.value}`}>
+          <dt>{fact.label}</dt>
+          <dd><strong>{buyerFactValue(fact)}</strong></dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function ClaimFactList({
   section,
   evidence,
-  onOpen,
 }: {
-  section: ReraReportSurfaceSection;
+  section?: ReraReportSurfaceSection;
   evidence: ReraEvidenceProjection;
-  onOpen: (claims: ReraEvidenceClaim[]) => void;
 }) {
+  if (!section) return null;
   const facts = displayFactsForSection(section, evidence);
   if (facts.length === 0) return null;
   return (
@@ -58,330 +107,613 @@ function FactList({
             <strong>{fact.value}</strong>
             {fact.claims[0]?.assertion_mode !== "registry_record" && <span>{fact.assertion}</span>}
           </dd>
-          <EvidenceButton claims={fact.claims} onOpen={onOpen} />
         </div>
       ))}
     </dl>
   );
 }
 
-function Timeline({
+function ProjectOverview({
   section,
+  surface,
   evidence,
-  onOpen,
 }: {
-  section: ReraReportSurfaceSection;
+  section?: ReraBuyerFactSection;
+  surface?: ReraReportSurfaceSection;
   evidence: ReraEvidenceProjection;
-  onOpen: (claims: ReraEvidenceClaim[]) => void;
 }) {
-  const events = evidence.events.filter((event) => section.selectors.some(({ key }) => (
-    selectorMatches(key, `event:${event.event_type}`)
-  )));
-  if (events.length === 0) return null;
+  const claimFacts = surface ? displayFactsForSection(surface, evidence) : [];
+  const buyerFacts = section?.facts ?? [];
+  if (buyerFacts.length === 0 && claimFacts.length === 0) return null;
+  const knownValues = new Set(buyerFacts.map((fact) => fact.value.trim().toLowerCase()));
+  const extraClaims = claimFacts.filter((fact) => !knownValues.has(fact.value.trim().toLowerCase()));
   return (
-    <ol className="rera-timeline">
-      {events.map((event) => {
-        const selector = section.selectors.find(({ key }) => selectorMatches(key, `event:${event.event_type}`));
-        const claims = evidence.claims.filter((claim) => event.claim_ids.includes(claim.claim_id));
-        return (
-          <li key={event.event_id}>
-            <time dateTime={event.date}>{formatReraDate(event.date)}</time>
-            <strong>{selector?.label ?? event.event_type}</strong>
-            <EvidenceButton claims={claims} onOpen={onOpen} />
-          </li>
-        );
-      })}
-    </ol>
+    <Section id="overview" title="Project at a glance">
+      <dl className="rera-metric-grid">
+        {buyerFacts.map((fact) => (
+          <div key={`${fact.key}:${fact.value}`}>
+            <dt>{fact.label}</dt>
+            <dd>{buyerFactValue(fact)}</dd>
+          </div>
+        ))}
+        {extraClaims.map((fact) => (
+          <div key={fact.id}>
+            <dt>{fact.label}</dt>
+            <dd>{fact.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </Section>
   );
 }
 
-function QuarterlySeries({
+function RegulatoryRecord({ report }: { report: ReraEvidenceReportResponse }) {
+  const [expanded, setExpanded] = useState(false);
+  const section = surfaceById(report.surface.sections, "regulatory_record");
+  if (!section || report.evidence.events.length === 0) return null;
+
+  const events = orderReraRegulatoryEvents(
+    report.evidence.events,
+    report.surface.regulatory_event_order,
+  );
+  const limit = section.items_per_page ?? 3;
+  const visibleEvents = expanded
+    ? events
+    : previewReraRegulatoryEvents(
+      report.evidence.events,
+      report.surface.regulatory_event_order,
+      limit,
+    );
+  const coverageNote = regulatoryCoverageNote(
+    report.evidence.regulatory_coverage,
+    report.surface.coverage_note,
+  );
+
+  return (
+    <Section id="regulatory-record" title={section.title}>
+      <ol className="rera-regulatory-events">
+        {visibleEvents.map((event) => {
+          const presentation = regulatoryEventPresentation(event, report.evidence);
+          return (
+            <li key={event.event_id}>
+              <div className="rera-regulatory-event-copy">
+                <strong>{event.current_effect}</strong>
+                <span>
+                  {[event.issuer, formatReraDate(event.occurred_at), event.disposition ? humanize(event.disposition) : null]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+                {presentation.supportingEvidence?.supporting_quote && (
+                  <blockquote>
+                    “{presentation.supportingEvidence.supporting_quote}”
+                    {presentation.supportingEvidence.page && (
+                      <cite>Page {presentation.supportingEvidence.page}</cite>
+                    )}
+                  </blockquote>
+                )}
+              </div>
+              {presentation.source && (
+                <a href={presentation.source.source_url} target="_blank" rel="noreferrer">
+                  {presentation.actionLabel}
+                </a>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {events.length > limit && (
+        <button
+          className="rera-chronology-toggle"
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? "Show current items" : "Show full chronology"}
+        </button>
+      )}
+      {coverageNote && (
+        <p className="rera-regulatory-coverage">{coverageNote}</p>
+      )}
+    </Section>
+  );
+}
+
+function canonicalDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value.trim().toLowerCase() : date.toISOString().slice(0, 10);
+}
+
+function Schedule({
+  section,
+  surface,
+  evidence,
+}: {
+  section?: ReraBuyerFactSection;
+  surface?: ReraReportSurfaceSection;
+  evidence: ReraEvidenceProjection;
+}) {
+  const facts = section?.facts ?? [];
+  const seenDates = new Set(facts.map((fact) => canonicalDate(fact.value)));
+  const claimFacts = surface
+    ? displayFactsForSection(surface, evidence)
+      .filter((fact) => !seenDates.has(canonicalDate(fact.value)))
+    : [];
+  if (facts.length === 0 && claimFacts.length === 0) return null;
+  return (
+    <Section id="schedule" title="Schedule and progress">
+      <ol className="rera-timeline">
+        {facts.map((fact) => (
+          <li key={`${fact.key}:${fact.value}`}>
+            <span>{fact.label}</span>
+            <strong>{buyerFactValue(fact)}</strong>
+          </li>
+        ))}
+        {claimFacts.map((fact) => (
+          <li key={fact.id}>
+            <span>{fact.label}</span>
+            <time dateTime={fact.value}>{formatReraDate(fact.value)}</time>
+          </li>
+        ))}
+      </ol>
+    </Section>
+  );
+}
+
+function QuarterlyProgress({
   section,
   evidence,
-  onOpen,
 }: {
-  section: ReraReportSurfaceSection;
+  section?: ReraReportSurfaceSection;
   evidence: ReraEvidenceProjection;
-  onOpen: (claims: ReraEvidenceClaim[]) => void;
 }) {
   const series = evidence.series.find((item) => item.series_type === "quarterly_inventory");
-  if (!series) return null;
+  if (!series || !section) return null;
   const labels = Object.fromEntries(section.selectors.map((selector) => [selector.key.split(".").at(-1), selector.label]));
   return (
-    <div className="rera-series" role="region" aria-label={section.title} tabIndex={0}>
-      <table>
-        <thead>
-          <tr>
-            <th>Filing</th>
-            <th>{labels.booked_units ?? "Booked"}</th>
-            <th>{labels.unsold_units ?? "Unsold"}</th>
-            <th>{labels.total_units ?? "Filed homes"}</th>
-            <th><span className="sr-only">Evidence</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {series.points.map((point) => {
-            const claims = evidence.claims.filter((claim) => point.claim_ids.includes(claim.claim_id));
-            const total = point.total_units ?? 0;
-            const booked = point.booked_units ?? 0;
-            return (
-              <tr key={point.point_id}>
-                <th scope="row">
-                  <strong>{[point.quarter, point.financial_year].filter(Boolean).join(" · ")}</strong>
-                  <span>{formatReraDate(point.effective_at)}</span>
-                </th>
-                <td>
-                  <strong>{booked.toLocaleString("en-IN")}</strong>
-                  {total > 0 && <progress max={total} value={booked} aria-label={`${booked} of ${total} homes filed as booked`} />}
-                </td>
-                <td>{point.unsold_units?.toLocaleString("en-IN") ?? "—"}</td>
-                <td>{point.total_units?.toLocaleString("en-IN") ?? "—"}</td>
-                <td><EvidenceButton claims={claims} onOpen={onOpen} /></td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <Section id="quarterly-progress" title="Quarterly progress">
+      <div className="rera-series" role="region" aria-label="Quarterly progress" tabIndex={0}>
+        <table>
+          <thead>
+            <tr>
+              <th>Filing</th>
+              <th>{labels.booked_units ?? "Booked"}</th>
+              <th>{labels.unsold_units ?? "Unsold"}</th>
+              <th>{labels.total_units ?? "Filed homes"}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {series.points.map((point) => {
+              const total = point.total_units ?? 0;
+              const booked = point.booked_units ?? 0;
+              return (
+                <tr key={point.point_id}>
+                  <th scope="row">
+                    <strong>{[point.quarter, point.financial_year].filter(Boolean).join(" · ")}</strong>
+                    <span>{formatReraDate(point.effective_at)}</span>
+                  </th>
+                  <td>
+                    <strong>{booked.toLocaleString("en-IN")}</strong>
+                    {total > 0 && <progress max={total} value={booked} aria-label={`${booked} of ${total} homes filed as booked`} />}
+                  </td>
+                  <td>{point.unsold_units?.toLocaleString("en-IN") ?? "—"}</td>
+                  <td>{point.total_units?.toLocaleString("en-IN") ?? "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Section>
   );
 }
 
-function InventoryTable({
+function Inventory({
   section,
   evidence,
-  onOpen,
 }: {
-  section: ReraReportSurfaceSection;
+  section?: ReraReportSurfaceSection;
   evidence: ReraEvidenceProjection;
-  onOpen: (claims: ReraEvidenceClaim[]) => void;
 }) {
+  if (!section) return null;
   const entities = evidence.entities.filter((entity) => entity.entity_type === "inventory_configuration");
   const valueSelectors = section.selectors.filter(({ key }) => (
     key.startsWith("claim:")
     && entities.some((entity) => claimsForSelector(evidence.claims, key, entity.entity_id).length > 0)
   ));
-  const registrationClaims = evidence.claims.filter((claim) => claim.subject.entity_type === "registration");
-  const summaryFacts = displayFactsForSection(section, { ...evidence, claims: registrationClaims });
-  if (entities.length === 0 && summaryFacts.length === 0) return null;
+  const rows = new Map<string, { entity: (typeof entities)[number]; claims: ReraEvidenceClaim[] }>();
+  for (const entity of entities) {
+    const claims = evidence.claims.filter((claim) => claim.subject.entity_id === entity.entity_id);
+    const values = valueSelectors.map((selector) => {
+      const claim = claimsForSelector(claims, selector.key)[0];
+      return claim ? claimValueText(claim.value, selector.format) : "—";
+    });
+    const normalizedLabel = (entity.label ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+    rows.set(`${normalizedLabel}:${values.join("|")}`, { entity, claims });
+  }
+  if (rows.size === 0) return null;
   return (
-    <>
-      {summaryFacts.length > 0 && (
-        <dl className="rera-inline-facts">
-          {summaryFacts.map((fact) => (
-            <div key={fact.id}>
-              <dt>{fact.label}</dt>
-              <dd>{fact.value}</dd>
-              <EvidenceButton claims={fact.claims} onOpen={onOpen} />
-            </div>
-          ))}
-        </dl>
-      )}
-      {entities.length > 0 && (
-        <div className="rera-table-wrap" role="region" aria-label={section.title} tabIndex={0}>
-          <table className="rera-table">
-            <thead>
-              <tr>
-                <th>Configuration</th>
-                {valueSelectors.map((selector) => <th key={selector.key}>{selector.label}</th>)}
-                <th><span className="sr-only">Evidence</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {entities.map((entity) => {
-                const rowClaims = evidence.claims.filter((claim) => claim.subject.entity_id === entity.entity_id);
-                return (
-                  <tr key={entity.entity_id}>
-                    <th scope="row">{entity.label ?? "Filed configuration"}</th>
-                    {valueSelectors.map((selector) => {
-                      const claim = claimsForSelector(rowClaims, selector.key)[0];
-                      return <td key={selector.key}>{claim ? claimValueText(claim.value, selector.format) : "—"}</td>;
-                    })}
-                    <td><EvidenceButton claims={rowClaims} onOpen={onOpen} /></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <Discrepancies evidence={evidence} onOpen={onOpen} />
-    </>
+    <Section id="inventory" title="Homes and carpet area">
+      <div className="rera-table-wrap" role="region" aria-label="Homes and carpet area" tabIndex={0}>
+        <table className="rera-table">
+          <thead>
+            <tr>
+              <th>Configuration</th>
+              {valueSelectors.map((selector) => <th key={selector.key}>{selector.label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {[...rows.values()].map(({ entity, claims: rowClaims }) => {
+              return (
+                <tr key={entity.entity_id}>
+                  <th scope="row">{entity.label ?? "Filed configuration"}</th>
+                  {valueSelectors.map((selector) => {
+                    const claim = claimsForSelector(rowClaims, selector.key)[0];
+                    return <td key={selector.key}>{claim ? claimValueText(claim.value, selector.format) : "—"}</td>;
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Section>
   );
 }
 
-function Discrepancies({ evidence, onOpen }: {
-  evidence: ReraEvidenceProjection;
-  onOpen: (claims: ReraEvidenceClaim[]) => void;
-}) {
+function Discrepancies({ evidence }: { evidence: ReraEvidenceProjection }) {
   const comparisons = evidence.discrepancies.flatMap((item) => item.comparisons)
     .filter((comparison) => comparison.relationship === "different_values");
   if (comparisons.length === 0) return null;
   return (
-    <div className="rera-discrepancies">
-      {comparisons.map((comparison) => {
-        const claims = evidence.claims.filter((claim) => comparison.input_claim_ids.includes(claim.claim_id));
-        const unit = comparison.unit === "square_metres" ? "m²" : comparison.unit;
-        return (
+    <Section id="filed-differences" title="Filed totals to compare">
+      <div className="rera-discrepancies">
+        {comparisons.map((comparison) => (
           <div key={comparison.id}>
             <strong>Differing filed totals</strong>
-            <span>{comparison.observed_deltas.map((delta) => `${Math.abs(delta).toLocaleString("en-IN")} ${unit}`).join(", ")}</span>
-            <EvidenceButton claims={claims} onOpen={onOpen} />
+            <span>
+              {[
+                ...comparison.left.map((measurement) => measurement.value),
+                ...comparison.right.map((measurement) => measurement.value),
+              ].filter((value, index, values) => values.indexOf(value) === index)
+                .map((value) => `${value.toLocaleString("en-IN")} ${comparison.unit === "square_metres" ? "m²" : comparison.unit}`)
+                .join(" vs ")}
+            </span>
           </div>
-        );
-      })}
-    </div>
+        ))}
+      </div>
+    </Section>
   );
 }
 
-function Documents({
-  evidence,
-  onOpen,
-}: {
-  evidence: ReraEvidenceProjection;
-  onOpen: (claims: ReraEvidenceClaim[]) => void;
-}) {
-  const documents = evidence.entities.filter((entity) => entity.entity_type === "document");
-  if (documents.length === 0) return null;
+function formatMonth(value?: string): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(date);
+}
+
+function builderProjectState(project: BuilderProjectRecord): string {
+  if (project.delay_months != null && project.delay_months > 0) {
+    return `${project.delay_months} month movement`;
+  }
+  const status = project.project_status_display ?? project.rera_status;
+  return status ? humanize(status) : "—";
+}
+
+function BuilderRecord({ portfolio }: { portfolio?: BuilderPortfolio }) {
+  const otherProjects = portfolio?.projects.filter((project) => !project.current) ?? [];
+  if (!portfolio || otherProjects.length === 0) return null;
   return (
-    <div className="rera-documents">
-      {documents.map((document) => {
-        const claims = evidence.claims.filter((claim) => claim.subject.entity_id === document.entity_id);
-        const urlClaim = claims.find((claim) => claim.predicate === "official_document_url");
-        const quarter = claims.find((claim) => claim.predicate === "document_quarter");
-        const year = claims.find((claim) => claim.predicate === "document_financial_year");
-        const url = urlClaim?.value.type === "document_ref" ? httpUrl(urlClaim.value.data) : null;
-        const period = [quarter, year].map((claim) => claim ? claimValueText(claim.value) : null).filter(Boolean).join(" · ");
-        return (
-          <div key={document.entity_id}>
-            <div>
-              <strong>{document.label ?? "Filed document"}</strong>
-              {period && <span>{period}</span>}
-            </div>
-            {url && <a href={url} target="_blank" rel="noreferrer">Open</a>}
-            <EvidenceButton claims={claims} onOpen={onOpen} />
-          </div>
-        );
-      })}
-    </div>
+    <Section id="builder" title={`Other projects from ${portfolio.builder_name}`}>
+      <div className="rera-table-wrap" role="region" aria-label={`${portfolio.builder_name} projects`} tabIndex={0}>
+        <table className="rera-table rera-builder-table">
+          <thead>
+            <tr><th>Project</th><th>Registration</th><th>Current target</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {otherProjects.map((project) => {
+              const registryUrl = httpUrl(project.rera_portal_url);
+              return (
+                <tr key={`${project.property_id}:${project.rera_number ?? project.project_name}`}>
+                  <th scope="row">
+                    <Link to={`/property/${encodeURIComponent(project.property_id)}`}>{project.project_name}</Link>
+                    <span>{project.area}{project.current ? " · This project" : ""}</span>
+                  </th>
+                  <td>
+                    {registryUrl && project.rera_number
+                      ? <a href={registryUrl} target="_blank" rel="noreferrer">{project.rera_number}</a>
+                      : project.rera_number ?? "—"}
+                  </td>
+                  <td>{formatMonth(project.completion_date)}</td>
+                  <td>{builderProjectState(project)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Section>
   );
 }
 
-function EvidenceDrawer({
-  claims,
-  evidence,
-  onClose,
+function planPreviewUrl(value?: string): string | null {
+  if (value?.startsWith("/media/")) return value;
+  return httpUrl(value);
+}
+
+type PlanPreviewItem = {
+  id: string;
+  label: string;
+  previewUrl: string;
+  detail?: string;
+};
+
+function Plans({
+  plans,
+  surface,
 }: {
-  claims: ReraEvidenceClaim[];
-  evidence: ReraEvidenceProjection;
-  onClose: () => void;
+  plans?: ProjectPlansView;
+  surface?: ReraReportSurfaceSection;
 }) {
-  const drawerRef = useRef<HTMLElement>(null);
+  const [activePreviewIndex, setActivePreviewIndex] = useState<number | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const siteOverview = plans?.site_overview;
+  const floorPlans = plans?.floor_plans ?? [];
+  const filedPlanPreviews = selectReraPlanPreviews(
+    plans?.filed_plan_previews ?? [],
+    surface?.preview_kinds ?? [],
+  );
+  const previewItems = [
+    siteOverview && planPreviewUrl(siteOverview.preview_url)
+      ? {
+          id: siteOverview.artifact_id,
+          label: siteOverview.label,
+          previewUrl: planPreviewUrl(siteOverview.preview_url)!,
+        }
+      : null,
+    ...floorPlans.map((plan) => {
+      const previewUrl = planPreviewUrl(plan.preview_url);
+      if (!previewUrl) return null;
+      const areas = [
+        plan.carpet_area_sqft ? `${plan.carpet_area_sqft.toLocaleString("en-IN")} sq ft carpet` : null,
+        plan.sale_area_sqft ? `${plan.sale_area_sqft.toLocaleString("en-IN")} sq ft sale area` : null,
+      ].filter(Boolean).join(" · ");
+      return {
+        id: plan.artifact_id,
+        label: plan.title,
+        previewUrl,
+        detail: areas || undefined,
+      };
+    }),
+    ...filedPlanPreviews.map((plan) => {
+      const previewUrl = planPreviewUrl(plan.preview_url);
+      if (!previewUrl) return null;
+      return {
+        id: plan.artifact_id,
+        label: plan.label,
+        previewUrl,
+      };
+    }),
+  ].filter((item): item is PlanPreviewItem => Boolean(item));
+  const visiblePreviewItems = previewItems.slice(
+    0,
+    surface?.items_per_page ?? previewItems.length,
+  );
+  const safeActiveIndex = activePreviewIndex == null
+    ? null
+    : Math.min(activePreviewIndex, visiblePreviewItems.length - 1);
+  const activePreview = safeActiveIndex == null ? null : visiblePreviewItems[safeActiveIndex];
 
   useEffect(() => {
+    if (!activePreview) return undefined;
     const previouslyFocused = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
     const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    closeButtonRef.current?.focus();
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab") return;
-
-      const focusable = [...(drawerRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ) ?? [])];
-      if (focusable.length === 0) return;
-      const first = focusable[0]!;
-      const last = focusable.at(-1)!;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setActivePreviewIndex(null);
     };
 
-    window.addEventListener("keydown", handleKeyDown);
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", closeOnEscape);
+    closeButtonRef.current?.focus();
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
       previouslyFocused?.focus();
     };
-  }, [onClose]);
-  const sourceByCapture = new Map(evidence.source_index.map((source) => [`${source.receipt_id}:${source.capture_id}`, source]));
+  }, [activePreview]);
+
+  if (visiblePreviewItems.length === 0) return null;
+
   return (
-    <div className="rera-drawer-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.currentTarget === event.target) onClose();
-    }}>
-      <aside ref={drawerRef} className="rera-drawer" role="dialog" aria-modal="true" aria-labelledby="rera-drawer-title">
-        <header>
-          <h2 id="rera-drawer-title">Filed evidence</h2>
-          <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close evidence">Close</button>
-        </header>
-        <div className="rera-drawer__body">
-          {claims.map((claim) => (
-            <section key={claim.claim_id}>
-              <strong>{claimValueText(claim.value)}</strong>
-              <span>{assertionLabel(claim.assertion_mode)}</span>
-              {claim.effective_time?.start && <time dateTime={claim.effective_time.start}>{formatReraDate(claim.effective_time.start)}</time>}
-              {claim.evidence.map((receipt) => {
-                const source = sourceByCapture.get(`${receipt.receipt_id}:${receipt.capture_id}`);
-                const url = httpUrl(source?.source_url);
-                return (
-                  <div key={`${claim.claim_id}:${receipt.capture_id}`}>
-                    <span>Captured {source ? formatReraDate(source.captured_at) : "from K-RERA"}</span>
-                    {url && <a href={url} target="_blank" rel="noreferrer">Source</a>}
-                  </div>
-                );
-              })}
-            </section>
-          ))}
+    <Section id="plans" title={surface?.title ?? "Plans"}>
+      <div className="rera-plan-grid">
+        {visiblePreviewItems.map((plan, index) => (
+          <button
+            type="button"
+            className="rera-plan-preview"
+            key={plan.id}
+            aria-haspopup="dialog"
+            aria-label={`Open ${plan.label} preview`}
+            onClick={() => setActivePreviewIndex(index)}
+          >
+            <img src={plan.previewUrl} alt="" />
+            <strong>{plan.label}</strong>
+            {plan.detail && <span>{plan.detail}</span>}
+          </button>
+        ))}
+      </div>
+      {activePreview && (
+        <div
+          className="rera-plan-lightbox-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setActivePreviewIndex(null);
+          }}
+        >
+          <div
+            className="rera-plan-lightbox"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rera-plan-lightbox-title"
+          >
+            <header>
+              <div>
+                <h2 id="rera-plan-lightbox-title">{activePreview.label}</h2>
+                {activePreview.detail && <p>{activePreview.detail}</p>}
+              </div>
+              <div className="rera-plan-lightbox-actions">
+                <a href={activePreview.previewUrl} download>Download image</a>
+                <button
+                  ref={closeButtonRef}
+                  type="button"
+                  aria-label="Close plan preview"
+                  onClick={() => setActivePreviewIndex(null)}
+                >
+                  ×
+                </button>
+              </div>
+            </header>
+            <div className="rera-plan-lightbox-image">
+              <img src={activePreview.previewUrl} alt={activePreview.label} />
+            </div>
+            {visiblePreviewItems.length > 1 && (
+              <div className="rera-plan-lightbox-strip" aria-label="Other plan previews">
+                {visiblePreviewItems.map((plan, index) => (
+                  <button
+                    type="button"
+                    className={index === safeActiveIndex ? "is-active" : undefined}
+                    key={plan.id}
+                    aria-label={`Show ${plan.label}`}
+                    aria-pressed={index === safeActiveIndex}
+                    onClick={() => setActivePreviewIndex(index)}
+                  >
+                    <img src={plan.previewUrl} alt="" />
+                    <span>{plan.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </aside>
-    </div>
+      )}
+    </Section>
   );
 }
 
-function ReportSection({
-  section,
-  evidence,
-  onOpen,
+function Documents({
+  documents,
+  surface,
 }: {
-  section: ReraReportSurfaceSection;
-  evidence: ReraEvidenceProjection;
-  onOpen: (claims: ReraEvidenceClaim[]) => void;
+  documents: ReraBuyerDocument[];
+  surface?: ReraReportSurfaceSection;
 }) {
-  let content;
-  if (section.renderer === "timeline") content = <Timeline section={section} evidence={evidence} onOpen={onOpen} />;
-  else if (section.renderer === "series") content = <QuarterlySeries section={section} evidence={evidence} onOpen={onOpen} />;
-  else if (section.renderer === "table") content = <InventoryTable section={section} evidence={evidence} onOpen={onOpen} />;
-  else if (section.renderer === "documents") content = <Documents evidence={evidence} onOpen={onOpen} />;
-  else content = <FactList section={section} evidence={evidence} onOpen={onOpen} />;
-  if (!content) return null;
+  const orderedDocuments = useMemo(() => orderReraDocuments(documents), [documents]);
+  const itemsPerPage = Math.max(1, surface?.items_per_page ?? 10);
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(orderedDocuments.length / itemsPerPage));
+  const visiblePage = Math.min(page, pageCount - 1);
+
+  if (orderedDocuments.length === 0) return null;
+  const visibleDocuments = orderedDocuments.slice(
+    visiblePage * itemsPerPage,
+    (visiblePage + 1) * itemsPerPage,
+  );
+
   return (
-    <section className="rera-section" id={`rera-${section.id}`}>
-      <h2>{section.title}</h2>
-      {content}
-    </section>
+    <Section id="documents" title={surface?.title ?? "Approvals and documents"}>
+      <ul className="rera-document-list">
+        {visibleDocuments.map((document) => (
+          <li key={document.id}>
+            <span>{document.group_label}</span>
+            <a href={document.url} target="_blank" rel="noreferrer">{document.label}</a>
+          </li>
+        ))}
+      </ul>
+      {pageCount > 1 && (
+        <nav className="rera-document-pager" aria-label="Document pages">
+          <button
+            type="button"
+            aria-label="Previous documents"
+            disabled={visiblePage === 0}
+            onClick={() => setPage(Math.max(0, visiblePage - 1))}
+          >
+            Previous
+          </button>
+          <span>{visiblePage + 1} / {pageCount}</span>
+          <button
+            type="button"
+            aria-label="Next documents"
+            disabled={visiblePage + 1 >= pageCount}
+            onClick={() => setPage(Math.min(pageCount - 1, visiblePage + 1))}
+          >
+            Next
+          </button>
+        </nav>
+      )}
+    </Section>
+  );
+}
+
+function FiledSchedules({ sections }: { sections: ReraScheduleSection[] }) {
+  const visible = sections
+    .map((section) => ({ ...section, rows: section.rows.filter((row) => row.label.trim()) }))
+    .filter((section) => section.rows.length > 0);
+  if (visible.length === 0) return null;
+  return (
+    <Section id="schedules" title="Filed project schedules">
+      <div className="rera-schedule-groups">
+        {visible.map((section) => (
+          <details key={section.group || section.label}>
+            <summary>{section.label || humanize(section.group)}</summary>
+            <dl className="rera-fact-list">
+              {section.rows.map((row) => {
+                const values = [
+                  row.available == null ? null : row.available ? "Yes" : "No",
+                  row.area_sqm == null ? null : `${row.area_sqm.toLocaleString("en-IN", { maximumFractionDigits: 1 })} m²`,
+                  row.value,
+                ].filter(Boolean).join(" · ");
+                return <div key={`${section.group}:${row.label}`}><dt>{row.label}</dt><dd><strong>{values}</strong></dd></div>;
+              })}
+            </dl>
+          </details>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+function WaterDeclarations({
+  report,
+  water,
+}: {
+  report: ReraEvidenceReportResponse;
+  water?: ReraBuyerFactSection;
+}) {
+  const waterSurface = surfaceById(report.surface.sections, "water");
+  const hasWater = Boolean(water?.facts.length || (waterSurface && displayFactsForSection(waterSurface, report.evidence).length));
+  if (!hasWater) return null;
+  return (
+    <Section id="water" title="Water and service declarations">
+      <BuyerFactList facts={water?.facts ?? []} />
+      <ClaimFactList section={waterSurface} evidence={report.evidence} />
+    </Section>
   );
 }
 
 export function ReraReportPage() {
   const { id = "" } = useParams();
+  return <ReraReportContent key={id} id={id} />;
+}
+
+function ReraReportContent({ id }: { id: string }) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
-  const [drawerClaims, setDrawerClaims] = useState<ReraEvidenceClaim[]>([]);
 
   useEffect(() => {
     let active = true;
-    setState({ status: "loading" });
     Promise.all([getProperty(id), getPropertyRera(id)])
       .then(([detail, report]) => active && setState({ status: "ready", detail, report }))
       .catch((error: unknown) => active && setState({
@@ -391,59 +723,92 @@ export function ReraReportPage() {
     return () => { active = false; };
   }, [id]);
 
-  const visibleSections = useMemo(() => {
-    if (state.status !== "ready") return [];
-    return state.report.surface.sections.filter((section) => sectionHasEvidence(section, state.report.evidence));
+  const latestCapture = useMemo(() => {
+    if (state.status !== "ready") return undefined;
+    return state.report.evidence.regulatory_coverage
+      .map((coverage) => coverage.checked_at)
+      .sort()
+      .at(-1);
   }, [state]);
 
   if (state.status === "loading") return <PageState variant="loading" context="property" />;
   if (state.status === "error") return <PageState variant="error" context="property" message={state.message} />;
 
-  const property = state.detail.property;
-  const report = state.report;
-  const title = property.title.trim();
-  const latestCapture = report.evidence.coverage
-    .map((coverage) => coverage.latest_observed_at)
-    .sort()
-    .at(-1);
+  const { detail, report } = state;
+  const property = detail.property;
+  const title = state.detail.society?.name.trim() || property.title.trim();
+  const buyer = report.buyer_report;
+  const factSections = buyer?.fact_sections;
+  const registration = sectionById(factSections, "registration");
+  const registrationNumber = report.evidence.claims.find((claim) => claim.predicate === "official_registration_number");
+  const registrationText = registrationNumber
+    ? claimValueText(registrationNumber.value)
+    : registration?.facts.find((fact) => /registration number/i.test(fact.label))?.value;
+  const status = registration?.facts.find((fact) => fact.key === "rera_status")?.value;
+  const statusLabel = status ? humanize(status) : undefined;
+  const registryUrl = httpUrl(buyer?.registry_url);
+  const hasReportData = report.evidence.claims.length > 0 || (factSections?.some((section) => section.facts.length) ?? false);
+
   return (
     <main className="page-container-wide rera-report-page">
       <Helmet>
         <title>{title} RERA - OpenEstates</title>
-        <meta name="description" content={`Officially filed RERA details for ${title}.`} />
+        <meta name="description" content={`Filed project details for ${title}.`} />
       </Helmet>
       <header className="rera-hero">
         <Link to={`/property/${encodeURIComponent(id)}`}>Back to property</Link>
         <h1>{title}</h1>
-        <p>
-          {[property.area, property.city, latestCapture ? `Captured ${formatReraDate(latestCapture)}` : null]
-            .filter(Boolean).join(" · ")}
-        </p>
-        {report.availability === "partial" && <span>Some filed sections are not available.</span>}
+        <p>{[property.area, property.city, statusLabel, latestCapture ? `Updated ${formatReraDate(latestCapture)}` : null].filter(Boolean).join(" · ")}</p>
+        {(registrationText || registryUrl) && (
+          <div className="rera-registry-line">
+            {registrationText && <strong>{registrationText}</strong>}
+            {registryUrl && <a href={registryUrl} target="_blank" rel="noreferrer">Open registry</a>}
+          </div>
+        )}
+        {report.availability === "partial" && <span>Some filing sections are not available.</span>}
       </header>
 
-      {report.availability === "unavailable" ? (
+      {!hasReportData ? (
         <section className="rera-empty">
           <h2>RERA record unavailable</h2>
           <p>No matched filing is available for this property yet.</p>
         </section>
       ) : (
-        visibleSections.map((section) => (
-          <ReportSection
-            key={section.id}
-            section={section}
+        <>
+          <RegulatoryRecord report={report} />
+          <ProjectOverview
+            section={sectionById(factSections, "overview")}
+            surface={surfaceById(report.surface.sections, "overview")}
             evidence={report.evidence}
-            onOpen={setDrawerClaims}
           />
-        ))
-      )}
-
-      {drawerClaims.length > 0 && (
-        <EvidenceDrawer
-          claims={drawerClaims}
-          evidence={report.evidence}
-          onClose={() => setDrawerClaims([])}
-        />
+          <Discrepancies evidence={report.evidence} />
+          <Schedule
+            section={sectionById(factSections, "schedule")}
+            surface={surfaceById(report.surface.sections, "schedule")}
+            evidence={report.evidence}
+          />
+          <QuarterlyProgress section={surfaceById(report.surface.sections, "quarterly_progress")} evidence={report.evidence} />
+          <Inventory section={surfaceById(report.surface.sections, "inventory")} evidence={report.evidence} />
+          <Plans
+            plans={detail.plans}
+            surface={surfaceById(report.surface.sections, "plans")}
+          />
+          <Documents
+            documents={buyer?.documents ?? []}
+            surface={surfaceById(report.surface.sections, "documents")}
+          />
+          <WaterDeclarations
+            report={report}
+            water={sectionById(factSections, "water")}
+          />
+          <FiledSchedules sections={buyer?.schedules ?? []} />
+          {sectionById(factSections, "location")?.facts.length ? (
+            <Section id="location" title="Registered location">
+              <BuyerFactList facts={sectionById(factSections, "location")!.facts} />
+            </Section>
+          ) : null}
+          <BuilderRecord portfolio={buyer?.builder_portfolio} />
+        </>
       )}
     </main>
   );

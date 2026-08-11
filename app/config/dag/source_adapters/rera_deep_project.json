@@ -30,6 +30,7 @@
     }
   ],
   "do_not_promote_fact_keys": [
+    "project_units_per_acre",
     "rera_total_project_cost",
     "rera_land_cost",
     "rera_construction_cost",
@@ -45,7 +46,6 @@
     "project_unit_count",
     "project_tower_count",
     "project_max_floor_count",
-    "project_units_per_acre",
     "available_configurations",
     "configuration_count",
     "has_1bhk",

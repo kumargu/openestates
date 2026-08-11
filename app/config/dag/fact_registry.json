@@ -571,9 +571,7 @@
       ],
       "fact_keys": [
         "rera_registered",
-        "rera_number",
-        "rera_land_litigation",
-        "rera_complaints_count"
+        "rera_number"
       ],
       "source_priority": [
         "rera",
@@ -598,7 +596,6 @@
       "fact_keys": [
         "builder_delivery_rate",
         "rera_builder_projects_count",
-        "rera_builder_revocations",
         "builder_reputation"
       ],
       "source_priority": [
@@ -1632,7 +1629,6 @@
           "experienced builder",
           "rera track record",
           "builder project count",
-          "builder revocations",
           "builder records"
         ],
         "label": "reliable builder",
@@ -1640,7 +1636,6 @@
           "builder_quality_score",
           "builder_reputation",
           "rera_builder_projects_count",
-          "rera_builder_revocations",
           "delivery_track_record"
         ],
         "weight": 1.3
@@ -1656,8 +1651,7 @@
         "expanded_keys": [
           "builder_quality_score",
           "builder_reputation",
-          "rera_builder_projects_count",
-          "rera_builder_revocations"
+          "rera_builder_projects_count"
         ],
         "weight": 1.2
       },
@@ -2604,13 +2598,11 @@
           "builder_quality_score",
           "lifecycle.builder_reputation_negative",
           "maintenance_sentiment",
-          "rera_builder_revocations",
           "delivery_track_record"
         ],
         "gap_keys": [
           "lifecycle.builder_reputation_negative",
           "maintenance_sentiment",
-          "rera_builder_revocations",
           "delivery_track_record"
         ],
         "weight": 1.3
@@ -3121,58 +3113,6 @@
         "Google"
       ],
       "scoring_method": "google-proof"
-    },
-    {
-      "dimension": "rera_complaints_count",
-      "label": "RERA complaint count",
-      "fact_keys": [
-        "rera_complaints_count",
-        "rera_project_complaints_count",
-        "rera_project_complaints_open_count"
-      ],
-      "query_units": [
-        {
-          "unit": "complaints",
-          "aliases": [
-            "rera complaint count",
-            "rera complaints",
-            "complaint count",
-            "complaints"
-          ],
-          "to_canonical": 1.0
-        }
-      ],
-      "zero_is_max": true,
-      "proof_sources": [
-        "Rera",
-        "Computed"
-      ],
-      "scoring_method": "rera-proof"
-    },
-    {
-      "dimension": "rera_builder_revocations",
-      "label": "RERA builder revocations",
-      "fact_keys": [
-        "rera_builder_revocations"
-      ],
-      "query_units": [
-        {
-          "unit": "revocations",
-          "aliases": [
-            "builder revocations",
-            "rera revocations",
-            "revocation count",
-            "revocations"
-          ],
-          "to_canonical": 1.0
-        }
-      ],
-      "zero_is_max": true,
-      "proof_sources": [
-        "Rera",
-        "Computed"
-      ],
-      "scoring_method": "rera-proof"
     }
   ],
   "text_evidence": [
@@ -3924,25 +3864,6 @@
       ],
       "display_label": "Premium price signal",
       "score_delta": 2.0
-    },
-    {
-      "dimension": "builder_trust",
-      "label": "builder trust",
-      "aliases": [
-        "builder trust",
-        "builder reputation",
-        "builder risk"
-      ],
-      "fact_keys": [
-        "rera_builder_revocations"
-      ],
-      "direction": "LowerIsBetter",
-      "thresholds": [
-        0,
-        1
-      ],
-      "display_label": "builder revocation risk",
-      "score_delta": 1.2
     },
     {
       "dimension": "waterlogging_risk",

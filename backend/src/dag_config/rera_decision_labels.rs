@@ -313,7 +313,7 @@ mod tests {
         assert!(config
             .labels
             .iter()
-            .any(|label| label.key == "rera_land_litigation"));
+            .any(|label| label.key == "legal_land_docs_available"));
         assert!(config
             .labels
             .iter()

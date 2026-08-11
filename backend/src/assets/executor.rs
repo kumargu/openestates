@@ -1496,9 +1496,11 @@ impl BuiltInAssetExecutor {
             Self::ReraProjectPlanFrames => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let input = super::rera_project_plan_frames_input(
+                    &context.dag.lake,
                     &context.run_id.to_string(),
                     context.options.planned_at,
-                )?;
+                )
+                .await?;
                 let record = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(record))
             }

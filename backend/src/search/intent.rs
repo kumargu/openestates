@@ -706,8 +706,9 @@ mod tests {
         );
 
         assert!(has_positive_label(&intent, "legal safety"));
-        assert!(has_positive_label(&intent, "reliable builder"));
-        assert!(has_expanded_positive_key(
+        assert!(!has_positive_label(&intent, "reliable builder"));
+        assert!(has_expanded_negative_key(&intent, "rera_complaints"));
+        assert!(!has_expanded_positive_key(
             &intent,
             "rera_builder_revocations"
         ));
@@ -742,6 +743,10 @@ mod tests {
         assert!(has_negative_label(&complaint, "legal risk"));
         assert!(has_negative_label(&complaint, "builder trust"));
         assert!(has_expanded_negative_key(
+            &complaint,
+            "delivery_track_record"
+        ));
+        assert!(!has_expanded_negative_key(
             &complaint,
             "rera_builder_revocations"
         ));

@@ -29,6 +29,7 @@ from urllib.request import Request, build_opener, HTTPCookieProcessor
 from urllib.parse import urlencode
 
 from pipeline.skills.base import BaseSkill, SkillResult, SkillCost, SourcedFact, FactSource
+from pipeline.skills.rera_document_intelligence import classify_rera_document
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,8 @@ class ReraDocumentArtifact:
     document_group: str = "other"
     buyer_visibility: str = "list_only"
     preview_policy: str = "list_only"
+    preview_role: Optional[str] = None
+    classification_basis: Optional[str] = None
     configuration_type: Optional[str] = None
     bedroom_count: Optional[float] = None
     confidence: float = 0.7
@@ -217,7 +220,6 @@ class ReraProjectDetail:
 
     # Builder track record
     builder_other_rera_projects: int = 0
-    builder_revocations: int = 0
     builder_states: List[str] = field(default_factory=list)
 
     # Complaints (across all promoter's projects)
@@ -850,17 +852,10 @@ def _extract_document_artifacts(detail_html: str, project_name: str) -> List[Rer
             continue
         surrounding = _clean_html(detail_html[max(0, match.start() - 240):match.end() + 240])
         source_field_label = _infer_document_source_label(surrounding, label)
-        link_text = "{} {}".format(label, href or "").strip()
-        combined = "{} {}".format(source_field_label or "", link_text).strip()
-        classification = _document_classification(combined, href)
-        if not classification["kind"]:
-            classification = _document_classification(
-                "{} {}".format(combined, surrounding).strip(),
-                href,
-            )
+        classification = _document_classification(label, source_field_label, href)
         kind = classification["kind"]
         if not kind:
-            continue
+            kind = "unclassified_document"
         source_url = f"{RERA_BASE}{href}" if href and href.startswith("/") else href
         artifact_id = "{}:{}:{}".format(
             _slug(project_name),
@@ -870,7 +865,9 @@ def _extract_document_artifacts(detail_html: str, project_name: str) -> List[Rer
         if artifact_id in seen:
             continue
         seen.add(artifact_id)
-        config_type, bedrooms = _canonical_configuration(combined)
+        config_type, bedrooms = _canonical_configuration(
+            "{} {}".format(source_field_label or "", label).strip()
+        )
         artifacts.append(
             ReraDocumentArtifact(
                 artifact_id=artifact_id,
@@ -881,26 +878,14 @@ def _extract_document_artifacts(detail_html: str, project_name: str) -> List[Rer
                 document_group=classification["group"] or "other",
                 buyer_visibility=classification["buyer_visibility"] or "list_only",
                 preview_policy=classification["preview_policy"] or "list_only",
+                preview_role=classification["preview_role"],
+                classification_basis=classification["classification_basis"],
                 configuration_type=config_type if kind == "floor_plan" else None,
                 bedroom_count=bedrooms if kind == "floor_plan" else None,
                 confidence=0.85 if source_url else 0.65,
             )
         )
 
-    if not any(artifact.document_kind == "site_plan" for artifact in artifacts):
-        if re.search(r"\b(site plan|layout plan|master plan)\b", detail_html, re.IGNORECASE):
-            artifacts.append(
-                ReraDocumentArtifact(
-                    artifact_id="{}:site_plan:detected".format(_slug(project_name)),
-                    document_kind="site_plan",
-                    label="Site plan detected",
-                    source_field_label="Site plan detected",
-                    document_group="plans",
-                    buyer_visibility="preview_allowed",
-                    preview_policy="preview_allowed",
-                    confidence=0.55,
-                )
-            )
     return artifacts
 
 
@@ -918,6 +903,8 @@ def _usable_document_link(label: str, href: Optional[str]) -> bool:
         return False
     if href and re.search(r"[?&]DOC_ID=(?:&|$)", href, re.IGNORECASE):
         return False
+    if classify_rera_document(label).get("preview_role") == "placeholder":
+        return False
     return True
 
 
@@ -925,7 +912,7 @@ def _infer_document_source_label(surrounding: str, link_label: str) -> Optional[
     """Infer the RERA field label that names an uploaded document link."""
     text = re.sub(r"\s+", " ", surrounding or "").strip()
     link_label = re.sub(r"\s+", " ", link_label or "").strip()
-    link_classification = _document_classification(link_label, None)
+    link_classification = _document_classification(link_label, None, None)
     if link_classification["kind"] in (
         "brochure",
         "floor_plan",
@@ -994,75 +981,10 @@ def _infer_document_source_label(surrounding: str, link_label: str) -> Optional[
     return link_label or None
 
 
-def _document_classification(text: str, href: Optional[str]) -> Dict[str, Optional[str]]:
-    combined = "{} {}".format(text or "", href or "").lower()
-    kind: Optional[str] = None
-    group = "other"
-    buyer_visibility = "list_only"
-    preview_policy = "list_only"
-
-    if any(term in combined for term in ("brochure", "prospectus", "flipchart")):
-        kind = "brochure"
-        group = "plans"
-        buyer_visibility = "preview_allowed"
-        preview_policy = "preview_allowed"
-    elif any(term in combined for term in ("floor plan", "floorplan", "unit plan", "flat plan")):
-        kind = "floor_plan"
-        group = "plans"
-        buyer_visibility = "preview_allowed"
-        preview_policy = "preview_allowed"
-    elif any(term in combined for term in ("site plan", "siteplan", "layout plan", "master plan")):
-        kind = "site_plan"
-        group = "plans"
-        buyer_visibility = "preview_allowed"
-        preview_policy = "preview_allowed"
-    elif any(term in combined for term in ("section plan", "sectional drawing", "section of building")):
-        kind = "section_plan"
-        group = "plans"
-        buyer_visibility = "preview_allowed"
-        preview_policy = "preview_allowed"
-    elif any(term in combined for term in ("area development plan", "development plan")):
-        kind = "development_plan"
-        group = "plans"
-        buyer_visibility = "preview_allowed"
-        preview_policy = "preview_allowed"
-    elif any(term in combined for term in ("sanction plan", "approved plan", "approval plan", "approved building/plotting plan")):
-        kind = "sanction_plan"
-        group = "plans"
-        buyer_visibility = "preview_allowed"
-        preview_policy = "preview_allowed"
-    elif "commencement certificate" in combined:
-        kind = "commencement_certificate"
-        group = "approvals_nocs"
-    elif any(term in combined for term in ("encumbrance certificate", " ec ", " ec.", "ec.pdf")):
-        kind = "encumbrance_certificate"
-        group = "legal_land"
-    elif any(term in combined for term in ("title deed", "sale deed", "joint development", "jda", "conversion certificate", "khata", "land document")):
-        kind = "title_or_land_document"
-        group = "legal_land"
-    elif any(term in combined for term in ("bescom", "bwssb", "fire force", "airport authority", "kspcb", "seiaa", "bmrcl", "noc")):
-        kind = "noc"
-        group = "approvals_nocs"
-    elif any(term in combined for term in ("agreement for sale", "allotment letter", "sale deed proforma", "proforma for sale deed")):
-        kind = "customer_contract_template"
-        group = "buyer_templates"
-        buyer_visibility = "list_only"
-    elif any(term in combined for term in ("pan card", "balance sheet", "profit and loss", "auditor", "itr")):
-        kind = "promoter_financial_document"
-        group = "promoter_financials"
-        buyer_visibility = "private_or_sensitive"
-        preview_policy = "hidden"
-    elif any(term in combined for term in ("affidavit", "annexure - 49", "annexure-49", "form b")):
-        kind = "affidavit"
-        group = "affidavits"
-        buyer_visibility = "list_only"
-
-    return {
-        "kind": kind,
-        "group": group,
-        "buyer_visibility": buyer_visibility,
-        "preview_policy": preview_policy,
-    }
+def _document_classification(
+    label: Optional[str], source_field_label: Optional[str], href: Optional[str]
+) -> Dict[str, Optional[str]]:
+    return classify_rera_document(label, source_field_label, href)
 
 
 def _extract_configurations(
@@ -1274,7 +1196,9 @@ def _fill_detail_wide_schedule_fields(detail_html: str, detail: ReraProjectDetai
     _extract_infra_counts(text, detail)
 
 
-def _extract_complaints(detail_html: str) -> Tuple[List[ReraComplaintRow], List[ReraComplaintSummary]]:
+def extract_rera_complaints(
+    detail_html: str,
+) -> Tuple[List[ReraComplaintRow], List[ReraComplaintSummary]]:
     rows: List[ReraComplaintRow] = []
     summaries: List[ReraComplaintSummary] = []
 
@@ -1629,10 +1553,6 @@ def parse_rera_detail(detail_html: str, search_result: ReraSearchResult) -> Rera
         )
         detail.builder_other_rera_projects = len(set(other_rera))
 
-        # Check for revocations
-        revoked_count = len(re.findall(r'revoked', home, re.IGNORECASE))
-        detail.builder_revocations = revoked_count
-
         # Extract states where builder has RERA registrations
         states = set()
         known_states = [
@@ -1646,7 +1566,9 @@ def parse_rera_detail(detail_html: str, search_result: ReraSearchResult) -> Rera
         detail.builder_states = sorted(states)
 
     # --- Complaints ---
-    detail.complaint_rows, detail.complaint_summaries = _extract_complaints(detail_html)
+    detail.complaint_rows, detail.complaint_summaries = extract_rera_complaints(
+        detail_html
+    )
     project_summary = next((summary for summary in detail.complaint_summaries if summary.scope == "project"), None)
     if project_summary:
         detail.complaints_count = (
@@ -1928,8 +1850,6 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
         add_numeric_fact("rera_total_land_area_sqm", detail.total_land_area_sqm, "Total Land Area: {value} sq m")
         add_numeric_fact("project_land_area_sqm", detail.total_land_area_sqm, "Project land area: {value} sq m", ["land area", "large campus", "acres"])
         add_numeric_fact("project_land_area_acres", round(detail.total_land_area_sqm / 4046.8564224, 2), "Project land area: {value} acres", ["land area", "large campus", "acres"])
-        if detail.total_units and detail.total_units > 0:
-            add_numeric_fact("project_units_per_acre", round(detail.total_units / (detail.total_land_area_sqm / 4046.8564224), 2), "{value} units per acre", ["low density", "density", "spacious"])
 
     if detail.open_area_pct is not None:
         add_numeric_fact("project_open_area_pct", detail.open_area_pct, "{value}% open area", ["open area", "open space", "greenery"])
@@ -2081,13 +2001,6 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
             ["builder RERA projects", "track record"],
         )
 
-    add_fact(
-        "rera_builder_revocations",
-        {"type": "Numeric", "data": detail.builder_revocations},
-        "{value} revocations",
-        ["builder revocations"],
-    )
-
     if detail.builder_states:
         add_fact(
             "rera_builder_states",
@@ -2142,6 +2055,8 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
                 "document_group": artifact.document_group,
                 "buyer_visibility": artifact.buyer_visibility,
                 "preview_policy": artifact.preview_policy,
+                "preview_role": artifact.preview_role,
+                "classification_basis": artifact.classification_basis,
                 "configuration_type": artifact.configuration_type,
                 "bedroom_count": artifact.bedroom_count,
                 "confidence": artifact.confidence,
@@ -2257,7 +2172,7 @@ class FetchReraSkill(BaseSkill):
         "rera_promoter_complaints_disposed_count", "rera_promoter_complaints_open_count",
         "rera_complaint_summary_manifest",
         "project_unit_count", "project_tower_count", "project_max_floor_count",
-        "project_units_per_acre", "available_configurations", "configuration_count",
+        "available_configurations", "configuration_count",
         "has_1bhk", "has_2bhk", "has_3bhk", "has_4bhk",
         "parking_total_car_count", "parking_covered_count", "parking_surface_count",
         "parking_basement_count", "parking_visitor_count", "parking_accessible_count",

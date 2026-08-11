@@ -28,7 +28,6 @@ pub struct ReraInfo {
     pub total_land_area_sqm: Option<f64>,
     pub total_land_area_acres: Option<f64>,
     pub open_area_pct: Option<f64>,
-    pub units_per_acre: Option<f64>,
     pub total_project_cost_inr: Option<f64>,
     pub land_cost_inr: Option<f64>,
     pub construction_cost_inr: Option<f64>,
@@ -47,7 +46,6 @@ pub struct ReraInfo {
     pub schedule_sections: Vec<ReraScheduleSection>,
     pub affidavit_only_visible: Option<bool>,
     pub builder_total_projects: Option<i32>,
-    pub builder_revocations: Option<i32>,
     pub builder_states: Vec<String>,
     pub land_litigation: Option<bool>,
     pub escrow_bank: Option<String>,
@@ -512,8 +510,6 @@ pub fn rera_decision_cards(info: &ReraInfo) -> Vec<ReraDecisionCard> {
             .map(|value| format!("{} acres", compact_number(value))),
         info.total_units
             .map(|value| format!("{} homes", compact_i32(value))),
-        info.units_per_acre
-            .map(|value| format!("{} homes/acre", compact_number(value))),
         info.open_area_pct
             .map(|value| format!("{}% open area", compact_number(value))),
     ]
@@ -523,10 +519,7 @@ pub fn rera_decision_cards(info: &ReraInfo) -> Vec<ReraDecisionCard> {
     if !scale_parts.is_empty() {
         cards.push(ReraDecisionCard {
             id: "project_scale".to_string(),
-            title: info
-                .units_per_acre
-                .map(|value| format!("{} homes/acre", compact_number(value)))
-                .unwrap_or_else(|| "Project scale available".to_string()),
+            title: "Project scale".to_string(),
             detail: scale_parts.join(" · "),
             tone: "neutral".to_string(),
             source: "RERA".to_string(),
@@ -534,7 +527,6 @@ pub fn rera_decision_cards(info: &ReraInfo) -> Vec<ReraDecisionCard> {
             facts: serde_json::json!({
                 "total_land_area_acres": info.total_land_area_acres,
                 "total_units": info.total_units,
-                "units_per_acre": info.units_per_acre,
                 "open_area_pct": info.open_area_pct,
             }),
             actions: Vec::new(),
@@ -577,12 +569,6 @@ fn get_tags_fact(facts: &[SourcedFact], key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-pub(crate) fn units_per_acre(total_units: Option<i32>, acres: Option<f64>) -> Option<f64> {
-    let units = f64::from(total_units?);
-    let acres = acres?;
-    (units.is_finite() && acres.is_finite() && units > 0.0 && acres > 0.0).then_some(units / acres)
-}
-
 pub(crate) fn overlay_project_scale_facts(
     card: &mut PropertyCard,
     serving_facts: &ServingFactIndex,
@@ -600,15 +586,6 @@ pub(crate) fn overlay_project_scale_facts(
     {
         card.open_space_pct = Some(fact.value);
     }
-    let total_units = projection
-        .latest_numeric("rera_total_units")
-        .and_then(|fact| projected_i32(fact.value));
-    card.units_per_acre = units_per_acre(total_units, card.society_land_acres);
-}
-
-fn projected_i32(value: f64) -> Option<i32> {
-    (value.is_finite() && value >= i32::MIN as f64 && value <= i32::MAX as f64)
-        .then(|| value.round() as i32)
 }
 
 /// Get the learned_at timestamp from any fact matching the key, formatted as ISO string.
@@ -667,7 +644,6 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
 
     let total_land_area_sqm = get_numeric_fact(facts, "rera_total_land_area_sqm");
     let total_land_area_acres = total_land_area_sqm.map(|sqm| sqm / 4_046.856_422_4);
-    let units_per_acre = units_per_acre(total_units, total_land_area_acres);
     let document_manifest = get_text_fact(facts, "rera_document_manifest")
         .and_then(|value| parse_rera_json::<Vec<ReraDocumentManifestItem>>(&value))
         .unwrap_or_default();
@@ -692,7 +668,6 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
         total_land_area_acres,
         open_area_pct: get_numeric_fact(facts, "project_open_area_pct")
             .or_else(|| get_numeric_fact(facts, "rera_open_area_pct")),
-        units_per_acre,
         total_project_cost_inr: None,
         land_cost_inr: None,
         construction_cost_inr: None,
@@ -729,7 +704,6 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
         affidavit_only_visible: rera_affidavit_only_visible(&document_manifest),
         document_manifest,
         builder_total_projects: builder_projects,
-        builder_revocations: get_numeric_fact(facts, "rera_builder_revocations").map(|n| n as i32),
         builder_states,
         land_litigation: get_bool_fact(facts, "rera_land_litigation"),
         escrow_bank: get_text_fact(facts, "rera_escrow_bank"),
@@ -815,7 +789,6 @@ pub struct BuilderTrust {
     pub delivery_rate: Option<f64>,
     pub project_count: Option<u32>,
     pub delivery_display: Option<String>,
-    pub zero_revocations: Option<bool>,
 }
 
 /// Extract builder trust from a facts slice — shared logic between direct and canonical builder.
@@ -840,13 +813,10 @@ fn builder_trust_from_facts(facts: &[SourcedFact]) -> Option<BuilderTrust> {
             }
         });
 
-    let zero_revocations = get_text_fact(facts, "builder_zero_revocations").map(|v| v == "true");
-
     Some(BuilderTrust {
         delivery_rate,
         project_count,
         delivery_display,
-        zero_revocations,
     })
 }
 
@@ -1127,7 +1097,6 @@ pub fn enrich_property_card(
         google_reviews_url,
         society_land_acres: None,
         open_space_pct: None,
-        units_per_acre: None,
         root_source,
         project_status,
         project_status_display,

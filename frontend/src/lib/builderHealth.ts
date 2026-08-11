@@ -18,7 +18,6 @@ export type BuilderHealthSummary = {
     reraLinked: number;
     delayed: number;
     complaints: number;
-    revocations: number | null;
   };
 };
 
@@ -124,19 +123,8 @@ export function builderHealthSummary(portfolio: BuilderPortfolio): BuilderHealth
       (project.delay_months != null && project.delay_months > 0)
       || (project.complaints_count != null && project.complaints_count > 0),
   ).length;
-  const revocations = portfolio.revocations ?? null;
-  const label = revocations != null && revocations > 0
-    ? `${revocations} revocation${revocations === 1 ? "" : "s"} recorded`
-    : flaggedProjects > 0
-      ? `${flaggedProjects} project${flaggedProjects === 1 ? " needs" : "s need"} review`
-      : revocations === 0
-        ? "No recorded flags"
-        : "Review available records";
-  const tone = (revocations != null && revocations > 0) || flaggedProjects > 0
-    ? "watch"
-    : revocations === 0
-      ? "clear"
-      : "neutral";
+  const label = "Regulatory history";
+  const tone = "neutral";
   const parts = [
     `${projects.length} related project${projects.length === 1 ? "" : "s"}`,
     `${reraLinked} RERA-linked`,
@@ -155,7 +143,6 @@ export function builderHealthSummary(portfolio: BuilderPortfolio): BuilderHealth
       reraLinked,
       delayed,
       complaints,
-      revocations,
     },
   };
 }

@@ -1140,19 +1140,10 @@ mod tests {
     }
 
     #[test]
-    fn detects_configured_zero_count_constraints_as_maximums() {
+    fn ignores_removed_zero_complaint_and_revocation_constraints() {
         let constraints =
             detect_hard_constraints("homes with zero RERA complaints and zero builder revocations");
-        assert!(constraints.iter().any(|constraint| {
-            constraint.field == "rera_complaints_count"
-                && constraint.operator == ConstraintOperator::Max
-                && constraint.value == 0.0
-        }));
-        assert!(constraints.iter().any(|constraint| {
-            constraint.field == "rera_builder_revocations"
-                && constraint.operator == ConstraintOperator::Max
-                && constraint.value == 0.0
-        }));
+        assert!(constraints.is_empty());
     }
 
     #[test]
@@ -1212,11 +1203,7 @@ mod tests {
         assert!(labels.contains(&"waterlogging risk"));
         assert!(labels.contains(&"traffic"));
         assert!(numeric_evidence_schema("waterlogging risk").is_some());
-        let builder_trust = numeric_evidence_schema("builder trust")
-            .expect("builder trust should have RERA numeric risk evidence");
-        assert!(builder_trust
-            .fact_keys
-            .contains(&"rera_builder_revocations".to_string()));
+        assert!(numeric_evidence_schema("builder trust").is_none());
         assert!(text_evidence_schema("traffic").is_some());
     }
 

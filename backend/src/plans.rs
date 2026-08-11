@@ -1,4 +1,4 @@
-//! Buyer-facing project plan media (site overview + floor plans).
+//! Buyer-facing project plan media.
 //!
 //! Offline promotion writes:
 //! - preview images under `data/lake/media/previews/rera_plans/{slug}/`
@@ -26,6 +26,8 @@ pub struct ProjectPlansView {
     pub site_overview: Option<SiteOverviewPlan>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub floor_plans: Vec<FloorPlanVariant>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub filed_plan_previews: Vec<FiledPlanPreview>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -73,6 +75,21 @@ pub struct FloorPlanVariant {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FiledPlanPreview {
+    pub artifact_id: String,
+    pub kind: String,
+    pub label: String,
+    pub preview_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thumbnail_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<u32>,
+    pub confidence: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct ProjectPlanFramesRecord {
     provider: String,
     coverage_quality: String,
@@ -86,6 +103,8 @@ struct ProjectPlanFramesRecord {
     site_overview: Option<SiteOverviewPlan>,
     #[serde(default)]
     floor_plans: Vec<FloorPlanVariant>,
+    #[serde(default)]
+    filed_plan_previews: Vec<FiledPlanPreview>,
 }
 
 /// Resolve buyer plan media for a society from the promoted serving bundle.
@@ -216,7 +235,10 @@ fn parse_plans_payload(payload: &str) -> Option<ProjectPlansView> {
     if !record.provider.eq_ignore_ascii_case("rera") {
         return None;
     }
-    if record.site_overview.is_none() && record.floor_plans.is_empty() {
+    if record.site_overview.is_none()
+        && record.floor_plans.is_empty()
+        && record.filed_plan_previews.is_empty()
+    {
         return None;
     }
     Some(record_to_view(record))
@@ -230,6 +252,7 @@ fn record_to_view(record: ProjectPlanFramesRecord) -> ProjectPlansView {
         registration_number: record.registration_number,
         site_overview: record.site_overview,
         floor_plans: record.floor_plans,
+        filed_plan_previews: record.filed_plan_previews,
     }
 }
 
@@ -334,6 +357,7 @@ mod tests {
                     confidence: 0.9,
                 },
             ],
+            filed_plan_previews: Vec::new(),
         };
 
         let matched = matched_floor_plan_for_bhk(&plans, 3).expect("match");
@@ -349,6 +373,7 @@ mod tests {
 
         assert_eq!(view.provider, "RERA");
         assert_eq!(view.floor_plans.len(), 1);
+        assert!(view.filed_plan_previews.is_empty());
         assert_eq!(
             view.floor_plans[0].preview_url,
             "/media/previews/rera_plans/test/type-a.png"
@@ -376,5 +401,32 @@ mod tests {
         .to_string();
 
         assert!(parse_plans_payload(&payload).is_none());
+    }
+
+    #[test]
+    fn parses_filed_plan_previews_without_inventing_unit_floor_plans() {
+        let payload = serde_json::json!({
+            "provider": "RERA",
+            "coverage_quality": "filed_plan_previews",
+            "registration_number": "PRM-1",
+            "society_entity_id": "society:test",
+            "filed_plan_previews": [{
+                "artifact_id": "approved-plan:page-2",
+                "kind": "sanction_plan",
+                "label": "Approved basement plan",
+                "preview_url": "/media/previews/rera_plans/test/page-2.png",
+                "source_url": "https://rera.test/approved-plan",
+                "page": 2,
+                "confidence": 0.85
+            }],
+            "floor_plans": []
+        })
+        .to_string();
+
+        let view = parse_plans_payload(&payload).expect("filed preview should render");
+
+        assert!(view.floor_plans.is_empty());
+        assert_eq!(view.filed_plan_previews.len(), 1);
+        assert_eq!(view.filed_plan_previews[0].kind, "sanction_plan");
     }
 }
