@@ -398,9 +398,13 @@ export type MapWaterContext = {
 export type MapOverlayLine = {
   id: string;
   name: string;
+  label?: string;
+  distance_km?: number;
+  details?: string[];
   kind: string;
   coordinates: [number, number][];
   source_type: string;
+  source_url?: string;
 };
 
 export type MapOverlayPolygon = {
@@ -521,6 +525,7 @@ export type SceneFeature = {
   kind: string;
   label: string;
   shortLabel?: string;
+  details?: string[];
   geometry: SceneGeometry;
   coordinateQuality: SceneCoordinateQuality;
   metrics?: SceneMetrics;

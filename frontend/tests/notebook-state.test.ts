@@ -39,6 +39,7 @@ const {
   showNotebookCompareLabel,
   toggleNotebookCompareId,
   updateNotebookNote,
+  upsertContextualNote,
 } = await import("../src/lib/notebook.ts");
 const {
   SHORTLIST_STORAGE_KEY,
@@ -208,6 +209,44 @@ test("complaint label remains the leading visual label after migration", () => {
   const state = readNotebook();
 
   assert.deepEqual(state.notes[0].labels, ["complaints", "risk", "legal"]);
+});
+
+test("map notes retain property, feature, layer, distance, source, and label context", () => {
+  storage.clear();
+
+  const created = upsertContextualNote({
+    propertyId: "home-1",
+    catalogKey: "nearby:home-1:schools:place-school",
+    title: "Green School",
+    text: "Ask about the morning bus route.",
+    labels: ["schools", "schools_under_1km"],
+    detail: "Schools · 0.8 km · 4.3 rating",
+    source: "Google",
+  });
+
+  assert.ok(created);
+  assert.deepEqual(created.propertyIds, ["home-1"]);
+  assert.equal(created.notes.length, 1);
+  assert.equal(created.notes[0].catalogKey, "nearby:home-1:schools:place-school");
+  assert.equal(created.notes[0].title, "Green School");
+  assert.equal(created.notes[0].selectionText, "Ask about the morning bus route.");
+  assert.equal(created.notes[0].detail, "Schools · 0.8 km · 4.3 rating");
+  assert.equal(created.notes[0].source, "Google");
+  assert.deepEqual(created.notes[0].labels, ["schools", "schools_under_1km"]);
+
+  const updated = upsertContextualNote({
+    propertyId: "home-1",
+    catalogKey: "nearby:home-1:schools:place-school",
+    title: "Green School",
+    text: "Visit during pickup time.",
+    labels: ["schools"],
+    detail: "Schools · 0.8 km",
+    source: "Google",
+  });
+
+  assert.ok(updated);
+  assert.equal(updated.notes.length, 1);
+  assert.equal(updated.notes[0].selectionText, "Visit during pickup time.");
 });
 
 test("slash command blocks append and remain editable", () => {

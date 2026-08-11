@@ -1,5 +1,10 @@
-import { useEffect, useMemo, useRef } from "react";
-import maplibregl, { type GeoJSONSource, type Map as MapLibreMap, type Marker } from "maplibre-gl";
+import { useEffect, useRef } from "react";
+import maplibregl, {
+  type GeoJSONSource,
+  type Map as MapLibreMap,
+  type Marker,
+  type Popup,
+} from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { MapOverlayLine, MapWaterContext } from "../../lib/types.ts";
 import { NOTEBOOK_SAVE_ICON_PATH } from "../notebook/NotebookSaveIcon.tsx";
@@ -19,13 +24,15 @@ export type AroundThisHomeMapProps = {
   metroLines: MapOverlayLine[];
   redFlagLines: MapOverlayLine[];
   showMetroLines: boolean;
-  nearestMetroDistanceKm?: number;
   water?: MapWaterContext | null;
   waterTint: boolean;
+  expanded: boolean;
   pinnedPlaceIds?: string[];
   onSelectPlace: (id: string) => void;
   onSelectCluster: (cluster: PlaceCluster) => void;
+  onSelectRedFlagLine: (id: string) => void;
   onRememberPlace?: (place: NumberedPlace) => void;
+  onToggleExpanded: () => void;
 };
 
 function markerEl(
@@ -57,12 +64,12 @@ function markerEl(
   }
 
   if (kind === "cluster") {
-    button.textContent = String(options.count ?? 0);
+    button.innerHTML = `<span class="nearby-map-marker__visual">${options.count ?? 0}</span>`;
     button.setAttribute("aria-label", `${options.count} places nearby`);
     return button;
   }
 
-  button.innerHTML = markerGlyph(options.layer);
+  button.innerHTML = `<span class="nearby-map-marker__visual">${markerGlyph(options.layer)}</span>`;
   button.setAttribute("aria-label", options.name ?? "Nearby place");
   return button;
 }
@@ -99,8 +106,12 @@ function escapeHtml(value: string): string {
 function placePopupHtml(place: NumberedPlace, pinned: boolean): string {
   const meta = [
     typeof place.distance_km === "number" ? `${place.distance_km.toFixed(1)} km` : null,
-    place.layer !== "red_flags" && typeof place.rating === "number" ? `${place.rating.toFixed(1)} rating` : null,
-    place.layer !== "red_flags" && typeof place.review_count === "number" ? `${place.review_count} reviews` : null,
+    place.layer !== "red_flags" && typeof place.rating === "number"
+      ? `${place.rating.toFixed(1)} rating`
+      : null,
+    place.layer !== "red_flags" && typeof place.review_count === "number"
+      ? `${place.review_count} reviews`
+      : null,
     place.note ?? null,
   ].filter(Boolean).join(" · ");
   return `
@@ -190,6 +201,7 @@ function linesToFeatureCollection(
 }
 
 function redFlagLineLabel(line: MapOverlayLine): string {
+  if (line.label?.trim()) return line.label.trim();
   const normalized = line.name.toLowerCase();
   if (normalized.includes("transmission") || normalized.includes("voltage")) {
     return "Transmission line";
@@ -282,21 +294,23 @@ function ringRadiiForViewport(radiusKm: number): number[] {
   return [2, 5];
 }
 
-/** Strip basemap POI/label noise so the plate reads like a focused activity map. */
-function quietBasemap(map: MapLibreMap) {
+/** Keep buyer geography while removing commercial and house-level label noise. */
+function quietBasemap(map: MapLibreMap, showTransitLabels: boolean) {
   const style = map.getStyle();
   if (!style?.layers) return;
   for (const layer of style.layers) {
     const id = layer.id.toLowerCase();
     if (id.startsWith("oe-")) continue;
-    const isLabel = layer.type === "symbol";
-    const isPoiNoise = /poi|place-|housenumber|transit|rail|airport|golf|pitch/.test(id);
-    if (isLabel || isPoiNoise) {
-      try {
-        map.setLayoutProperty(layer.id, "visibility", "none");
-      } catch {
-        // Some style layers are immutable; ignore.
-      }
+    if (layer.type !== "symbol") continue;
+    const keepsOrientation = /(^|[-_])(place|settlement|city|town|village|suburb|neighbou?rhood|road|street|motorway|trunk|primary|secondary)([-_]|$)/.test(id)
+      || id === "label_other"
+      || id === "highway-name-major";
+    const isTransit = /transit|station|rail/.test(id);
+    const hide = !keepsOrientation && !(showTransitLabels && isTransit);
+    try {
+      map.setLayoutProperty(layer.id, "visibility", hide ? "none" : "visible");
+    } catch {
+      // Some style layers are immutable; ignore.
     }
   }
 }
@@ -452,17 +466,20 @@ function ensureOverlayLayers(map: MapLibreMap) {
       source: "oe-red-flag-lines",
       layout: {
         "symbol-placement": "line",
+        "symbol-spacing": 180,
         "text-field": ["get", "label"],
         "text-font": ["Noto Sans Regular"],
-        "text-size": 11,
+        "text-size": 12,
         "text-letter-spacing": 0,
         "text-padding": 12,
         "text-rotation-alignment": "map",
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
       },
       paint: {
-        "text-color": "#9a2634",
-        "text-halo-color": "rgba(255, 255, 255, 0.94)",
-        "text-halo-width": 1.8,
+        "text-color": "#86212d",
+        "text-halo-color": "rgba(255, 255, 255, 0.98)",
+        "text-halo-width": 2.4,
       },
     });
   }
@@ -489,21 +506,26 @@ export function AroundThisHomeMap({
   metroLines,
   redFlagLines,
   showMetroLines,
-  nearestMetroDistanceKm,
   water,
   waterTint,
+  expanded,
   pinnedPlaceIds = [],
   onSelectPlace,
   onSelectCluster,
+  onSelectRedFlagLine,
   onRememberPlace,
+  onToggleExpanded,
 }: AroundThisHomeMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
+  const popupsRef = useRef<Popup[]>([]);
   const styleReadyRef = useRef(false);
   const viewportCenterRef = useRef(viewport.center);
+  const expandedRef = useRef(expanded);
   const onSelectPlaceRef = useRef(onSelectPlace);
   const onSelectClusterRef = useRef(onSelectCluster);
+  const onSelectRedFlagLineRef = useRef(onSelectRedFlagLine);
   const onRememberPlaceRef = useRef(onRememberPlace);
   const pinnedPlaceIdsRef = useRef(new Set(pinnedPlaceIds));
 
@@ -512,23 +534,19 @@ export function AroundThisHomeMap({
   }, [viewport.center]);
 
   useEffect(() => {
+    expandedRef.current = expanded;
+  }, [expanded]);
+
+  useEffect(() => {
     onSelectPlaceRef.current = onSelectPlace;
     onSelectClusterRef.current = onSelectCluster;
+    onSelectRedFlagLineRef.current = onSelectRedFlagLine;
     onRememberPlaceRef.current = onRememberPlace;
-  }, [onSelectPlace, onSelectCluster, onRememberPlace]);
+  }, [onSelectPlace, onSelectCluster, onSelectRedFlagLine, onRememberPlace]);
 
   useEffect(() => {
     pinnedPlaceIdsRef.current = new Set(pinnedPlaceIds);
   }, [pinnedPlaceIds]);
-
-  const selectedPlace = useMemo(
-    () => places.find((place) => place.id === selectedId) ?? places[0] ?? null,
-    [places, selectedId],
-  );
-  const metroLineLabel = useMemo(
-    () => [...new Set(metroLines.map((line) => line.name).filter(Boolean))].join(" · "),
-    [metroLines],
-  );
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -547,13 +565,24 @@ export function AroundThisHomeMap({
       touchPitch: false,
       keyboard: false,
     });
+    map.addControl(new maplibregl.ScaleControl({ unit: "metric", maxWidth: 90 }), "bottom-left");
     map.addControl(
       new maplibregl.NavigationControl({ showCompass: false, visualizePitch: false }),
       "top-right",
     );
     map.on("load", () => {
-      quietBasemap(map);
+      quietBasemap(map, showMetroLines);
       ensureOverlayLayers(map);
+      map.on("click", "oe-red-flag-lines", (event) => {
+        const lineId = event.features?.[0]?.properties?.id;
+        if (typeof lineId === "string") onSelectRedFlagLineRef.current(lineId);
+      });
+      map.on("mouseenter", "oe-red-flag-lines", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "oe-red-flag-lines", () => {
+        map.getCanvas().style.cursor = "";
+      });
       styleReadyRef.current = true;
       map.resize();
       map.jumpTo({
@@ -561,6 +590,7 @@ export function AroundThisHomeMap({
       });
     });
     map.on("zoomend", () => {
+      if (expandedRef.current) return;
       const anchor = viewportCenterRef.current;
       const center = map.getCenter();
       if (
@@ -593,6 +623,8 @@ export function AroundThisHomeMap({
       if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
       for (const marker of markersRef.current) marker.remove();
       markersRef.current = [];
+      for (const popup of popupsRef.current) popup.remove();
+      popupsRef.current = [];
       map.remove();
       mapRef.current = null;
       styleReadyRef.current = false;
@@ -612,9 +644,40 @@ export function AroundThisHomeMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    if (expanded) {
+      map.dragPan.enable();
+      map.scrollZoom.enable();
+      map.touchZoomRotate.enable();
+      map.keyboard.enable();
+    } else {
+      map.dragPan.disable();
+      map.scrollZoom.disable();
+      map.touchZoomRotate.disable();
+      map.keyboard.disable();
+      map.easeTo({
+        center: [viewport.center.longitude, viewport.center.latitude],
+        zoom: viewport.zoom,
+        duration: 250,
+      });
+    }
+    map.resize();
+  }, [expanded, viewport.center.latitude, viewport.center.longitude, viewport.zoom]);
+
+  useEffect(() => {
+    if (!expanded) return undefined;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") onToggleExpanded();
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [expanded, onToggleExpanded]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
 
     const syncOverlays = () => {
-      quietBasemap(map);
+      quietBasemap(map, showMetroLines);
       ensureOverlayLayers(map);
       setSourceData(
         map,
@@ -656,6 +719,8 @@ export function AroundThisHomeMap({
 
     for (const marker of markersRef.current) marker.remove();
     markersRef.current = [];
+    for (const popup of popupsRef.current) popup.remove();
+    popupsRef.current = [];
 
     const homeMarker = new maplibregl.Marker({
       element: markerEl("home"),
@@ -692,40 +757,31 @@ export function AroundThisHomeMap({
     for (const place of places) {
       if (clusters.some((cluster) => cluster.placeIds.includes(place.id))) continue;
       const element = markerEl("place", {
-        selected: place.id === selectedId || place.id === selectedPlace?.id,
+        selected: place.id === selectedId,
         layer: place.layer,
         name: place.name,
       });
       const popup = new maplibregl.Popup({
         closeButton: false,
         closeOnClick: false,
-        offset: 18,
+        offset: 20,
         className: "nearby-map-popup",
       })
         .setLngLat([place.longitude, place.latitude])
         .setHTML(placePopupHtml(place, pinnedPlaceIdsRef.current.has(place.id)));
+      popupsRef.current.push(popup);
 
       let hideTimer: number | undefined;
       let lastPointerPinAt = 0;
-      const showPopup = () => {
-        window.clearTimeout(hideTimer);
-        popup.setHTML(placePopupHtml(place, pinnedPlaceIdsRef.current.has(place.id)));
-        popup.addTo(map);
-        bindPopupControls();
-      };
-      const keepPopupOpen = () => {
-        window.clearTimeout(hideTimer);
-      };
-      const hidePopup = () => {
+      const keepPreviewOpen = () => window.clearTimeout(hideTimer);
+      const hidePreview = () => {
         hideTimer = window.setTimeout(() => {
           const root = popup.getElement();
           if (
             root?.matches(":hover")
             || root?.contains(document.activeElement)
             || element.matches(":hover")
-          ) {
-            return;
-          }
+          ) return;
           popup.remove();
         }, 360);
       };
@@ -738,17 +794,17 @@ export function AroundThisHomeMap({
         else pinnedPlaceIdsRef.current.delete(place.id);
         onRememberPlaceRef.current?.(place);
         popup.setHTML(placePopupHtml(place, nextPinned));
-        bindPopupControls();
+        bindPreview();
       };
-      const bindPopupControls = () => {
+      const bindPreview = () => {
         const root = popup.getElement();
         if (!root) return;
-        if (root.dataset.oeNotebookBound !== "true") {
-          root.dataset.oeNotebookBound = "true";
-          root.addEventListener("pointerenter", keepPopupOpen);
-          root.addEventListener("pointerleave", hidePopup);
-          root.addEventListener("focusin", keepPopupOpen);
-          root.addEventListener("focusout", hidePopup);
+        if (root.dataset.oePreviewBound !== "true") {
+          root.dataset.oePreviewBound = "true";
+          root.addEventListener("pointerenter", keepPreviewOpen);
+          root.addEventListener("pointerleave", hidePreview);
+          root.addEventListener("focusin", keepPreviewOpen);
+          root.addEventListener("focusout", hidePreview);
         }
         const pin = root.querySelector<HTMLButtonElement>("[data-notebook-pin]");
         if (!pin || pin.dataset.oeNotebookBound === "true") return;
@@ -766,13 +822,17 @@ export function AroundThisHomeMap({
           togglePopupPin(event);
         });
       };
-
-      popup.on("open", bindPopupControls);
-
-      element.addEventListener("pointerenter", showPopup);
-      element.addEventListener("pointerleave", hidePopup);
-      element.addEventListener("focus", showPopup);
-      element.addEventListener("blur", hidePopup);
+      const showPreview = () => {
+        keepPreviewOpen();
+        popup.setHTML(placePopupHtml(place, pinnedPlaceIdsRef.current.has(place.id)));
+        popup.addTo(map);
+        bindPreview();
+      };
+      popup.on("open", bindPreview);
+      element.addEventListener("pointerenter", showPreview);
+      element.addEventListener("pointerleave", hidePreview);
+      element.addEventListener("focus", showPreview);
+      element.addEventListener("blur", hidePreview);
       element.addEventListener("click", (event) => {
         event.stopPropagation();
         onSelectPlaceRef.current(place.id);
@@ -788,29 +848,34 @@ export function AroundThisHomeMap({
     metroLines,
     places,
     selectedId,
-    selectedPlace?.id,
     showMetroLines,
     pinnedPlaceIds,
   ]);
 
+  function returnToHome() {
+    mapRef.current?.easeTo({
+      center: [viewport.center.longitude, viewport.center.latitude],
+      zoom: viewport.zoom,
+      duration: 350,
+    });
+  }
+
   return (
     <div
-      className="nearby-map"
+      className={`nearby-map${expanded ? " is-expanded" : ""}`}
       role="region"
-      aria-label={`Map of places around ${home.name}`}
+      aria-label="Nearby evidence map"
     >
       <div ref={containerRef} className="nearby-map__canvas" role="presentation" />
-      <div className="nearby-map__chrome" aria-hidden="true">
-        <span>{viewport.radiusKm < 1
-          ? `${Math.round(viewport.radiusKm * 1000)} m`
-          : `${viewport.radiusKm.toFixed(viewport.radiusKm < 3 ? 1 : 0)} km`}
-        </span>
-        {typeof nearestMetroDistanceKm === "number" && (
-          <span>Metro · {nearestMetroDistanceKm.toFixed(1)} km</span>
+      <div className="nearby-map__actions">
+        {expanded && (
+          <button type="button" onClick={returnToHome}>
+            Back to home
+          </button>
         )}
-        {showMetroLines && metroLineLabel && (
-          <span>{metroLineLabel}</span>
-        )}
+        <button type="button" onClick={onToggleExpanded}>
+          {expanded ? "Close map" : "Expand map"}
+        </button>
       </div>
     </div>
   );

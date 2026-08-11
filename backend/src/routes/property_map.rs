@@ -282,11 +282,19 @@ pub fn property_map_context_from_surface_scene(
             Some(crate::routes::map_overlays::MapOverlayLine {
                 id: feature.id.clone(),
                 name: feature.label.clone(),
+                label: feature.short_label.clone(),
+                distance_km: feature
+                    .metrics
+                    .as_ref()
+                    .and_then(|metrics| metrics.distance_m)
+                    .map(|distance_m| f64::from(distance_m) / 1000.0),
+                details: feature.details.clone(),
                 kind: feature.kind.clone(),
                 coordinates,
                 source_type: receipt
                     .map(|receipt| receipt.source_type.clone())
                     .unwrap_or_else(|| "OpenEstates".to_string()),
+                source_url: receipt.and_then(|receipt| receipt.source_url.clone()),
             })
         })
         .collect::<Vec<_>>();
@@ -1377,6 +1385,7 @@ mod tests {
                 kind: "place".to_string(),
                 label: "Green School".to_string(),
                 short_label: None,
+                details: Vec::new(),
                 geometry: SceneGeometry::Point {
                     coordinates: [77.751, 12.981],
                 },
@@ -1475,7 +1484,8 @@ mod tests {
                 layer_id: "red_flags".to_string(),
                 kind: "place".to_string(),
                 label: "High voltage transmission line".to_string(),
-                short_label: None,
+                short_label: Some("Transmission line".to_string()),
+                details: vec!["220 kV".to_string()],
                 geometry: SceneGeometry::LineString {
                     coordinates: vec![[77.75, 12.98], [77.752, 12.982]],
                 },
@@ -1528,6 +1538,16 @@ mod tests {
             vec![[77.75, 12.98], [77.752, 12.982]]
         );
         assert_eq!(context.red_flag_lines[0].source_type, "OpenStreetMap");
+        assert_eq!(
+            context.red_flag_lines[0].source_url.as_deref(),
+            Some("https://www.openstreetmap.org/way/1")
+        );
+        assert_eq!(
+            context.red_flag_lines[0].label.as_deref(),
+            Some("Transmission line")
+        );
+        assert_eq!(context.red_flag_lines[0].distance_km, Some(0.094));
+        assert_eq!(context.red_flag_lines[0].details, vec!["220 kV"]);
     }
 
     #[test]

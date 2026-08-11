@@ -154,17 +154,21 @@ test("surface scene payload can drive the around-this-home plate", () => {
   assert.equal(numbered[0].distance_km, 0.7);
 });
 
-test("surface scene line features do not break legacy point projection", () => {
+test("surface scene preserves configured buyer labels for red-flag lines", () => {
   const scene: SurfaceSceneResponse = {
     contractVersion: 1,
-    surfaceId: "flooding",
+    surfaceId: "around_this_home",
     propertyId: "property:sample",
     servingBundleVersion: "bundle-smoke",
     entityRefs: {
       property_entity_id: "property:sample",
       society_entity_id: "society:sample",
       area_entity_id: "area:whitefield",
-      source_entity_ids: ["society:sample", "place:stormwater-drain:one"],
+      source_entity_ids: [
+        "society:sample",
+        "place:transmission-line:one",
+        "place:transmission-line:two",
+      ],
     },
     anchor: {
       entityId: "society:sample",
@@ -179,25 +183,27 @@ test("surface scene line features do not break legacy point projection", () => {
     },
     layers: [
       {
-        id: "drains",
-        label: "Drains",
+        id: "red_flags",
+        label: "Red flags",
         family: "risk",
         renderKind: "line",
         relationClass: "risk_externality",
         enabledByDefault: true,
         rank: 1,
-        availableCount: 1,
-        shownCount: 1,
+        availableCount: 2,
+        shownCount: 2,
         fillState: "filled",
       },
     ],
     features: [
       {
-        id: "flooding:drains:place-stormwater-drain-one",
-        entityId: "place:stormwater-drain:one",
-        layerId: "drains",
+        id: "around_this_home:red_flags:place-transmission-line-one",
+        entityId: "place:transmission-line:one",
+        layerId: "red_flags",
         kind: "line",
-        label: "Varthur Rajakaluve",
+        label: "KPTCL",
+        shortLabel: "Transmission line",
+        details: ["66 kV"],
         geometry: {
           type: "LineString",
           coordinates: [[77.745, 12.94], [77.747, 12.942]],
@@ -206,40 +212,79 @@ test("surface scene line features do not break legacy point projection", () => {
         metrics: { distanceM: 42 },
         display: { tone: "risk", priority: 1 },
         confidence: 0.84,
-        receiptIds: ["receipt:drain"],
+        receiptIds: ["receipt:line-one"],
+      },
+      {
+        id: "around_this_home:red_flags:place-transmission-line-two",
+        entityId: "place:transmission-line:two",
+        layerId: "red_flags",
+        kind: "line",
+        label: "POWERGRID",
+        shortLabel: "Transmission line",
+        details: ["220 kV"],
+        geometry: {
+          type: "LineString",
+          coordinates: [[77.748, 12.943], [77.75, 12.945]],
+        },
+        coordinateQuality: "exact",
+        metrics: { distanceM: 180 },
+        display: { tone: "risk", priority: 1 },
+        confidence: 0.82,
+        receiptIds: ["receipt:line-two"],
       },
     ],
     relations: [
       {
         fromId: "society:sample",
-        toId: "flooding:drains:place-stormwater-drain-one",
+        toId: "around_this_home:red_flags:place-transmission-line-one",
         edgeType: "has_fact",
         relationClass: "risk_externality",
         direct: true,
         distanceM: 42,
         confidence: 0.84,
-        receiptIds: ["receipt:drain"],
+        receiptIds: ["receipt:line-one"],
+      },
+      {
+        fromId: "society:sample",
+        toId: "around_this_home:red_flags:place-transmission-line-two",
+        edgeType: "has_fact",
+        relationClass: "risk_externality",
+        direct: true,
+        distanceM: 180,
+        confidence: 0.82,
+        receiptIds: ["receipt:line-two"],
       },
     ],
     callouts: [],
     receipts: [
       {
-        id: "receipt:drain",
+        id: "receipt:line-one",
         entityId: "society:sample",
-        factKey: "stormwater_drain_nearby",
-        claim: "Varthur Rajakaluve (42 m, severity: high)",
-        sourceType: "OpenCity",
+        factKey: "high_voltage_transmission_line_nearby",
+        claim: "KPTCL (42 m, 66 kV, severity: high)",
+        sourceType: "OpenStreetMap",
+        sourceUrl: "https://www.openstreetmap.org/way/1",
         learnedAt: "2026-07-27T00:00:00Z",
         confidence: 0.84,
         scope: "within 50 m",
+      },
+      {
+        id: "receipt:line-two",
+        entityId: "society:sample",
+        factKey: "high_voltage_transmission_line_nearby",
+        claim: "POWERGRID (180 m, 220 kV, severity: high)",
+        sourceType: "OpenStreetMap",
+        learnedAt: "2026-07-27T00:00:00Z",
+        confidence: 0.82,
+        scope: "within 200 m",
       },
     ],
     fillRate: {
       filledLayers: 1,
       partialLayers: 0,
       emptyLayers: 0,
-      shownFeatures: 1,
-      availableFeatures: 1,
+      shownFeatures: 2,
+      availableFeatures: 2,
       value: 1,
     },
     gaps: [],
@@ -248,6 +293,18 @@ test("surface scene line features do not break legacy point projection", () => {
   const context = propertyMapContextFromSurfaceScene(scene);
   assert.ok(context);
   assert.equal(context.places.length, 0);
+  assert.equal(context.red_flag_lines?.length, 2);
+  assert.equal(context.red_flag_lines?.[0]?.name, "KPTCL");
+  assert.equal(context.red_flag_lines?.[0]?.label, "Transmission line");
+  assert.equal(context.red_flag_lines?.[0]?.distance_km, 0.042);
+  assert.deepEqual(context.red_flag_lines?.[0]?.details, ["66 kV"]);
+  assert.equal(
+    context.red_flag_lines?.[0]?.source_url,
+    "https://www.openstreetmap.org/way/1",
+  );
+  assert.equal(context.red_flag_lines?.[1]?.name, "POWERGRID");
+  assert.equal(context.red_flag_lines?.[1]?.distance_km, 0.18);
+  assert.deepEqual(context.red_flag_lines?.[1]?.details, ["220 kV"]);
   assert.deepEqual(resolveHomeAnchor(context), {
     latitude: 12.94,
     longitude: 77.745,

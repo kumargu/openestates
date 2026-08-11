@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -52,6 +53,8 @@ pub struct UiSurfaceLayerRule {
     pub label: String,
     #[serde(default, rename = "factKeys")]
     pub fact_keys: Vec<String>,
+    #[serde(default, rename = "featureLabels")]
+    pub feature_labels: HashMap<String, String>,
     #[serde(default, rename = "edgeTypes")]
     pub edge_types: Vec<String>,
     #[serde(default, rename = "linkedEntityFactKeys")]
@@ -178,6 +181,20 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                 {
                     return Err(DagConfigError::InvalidConfig(format!(
                         "surface {} layer {} sortPriorityFactKeys contains unknown fact key {}",
+                        surface.id, layer.id, fact_key
+                    )));
+                }
+            }
+            for (fact_key, label) in &layer.feature_labels {
+                if !layer.fact_keys.iter().any(|key| key == fact_key) {
+                    return Err(DagConfigError::InvalidConfig(format!(
+                        "surface {} layer {} featureLabels contains unknown fact key {}",
+                        surface.id, layer.id, fact_key
+                    )));
+                }
+                if label.trim().is_empty() {
+                    return Err(DagConfigError::InvalidConfig(format!(
+                        "surface {} layer {} featureLabels contains a blank label for {}",
                         surface.id, layer.id, fact_key
                     )));
                 }
