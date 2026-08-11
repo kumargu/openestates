@@ -7,6 +7,7 @@ import {
   workspaceFocusedHomeId,
   workspaceNavItems,
   workspacePlanReplacementId,
+  shouldShowWorkspaceSidebar,
 } from "../src/lib/workspaceNav.ts";
 
 test("workspace view detection includes RERA property reports", () => {
@@ -51,23 +52,30 @@ test("property context never invents a current home", () => {
   assert.equal(byView.get("rera")?.available, false);
 });
 
-test("workspace stays active for compare and Buy vs Rent views", () => {
-  for (const view of ["compare", "plan"] as const) {
-    const workspace = workspaceNavItems("home-1", view)
-      .find((item) => item.view === "notebook");
-    assert.equal(workspace?.active, true);
-  }
+test("workspace and compare destinations keep distinct active states", () => {
+  const compareItems = workspaceNavItems("home-1", "compare", {
+    compareIds: ["home-1", "home-2"],
+  });
+  assert.equal(compareItems.find((item) => item.view === "compare")?.active, true);
+  assert.equal(compareItems.find((item) => item.view === "notebook")?.active, false);
+
+  const planItems = workspaceNavItems("home-1", "plan");
+  assert.equal(planItems.find((item) => item.view === "notebook")?.active, true);
+  assert.equal(planItems.find((item) => item.view === "compare")?.active, false);
 });
 
 test("workspace sidebar keeps RERA attached to the focused home", () => {
   const items = workspaceNavItems("home-1", "notebook", {
     mode: "workspace",
     discoveryHref: "/?q=near+metro",
+    compareIds: ["home-1", "home-2"],
   });
-  assert.deepEqual(items.map((item) => item.label), ["Explore", "Workspace", "RERA evidence"]);
+  assert.deepEqual(items.map((item) => item.label), ["Explore", "Workspace", "Compare", "RERA evidence"]);
   assert.equal(items[0]?.to, "/?q=near+metro");
-  assert.equal(items[2]?.to, "/property/home-1/rera");
+  assert.equal(items[2]?.to, "/workspace/compare?ids=home-1%2Chome-2&focus=home-1");
   assert.equal(items[2]?.available, true);
+  assert.equal(items[3]?.to, "/property/home-1/rera");
+  assert.equal(items[3]?.available, true);
   assert.equal(items.some((item) => item.label === "This home"), false);
   assert.equal(items.some((item) => item.label === "Buy vs Rent"), false);
 });
@@ -76,6 +84,15 @@ test("workspace RERA is disabled until a home is selected", () => {
   const rera = workspaceNavItems("", "notebook", { mode: "workspace" })
     .find((item) => item.view === "rera");
   assert.equal(rera?.available, false);
+});
+
+test("landing shows workspace navigation only after a home is saved", () => {
+  assert.equal(shouldShowWorkspaceSidebar("landing", 0), false);
+  assert.equal(shouldShowWorkspaceSidebar("discovery", 0), false);
+  assert.equal(shouldShowWorkspaceSidebar("landing", 1), true);
+  assert.equal(shouldShowWorkspaceSidebar("discovery", 2), true);
+  assert.equal(shouldShowWorkspaceSidebar("property-context", 0), true);
+  assert.equal(shouldShowWorkspaceSidebar("workspace", 0), true);
 });
 
 test("workspace view links preserve explicit property context", () => {

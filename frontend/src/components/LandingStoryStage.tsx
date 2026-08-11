@@ -4,7 +4,7 @@ import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { Link } from "react-router-dom";
 import { ImageWithFallback } from "./ImageWithFallback.tsx";
 import { LivingEvidenceTile } from "./evidence/LivingEvidenceTile.tsx";
-import { getProperty, getPropertyRera, propertyDetailPath } from "../lib/api.ts";
+import { getProperty, propertyDetailPath } from "../lib/api.ts";
 import { availableLayers, layerLabel } from "../lib/nearbyPlateProjection.ts";
 import { filterListableProperties, uniqueSocietiesForDiscovery } from "../lib/property-filters.ts";
 import type {
@@ -12,9 +12,6 @@ import type {
   PropertyCard,
   PropertyDetailResponse,
   PropertyMapContext,
-  ReraComplaintSection,
-  ReraDocumentSection,
-  ReraDossier,
 } from "../lib/types.ts";
 import { useLandingSceneController } from "../hooks/useLandingSceneController.ts";
 import {
@@ -31,7 +28,6 @@ const REVEAL_SEQUENCE_DELAYS = [620, 760] as const;
 const NOTEBOOK_SEQUENCE_DURATIONS = [1_400, 1_100, 2_200] as const;
 const COMPARE_SEQUENCE_DURATIONS = [1_800, 1_500, 2_200] as const;
 const RERA_SEQUENCE_DURATIONS = [1_800, 1_800, 1_800, 2_200] as const;
-const RESOLVE_STORY_DURATION_MS = 5_400;
 const CARD_UNFOLD_TRANSITION = {
   type: "spring",
   visualDuration: 0.55,
@@ -60,12 +56,6 @@ type LandingMapStory = {
   label: string;
   places: MapPlacePin[];
   visual: "places" | "metro" | "lakes" | "water" | "lines";
-};
-
-type ResolveStory = {
-  id: string;
-  query: string;
-  homes: PropertyCard[];
 };
 
 function useDesktopStory(): boolean {
@@ -187,30 +177,6 @@ function usePropertyDetail(propertyId?: string): PropertyDetailResponse | undefi
   }, [propertyId]);
 
   return loaded && loaded.propertyId === propertyId ? loaded.detail : undefined;
-}
-
-function usePropertyReraDossier(propertyId?: string): ReraDossier | undefined {
-  const [loaded, setLoaded] = useState<{
-    propertyId: string;
-    dossier?: ReraDossier;
-  }>();
-
-  useEffect(() => {
-    if (!propertyId) return undefined;
-    let cancelled = false;
-    getPropertyRera(propertyId)
-      .then((response) => {
-        if (!cancelled) setLoaded({ propertyId, dossier: response });
-      })
-      .catch(() => {
-        if (!cancelled) setLoaded({ propertyId, dossier: undefined });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [propertyId]);
-
-  return loaded && loaded.propertyId === propertyId ? loaded.dossier : undefined;
 }
 
 function buyerFacingDetail(value: string): string {
@@ -348,32 +314,6 @@ function storyHomesForResolve(properties: PropertyCard[]): PropertyCard[] {
     .slice(0, 3);
 }
 
-function resolveStories(properties: PropertyCard[]): ResolveStory[] {
-  const candidates: ResolveStory[] = [
-    {
-      id: "family-budget",
-      query: RESOLVE_QUERY,
-      homes: storyHomesForResolve(properties),
-    },
-    ...FEATURED_LENSES
-      .filter((lens) => lens.id !== "family")
-      .map((lens) => ({
-        id: lens.id,
-        query: lens.query,
-        homes: rankHomesForLens(properties, lens.id).slice(0, 3),
-      })),
-  ];
-  const seenResults = new Set<string>();
-
-  return candidates.filter((story) => {
-    if (story.homes.length === 0) return false;
-    const signature = story.homes.map((home) => home.id).join("|");
-    if (seenResults.has(signature)) return false;
-    seenResults.add(signature);
-    return true;
-  });
-}
-
 function querySegments(query: string): string[] {
   const words = query.split(/\s+/).filter(Boolean);
   const segmentSize = Math.max(1, Math.ceil(words.length / 3));
@@ -447,15 +387,17 @@ function ResolveCanvas({
       data-selection-visible={sequence.selectionVisible}
       data-proof-visible={sequence.proofVisible}
     >
-      <div className="landing-resolve__composer">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="10.8" cy="10.8" r="6.2" />
-          <path d="m15.4 15.4 4.1 4.1" />
-        </svg>
-        <p className="landing-resolve__query">
-          {querySegments(query).map((segment) => <span key={segment}>{segment} </span>)}
+      <div className="landing-resolve__world" aria-hidden="true">
+        <span className="landing-resolve__orbit landing-resolve__orbit--one" />
+        <span className="landing-resolve__orbit landing-resolve__orbit--two" />
+        <span className="landing-resolve__node landing-resolve__node--one" />
+        <span className="landing-resolve__node landing-resolve__node--two" />
+        <span className="landing-resolve__node landing-resolve__node--three" />
+      </div>
+      <div className="landing-resolve__intent">
+        <p className="landing-resolve__query" aria-label={query}>
+          {querySegments(query).map((segment) => <span key={segment}>{segment}</span>)}
         </p>
-        <i aria-hidden="true">→</i>
       </div>
       <div className="landing-resolve__homes">
         {homes.map((property, index) => {
@@ -965,14 +907,12 @@ function formatRecordDate(value?: string): string | undefined {
 function ReraCanvas({
   active,
   detail,
-  dossier,
   paused,
   property,
   reducedMotion,
 }: {
   active: boolean;
   detail?: PropertyDetailResponse;
-  dossier?: ReraDossier;
   paused: boolean;
   property: PropertyCard;
   reducedMotion: boolean;
@@ -986,16 +926,13 @@ function ReraCanvas({
   const summary = property.decision_check_summary;
   const rera = detail?.rera;
   const portfolio = detail?.builder_portfolio;
-  const activeDossier = dossier ?? detail?.rera_dossier;
-  const registration = activeDossier?.source.registration_number
-    ?? rera?.registration_number
-    ?? summary?.registrationNumberCompact;
-  const status = activeDossier?.source.status ?? rera?.status;
+  const registration = rera?.registration_number ?? summary?.registrationNumberCompact;
+  const status = rera?.status;
   const documentFallback = summary?.groups
     ?.find((group) => group.id === "documents")
     ?.labels.slice(0, 3)
     .map((label) => ({ group: label.key, label: label.label, count: 1 })) ?? [];
-  const summaryCards = (activeDossier?.summary_cards ?? [])
+  const summaryCards = (rera?.decision_cards ?? [])
     .filter((card) => isKnownText(card.title) || isKnownText(card.detail))
     .filter((card) => !(isKnownText(registration) && /rera registered|registration/i.test(card.title)))
     .slice(0, 3);
@@ -1007,30 +944,23 @@ function ReraCanvas({
       detail: label.valueText ?? "",
       tone: label.severity,
     }));
-  const documentSections: Array<Pick<ReraDocumentSection, "group" | "label" | "count">> = (() => {
-    const sections = (activeDossier?.document_sections ?? [])
-      .filter((section) => (section.count ?? section.items?.length ?? 0) > 0)
-      .slice(0, 4)
-      .map((section) => ({
-        group: section.group,
-        label: section.label,
-        count: section.count ?? section.items?.length ?? 0,
-      }));
-    return sections.length > 0 ? sections : documentFallback;
-  })();
-  const complaintSections: Array<Pick<ReraComplaintSection, "scope" | "label" | "total" | "open" | "top_themes">> =
-    (activeDossier?.complaint_sections ?? [])
-      .filter((section) => section.total > 0 || section.open > 0 || section.disposed > 0)
-      .slice(0, 2);
-  const timeline = activeDossier?.timeline ?? {
+  const documentSections = documentFallback;
+  const complaintSections = (rera?.complaint_summaries ?? [])
+    .map((section) => ({
+      scope: section.scope,
+      label: section.scope === "promoter" ? "Promoter complaints" : "Project complaints",
+      total: section.total_count_from_tab_label ?? section.row_count_parsed,
+      open: section.open_count,
+      disposed: section.disposed_count,
+    }))
+    .filter((section) => section.total > 0 || section.open > 0 || section.disposed > 0)
+    .slice(0, 2);
+  const timeline = {
     start_date: rera?.start_date,
     original_completion_date: rera?.original_completion_date,
     completion_date: rera?.completion_date,
     delay_months: rera?.delay_months,
   };
-  const legalChecks = (activeDossier?.legal_checks ?? [])
-    .filter((check) => isKnownText(check.value))
-    .slice(0, 3);
   const builderProjects = (portfolio?.projects ?? []).slice(0, 3);
   const phaseLabels = ["At a glance", "Documents", "Builder record", "Schedule"];
   const sceneTransition = {
@@ -1170,16 +1100,6 @@ function ReraCanvas({
                   <p className="is-attention"><span>Movement</span><strong>{timeline?.delay_months} months</strong></p>
                 ) : null}
               </div>
-              {legalChecks.length > 0 ? (
-                <div className="landing-record__legal">
-                  {legalChecks.map((check) => (
-                    <article key={check.key}>
-                      <span>{check.label}</span>
-                      <strong>{check.value}</strong>
-                    </article>
-                  ))}
-                </div>
-              ) : null}
             </motion.section>
           )}
         </AnimatePresence>
@@ -1278,26 +1198,11 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
   const isDesktopStory = useDesktopStory();
   const controller = useLandingSceneController(STORY_SCENE_IDS, isDesktopStory);
   const storyRef = useLandingStoryMotion(controller.isReducedMotion);
-  const stories = resolveStories(uniqueHomes);
-  const resolveStoryDurations = Array.from(
-    { length: stories.length },
-    () => RESOLVE_STORY_DURATION_MS,
-  );
-  const resolveStoryIndex = useLandingLoopSequence({
-    active: controller.activeSceneId === "resolve",
-    durations: resolveStoryDurations,
-    paused: controller.isPaused("resolve"),
-    reducedMotion: controller.isReducedMotion,
-  });
-  const resolveStory = stories.length > 0
-    ? stories[resolveStoryIndex % stories.length]
-    : undefined;
-  const resolveHomes = stories[0]?.homes ?? [];
+  const resolveHomes = storyHomesForResolve(uniqueHomes);
   const revealHome = resolveHomes[0] ?? selectEvidenceHome(uniqueHomes);
   const revealDetail = usePropertyDetail(revealHome?.id);
-  const revealRera = usePropertyReraDossier(revealHome?.id);
 
-  if (!revealHome || !resolveStory) return null;
+  if (!revealHome || resolveHomes.length === 0) return null;
 
   const rankedStoryHomes = rankEvidenceHomes(uniqueHomes);
   const notebookHome = resolveHomes.find((home) => home.id !== revealHome.id)
@@ -1317,17 +1222,17 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
       title: "Start with the life you want",
       description: "A natural-language search becomes a small, ranked set of homes with reasons attached.",
       action: (
-        <button type="button" onClick={() => onSearch(resolveStory.query)}>
+        <button type="button" onClick={() => onSearch(RESOLVE_QUERY)}>
           Try this search <span aria-hidden="true">→</span>
         </button>
       ),
       canvas: (
         <ResolveCanvas
-          key={`${resolveStory.id}-${resolveIsActive ? "active" : "rest"}-${controller.isReducedMotion ? "reduced" : "motion"}`}
+          key={`${resolveIsActive ? "active" : "rest"}-${controller.isReducedMotion ? "reduced" : "motion"}`}
           active={resolveIsActive}
-          homes={resolveStory.homes}
+          homes={resolveHomes}
           paused={controller.isPaused("resolve")}
-          query={resolveStory.query}
+          query={RESOLVE_QUERY}
           reducedMotion={controller.isReducedMotion}
         />
       ),
@@ -1404,7 +1309,6 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
         <ReraCanvas
           active={controller.activeSceneId === "record"}
           detail={revealDetail}
-          dossier={revealRera}
           paused={controller.isPaused("record")}
           property={revealHome}
           reducedMotion={controller.isReducedMotion}

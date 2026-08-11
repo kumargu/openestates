@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../../hooks/useNotebook.ts";
 import { LabelPill } from "../ui/LabelPill.tsx";
 import { floorPlanForBhk, type FloorPlanComparePlan } from "../../lib/floor-plan-compare.ts";
+import { buildTaggedMatrixRows } from "../../lib/comparisonMatrix.ts";
 import {
   labelDef,
   labelsForNearbyPlace,
@@ -61,11 +62,6 @@ type CompareEvidence = {
   labels: NotebookLabelId[];
   primaryLabel: NotebookLabelId;
   group: NoteGroupId;
-};
-
-type CompareEvidenceCluster = {
-  label: NotebookLabelId;
-  items: CompareEvidence[];
 };
 
 type NoteGroupId =
@@ -211,17 +207,12 @@ function projectScale(listings: PropertyCard[]): string | null {
     (listing) => listing.society_land_acres ?? null,
     (value) => `${value.toFixed(1).replace(/\.0$/, "")} acres`,
   );
-  const density = numericRange(
-    listings,
-    (listing) => listing.units_per_acre ?? null,
-    (value) => `${Math.round(value)} homes / acre`,
-  );
   const openSpace = numericRange(
     listings,
     (listing) => listing.open_space_pct ?? null,
     (value) => `${value.toFixed(1).replace(/\.0$/, "")}% open`,
   );
-  const parts = [land, density, openSpace].filter(Boolean);
+  const parts = [land, openSpace].filter(Boolean);
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
@@ -357,18 +348,9 @@ function normalizeCompareEvidences(items: CompareItem[], hiddenLabels: Set<Noteb
   return [...byKey.values()].sort(compareEvidence);
 }
 
-function compareEvidenceClusters(items: CompareEvidence[]): CompareEvidenceCluster[] {
-  const grouped = new Map<NotebookLabelId, CompareEvidence[]>();
-  for (const item of [...items].sort(compareEvidence)) {
-    const label = item.primaryLabel;
-    grouped.set(label, [...(grouped.get(label) ?? []), item]);
-  }
-  return [...grouped.entries()]
-    .sort((left, right) =>
-      compareEvidence(left[1][0], right[1][0])
-      || labelDef(left[0]).title.localeCompare(labelDef(right[0]).title)
-    )
-    .map(([label, groupItems]) => ({ label, items: groupItems }));
+function compareEvidenceLabels(left: NotebookLabelId, right: NotebookLabelId): number {
+  return labelDef(left).title.localeCompare(labelDef(right).title, "en-IN")
+    || left.localeCompare(right, "en-IN");
 }
 
 function statusClassName(value: string): string {
@@ -481,45 +463,22 @@ function CompactCompareItem({
   );
 }
 
-function GroupedCompareCell({
+function CompareTagCell({
   evidences,
-  onHideLabel,
 }: {
   evidences: CompareEvidence[];
-  onHideLabel: (label: NotebookLabelId) => void;
 }) {
   if (evidences.length === 0) {
     return <div className="compare-theme__cell is-empty" />;
   }
 
-  const clusters = compareEvidenceClusters(evidences);
   return (
-    <div className="compare-theme__cell compare-theme__cell--grouped">
-      {clusters.map((cluster) => (
-        <div key={cluster.label} className="compare-item-cluster">
-          <div className="compare-item-cluster__head">
-            <LabelPill
-              labelId={cluster.label}
-              surface="compare"
-              showIcon
-              className="compare-item-cluster__label compare-label-pill--readonly"
-            />
-            <button
-              type="button"
-              className="compare-label-hide"
-              aria-label={`Hide ${labelDef(cluster.label).title} from compare`}
-              onClick={() => onHideLabel(cluster.label)}
-            >
-              Hide
-            </button>
-          </div>
-          <div className="compare-compact-items">
-            {cluster.items.map((item) => (
-              <CompactCompareItem key={item.id} item={item} />
-            ))}
-          </div>
-        </div>
-      ))}
+    <div className="compare-theme__cell">
+      <div className="compare-compact-items">
+        {evidences.map((item) => (
+          <CompactCompareItem key={item.id} item={item} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -720,11 +679,26 @@ export function SocietyComparisonMatrix({
         };
       })
       .sort((left, right) =>
-        left.section.localeCompare(right.section)
+        NOTE_SECTION_ORDER[left.section] - NOTE_SECTION_ORDER[right.section]
         || left.rank - right.rank
         || left.label.localeCompare(right.label)
       );
   }, [columnEvidences, columns]);
+  const tagRowsByGroup = useMemo(
+    () => new Map(noteRows.map((row) => [
+      row.id,
+      buildTaggedMatrixRows(
+        columns.map((column) => ({
+          key: column.key,
+          items: columnEvidences.get(column.key) ?? [],
+        })),
+        row.id,
+        compareEvidenceLabels,
+        compareEvidence,
+      ),
+    ])),
+    [columnEvidences, columns, noteRows],
+  );
 
   function setBhk(bhk: number) {
     const next = new URLSearchParams(searchParams);
@@ -797,19 +771,35 @@ export function SocietyComparisonMatrix({
                   <header className="compare-theme__head">
                     <strong>{row.label}</strong>
                   </header>
-                  <div className={`compare-topic-columns compare-topic-columns--homes-${columns.length}`}>
-                    {columns.map((column) => {
-                      const matching = (columnEvidences.get(column.key) ?? []).filter(
-                        (evidence) => evidence.group === row.id,
-                      );
-                      return (
-                        <GroupedCompareCell
-                          key={column.key}
-                          evidences={matching}
-                          onHideLabel={hideCompareLabel}
-                        />
-                      );
-                    })}
+                  <div className="compare-tag-matrix">
+                    {(tagRowsByGroup.get(row.id) ?? []).map((tagRow) => (
+                      <section key={tagRow.tag} className="compare-tag-row">
+                        <header className="compare-tag-row__head">
+                          <LabelPill
+                            labelId={tagRow.tag}
+                            surface="compare"
+                            showIcon
+                            className="compare-tag-row__label compare-label-pill--readonly"
+                          />
+                          <button
+                            type="button"
+                            className="compare-label-hide"
+                            aria-label={`Hide ${labelDef(tagRow.tag).title} from compare`}
+                            onClick={() => hideCompareLabel(tagRow.tag)}
+                          >
+                            Hide
+                          </button>
+                        </header>
+                        <div className={`compare-topic-columns compare-topic-columns--homes-${columns.length}`}>
+                          {tagRow.cells.map((cell) => (
+                            <CompareTagCell
+                              key={cell.columnKey}
+                              evidences={cell.items}
+                            />
+                          ))}
+                        </div>
+                      </section>
+                    ))}
                   </div>
                 </article>
               ))}

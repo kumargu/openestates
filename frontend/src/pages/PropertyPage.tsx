@@ -8,8 +8,6 @@ import {
 import { Helmet } from "react-helmet-async";
 import type {
   DetailSignal,
-  DecisionCheckSummary,
-  DecisionLabel,
   EvidenceSection,
   ExternalReviewCard,
   PropertyCard,
@@ -33,8 +31,6 @@ import {
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
-import { NotebookPinButton } from "../components/notebook/NotebookPinButton.tsx";
-import { LabelPill, type LabelPillTone } from "../components/ui/LabelPill.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import {
   derivePriceBands,
@@ -73,16 +69,6 @@ function compactLifecycleLabel(value: string): string {
     .trim();
   if (!normalized) return value;
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-}
-
-function displayName(value: string): string {
-  const keepUpper = new Set(["BHK", "ITPL", "JP", "KR"]);
-  return value
-    .replace(/^(\d+(?:\.\d+)?)\s+BHK\s+(?:in|at)\s+/i, "$1 BHK ")
-    .replace(/\b[A-Z][A-Z0-9&.'-]*\b/g, (word) => {
-      if (keepUpper.has(word) || /\d/.test(word)) return word;
-      return word.charAt(0) + word.slice(1).toLowerCase();
-    });
 }
 
 function truncateCopy(value: string, limit = 220): string {
@@ -579,143 +565,6 @@ function PropertyPhotoMosaic({
   );
 }
 
-function PopupActionButton({
-  label,
-  caption,
-  tone,
-  onClick,
-}: {
-  label: string;
-  caption?: string;
-  tone?: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={`property-popup-action${tone ? ` property-popup-action--${tone}` : ""}`}
-      onClick={onClick}
-      aria-haspopup="dialog"
-    >
-      <span>
-        <strong>{label}</strong>
-        {caption && <small>{caption}</small>}
-      </span>
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        aria-hidden="true"
-      >
-        <path d="m9 18 6-6-6-6" />
-      </svg>
-    </button>
-  );
-}
-
-function safeNotebookLabels(label: DecisionLabel): string[] {
-  const labels = label.notebookLabels?.filter(Boolean) ?? [];
-  return labels.length > 0 ? labels.slice(0, 4) : [label.key];
-}
-
-function projectCheckTags(summary: DecisionCheckSummary): DecisionLabel[] {
-  const seen = new Set<string>();
-  const labels = (summary.groups ?? [])
-    .flatMap((group) => group.labels)
-    .concat(summary.primaryLabels ?? []);
-  return labels.filter((label) => {
-    if (seen.has(label.key)) return false;
-    seen.add(label.key);
-    return true;
-  });
-}
-
-function decisionTone(severity: DecisionLabel["severity"]): LabelPillTone {
-  if (severity === "positive") return "positive";
-  if (severity === "caution") return "caution";
-  if (severity === "risk") return "risk";
-  return "info";
-}
-
-function ProjectCheckTag({
-  label,
-  propertyId,
-}: {
-  label: DecisionLabel;
-  propertyId: string;
-}) {
-  return (
-    <LabelPill
-      label={label.label}
-      surface="fact"
-      tone={decisionTone(label.severity)}
-      className="property-check-tag"
-    >
-      <NotebookPinButton
-        propertyId={propertyId}
-        catalogKey={`rera:${propertyId}:label:${label.key}`}
-        title={label.label}
-        labels={safeNotebookLabels(label)}
-        detail={label.valueText ?? label.label}
-        source="RERA"
-        className="property-check-tag__pin"
-      />
-    </LabelPill>
-  );
-}
-
-function ProjectChecksContent({
-  summary,
-  propertyId,
-}: {
-  summary: DecisionCheckSummary;
-  propertyId: string;
-}) {
-  const tags = projectCheckTags(summary);
-  return (
-    <div className="property-checks">
-      <div className="property-checks__registry">
-        {summary.registrationNumber && (
-          <div className="property-checks__registry-number">
-            <button
-              type="button"
-              onClick={() =>
-                void navigator.clipboard?.writeText(
-                  summary.registrationNumber ?? "",
-                )
-              }
-              title="Copy registration number"
-            >
-              {summary.registrationNumber}
-            </button>
-            <NotebookPinButton
-              propertyId={propertyId}
-              catalogKey={`rera:${propertyId}:registration:${summary.registrationNumber}`}
-              title={`RERA ${summary.registrationNumber}`}
-              labels={["legal"]}
-              detail={summary.registrationNumber}
-              source="RERA"
-              className="property-checks__registry-pin"
-            />
-          </div>
-        )}
-      </div>
-      <div className="property-check-tags" aria-label="RERA facts">
-        {tags.map((label) => (
-          <ProjectCheckTag
-            key={label.key}
-            label={label}
-            propertyId={propertyId}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function GoogleReviewsSection({
   data,
   reviewSections,
@@ -811,7 +660,7 @@ function NearbyHomeCard({
     images: property.images,
   });
   const image = propertySceneImageAt(images, sceneIndex, property.hero_image);
-  const title = displayName(property.title);
+  const title = property.title.trim();
   const note = `${property.area} · ${property.bhk} BHK`;
 
   return (
@@ -1043,7 +892,6 @@ function PropertyPageBody({
   const [status, setStatus] = useState<
     "loading" | "error" | "not_found" | "ok"
   >("loading");
-  const [projectChecksOpen, setProjectChecksOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1281,9 +1129,10 @@ function PropertyPageBody({
     ?.split("·")[0]
     ?.trim();
   const reviewsSections = reviewEvidenceSections(detailEvidenceSections);
-  const displayTitle = displayName(p.title);
-  const projectChecks = data.decision_check_summary;
-  const showProjectChecks = Boolean(projectChecks);
+  const displayTitle = p.title.trim();
+  const reraReport = data.rera_report_ref.availability === "unavailable"
+    ? undefined
+    : data.rera_report_ref;
 
   function handleAreaSelect(area: string) {
     navigate(`/?q=${encodeURIComponent(area)}`);
@@ -1364,7 +1213,7 @@ function PropertyPageBody({
           )}
         </section>
 
-        {(showApproachTrail || showProjectChecks) && (
+        {(showApproachTrail || reraReport) && (
           <section className="property-popup-row" aria-label="Home details">
             {showApproachTrail && (
               <ApproachRoadTrail
@@ -1373,12 +1222,21 @@ function PropertyPageBody({
                 variant="compact"
               />
             )}
-            {projectChecks && (
-              <PopupActionButton
-                label={projectChecks.tileLabel}
-                tone={projectChecks.tone}
-                onClick={() => setProjectChecksOpen(true)}
-              />
+            {reraReport && (
+              <Link className="property-popup-action" to={reraReport.href}>
+                <span><strong>RERA report</strong></span>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </Link>
             )}
           </section>
         )}
@@ -1397,11 +1255,6 @@ function PropertyPageBody({
         />
       </main>
 
-      {projectChecksOpen && projectChecks && (
-        <CleanDialog title="RERA" onClose={() => setProjectChecksOpen(false)}>
-          <ProjectChecksContent summary={projectChecks} propertyId={p.id} />
-        </CleanDialog>
-      )}
     </div>
   );
 }

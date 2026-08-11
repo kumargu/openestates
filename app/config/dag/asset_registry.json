@@ -3,6 +3,46 @@
   "description": "OpenEstates asset DAG. Exported from embedded registry; edit via DAG config.",
   "assets": [
     {
+      "id": "rera_receipts",
+      "stage": "raw",
+      "description": "Immutable, content-addressed K-RERA listing, detail, QPR, and document receipts.",
+      "dependencies": [],
+      "refresh": "manual",
+      "cost_tier": "free",
+      "trust_tier": "root",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
+      "id": "rera_source_records",
+      "stage": "silver",
+      "description": "Typed, source-preserving K-RERA records with receipt-level lineage.",
+      "dependencies": [
+        "rera_receipts"
+      ],
+      "refresh": "manual",
+      "cost_tier": "free",
+      "trust_tier": "root",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
+      "id": "rera_claims",
+      "stage": "gold",
+      "description": "Scoped RERA source assertions with deterministic receipt lineage.",
+      "dependencies": [
+        "rera_source_records"
+      ],
+      "refresh": "manual",
+      "cost_tier": "free",
+      "trust_tier": "derived",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
       "id": "rera_registry_monthly",
       "stage": "raw",
       "description": "Monthly RERA registry snapshot for canonical project discovery.",
@@ -407,7 +447,15 @@
       "stage": "serving",
       "description": "Local request-path bundle for KG facts, schema config, aliases, and indexes.",
       "dependencies": [
-        "kg_society_view"
+        "kg_society_view",
+        "rera_receipts",
+        "rera_source_records",
+        "rera_claims"
+      ],
+      "optional_dependencies": [
+        "rera_receipts",
+        "rera_source_records",
+        "rera_claims"
       ],
       "refresh": "on_change",
       "cost_tier": "free",

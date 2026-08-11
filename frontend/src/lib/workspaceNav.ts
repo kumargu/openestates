@@ -1,9 +1,11 @@
+import type { NavigationMode } from "./navigationContext.ts";
+
 export type WorkspaceView = "browse" | "home" | "notebook" | "compare" | "rera" | "plan";
 
 export type WorkspaceNavItem = {
   view: WorkspaceView;
   label: string;
-  icon: "browse" | "listing" | "notebook" | "rera";
+  icon: "browse" | "listing" | "notebook" | "compare" | "rera";
   to: string;
   active: boolean;
   /** False when the item needs a focused shortlist home and none is set. */
@@ -24,14 +26,17 @@ export function workspaceNavItems(
   focusedId: string,
   activeView: WorkspaceView,
   options: {
-    mode?: "property-context" | "workspace";
+    mode?: "discovery" | "property-context" | "workspace";
     discoveryHref?: string;
+    compareIds?: string[];
   } = {},
 ): WorkspaceNavItem[] {
   const encodedId = focusedId ? encodeURIComponent(focusedId) : "";
   const hasFocus = Boolean(encodedId);
   const detailHref = hasFocus ? `/property/${encodedId}` : "/";
   const reraHref = hasFocus ? `/property/${encodedId}/rera` : "/";
+  const compareIds = options.compareIds ?? [];
+  const compareHref = workspaceCompareHref(compareIds, focusedId);
 
   const mode = options.mode ?? "workspace";
   if (mode === "property-context") {
@@ -60,13 +65,22 @@ export function workspaceNavItems(
   return [
     { view: "browse" as const, label: "Explore", icon: "browse" as const, to: options.discoveryHref ?? "/", available: true },
     { view: "notebook" as const, label: "Workspace", icon: "notebook" as const, to: "/workspace", available: true },
+    { view: "compare" as const, label: "Compare", icon: "compare" as const, to: compareHref, available: compareIds.length > 0 },
     { view: "rera" as const, label: "RERA evidence", icon: "rera" as const, to: reraHref, available: hasFocus },
   ].map((item) => ({
     ...item,
     active: item.view === "notebook"
-      ? ["notebook", "compare", "plan"].includes(activeView)
+      ? ["notebook", "plan"].includes(activeView)
       : item.view === activeView,
   }));
+}
+
+export function shouldShowWorkspaceSidebar(
+  mode: NavigationMode,
+  savedHomeCount: number,
+): boolean {
+  if (mode === "property-context" || mode === "workspace") return true;
+  return savedHomeCount > 0;
 }
 
 export function workspaceCompareHref(ids: string[], focusId?: string): string {

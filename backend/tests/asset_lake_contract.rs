@@ -6,7 +6,7 @@ use arrow::record_batch::RecordBatch;
 use backend::assets::{
     default_openestates_registry, ArtifactRef, AssetId, AssetMaterializationStore, AssetPartition,
     AssetPathBuilder, AssetPlanner, AssetStage, CurrentAssetPointer, MaterializationRecord,
-    PlanReason, SourceWatermark,
+    PlanReason, RefreshCadence, SourceWatermark,
 };
 use backend::lake::{LakeKey, LakeStore};
 use chrono::{TimeZone, Utc};
@@ -181,12 +181,16 @@ async fn mock_rera_to_serving_bundle_materializes_with_stable_local_keys() {
 }
 
 #[tokio::test]
-async fn planner_returns_missing_default_assets_in_dependency_order() {
+async fn planner_returns_missing_automatic_assets_in_dependency_order() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let materializations = AssetMaterializationStore::new(lake);
     let registry = default_openestates_registry();
-    let expected_count = registry.definitions().len();
+    let expected_count = registry
+        .definitions()
+        .iter()
+        .filter(|definition| definition.refresh != RefreshCadence::Manual)
+        .count();
     let planner = AssetPlanner::new(registry, materializations);
 
     let partition =
@@ -197,6 +201,11 @@ async fn planner_returns_missing_default_assets_in_dependency_order() {
         .unwrap();
 
     assert_eq!(plan.len(), expected_count);
+    for manual_asset in ["rera_receipts", "rera_source_records", "rera_claims"] {
+        assert!(plan
+            .iter()
+            .all(|asset| asset.asset_id != AssetId::new(manual_asset).unwrap()));
+    }
     assert!(plan
         .iter()
         .position(|asset| asset.asset_id == AssetId::new("rera_registry_monthly").unwrap())

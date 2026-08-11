@@ -737,9 +737,9 @@ fn append_project_facts(
             run_id,
             "rera_registered",
             FactValue::Bool(true),
-            "RERA Registered: {value}",
-            &["rera verified", "legally verified", "verified project"],
-            Some(("TextMatch", 3.0)),
+            "RERA registration record: {value}",
+            &["rera registration", "rera number"],
+            None,
             facts,
             annotations,
         )?;
@@ -815,9 +815,9 @@ fn append_project_facts(
             run_id,
             "rera_land_litigation",
             FactValue::Bool(value),
-            "RERA land litigation: {value}",
-            &["legal risk", "land litigation"],
-            Some(("LowerBetter", 3.0)),
+            "Promoter land-litigation declaration: {value}",
+            &["land litigation declaration"],
+            None,
             facts,
             annotations,
         )?;
@@ -853,7 +853,9 @@ fn push_fact(
         fact_key: fact_key.to_string(),
         value_type: value_type.to_string(),
         value_json,
-        confidence: 1.0,
+        // The registry establishes that the portal recorded this field, not
+        // independent truth for promoter-filed declarations.
+        confidence: 0.85,
         source_type: "Rera".to_string(),
         source_url: Some(project.source_url.clone()),
         model: None,
@@ -1475,6 +1477,34 @@ mod tests {
             .mappings
             .iter()
             .all(|mapping| mapping.alias_entity_id.is_none()));
+    }
+
+    #[test]
+    fn listing_facts_do_not_turn_registry_rows_into_safety_claims() {
+        let fetched_at = Utc.with_ymd_and_hms(2026, 8, 1, 10, 0, 0).unwrap();
+        let project = test_project("ACK-1", "PRM-1", "Evidence Project", fetched_at);
+        let mut facts = Vec::new();
+        let mut annotations = Vec::new();
+
+        append_project_facts(
+            &project,
+            "society:evidence-project",
+            &MaterializationId::new(),
+            &mut facts,
+            &mut annotations,
+        )
+        .unwrap();
+
+        let registration = annotations
+            .iter()
+            .find(|annotation| annotation.fact_key == "rera_registered")
+            .unwrap();
+        assert_eq!(
+            registration.answers_preferences_json,
+            r#"["rera registration","rera number"]"#
+        );
+        assert!(registration.scoring_direction.is_none());
+        assert!(facts.iter().all(|fact| fact.confidence < 1.0));
     }
 
     fn test_fact(entity_id: &str, fact_key: &str, learned_at: DateTime<Utc>) -> SkillFactRecord {

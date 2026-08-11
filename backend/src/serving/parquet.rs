@@ -20,7 +20,8 @@ use crate::parquet_data::{
 };
 
 use super::{
-    ServingEdgeRecord, ServingEntityRecord, ServingFactRecord, ServingSearchMetadataRecord,
+    ServingEdgeRecord, ServingEntityRecord, ServingFactRecord, ServingReraEvidenceRecord,
+    ServingSearchMetadataRecord,
 };
 
 pub fn write_entities_parquet(
@@ -264,6 +265,55 @@ pub fn read_search_metadata_parquet(
     Ok(records)
 }
 
+pub fn write_rera_evidence_parquet(
+    records: &[ServingReraEvidenceRecord],
+) -> Result<Vec<u8>, ParquetWriteError> {
+    let evidence_json = records
+        .iter()
+        .map(serde_json::to_string)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(ParquetWriteError::Json)?;
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("society_id", DataType::Utf8, false),
+        Field::new("evidence_json", DataType::Utf8, false),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema,
+        vec![
+            string_array(records.iter().map(|record| record.society_id.clone())),
+            string_array(evidence_json.into_iter()),
+        ],
+    )
+    .map_err(ParquetWriteError::Arrow)?;
+    write_batch(batch)
+}
+
+pub fn read_rera_evidence_parquet(
+    bytes: &[u8],
+) -> Result<Vec<ServingReraEvidenceRecord>, ParquetReadError> {
+    let mut records = Vec::new();
+    for batch in ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes))?.build()? {
+        let batch = batch?;
+        let society_id = string_column(&batch, "society_id")?;
+        let evidence_json = string_column(&batch, "evidence_json")?;
+        for row in 0..batch.num_rows() {
+            let expected_society_id = required_string(society_id, row, "society_id")?;
+            let record: ServingReraEvidenceRecord =
+                serde_json::from_str(&required_string(evidence_json, row, "evidence_json")?)?;
+            if record.society_id != expected_society_id {
+                return Err(ParquetReadError::InvalidReraEvidenceSociety {
+                    row,
+                    expected: expected_society_id,
+                    actual: record.society_id,
+                });
+            }
+            records.push(record);
+        }
+    }
+    records.sort_by(|left, right| left.society_id.cmp(&right.society_id));
+    Ok(records)
+}
+
 fn write_batch(batch: RecordBatch) -> Result<Vec<u8>, ParquetWriteError> {
     let props = WriterProperties::builder()
         .set_compression(Compression::ZSTD(ZstdLevel::default()))
@@ -458,6 +508,7 @@ pub enum ParquetWriteError {
         value_type: String,
         actual_type: String,
     },
+    Json(serde_json::Error),
     Parquet(parquet::errors::ParquetError),
 }
 
@@ -472,6 +523,7 @@ impl fmt::Display for ParquetWriteError {
                 f,
                 "serving fact value_type {value_type} does not match fact value type {actual_type}"
             ),
+            Self::Json(err) => write!(f, "serving Parquet JSON serialization error: {err}"),
             Self::Parquet(err) => write!(f, "Parquet write error: {err}"),
         }
     }
@@ -490,6 +542,11 @@ pub enum ParquetReadError {
     InvalidTypedValue {
         row: usize,
         message: String,
+    },
+    InvalidReraEvidenceSociety {
+        row: usize,
+        expected: String,
+        actual: String,
     },
     Json(serde_json::Error),
     Parquet(parquet::errors::ParquetError),
@@ -510,6 +567,14 @@ impl fmt::Display for ParquetReadError {
             Self::InvalidTypedValue { row, message } => {
                 write!(f, "invalid typed fact value at row {row}: {message}")
             }
+            Self::InvalidReraEvidenceSociety {
+                row,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "RERA evidence row {row} society mismatch: column {expected}, payload {actual}"
+            ),
             Self::Json(err) => write!(f, "Parquet JSON compatibility error: {err}"),
             Self::Parquet(err) => write!(f, "Parquet read error: {err}"),
             Self::UnexpectedNull { column, row } => {

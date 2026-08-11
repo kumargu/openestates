@@ -29,7 +29,10 @@ pub mod promotion;
 pub mod reddit;
 pub mod registry;
 pub mod rera;
+pub mod rera_claims;
+pub mod rera_evidence;
 pub mod rera_plans;
+pub mod rera_source_records;
 pub mod run_manifest;
 pub mod skill_facts;
 pub mod source_inputs;
@@ -81,10 +84,10 @@ pub use google::{
 };
 pub use home_state::{home_state_signals_input, HOME_STATE_SIGNALS_ASSET_ID};
 pub use kg_view::{
-    KgSocietyViewMaterialization, KgSocietyViewMaterializeError, KgSocietyViewMaterializer,
-    KgViewArtifact, KgViewArtifactKind, KgViewEdgeRecord, KgViewEntityRecord,
-    KgViewFactAnnotationRecord, KgViewFactRecord, KgViewManifest, KgViewRecords,
-    KG_SOCIETY_VIEW_ASSET_ID,
+    load_kg_view_records, KgSocietyViewMaterialization, KgSocietyViewMaterializeError,
+    KgSocietyViewMaterializer, KgViewArtifact, KgViewArtifactKind, KgViewEdgeRecord,
+    KgViewEntityRecord, KgViewFactAnnotationRecord, KgViewFactRecord, KgViewManifest,
+    KgViewRecords, KG_SOCIETY_VIEW_ASSET_ID,
 };
 pub use materialization::AssetMaterializationStore;
 pub use media::{
@@ -128,8 +131,28 @@ pub use rera::{
     ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
     CANONICAL_SOCIETY_NODES_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
+pub use rera_claims::{
+    claims_from_source_records, inventory_reconciliations, read_rera_claims, ReraAssertionMode,
+    ReraClaimDerivation, ReraClaimEffectiveTime, ReraClaimError, ReraClaimEvidence, ReraClaimInput,
+    ReraClaimMaterializeError, ReraClaimSubject, ReraClaimV1, ReraClaimValidationState,
+    ReraClaimValue, ReraClaimVisibility, ReraClaimsManifest, ReraClaimsMaterializer,
+    ReraClaimsQualityReport, ReraInventoryComparisonV1, ReraInventoryMeasurementV1,
+    ReraInventoryReconciliationV1, ReraSourceTrust, RERA_CLAIMS_ASSET_ID,
+    RERA_INVENTORY_RECONCILIATION_RULE_ID, RERA_INVENTORY_RECONCILIATION_RULE_VERSION,
+};
+pub use rera_evidence::{
+    read_rera_receipt_records, rera_registration_identity, ReraEvidenceError, ReraReceiptInput,
+    ReraReceiptKind, ReraReceiptRecord, ReraReceiptSourceRecord, ReraReceiptsInput,
+    ReraReceiptsMaterializer, ReraReceiptsQualityReport, ReraReceiptsSourceInput,
+    RERA_RECEIPTS_ASSET_ID,
+};
 pub use rera_plans::{
     rera_project_plan_frames_input, ReraPlanFramesAssetError, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
+};
+pub use rera_source_records::{
+    read_rera_source_records, ReraSourceRecord, ReraSourceRecordInput, ReraSourceRecordKind,
+    ReraSourceRecordsError, ReraSourceRecordsInput, ReraSourceRecordsManifest,
+    ReraSourceRecordsMaterializer, ReraSourceRecordsQualityReport, RERA_SOURCE_RECORDS_ASSET_ID,
 };
 pub use run_manifest::{
     AssetDagResumeLease, AssetDagRunManifest, AssetRunAttempt, AssetRunManifestStore, AssetRunStep,

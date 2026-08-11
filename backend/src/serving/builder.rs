@@ -13,7 +13,7 @@ use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
 use crate::search::schema;
 
 use super::parquet::{
-    write_edges_parquet, write_entities_parquet, write_facts_parquet,
+    write_edges_parquet, write_entities_parquet, write_facts_parquet, write_rera_evidence_parquet,
     write_search_metadata_parquet, ParquetWriteError,
 };
 use super::proximity::derive_proximity_records;
@@ -21,10 +21,10 @@ use super::tantivy_index::{TantivyIndexError, TantivyRecallIndex};
 use super::{
     BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingBundleSchema,
     ServingColumnSchema, ServingEdgeRecord, ServingEntityRecord, ServingFactRecord,
-    ServingSearchMetadataRecord, ServingTableSchema, TrustPolicy,
+    ServingReraEvidenceRecord, ServingSearchMetadataRecord, ServingTableSchema, TrustPolicy,
 };
 
-pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 5;
+pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 6;
 
 #[derive(Clone)]
 pub struct ServingBundleBuilder {
@@ -51,6 +51,16 @@ impl ServingBundleBuilder {
         records: &KgViewRecords,
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
+        self.build_from_kg_view_records_with_rera(records, Vec::new(), bundle_version)
+            .await
+    }
+
+    pub async fn build_from_kg_view_records_with_rera(
+        &self,
+        records: &KgViewRecords,
+        rera_evidence: Vec<ServingReraEvidenceRecord>,
+        bundle_version: impl Into<String>,
+    ) -> Result<ServingBundleManifest, ServingBundleError> {
         let current_facts = current_serving_facts(&records.facts);
         let entities = serving_entity_records(records, &current_facts);
         let facts = serving_fact_records(&current_facts)?;
@@ -63,6 +73,7 @@ impl ServingBundleBuilder {
             facts,
             search_metadata,
             edges,
+            rera_evidence,
             bundle_version,
             true,
         )
@@ -83,6 +94,7 @@ impl ServingBundleBuilder {
             facts,
             search_metadata,
             edges,
+            Vec::new(),
             bundle_version,
             false,
         )
@@ -95,6 +107,7 @@ impl ServingBundleBuilder {
         mut facts: Vec<ServingFactRecord>,
         mut search_metadata: Vec<ServingSearchMetadataRecord>,
         mut edges: Vec<ServingEdgeRecord>,
+        rera_evidence: Vec<ServingReraEvidenceRecord>,
         bundle_version: impl Into<String>,
         derive_proximity: bool,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
@@ -161,6 +174,22 @@ impl ServingBundleBuilder {
             Some(search_metadata.len() as u64),
         ));
 
+        let rera_evidence_key = AssetPathBuilder::serving_bundle_key(
+            &bundle_version,
+            "rera_evidence/part-00000.parquet",
+        );
+        let rera_evidence_bytes = write_rera_evidence_parquet(&rera_evidence)?;
+        let rera_evidence_meta = self
+            .lake
+            .put_bytes(&rera_evidence_key, rera_evidence_bytes)
+            .await?;
+        artifacts.push(artifact(
+            BundleArtifactKind::ReraEvidenceParquet,
+            rera_evidence_meta,
+            "application/vnd.apache.parquet",
+            Some(rera_evidence.len() as u64),
+        ));
+
         let schema_key = AssetPathBuilder::serving_bundle_key(&bundle_version, "schema.json");
         let schema_descriptor = serving_bundle_schema_descriptor(SERVING_BUNDLE_FORMAT_VERSION);
         let schema_meta = self.lake.put_json(&schema_key, &schema_descriptor).await?;
@@ -199,10 +228,12 @@ impl ServingBundleBuilder {
             entity_count: entities.len() as u64,
             fact_count: facts.len() as u64,
             search_metadata_count: search_metadata.len() as u64,
+            rera_evidence_count: rera_evidence.len() as u64,
             edge_count: edges.len() as u64,
             entity_parquet_key: entity_key.to_string(),
             fact_parquet_key: fact_key.to_string(),
             search_metadata_parquet_key: search_metadata_key.to_string(),
+            rera_evidence_parquet_key: Some(rera_evidence_key.to_string()),
             edge_parquet_key: Some(edge_key.to_string()),
             schema_key: schema_key.to_string(),
             trust_policy_key: trust_policy_key.to_string(),
@@ -325,6 +356,14 @@ pub fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSch
                     optional_column("scoring_direction", "utf8"),
                     optional_column("scoring_weight", "float32"),
                     required_column("scoring_thresholds", "list<float64>"),
+                ],
+            },
+            ServingTableSchema {
+                name: "rera_evidence".to_string(),
+                path: "rera_evidence/part-00000.parquet".to_string(),
+                columns: vec![
+                    required_column("society_id", "utf8"),
+                    required_column("evidence_json", "utf8"),
                 ],
             },
         ],

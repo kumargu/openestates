@@ -527,6 +527,33 @@ pub fn openestates_registry() -> AssetRegistry {
 pub fn default_openestates_registry() -> AssetRegistry {
     AssetRegistry::new(vec![
         asset(
+            "rera_receipts",
+            AssetStage::Raw,
+            "Immutable, content-addressed K-RERA listing, detail, QPR, and document receipts.",
+            &[],
+            RefreshCadence::Manual,
+            CostTier::Free,
+            TrustTier::Root,
+        ),
+        asset(
+            "rera_source_records",
+            AssetStage::Silver,
+            "Typed, source-preserving K-RERA records with receipt-level lineage.",
+            &["rera_receipts"],
+            RefreshCadence::Manual,
+            CostTier::Free,
+            TrustTier::Root,
+        ),
+        asset(
+            "rera_claims",
+            AssetStage::Gold,
+            "Scoped RERA source assertions with deterministic receipt lineage.",
+            &["rera_source_records"],
+            RefreshCadence::Manual,
+            CostTier::Free,
+            TrustTier::Derived,
+        ),
+        asset(
             "rera_registry_monthly",
             AssetStage::Raw,
             "Monthly RERA registry snapshot for canonical project discovery.",
@@ -796,11 +823,19 @@ pub fn default_openestates_registry() -> AssetRegistry {
             "search_serving_bundle",
             AssetStage::Serving,
             "Local request-path bundle for KG facts, schema config, aliases, and indexes.",
-            &["kg_society_view"],
+            &[
+                "kg_society_view",
+                "rera_receipts",
+                "rera_source_records",
+                "rera_claims",
+            ],
             RefreshCadence::OnChange,
             CostTier::Free,
             TrustTier::Serving,
-        ),
+        )
+        .with_optional_dependency("rera_receipts")
+        .with_optional_dependency("rera_source_records")
+        .with_optional_dependency("rera_claims"),
     ])
     .expect("default asset registry is valid")
 }

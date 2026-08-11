@@ -24,8 +24,11 @@ import {
   requestDiscoveryReturn,
   writeDiscoveryContext,
 } from "../../lib/navigationContext.ts";
-import { activeWorkspaceView, workspaceFocusedHomeId } from "../../lib/workspaceNav.ts";
-import { SavedHomesDock } from "./SavedHomesDock.tsx";
+import {
+  activeWorkspaceView,
+  shouldShowWorkspaceSidebar,
+  workspaceFocusedHomeId,
+} from "../../lib/workspaceNav.ts";
 import { WorkspaceSidebar } from "./WorkspaceSidebar.tsx";
 import "../../styles/workspace.css";
 
@@ -239,31 +242,30 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
 
   const reducedBeforeDecision = shellMode === "workspace" && homes.length === 0 && queryIds.length === 0;
   const sidebarCollapsed = collapsed || reducedBeforeDecision;
-  const showSidebar = shellMode === "property-context" || shellMode === "workspace";
-  const sidebarMode = shellMode === "property-context" ? "property-context" : "workspace";
+  const showSidebar = shouldShowWorkspaceSidebar(shellMode, homes.length);
+  const sidebarMode = shellMode === "property-context"
+    ? "property-context"
+    : shellMode === "workspace"
+      ? "workspace"
+      : "discovery";
+  const effectiveSidebarCollapsed = sidebarMode === "workspace" && sidebarCollapsed;
   const discoveryHref = discoveryReturnHref();
   const sidebarHomes = homes;
 
   return (
-    <div className={`workspace-shell${showSidebar ? "" : " workspace-shell--plain"}${showSidebar && sidebarCollapsed ? " workspace-shell--collapsed" : ""}`}>
+    <div className={`workspace-shell${showSidebar ? "" : " workspace-shell--plain"}${showSidebar && effectiveSidebarCollapsed ? " workspace-shell--collapsed" : ""}`}>
       {showSidebar ? (
         <WorkspaceSidebar
           homes={sidebarHomes}
           focusedId={focusedId}
           activeView={activeView}
-          collapsed={shellMode === "property-context" ? false : sidebarCollapsed}
+          collapsed={effectiveSidebarCollapsed}
           reduced={reducedBeforeDecision}
           mode={sidebarMode}
           discoveryHref={discoveryHref}
           onToggle={toggleSidebar}
           onFocus={focusHome}
           onRemove={removeHome}
-        />
-      ) : null}
-      {(shellMode === "landing" || shellMode === "discovery") && homes.length > 0 ? (
-        <SavedHomesDock
-          key={`${shellMode}:${location.search}`}
-          homes={homes}
         />
       ) : null}
       <div className="workspace-view">{children}</div>

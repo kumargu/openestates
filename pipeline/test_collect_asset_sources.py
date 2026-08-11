@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import os
 import shutil
@@ -23,10 +24,15 @@ from pipeline.collect_asset_sources import (
     google_nearby_collection_categories,
     groundwater_zones_from_kml,
     collect_reddit_assets,
+    collect_rera_receipts,
+    collect_rera_source_records,
     collect_rera_registry,
     google_society_inputs,
     reddit_society_inputs,
     request_with_rera_detail_facts,
+    rera_declared_inventory_rows,
+    rera_project_detail_source_records,
+    rera_square_metres,
 )
 from pipeline.skills.base import FactSource, SkillCost, SkillResult, SourcedFact
 from pipeline.skills.fetch_google_review_links import (
@@ -88,6 +94,320 @@ class CollectAssetSourcesTest(unittest.TestCase):
             os.environ["OPENESTATES_SKIP_LOCAL_SOCIETY_PHOTO_COLLECTION"] = (
                 self._old_skip_local_society_photo_collection
             )
+
+    def test_manual_rera_receipt_source_preserves_raw_listing_bytes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            listing_cache = root / "listing.json"
+            listing_raw = root / "listing.html"
+            listing_cache.write_text(
+                json.dumps({"cached_at": "2026-08-09T10:30:00Z"}),
+                encoding="utf-8",
+            )
+            listing_raw.write_bytes(b"<html>official receipt</html>")
+            with patch("pipeline.collect_asset_sources.LISTING_CACHE_PATH", listing_cache), patch(
+                "pipeline.collect_asset_sources.LISTING_RAW_CACHE_PATH", listing_raw
+            ):
+                payload = collect_rera_receipts({"planned_at": "2026-08-09T11:00:00Z"})
+
+        self.assertEqual(payload["snapshot_date"], "2026-08-09")
+        self.assertEqual(payload["receipts"][0]["kind"], "registry_listing")
+        self.assertEqual(
+            bytes.fromhex(payload["receipts"][0]["body_hex"]),
+            b"<html>official receipt</html>",
+        )
+
+    def test_rera_receipts_reuse_provenance_complete_scoped_captures(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            listing_cache = root / "listing.json"
+            listing_raw = root / "listing.html"
+            listing_cache.write_text(
+                json.dumps({"cached_at": "2026-08-09T10:30:00Z"}),
+                encoding="utf-8",
+            )
+            listing_raw.write_bytes(b"<html>official receipt</html>")
+            snapshot = {
+                "registration_number": "PRM/KA/RERA/1251/446/PR/300924/007105",
+                "source_url": "https://rera.karnataka.gov.in/projectDetails?action=12638",
+                "captured_at": "2026-08-09T10:31:00Z",
+                "parent_receipt_id": "rera_receipt:sha256:listing",
+                "crawl_run_id": "rera-project-detail-2026-08-09",
+                "body_hex": b"<html>detail</html>".hex(),
+                "body_sha256": hashlib.sha256(b"<html>detail</html>").hexdigest(),
+            }
+            with patch("pipeline.collect_asset_sources.LISTING_CACHE_PATH", listing_cache), patch(
+                "pipeline.collect_asset_sources.LISTING_RAW_CACHE_PATH", listing_raw
+            ), patch(
+                "pipeline.collect_asset_sources.load_scoped_rera_detail_receipts",
+                return_value=[snapshot],
+            ) as load_cached, patch(
+                "pipeline.collect_asset_sources.capture_scoped_rera_detail_receipts"
+            ) as capture:
+                payload = collect_rera_receipts({"source_entities": [{"name": "Fixture"}]})
+
+        load_cached.assert_called_once()
+        capture.assert_not_called()
+        self.assertEqual(len(payload["receipts"]), 2)
+
+    def test_forced_rera_receipts_refresh_scoped_captures(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            listing_cache = root / "listing.json"
+            listing_raw = root / "listing.html"
+            listing_cache.write_text(
+                json.dumps({"cached_at": "2026-08-09T10:30:00Z"}),
+                encoding="utf-8",
+            )
+            listing_raw.write_bytes(b"<html>official receipt</html>")
+            with patch("pipeline.collect_asset_sources.LISTING_CACHE_PATH", listing_cache), patch(
+                "pipeline.collect_asset_sources.LISTING_RAW_CACHE_PATH", listing_raw
+            ), patch(
+                "pipeline.collect_asset_sources.load_scoped_rera_detail_receipts"
+            ) as load_cached, patch(
+                "pipeline.collect_asset_sources.capture_scoped_rera_detail_receipts",
+                return_value=[],
+            ) as capture:
+                collect_rera_receipts({"force_refresh_assets": ["rera_receipts"]})
+
+        load_cached.assert_not_called()
+        capture.assert_called_once()
+
+    def test_rera_source_records_parse_the_raw_listing_with_receipt_lineage(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            listing_cache = root / "listing.json"
+            listing_raw = root / "listing.html"
+            listing_cache.write_text(
+                json.dumps({"cached_at": "2026-08-09T10:30:00Z"}),
+                encoding="utf-8",
+            )
+            listing_raw.write_bytes(
+                b"applicationNameList.push('ACK-1');"
+                b"applicationNameList2.push('PRM/KA/RERA/1251/446/PR/200811/003528');"
+                b"applicationNameList3.push('Fixture Project');"
+                b"applicationNameList4.push('Fixture Promoter');"
+            )
+            with patch("pipeline.collect_asset_sources.LISTING_CACHE_PATH", listing_cache), patch(
+                "pipeline.collect_asset_sources.LISTING_RAW_CACHE_PATH", listing_raw
+            ):
+                payload = collect_rera_source_records({"planned_at": "2026-08-09T11:00:00Z"})
+
+        self.assertEqual(payload["snapshot_date"], "2026-08-09")
+        self.assertEqual(len(payload["records"]), 1)
+        row = payload["records"][0]
+        self.assertEqual(row["kind"], "registration_summary")
+        self.assertTrue(row["receipt_id"].startswith("rera_receipt:sha256:"))
+        receipt_id = row["receipt_id"]
+        expected_capture = hashlib.sha256(
+            "rera_capture.v1\n{}\n{}\n2026-08-09T10:30:00+00:00".format(
+                receipt_id, "https://rera.karnataka.gov.in/viewAllProjects?language=en"
+            ).encode("utf-8")
+        ).hexdigest()
+        self.assertEqual(row["capture_id"], "rera_capture:sha256:{}".format(expected_capture))
+        self.assertEqual(
+            json.loads(row["raw_value"])["project_name"], "Fixture Project"
+        )
+
+    def test_rera_source_records_scoped_run_ignores_unrelated_malformed_listing_rows(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            listing_cache = root / "listing.json"
+            listing_raw = root / "listing.html"
+            listing_cache.write_text(
+                json.dumps({"cached_at": "2026-08-09T10:30:00Z"}),
+                encoding="utf-8",
+            )
+            listing_raw.write_bytes(
+                b"applicationNameList.push('ACK-BLANK');"
+                b"applicationNameList2.push('');"
+                b"applicationNameList3.push('Malformed Project');"
+                b"applicationNameList4.push('Malformed Promoter');"
+                b"applicationNameList.push('ACK-GODREJ');"
+                b"applicationNameList2.push('PRM/KA/RERA/1251/446/PR/300924/007105');"
+                b"applicationNameList3.push('GODREJ LAKESIDE ORCHARD');"
+                b"applicationNameList4.push('Godrej Properties Limited');"
+            )
+            request = {
+                "planned_at": "2026-08-09T11:00:00Z",
+                "source_entities": [
+                    {
+                        "entity_id": "society:godrej-lakeside-orchard",
+                        "name": "GODREJ LAKESIDE ORCHARD",
+                        "project_key": "PRM/KA/RERA/1251/446/PR/300924/007105",
+                    }
+                ],
+            }
+            with patch("pipeline.collect_asset_sources.LISTING_CACHE_PATH", listing_cache), patch(
+                "pipeline.collect_asset_sources.LISTING_RAW_CACHE_PATH", listing_raw
+            ), patch(
+                "pipeline.collect_asset_sources.load_scoped_rera_detail_receipts",
+                return_value=[],
+            ):
+                payload = collect_rera_source_records(request)
+
+        self.assertEqual(len(payload["records"]), 2)
+        self.assertEqual(
+            payload["records"][0]["registration_number"],
+            "PRM/KA/RERA/1251/446/PR/300924/007105",
+        )
+        relation = payload["records"][1]
+        self.assertEqual(relation["kind"], "registration_relation")
+        self.assertEqual(
+            json.loads(relation["raw_value"]),
+            {
+                "entity_id": "society:godrej-lakeside-orchard",
+                "entity_type": "society",
+                "resolution_method": "catalog_project_key_exact",
+                "resolution_confidence": 1.0,
+            },
+        )
+
+    def test_rera_project_detail_records_preserve_declarations_and_qpr_inventory(self):
+        def quarter(quarter, year, submitted, booked, unsold):
+            return """
+                <b>Quarter {quarter} ( {year} )<span> Details (Submitted on {submitted})</span></b>
+                <table><thead><tr><th>Total No of Units Booked</th></tr></thead><tbody>
+                <tr><td>Total</td><td>970</td><td>{booked}</td><td>{unsold}</td></tr>
+                </tbody></table>
+                <a href='/download_jc?DOC_ID=form-{quarter}'>Form 6 {quarter}.pdf</a>
+            """.format(
+                quarter=quarter,
+                year=year,
+                submitted=submitted,
+                booked=booked,
+                unsold=unsold,
+            )
+
+        detail_html = """
+            <div><p>Total Number of Inventories/Flats/Villas<span>:</span></p></div>
+            <div><p>698</p></div>
+            <div><p>Total Carpet Area of all the Floors (Sq Mtr)<span>:</span></p></div>
+            <div><p>65100</p></div>
+            <div>Development <span>Details (Bifurcation of Type of Inventories/Flats/Villas)</span></div>
+            <table><thead><tr>
+                <th>Sl No</th><th>Type of Inventory</th><th>No. of Units</th>
+                <th>Carpet Area</th><th>Balcony/Verandah Area</th><th>Open Terrace Area</th>
+            </tr></thead><tbody>
+                <tr><td>1</td><td>3BHK+3T</td><td>135</td><td>14832.5</td><td>1986</td><td></td></tr>
+                <tr><td>2</td><td>2BHK+2T</td><td>154</td><td>11053</td><td>1695</td><td>0</td></tr>
+                <tr><td></td><td>TOTAL</td><td>289</td><td>25885</td><td>3681</td><td></td></tr>
+            </tbody></table>
+            <div><p>Source of Water<span>:</span></p></div><div><p>Local Authority,</p></div>
+            <div><p>Local Authority<span>:</span></p></div><div><p>Kodathi Grama Panchayath</p></div>
+            <tr><td>At the time of Registration</td><td>01-11-2024</td><td>30-09-2030</td></tr>
+        """ + quarter("Q3", "2025-26", "12-01-2026", 678, 292) + quarter(
+            "Q4", "2025-26", "13-04-2026", 678, 292
+        ) + quarter("Q1", "2026-27", "13-07-2026", 837, 133)
+        snapshot = {
+            "registration_number": "PRM/KA/RERA/1251/446/PR/300924/007105",
+            "source_url": "https://rera.karnataka.gov.in/projectDetails?action=12638",
+            "captured_at": "2026-08-09T10:30:00+00:00",
+            "body_hex": detail_html.encode("utf-8").hex(),
+        }
+
+        rows = rera_project_detail_source_records(snapshot)
+        by_kind = {}
+        for row in rows:
+            by_kind.setdefault(row["kind"], []).append(row)
+
+        declaration_values = [json.loads(row["raw_value"]) for row in by_kind["promoter_declaration"]]
+        self.assertEqual(
+            declaration_values,
+            [{"unit_count": 698}, {"total_carpet_area_sqm": 65100.0}],
+        )
+        inventory_values = [json.loads(row["raw_value"]) for row in by_kind["inventory"]]
+        self.assertEqual(
+            inventory_values,
+            [
+                {
+                    "inventory_type": "3BHK+3T",
+                    "unit_count": 135,
+                    "total_carpet_area_sqm": 14832.5,
+                    "total_balcony_verandah_area_sqm": 1986,
+                    "total_open_terrace_area_sqm": None,
+                },
+                {
+                    "inventory_type": "2BHK+2T",
+                    "unit_count": 154,
+                    "total_carpet_area_sqm": 11053,
+                    "total_balcony_verandah_area_sqm": 1695,
+                    "total_open_terrace_area_sqm": 0,
+                },
+                {
+                    "inventory_type": "TOTAL",
+                    "unit_count": 289,
+                    "total_carpet_area_sqm": 25885,
+                    "total_balcony_verandah_area_sqm": 3681,
+                    "total_open_terrace_area_sqm": None,
+                },
+            ],
+        )
+        self.assertEqual(
+            json.loads(by_kind["water_service_declaration"][0]["raw_value"]),
+            {"source": "Local Authority"},
+        )
+        qpr_rows = [json.loads(row["raw_value"]) for row in by_kind["quarterly_progress"]]
+        self.assertEqual(
+            qpr_rows,
+            [
+                {"quarter": "Q3", "financial_year": "2025-26", "tower_count": 1, "total_units": 970, "booked_units": 678, "unsold_units": 292},
+                {"quarter": "Q4", "financial_year": "2025-26", "tower_count": 1, "total_units": 970, "booked_units": 678, "unsold_units": 292},
+                {"quarter": "Q1", "financial_year": "2026-27", "tower_count": 1, "total_units": 970, "booked_units": 837, "unsold_units": 133},
+            ],
+        )
+        self.assertEqual(len(by_kind["document_approval"]), 3)
+        self.assertEqual(len(by_kind["source_warning"]), 1)
+
+    def test_rera_square_metres_accepts_only_structured_area_values(self):
+        self.assertEqual(rera_square_metres("53,728SqMtr"), 53728.0)
+        self.assertEqual(rera_square_metres("65,100 sq. metres"), 65100.0)
+        self.assertEqual(rera_square_metres("0 Sq Mtr"), 0.0)
+        self.assertIsNone(rera_square_metres("about 53,728 SqMtr"))
+        self.assertIsNone(rera_square_metres("53,728 sq ft"))
+        self.assertIsNone(rera_square_metres("not filed"))
+
+    def test_rera_legacy_inventory_preserves_filed_values_and_deduplicates_blocks(self):
+        block = """
+            <div><p>Type of Inventory<span>:</span></p></div><div><p>Flats</p></div>
+            <div><p>No of Inventory<span>:</span></p></div><div><p>1,463</p></div>
+            <div><p>Carpet Area (Sq Mtr)<span>:</span></p></div><div><p>1355269SqMtr</p></div>
+            <div><p>Area of exclusive balcony/verandah (Sq Mtr)<span>:</span></p></div><div><p>12,345 SqMtr</p></div>
+            <div><p>Area of exclusive open Terrace (Sq Mtr)<span>:</span></p></div><div><p>Not Filed</p></div>
+        """
+
+        repeated_with_spacing = block.replace("SqMtr", " Sq Mtr")
+        rows = rera_declared_inventory_rows(block + repeated_with_spacing)
+
+        self.assertEqual(
+            rows,
+            [
+                {
+                    "row_number": "1",
+                    "inventory_type": "Flats",
+                    "unit_count": 1463,
+                    "filed_carpet_area_sqm": 1355269.0,
+                    "filed_balcony_verandah_area_sqm": 12345.0,
+                    "filed_open_terrace_area_sqm": None,
+                    "area_scope": "source_unspecified",
+                    "filed_values": {
+                        "unit_count": "1,463",
+                        "carpet_area": "1355269SqMtr",
+                        "balcony_verandah_area": "12,345 SqMtr",
+                        "open_terrace_area": "Not Filed",
+                    },
+                }
+            ],
+        )
+
+    def test_rera_legacy_inventory_requires_a_typed_unit_count(self):
+        detail_html = """
+            <div><p>Type of Inventory<span>:</span></p></div><div><p>Flats</p></div>
+            <div><p>No of Inventory<span>:</span></p></div><div><p>Not Filed</p></div>
+            <div><p>Carpet Area (Sq Mtr)<span>:</span></p></div><div><p>53728SqMtr</p></div>
+        """
+
+        self.assertEqual(rera_declared_inventory_rows(detail_html), [])
 
     def test_rera_detail_collection_is_scoped_and_preserves_alias_lineage(self):
         request = {

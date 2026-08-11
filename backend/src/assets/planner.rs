@@ -358,6 +358,10 @@ async fn plan_reason(
 ) -> Result<Option<PlanReason>, PlannerError> {
     let current = match current {
         Some(record) => record,
+        // Manual roots are parallel/backfill products. They must not make an
+        // unrelated production DAG run fail merely because no one has
+        // requested their first materialization yet.
+        None if definition.refresh == RefreshCadence::Manual => return Ok(None),
         None => return Ok(Some(PlanReason::Missing)),
     };
 

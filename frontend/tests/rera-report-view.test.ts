@@ -1,165 +1,87 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  displayName,
-  formatReraCoordinates,
+  claimValueText,
+  displayFactsForSection,
   httpUrl,
-  kindLabel,
-  presentLocationFacts,
-  reportSections,
-  safeLabels,
-  visibleDocumentSections,
+  sectionHasEvidence,
+  selectorMatches,
 } from "../src/lib/reraReportView.ts";
-import type { ReraDossier, ReraDocumentSection, ReraReportFact } from "../src/lib/types.ts";
+import type {
+  ReraEvidenceClaim,
+  ReraEvidenceProjection,
+  ReraReportSurfaceSection,
+} from "../src/lib/types.ts";
 
-const BASE_DOSSIER: ReraDossier = {
-  property_id: "property:test",
-  society_id: "society:test",
-  summary_cards: [],
-  compare_items: [],
-  complaint_sections: [],
-  document_sections: [],
-  timeline: {},
-  legal_checks: [],
-  source: {
-    registered: true,
-    registration_number: "PRM/KA/RERA/1251/446/PR/TEST",
-    last_verified: "2026-07-30",
-  },
+const CLAIM: ReraEvidenceClaim = {
+  claim_id: "claim:one",
+  subject: { entity_id: "registration:one", entity_type: "registration" },
+  predicate: "official_registration_number",
+  value: { type: "text", data: "PRM/KA/RERA/TEST" },
+  assertion_mode: "registry_record",
+  source_trust: "primary_authority",
+  extraction_confidence: 0.95,
+  validation_state: "accepted",
+  visibility: "public",
+  evidence: [{
+    source_record_id: "record:one",
+    receipt_id: "receipt:one",
+    capture_id: "capture:one",
+    locator: "listing[0]",
+    parser_version: "fixture.v1",
+  }],
 };
 
-test("RERA report falls back to generic compare facts without inventing empty rows", () => {
-  const sections = reportSections({
-    ...BASE_DOSSIER,
-    compare_items: [
-      { key: "project_complaints", label: "Project complaints", value: "3", tone: "watch", labels: ["legal"] },
-      { key: "open_complaints", label: "Open complaints", value: "unknown", tone: "neutral", labels: [] },
-      { key: "noc_documents", label: "NOC documents", value: "6", tone: "neutral", labels: [] },
-    ],
+const EVIDENCE: ReraEvidenceProjection = {
+  schema_version: "rera_evidence_projection.v1",
+  property_id: "property:one",
+  bundle_id: "bundle:one",
+  generated_at: "2026-08-10T00:00:00Z",
+  registration_ids: ["registration:one"],
+  entities: [],
+  claims: [CLAIM],
+  events: [],
+  series: [],
+  discrepancies: [],
+  coverage: [],
+  source_index: [],
+};
+
+const SECTION: ReraReportSurfaceSection = {
+  id: "registration",
+  title: "Official registration record",
+  renderer: "fact_list",
+  selectors: [{ key: "claim:official_registration_number", label: "Registration number" }],
+  empty_behavior: "omit",
+};
+
+test("RERA selectors match exact and configured wildcard predicates", () => {
+  assert.equal(selectorMatches("claim:official_registration_number", "claim:official_registration_number"), true);
+  assert.equal(selectorMatches("claim:declared_inventory_*", "claim:declared_inventory_unit_count"), true);
+  assert.equal(selectorMatches("claim:complaint_*", "claim:declared_inventory_unit_count"), false);
+});
+
+test("RERA sections omit themselves when the evidence product has no matching data", () => {
+  assert.equal(sectionHasEvidence(SECTION, EVIDENCE), true);
+  assert.equal(sectionHasEvidence({
+    ...SECTION,
+    selectors: [{ key: "claim:declared_water_source", label: "Water source" }],
+  }, EVIDENCE), false);
+});
+
+test("RERA display facts use config labels and coalesce repeated source assertions", () => {
+  const facts = displayFactsForSection(SECTION, {
+    ...EVIDENCE,
+    claims: [CLAIM, { ...CLAIM, claim_id: "claim:two" }],
   });
-
-  assert.equal(sections.length, 1);
-  assert.equal(sections[0].title, "Facts");
-  assert.deepEqual(sections[0].facts.map((fact) => fact.label), [
-    "Project complaints",
-    "NOC documents",
-  ]);
-  assert.equal(sections[0].facts[1].learned_at, "2026-07-30");
+  assert.equal(facts.length, 1);
+  assert.equal(facts[0].label, "Registration number");
+  assert.equal(facts[0].value, "PRM/KA/RERA/TEST");
+  assert.equal(facts[0].claims.length, 2);
 });
 
-test("configured RERA fact sections are preserved as the primary report shape", () => {
-  const sections = reportSections({
-    ...BASE_DOSSIER,
-    fact_sections: [{
-      id: "builder",
-      title: "Builder",
-      facts: [{
-        key: "builder_average_delay_months",
-        label: "Builder average delay",
-        value: "8 months",
-        tone: "caution",
-        labels: ["risk"],
-        confidence: 0.8,
-        learned_at: "2026-07-30",
-      }],
-    }],
-    compare_items: [
-      { key: "project_complaints", label: "Project complaints", value: "3", tone: "watch", labels: ["legal"] },
-    ],
-  });
-
-  assert.deepEqual(sections.map((section) => section.id), ["builder"]);
-  assert.equal(sections[0].facts[0].value, "8 months");
-});
-
-test("RERA document sections hide empty groups and invalid links", () => {
-  const sections: ReraDocumentSection[] = [
-    {
-      group: "noc",
-      label: "NOC documents",
-      count: 2,
-      kinds: ["noc"],
-      preview_available_count: 0,
-      hidden_count: 0,
-      items: [
-        {
-          artifact_id: "one",
-          label: "Fire NOC",
-          kind: "fire_noc",
-          source_url: "https://rera.karnataka.gov.in/download_jc?DOC_ID=abc",
-        },
-        {
-          artifact_id: "two",
-          label: "Invalid",
-          kind: "noc",
-          source_url: "javascript:alert(1)",
-        },
-      ],
-    },
-    {
-      group: "empty",
-      label: "Empty",
-      count: 1,
-      kinds: ["other"],
-      preview_available_count: 0,
-      hidden_count: 1,
-      items: [{
-        artifact_id: "three",
-        label: "Missing",
-        kind: "other",
-        source_url: "",
-      }],
-    },
-  ];
-
-  const visible = visibleDocumentSections(sections);
-
-  assert.equal(visible.length, 1);
-  assert.equal(visible[0].group, "noc");
-  assert.equal(visible[0].count, 1);
-  assert.deepEqual(visible[0].items.map((item) => item.label), ["Fire NOC"]);
-});
-
-test("RERA report helpers keep labels readable and notebook tags bounded", () => {
-  assert.equal(displayName("3 BHK in SUMADHURA CAPITOL RESIDENCES"), "3 BHK Sumadhura Capitol Residences");
-  assert.equal(displayName("3 BHK at Samadhura Capitol Residences"), "3 BHK Samadhura Capitol Residences");
-  assert.equal(httpUrl("ftp://example.com/file"), null);
-  assert.equal(kindLabel("latest_encumbrance_certificate"), "Latest Encumbrance Certificate");
-  assert.deepEqual(safeLabels(["risk", "risk", "legal", "builder", "delay"], "builder_delay"), [
-    "risk",
-    "legal",
-    "builder",
-    "delay",
-  ]);
-  assert.deepEqual(safeLabels([], "land_litigation"), ["risk", "legal"]);
-});
-
-test("location facts fold coordinates under address without a second box", () => {
-  const facts: ReraReportFact[] = [
-    {
-      key: "address",
-      label: "Address",
-      value: "Sy No. 14, Pattandur Agrahara Village, Bengaluru",
-      tone: "neutral",
-      labels: ["location"],
-      confidence: 0.9,
-      learned_at: "2026-07-30",
-    },
-    {
-      key: "rera_lat_lng",
-      label: "RERA_LAT_LNG",
-      value: "12.98535765887552, 77.75078040700681",
-      tone: "neutral",
-      labels: ["location"],
-      confidence: 0.7,
-      learned_at: "2026-07-30",
-    },
-  ];
-
-  const presented = presentLocationFacts(facts);
-  assert.equal(presented.address?.key, "address");
-  assert.equal(presented.coordinates?.key, "rera_lat_lng");
-  assert.equal(presented.coordinatesDisplay, "12.98536, 77.75078");
-  assert.equal(presented.otherFacts.length, 0);
-  assert.equal(formatReraCoordinates("12.98535765887552, 77.75078040700681"), "12.98536, 77.75078");
+test("RERA values retain units without deriving per-home carpet area", () => {
+  assert.equal(claimValueText({ type: "number", data: 53728 }, "square_metres"), "53,728 m²");
+  assert.equal(claimValueText({ type: "boolean", data: false }), "No");
+  assert.equal(httpUrl("javascript:alert(1)"), null);
 });

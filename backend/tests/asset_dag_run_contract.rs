@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use backend::assets::{
     default_openestates_registry, ArtifactRef, AssetDagRunManifest, AssetDefinition, AssetId,
     AssetMaterializationStore, AssetPartition, AssetPlanner, AssetRegistry, AssetRunManifestStore,
@@ -92,6 +94,46 @@ async fn dag_plan_captures_freshness_and_dependency_propagation() {
 
     let planned_assets = planner.plan_partition(&partition, now).await.unwrap();
     assert_eq!(planned_assets.len(), plan.run_entries().count());
+}
+
+#[tokio::test]
+async fn manual_rera_receipts_stay_out_of_normal_runs_until_forced() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let materializations = AssetMaterializationStore::new(lake);
+    let registry = default_openestates_registry();
+    let planner = AssetPlanner::new(registry, materializations);
+    let now = Utc.with_ymd_and_hms(2026, 8, 9, 12, 0, 0).unwrap();
+    let partition = AssetPartition::global();
+
+    let normal = planner
+        .plan_partition_details(&partition, now)
+        .await
+        .unwrap();
+    let receipt_entry = plan_entry(&normal, "rera_receipts");
+    assert_eq!(receipt_entry.decision, PlanDecision::Skip);
+    assert_eq!(receipt_entry.reason, None);
+    assert_eq!(receipt_entry.freshness.cadence, RefreshCadence::Manual);
+    let source_record_entry = plan_entry(&normal, "rera_source_records");
+    assert_eq!(source_record_entry.decision, PlanDecision::Skip);
+    assert_eq!(source_record_entry.reason, None);
+    assert_eq!(
+        source_record_entry.freshness.cadence,
+        RefreshCadence::Manual
+    );
+    let claim_entry = plan_entry(&normal, "rera_claims");
+    assert_eq!(claim_entry.decision, PlanDecision::Skip);
+    assert_eq!(claim_entry.reason, None);
+    assert_eq!(claim_entry.freshness.cadence, RefreshCadence::Manual);
+
+    let forced_assets = HashSet::from([asset_id("rera_receipts")]);
+    let forced = planner
+        .plan_partition_details_with_forced(&partition, now, &forced_assets)
+        .await
+        .unwrap();
+    let receipt_entry = plan_entry(&forced, "rera_receipts");
+    assert_eq!(receipt_entry.decision, PlanDecision::Run);
+    assert_eq!(receipt_entry.reason, Some(PlanReason::Forced));
 }
 
 #[tokio::test]
