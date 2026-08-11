@@ -4,7 +4,10 @@ use backend::assets::{
     promote_search_serving_release, AssetId, AssetMaterializationStore, MaterializationId,
 };
 use backend::lake::{LakeStoreLocation, LAKE_URL_ENV};
-use backend::serving::SEARCH_SERVING_BUNDLE_ASSET_ID;
+use backend::serving::{
+    validate_search_serving_candidate, write_frontend_media_manifest,
+    SEARCH_SERVING_BUNDLE_ASSET_ID,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -12,15 +15,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let project_root = cli.project_root.unwrap_or_else(default_project_root);
     let lake = LakeStoreLocation::from_env(&project_root)?.open()?;
     let store = AssetMaterializationStore::new(lake.clone());
-    let record = store
-        .record_by_id_for_asset(&cli.asset_id, &cli.materialization_id)
-        .await?
-        .ok_or_else(|| {
-            format!(
-                "materialization {} was not found for asset {}",
-                cli.materialization_id, cli.asset_id
+    let record = match cli.materialization_id.as_ref() {
+        Some(materialization_id) => store
+            .record_by_id_for_asset(&cli.asset_id, materialization_id)
+            .await?
+            .ok_or_else(|| {
+                format!(
+                    "materialization {materialization_id} was not found for asset {}",
+                    cli.asset_id
+                )
+            })?,
+        None => {
+            store
+                .current_record(&cli.asset_id, &backend::assets::AssetPartition::global())
+                .await?
+        }
+    };
+    let validation = if record.asset_id.as_str() == SEARCH_SERVING_BUNDLE_ASSET_ID {
+        Some(validate_search_serving_candidate(&lake, &record).await?)
+    } else {
+        None
+    };
+    if let Some(validation) = validation.as_ref() {
+        if !validation.passed {
+            println!("{}", serde_json::to_string_pretty(validation)?);
+            return Err(format!(
+                "serving bundle validation failed with {} issue(s); no pointers were changed",
+                validation.issues.len()
             )
-        })?;
+            .into());
+        }
+        if cli.sync_frontend_manifest || !cli.check_only {
+            write_frontend_media_manifest(&project_root, validation)?;
+        }
+    }
+    if cli.check_only {
+        println!("{}", serde_json::to_string_pretty(&validation)?);
+        return Ok(());
+    }
+
     let (promoted, release) = if record.asset_id.as_str() == SEARCH_SERVING_BUNDLE_ASSET_ID {
         let release = promote_search_serving_release(&store, &record, cli.force).await?;
         (true, Some(release))
@@ -39,6 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "version": record.version,
             "row_count": record.row_count,
             "promoted": promoted,
+            "validation": validation,
             "release": release.map(|release| serde_json::json!({
                 "kg_society_view_materialization_id": release.kg_materialization_id,
                 "current_project_facts_materialization_id": release.current_project_facts_materialization_id,
@@ -52,8 +86,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 struct CliOptions {
     project_root: Option<PathBuf>,
     asset_id: AssetId,
-    materialization_id: MaterializationId,
+    materialization_id: Option<MaterializationId>,
     force: bool,
+    check_only: bool,
+    sync_frontend_manifest: bool,
 }
 
 impl CliOptions {
@@ -62,6 +98,9 @@ impl CliOptions {
         let mut asset_id = None;
         let mut materialization_id = None;
         let mut force = false;
+        let mut current = false;
+        let mut check_only = false;
+        let mut sync_frontend_manifest = false;
         let mut args = std::env::args().skip(1);
 
         while let Some(arg) = args.next() {
@@ -89,8 +128,17 @@ impl CliOptions {
                         format!("--materialization requires a valid UUID: {value}")
                     })?);
                 }
+                "--current" => {
+                    current = true;
+                }
                 "--force" => {
                     force = true;
+                }
+                "--check-only" => {
+                    check_only = true;
+                }
+                "--sync-frontend-manifest" => {
+                    sync_frontend_manifest = true;
                 }
                 "--help" | "-h" => {
                     print_help();
@@ -100,12 +148,23 @@ impl CliOptions {
             }
         }
 
+        if current == materialization_id.is_some() {
+            return Err("provide exactly one of --materialization <uuid> or --current".to_string());
+        }
+        if current && !check_only {
+            return Err("--current is only allowed with --check-only".to_string());
+        }
+        if sync_frontend_manifest && !check_only {
+            return Err("--sync-frontend-manifest is only needed with --check-only".to_string());
+        }
+
         Ok(Self {
             project_root,
             asset_id: asset_id.ok_or_else(|| "--asset is required".to_string())?,
-            materialization_id: materialization_id
-                .ok_or_else(|| "--materialization is required".to_string())?,
+            materialization_id,
             force,
+            check_only,
+            sync_frontend_manifest,
         })
     }
 }
@@ -123,14 +182,17 @@ fn print_help() {
     println!();
     println!("Usage:");
     println!(
-        "  cargo run --bin openestates-promote-materialization -- --asset <asset-id> --materialization <uuid>"
+        "  cargo run --bin openestates-promote-materialization -- --asset <asset-id> (--materialization <uuid> | --current --check-only)"
     );
     println!();
     println!("Options:");
     println!("  --project-root <path>  Project root used for local lake resolution");
     println!("  --asset <asset-id>     Asset id, e.g. image_media_facts");
     println!("  --materialization <id> Existing materialization UUID");
+    println!("  --current              Validate the current global materialization");
     println!("  --force                Replace current pointer even when materialization is older");
+    println!("  --check-only           Validate without changing any current pointer");
+    println!("  --sync-frontend-manifest  Write frontend/media-manifest.json after validation");
     println!(
         "  {env_name:<22} Lake URL: file:///absolute/path or s3://bucket/optional/prefix",
         env_name = LAKE_URL_ENV

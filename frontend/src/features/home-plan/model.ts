@@ -38,6 +38,13 @@ export type PlanInputs = {
   assumptions: PlanAssumptions;
 };
 
+export type EditablePlanInput =
+  | "monthlyEmiThousands"
+  | "currentRentThousands"
+  | "monthlySipThousands"
+  | "loanRate"
+  | "equityReturn";
+
 export type ProjectionPoint = {
   year: number;
   buyNetWorth: number;
@@ -114,6 +121,13 @@ function finiteAmount(value: number, field: string, min = 0): number {
   return value;
 }
 
+function normalizeExtraEmisPerYear(value: number): number {
+  if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
+    throw new RangeError("extraEmisPerYear must be a finite whole number >= 0");
+  }
+  return value;
+}
+
 export function normalizePlanInputs(inputs: PlanInputs): PlanInputs {
   const propertyPriceLakh = finiteAmount(inputs.propertyPriceLakh, "propertyPriceLakh", 0.01);
   return {
@@ -131,6 +145,19 @@ export function normalizePlanInputs(inputs: PlanInputs): PlanInputs {
       rentInflationRate: finiteAmount(inputs.assumptions.rentInflationRate, "rentInflationRate"),
     },
   };
+}
+
+/** Updates exactly the input the buyer changed. */
+export function updatePlanInput(
+  inputs: PlanInputs,
+  key: EditablePlanInput,
+  value: number,
+): PlanInputs {
+  const minimum = key === "monthlyEmiThousands" ? 1 : 0;
+  if (!Number.isFinite(value) || value < minimum) {
+    throw new RangeError(`${key} must be a finite number >= ${minimum}`);
+  }
+  return { ...inputs, [key]: value };
 }
 
 function rupeesToRoundedThousands(value: number): number {
@@ -183,6 +210,7 @@ export function calculateLoanJourney(
   extraEmisPerYear: number,
 ): LoanJourney {
   inputs = normalizePlanInputs(inputs);
+  extraEmisPerYear = normalizeExtraEmisPerYear(extraEmisPerYear);
   const schedule = buildPaymentSchedule(inputs);
   const constructionPlan = constructionPlanFor(inputs);
   const principal = schedule.reduce((sum, payment) => sum + payment.loanAmount, 0);
@@ -280,7 +308,7 @@ export function calculateProjection(
   extraEmisPerYear = 0,
 ): PlanProjection {
   inputs = normalizePlanInputs(inputs);
-  extraEmisPerYear = Math.max(0, extraEmisPerYear);
+  extraEmisPerYear = normalizeExtraEmisPerYear(extraEmisPerYear);
   const schedule = buildPaymentSchedule(inputs);
   const loanAmount = schedule.reduce((sum, payment) => sum + payment.loanAmount, 0);
   const monthlyEmi = inputs.monthlyEmiThousands * 1_000;

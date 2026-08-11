@@ -1,20 +1,38 @@
-import { useState } from "react";
+import { useState, type SyntheticEvent } from "react";
 
 export function ImageWithFallback({
   src,
   alt,
   className,
   loading = "lazy",
+  decoding = "async",
+  fetchPriority,
+  onReady,
 }: {
   src: string | null;
   alt: string;
   className?: string;
   loading?: "lazy" | "eager";
+  decoding?: "async" | "auto" | "sync";
+  fetchPriority?: "high" | "low" | "auto";
+  onReady?: () => void;
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
   const isPlaceholder = !src || src.startsWith("placeholder://");
   const failed = Boolean(src && failedSrc === src);
+
+  const handleLoad = (event: SyntheticEvent<HTMLImageElement>) => {
+    if (!onReady) return;
+
+    const image = event.currentTarget;
+    if (typeof image.decode !== "function") {
+      onReady();
+      return;
+    }
+
+    void image.decode().then(onReady, onReady);
+  };
 
   if (isPlaceholder || failed) {
     return (
@@ -40,6 +58,9 @@ export function ImageWithFallback({
       alt={alt}
       className={className}
       loading={loading}
+      decoding={decoding}
+      fetchPriority={fetchPriority}
+      onLoad={handleLoad}
       onError={() => setFailedSrc(src)}
     />
   );

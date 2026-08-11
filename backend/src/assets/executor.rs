@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -8,17 +9,18 @@ use serde::{Deserialize, Serialize};
 use crate::knowledge::KnowledgeGraph;
 use crate::lake::{LakeError, LakeStore};
 use crate::serving::{
-    project_rera_evidence, ReraServingProjectionError, SearchServingBundleMaterialization,
+    project_rera_evidence, validate_search_serving_candidate, write_frontend_media_manifest,
+    ReraServingProjectionError, SearchServingBundleMaterialization,
     SearchServingBundleMaterializeError, SearchServingBundleMaterializer,
     SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 
 use super::{
-    read_rera_claims, read_rera_receipt_records, read_rera_source_records,
-    read_skill_fact_artifact_rows, sort_materialization_records, ApproachRoadGraphError,
-    ApproachRoadGraphMaterializer, AssetDagPlan, AssetDagRunManifest, AssetDefinition,
-    AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition, AssetPlanner,
-    AssetRunManifestStore, AssetSourceInputs, AssetStage, CurrentProjectFactsError,
+    ingest_local_media_assets, read_rera_claims, read_rera_receipt_records,
+    read_rera_source_records, read_skill_fact_artifact_rows, sort_materialization_records,
+    ApproachRoadGraphError, ApproachRoadGraphMaterializer, AssetDagPlan, AssetDagRunManifest,
+    AssetDefinition, AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition,
+    AssetPlanner, AssetRunManifestStore, AssetSourceInputs, AssetStage, CurrentProjectFactsError,
     CurrentProjectFactsMaterializer, DependencyFanInPolicy, EnvironmentalAssetError,
     GooglePlaceAssetError, GooglePlaceSnapshotMaterializer, KgSocietyViewMaterialization,
     KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, MaterializationId,
@@ -192,6 +194,8 @@ pub struct AssetDagExecutor {
     executors: BuiltInAssetExecutorRegistry,
     materializations: AssetMaterializationStore,
     run_manifests: AssetRunManifestStore,
+    project_root: PathBuf,
+    sync_frontend_manifest: bool,
 }
 
 impl AssetDagExecutor {
@@ -204,7 +208,18 @@ impl AssetDagExecutor {
             executors: BuiltInAssetExecutorRegistry::default_openestates(),
             materializations,
             run_manifests,
+            project_root: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .expect("backend crate should live under project root")
+                .to_path_buf(),
+            sync_frontend_manifest: false,
         }
+    }
+
+    pub fn with_project_root(mut self, project_root: impl Into<PathBuf>) -> Self {
+        self.project_root = project_root.into();
+        self.sync_frontend_manifest = true;
+        self
     }
 
     pub async fn plan(
@@ -718,6 +733,37 @@ impl AssetDagExecutor {
         expected_current: Option<&MaterializationId>,
         policy: &AssetRetryPolicy,
     ) -> Result<(), AssetDagExecutorError> {
+        if record.asset_id.as_str() == SEARCH_SERVING_BUNDLE_ASSET_ID {
+            let report = validate_search_serving_candidate(&self.lake, record)
+                .await
+                .map_err(|error| {
+                    AssetDagExecutorError::ServingReleaseValidation(error.to_string())
+                })?;
+            if !report.passed {
+                return Err(AssetDagExecutorError::ServingReleaseValidation(format!(
+                    "bundle {} failed {} release gate(s): {}",
+                    report.bundle_version,
+                    report.issues.len(),
+                    report
+                        .issues
+                        .iter()
+                        .take(5)
+                        .map(|issue| match issue.reference.as_deref() {
+                            Some(reference) => format!("{} ({reference})", issue.message),
+                            None => issue.message.clone(),
+                        })
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                )));
+            }
+            if self.sync_frontend_manifest {
+                write_frontend_media_manifest(&self.project_root, &report).map_err(|error| {
+                    AssetDagExecutorError::ServingReleaseValidation(format!(
+                        "could not write frontend media manifest: {error}"
+                    ))
+                })?;
+            }
+        }
         let mut attempt = 0;
         loop {
             attempt += 1;
@@ -1673,6 +1719,9 @@ impl BuiltInAssetExecutor {
                     .external_images_weekly
                     .as_ref()
                     .ok_or_else(|| source_input_error(&context))?;
+                let input =
+                    ingest_local_media_assets(&context.dag.lake, &context.dag.project_root, input)
+                        .await?;
                 let parent_records = context
                     .dag
                     .dependency_materialization_records(
@@ -1688,7 +1737,7 @@ impl BuiltInAssetExecutor {
                     .collect();
                 let record = MediaAssetMaterializer::new(context.dag.lake.clone())
                     .materialize_external_images(
-                        input,
+                        &input,
                         parent_materializations,
                         context.run_id.clone(),
                         context.asset_partition.clone(),
@@ -2258,6 +2307,7 @@ pub enum AssetDagExecutorError {
     ProjectEnrichment(ProjectEnrichmentAssetError),
     Media(MediaAssetError),
     SearchServingBundle(SearchServingBundleMaterializeError),
+    ServingReleaseValidation(String),
     SkillFact(SkillFactMaterializeError),
     ApproachRoadGraph(ApproachRoadGraphError),
     Environmental(EnvironmentalAssetError),
@@ -2375,6 +2425,9 @@ impl fmt::Display for AssetDagExecutorError {
             Self::Media(err) => write!(f, "media asset execution failed: {err}"),
             Self::SearchServingBundle(err) => {
                 write!(f, "search serving bundle execution failed: {err}")
+            }
+            Self::ServingReleaseValidation(message) => {
+                write!(f, "serving release validation failed: {message}")
             }
             Self::SkillFact(err) => write!(f, "skill fact source execution failed: {err}"),
             Self::Rera(err) => write!(f, "RERA asset execution failed: {err}"),
@@ -2826,6 +2879,8 @@ mod tests {
             lake,
             registry,
             executors: BuiltInAssetExecutorRegistry { executors },
+            project_root: root.path().to_path_buf(),
+            sync_frontend_manifest: false,
         };
         let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
 
@@ -2883,6 +2938,8 @@ mod tests {
             lake: lake.clone(),
             registry,
             executors: BuiltInAssetExecutorRegistry { executors },
+            project_root: root.path().to_path_buf(),
+            sync_frontend_manifest: false,
         };
         let now = Utc.with_ymd_and_hms(2026, 7, 26, 8, 0, 0).unwrap();
 
@@ -2975,6 +3032,8 @@ mod tests {
             lake,
             registry,
             executors: BuiltInAssetExecutorRegistry { executors },
+            project_root: root.path().to_path_buf(),
+            sync_frontend_manifest: false,
         };
         let now = Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap();
 

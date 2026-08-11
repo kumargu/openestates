@@ -58,7 +58,6 @@ export function LivingEvidenceTile({
 }: Props) {
   const { images } = usePropertySceneImages({
     heroImage: property.hero_image,
-    societyId: property.kg_entity_refs?.society_entity_id,
   });
   const cardImage = images[0] ?? property.hero_image ?? null;
 
@@ -92,6 +91,7 @@ export function LivingEvidenceTile({
           alt=""
           className="catalog-card__image"
           loading="lazy"
+          fetchPriority="low"
         />
         {allowSave || onQuickView ? (
           <div className="catalog-card__actions" role="group" aria-label="Property actions">

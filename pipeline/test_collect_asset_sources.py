@@ -1,6 +1,8 @@
+import base64
 import hashlib
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from io import BytesIO
@@ -55,6 +57,7 @@ from pipeline.sources.external_images import (
     classify_media_candidate,
     skip_image_optimization,
     write_optimized_preview,
+    write_sips_preview,
 )
 
 
@@ -2013,8 +2016,9 @@ class CollectAssetSourcesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             photo_dir = (
                 Path(temp_dir)
-                / "frontend"
-                / "public"
+                / "data"
+                / "cache"
+                / "media_ingest"
                 / "societies"
                 / "example-green"
             )
@@ -2049,10 +2053,10 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         records = output["external_images_weekly"]["records"]
         self.assertEqual(len(records), 3)
-        self.assertEqual(records[0]["image_url"], "/societies/example-green/1.jpg")
+        self.assertEqual(records[0]["image_url"], "/_staged_media/societies/example-green/1.jpg")
         self.assertEqual(records[0]["source_name"], "LocalSocietyPhotos")
-        self.assertEqual(records[0]["storage_policy"], "static_public_asset")
-        self.assertEqual(records[1]["image_url"], "/societies/example-green/2.jpg")
+        self.assertEqual(records[0]["storage_policy"], "staged_local_asset")
+        self.assertEqual(records[1]["image_url"], "/_staged_media/societies/example-green/2.jpg")
         self.assertEqual(records[2]["source_name"], "SquareYards")
         self.assertGreater(records[2]["rank"], records[1]["rank"])
 
@@ -2060,8 +2064,9 @@ class CollectAssetSourcesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             photo_dir = (
                 Path(temp_dir)
-                / "frontend"
-                / "public"
+                / "data"
+                / "cache"
+                / "media_ingest"
                 / "societies"
                 / "prestige-waterford"
             )
@@ -2092,14 +2097,15 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         records = output["external_images_weekly"]["records"]
         self.assertEqual(len(records), 1)
-        self.assertEqual(records[0]["image_url"], "/societies/prestige-waterford/1.jpg")
+        self.assertEqual(records[0]["image_url"], "/_staged_media/societies/prestige-waterford/1.jpg")
 
     def test_external_image_collection_skips_portals_when_local_gallery_is_complete(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             photo_dir = (
                 Path(temp_dir)
-                / "frontend"
-                / "public"
+                / "data"
+                / "cache"
+                / "media_ingest"
                 / "societies"
                 / "example-green"
             )
@@ -2137,7 +2143,10 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(len(records), 5)
         self.assertEqual(records[0]["source_name"], "LocalSocietyPhotos")
         self.assertTrue(
-            all(record["image_url"].startswith("/societies/example-green/") for record in records)
+            all(
+                record["image_url"].startswith("/_staged_media/societies/example-green/")
+                for record in records
+            )
         )
 
     def test_external_image_collection_can_fill_local_society_photos_from_policy(self):
@@ -2159,8 +2168,9 @@ class CollectAssetSourcesTest(unittest.TestCase):
             def fake_fetch(**kwargs):
                 photo_dir = (
                     Path(temp_dir)
-                    / "frontend"
-                    / "public"
+                    / "data"
+                    / "cache"
+                    / "media_ingest"
                     / "societies"
                     / "example-green"
                 )
@@ -2168,7 +2178,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
                 (photo_dir / "1.jpg").write_bytes(b"\xff\xd8\xfflocal-photo")
                 return {
                     "entity_id": kwargs["entity_id"],
-                    "all_photos": ["/societies/example-green/1.jpg"],
+                    "all_photos": ["/_staged_media/societies/example-green/1.jpg"],
                 }
 
             os.environ.pop("OPENESTATES_SKIP_LOCAL_SOCIETY_PHOTO_COLLECTION", None)
@@ -2199,8 +2209,8 @@ class CollectAssetSourcesTest(unittest.TestCase):
         fetch.assert_called_once()
         records = output["external_images_weekly"]["records"]
         self.assertEqual(len(records), 1)
-        self.assertEqual(records[0]["image_url"], "/societies/example-green/1.jpg")
-        self.assertEqual(records[0]["storage_policy"], "static_public_asset")
+        self.assertEqual(records[0]["image_url"], "/_staged_media/societies/example-green/1.jpg")
+        self.assertEqual(records[0]["storage_policy"], "staged_local_asset")
 
     def test_external_image_collection_uses_magicbricks_project_page_fallback(self):
         html = """
@@ -2366,7 +2376,9 @@ class CollectAssetSourcesTest(unittest.TestCase):
             (policy_dir / "local_society_photo_collection.json").write_text(
                 json.dumps({"enabled": True, "target_images": 1})
             )
-            photo_dir = root / "frontend" / "public" / "societies" / "example-green"
+            photo_dir = (
+                root / "data" / "cache" / "media_ingest" / "societies" / "example-green"
+            )
             photo_dir.mkdir(parents=True)
             (photo_dir / "1.jpg").write_bytes(b"local-photo-one")
             metadata_dir = root / "data" / "cache" / "image_metadata"
@@ -2402,7 +2414,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         records = output["external_images_weekly"]["records"]
         self.assertEqual(len(records), 1)
-        self.assertEqual(records[0]["image_url"], "/societies/example-green/1.jpg")
+        self.assertEqual(records[0]["image_url"], "/_staged_media/societies/example-green/1.jpg")
         self.assertEqual(
             records[0]["original_image_url"],
             "https://static.squareyards.com/resources/images/example-green.jpg",
@@ -2433,12 +2445,36 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
             self.assertIsNotNone(result)
             assert result is not None
-            self.assertTrue(result["preview_url"].startswith("/media/previews/"))
+            self.assertTrue(result["preview_url"].startswith("/_staged_media/"))
             preview_path = Path(result["preview_path"])
             self.assertTrue(preview_path.exists())
             self.assertEqual(preview_path.suffix, ".webp")
+            self.assertEqual(
+                result["content_sha256"], hashlib.sha256(preview_path.read_bytes()).hexdigest()
+            )
             self.assertLessEqual(result["width"], 1280)
             self.assertLessEqual(result["height"], 960)
+
+    @unittest.skipUnless(shutil.which("sips"), "sips is available only on macOS")
+    def test_sips_optimizer_writes_browser_safe_jpeg_preview(self):
+        png_bytes = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
+            "/x8AAusB9Y9Zl1sAAAAASUVORK5CYII="
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = write_sips_preview(
+                project_root=Path(temp_dir),
+                entity_id="society:example-green",
+                image_url="https://img.example.com/example-green-elevation.jpg",
+                image_bytes=png_bytes,
+            )
+
+            self.assertIsNotNone(result)
+            assert result is not None
+            preview_path = Path(result["preview_path"])
+            self.assertEqual(preview_path.suffix, ".jpg")
+            self.assertTrue(preview_path.read_bytes().startswith(b"\xff\xd8"))
 
     def test_external_image_optimization_is_disabled_until_explicitly_enabled(self):
         os.environ.pop("OPENESTATES_SKIP_IMAGE_OPTIMIZATION", None)

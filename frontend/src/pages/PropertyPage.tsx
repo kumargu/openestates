@@ -474,15 +474,14 @@ function PropertyPhotoMosaic({
   societyName,
   heroImage,
   images,
-  societyId,
 }: {
   title: string;
   societyName?: string;
   heroImage?: string | null;
   images?: string[];
-  societyId?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [readyLeadImage, setReadyLeadImage] = useState<string | null>(null);
   const {
     images: sceneImages,
     loading,
@@ -490,17 +489,26 @@ function PropertyPhotoMosaic({
   } = usePropertySceneImages({
     heroImage,
     images,
-    societyId,
   });
   const leadImage = propertySceneImageAt(sceneImages, 0, heroImage);
+  const leadImageReady = Boolean(leadImage && readyLeadImage === leadImage);
   const mosaicImages = sceneImages.slice(1, 5);
   const total = sceneImages.length || (heroImage ? 1 : 0);
 
   return (
     <section className="property-photo-mosaic" aria-label="Property photos">
-      <div className="property-photo-mosaic__lead">
+      <div
+        className={`property-photo-mosaic__lead${leadImageReady ? " is-ready" : ""}`}
+      >
         {leadImage ? (
-          <ImageWithFallback src={leadImage} alt={title} loading="eager" />
+          <ImageWithFallback
+            src={leadImage}
+            alt={title}
+            loading="eager"
+            decoding="auto"
+            fetchPriority="high"
+            onReady={() => setReadyLeadImage(leadImage)}
+          />
         ) : (
           <div className="property-photo-mosaic__empty">
             <span>{loading ? "Loading photos" : "Photos unavailable"}</span>
@@ -515,6 +523,7 @@ function PropertyPhotoMosaic({
               src={src}
               alt={`${title} - ${sceneLabelForIndex(index + 1)}`}
               loading="lazy"
+              fetchPriority="low"
             />
             <span>{sceneLabelForIndex(index + 1)}</span>
           </button>
@@ -544,6 +553,7 @@ function PropertyPhotoMosaic({
                   src={src}
                   alt={`${title} - ${sceneLabelForIndex(index)}`}
                   loading="lazy"
+                  fetchPriority="low"
                 />
                 <figcaption>{sceneLabelForIndex(index)}</figcaption>
               </figure>
@@ -648,7 +658,6 @@ function NearbyHomeCard({
   const { images } = usePropertySceneImages({
     heroImage: property.hero_image,
     images: property.images,
-    societyId: property.kg_entity_refs?.society_entity_id,
   });
   const image = propertySceneImageAt(images, sceneIndex, property.hero_image);
   const title = property.title.trim();
@@ -659,7 +668,12 @@ function NearbyHomeCard({
       <Link to={`/property/${property.id}`}>
         <span className="property-nearby-card__image">
           {image ? (
-            <ImageWithFallback src={image} alt={title} loading="lazy" />
+            <ImageWithFallback
+              src={image}
+              alt={title}
+              loading="lazy"
+              fetchPriority="low"
+            />
           ) : (
             <span>{property.society_name || property.title}</span>
           )}
@@ -1187,7 +1201,6 @@ function PropertyPageBody({
         societyName={society?.name}
         heroImage={p.hero_image}
         images={p.images}
-        societyId={p.society_id}
       />
 
       <main className="property-clean-flow">

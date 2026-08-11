@@ -39,6 +39,14 @@ node_modules/
 
 # Frontend build output
 frontend/dist/
+# Property media is a lake artifact, never a frontend/Git asset.
+frontend/public/societies/
+frontend/public/launches/
+frontend/public/societies_ranked.json
+
+# Local browser/debug output
+.playwright-mcp/
+backend/data/validation/
 
 # Reddit cache (generated)
 data/reddit_cache/

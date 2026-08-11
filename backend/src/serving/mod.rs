@@ -11,6 +11,7 @@ pub mod materializer;
 pub mod parquet;
 pub mod projection;
 pub mod proximity;
+pub mod release_validation;
 pub mod rera;
 pub mod spatial_index;
 pub mod tantivy_index;
@@ -29,6 +30,11 @@ pub use parquet::{
 };
 pub use projection::{GoogleReviewEvidence, ProjectedFact, SocietyFactProjection};
 pub use proximity::{derive_proximity_records, DerivedProximityRecords};
+pub use release_validation::{
+    validate_search_serving_candidate, write_frontend_media_manifest, FrontendMediaAsset,
+    FrontendMediaManifest, ServingBundleValidationError, ServingBundleValidationIssue,
+    ServingBundleValidationReport,
+};
 pub use rera::{
     project_rera_evidence, ReraEvidenceCoverage, ReraEvidenceEntity, ReraEvidenceEvent,
     ReraEvidenceIndex, ReraEvidenceSeries, ReraEvidenceSeriesPoint, ReraEvidenceSource,

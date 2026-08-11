@@ -91,9 +91,10 @@ pub use kg_view::{
 };
 pub use materialization::AssetMaterializationStore;
 pub use media::{
-    image_media_facts_input_with_aliases, ExternalImageObservationRecord,
-    ExternalImageSnapshotManifest, ExternalImagesWeeklyInput, MediaAssetError,
-    MediaAssetMaterializer, EXTERNAL_IMAGES_WEEKLY_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
+    image_media_facts_input_with_aliases, ingest_local_media_assets,
+    ExternalImageObservationRecord, ExternalImageSnapshotManifest, ExternalImagesWeeklyInput,
+    MediaAssetError, MediaAssetMaterializer, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+    IMAGE_MEDIA_FACTS_ASSET_ID,
 };
 pub use osm_power::{
     canonicalize_osm_power_infrastructure_input, osm_power_line_facts_input, OsmPowerAssetError,

@@ -1,67 +1,35 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  initialPropertySceneUrls,
-  probeImageUrls,
-  societyPhotoCandidates,
-  societySlugFromId,
-} from "../lib/propertyScene.ts";
+/**
+ * Resolve only the image URLs explicitly promoted in the serving payload.
+ *
+ * This hook must remain a synchronous selector, not an image loader. Browsers
+ * already fetch `<img>` resources independently from the property API response,
+ * and each rendering surface owns the correct priority: the visible hero uses
+ * eager/high priority while galleries and recommendations use lazy/low priority.
+ * `ImageWithFallback` handles an individual failed request at render time.
+ *
+ * Do not add `new Image()`, `Promise.all()`, HEAD requests, or society-ID path
+ * guessing here. A preflight probe starts every gallery download on page reload,
+ * defeats native lazy loading, and multiplies requests when several cards use
+ * this hook. A missing URL is a serving-bundle/data issue; the frontend must not
+ * search local folders for an alternative source of truth.
+ */
+import { useMemo } from "react";
+import { initialPropertySceneUrls } from "../lib/propertyScene.ts";
 
 type Input = {
   heroImage?: string | null;
   images?: string[];
-  societyId?: string;
 };
 
 export function usePropertySceneImages(input: Input) {
-  const seeds = useMemo(
+  const images = useMemo(
     () =>
       initialPropertySceneUrls({
         heroImage: input.heroImage,
         images: input.images,
-        societyId: input.societyId,
       }),
-    [input.heroImage, input.images, input.societyId],
+    [input.heroImage, input.images],
   );
 
-  const [images, setImages] = useState<string[]>(seeds);
-  const [loading, setLoading] = useState(seeds.length === 0 && Boolean(input.societyId));
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function resolve() {
-      if (seeds.length > 0) {
-        const loaded = await probeImageUrls(seeds);
-        if (!cancelled) {
-          setImages(loaded);
-          setLoading(false);
-        }
-        return;
-      }
-
-      const slug = societySlugFromId(input.societyId);
-      if (!slug) {
-        if (!cancelled) {
-          setImages([]);
-          setLoading(false);
-        }
-        return;
-      }
-
-      setLoading(true);
-      const candidates = societyPhotoCandidates(slug, 5);
-      const loaded = await probeImageUrls(candidates);
-      if (!cancelled) {
-        setImages(loaded);
-        setLoading(false);
-      }
-    }
-
-    void resolve();
-    return () => {
-      cancelled = true;
-    };
-  }, [input.societyId, seeds]);
-
-  return { images, loading, hasImages: images.length > 0 };
+  return { images, loading: false, hasImages: images.length > 0 };
 }

@@ -415,7 +415,12 @@ function ResolveCanvas({
               className={`landing-resolve__home${index === 0 ? " is-focus" : ""}`}
             >
               <div className="landing-resolve__home-media" aria-hidden="true">
-                <ImageWithFallback src={image} alt="" loading={index === 0 ? "eager" : "lazy"} />
+                <ImageWithFallback
+                  src={image}
+                  alt=""
+                  loading={index === 0 ? "eager" : "lazy"}
+                  fetchPriority={index === 0 ? "high" : "low"}
+                />
               </div>
               <span className="landing-resolve__rank">0{index + 1}</span>
               <div className="landing-resolve__home-copy">

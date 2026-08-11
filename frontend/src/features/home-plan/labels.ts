@@ -1,18 +1,18 @@
 /** User-facing name for the buy / rent / invest comparison surface. */
 export const BUY_VS_RENT = {
   /** Short nav / button label */
-  short: "Buy vs rent",
+  short: "Rent vs buy",
   /** Section kicker on property page */
-  kicker: "Buy vs rent",
+  kicker: "Rent vs buy",
   /** Primary CTA */
   cta: "Run the numbers",
   /** Assumptions drawer trigger */
   editAssumptions: "Edit assumptions",
   /** Page title suffix */
-  pageTitle: "Buy vs rent",
+  pageTitle: "Rent vs buy",
   /** Loading / error copy */
-  loading: "Loading buy vs rent comparison",
-  pickProperty: "Pick a home first, then run the numbers.",
+  loading: "Loading rent vs buy comparison",
+  pickProperty: "Pick a home first, then compare rent and buy.",
   unavailable: "This home is no longer available for comparison.",
   loadError: "We could not load this comparison. Go back to the property and try again.",
   assumptionsTitle: "Your assumptions",

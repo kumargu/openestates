@@ -1,4 +1,4 @@
-import { type PlanInputs } from "./model.ts";
+import { type EditablePlanInput, type PlanInputs } from "./model.ts";
 import { useState } from "react";
 
 const LAKH = 100_000;
@@ -12,13 +12,14 @@ function monthlyInterestThresholdThousands(inputs: PlanInputs): number {
 type PlanAssumptionRailProps = {
   inputs: PlanInputs;
   extraEmisPerYear: number;
-  onInputChange: <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => void;
+  loanFreeYear: number | null;
+  onInputChange: (key: EditablePlanInput, value: number) => void;
   onExtraEmisChange: (count: number) => void;
   onReset: () => void;
 };
 
 type InputSpec = {
-  key: "monthlyEmiThousands" | "currentRentThousands" | "monthlySipThousands" | "loanRate" | "equityReturn";
+  key: EditablePlanInput;
   label: string;
   min: number;
   max?: number;
@@ -105,6 +106,7 @@ function PlanInput({
 export function PlanAssumptionRail({
   inputs,
   extraEmisPerYear,
+  loanFreeYear,
   onInputChange,
   onExtraEmisChange,
   onReset,
@@ -112,7 +114,9 @@ export function PlanAssumptionRail({
   const principalThresholdThousands = monthlyInterestThresholdThousands(inputs);
   const emiNote = principalThresholdThousands > 0 && inputs.monthlyEmiThousands <= principalThresholdThousands
     ? `Principal starts above ₹${principalThresholdThousands.toLocaleString("en-IN")}K / mo`
-    : "Loan-free year";
+    : loanFreeYear == null
+      ? "Loan stays open at this EMI"
+      : `Loan-free around year ${loanFreeYear}`;
   const rentPathInputs: InputSpec[] = [
     {
       key: "currentRentThousands",
@@ -122,7 +126,7 @@ export function PlanAssumptionRail({
       step: 5,
       prefix: "₹",
       suffix: "K / mo",
-      note: "Cash out while renting",
+      note: "Monthly housing cost",
     },
     {
       key: "monthlySipThousands",
@@ -132,7 +136,7 @@ export function PlanAssumptionRail({
       step: 5,
       prefix: "₹",
       suffix: "K / mo",
-      note: "Your rent-path investment",
+      note: "Rent-path investment",
     },
   ];
 
