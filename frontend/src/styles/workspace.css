@@ -20,135 +20,6 @@
   grid-column: auto;
 }
 
-.saved-homes-dock {
-  position: fixed;
-  right: clamp(1rem, 3vw, 2.5rem);
-  bottom: clamp(1rem, 3vw, 2rem);
-  z-index: 90;
-}
-
-.saved-homes-dock__trigger {
-  display: inline-flex;
-  min-height: 2.65rem;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0 0.9rem;
-  border: 1px solid rgba(38, 35, 32, 0.11);
-  border-radius: 999px;
-  background: rgba(252, 250, 247, 0.94);
-  box-shadow: 0 10px 30px rgba(38, 35, 32, 0.11);
-  color: #3b3631;
-  font: inherit;
-  font-size: 0.7rem;
-  font-weight: 720;
-  backdrop-filter: blur(16px);
-  cursor: pointer;
-}
-
-.saved-homes-dock__trigger span {
-  display: grid;
-  min-width: 1.25rem;
-  height: 1.25rem;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--color-cool-soft);
-  color: var(--color-cool-deep);
-  font-size: 0.61rem;
-}
-
-.saved-homes-dock__panel {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 0.65rem);
-  width: min(21rem, calc(100vw - 2rem));
-  padding: 0.8rem;
-  border: 1px solid rgba(38, 35, 32, 0.09);
-  border-radius: 14px;
-  background: rgba(252, 250, 247, 0.98);
-  box-shadow: 0 24px 60px rgba(38, 35, 32, 0.16);
-  backdrop-filter: blur(20px);
-}
-
-.saved-homes-dock__panel header,
-.saved-homes-dock__panel header > div,
-.saved-homes-dock__list a {
-  display: flex;
-}
-
-.saved-homes-dock__panel header {
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.15rem 0.2rem 0.65rem;
-}
-
-.saved-homes-dock__panel header > div,
-.saved-homes-dock__list a {
-  flex-direction: column;
-}
-
-.saved-homes-dock__panel header strong {
-  color: #2c2824;
-  font-size: 0.77rem;
-}
-
-.saved-homes-dock__panel header span,
-.saved-homes-dock__list span {
-  margin-top: 0.15rem;
-  color: var(--color-text-muted);
-  font-size: 0.6rem;
-}
-
-.saved-homes-dock__panel header button {
-  width: 1.7rem;
-  height: 1.7rem;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-muted);
-  font: inherit;
-  cursor: pointer;
-}
-
-.saved-homes-dock__list {
-  display: grid;
-  gap: 0.2rem;
-}
-
-.saved-homes-dock__list a {
-  padding: 0.62rem;
-  border-radius: 8px;
-  color: #3b3631;
-  text-decoration: none;
-}
-
-.saved-homes-dock__list a:hover {
-  background: rgba(91, 127, 176, 0.08);
-}
-
-.saved-homes-dock__list strong {
-  overflow: hidden;
-  font-size: 0.69rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.saved-homes-dock__panel footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.42rem 0.75rem;
-  margin-top: 0.6rem;
-  padding: 0.7rem 0.2rem 0.1rem;
-  border-top: 1px solid rgba(38, 35, 32, 0.07);
-}
-
-.saved-homes-dock__panel footer a {
-  color: var(--color-cool-deep);
-  font-size: 0.62rem;
-  font-weight: 700;
-  text-decoration: none;
-}
-
 .workspace-view {
   grid-column: 2;
   min-width: 0;
@@ -158,6 +29,10 @@
 
 .workspace-view > main {
   min-height: 100vh;
+}
+
+.workspace-shell:not(.workspace-shell--plain) .home-closing {
+  display: none;
 }
 
 .workspace-header {
@@ -2485,8 +2360,9 @@
     gap: 0.12rem;
   }
 
-  .workspace-sidebar--workspace .workspace-sidebar__nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .workspace-sidebar--workspace .workspace-sidebar__nav,
+  .workspace-sidebar--discovery .workspace-sidebar__nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .workspace-sidebar--property-context .workspace-sidebar__nav {
@@ -2508,6 +2384,7 @@
   }
 
   .workspace-sidebar--property-context .workspace-sidebar__nav-item span,
+  .workspace-sidebar--discovery .workspace-sidebar__nav-item span,
   .workspace-sidebar--workspace:not(.workspace-sidebar--collapsed) .workspace-sidebar__nav-item span {
     display: block;
     max-width: 100%;
@@ -2522,10 +2399,6 @@
     overflow-x: auto;
   }
 
-  .saved-homes-dock {
-    right: max(0.8rem, env(safe-area-inset-right));
-    bottom: max(0.8rem, env(safe-area-inset-bottom));
-  }
 }
 
 @media (max-width: 650px) {

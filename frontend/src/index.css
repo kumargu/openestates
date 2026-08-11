@@ -6877,11 +6877,10 @@ button.oe-label-pill:focus-visible {
   box-sizing: border-box;
   width: 100%;
   margin-top: 1.75rem;
-  padding: 1.5rem 0 1.25rem;
-  background:
-    linear-gradient(180deg, rgba(244, 247, 251, 0.78) 0%, rgba(255, 255, 255, 0.62) 100%);
-  border-top: 1px solid rgba(100, 140, 200, 0.14);
-  border-bottom: 1px solid rgba(100, 140, 200, 0.1);
+  padding: 1.5rem 0 0;
+  background: transparent;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 0;
 }
 
 .property-micro-market .area-tracker-section__inner {
@@ -6896,7 +6895,10 @@ button.oe-label-pill:focus-visible {
 
 .property-micro-market .home-micro-heading {
   margin-bottom: 0;
-  font-size: clamp(1.2rem, 1rem + 0.7vw, 1.55rem);
+  color: var(--color-text);
+  font-size: clamp(1.28rem, 1rem + 0.8vw, 1.85rem);
+  line-height: 1.2;
+  letter-spacing: 0;
 }
 
 .property-micro-market .home-micro-grid {

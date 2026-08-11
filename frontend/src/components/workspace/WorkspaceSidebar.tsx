@@ -13,6 +13,7 @@ type WorkspaceIconName =
   | "browse"
   | "listing"
   | "notebook"
+  | "compare"
   | "rera"
   | "chevron";
 
@@ -22,7 +23,7 @@ type WorkspaceSidebarProps = {
   activeView: WorkspaceView;
   collapsed: boolean;
   reduced: boolean;
-  mode: "property-context" | "workspace";
+  mode: "discovery" | "property-context" | "workspace";
   discoveryHref: string;
   onToggle: () => void;
   onFocus: (propertyId: string) => void;
@@ -42,7 +43,7 @@ function WorkspaceIcon({
     viewBox: "0 0 24 24",
     fill: "none",
     stroke: "currentColor",
-    strokeWidth: 1.8,
+    strokeWidth: 1.65,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
     "aria-hidden": true,
@@ -51,34 +52,40 @@ function WorkspaceIcon({
   if (name === "browse") {
     return (
       <svg {...common}>
-        <circle cx="11" cy="11" r="6" />
-        <path d="m16 16 4 4" />
+        <circle cx="12" cy="12" r="8.25" />
+        <path d="m15.35 8.65-2.2 4.5-4.5 2.2 2.2-4.5 4.5-2.2Z" />
       </svg>
     );
   }
   if (name === "listing") {
-    // Door / entry — “this home”, not the app-home house glyph.
     return (
       <svg {...common}>
-        <path d="M5 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" />
-        <path d="M16 10h2.5a1.5 1.5 0 0 1 1.5 1.5V21" />
-        <path d="M10 21v-6h3v6" />
+        <path d="m4 10 8-6.5 8 6.5v9.25a1.25 1.25 0 0 1-1.25 1.25H5.25A1.25 1.25 0 0 1 4 19.25Z" />
+        <path d="M9 20.5v-6h6v6" />
       </svg>
     );
   }
   if (name === "notebook") {
     return (
       <svg {...common}>
-        <path d="M7 3.5h8.5A2.5 2.5 0 0 1 18 6v14.2l-5.2-2.6L7.5 20.2V6A2.5 2.5 0 0 1 10 3.5" />
+        <path d="M6.5 3.75h7l4 4v12.5H6.5Z" />
+        <path d="M13.5 3.75v4h4M9.25 12h5.5M9.25 15.5h4" />
+      </svg>
+    );
+  }
+  if (name === "compare") {
+    return (
+      <svg {...common}>
+        <rect x="3.75" y="5.25" width="16.5" height="13.5" rx="2" />
+        <path d="M12 5.25v13.5" />
       </svg>
     );
   }
   if (name === "rera") {
     return (
       <svg {...common}>
-        <path d="M7 3.5h10v17H7z" />
-        <path d="M10 8h4M10 12h4" />
-        <path d="m10 16 1.4 1.4L15 14" />
+        <path d="M12 3.5 18.5 6v5.5c0 4.2-2.6 7-6.5 9-3.9-2-6.5-4.8-6.5-9V6Z" />
+        <path d="m9.2 11.9 1.75 1.75 3.9-4.1" />
       </svg>
     );
   }
@@ -120,6 +127,7 @@ export function WorkspaceSidebar({
   const navItems = workspaceNavItems(focusedId, activeView, {
     mode,
     discoveryHref,
+    compareIds: homes.map((home) => home.id),
   });
   const [showAllHomes, setShowAllHomes] = useState(false);
   const { notes } = useNotebook();
@@ -165,7 +173,7 @@ export function WorkspaceSidebar({
         ) : null}
       </div>
 
-      <nav className="workspace-sidebar__nav" aria-label={mode === "workspace" ? "Buyer workspace" : "Property navigation"}>
+      <nav className="workspace-sidebar__nav" aria-label={mode === "property-context" ? "Property navigation" : "Buyer workspace"}>
         {navItems.map((item) => {
           const title = !item.available
             ? `${item.label} — save a home first`
@@ -274,7 +282,7 @@ export function WorkspaceSidebar({
 
       <div className="workspace-sidebar__footer" aria-hidden="true">
         <span>OE</span>
-        {!collapsed && <p>{mode === "workspace" ? "Your shortlist" : "Property guide"}</p>}
+        {!collapsed && <p>{mode === "property-context" ? "Property guide" : "Your shortlist"}</p>}
       </div>
     </aside>
   );
