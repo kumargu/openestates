@@ -1123,18 +1123,8 @@
   flex-shrink: 0;
 }
 
-.nearby-plate__nearest-item:hover .notebook-pin,
-.nearby-plate__nearest-item:focus-within .notebook-pin,
-.nearby-plate__selected:hover .notebook-pin,
-.nearby-plate__selected:focus-within .notebook-pin,
-.nearby-plate__water-card:hover .notebook-pin,
-.nearby-plate__water-card:focus-within .notebook-pin,
 .notebook-pin.is-filled,
 .notebook-pin:focus-visible {
-  opacity: 1;
-}
-
-.nearby-plate__selected .notebook-pin {
   opacity: 1;
 }
 

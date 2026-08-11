@@ -49,9 +49,17 @@ pub struct SeedPolygon {
 pub struct MapOverlayLine {
     pub id: String,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub distance_km: Option<f64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub details: Vec<String>,
     pub kind: String,
     pub coordinates: Vec<[f64; 2]>,
     pub source_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -188,9 +196,13 @@ pub fn nearest_metro_corridor(
             (coordinates.len() >= 2).then(|| MapOverlayLine {
                 id: line.id.clone(),
                 name: corridor_name.clone(),
+                label: None,
+                distance_km: None,
+                details: Vec::new(),
                 kind: "metro_line".to_string(),
                 coordinates,
                 source_type: "OpenStreetMap".to_string(),
+                source_url: None,
             })
         })
         .collect::<Vec<_>>();
@@ -240,9 +252,13 @@ pub fn metro_network_near(
                 network.push(MapOverlayLine {
                     id: line.id.clone(),
                     name: display_name.clone(),
+                    label: None,
+                    distance_km: None,
+                    details: Vec::new(),
                     kind: "metro_line".to_string(),
                     coordinates,
                     source_type: "OpenStreetMap".to_string(),
+                    source_url: None,
                 });
             }
         }
@@ -378,9 +394,13 @@ fn trunk_line_corridor(
             MapOverlayLine {
                 id: line.id.clone(),
                 name: display_name.clone(),
+                label: None,
+                distance_km: None,
+                details: Vec::new(),
                 kind: "metro_line".to_string(),
                 coordinates: line.coordinates.clone(),
                 source_type: "OpenStreetMap".to_string(),
+                source_url: None,
             }
         })
         .collect::<Vec<_>>();

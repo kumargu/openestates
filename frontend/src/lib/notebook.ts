@@ -870,6 +870,39 @@ export function upsertCatalogNote(input: {
   )));
 }
 
+export function upsertContextualNote(input: {
+  propertyId: string;
+  catalogKey: string;
+  title: string;
+  text: string;
+  labels: NotebookLabelId[];
+  detail?: string;
+  source?: string;
+}): NotebookState | null {
+  const selectionText = input.text.trim();
+  if (!selectionText) return null;
+
+  const state = readNotebook();
+  const existing = blockByCatalogKey(state, input.catalogKey);
+  const block: EvidenceReferenceBlock = {
+    id: existing?.block.id ?? noteId(),
+    type: "evidence_reference",
+    title: input.title,
+    detail: input.detail,
+    source: input.source,
+    catalogKey: input.catalogKey,
+    selectionText,
+    labels: uniqueLabels(input.labels),
+    createdAt: existing?.block.createdAt ?? Date.now(),
+  };
+
+  return writeNotebook(updateDocument(state, input.propertyId, (blocks) => (
+    existing
+      ? blocks.map((current) => current.id === existing.block.id ? block : current)
+      : [...blocks, block]
+  )));
+}
+
 export function addSelectionNote(input: {
   propertyId: string;
   text: string;

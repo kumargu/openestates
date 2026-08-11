@@ -96,6 +96,8 @@ pub struct SceneFeature {
     pub label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub short_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub details: Vec<String>,
     pub geometry: SceneGeometry,
     pub coordinate_quality: CoordinateQuality,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -367,6 +369,7 @@ pub fn build_surface_scene_with_focus(
                 kind: candidate.kind,
                 label: candidate.label,
                 short_label: candidate.short_label,
+                details: candidate.details,
                 geometry: candidate.geometry,
                 coordinate_quality: candidate.coordinate_quality,
                 metrics: Some(SceneMetrics {
@@ -442,6 +445,7 @@ struct SceneFeatureCandidate {
     kind: String,
     label: String,
     short_label: Option<String>,
+    details: Vec<String>,
     geometry: SceneGeometry,
     coordinate_quality: CoordinateQuality,
     distance_m: Option<u32>,
@@ -775,7 +779,8 @@ fn feature_candidate_from_fact(
             .or(source.entity_id),
         kind: kind_for_layer(layer_rule),
         label,
-        short_label: None,
+        short_label: layer_rule.feature_labels.get(&fact.fact_key).cloned(),
+        details: parsed.details,
         geometry,
         coordinate_quality: if place_coordinates.is_some() {
             CoordinateQuality::Exact
@@ -1063,6 +1068,7 @@ struct ParsedNearbyDisplay {
     distance_km: Option<f64>,
     rating: Option<f64>,
     review_count: Option<u32>,
+    details: Vec<String>,
 }
 
 fn parse_nearby_display(value: &str) -> ParsedNearbyDisplay {
@@ -1077,6 +1083,7 @@ fn parse_nearby_display(value: &str) -> ParsedNearbyDisplay {
     let mut distance_km = None;
     let mut rating = None;
     let mut review_count = None;
+    let mut details = Vec::new();
     if let Some(meta) = meta {
         distance_km = extract_first_distance_km(meta);
         for part in meta.split(',') {
@@ -1089,6 +1096,11 @@ fn parse_nearby_display(value: &str) -> ParsedNearbyDisplay {
                     .filter(|value| value.is_finite() && (0.0..=5.0).contains(value));
             } else if let Some(raw) = part.strip_suffix(" reviews") {
                 review_count = raw.trim().parse::<u32>().ok();
+            } else if extract_first_distance_km(part).is_none()
+                && !part.to_ascii_lowercase().starts_with("severity:")
+                && !part.is_empty()
+            {
+                details.push(part.to_string());
             }
         }
     }
@@ -1097,6 +1109,7 @@ fn parse_nearby_display(value: &str) -> ParsedNearbyDisplay {
         distance_km,
         rating,
         review_count,
+        details,
     }
 }
 
@@ -1429,6 +1442,11 @@ mod tests {
         assert_eq!(parsed.distance_km, Some(1.2));
         assert_eq!(parsed.rating, Some(4.4));
         assert_eq!(parsed.review_count, Some(521));
+        assert!(parsed.details.is_empty());
+
+        let line = parse_nearby_display("KPTCL (877 m, 66 kV, severity: info)");
+        assert_eq!(line.distance_km, Some(0.877));
+        assert_eq!(line.details, vec!["66 kV"]);
     }
 
     #[test]
@@ -1618,6 +1636,7 @@ mod tests {
                     id: "drains".to_string(),
                     label: "Drains".to_string(),
                     fact_keys: vec!["stormwater_drain_nearby".to_string()],
+                    feature_labels: HashMap::new(),
                     edge_types: Vec::new(),
                     linked_entity_fact_keys: vec!["stormwater_drain_place_entity".to_string()],
                     sort_priority_fact_keys: Vec::new(),
@@ -1723,6 +1742,7 @@ mod tests {
                         "nearby_graveyards".to_string(),
                         "high_voltage_transmission_line_nearby".to_string(),
                     ],
+                    feature_labels: HashMap::new(),
                     edge_types: Vec::new(),
                     linked_entity_fact_keys: Vec::new(),
                     sort_priority_fact_keys: vec![
@@ -1819,6 +1839,7 @@ mod tests {
                         "nearby_graveyards".to_string(),
                         "high_voltage_transmission_line_nearby".to_string(),
                     ],
+                    feature_labels: HashMap::new(),
                     edge_types: Vec::new(),
                     linked_entity_fact_keys: Vec::new(),
                     sort_priority_fact_keys: vec![
@@ -1935,6 +1956,7 @@ mod tests {
                     id: "tech".to_string(),
                     label: "Tech parks".to_string(),
                     fact_keys: vec!["nearby_tech_parks".to_string()],
+                    feature_labels: HashMap::new(),
                     edge_types: Vec::new(),
                     linked_entity_fact_keys: Vec::new(),
                     sort_priority_fact_keys: Vec::new(),
@@ -2050,6 +2072,7 @@ mod tests {
                     id: "red_flags".to_string(),
                     label: "Red flags".to_string(),
                     fact_keys: vec!["high_voltage_transmission_line_nearby".to_string()],
+                    feature_labels: HashMap::new(),
                     edge_types: Vec::new(),
                     linked_entity_fact_keys: vec![
                         "high_voltage_transmission_line_place_entity".to_string()
@@ -2147,6 +2170,7 @@ mod tests {
                     id: "red_flags".to_string(),
                     label: "Red flags".to_string(),
                     fact_keys: vec!["nearby_graveyards".to_string()],
+                    feature_labels: HashMap::new(),
                     edge_types: Vec::new(),
                     linked_entity_fact_keys: Vec::new(),
                     sort_priority_fact_keys: Vec::new(),
@@ -2199,6 +2223,7 @@ mod tests {
                 kind: "line".to_string(),
                 label: "Drain".to_string(),
                 short_label: None,
+                details: Vec::new(),
                 geometry: SceneGeometry::LineString {
                     coordinates: vec![[77.745, 12.94], [77.747, 12.942]],
                 },
@@ -2236,6 +2261,7 @@ mod tests {
             id: "groundwater".to_string(),
             label: "Groundwater".to_string(),
             fact_keys: vec!["environment.groundwater_potential_class".to_string()],
+            feature_labels: HashMap::new(),
             edge_types: Vec::new(),
             linked_entity_fact_keys: Vec::new(),
             sort_priority_fact_keys: Vec::new(),
@@ -2262,6 +2288,7 @@ mod tests {
             id: "approach_waterlogging".to_string(),
             label: "Waterlogging".to_string(),
             fact_keys: vec!["risk.approach_road_waterlogging".to_string()],
+            feature_labels: HashMap::new(),
             edge_types: vec!["served_by_road".to_string()],
             linked_entity_fact_keys: Vec::new(),
             sort_priority_fact_keys: Vec::new(),

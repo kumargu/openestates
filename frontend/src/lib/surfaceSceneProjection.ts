@@ -139,9 +139,15 @@ function mapLineFromFeature(
   return {
     id: feature.id,
     name: feature.label,
+    label: feature.shortLabel,
+    distance_km: typeof feature.metrics?.distanceM === "number"
+      ? feature.metrics.distanceM / 1000
+      : undefined,
+    details: feature.details,
     kind: feature.kind,
     coordinates,
     source_type: receipt?.sourceType ?? "OpenEstates",
+    source_url: receipt?.sourceUrl,
   };
 }
 

@@ -19,6 +19,7 @@ import {
   toggleCatalogNote,
   toggleNotebookCompareId,
   updateNotebookNote,
+  upsertContextualNote,
   type NotebookLabelId,
   type NotebookNote,
   type NotebookState,
@@ -68,6 +69,11 @@ export function useNotebook() {
 
   const addHandwritten = useCallback((input: Parameters<typeof addHandwrittenNote>[0]) => {
     const next = addHandwrittenNote(input);
+    if (next) setState(next);
+  }, []);
+
+  const addContextual = useCallback((input: Parameters<typeof upsertContextualNote>[0]) => {
+    const next = upsertContextualNote(input);
     if (next) setState(next);
   }, []);
 
@@ -136,6 +142,7 @@ export function useNotebook() {
     toggleFact,
     rememberSelection,
     addHandwritten,
+    addContextual,
     addCommandBlock,
     addParagraphAfter,
     removeNote,
