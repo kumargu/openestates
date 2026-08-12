@@ -455,7 +455,7 @@ def fetch_images_for_entity(
     """
     slug = entity_id.replace("society:", "").replace("soc-", "").replace(" ", "_")
     root = project_root or PROJECT_ROOT
-    photos_dir = root / "frontend" / "public" / "societies"
+    photos_dir = root / "data" / "cache" / "media_ingest" / "societies"
     metadata_dir = root / "data" / "cache" / "image_metadata"
     dest_dir = photos_dir / slug
     existing = sorted(dest_dir.glob("*.*")) if dest_dir.exists() else []

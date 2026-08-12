@@ -58,9 +58,7 @@
       { "key": "rera_status", "label": "Status", "scope": "society", "relationship": "project registration" },
       { "key": "rera_completion_date", "label": "Completion", "scope": "society", "relationship": "project registration" },
       { "key": "rera_total_land_area_sqm", "label": "Land area", "scope": "society", "relationship": "project registration" },
-      { "key": "rera_delay_months", "label": "Delay", "scope": "society", "relationship": "project registration" },
-      { "key": "rera_complaints_count", "label": "Complaints", "scope": "society", "relationship": "project registration" },
-      { "key": "rera_builder_revocations", "label": "Builder revocations", "scope": "society", "relationship": "project registration" }
+      { "key": "rera_delay_months", "label": "Delay", "scope": "society", "relationship": "project registration" }
     ]
   },
   {

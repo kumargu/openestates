@@ -30,7 +30,7 @@ use crate::state::{
 };
 use crate::{
     assets::{CatalogEnvironment, CatalogReleaseId, CatalogReleaseStore, MaterializationId},
-    lake::{LakeStoreLocation, LAKE_URL_ENV},
+    lake::LakeStoreLocation,
     serving::ServingBundleLoadError,
 };
 
@@ -127,27 +127,18 @@ pub fn runtime_snapshot_from_serving_bundle(
 pub async fn load_serving_bundle(
     project_root: &Path,
 ) -> Result<Option<Arc<LoadedServingBundle>>, String> {
-    let explicitly_configured = std::env::var_os(LAKE_URL_ENV).is_some();
     let lake_location = LakeStoreLocation::from_env(project_root).map_err(|err| err.to_string())?;
-    load_serving_bundle_from_location(project_root, lake_location, explicitly_configured).await
+    load_serving_bundle_from_location(project_root, lake_location).await
 }
 
 async fn load_serving_bundle_from_location(
     project_root: &Path,
     lake_location: LakeStoreLocation,
-    explicitly_configured: bool,
 ) -> Result<Option<Arc<LoadedServingBundle>>, String> {
     let cache_root = project_root.join("data").join("cache").join("serving");
-    let lake = match lake_location.open() {
-        Ok(lake) => lake,
-        Err(err) if explicitly_configured => {
-            return Err(format!("lake unavailable at {lake_location}: {err}"));
-        }
-        Err(err) => {
-            eprintln!("WARN: Serving bundle lake unavailable at {lake_location}: {err}");
-            return Ok(None);
-        }
-    };
+    let lake = lake_location
+        .open()
+        .map_err(|err| format!("lake unavailable at {lake_location}: {err}"))?;
 
     let loader = ServingBundleLoader::new(lake, cache_root);
     match load_selected_search_bundle(&loader).await {
@@ -160,20 +151,12 @@ async fn load_serving_bundle_from_location(
             );
             Ok(Some(Arc::new(bundle)))
         }
-        Ok(None) if explicitly_configured => Err(format!(
-            "no promoted search serving bundle found at explicitly configured lake {lake_location}"
+        Ok(None) => Err(format!(
+            "selected catalog release points to no serving bundle at {lake_location}"
         )),
-        Ok(None) => {
-            println!("No promoted serving bundle found; using local property recall only");
-            Ok(None)
-        }
-        Err(err) if explicitly_configured => Err(format!(
+        Err(err) => Err(format!(
             "failed to load promoted search serving bundle from {lake_location}: {err}"
         )),
-        Err(err) => {
-            log_serving_load_error(err);
-            Ok(None)
-        }
     }
 }
 
@@ -192,9 +175,6 @@ async fn load_selected_search_bundle(
     }
     let explicit_release = std::env::var(SERVING_RELEASE_ID_ENV).ok();
     let explicit_environment = std::env::var(SERVING_ENV_ENV).ok();
-    if explicit_release.is_none() && explicit_environment.is_none() {
-        return loader.load_current_search_bundle().await;
-    }
 
     let release_id = match explicit_release {
         Some(value) => value.parse::<CatalogReleaseId>().map_err(|err| {
@@ -205,7 +185,7 @@ async fn load_selected_search_bundle(
         None => {
             let environment = explicit_environment
                 .as_deref()
-                .unwrap_or("production")
+                .unwrap_or("dev")
                 .parse::<CatalogEnvironment>()
                 .map_err(ServingBundleLoadError::Configuration)?;
             let store = CatalogReleaseStore::new(loader.lake().clone());
@@ -230,10 +210,6 @@ async fn load_selected_search_bundle(
     loader
         .load_search_bundle_by_materialization(&release.derived_assets.serving_materialization_id)
         .await
-}
-
-fn log_serving_load_error(err: ServingBundleLoadError) {
-    eprintln!("WARN: Failed to load serving bundle; using local property recall only: {err}");
 }
 
 pub fn properties_from_serving_bundle(bundle: &LoadedServingBundle) -> Vec<Property> {
@@ -1702,19 +1678,17 @@ mod tests {
         let root = tempdir().unwrap();
         let lake_location = LakeStoreLocation::Local(root.path().join("lake"));
 
-        let err = match load_serving_bundle_from_location(root.path(), lake_location.clone(), true)
-            .await
+        let err = match load_serving_bundle_from_location(root.path(), lake_location.clone()).await
         {
             Ok(_) => panic!("explicit lake without a promoted bundle should fail"),
             Err(err) => err,
         };
-        assert!(err.contains("no promoted search serving bundle found"));
+        assert!(err.contains("OPENESTATES_SERVING_ENV=dev has no catalog release pointer"));
 
         assert!(
-            load_serving_bundle_from_location(root.path(), lake_location, false)
+            load_serving_bundle_from_location(root.path(), lake_location)
                 .await
-                .unwrap()
-                .is_none()
+                .is_err()
         );
     }
 

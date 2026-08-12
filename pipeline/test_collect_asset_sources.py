@@ -20,6 +20,7 @@ from pipeline.collect_asset_sources import (
     collect_google_places,
     collect_osm_power_infrastructure,
     collect_stormwater_drains,
+    capture_scoped_rera_regulatory_payloads,
     geospatial_society_inputs,
     google_nearby_collection_categories,
     groundwater_zones_from_kml,
@@ -62,6 +63,70 @@ from pipeline.sources.external_images import (
 
 
 class CollectAssetSourcesTest(unittest.TestCase):
+    def test_regulatory_capture_checks_all_lists_and_promotes_only_exact_registration(self):
+        registration = "PRM/KA/RERA/1251/446/PR/200811/003528"
+        project_orders = """
+            <table id="projectList">
+              <tr><th>PROJECT NO</th><th>PROMOTER NAME</th><th>PROJECT NAME</th><th>ORDER CATEGORY</th><th>DISTRICT</th><th>K-RERA ORDER DATE</th><th>K-RERA ORDER COPY</th></tr>
+              <tr><td>PRM/KA/RERA/1251/446/PR/200811/003528</td><td>Promoter</td><td>Project</td><td>PROJECT EXTENSION</td><td>Bengaluru Urban</td><td>22-02-2023</td><td><a href="/download_jc?DOC_ID=exact">PDF</a></td></tr>
+              <tr><td>PRM/KA/RERA/1251/446/PR/999999/999999</td><td>Other</td><td>Project</td><td>PROJECT REVOKED</td><td>Bengaluru Urban</td><td>23-02-2023</td><td><a href="/download_jc?DOC_ID=other">PDF</a></td></tr>
+            </table>
+        """.encode("utf-8")
+        fetched_urls = []
+
+        def fetch(url):
+            fetched_urls.append(url)
+            if url.endswith("/viewAllProjectOrders"):
+                return project_orders
+            if "download_jc" in url:
+                return b"%PDF-1.4 exact order"
+            return b"<html><body>official list</body></html>"
+
+        request = {
+            "planned_at": "2026-08-11T10:30:00+00:00",
+            "source_entities": [
+                {
+                    "entity_id": "society:test",
+                    "name": "Test project",
+                    "project_key": registration,
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            with (
+                patch(
+                    "pipeline.collect_asset_sources.RERA_REGULATORY_CACHE_DIR",
+                    root / "records",
+                ),
+                patch(
+                    "pipeline.collect_asset_sources.RERA_REGULATORY_LIST_CACHE_DIR",
+                    root / "lists",
+                ),
+                patch(
+                    "pipeline.collect_asset_sources.RERA_REGULATORY_DOCUMENT_CACHE_DIR",
+                    root / "documents",
+                ),
+            ):
+                payloads = capture_scoped_rera_regulatory_payloads(request, fetch=fetch)
+
+        self.assertEqual(len(payloads), 1)
+        self.assertEqual(len([url for url in fetched_urls if "download_jc" not in url]), 10)
+        self.assertEqual(len([url for url in fetched_urls if "download_jc" in url]), 1)
+        self.assertTrue(
+            all(
+                "registration_number" not in receipt
+                for receipt in payloads[0]["receipts"]
+                if receipt["kind"] == "regulatory_list"
+            )
+        )
+        values = [json.loads(record["raw_value"]) for record in payloads[0]["records"]]
+        events = [value for value in values if value.get("event_type")]
+        coverage = [value for value in values if value.get("source") == "K-RERA"]
+        self.assertEqual([event["event_type"] for event in events], ["registration_extended"])
+        self.assertEqual(events[0]["promotion"]["scope_resolution"], "exact_registration")
+        self.assertEqual(coverage[0]["status"], "checked")
+
     def setUp(self):
         self._old_skip_image_optimization = os.environ.get(
             "OPENESTATES_SKIP_IMAGE_OPTIMIZATION"
@@ -351,13 +416,136 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(
             qpr_rows,
             [
-                {"quarter": "Q3", "financial_year": "2025-26", "tower_count": 1, "total_units": 970, "booked_units": 678, "unsold_units": 292},
-                {"quarter": "Q4", "financial_year": "2025-26", "tower_count": 1, "total_units": 970, "booked_units": 678, "unsold_units": 292},
-                {"quarter": "Q1", "financial_year": "2026-27", "tower_count": 1, "total_units": 970, "booked_units": 837, "unsold_units": 133},
+                {"record_type": "inventory_totals", "quarter": "Q3", "financial_year": "2025-26", "tower_count": 1, "total_units": 970, "booked_units": 678, "unsold_units": 292},
+                {"record_type": "inventory_totals", "quarter": "Q4", "financial_year": "2025-26", "tower_count": 1, "total_units": 970, "booked_units": 678, "unsold_units": 292},
+                {"record_type": "inventory_totals", "quarter": "Q1", "financial_year": "2026-27", "tower_count": 1, "total_units": 970, "booked_units": 837, "unsold_units": 133},
             ],
         )
         self.assertEqual(len(by_kind["document_approval"]), 3)
         self.assertEqual(len(by_kind["source_warning"]), 1)
+
+    def test_rera_qpr_preserves_work_parking_approvals_and_restricted_cost_rows(self):
+        detail_html = """
+            <b>Quarter Q1 ( 2026-27 )<span> Details (Submitted on 15-07-2026)</span></b>
+            <table><tr><th>Total No of Units Booked</th></tr>
+              <tr><td>Total</td><td>105</td><td>84</td><td>21</td></tr>
+            </table>
+            <table><tr><th>Total No of Parkings</th><th>Total No Of Parkings Booked</th><th>Total No of Parkings Available</th></tr>
+              <tr><td>105</td><td>84</td><td>21</td></tr>
+            </table>
+            <table><tr><th>Sl No</th><th>Project Work</th><th>% of Completion</th><th>Estimated From Date</th><th>Estimated To Date</th><th>Actual From Date</th><th>Actual To Date</th></tr>
+              <tr><td>1</td><td>Foundation footing work</td><td>85%</td><td>01-01-2025</td><td>31-12-2025</td><td>15-01-2025</td><td></td></tr>
+            </table>
+            <table><tr><th>Sl No.</th><th>Particulars</th><th>Estimated Cost (in INR)</th><th>Actual Cost (in INR)</th></tr>
+              <tr><td>1</td><td>Construction certified by engineer</td><td>2,500,000</td><td>1,250,000</td></tr>
+            </table>
+            <table><tr><th>Sl No.</th><th>NOC Name</th><th>Is Applicable ?</th><th>Status Of Approval</th><th>Date of Application</th><th>NOC</th></tr>
+              <tr><td>1</td><td>Fire and Safety</td><td>Yes</td><td>Approved</td><td>21-05-2024</td><td></td></tr>
+              <tr><td>2</td><td>Horticulture department</td><td>No</td><td></td><td></td><td></td></tr>
+            </table>
+        """
+        snapshot = {
+            "registration_number": "PRM/KA/RERA/1251/446/PR/051024/007125",
+            "source_url": "https://rera.karnataka.gov.in/projectDetails?action=fixture",
+            "captured_at": "2026-08-10T10:30:00+00:00",
+            "body_hex": detail_html.encode("utf-8").hex(),
+        }
+
+        rows = rera_project_detail_source_records(snapshot)
+        quarterly = [
+            json.loads(row["raw_value"])
+            for row in rows
+            if row["kind"] == "quarterly_progress"
+        ]
+        finance = [
+            json.loads(row["raw_value"])
+            for row in rows
+            if row["kind"] == "finance_declaration"
+        ]
+
+        self.assertEqual(
+            [row["record_type"] for row in quarterly],
+            ["inventory_totals", "parking_totals", "work_progress", "approval_status", "approval_status"],
+        )
+        self.assertEqual(quarterly[2]["completion_pct"], 85.0)
+        self.assertEqual(quarterly[2]["estimated_start_date"], "2025-01-01")
+        self.assertEqual(quarterly[3]["applicable"], True)
+        self.assertEqual(quarterly[4]["applicable"], False)
+        self.assertEqual(
+            finance,
+            [{
+                "record_type": "project_cost",
+                "quarter": "Q1",
+                "financial_year": "2026-27",
+                "particulars": "Construction certified by engineer",
+                "estimated_cost_inr": "2500000",
+                "actual_cost_inr": "1250000",
+            }],
+        )
+
+    def test_rera_complaint_tabs_preserve_scope_totals_rows_and_partial_status_coverage(self):
+        detail_html = """
+            <div id="menu-comp" class="tab-pane">
+              Complaints on Promoter (4)
+              <table>
+                <tr><td>1</td><td>CMP/10/2024</td><td>12-01-2024</td><td>Refund after cancellation</td><td>DISPOSED</td></tr>
+                <tr><td>2</td><td>CMP/11/2024</td><td>14-02-2024</td><td>Possession delay compensation</td><td>UNDER ENQUIRY</td></tr>
+              </table>
+            </div>
+            <div id="menu-comp2" class="tab-pane">
+              Complaints on Project (1)
+              <table>
+                <tr><td>1</td><td>CMP/20/2025</td><td>04-03-2025</td><td>Agreement payment dispute</td><td>POSTED FOR ORDERS</td></tr>
+              </table>
+            </div>
+        """
+        snapshot = {
+            "registration_number": "PRM/KA/RERA/1251/446/PR/200811/003528",
+            "source_url": "https://rera.karnataka.gov.in/projectDetails?action=fixture",
+            "captured_at": "2026-08-10T10:30:00+00:00",
+            "body_hex": detail_html.encode("utf-8").hex(),
+        }
+
+        complaint_records = [
+            row
+            for row in rera_project_detail_source_records(snapshot)
+            if row["kind"] == "complaint_order"
+        ]
+        values = [json.loads(row["raw_value"]) for row in complaint_records]
+        summaries = {
+            value["scope"]: value
+            for value in values
+            if value["record_type"] == "scope_summary"
+        }
+        rows = [
+            value for value in values if value["record_type"] == "complaint_record"
+        ]
+
+        self.assertEqual(summaries["project"]["recorded_total"], 1)
+        self.assertTrue(summaries["project"]["status_counts_complete"])
+        self.assertEqual(summaries["promoter"]["recorded_total"], 4)
+        self.assertEqual(summaries["promoter"]["row_count_parsed"], 2)
+        self.assertFalse(summaries["promoter"]["status_counts_complete"])
+        self.assertEqual(
+            summaries["promoter"]["theme_counts_in_parsed_rows"],
+            {
+                "cancellation": 1,
+                "compensation": 1,
+                "delay": 1,
+                "possession": 1,
+                "refund": 1,
+            },
+        )
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]["complaint_date"], "2025-03-04")
+        self.assertEqual(rows[0]["status_group"], "posted_for_orders")
+        self.assertEqual(complaint_records[2]["effective_at"], "2025-03-04")
+        self.assertTrue(
+            all(
+                row["parser_version"] == "rera_project_detail_source_records.v3"
+                for row in complaint_records
+            )
+        )
 
     def test_rera_square_metres_accepts_only_structured_area_values(self):
         self.assertEqual(rera_square_metres("53,728SqMtr"), 53728.0)

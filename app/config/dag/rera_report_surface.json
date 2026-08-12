@@ -1,11 +1,83 @@
 {
-  "version": 2,
-  "description": "Dedicated RERA evidence report. Sections select accepted public evidence products and omit themselves when no matching data exists.",
+  "version": 6,
+  "description": "Buyer-journey RERA report with a high-confidence, source-attributed regulatory chronology. Only accepted public evidence enters the report.",
+  "coverage_note": "High Court proceedings are outside this release.",
+  "regulatory_event_order": [
+    "registration_restriction",
+    "registration_status",
+    "final_finding",
+    "enforcement",
+    "interim_order",
+    "pending_proceeding",
+    "promoter_disclosure",
+    "filed_discrepancy",
+    "historical"
+  ],
+  "candidate_rules": {
+    "include_source_types": [],
+    "include_fact_keys": [
+      "available_configurations",
+      "project_land_area_acres",
+      "project_max_floor_count",
+      "project_open_area_pct",
+      "project_start_date",
+      "project_tower_count",
+      "project_unit_count",
+      "parking_covered_count",
+      "parking_offered_for_sale_count",
+      "parking_surface_count",
+      "parking_total_car_count",
+      "site_plan_asset_count",
+      "floor_plan_asset_count",
+      "stp_count"
+    ],
+    "include_key_prefixes": ["rera_"],
+    "exclude_key_contains": [
+      "manifest",
+      "source_url",
+      "raw",
+      "html",
+      "extracted",
+      "evidence",
+      "promoted",
+      "debug",
+      "pipeline",
+      "confidence_reason",
+      "total_land_area_sqm",
+      "escrow_account",
+      "escrow_ifsc"
+    ],
+    "exclude_key_suffixes": ["_url"]
+  },
+  "value_rules": {
+    "skip_json_containers": true,
+    "skip_text_values": ["unknown", "not specified", "n/a", "na", "none", "null"],
+    "numeric_units": [
+      { "key_suffixes": ["_pct"], "key_contains": ["percentage"], "suffix": "%" },
+      { "key_suffixes": ["_months"], "key_contains": ["delay_months"], "suffix": " months" },
+      { "key_suffixes": ["_acres"], "key_contains": ["area_acres"], "suffix": " acres" },
+      { "key_suffixes": ["_sqm"], "key_contains": ["area_sqm"], "suffix": " m²" },
+      { "key_suffixes": ["_sqft"], "key_contains": ["area_sqft"], "suffix": " sq ft" }
+    ]
+  },
   "sections": [
     {
-      "id": "registration",
-      "title": "Official registration record",
+      "id": "regulatory_record",
+      "title": "Regulatory record",
       "rank": 0,
+      "renderer": "regulatory_record",
+      "selectors": [
+        { "key": "event:*", "label": "Regulatory event" }
+      ],
+      "items_per_page": 3,
+      "empty_behavior": "omit",
+      "key_prefixes": ["regulatory_"],
+      "fact_keys": []
+    },
+    {
+      "id": "registration",
+      "title": "Official registration",
+      "rank": 11,
       "renderer": "fact_list",
       "selectors": [
         { "key": "claim:official_registration_number", "label": "Registration number" },
@@ -15,23 +87,63 @@
       ],
       "empty_behavior": "omit",
       "fact_keys": [
-        "official_registration_number",
-        "registry_acknowledgement_number",
-        "registry_project_name",
-        "registry_promoter_name"
+        "rera_number",
+        "rera_registration_number",
+        "rera_ack_number",
+        "rera_registered",
+        "rera_status",
+        "rera_approved_on"
+      ]
+    },
+    {
+      "id": "overview",
+      "title": "Project at a glance",
+      "rank": 1,
+      "renderer": "fact_list",
+      "selectors": [
+        { "key": "claim:declared_unit_count", "label": "Declared homes", "format": "integer" },
+        { "key": "claim:declared_project_total_carpet_area", "label": "Declared carpet area", "format": "square_metres" }
+      ],
+      "empty_behavior": "omit",
+      "fact_keys": [
+        "available_configurations",
+        "project_land_area_acres",
+        "project_max_floor_count",
+        "project_open_area_pct",
+        "project_tower_count",
+        "project_unit_count",
+        "rera_far_sanctioned",
+        "rera_num_towers",
+        "rera_open_area_pct",
+        "rera_project_sub_type",
+        "rera_project_type",
+        "rera_total_builtup_area_sqm",
+        "rera_total_carpet_area_sqm",
+        "rera_total_units",
+        "parking_covered_count",
+        "parking_offered_for_sale_count",
+        "parking_surface_count",
+        "parking_total_car_count",
+        "stp_count"
       ]
     },
     {
       "id": "schedule",
-      "title": "Schedule, extensions and milestones",
+      "title": "Schedule and progress",
       "rank": 1,
       "renderer": "timeline",
       "selectors": [
-        { "key": "event:registration_start_date", "label": "Registration start" },
-        { "key": "event:proposed_completion_date", "label": "Proposed completion" }
+        { "key": "claim:registration_start_date", "label": "Registration start" },
+        { "key": "claim:proposed_completion_date", "label": "Proposed completion" }
       ],
       "empty_behavior": "omit",
-      "fact_keys": ["registration_start_date", "proposed_completion_date"]
+      "fact_keys": [
+        "project_start_date",
+        "rera_completion_date",
+        "rera_delay_months",
+        "rera_original_completion_date",
+        "rera_start_date"
+      ]
     },
     {
       "id": "quarterly_progress",
@@ -60,9 +172,6 @@
       "renderer": "table",
       "selectors": [
         { "key": "entity:inventory_configuration", "label": "Configuration" },
-        { "key": "claim:declared_unit_count", "label": "Declared homes", "format": "integer" },
-        { "key": "claim:declared_project_total_carpet_area", "label": "Declared project carpet area", "format": "square_metres" },
-        { "key": "claim:declared_inventory_total_unit_count", "label": "Inventory total", "format": "integer" },
         { "key": "claim:declared_inventory_unit_count", "label": "Homes", "format": "integer" },
         { "key": "claim:declared_inventory_total_carpet_area", "label": "Total carpet area", "format": "square_metres" },
         { "key": "claim:declared_inventory_filed_carpet_area", "label": "Filed carpet area", "format": "square_metres" },
@@ -71,50 +180,47 @@
       ],
       "empty_behavior": "omit",
       "key_prefixes": ["declared_inventory_"],
-      "fact_keys": ["declared_unit_count", "declared_project_total_carpet_area"]
+      "fact_keys": ["available_configurations"]
+    },
+    {
+      "id": "plans",
+      "title": "Plans",
+      "rank": 4,
+      "renderer": "documents",
+      "selectors": [
+        { "key": "claim:official_plan_url", "label": "Filed plan" }
+      ],
+      "items_per_page": 3,
+      "preview_kinds": [
+        "site_plan",
+        "floor_plan",
+        "section_plan",
+        "development_plan",
+        "sanction_plan"
+      ],
+      "empty_behavior": "omit",
+      "fact_keys": ["floor_plan_asset_count", "site_plan_asset_count"]
     },
     {
       "id": "documents",
-      "title": "Documents and approvals",
-      "rank": 4,
+      "title": "Approvals and documents",
+      "rank": 8,
       "renderer": "documents",
       "selectors": [
         { "key": "entity:document", "label": "Document" },
         { "key": "claim:document_quarter", "label": "Quarter" },
         { "key": "claim:document_financial_year", "label": "Financial year" },
-        { "key": "claim:official_document_url", "label": "Source" }
+        { "key": "claim:official_document_url", "label": "Open document" }
       ],
+      "items_per_page": 10,
       "empty_behavior": "omit",
-      "key_prefixes": ["document_", "official_document_"]
-    },
-    {
-      "id": "complaints",
-      "title": "Complaints and authority orders",
-      "rank": 5,
-      "renderer": "timeline",
-      "selectors": [
-        { "key": "claim:complaint_*", "label": "Complaint record" },
-        { "key": "claim:authority_order_*", "label": "Authority order" }
-      ],
-      "empty_behavior": "omit",
-      "key_prefixes": ["complaint_", "authority_order_"]
-    },
-    {
-      "id": "finance",
-      "title": "Financial declarations and charges",
-      "rank": 6,
-      "renderer": "fact_list",
-      "selectors": [
-        { "key": "claim:finance_*", "label": "Financial declaration" },
-        { "key": "claim:declared_charge_*", "label": "Charge" }
-      ],
-      "empty_behavior": "omit",
-      "key_prefixes": ["finance_", "declared_charge_"]
+      "key_prefixes": ["document_", "official_document_", "rera_document_", "rera_affidavit_", "rera_legal_land_document_", "rera_noc_document_"],
+      "fact_keys": []
     },
     {
       "id": "water",
       "title": "Water and service declarations",
-      "rank": 7,
+      "rank": 6,
       "renderer": "fact_list",
       "selectors": [
         { "key": "claim:declared_water_source", "label": "Declared water source" },
@@ -122,11 +228,63 @@
       ],
       "empty_behavior": "omit",
       "fact_keys": ["declared_water_source", "declared_water_local_authority"]
+    },
+    {
+      "id": "location",
+      "title": "Registered location",
+      "rank": 9,
+      "renderer": "fact_list",
+      "selectors": [
+        { "key": "claim:registry_project_address", "label": "Address" }
+      ],
+      "empty_behavior": "omit",
+      "fact_keys": ["rera_project_address", "rera_survey_numbers"]
     }
   ],
-  "default_section": {
-    "id": "other",
-    "title": "Other filed facts",
-    "rank": 99
+  "display_rules": [
+    { "fact_keys": ["rera_number", "rera_registration_number"], "label": "Registration number" },
+    { "fact_keys": ["rera_ack_number"], "label": "Acknowledgement number" },
+    { "fact_keys": ["rera_approved_on"], "label": "Approved on" },
+    { "fact_keys": ["rera_registered"], "label": "Registered" },
+    { "fact_keys": ["rera_status"], "label": "Status" },
+    { "fact_keys": ["rera_project_type"], "label": "Project type" },
+    { "fact_keys": ["rera_project_sub_type"], "label": "Project subtype" },
+    { "fact_keys": ["project_land_area_acres"], "label": "Land area" },
+    { "fact_keys": ["project_land_area_sqm", "rera_total_land_area_sqm"], "label": "Land area" },
+    { "fact_keys": ["project_open_area_pct", "rera_open_area_pct"], "label": "Open area" },
+    { "fact_keys": ["project_unit_count", "rera_total_units"], "label": "Homes" },
+    { "fact_keys": ["project_tower_count", "rera_num_towers"], "label": "Towers" },
+    { "fact_keys": ["project_max_floor_count"], "label": "Maximum floors" },
+    { "fact_keys": ["available_configurations"], "label": "Configurations" },
+    { "fact_keys": ["rera_total_builtup_area_sqm"], "label": "Built-up area" },
+    { "fact_keys": ["rera_total_carpet_area_sqm"], "label": "Total carpet area" },
+    { "fact_keys": ["rera_far_sanctioned"], "label": "Sanctioned FAR" },
+    { "fact_keys": ["parking_total_car_count"], "label": "Car parking" },
+    { "fact_keys": ["parking_covered_count"], "label": "Covered parking" },
+    { "fact_keys": ["parking_surface_count"], "label": "Open parking" },
+    { "fact_keys": ["parking_offered_for_sale_count"], "label": "Parking offered for sale" },
+    { "fact_keys": ["rera_start_date", "project_start_date"], "label": "Start date" },
+    { "fact_keys": ["rera_original_completion_date"], "label": "Original completion" },
+    { "fact_keys": ["rera_completion_date"], "label": "Current completion" },
+    { "fact_keys": ["rera_delay_months"], "label": "Schedule movement" },
+    { "fact_keys": ["rera_promoter_name"], "label": "Promoter" },
+    { "fact_keys": ["rera_escrow_bank"], "label": "Escrow bank" },
+    { "fact_keys": ["rera_affidavit_document_count"], "label": "Affidavits" },
+    { "fact_keys": ["rera_legal_land_document_count"], "label": "Land records" },
+    { "fact_keys": ["rera_noc_document_count"], "label": "NOCs" },
+    { "fact_keys": ["site_plan_asset_count"], "label": "Site plans" },
+    { "fact_keys": ["floor_plan_asset_count"], "label": "Floor plans" },
+    { "fact_keys": ["rera_project_address"], "label": "Address" },
+    { "fact_keys": ["rera_survey_numbers"], "label": "Survey numbers" },
+    { "fact_keys": ["stp_count"], "label": "STPs" }
+  ],
+  "tone_rules": [],
+  "notebook_label_rules": [],
+  "document_group_labels": {
+    "affidavits": "Affidavits",
+    "approvals_nocs": "Approvals and NOCs",
+    "buyer_templates": "Buyer templates",
+    "legal_land": "Land and legal records",
+    "plans": "Plans"
   }
 }

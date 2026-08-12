@@ -119,10 +119,6 @@ export function BuilderHealthPanel({
               <dt>With complaints</dt>
               <dd>{summary.metrics.complaints}</dd>
             </div>
-            <div>
-              <dt>Revocations</dt>
-              <dd>{summary.metrics.revocations ?? "—"}</dd>
-            </div>
           </dl>
 
           <div className="builder-health__table-wrap">

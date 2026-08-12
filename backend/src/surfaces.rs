@@ -2467,6 +2467,7 @@ mod tests {
                 fact_count: facts.len() as u64,
                 search_metadata_count: 0,
                 rera_evidence_count: 0,
+                excluded_rera_evidence_society_ids: Vec::new(),
                 edge_count: 0,
                 entity_parquet_key: "entities.parquet".to_string(),
                 fact_parquet_key: "facts.parquet".to_string(),

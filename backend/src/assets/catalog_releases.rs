@@ -7,10 +7,16 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
-use crate::serving::SEARCH_SERVING_BUNDLE_ASSET_ID;
+use crate::serving::{
+    read_entities_parquet, read_rera_evidence_parquet, unique_society_aliases,
+    ServingBundleManifest, SEARCH_SERVING_BUNDLE_ASSET_ID,
+};
 
-use super::promotion::{validate_search_serving_lineage, ServingReleasePromotionError};
-use super::{AssetId, AssetMaterializationStore, MaterializationId};
+use super::promotion::ServingReleasePromotionError;
+use super::{
+    AssetId, AssetMaterializationStore, MaterializationId, MaterializationStatus,
+    CURRENT_PROJECT_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -298,6 +304,7 @@ impl CatalogReleaseStore {
 
         gates.extend(self.validate_materialization_lineage(&release).await?);
         gates.extend(self.validate_memberships(&release).await?);
+        gates.extend(self.validate_serving_rera_scope(&release).await?);
 
         let quality_report = QualityReport::passed(gates);
         release.validation_status = if quality_report.status == QualityGateStatus::Passed {
@@ -381,12 +388,14 @@ impl CatalogReleaseStore {
                         release.derived_assets.serving_materialization_id.clone(),
                     )
                 })?;
-            super::promotion::promote_search_serving_release(
-                &self.materializations,
-                &serving_record,
-                options.force_legacy_pointer,
-            )
-            .await?;
+            if options.force_legacy_pointer {
+                super::promotion::promote_search_serving_release(
+                    &self.materializations,
+                    &serving_record,
+                    true,
+                )
+                .await?;
+            }
         }
 
         let key = environment_pointer_key(environment);
@@ -445,23 +454,65 @@ impl CatalogReleaseStore {
                     release.derived_assets.serving_materialization_id.clone(),
                 )
             })?;
-        let lineage =
-            validate_search_serving_lineage(&self.materializations, &serving_record).await?;
         let pinned = &release.derived_assets;
-        if lineage.kg_materialization_id != pinned.kg_materialization_id {
-            return Ok(vec![failed_gate(format!(
-                "kg lineage mismatch: release pins {}, serving lineage has {}",
-                pinned.kg_materialization_id, lineage.kg_materialization_id
-            ))]);
-        }
-        if lineage.current_project_facts_materialization_id
-            != pinned.project_facts_materialization_id
+        let kg_asset = AssetId::new(KG_SOCIETY_VIEW_ASSET_ID).expect("static asset id is valid");
+        let kg_record = self
+            .materializations
+            .record_by_id_for_asset(&kg_asset, &pinned.kg_materialization_id)
+            .await?
+            .ok_or_else(|| {
+                CatalogReleaseError::MissingMaterialization(pinned.kg_materialization_id.clone())
+            })?;
+        let project_asset =
+            AssetId::new(CURRENT_PROJECT_FACTS_ASSET_ID).expect("static asset id is valid");
+        let project_record = self
+            .materializations
+            .record_by_id_for_asset(&project_asset, &pinned.project_facts_materialization_id)
+            .await?
+            .ok_or_else(|| {
+                CatalogReleaseError::MissingMaterialization(
+                    pinned.project_facts_materialization_id.clone(),
+                )
+            })?;
+
+        if serving_record.status != MaterializationStatus::Succeeded
+            || kg_record.status != MaterializationStatus::Succeeded
+            || project_record.status != MaterializationStatus::Succeeded
         {
             return Ok(vec![failed_gate(format!(
-                "project facts lineage mismatch: release pins {}, kg lineage has {}",
-                pinned.project_facts_materialization_id,
-                lineage.current_project_facts_materialization_id
+                "pinned serving lineage contains a non-succeeded materialization"
             ))]);
+        }
+        if !serving_record
+            .parent_materializations
+            .contains(&pinned.kg_materialization_id)
+        {
+            return Ok(vec![failed_gate(format!(
+                "serving materialization {} does not directly pin KG materialization {}",
+                serving_record.materialization_id, pinned.kg_materialization_id
+            ))]);
+        }
+        if !kg_record
+            .parent_materializations
+            .contains(&pinned.project_facts_materialization_id)
+        {
+            return Ok(vec![failed_gate(format!(
+                "KG materialization {} does not directly pin project facts materialization {}",
+                kg_record.materialization_id, pinned.project_facts_materialization_id
+            ))]);
+        }
+        for parent_id in &serving_record.parent_materializations {
+            if self
+                .materializations
+                .record_by_id(parent_id)
+                .await?
+                .is_none()
+            {
+                return Ok(vec![failed_gate(format!(
+                    "serving materialization {} has missing direct parent {parent_id}",
+                    serving_record.materialization_id
+                ))]);
+            }
         }
 
         let mut missing = Vec::new();
@@ -570,12 +621,184 @@ impl CatalogReleaseStore {
                     )));
                 }
             }
+
+            let base_properties = base
+                .memberships
+                .iter()
+                .filter_map(|membership| {
+                    membership
+                        .property_id
+                        .as_deref()
+                        .map(|property_id| (property_id, membership.society_id.as_str()))
+                })
+                .collect::<BTreeMap<_, _>>();
+            let declared_additions = release
+                .changes
+                .added_societies
+                .iter()
+                .map(|society_id| normalize_society_id(society_id))
+                .collect::<BTreeSet<_>>();
+            let declared_removals = release
+                .changes
+                .removed_societies
+                .iter()
+                .map(|society_id| normalize_society_id(society_id))
+                .collect::<BTreeSet<_>>();
+            for membership in &release.memberships {
+                let Some(property_id) = membership.property_id.as_deref() else {
+                    continue;
+                };
+                if let Some(base_society_id) = base_properties.get(property_id) {
+                    let base_society_id = normalize_society_id(base_society_id);
+                    let next_society_id = normalize_society_id(&membership.society_id);
+                    if base_society_id != next_society_id
+                        && !(declared_removals.contains(&base_society_id)
+                            && declared_additions.contains(&next_society_id))
+                    {
+                        gates.push(failed_gate(format!(
+                            "property {property_id} changed society from {base_society_id} to {next_society_id} without a declared remove/add transition"
+                        )));
+                    }
+                    continue;
+                }
+                if !declared_additions.contains(&normalize_society_id(&membership.society_id)) {
+                    gates.push(failed_gate(format!(
+                        "property {property_id} was added outside the base release without a declared society addition"
+                    )));
+                }
+            }
         }
 
         if gates.is_empty() {
             gates.push(passed_gate("catalog membership identity"));
         }
         Ok(gates)
+    }
+
+    async fn validate_serving_rera_scope(
+        &self,
+        release: &CatalogRelease,
+    ) -> Result<Vec<QualityGateResult>, CatalogReleaseError> {
+        let serving_asset =
+            AssetId::new(SEARCH_SERVING_BUNDLE_ASSET_ID).expect("static asset id is valid");
+        let serving_record = self
+            .materializations
+            .record_by_id_for_asset(
+                &serving_asset,
+                &release.derived_assets.serving_materialization_id,
+            )
+            .await?
+            .ok_or_else(|| {
+                CatalogReleaseError::MissingMaterialization(
+                    release.derived_assets.serving_materialization_id.clone(),
+                )
+            })?;
+        let manifest_artifact = serving_record
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.key.ends_with("manifest.json"))
+            .ok_or_else(|| {
+                CatalogReleaseError::GateRejected(format!(
+                    "serving materialization {} has no manifest artifact",
+                    serving_record.materialization_id
+                ))
+            })?;
+        let manifest_key = LakeKey::new(manifest_artifact.key.clone()).map_err(|err| {
+            CatalogReleaseError::GateRejected(format!("invalid serving manifest key: {err}"))
+        })?;
+        let manifest: ServingBundleManifest = self.lake.get_json(&manifest_key).await?;
+        let entities_key = LakeKey::new(manifest.entity_parquet_key.clone()).map_err(|err| {
+            CatalogReleaseError::GateRejected(format!("invalid serving entities key: {err}"))
+        })?;
+        let entities = read_entities_parquet(&self.lake.get_bytes(&entities_key).await?)
+            .map_err(|err| CatalogReleaseError::GateRejected(err.to_string()))?;
+        let Some(rera_key) = manifest.rera_evidence_parquet_key.as_ref() else {
+            return Ok(vec![passed_gate("serving RERA evidence scope")]);
+        };
+        let rera_key = LakeKey::new(rera_key.clone()).map_err(|err| {
+            CatalogReleaseError::GateRejected(format!("invalid serving RERA evidence key: {err}"))
+        })?;
+        let evidence = read_rera_evidence_parquet(&self.lake.get_bytes(&rera_key).await?)
+            .map_err(|err| CatalogReleaseError::GateRejected(err.to_string()))?;
+
+        let society_ids = entities
+            .iter()
+            .filter(|entity| entity.entity_type == "society")
+            .map(|entity| entity.entity_id.clone())
+            .collect::<BTreeSet<_>>();
+        let aliases = unique_society_aliases(&entities)
+            .into_iter()
+            .collect::<BTreeMap<_, _>>();
+        let membership_societies = release
+            .memberships
+            .iter()
+            .filter_map(|membership| {
+                let normalized = normalize_society_id(&membership.society_id);
+                if society_ids.contains(&normalized) {
+                    Some(normalized)
+                } else {
+                    aliases.get(&normalized).cloned()
+                }
+            })
+            .collect::<BTreeSet<_>>();
+        let mut mapped_registrations = BTreeMap::<String, String>::new();
+        let mut gates = Vec::new();
+        for record in &evidence {
+            let canonical_id = if society_ids.contains(&record.society_id) {
+                Some(record.society_id.clone())
+            } else {
+                aliases.get(&record.society_id).cloned()
+            };
+            let Some(canonical_id) = canonical_id else {
+                gates.push(failed_gate(format!(
+                    "RERA evidence society {} is absent from serving entities",
+                    record.society_id
+                )));
+                continue;
+            };
+            if !membership_societies.contains(&canonical_id) {
+                gates.push(failed_gate(format!(
+                    "RERA evidence society {} has no catalog membership",
+                    record.society_id
+                )));
+            }
+            for registration_id in &record.registration_ids {
+                record_unique_mapping(
+                    &mut gates,
+                    &mut mapped_registrations,
+                    "serving RERA registration",
+                    registration_id,
+                    &canonical_id,
+                );
+            }
+        }
+        if gates.is_empty() {
+            gates.push(passed_gate("serving RERA evidence scope"));
+        }
+        if !manifest.excluded_rera_evidence_society_ids.is_empty() {
+            gates.push(warning_gate(format!(
+                "{} collected RERA societ{} outside this catalog and omitted from serving: {}",
+                manifest.excluded_rera_evidence_society_ids.len(),
+                if manifest.excluded_rera_evidence_society_ids.len() == 1 {
+                    "y was"
+                } else {
+                    "ies were"
+                },
+                manifest.excluded_rera_evidence_society_ids.join(", ")
+            )));
+        }
+        Ok(gates)
+    }
+}
+
+fn normalize_society_id(value: &str) -> String {
+    let normalized = value.trim().to_ascii_lowercase().replace(['_', ' '], "-");
+    if let Some(slug) = normalized.strip_prefix("soc-") {
+        format!("society:{slug}")
+    } else if normalized.starts_with("society:") {
+        normalized
+    } else {
+        format!("society:{normalized}")
     }
 }
 
@@ -674,6 +897,14 @@ fn failed_gate(message: String) -> QualityGateResult {
     }
 }
 
+fn warning_gate(message: String) -> QualityGateResult {
+    QualityGateResult {
+        gate: "catalog serving coverage".to_string(),
+        status: QualityGateStatus::Warning,
+        message: Some(message),
+    }
+}
+
 fn normalized_optional(value: &Option<String>) -> Option<String> {
     value
         .as_deref()
@@ -709,11 +940,13 @@ fn record_unique_mapping(
 
 #[cfg(test)]
 mod tests {
-    use crate::assets::{
-        AssetPartition, AssetStage, MaterializationRecord, CURRENT_PROJECT_FACTS_ASSET_ID,
-        KG_SOCIETY_VIEW_ASSET_ID,
-    };
+    use crate::assets::{ArtifactRef, AssetPartition, AssetStage, MaterializationRecord};
     use crate::lake::LakeStore;
+    use crate::serving::parquet::write_entities_parquet;
+    use crate::serving::{
+        write_rera_evidence_parquet, ServingBundleManifest, ServingEntityRecord,
+        ServingReraEvidenceRecord,
+    };
     use tempfile::tempdir;
 
     use super::*;
@@ -723,33 +956,10 @@ mod tests {
         let root = tempdir().unwrap();
         let lake = LakeStore::local(root.path()).unwrap();
         let store = CatalogReleaseStore::new(lake.clone());
-        let materializations = AssetMaterializationStore::new(lake);
-        let project = record(CURRENT_PROJECT_FACTS_ASSET_ID, Vec::new());
-        let kg = record(
-            KG_SOCIETY_VIEW_ASSET_ID,
-            vec![project.materialization_id.clone()],
-        );
-        let serving = record(
-            SEARCH_SERVING_BUNDLE_ASSET_ID,
-            vec![kg.materialization_id.clone()],
-        );
-        for record in [&project, &kg, &serving] {
-            materializations
-                .write_materialization(record)
-                .await
-                .unwrap();
-        }
+        let derived = write_test_lineage(&lake, &[], &[], Vec::new()).await;
 
-        let mut release = CatalogRelease::candidate(
-            None,
-            Some("release zero".to_string()),
-            DerivedCatalogAssets {
-                serving_materialization_id: serving.materialization_id.clone(),
-                kg_materialization_id: kg.materialization_id.clone(),
-                project_facts_materialization_id: project.materialization_id.clone(),
-                materializations: Vec::new(),
-            },
-        );
+        let mut release =
+            CatalogRelease::candidate(None, Some("release zero".to_string()), derived);
         release.memberships.push(CatalogMembership {
             society_id: "society:one".to_string(),
             property_id: Some("property:one-3bhk".to_string()),
@@ -780,29 +990,7 @@ mod tests {
         let root = tempdir().unwrap();
         let lake = LakeStore::local(root.path()).unwrap();
         let store = CatalogReleaseStore::new(lake.clone());
-        let materializations = AssetMaterializationStore::new(lake);
-        let project = record(CURRENT_PROJECT_FACTS_ASSET_ID, Vec::new());
-        let kg = record(
-            KG_SOCIETY_VIEW_ASSET_ID,
-            vec![project.materialization_id.clone()],
-        );
-        let serving = record(
-            SEARCH_SERVING_BUNDLE_ASSET_ID,
-            vec![kg.materialization_id.clone()],
-        );
-        for record in [&project, &kg, &serving] {
-            materializations
-                .write_materialization(record)
-                .await
-                .unwrap();
-        }
-
-        let derived = DerivedCatalogAssets {
-            serving_materialization_id: serving.materialization_id.clone(),
-            kg_materialization_id: kg.materialization_id.clone(),
-            project_facts_materialization_id: project.materialization_id.clone(),
-            materializations: Vec::new(),
-        };
+        let derived = write_test_lineage(&lake, &[], &[], Vec::new()).await;
         let mut base = CatalogRelease::candidate(None, None, derived.clone());
         base.memberships.push(membership("property:keep"));
         store.write_release(&base).await.unwrap();
@@ -824,6 +1012,124 @@ mod tests {
                 .message
                 .as_deref()
                 .is_some_and(|message| message.contains("disappeared without tombstone"))));
+    }
+
+    #[tokio::test]
+    async fn rejects_undeclared_membership_addition_to_base_release() {
+        let root = tempdir().unwrap();
+        let lake = LakeStore::local(root.path()).unwrap();
+        let store = CatalogReleaseStore::new(lake.clone());
+        let derived = write_test_lineage(&lake, &[], &[], Vec::new()).await;
+
+        let mut base = CatalogRelease::candidate(None, None, derived.clone());
+        base.memberships.push(membership("property:existing"));
+        store.write_release(&base).await.unwrap();
+
+        let mut child = CatalogRelease::candidate(Some(base.release_id.clone()), None, derived);
+        child.memberships.extend([
+            membership("property:existing"),
+            membership("property:unexpected"),
+        ]);
+        store.write_release(&child).await.unwrap();
+
+        let validated = store.validate_release(&child.release_id).await.unwrap();
+        assert_eq!(
+            validated.validation_status,
+            CatalogValidationStatus::Rejected
+        );
+        assert!(quality_messages(&validated).any(|message| {
+            message.contains("property:unexpected") && message.contains("without a declared")
+        }));
+    }
+
+    #[tokio::test]
+    async fn rejects_undeclared_property_society_remap() {
+        let root = tempdir().unwrap();
+        let lake = LakeStore::local(root.path()).unwrap();
+        let store = CatalogReleaseStore::new(lake.clone());
+        let derived = write_test_lineage(&lake, &[], &[], Vec::new()).await;
+
+        let mut base = CatalogRelease::candidate(None, None, derived.clone());
+        base.memberships.push(membership("property:existing"));
+        store.write_release(&base).await.unwrap();
+
+        let mut child = CatalogRelease::candidate(Some(base.release_id.clone()), None, derived);
+        let mut remapped = membership("property:existing");
+        remapped.society_id = "society:two".to_string();
+        child.memberships.push(remapped);
+        store.write_release(&child).await.unwrap();
+
+        let validated = store.validate_release(&child.release_id).await.unwrap();
+        assert_eq!(
+            validated.validation_status,
+            CatalogValidationStatus::Rejected
+        );
+        assert!(quality_messages(&validated).any(|message| {
+            message.contains("property:existing")
+                && message.contains("changed society")
+                && message.contains("without a declared remove/add transition")
+        }));
+    }
+
+    #[tokio::test]
+    async fn rejects_rera_evidence_outside_serving_entities() {
+        let root = tempdir().unwrap();
+        let lake = LakeStore::local(root.path()).unwrap();
+        let store = CatalogReleaseStore::new(lake.clone());
+        let derived = write_test_lineage(
+            &lake,
+            &[society_entity("society:one")],
+            &[rera_evidence("society:orphan", "registration:orphan")],
+            Vec::new(),
+        )
+        .await;
+        let mut release = CatalogRelease::candidate(None, None, derived);
+        release.memberships.push(membership("property:one"));
+        store.write_release(&release).await.unwrap();
+
+        let validated = store.validate_release(&release.release_id).await.unwrap();
+        assert_eq!(
+            validated.validation_status,
+            CatalogValidationStatus::Rejected
+        );
+        assert!(quality_messages(&validated)
+            .any(|message| message.contains("society:orphan is absent from serving entities")));
+    }
+
+    #[tokio::test]
+    async fn records_excluded_rera_societies_as_release_warning() {
+        let root = tempdir().unwrap();
+        let lake = LakeStore::local(root.path()).unwrap();
+        let store = CatalogReleaseStore::new(lake.clone());
+        let derived = write_test_lineage(
+            &lake,
+            &[society_entity("society:one")],
+            &[rera_evidence("society:one", "registration:one")],
+            vec!["society:outside-catalog".to_string()],
+        )
+        .await;
+        let mut release = CatalogRelease::candidate(None, None, derived);
+        release.memberships.push(membership("property:one"));
+        store.write_release(&release).await.unwrap();
+
+        let validated = store.validate_release(&release.release_id).await.unwrap();
+        assert_eq!(
+            validated.validation_status,
+            CatalogValidationStatus::Validated
+        );
+        assert!(validated
+            .quality_report
+            .as_ref()
+            .unwrap()
+            .gates
+            .iter()
+            .any(|gate| {
+                gate.status == QualityGateStatus::Warning
+                    && gate
+                        .message
+                        .as_deref()
+                        .is_some_and(|message| message.contains("society:outside-catalog"))
+            }));
     }
 
     #[tokio::test]
@@ -900,6 +1206,20 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("approve"));
+
+        let production = store
+            .promote_environment(
+                &release.release_id,
+                CatalogEnvironment::Production,
+                PromoteCatalogReleaseOptions {
+                    approve_production: true,
+                    expected_current_release: None,
+                    force_legacy_pointer: false,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(production.release_id, release.release_id);
     }
 
     fn membership(property_id: &str) -> CatalogMembership {
@@ -915,6 +1235,39 @@ mod tests {
         }
     }
 
+    fn society_entity(entity_id: &str) -> ServingEntityRecord {
+        ServingEntityRecord {
+            entity_id: entity_id.to_string(),
+            entity_type: "society".to_string(),
+            name: entity_id.to_string(),
+            root_source: None,
+            searchable_text: String::new(),
+        }
+    }
+
+    fn rera_evidence(society_id: &str, registration_id: &str) -> ServingReraEvidenceRecord {
+        ServingReraEvidenceRecord {
+            society_id: society_id.to_string(),
+            registration_ids: vec![registration_id.to_string()],
+            entities: Vec::new(),
+            claims: Vec::new(),
+            events: Vec::new(),
+            series: Vec::new(),
+            discrepancies: Vec::new(),
+            regulatory_coverage: Vec::new(),
+            source_index: Vec::new(),
+        }
+    }
+
+    fn quality_messages(release: &CatalogRelease) -> impl Iterator<Item = &str> {
+        release
+            .quality_report
+            .as_ref()
+            .into_iter()
+            .flat_map(|report| report.gates.iter())
+            .filter_map(|gate| gate.message.as_deref())
+    }
+
     fn record(asset_id: &str, parents: Vec<MaterializationId>) -> MaterializationRecord {
         MaterializationRecord::succeeded(
             AssetId::new(asset_id).unwrap(),
@@ -927,5 +1280,70 @@ mod tests {
             Vec::new(),
         )
         .with_parent_materializations(parents)
+    }
+
+    async fn write_test_lineage(
+        lake: &LakeStore,
+        entities: &[ServingEntityRecord],
+        evidence: &[ServingReraEvidenceRecord],
+        excluded_rera_evidence_society_ids: Vec<String>,
+    ) -> DerivedCatalogAssets {
+        let materializations = AssetMaterializationStore::new(lake.clone());
+        let project = record(CURRENT_PROJECT_FACTS_ASSET_ID, Vec::new());
+        let kg = record(
+            KG_SOCIETY_VIEW_ASSET_ID,
+            vec![project.materialization_id.clone()],
+        );
+        let mut serving = record(
+            SEARCH_SERVING_BUNDLE_ASSET_ID,
+            vec![kg.materialization_id.clone()],
+        );
+        let prefix = format!("serving/test/{}", serving.materialization_id);
+        let entities_key = LakeKey::new(format!("{prefix}/entities.parquet")).unwrap();
+        let evidence_key = LakeKey::new(format!("{prefix}/rera_evidence.parquet")).unwrap();
+        lake.put_bytes(&entities_key, write_entities_parquet(entities).unwrap())
+            .await
+            .unwrap();
+        lake.put_bytes(
+            &evidence_key,
+            write_rera_evidence_parquet(evidence).unwrap(),
+        )
+        .await
+        .unwrap();
+        let manifest = ServingBundleManifest {
+            bundle_version: "test".to_string(),
+            format_version: 1,
+            created_at: Utc::now(),
+            entity_count: entities.len() as u64,
+            fact_count: 0,
+            search_metadata_count: 0,
+            rera_evidence_count: evidence.len() as u64,
+            excluded_rera_evidence_society_ids,
+            edge_count: 0,
+            entity_parquet_key: entities_key.to_string(),
+            fact_parquet_key: format!("{prefix}/facts.parquet"),
+            search_metadata_parquet_key: format!("{prefix}/search_metadata.parquet"),
+            rera_evidence_parquet_key: Some(evidence_key.to_string()),
+            edge_parquet_key: None,
+            schema_key: format!("{prefix}/schema.json"),
+            trust_policy_key: format!("{prefix}/trust.json"),
+            tantivy_index_prefix: format!("{prefix}/tantivy"),
+            artifacts: Vec::new(),
+        };
+        let manifest_key = LakeKey::new(format!("{prefix}/manifest.json")).unwrap();
+        let metadata = lake.put_json(&manifest_key, &manifest).await.unwrap();
+        serving.artifacts = vec![ArtifactRef::json(metadata)];
+        for record in [&project, &kg, &serving] {
+            materializations
+                .write_materialization(record)
+                .await
+                .unwrap();
+        }
+        DerivedCatalogAssets {
+            serving_materialization_id: serving.materialization_id,
+            kg_materialization_id: kg.materialization_id,
+            project_facts_materialization_id: project.materialization_id,
+            materializations: Vec::new(),
+        }
     }
 }

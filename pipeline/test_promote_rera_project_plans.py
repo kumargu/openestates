@@ -101,6 +101,41 @@ class PromoteReraProjectPlansTest(unittest.TestCase):
                 self.assertEqual(serving["value_type"], "text")
                 self.assertEqual(serving["source_type"], "Rera")
 
+    def test_materializes_neutral_filed_plan_preview_without_unit_claims(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            previews = root / "manifest" / "previews"
+            previews.mkdir(parents=True)
+            (previews / "approved-plan-page-2.png").write_bytes(PNG_BYTES)
+            project = {
+                "society_slug": "example",
+                "society_entity_id": "society:example",
+                "provider": "RERA",
+                "coverage_quality": "filed_plan_preview",
+                "source_dirs": ["previews"],
+                "document_artifacts": [{
+                    "artifact_id": "example:sanction-plan",
+                    "kind": "sanction_plan",
+                    "label": "Approved basement plan",
+                    "source_url": "https://rera.test/approved-plan",
+                    "confidence": 0.82,
+                }],
+                "filed_plan_previews": [{
+                    "artifact_id": "example:sanction-plan",
+                    "source_name": "approved-plan-page-2.png",
+                    "page": 2,
+                }],
+                "floor_plans": [],
+            }
+
+            result = materialize_project(root, root / "manifest" / "targets.json", project)
+            payload = json.loads(Path(result["fact_path"]).read_text(encoding="utf-8"))
+
+            self.assertEqual(result["filed_plan_preview_count"], 1)
+            self.assertEqual(result["floor_plan_count"], 0)
+            self.assertEqual(payload["filed_plan_previews"][0]["kind"], "sanction_plan")
+            self.assertNotIn("configuration_type", payload["filed_plan_previews"][0])
+
     def test_materializes_empty_gap_target_without_preview_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

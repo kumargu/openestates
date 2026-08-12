@@ -305,6 +305,10 @@ pub struct ServingBundleManifest {
     pub search_metadata_count: u64,
     #[serde(default)]
     pub rera_evidence_count: u64,
+    /// RERA evidence collected for societies outside this bundle's catalog.
+    /// These rows remain in durable RERA assets but are never exposed at runtime.
+    #[serde(default)]
+    pub excluded_rera_evidence_society_ids: Vec<String>,
     #[serde(default)]
     pub edge_count: u64,
     pub entity_parquet_key: String,

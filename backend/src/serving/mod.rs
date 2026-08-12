@@ -36,8 +36,8 @@ pub use release_validation::{
     ServingBundleValidationReport,
 };
 pub use rera::{
-    project_rera_evidence, ReraEvidenceCoverage, ReraEvidenceEntity, ReraEvidenceEvent,
-    ReraEvidenceIndex, ReraEvidenceSeries, ReraEvidenceSeriesPoint, ReraEvidenceSource,
+    project_rera_evidence, ReraEvidenceEntity, ReraEvidenceEvent, ReraEvidenceIndex,
+    ReraEvidenceSeries, ReraEvidenceSeriesPoint, ReraEvidenceSource, ReraRegulatoryCoverage,
     ReraServingProjectionError, ServingReraEvidenceRecord, RERA_EVIDENCE_SCHEMA_VERSION,
 };
 pub use spatial_index::{SpatialPoint, SpatialServingIndex};

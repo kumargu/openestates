@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
@@ -6,6 +6,10 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use crate::assets::{
+    ReraAssertionMode, ReraClaimDerivation, ReraClaimEffectiveTime, ReraClaimSubject, ReraClaimV1,
+    ReraClaimValue, ReraSourceTrust,
+};
 use crate::decision_labels::{DecisionCheckSummary, DecisionLabel};
 use crate::models::{KgEntityRefs, PropertyCard};
 use crate::recommendations::{
@@ -19,9 +23,10 @@ use crate::scoring::{
 use crate::search::text::compute_confidence_for_detail;
 use crate::search::ConfidenceScore;
 use crate::serving::{
-    GoogleReviewEvidence, LoadedServingBundle, ReraEvidenceCoverage, ReraEvidenceEntity,
-    ReraEvidenceEvent, ReraEvidenceSeries, ReraEvidenceSource, ServingFactIndex,
-    ServingReraEvidenceRecord, SocietyFactProjection, RERA_EVIDENCE_SCHEMA_VERSION,
+    GoogleReviewEvidence, LoadedServingBundle, ReraEvidenceEntity, ReraEvidenceEvent,
+    ReraEvidenceSeries, ReraEvidenceSource, ReraRegulatoryCoverage, ServingFactIndex,
+    ServingFactRecord, ServingReraEvidenceRecord, SocietyFactProjection,
+    RERA_EVIDENCE_SCHEMA_VERSION,
 };
 use crate::state::AppState;
 
@@ -30,9 +35,9 @@ use crate::community::{
     deterministic_community_summarizer, CommunityPulse,
 };
 use crate::dag_config::{
-    evidence_sections_config, rera_report_surface_config, ui_surfaces_config,
-    ContextFactDefinition, EvidenceSectionDefinition, EvidenceSectionPresentation,
-    ReraReportSurfaceFile,
+    evidence_sections_config, fact_registry_index_config, rera_report_surface_config,
+    ui_surfaces_config, ContextFactDefinition, EvidenceSectionDefinition,
+    EvidenceSectionPresentation, FactRegistryIndex, ReraReportSurfaceFile,
 };
 use crate::knowledge::node::NodeType;
 use crate::knowledge::{google_reviews_url_from_facts, FactValue, SourcedFact};
@@ -45,9 +50,8 @@ use super::enrichment::{
     enrich_area, enrich_property_card, enrich_society, extract_area_intelligence,
     extract_builder_trust, extract_data_freshness, extract_rera_info, kg_entity_refs_for_property,
     overlay_project_scale_facts, rera_affidavit_only_visible, rera_decision_cards,
-    rera_document_groups, society_node_id, units_per_acre, AreaIntelligence, BuilderTrust,
-    DataFreshness, ReraComplaintScopeSummary, ReraDocumentManifestItem, ReraInfo,
-    ReraScheduleSection,
+    rera_document_groups, society_node_id, AreaIntelligence, BuilderTrust, DataFreshness,
+    ReraComplaintScopeSummary, ReraDocumentManifestItem, ReraInfo, ReraScheduleSection,
 };
 use super::property_map::property_map_context_from_surface_scene;
 
@@ -131,7 +135,7 @@ pub struct PropertyDetail {
     /// Builder delivery track record from knowledge graph
     #[serde(skip_serializing_if = "Option::is_none")]
     pub builder_trust: Option<BuilderTrust>,
-    /// Other locally tracked projects tied to the same builder/promoter name.
+    /// Other locally tracked projects tied to the same normalized legal promoter name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub builder_portfolio: Option<BuilderPortfolio>,
     /// Data freshness — how recently and richly the society data was updated
@@ -177,6 +181,50 @@ pub struct ReraEvidenceReportResponse {
     pub availability: ReraEvidenceAvailability,
     pub evidence: ReraEvidenceProjectionResponse,
     pub surface: ReraReportSurfaceResponse,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub buyer_report: Option<ReraBuyerReport>,
+}
+
+/// Buyer-oriented read model layered over the canonical evidence projection.
+/// These rows come from the same promoted serving bundle and remain separate
+/// from immutable claims so older broad facts are never misrepresented as L2.
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraBuyerReport {
+    pub fact_sections: Vec<ReraBuyerFactSection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub builder_portfolio: Option<BuilderPortfolio>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub schedules: Vec<ReraScheduleSection>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub documents: Vec<ReraBuyerDocument>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registry_url: Option<String>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraBuyerFactSection {
+    pub id: String,
+    pub title: String,
+    pub facts: Vec<ReraBuyerFact>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraBuyerFact {
+    pub key: String,
+    pub label: String,
+    pub value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+    pub learned_at: String,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraBuyerDocument {
+    pub id: String,
+    pub label: String,
+    pub group: String,
+    pub group_label: String,
+    pub url: String,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -187,17 +235,76 @@ pub struct ReraEvidenceProjectionResponse {
     pub generated_at: chrono::DateTime<chrono::Utc>,
     pub registration_ids: Vec<String>,
     pub entities: Vec<ReraEvidenceEntity>,
-    pub claims: Vec<crate::assets::ReraClaimV1>,
+    pub claims: Vec<ReraPublicClaim>,
     pub events: Vec<ReraEvidenceEvent>,
     pub series: Vec<ReraEvidenceSeries>,
     pub discrepancies: Vec<crate::assets::ReraInventoryReconciliationV1>,
-    pub coverage: Vec<ReraEvidenceCoverage>,
+    pub regulatory_coverage: Vec<ReraRegulatoryCoverage>,
     pub source_index: Vec<ReraEvidenceSource>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraPublicClaim {
+    pub claim_id: String,
+    pub subject: ReraClaimSubject,
+    pub predicate: String,
+    pub value: ReraClaimValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_time: Option<ReraClaimEffectiveTime>,
+    pub assertion_mode: ReraAssertionMode,
+    pub source_trust: ReraSourceTrust,
+    pub evidence: Vec<ReraPublicClaimEvidence>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub derivation: Option<ReraClaimDerivation>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraPublicClaimEvidence {
+    pub source_record_id: String,
+    pub receipt_id: String,
+    pub capture_id: String,
+    pub locator: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supporting_quote: Option<String>,
+}
+
+impl From<&ReraClaimV1> for ReraPublicClaim {
+    fn from(claim: &ReraClaimV1) -> Self {
+        Self {
+            claim_id: claim.claim_id.clone(),
+            subject: claim.subject.clone(),
+            predicate: claim.predicate.clone(),
+            value: claim.value.clone(),
+            unit: claim.unit.clone(),
+            effective_time: claim.effective_time.clone(),
+            assertion_mode: claim.assertion_mode,
+            source_trust: claim.source_trust,
+            evidence: claim
+                .evidence
+                .iter()
+                .map(|evidence| ReraPublicClaimEvidence {
+                    source_record_id: evidence.source_record_id.clone(),
+                    receipt_id: evidence.receipt_id.clone(),
+                    capture_id: evidence.capture_id.clone(),
+                    locator: evidence.locator.clone(),
+                    page: evidence.page,
+                    supporting_quote: evidence.supporting_quote.clone(),
+                })
+                .collect(),
+            derivation: claim.derivation.clone(),
+        }
+    }
 }
 
 #[derive(Serialize, Clone, Debug)]
 pub struct ReraReportSurfaceResponse {
     pub version: u32,
+    pub coverage_note: String,
+    pub regulatory_event_order: Vec<String>,
     pub sections: Vec<ReraReportSurfaceSectionResponse>,
 }
 
@@ -207,6 +314,9 @@ pub struct ReraReportSurfaceSectionResponse {
     pub title: String,
     pub renderer: String,
     pub selectors: Vec<crate::dag_config::ReraReportSelectorRule>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub items_per_page: Option<usize>,
+    pub preview_kinds: Vec<String>,
     pub empty_behavior: String,
 }
 
@@ -284,7 +394,6 @@ pub struct BuilderPortfolio {
     pub rera_registered_projects: usize,
     pub delayed_projects: usize,
     pub complaint_projects: usize,
-    pub revocations: Option<i32>,
     pub projects: Vec<BuilderProjectRecord>,
 }
 
@@ -546,27 +655,6 @@ fn find_property_by_request_id<'a>(
     properties.iter().find(|p| p.id == canonical_id)
 }
 
-fn normalized_builder_key(name: &str) -> String {
-    const CORPORATE_SUFFIXES: &[&str] = &[
-        "private",
-        "pvt",
-        "limited",
-        "ltd",
-        "llp",
-        "inc",
-        "corp",
-        "corporation",
-        "company",
-        "co",
-    ];
-
-    name.to_lowercase()
-        .split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|token| !token.is_empty() && !CORPORATE_SUFFIXES.contains(token))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 fn project_name_for(property: &crate::models::Property) -> String {
     let in_prefix = format!("{} BHK in ", property.bhk);
     let at_prefix = format!("{} BHK at ", property.bhk);
@@ -576,31 +664,6 @@ fn project_name_for(property: &crate::models::Property) -> String {
         .or_else(|| property.title.strip_prefix(&at_prefix))
         .unwrap_or(&property.title)
         .to_string()
-}
-
-fn project_status_display_for(
-    graph: &crate::knowledge::KnowledgeGraph,
-    society_id: &str,
-) -> Option<String> {
-    let soc_node_id = society_node_id(society_id);
-    let node = graph.get_node(&soc_node_id)?;
-    node.facts
-        .iter()
-        .filter(|f| f.key == "project_status")
-        .max_by_key(|f| f.version)
-        .and_then(|f| {
-            f.display_template.clone().map(|tmpl| {
-                if tmpl.contains("{value}") {
-                    if let crate::knowledge::FactValue::Text(ref val) = f.value {
-                        tmpl.replace("{value}", val)
-                    } else {
-                        tmpl
-                    }
-                } else {
-                    tmpl
-                }
-            })
-        })
 }
 
 fn area_lookup_key(id_or_name: &str) -> String {
@@ -718,12 +781,6 @@ fn source_item_from_fact(
         }
         (FactValue::Numeric(n), "rera_delay_months") => {
             format!("{} month delay", *n as i64)
-        }
-        (FactValue::Numeric(n), "rera_builder_revocations") if (*n - 1.0).abs() < f64::EPSILON => {
-            "1 revocation".to_string()
-        }
-        (FactValue::Numeric(n), "rera_builder_revocations") => {
-            format!("{} revocations", *n as i64)
         }
         (FactValue::Numeric(n), "reddit_thread_count") if (*n - 1.0).abs() < f64::EPSILON => {
             "1 thread".to_string()
@@ -2119,92 +2176,6 @@ fn unique_sorted(mut values: Vec<String>) -> Vec<String> {
     values
 }
 
-fn build_builder_portfolio(
-    graph: &crate::knowledge::KnowledgeGraph,
-    properties: &[crate::models::Property],
-    current: &crate::models::Property,
-) -> Option<BuilderPortfolio> {
-    let builder_key = normalized_builder_key(&current.builder_name);
-    if builder_key.is_empty() {
-        return None;
-    }
-
-    let mut seen_societies = HashSet::new();
-    let mut projects = Vec::new();
-    let mut rera_registered_projects = 0;
-    let mut delayed_projects = 0;
-    let mut complaint_projects = 0;
-    let mut revocations: Option<i32> = None;
-
-    for property in properties {
-        if normalized_builder_key(&property.builder_name) != builder_key {
-            continue;
-        }
-        if !seen_societies.insert(property.society_id.clone()) {
-            continue;
-        }
-
-        let rera = extract_rera_info(graph, &property.society_id);
-        if rera.as_ref().is_some_and(|r| r.registered) {
-            rera_registered_projects += 1;
-        }
-        if rera
-            .as_ref()
-            .and_then(|r| r.delay_months)
-            .is_some_and(|months| months > 0)
-        {
-            delayed_projects += 1;
-        }
-        if rera
-            .as_ref()
-            .and_then(|r| r.complaints_count)
-            .is_some_and(|count| count > 0)
-        {
-            complaint_projects += 1;
-        }
-        if let Some(builder_revocations) = rera.as_ref().and_then(|r| r.builder_revocations) {
-            revocations = Some(revocations.unwrap_or(0).max(builder_revocations));
-        }
-
-        projects.push(BuilderProjectRecord {
-            property_id: property.id.clone(),
-            project_name: project_name_for(property),
-            area: property.area.clone(),
-            rera_number: rera.as_ref().and_then(|r| r.registration_number.clone()),
-            rera_portal_url: rera.as_ref().and_then(|r| r.rera_portal_url.clone()),
-            rera_status: rera.as_ref().and_then(|r| r.status.clone()),
-            rera_registered: rera.as_ref().is_some_and(|r| r.registered),
-            start_date: rera.as_ref().and_then(|r| r.start_date.clone()),
-            completion_date: rera.as_ref().and_then(|r| r.completion_date.clone()),
-            delay_months: rera.as_ref().and_then(|r| r.delay_months),
-            complaints_count: rera.as_ref().and_then(|r| r.complaints_count),
-            project_status_display: project_status_display_for(graph, &property.society_id),
-            current: property.society_id == current.society_id,
-        });
-    }
-
-    if projects.len() <= 1 && rera_registered_projects == 0 {
-        return None;
-    }
-
-    projects.sort_by(|a, b| {
-        b.current
-            .cmp(&a.current)
-            .then_with(|| a.project_name.cmp(&b.project_name))
-    });
-    let tracked_projects = projects.len();
-
-    Some(BuilderPortfolio {
-        builder_name: current.builder_name.clone(),
-        tracked_projects,
-        rera_registered_projects,
-        delayed_projects,
-        complaint_projects,
-        revocations,
-        projects,
-    })
-}
-
 /// GET /api/properties/:id/evidence — returns backend-shaped dynamic evidence
 /// sections for the UI. React should render these sections, not interpret raw KG
 /// facts itself.
@@ -2590,7 +2561,7 @@ pub async fn get_property(
 
     // Extract builder trust from KG
     let builder_trust = extract_builder_trust(&graph, &property.society_id);
-    let builder_portfolio = build_builder_portfolio(&graph, &properties, &property);
+    let builder_portfolio = None;
     let entity_refs = kg_entity_refs_for_property(&property, &graph);
     let mut source_panels = build_source_panels(
         &graph,
@@ -3140,14 +3111,16 @@ fn refresh_rera_document_summary(info: &mut ReraInfo) {
 }
 
 fn rera_evidence_availability(record: &ServingReraEvidenceRecord) -> ReraEvidenceAvailability {
-    if record
-        .coverage
+    let checked_sources = record
+        .regulatory_coverage
         .iter()
-        .any(|coverage| coverage.source_section == "source_warning")
-    {
-        ReraEvidenceAvailability::Partial
-    } else {
+        .filter(|coverage| coverage.status == "checked")
+        .map(|coverage| coverage.source.as_str())
+        .collect::<HashSet<_>>();
+    if checked_sources.contains("K-RERA") {
         ReraEvidenceAvailability::Available
+    } else {
+        ReraEvidenceAvailability::Partial
     }
 }
 
@@ -3156,6 +3129,19 @@ fn rera_report_ref_for_property(
     bundle: Option<&LoadedServingBundle>,
 ) -> ReraReportRef {
     let record = bundle.and_then(|bundle| rera_evidence_for_property(bundle, property));
+    let has_buyer_facts = bundle
+        .and_then(|bundle| {
+            let config = rera_report_surface_config().ok()?;
+            Some(
+                !rera_buyer_fact_sections_for_society(
+                    &property.society_id,
+                    Some(&bundle.fact_index),
+                    config,
+                )
+                .is_empty(),
+            )
+        })
+        .unwrap_or(false);
     ReraReportRef {
         registration_ids: record
             .map(|record| record.registration_ids.clone())
@@ -3163,6 +3149,7 @@ fn rera_report_ref_for_property(
         href: format!("/property/{}/rera", property.id),
         availability: record
             .map(rera_evidence_availability)
+            .or_else(|| has_buyer_facts.then_some(ReraEvidenceAvailability::Partial))
             .unwrap_or(ReraEvidenceAvailability::Unavailable),
     }
 }
@@ -3176,6 +3163,331 @@ fn rera_evidence_for_property<'a>(
         .rera_evidence_index
         .society(&canonical_id)
         .or_else(|| bundle.rera_evidence_index.society(&property.society_id))
+}
+
+fn rera_buyer_fact_sections_for_society(
+    society_id: &str,
+    serving_facts: Option<&ServingFactIndex>,
+    config: &ReraReportSurfaceFile,
+) -> Vec<ReraBuyerFactSection> {
+    let Some(serving_facts) = serving_facts else {
+        return Vec::new();
+    };
+    let registry = fact_registry_index_config().ok();
+    let rows = rera_society_entity_id_candidates(society_id)
+        .into_iter()
+        .filter_map(|entity_id| serving_facts.entity(&entity_id))
+        .collect::<Vec<_>>();
+    if rows.is_empty() {
+        return Vec::new();
+    }
+
+    let mut latest = BTreeMap::<(String, String), (&ServingFactRecord, String)>::new();
+    for fact in rows
+        .iter()
+        .flat_map(|row| row.facts.iter())
+        .filter(|fact| rera_buyer_fact_candidate(config, fact))
+    {
+        let Some(value) = rera_buyer_fact_value(config, fact) else {
+            continue;
+        };
+        latest
+            .entry((fact.fact_key.clone(), value.clone()))
+            .and_modify(|current| {
+                if fact.learned_at > current.0.learned_at
+                    || (fact.learned_at == current.0.learned_at
+                        && fact.confidence > current.0.confidence)
+                {
+                    *current = (fact, value.clone());
+                }
+            })
+            .or_insert((fact, value));
+    }
+
+    let mut grouped = BTreeMap::<String, (String, u32, Vec<ReraBuyerFact>)>::new();
+    for (fact, value) in latest.into_values() {
+        let Some((section_id, section_title, rank)) =
+            rera_buyer_section_for_key(config, &fact.fact_key)
+        else {
+            continue;
+        };
+        grouped
+            .entry(section_id.to_string())
+            .or_insert_with(|| (section_title.to_string(), rank, Vec::new()))
+            .2
+            .push(ReraBuyerFact {
+                key: fact.fact_key.clone(),
+                label: rera_buyer_fact_label(config, registry, &fact.fact_key),
+                value,
+                source_url: fact.source_url.clone(),
+                learned_at: fact.learned_at.to_rfc3339(),
+            });
+    }
+
+    let mut sections = grouped
+        .into_iter()
+        .map(|(id, (title, rank, mut facts))| {
+            facts.sort_by(|left, right| {
+                left.label
+                    .cmp(&right.label)
+                    .then_with(|| left.key.cmp(&right.key))
+            });
+            facts.dedup_by(|left, right| {
+                left.label.eq_ignore_ascii_case(&right.label)
+                    && left.value.eq_ignore_ascii_case(&right.value)
+            });
+            (rank, ReraBuyerFactSection { id, title, facts })
+        })
+        .collect::<Vec<_>>();
+    sections.sort_by(|left, right| {
+        left.0
+            .cmp(&right.0)
+            .then_with(|| left.1.title.cmp(&right.1.title))
+    });
+    sections.into_iter().map(|(_, section)| section).collect()
+}
+
+fn rera_buyer_documents(info: &ReraInfo, config: &ReraReportSurfaceFile) -> Vec<ReraBuyerDocument> {
+    let mut documents = info
+        .document_manifest
+        .iter()
+        .filter_map(|item| {
+            let visibility = item
+                .buyer_visibility
+                .as_deref()
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase();
+            let preview = item
+                .preview_policy
+                .as_deref()
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase();
+            if matches!(
+                visibility.as_str(),
+                "hidden" | "private" | "private_or_sensitive"
+            ) || matches!(
+                preview.as_str(),
+                "hidden" | "private" | "private_or_sensitive"
+            ) {
+                return None;
+            }
+            let url = item.source_url.as_deref()?.trim();
+            if !url.starts_with("https://") && !url.starts_with("http://") {
+                return None;
+            }
+            let label = [
+                item.label.as_str(),
+                item.source_field_label.as_deref().unwrap_or(""),
+                item.kind.as_str(),
+            ]
+            .into_iter()
+            .map(str::trim)
+            .find(|value| !value.is_empty())
+            .unwrap_or("Document")
+            .to_string();
+            let group = rera_manifest_group(item);
+            let group_label = config
+                .document_group_labels
+                .get(&group)
+                .cloned()
+                .unwrap_or_else(|| group.replace(['_', '-'], " "));
+            Some(ReraBuyerDocument {
+                id: if item.artifact_id.trim().is_empty() {
+                    url.to_string()
+                } else {
+                    item.artifact_id.clone()
+                },
+                label,
+                group,
+                group_label,
+                url: url.to_string(),
+            })
+        })
+        .collect::<Vec<_>>();
+    documents.sort_by(|left, right| {
+        left.group
+            .cmp(&right.group)
+            .then_with(|| left.label.cmp(&right.label))
+    });
+    documents.dedup_by(|left, right| left.id == right.id || left.url == right.url);
+    documents
+}
+
+fn rera_buyer_fact_candidate(config: &ReraReportSurfaceFile, fact: &ServingFactRecord) -> bool {
+    let key = fact.fact_key.to_ascii_lowercase();
+    if config
+        .candidate_rules
+        .exclude_key_contains
+        .iter()
+        .any(|value| key.contains(&value.trim().to_ascii_lowercase()))
+        || config
+            .candidate_rules
+            .exclude_key_suffixes
+            .iter()
+            .any(|value| key.ends_with(&value.trim().to_ascii_lowercase()))
+    {
+        return false;
+    }
+    config
+        .candidate_rules
+        .include_source_types
+        .iter()
+        .any(|value| value.eq_ignore_ascii_case(&fact.source_type))
+        || config
+            .candidate_rules
+            .include_fact_keys
+            .iter()
+            .any(|value| key == value.trim().to_ascii_lowercase())
+        || config
+            .candidate_rules
+            .include_key_prefixes
+            .iter()
+            .any(|value| key.starts_with(&value.trim().to_ascii_lowercase()))
+}
+
+fn rera_buyer_section_for_key<'a>(
+    config: &'a ReraReportSurfaceFile,
+    key: &str,
+) -> Option<(&'a str, &'a str, u32)> {
+    let key = key.to_ascii_lowercase();
+    config
+        .sections
+        .iter()
+        .find(|section| {
+            rera_key_matches(
+                &key,
+                &section.fact_keys,
+                &section.key_prefixes,
+                &section.key_contains,
+                &section.key_suffixes,
+            )
+        })
+        .map(|section| (section.id.as_str(), section.title.as_str(), section.rank))
+}
+
+fn rera_buyer_fact_label(
+    config: &ReraReportSurfaceFile,
+    registry: Option<&FactRegistryIndex>,
+    key: &str,
+) -> String {
+    let normalized = key.to_ascii_lowercase();
+    if let Some(rule) = config
+        .display_rules
+        .iter()
+        .find(|rule| rera_key_matches(&normalized, &rule.fact_keys, &[], &rule.key_contains, &[]))
+    {
+        return rule.label.clone();
+    }
+    if let Some(label) = registry
+        .and_then(|index| index.lookup(key))
+        .and_then(|entry| entry.label.as_deref())
+        .map(str::trim)
+        .filter(|label| !label.is_empty())
+    {
+        return label.to_string();
+    }
+    key.replace(['_', '-'], " ")
+}
+
+fn rera_buyer_fact_value(
+    config: &ReraReportSurfaceFile,
+    fact: &ServingFactRecord,
+) -> Option<String> {
+    let key = fact.fact_key.to_ascii_lowercase();
+    let value = match &fact.value {
+        FactValue::Numeric(value) if value.is_finite() => {
+            let number = if value.fract().abs() < 0.05 {
+                format!("{}", value.round() as i64)
+            } else {
+                format!("{value:.1}")
+            };
+            let suffix = config
+                .value_rules
+                .numeric_units
+                .iter()
+                .find(|rule| {
+                    rera_key_matches(&key, &[], &[], &rule.key_contains, &rule.key_suffixes)
+                })
+                .map(|rule| rule.suffix.as_str())
+                .unwrap_or("");
+            format!("{number}{suffix}")
+        }
+        FactValue::Numeric(_) => return None,
+        FactValue::Text(value) => {
+            if config.value_rules.skip_json_containers
+                && serde_json::from_str::<serde_json::Value>(value)
+                    .ok()
+                    .is_some_and(|parsed| parsed.is_array() || parsed.is_object())
+            {
+                return None;
+            }
+            value.clone()
+        }
+        FactValue::Bool(value) => if *value { "Yes" } else { "No" }.to_string(),
+        FactValue::Tags(values) => values
+            .iter()
+            .map(String::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join(", "),
+        FactValue::Score { value, explanation } => {
+            let score = format!("{value:.1}");
+            if explanation.trim().is_empty() {
+                score
+            } else {
+                format!("{score} · {}", explanation.trim())
+            }
+        }
+    };
+    let value = value.trim();
+    if value.is_empty()
+        || config
+            .value_rules
+            .skip_text_values
+            .iter()
+            .any(|skip| value.eq_ignore_ascii_case(skip.trim()))
+    {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn rera_key_matches(
+    key: &str,
+    fact_keys: &[String],
+    key_prefixes: &[String],
+    key_contains: &[String],
+    key_suffixes: &[String],
+) -> bool {
+    fact_keys
+        .iter()
+        .any(|value| key == value.trim().to_ascii_lowercase())
+        || key_prefixes
+            .iter()
+            .any(|value| key.starts_with(&value.trim().to_ascii_lowercase()))
+        || key_contains
+            .iter()
+            .any(|value| key.contains(&value.trim().to_ascii_lowercase()))
+        || key_suffixes
+            .iter()
+            .any(|value| key.ends_with(&value.trim().to_ascii_lowercase()))
+}
+
+fn rera_society_entity_id_candidates(society_id: &str) -> Vec<String> {
+    let raw = society_id.trim().to_lowercase().replace(['_', ' '], "-");
+    let slug = raw
+        .strip_prefix("society:")
+        .or_else(|| raw.strip_prefix("soc-"))
+        .unwrap_or(&raw);
+    let canonical = format!("society:{slug}");
+    if raw == canonical {
+        vec![canonical]
+    } else {
+        vec![canonical, raw]
+    }
 }
 
 /// GET /api/properties/:id/rera — serves the accepted public RERA evidence
@@ -3203,7 +3515,32 @@ pub async fn get_property_rera(
         )
     })?;
     let surface = rera_surface_response(config);
-    let response = if let Some(bundle) = serving_bundle {
+    let graph = state.knowledge.read().await;
+    let project_record = rera_info_for(
+        &property.society_id,
+        &graph,
+        serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+    );
+    let buyer_report = ReraBuyerReport {
+        fact_sections: rera_buyer_fact_sections_for_society(
+            &property.society_id,
+            serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+            config,
+        ),
+        // Regulatory history needs a globally structured official denominator.
+        // Local catalog aggregates are intentionally not exposed as reputation.
+        builder_portfolio: None,
+        schedules: project_record
+            .as_ref()
+            .map(|record| record.schedule_sections.clone())
+            .unwrap_or_default(),
+        documents: project_record
+            .as_ref()
+            .map(|record| rera_buyer_documents(record, config))
+            .unwrap_or_default(),
+        registry_url: project_record.and_then(|record| record.rera_portal_url),
+    };
+    let mut response = if let Some(bundle) = serving_bundle {
         rera_evidence_report_for_property(
             &property.id,
             &bundle.manifest.bundle_version,
@@ -3214,6 +3551,12 @@ pub async fn get_property_rera(
     } else {
         rera_evidence_report_for_property(&property.id, "", chrono::Utc::now(), None, surface)
     };
+    if response.availability == ReraEvidenceAvailability::Unavailable
+        && !buyer_report.fact_sections.is_empty()
+    {
+        response.availability = ReraEvidenceAvailability::Partial;
+    }
+    response.buyer_report = Some(buyer_report);
     Ok(Json(response))
 }
 
@@ -3229,6 +3572,7 @@ fn rera_evidence_report_for_property(
             availability: ReraEvidenceAvailability::Unavailable,
             evidence: empty_rera_evidence_projection(property_id, bundle_id, generated_at),
             surface,
+            buyer_report: None,
         };
     };
     ReraEvidenceReportResponse {
@@ -3240,14 +3584,15 @@ fn rera_evidence_report_for_property(
             generated_at,
             registration_ids: record.registration_ids.clone(),
             entities: record.entities.clone(),
-            claims: record.claims.clone(),
+            claims: record.claims.iter().map(ReraPublicClaim::from).collect(),
             events: record.events.clone(),
             series: record.series.clone(),
             discrepancies: record.discrepancies.clone(),
-            coverage: record.coverage.clone(),
+            regulatory_coverage: record.regulatory_coverage.clone(),
             source_index: record.source_index.clone(),
         },
         surface,
+        buyer_report: None,
     }
 }
 
@@ -3256,6 +3601,8 @@ fn rera_surface_response(config: &ReraReportSurfaceFile) -> ReraReportSurfaceRes
     sections.sort_by_key(|section| section.rank);
     ReraReportSurfaceResponse {
         version: config.version,
+        coverage_note: config.coverage_note.clone(),
+        regulatory_event_order: config.regulatory_event_order.clone(),
         sections: sections
             .into_iter()
             .map(|section| ReraReportSurfaceSectionResponse {
@@ -3263,6 +3610,8 @@ fn rera_surface_response(config: &ReraReportSurfaceFile) -> ReraReportSurfaceRes
                 title: section.title,
                 renderer: section.renderer,
                 selectors: section.selectors,
+                items_per_page: section.items_per_page,
+                preview_kinds: section.preview_kinds,
                 empty_behavior: section.empty_behavior,
             })
             .collect(),
@@ -3285,7 +3634,7 @@ fn empty_rera_evidence_projection(
         events: Vec::new(),
         series: Vec::new(),
         discrepancies: Vec::new(),
-        coverage: Vec::new(),
+        regulatory_coverage: Vec::new(),
         source_index: Vec::new(),
     }
 }
@@ -3353,7 +3702,6 @@ fn rera_info_for(
     {
         info.open_area_pct = Some(fact.value);
     }
-    info.units_per_acre = units_per_acre(info.total_units, info.total_land_area_acres);
     info.total_project_cost_inr = None;
     info.land_cost_inr = None;
     info.construction_cost_inr = None;
@@ -3404,9 +3752,6 @@ fn rera_info_for(
     }
     if let Some(fact) = projection.latest_numeric("rera_builder_projects_count") {
         info.builder_total_projects = projected_i32(fact.value);
-    }
-    if let Some(fact) = projection.latest_numeric("rera_builder_revocations") {
-        info.builder_revocations = projected_i32(fact.value);
     }
     if let Some(fact) = projection.latest_text("rera_builder_states") {
         info.builder_states = fact
@@ -3476,9 +3821,11 @@ mod serving_state_tests {
         let captured_at = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
         let surface = ReraReportSurfaceResponse {
             version: 1,
+            coverage_note: "High Court proceedings are outside this release.".to_string(),
+            regulatory_event_order: vec!["historical".to_string()],
             sections: Vec::new(),
         };
-        let available = rera_record_with_coverage("registration_summary", captured_at);
+        let available = rera_record_with_coverage(true, captured_at);
         let response = rera_evidence_report_for_property(
             "sample-3bhk",
             "bundle-1",
@@ -3489,7 +3836,7 @@ mod serving_state_tests {
         assert_eq!(response.availability, ReraEvidenceAvailability::Available);
         assert_eq!(response.evidence.registration_ids, vec!["reg-1"]);
 
-        let partial = rera_record_with_coverage("source_warning", captured_at);
+        let partial = rera_record_with_coverage(false, captured_at);
         let response = rera_evidence_report_for_property(
             "sample-3bhk",
             "bundle-1",
@@ -3522,8 +3869,49 @@ mod serving_state_tests {
         assert!(reference.registration_ids.is_empty());
     }
 
+    #[test]
+    fn buyer_report_documents_keep_only_public_links_and_configured_group_labels() {
+        let mut info = ReraInfo::default();
+        info.document_manifest = vec![
+            ReraDocumentManifestItem {
+                artifact_id: "public-noc".to_string(),
+                label: "Fire clearance".to_string(),
+                source_url: Some("https://example.com/fire-clearance.pdf".to_string()),
+                document_group: "approvals_nocs".to_string(),
+                buyer_visibility: Some("public".to_string()),
+                ..ReraDocumentManifestItem::default()
+            },
+            ReraDocumentManifestItem {
+                artifact_id: "private-finance".to_string(),
+                label: "Account statement".to_string(),
+                source_url: Some("https://example.com/private.pdf".to_string()),
+                document_group: "promoter_financials".to_string(),
+                buyer_visibility: Some("private_or_sensitive".to_string()),
+                ..ReraDocumentManifestItem::default()
+            },
+        ];
+
+        let documents = rera_buyer_documents(
+            &info,
+            rera_report_surface_config().expect("RERA surface config"),
+        );
+        assert_eq!(documents.len(), 1);
+        assert_eq!(documents[0].id, "public-noc");
+        assert_eq!(documents[0].group_label, "Approvals and NOCs");
+    }
+
+    #[test]
+    fn buyer_report_omits_facts_without_an_explicit_section() {
+        let config = rera_report_surface_config().expect("RERA surface config");
+
+        let registration = rera_buyer_section_for_key(config, "rera_registration_number")
+            .expect("configured registration fact should have a buyer section");
+        assert_eq!(registration.0, "registration");
+        assert!(rera_buyer_section_for_key(config, "rera_unmapped_internal_fact").is_none());
+    }
+
     fn rera_record_with_coverage(
-        source_section: &str,
+        complete: bool,
         latest_observed_at: chrono::DateTime<Utc>,
     ) -> ServingReraEvidenceRecord {
         ServingReraEvidenceRecord {
@@ -3534,11 +3922,15 @@ mod serving_state_tests {
             events: Vec::new(),
             series: Vec::new(),
             discrepancies: Vec::new(),
-            coverage: vec![ReraEvidenceCoverage {
-                source_section: source_section.to_string(),
-                record_count: 1,
-                latest_observed_at,
-            }],
+            regulatory_coverage: ["K-RERA"]
+                .into_iter()
+                .take(if complete { 1 } else { 0 })
+                .map(|source| ReraRegulatoryCoverage {
+                    source: source.to_string(),
+                    checked_at: latest_observed_at,
+                    status: "checked".to_string(),
+                })
+                .collect(),
             source_index: Vec::new(),
         }
     }
