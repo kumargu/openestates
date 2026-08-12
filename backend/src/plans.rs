@@ -1,4 +1,4 @@
-//! Buyer-facing project plan media.
+//! Buyer-facing project plan media (site overview + floor plans).
 //!
 //! Offline promotion writes:
 //! - preview images under `data/lake/media/previews/rera_plans/{slug}/`
@@ -83,13 +83,11 @@ pub struct FiledPlanPreview {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thumbnail_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_url: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page: Option<u32>,
     pub confidence: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 struct ProjectPlanFramesRecord {
     provider: String,
     coverage_quality: String,
@@ -104,7 +102,20 @@ struct ProjectPlanFramesRecord {
     #[serde(default)]
     floor_plans: Vec<FloorPlanVariant>,
     #[serde(default)]
-    filed_plan_previews: Vec<FiledPlanPreview>,
+    filed_plan_previews: Vec<PromotedFiledPlanPreviewRecord>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+struct PromotedFiledPlanPreviewRecord {
+    artifact_id: String,
+    kind: String,
+    label: String,
+    preview_url: String,
+    #[serde(default)]
+    thumbnail_url: Option<String>,
+    #[serde(default)]
+    page: Option<u32>,
+    confidence: f64,
 }
 
 /// Resolve buyer plan media for a society from the promoted serving bundle.
@@ -252,7 +263,19 @@ fn record_to_view(record: ProjectPlanFramesRecord) -> ProjectPlansView {
         registration_number: record.registration_number,
         site_overview: record.site_overview,
         floor_plans: record.floor_plans,
-        filed_plan_previews: record.filed_plan_previews,
+        filed_plan_previews: record
+            .filed_plan_previews
+            .into_iter()
+            .map(|preview| FiledPlanPreview {
+                artifact_id: preview.artifact_id,
+                kind: preview.kind,
+                label: preview.label,
+                preview_url: preview.preview_url,
+                thumbnail_url: preview.thumbnail_url,
+                page: preview.page,
+                confidence: preview.confidence,
+            })
+            .collect(),
     }
 }
 
@@ -302,7 +325,7 @@ mod tests {
                 source_type: source_type.to_string(),
                 source_url: Some("https://rera.test/source".to_string()),
                 model: None,
-                skill_id: Some("promote_rera_project_plans".to_string()),
+                skill_id: Some("fetch_rera".to_string()),
                 learned_at: Utc::now(),
             }],
             Vec::new(),
@@ -404,29 +427,32 @@ mod tests {
     }
 
     #[test]
-    fn parses_filed_plan_previews_without_inventing_unit_floor_plans() {
+    fn exposes_filed_preview_without_internal_source_lineage() {
         let payload = serde_json::json!({
             "provider": "RERA",
-            "coverage_quality": "filed_plan_previews",
+            "coverage_quality": "auto_validated_plan_previews",
             "registration_number": "PRM-1",
             "society_entity_id": "society:test",
             "filed_plan_previews": [{
-                "artifact_id": "approved-plan:page-2",
+                "artifact_id": "approved-plan",
                 "kind": "sanction_plan",
-                "label": "Approved basement plan",
-                "preview_url": "/media/previews/rera_plans/test/page-2.png",
-                "source_url": "https://rera.test/approved-plan",
-                "page": 2,
-                "confidence": 0.85
-            }],
-            "floor_plans": []
+                "label": "Approved plan",
+                "preview_url": "/media/previews/rera_plans/test/approved.png",
+                "page": 1,
+                "confidence": 0.85,
+                "source_lineage": {
+                    "source_url": "https://rera.test/private-filing-url",
+                    "source_hash": "abc"
+                }
+            }]
         })
         .to_string();
 
-        let view = parse_plans_payload(&payload).expect("filed preview should render");
+        let view = parse_plans_payload(&payload).expect("filed preview should parse");
+        let buyer_json = serde_json::to_string(&view).unwrap();
 
-        assert!(view.floor_plans.is_empty());
-        assert_eq!(view.filed_plan_previews.len(), 1);
-        assert_eq!(view.filed_plan_previews[0].kind, "sanction_plan");
+        assert_eq!(view.filed_plan_previews[0].label, "Approved plan");
+        assert!(!buyer_json.contains("source_lineage"));
+        assert!(!buyer_json.contains("private-filing-url"));
     }
 }

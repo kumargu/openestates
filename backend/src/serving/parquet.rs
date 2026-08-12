@@ -32,6 +32,7 @@ pub fn write_entities_parquet(
         Field::new("entity_type", DataType::Utf8, false),
         Field::new("name", DataType::Utf8, false),
         Field::new("root_source", DataType::Utf8, true),
+        string_list_field("aliases", false),
         Field::new("searchable_text", DataType::Utf8, false),
     ]));
 
@@ -47,6 +48,7 @@ pub fn write_entities_parquet(
             string_array(entities.iter().map(|entity| entity.entity_type.clone())),
             string_array(entities.iter().map(|entity| entity.name.clone())),
             optional_string_array(root_sources),
+            string_list_array(entities.iter().map(|entity| Some(entity.aliases.clone()))),
             string_array(entities.iter().map(|entity| entity.searchable_text.clone())),
         ],
     )
@@ -71,6 +73,12 @@ pub fn read_entities_parquet(bytes: &[u8]) -> Result<Vec<ServingEntityRecord>, P
                 entity_type: required_string(entity_type, row, "entity_type")?,
                 name: required_string(name, row, "name")?,
                 root_source: optional_string(root_source, row),
+                aliases: match optional_string_list_column_value(&batch, "aliases", row)
+                    .map_err(|message| ParquetReadError::InvalidTypedValue { row, message })?
+                {
+                    OptionalListColumn::Values(values) => values,
+                    OptionalListColumn::Missing | OptionalListColumn::Null => Vec::new(),
+                },
                 searchable_text: required_string(searchable_text, row, "searchable_text")?,
             });
         }

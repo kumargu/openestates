@@ -5,15 +5,267 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pipeline.skills.fetch_rera import (
+    ReraDocumentArtifact,
     ReraProjectDetail,
     ReraSearchResult,
+    classify_rera_document,
     parse_rera_detail,
+    prepare_rera_plan_previews,
     rera_detail_to_facts,
     scrape_rera_listing,
+    search_rera_registration,
+    validate_rera_plan_preview,
 )
 
 
 class FetchReraSkillTest(unittest.TestCase):
+    @staticmethod
+    def plan_artifact(label, source_field_label=None):
+        classification = classify_rera_document(label, source_field_label)
+        return ReraDocumentArtifact(
+            artifact_id="artifact:" + label.lower().replace(" ", "-"),
+            document_kind=classification["kind"],
+            label=label,
+            source_url="https://rera.test/" + label.replace(" ", "%20"),
+            source_field_label=source_field_label,
+            document_group=classification["group"],
+            buyer_visibility=classification["buyer_visibility"],
+            preview_policy=classification["preview_policy"],
+            preview_role=classification["preview_role"],
+            buyer_label=classification["buyer_label"],
+        )
+
+    def test_document_policy_accepts_named_plans_and_excludes_forbidden_categories(self):
+        accepted = {
+            "9th Floor Plan1.pdf": ("floor_plan", "floor_plan"),
+            "siteplan.pdf": ("site_plan", "site_plan"),
+            "Approved Plans.pdf": ("sanction_plan", "sanction_plan"),
+        }
+        for label, expected in accepted.items():
+            with self.subTest(label=label):
+                classification = classify_rera_document(label)
+                self.assertEqual(
+                    (classification["kind"], classification["preview_role"]),
+                    expected,
+                )
+                self.assertEqual(classification["preview_policy"], "auto_validate")
+
+        excluded = (
+            "Project Photos.pdf",
+            "Project Brochure.pdf",
+            "Affidavit Annexure 49.pdf",
+            "Auditor Balance Sheet.pdf",
+            "Agreement for Sale.pdf",
+        )
+        for label in excluded:
+            with self.subTest(label=label):
+                classification = classify_rera_document(label)
+                self.assertEqual(classification["preview_policy"], "hidden")
+                self.assertIsNone(classification["buyer_label"])
+
+    def test_registration_lookup_posts_exact_registration_and_ignores_other_rows(self):
+        def row(numeric_id, registration, project):
+            cells = [
+                "1",
+                "ACK",
+                registration,
+                "",
+                "Builder",
+                project,
+                "Registered",
+                "Bengaluru Urban",
+                "Bengaluru East",
+                "Residential",
+                "01-01-2024",
+                "01-01-2028",
+                "01-01-2028",
+            ]
+            return "<tr><a id=\"{}\" onclick=\"return showFileApplicationPreview\"></a>{}</tr>".format(
+                numeric_id,
+                "".join("<td>{}</td>".format(value) for value in cells),
+            )
+
+        class FakeSession:
+            request = None
+
+            def post(self, _url, data):
+                self.request = data
+                return row("11", "PRM-OTHER", "Other") + row("22", "PRM-EXACT", "Exact")
+
+        session = FakeSession()
+        result = search_rera_registration(session, "PRM-EXACT")
+
+        self.assertEqual(session.request["regNo"], "PRM-EXACT")
+        self.assertEqual(session.request["project"], "")
+        self.assertEqual(result.registration_number, "PRM-EXACT")
+        self.assertEqual(result.numeric_id, "22")
+
+    def test_preview_validation_rejects_blank_photo_legal_financial_and_sensitive_pages(self):
+        drawing = {
+            "dark_ratio": 0.08,
+            "mid_tone_ratio": 0.05,
+            "very_dark_ratio": 0.03,
+            "edge_ratio": 0.08,
+        }
+        accepted, reason = validate_rera_plan_preview(
+            {"label": "Approved plan.pdf"}, "TYPICAL FLOOR PLAN", drawing
+        )
+        self.assertEqual((accepted, reason), ("accepted", None))
+
+        cases = (
+            ({"label": "Approved plan.pdf"}, "", {**drawing, "dark_ratio": 0.0}, "blank_render"),
+            ({"label": "Project Photos.pdf"}, "", drawing, "photo_document"),
+            ({"label": "Project Brochure.pdf"}, "", drawing, "cover_or_brochure"),
+            ({"label": "Approved plan.pdf"}, "Affidavit and sale deed", drawing, "legal_document"),
+            ({"label": "Approved plan.pdf"}, "Bank Account and balance sheet", drawing, "private_or_sensitive"),
+            ({"label": "Approved plan.pdf"}, "Digitally signed by architect", drawing, "private_or_sensitive"),
+        )
+        for artifact, text, signals, expected_reason in cases:
+            with self.subTest(reason=expected_reason):
+                status, reason = validate_rera_plan_preview(artifact, text, signals)
+                self.assertEqual((status, reason), ("rejected", expected_reason))
+
+    def test_scanned_preview_uses_ocr_and_preview_runs_are_deterministic(self):
+        artifacts = [
+            self.plan_artifact("Approved Plans.pdf"),
+            self.plan_artifact("9th Floor Plan1.pdf"),
+            self.plan_artifact("siteplan.pdf"),
+        ]
+        drawing = {
+            "dark_ratio": 0.08,
+            "mid_tone_ratio": 0.05,
+            "very_dark_ratio": 0.03,
+            "edge_ratio": 0.08,
+        }
+
+        def download(url):
+            return b"%PDF-1.4\n" + url.encode("utf-8")
+
+        def render(pdf_path, output_path, _size):
+            output_path.write_bytes(b"\x89PNG\r\n\x1a\n" + pdf_path.stem.encode("ascii"))
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            kwargs = {
+                "artifacts": artifacts,
+                "registration_number": "PRM-TEST",
+                "cache_root": Path(temp_dir),
+                "download": download,
+                "render": render,
+                "extract_text": lambda _path: "",
+                "ocr_text": lambda _path: "SCANNED TYPICAL FLOOR PLAN",
+                "analyze_image": lambda _path, _size: drawing,
+            }
+            first = prepare_rera_plan_previews(**kwargs)
+            second = prepare_rera_plan_previews(**kwargs)
+
+        self.assertEqual(first["previews"], second["previews"])
+        self.assertEqual(first["payload_hash"], second["payload_hash"])
+        self.assertEqual(
+            [preview["preview_hash"] for preview in first["previews"]],
+            [preview["preview_hash"] for preview in second["previews"]],
+        )
+        self.assertEqual(
+            [preview["buyer_label"] for preview in first["previews"]],
+            ["Site plan", "Floor plan", "Approved plan"],
+        )
+        self.assertTrue(all(preview["text_method"] == "tesseract" for preview in first["previews"]))
+
+    def test_preview_selection_deduplicates_identical_rendered_pages(self):
+        artifacts = [
+            self.plan_artifact("siteplan.pdf"),
+            self.plan_artifact("Approved Plans.pdf"),
+        ]
+        drawing = {
+            "dark_ratio": 0.08,
+            "mid_tone_ratio": 0.05,
+            "very_dark_ratio": 0.03,
+            "edge_ratio": 0.08,
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = prepare_rera_plan_previews(
+                artifacts,
+                "PRM-DUPLICATE-PREVIEW",
+                cache_root=Path(temp_dir),
+                download=lambda url: b"%PDF-1.4\n" + url.encode("utf-8"),
+                render=lambda _pdf, output, _size: output.write_bytes(
+                    b"\x89PNG\r\n\x1a\nidentical-render"
+                ),
+                extract_text=lambda _path: "TYPICAL PLAN",
+                ocr_text=lambda _path: "",
+                analyze_image=lambda _path, _size: drawing,
+            )
+
+        self.assertEqual([preview["buyer_label"] for preview in result["previews"]], ["Site plan"])
+        duplicate = next(
+            review
+            for review in result["document_reviews"]
+            if review["buyer_label"] == "Approved plan"
+        )
+        self.assertEqual(duplicate["rejection_reason"], "duplicate_preview")
+
+    def test_sensitive_source_field_rejects_an_eligible_filename(self):
+        artifact = self.plan_artifact("Approved Plans.pdf", "Balance Sheet")
+        drawing = {
+            "dark_ratio": 0.08,
+            "mid_tone_ratio": 0.05,
+            "very_dark_ratio": 0.03,
+            "edge_ratio": 0.08,
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = prepare_rera_plan_previews(
+                [artifact],
+                "PRM-SENSITIVE",
+                cache_root=Path(temp_dir),
+                download=lambda _url: b"%PDF-1.4\nsensitive",
+                render=lambda _pdf, output, _size: output.write_bytes(
+                    b"\x89PNG\r\n\x1a\nfixture"
+                ),
+                extract_text=lambda _path: "APPROVED PLAN",
+                ocr_text=lambda _path: "",
+                analyze_image=lambda _path, _size: drawing,
+            )
+
+        self.assertEqual(result["previews"], [])
+        self.assertEqual(result["document_reviews"][0]["rejection_reason"], "private_or_sensitive")
+
+    def test_one_document_failure_does_not_skip_later_plans(self):
+        artifacts = [
+            self.plan_artifact("siteplan.pdf"),
+            self.plan_artifact("9th Floor Plan1.pdf"),
+        ]
+        drawing = {
+            "dark_ratio": 0.08,
+            "mid_tone_ratio": 0.05,
+            "very_dark_ratio": 0.03,
+            "edge_ratio": 0.08,
+        }
+
+        def download(url):
+            if "siteplan" in url:
+                raise RuntimeError("truncated document")
+            return b"%PDF-1.4\nfloor-plan"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = prepare_rera_plan_previews(
+                artifacts,
+                "PRM-PARTIAL",
+                cache_root=Path(temp_dir),
+                download=download,
+                render=lambda _pdf, output, _size: output.write_bytes(
+                    b"\x89PNG\r\n\x1a\nfixture"
+                ),
+                extract_text=lambda _path: "FLOOR PLAN",
+                ocr_text=lambda _path: "",
+                analyze_image=lambda _path, _size: drawing,
+            )
+
+        self.assertEqual(len(result["previews"]), 1)
+        self.assertEqual(result["previews"][0]["buyer_label"], "Floor plan")
+        self.assertEqual(result["document_reviews"][0]["status"], "failed")
+        self.assertEqual(result["document_reviews"][1]["status"], "accepted")
+
     def test_listing_cache_preserves_exact_raw_receipt_bytes(self):
         body = b"""
         applicationNameList.push('ACK-1')
@@ -266,8 +518,7 @@ class FetchReraSkillTest(unittest.TestCase):
         by_kind = {item["kind"]: item for item in manifest}
 
         self.assertEqual(by_kind["site_plan"]["document_group"], "plans")
-        self.assertEqual(by_kind["site_plan"]["preview_policy"], "content_review_required")
-        self.assertEqual(by_kind["site_plan"]["preview_role"], "site_plan")
+        self.assertEqual(by_kind["site_plan"]["preview_policy"], "auto_validate")
         self.assertEqual(by_kind["encumbrance_certificate"]["document_group"], "legal_land")
         self.assertEqual(by_kind["noc"]["source_field_label"], "BESCOM")
         self.assertEqual(by_kind["affidavit"]["document_group"], "affidavits")
@@ -455,6 +706,7 @@ class FetchReraSkillTest(unittest.TestCase):
         self.assertEqual(facts["parking_total_car_count"].value, {"type": "Numeric", "data": 492})
         self.assertEqual(facts["parking_offered_for_sale_count"].value, {"type": "Numeric", "data": 106})
         self.assertEqual(facts["stp_count"].value, {"type": "Numeric", "data": 1})
+        self.assertEqual(facts["project_units_per_acre"].value, {"type": "Numeric", "data": 41.73})
 
 
 if __name__ == "__main__":

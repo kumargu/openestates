@@ -15,23 +15,29 @@ No external dependencies — stdlib only.
 """
 
 import http.cookiejar
+from http.client import HTTPException
 import html as html_module
 import json
 import logging
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener, HTTPCookieProcessor
 from urllib.parse import urlencode
 
 from pipeline.skills.base import BaseSkill, SkillResult, SkillCost, SourcedFact, FactSource
-from pipeline.skills.rera_document_intelligence import classify_rera_document
 
 logger = logging.getLogger(__name__)
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 RERA_BASE = "https://rera.karnataka.gov.in"
 LISTING_URL = f"{RERA_BASE}/viewAllProjects?language=en"
@@ -44,6 +50,10 @@ LISTING_CACHE_TTL_DAYS = 7
 
 DETAIL_CACHE_DIR = Path("data/cache/skills/rera_details")
 DETAIL_CACHE_TTL_DAYS = 30
+RERA_DOCUMENT_PREVIEW_POLICY_PATH = (
+    PROJECT_ROOT / "app/config/dag/source_adapters/rera_document_previews.json"
+)
+RERA_PLAN_PREVIEW_CACHE_DIR = PROJECT_ROOT / "data/cache/rera_project_plan_frames"
 
 # A successfully parsed registry record is strong evidence that the portal
 # contains that registration. It is not independent verification of every
@@ -113,7 +123,7 @@ class ReraDocumentArtifact:
     buyer_visibility: str = "list_only"
     preview_policy: str = "list_only"
     preview_role: Optional[str] = None
-    classification_basis: Optional[str] = None
+    buyer_label: Optional[str] = None
     configuration_type: Optional[str] = None
     bedroom_count: Optional[float] = None
     confidence: float = 0.7
@@ -220,6 +230,7 @@ class ReraProjectDetail:
 
     # Builder track record
     builder_other_rera_projects: int = 0
+    builder_revocations: int = 0
     builder_states: List[str] = field(default_factory=list)
 
     # Complaints (across all promoter's projects)
@@ -611,81 +622,83 @@ def search_rera_project(session: ReraSession, project_name: str) -> Optional[Rer
     Posts to /projectViewDetails with the project name and parses the result
     table to extract the numeric ID needed for the detail page.
     """
-    body = session.post(SEARCH_URL, {
-        "project": project_name,
-        "firm": "",
-        "regNo": "",
-        "district": "",
-        "subdistrict": "",
-        "appNo": "",
-    })
+    return _search_rera(session, project_name=project_name, registration_number=None)
 
-    # Extract all table rows (skip header)
+
+def search_rera_registration(
+    session: ReraSession,
+    registration_number: str,
+) -> Optional[ReraSearchResult]:
+    """Resolve the portal detail ID from one exact catalog registration."""
+    expected = " ".join(registration_number.strip().upper().split())
+    results = _search_rera(
+        session,
+        project_name=None,
+        registration_number=registration_number,
+        return_all=True,
+    )
+    for result in results:
+        found = " ".join(result.registration_number.strip().upper().split())
+        if found == expected:
+            return result
+    logger.warning("RERA registration search returned no exact match for '%s'", registration_number)
+    return None
+
+
+def _search_rera(
+    session: ReraSession,
+    project_name: Optional[str],
+    registration_number: Optional[str],
+    return_all: bool = False,
+) -> Any:
+    query_label = registration_number or project_name or "RERA project"
+    body = session.post(
+        SEARCH_URL,
+        {
+            "project": project_name or "",
+            "firm": "",
+            "regNo": registration_number or "",
+            "district": "",
+            "subdistrict": "",
+            "appNo": "",
+        },
+    )
+
     rows = re.findall(r'<tr[^>]*>(.*?)</tr>', body, re.DOTALL)
     if not rows:
-        logger.warning("RERA search returned no table rows for '%s'", project_name)
-        return None
+        logger.warning("RERA search returned no table rows for '%s'", query_label)
+        return [] if return_all else None
 
-    # Find the row with the best match — look for the onclick handler with numeric id
+    results = []
     for row in rows:
-        id_match = re.search(
-            r'<a\s+id="(\d+)"[^>]*onclick="return showFileApplicationPreview',
-            row,
-        )
-        if not id_match:
-            continue
+        result = _rera_search_result(row, project_name or query_label)
+        if result is not None:
+            results.append(result)
+    if results:
+        return results if return_all else results[0]
 
-        # Parse table cells from this row
-        tds = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
-        if len(tds) < 13:
-            continue
+    fallback = _rera_search_result(body, project_name or query_label)
+    if fallback is None:
+        logger.warning("Could not find numeric ID for '%s'", query_label)
+        return [] if return_all else None
+    return [fallback] if return_all else fallback
 
-        # Extract certificate URL if present
-        cert_match = re.search(r'href="(/certificate\?CER_NO=[^"]+)"', row)
-        cert_url = f"{RERA_BASE}{cert_match.group(1)}" if cert_match else None
 
-        return ReraSearchResult(
-            ack_number=_clean_html(tds[1]) if len(tds) > 1 else "",
-            registration_number=_clean_html(tds[2]) if len(tds) > 2 else "",
-            promoter_name=_clean_html(tds[4]) if len(tds) > 4 else "",
-            project_name=_clean_html(tds[5]) if len(tds) > 5 else project_name,
-            status=_clean_html(tds[6]) if len(tds) > 6 else "",
-            district=_clean_html(tds[7]) if len(tds) > 7 else "",
-            taluk=_clean_html(tds[8]) if len(tds) > 8 else "",
-            project_type=_clean_html(tds[9]) if len(tds) > 9 else "",
-            approved_on=_clean_html(tds[10]) if len(tds) > 10 else "",
-            completion_date=_clean_html(tds[11]) if len(tds) > 11 else "",
-            original_completion_date=_clean_html(tds[12]) if len(tds) > 12 else "",
-            numeric_id=id_match.group(1),
-            certificate_url=cert_url,
-        )
-
-    # Fallback: maybe the id is outside the row tags — search the whole body
+def _rera_search_result(fragment: str, fallback_project_name: str) -> Optional[ReraSearchResult]:
     id_match = re.search(
         r'<a\s+id="(\d+)"[^>]*onclick="return showFileApplicationPreview',
-        body,
+        fragment,
     )
-    if not id_match:
-        logger.warning("Could not find numeric ID for '%s'", project_name)
+    tds = re.findall(r'<td[^>]*>(.*?)</td>', fragment, re.DOTALL)
+    if id_match is None or len(tds) < 13:
         return None
-
-    # Parse all tds from body as a flat list (single-result fallback)
-    tds = re.findall(r'<td[^>]*>(.*?)</td>', body, re.DOTALL)
-    if len(tds) < 13:
-        logger.warning(
-            "RERA search returned insufficient data for '%s' (%d cells)",
-            project_name, len(tds),
-        )
-        return None
-
-    cert_match = re.search(r'href="(/certificate\?CER_NO=[^"]+)"', body)
+    cert_match = re.search(r'href="(/certificate\?CER_NO=[^"]+)"', fragment)
     cert_url = f"{RERA_BASE}{cert_match.group(1)}" if cert_match else None
-
     return ReraSearchResult(
         ack_number=_clean_html(tds[1]),
         registration_number=_clean_html(tds[2]),
         promoter_name=_clean_html(tds[4]) if len(tds) > 4 else "",
-        project_name=_clean_html(tds[5]) if len(tds) > 5 else project_name,
+        project_name=_clean_html(tds[5]) if len(tds) > 5 else fallback_project_name,
         status=_clean_html(tds[6]) if len(tds) > 6 else "",
         district=_clean_html(tds[7]) if len(tds) > 7 else "",
         taluk=_clean_html(tds[8]) if len(tds) > 8 else "",
@@ -852,10 +865,11 @@ def _extract_document_artifacts(detail_html: str, project_name: str) -> List[Rer
             continue
         surrounding = _clean_html(detail_html[max(0, match.start() - 240):match.end() + 240])
         source_field_label = _infer_document_source_label(surrounding, label)
-        classification = _document_classification(label, source_field_label, href)
+        combined = "{} {} {}".format(source_field_label or "", label, href or "").strip()
+        classification = classify_rera_document(label, source_field_label, href)
         kind = classification["kind"]
         if not kind:
-            kind = "unclassified_document"
+            continue
         source_url = f"{RERA_BASE}{href}" if href and href.startswith("/") else href
         artifact_id = "{}:{}:{}".format(
             _slug(project_name),
@@ -865,9 +879,7 @@ def _extract_document_artifacts(detail_html: str, project_name: str) -> List[Rer
         if artifact_id in seen:
             continue
         seen.add(artifact_id)
-        config_type, bedrooms = _canonical_configuration(
-            "{} {}".format(source_field_label or "", label).strip()
-        )
+        config_type, bedrooms = _canonical_configuration(combined)
         artifacts.append(
             ReraDocumentArtifact(
                 artifact_id=artifact_id,
@@ -878,14 +890,28 @@ def _extract_document_artifacts(detail_html: str, project_name: str) -> List[Rer
                 document_group=classification["group"] or "other",
                 buyer_visibility=classification["buyer_visibility"] or "list_only",
                 preview_policy=classification["preview_policy"] or "list_only",
-                preview_role=classification["preview_role"],
-                classification_basis=classification["classification_basis"],
+                preview_role=classification.get("preview_role"),
+                buyer_label=classification.get("buyer_label"),
                 configuration_type=config_type if kind == "floor_plan" else None,
                 bedroom_count=bedrooms if kind == "floor_plan" else None,
                 confidence=0.85 if source_url else 0.65,
             )
         )
 
+    if not any(artifact.document_kind == "site_plan" for artifact in artifacts):
+        if re.search(r"\b(site plan|layout plan|master plan)\b", detail_html, re.IGNORECASE):
+            artifacts.append(
+                ReraDocumentArtifact(
+                    artifact_id="{}:site_plan:detected".format(_slug(project_name)),
+                    document_kind="site_plan",
+                    label="Site plan detected",
+                    source_field_label="Site plan detected",
+                    document_group="plans",
+                    buyer_visibility="preview_allowed",
+                    preview_policy="preview_allowed",
+                    confidence=0.55,
+                )
+            )
     return artifacts
 
 
@@ -903,8 +929,6 @@ def _usable_document_link(label: str, href: Optional[str]) -> bool:
         return False
     if href and re.search(r"[?&]DOC_ID=(?:&|$)", href, re.IGNORECASE):
         return False
-    if classify_rera_document(label).get("preview_role") == "placeholder":
-        return False
     return True
 
 
@@ -912,7 +936,7 @@ def _infer_document_source_label(surrounding: str, link_label: str) -> Optional[
     """Infer the RERA field label that names an uploaded document link."""
     text = re.sub(r"\s+", " ", surrounding or "").strip()
     link_label = re.sub(r"\s+", " ", link_label or "").strip()
-    link_classification = _document_classification(link_label, None, None)
+    link_classification = _document_classification(link_label, None)
     if link_classification["kind"] in (
         "brochure",
         "floor_plan",
@@ -981,10 +1005,494 @@ def _infer_document_source_label(surrounding: str, link_label: str) -> Optional[
     return link_label or None
 
 
-def _document_classification(
-    label: Optional[str], source_field_label: Optional[str], href: Optional[str]
-) -> Dict[str, Optional[str]]:
-    return classify_rera_document(label, source_field_label, href)
+_RERA_DOCUMENT_POLICY: Optional[Dict[str, Any]] = None
+
+
+def load_rera_document_preview_policy(
+    path: Path = RERA_DOCUMENT_PREVIEW_POLICY_PATH,
+) -> Dict[str, Any]:
+    """Load and validate the document policy shared by extraction and previews."""
+    global _RERA_DOCUMENT_POLICY
+    if path == RERA_DOCUMENT_PREVIEW_POLICY_PATH and _RERA_DOCUMENT_POLICY is not None:
+        return _RERA_DOCUMENT_POLICY
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    roles = payload.get("roles") if isinstance(payload, dict) else None
+    selection = payload.get("selection") if isinstance(payload, dict) else None
+    if not isinstance(roles, list) or not roles:
+        raise ValueError("rera_document_previews.roles must be a non-empty list")
+    if not isinstance(selection, dict) or not isinstance(selection.get("role_order"), list):
+        raise ValueError("rera_document_previews.selection.role_order must be a list")
+    for role in roles:
+        if (
+            not isinstance(role, dict)
+            or not role.get("id")
+            or not role.get("kind")
+            or not role.get("group")
+        ):
+            raise ValueError("each RERA document role needs id, kind, and group")
+        patterns = role.get("patterns")
+        if not isinstance(patterns, list) or not patterns:
+            raise ValueError("RERA document role {} needs patterns".format(role.get("id")))
+        for pattern in patterns:
+            re.compile(pattern, re.IGNORECASE)
+    if path == RERA_DOCUMENT_PREVIEW_POLICY_PATH:
+        _RERA_DOCUMENT_POLICY = payload
+    return payload
+
+
+def classify_rera_document(
+    label: Optional[str],
+    source_field_label: Optional[str] = None,
+    href: Optional[str] = None,
+    policy: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Classify filenames first and use the portal field only as a fallback."""
+    active_policy = policy or load_rera_document_preview_policy()
+    for basis, value in (
+        ("label", label),
+        ("source_field_label", source_field_label),
+        ("href", href),
+    ):
+        if not isinstance(value, str) or not value.strip():
+            continue
+        normalized = re.sub(r"[^a-zA-Z0-9]+", " ", value).strip()
+        for role in active_policy["roles"]:
+            if not any(
+                re.search(pattern, candidate, re.IGNORECASE)
+                for pattern in role["patterns"]
+                for candidate in (value, normalized)
+            ):
+                continue
+            eligible = bool(role.get("eligible"))
+            return {
+                "kind": role["kind"],
+                "group": role["group"],
+                "buyer_visibility": "preview_candidate" if eligible else "list_only",
+                "preview_policy": "auto_validate" if eligible else "hidden",
+                "preview_role": role["id"],
+                "buyer_label": role.get("buyer_label") or None,
+                "classification_basis": basis,
+            }
+    return {
+        "kind": "unclassified_document",
+        "group": "other",
+        "buyer_visibility": "list_only",
+        "preview_policy": "hidden",
+        "preview_role": None,
+        "buyer_label": None,
+        "classification_basis": None,
+    }
+
+
+def _document_classification(text: str, href: Optional[str]) -> Dict[str, Any]:
+    return classify_rera_document(text, None, href)
+
+
+def _sha256_bytes(value: bytes) -> str:
+    import hashlib
+
+    return hashlib.sha256(value).hexdigest()
+
+
+def _sha256_file(path: Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _download_rera_pdf(url: str) -> bytes:
+    opener = build_opener()
+    request = Request(url, headers={"User-Agent": "OpenEstates-RERA-Evidence/1.0"})
+    try:
+        with opener.open(request, timeout=90) as response:
+            body = response.read()
+    except (HTTPError, URLError, OSError, HTTPException) as error:
+        raise ValueError("official document download failed: {}".format(error))
+    if not body.startswith(b"%PDF"):
+        raise ValueError("official document response is not a PDF")
+    return body
+
+
+def _cached_rera_pdf(
+    source_url: str,
+    cache_root: Path,
+    download: Callable[[str], bytes],
+) -> Tuple[Path, str]:
+    request_key = _sha256_bytes(source_url.encode("utf-8"))
+    request_path = cache_root / "requests" / "{}.json".format(request_key)
+    if request_path.is_file():
+        try:
+            metadata = json.loads(request_path.read_text(encoding="utf-8"))
+            source_hash = str(metadata.get("source_hash") or "")
+            cached = cache_root / "objects" / "documents" / "{}.pdf".format(source_hash)
+            if source_hash and cached.is_file() and _sha256_file(cached) == source_hash:
+                return cached, source_hash
+        except (OSError, ValueError, TypeError):
+            logger.warning("Ignoring invalid RERA document cache index %s", request_path)
+
+    body = download(source_url)
+    if not body.startswith(b"%PDF"):
+        raise ValueError("official document response is not a PDF")
+    source_hash = _sha256_bytes(body)
+    destination = cache_root / "objects" / "documents" / "{}.pdf".format(source_hash)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if not destination.is_file():
+        temporary = destination.with_suffix(".pdf.part")
+        temporary.write_bytes(body)
+        temporary.replace(destination)
+    request_path.parent.mkdir(parents=True, exist_ok=True)
+    request_path.write_text(
+        json.dumps(
+            {"source_hash": source_hash, "source_url": source_url},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return destination, source_hash
+
+
+def _render_rera_pdf_page_one(pdf_path: Path, output_path: Path, size: int) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    prefix = output_path.with_suffix("")
+    result = subprocess.run(
+        [
+            "pdftoppm",
+            "-png",
+            "-f",
+            "1",
+            "-l",
+            "1",
+            "-singlefile",
+            "-scale-to",
+            str(size),
+            str(pdf_path),
+            str(prefix),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        raise ValueError(result.stderr.strip() or "pdftoppm failed")
+    generated = prefix.with_suffix(".png")
+    if generated != output_path:
+        generated.replace(output_path)
+    if not output_path.is_file() or output_path.stat().st_size == 0:
+        raise ValueError("RERA preview renderer produced no image")
+
+
+def _cached_rera_preview(
+    pdf_path: Path,
+    source_hash: str,
+    cache_root: Path,
+    size: int,
+    render: Callable[[Path, Path, int], None],
+) -> Tuple[Path, str]:
+    index_path = cache_root / "renders" / "{}.json".format(source_hash)
+    if index_path.is_file():
+        try:
+            metadata = json.loads(index_path.read_text(encoding="utf-8"))
+            preview_hash = str(metadata.get("preview_hash") or "")
+            cached = cache_root / "objects" / "previews" / "{}.png".format(preview_hash)
+            if preview_hash and cached.is_file() and _sha256_file(cached) == preview_hash:
+                return cached, preview_hash
+        except (OSError, ValueError, TypeError):
+            logger.warning("Ignoring invalid RERA preview cache index %s", index_path)
+
+    with tempfile.TemporaryDirectory() as raw_directory:
+        temporary = Path(raw_directory) / "page-1.png"
+        render(pdf_path, temporary, size)
+        preview_hash = _sha256_file(temporary)
+        destination = cache_root / "objects" / "previews" / "{}.png".format(preview_hash)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if not destination.is_file():
+            shutil.copyfile(str(temporary), str(destination))
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index_path.write_text(
+        json.dumps(
+            {"page": 1, "preview_hash": preview_hash, "source_hash": source_hash},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return destination, preview_hash
+
+
+def _extract_rera_pdf_text(pdf_path: Path) -> str:
+    result = subprocess.run(
+        ["pdftotext", "-f", "1", "-l", "1", "-layout", str(pdf_path), "-"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    return result.stdout if result.returncode == 0 else ""
+
+
+def _ocr_rera_preview(preview_path: Path) -> str:
+    if shutil.which("tesseract") is None:
+        return ""
+    result = subprocess.run(
+        ["tesseract", str(preview_path), "stdout", "--psm", "6"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    return result.stdout if result.returncode == 0 else ""
+
+
+def _read_raw_pgm(path: Path) -> Tuple[int, int, bytes]:
+    data = path.read_bytes()
+    cursor = 0
+
+    def token() -> bytes:
+        nonlocal cursor
+        while cursor < len(data) and data[cursor] in b" \t\r\n":
+            cursor += 1
+        if cursor < len(data) and data[cursor] == ord("#"):
+            while cursor < len(data) and data[cursor] not in b"\r\n":
+                cursor += 1
+            return token()
+        start = cursor
+        while cursor < len(data) and data[cursor] not in b" \t\r\n":
+            cursor += 1
+        return data[start:cursor]
+
+    if token() != b"P5":
+        raise ValueError("analysis render is not a raw grayscale PGM")
+    width = int(token())
+    height = int(token())
+    if int(token()) != 255:
+        raise ValueError("analysis render has an unsupported pixel range")
+    while cursor < len(data) and data[cursor] in b" \t\r\n":
+        cursor += 1
+    pixels = data[cursor:]
+    if len(pixels) != width * height:
+        raise ValueError("analysis render has inconsistent pixel data")
+    return width, height, pixels
+
+
+def _rera_plan_image_signals(pdf_path: Path, analysis_size: int) -> Dict[str, float]:
+    with tempfile.TemporaryDirectory() as raw_directory:
+        prefix = Path(raw_directory) / "analysis"
+        result = subprocess.run(
+            [
+                "pdftoppm",
+                "-gray",
+                "-f",
+                "1",
+                "-l",
+                "1",
+                "-singlefile",
+                "-scale-to",
+                str(analysis_size),
+                str(pdf_path),
+                str(prefix),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0:
+            raise ValueError(result.stderr.strip() or "analysis render failed")
+        width, height, pixels = _read_raw_pgm(prefix.with_suffix(".pgm"))
+
+    total = max(len(pixels), 1)
+    dark_ratio = sum(1 for value in pixels if value < 220) / total
+    mid_tone_ratio = sum(1 for value in pixels if 80 <= value < 220) / total
+    very_dark_ratio = sum(1 for value in pixels if value < 80) / total
+    edge_count = 0
+    comparisons = 0
+    step = max(width // 160, 1)
+    for y in range(0, height - 1, step):
+        row = y * width
+        next_row = (y + 1) * width
+        for x in range(0, width - 1, step):
+            value = pixels[row + x]
+            if (
+                abs(value - pixels[row + x + 1]) > 35
+                or abs(value - pixels[next_row + x]) > 35
+            ):
+                edge_count += 1
+            comparisons += 1
+    return {
+        "dark_ratio": round(dark_ratio, 6),
+        "mid_tone_ratio": round(mid_tone_ratio, 6),
+        "very_dark_ratio": round(very_dark_ratio, 6),
+        "edge_ratio": round(edge_count / max(comparisons, 1), 6),
+    }
+
+
+def validate_rera_plan_preview(
+    artifact: Mapping[str, Any],
+    extracted_text: str,
+    image_signals: Mapping[str, float],
+    policy: Optional[Mapping[str, Any]] = None,
+) -> Tuple[str, Optional[str]]:
+    """Apply configured text-safety and line-drawing gates to one page-one render."""
+    active_policy = policy or load_rera_document_preview_policy()
+    signal_text = "\n".join(
+        str(value)
+        for value in (
+            artifact.get("label"),
+            artifact.get("source_field_label"),
+            extracted_text[:8000],
+        )
+        if value
+    )
+    review = active_policy["text_review"]
+    for field, reason in (
+        ("private_patterns", "private_or_sensitive"),
+        ("legal_patterns", "legal_document"),
+        ("photo_patterns", "photo_document"),
+        ("cover_patterns", "cover_or_brochure"),
+        ("placeholder_patterns", "placeholder_document"),
+    ):
+        if any(re.search(pattern, signal_text, re.IGNORECASE) for pattern in review[field]):
+            return "rejected", reason
+
+    image_review = active_policy["image_review"]
+    dark_ratio = float(image_signals.get("dark_ratio", 0.0))
+    mid_tone_ratio = float(image_signals.get("mid_tone_ratio", 1.0))
+    very_dark_ratio = float(image_signals.get("very_dark_ratio", 1.0))
+    edge_ratio = float(image_signals.get("edge_ratio", 0.0))
+    if dark_ratio < float(image_review["min_dark_ratio"]):
+        return "rejected", "blank_render"
+    if edge_ratio < float(image_review["min_edge_ratio"]):
+        return "rejected", "not_line_drawing_like"
+    if (
+        dark_ratio > float(image_review["max_dark_ratio"])
+        or mid_tone_ratio > float(image_review["max_mid_tone_ratio"])
+        or very_dark_ratio > float(image_review["max_very_dark_ratio"])
+    ):
+        return "rejected", "photo_or_dense_render"
+    return "accepted", None
+
+
+def prepare_rera_plan_previews(
+    artifacts: Sequence[ReraDocumentArtifact],
+    registration_number: str,
+    cache_root: Path = RERA_PLAN_PREVIEW_CACHE_DIR,
+    download: Callable[[str], bytes] = _download_rera_pdf,
+    render: Callable[[Path, Path, int], None] = _render_rera_pdf_page_one,
+    extract_text: Callable[[Path], str] = _extract_rera_pdf_text,
+    ocr_text: Callable[[Path], str] = _ocr_rera_preview,
+    analyze_image: Callable[[Path, int], Dict[str, float]] = _rera_plan_image_signals,
+) -> Dict[str, Any]:
+    """Render, validate, and select at most three directly named filing plans."""
+    policy = load_rera_document_preview_policy()
+    role_order = policy["selection"]["role_order"]
+    role_rank = {role: index for index, role in enumerate(role_order)}
+    candidates = sorted(
+        (
+            artifact
+            for artifact in artifacts
+            if artifact.preview_role in role_rank
+            and artifact.preview_policy == "auto_validate"
+            and artifact.source_url
+        ),
+        key=lambda artifact: (
+            role_rank[artifact.preview_role],
+            artifact.label.casefold(),
+            artifact.artifact_id,
+        ),
+    )
+    reviews: List[Dict[str, Any]] = []
+    accepted: List[Dict[str, Any]] = []
+    seen_sources = set()
+    seen_previews = set()
+    max_total = int(policy["selection"]["max_total"])
+    image_review = policy["image_review"]
+    ocr_threshold = int(policy["text_review"]["ocr_fallback_below_characters"])
+
+    for artifact in candidates:
+        review: Dict[str, Any] = {
+            "artifact_id": artifact.artifact_id,
+            "kind": artifact.document_kind,
+            "role": artifact.preview_role,
+            "label": artifact.label,
+            "source_field_label": artifact.source_field_label,
+            "buyer_label": artifact.buyer_label,
+            "source_url": artifact.source_url,
+            "page": 1,
+            "confidence": artifact.confidence,
+        }
+        try:
+            pdf_path, source_hash = _cached_rera_pdf(
+                artifact.source_url or "", cache_root, download
+            )
+            review["source_hash"] = source_hash
+            review["source_cache_relative_path"] = (
+                "rera_project_plan_frames/objects/documents/{}.pdf".format(source_hash)
+            )
+            if source_hash in seen_sources:
+                review.update(status="rejected", rejection_reason="duplicate_document")
+                reviews.append(review)
+                continue
+            seen_sources.add(source_hash)
+            preview_path, preview_hash = _cached_rera_preview(
+                pdf_path,
+                source_hash,
+                cache_root,
+                int(image_review["render_size_px"]),
+                render,
+            )
+            embedded_text = extract_text(pdf_path)
+            ocr = ocr_text(preview_path) if len(embedded_text.strip()) < ocr_threshold else ""
+            extracted = "\n".join(value for value in (embedded_text, ocr) if value.strip())
+            image_signals = analyze_image(pdf_path, int(image_review["analysis_size_px"]))
+            status, rejection_reason = validate_rera_plan_preview(
+                review, extracted, image_signals, policy
+            )
+            review.update(
+                status=status,
+                rejection_reason=rejection_reason,
+                preview_hash=preview_hash,
+                cache_relative_path="rera_project_plan_frames/objects/previews/{}.png".format(
+                    preview_hash
+                ),
+                text_method=(
+                    "embedded_text"
+                    if len(embedded_text.strip()) >= ocr_threshold
+                    else "tesseract"
+                    if ocr.strip()
+                    else "none"
+                ),
+                image_signals=image_signals,
+            )
+            if status == "accepted" and preview_hash in seen_previews:
+                review["status"] = "rejected"
+                review["rejection_reason"] = "duplicate_preview"
+            elif status == "accepted" and len(accepted) < max_total:
+                accepted.append(dict(review))
+                seen_previews.add(preview_hash)
+            elif status == "accepted":
+                review["status"] = "rejected"
+                review["rejection_reason"] = "selection_cap"
+        except Exception as error:
+            review.update(status="failed", rejection_reason=str(error))
+        reviews.append(review)
+
+    payload_hash = _sha256_bytes(
+        json.dumps(accepted, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    )
+    return {
+        "registration_number": registration_number,
+        "previews": accepted,
+        "document_reviews": reviews,
+        "payload_hash": payload_hash,
+    }
 
 
 def _extract_configurations(
@@ -1196,9 +1704,7 @@ def _fill_detail_wide_schedule_fields(detail_html: str, detail: ReraProjectDetai
     _extract_infra_counts(text, detail)
 
 
-def extract_rera_complaints(
-    detail_html: str,
-) -> Tuple[List[ReraComplaintRow], List[ReraComplaintSummary]]:
+def _extract_complaints(detail_html: str) -> Tuple[List[ReraComplaintRow], List[ReraComplaintSummary]]:
     rows: List[ReraComplaintRow] = []
     summaries: List[ReraComplaintSummary] = []
 
@@ -1553,6 +2059,10 @@ def parse_rera_detail(detail_html: str, search_result: ReraSearchResult) -> Rera
         )
         detail.builder_other_rera_projects = len(set(other_rera))
 
+        # Check for revocations
+        revoked_count = len(re.findall(r'revoked', home, re.IGNORECASE))
+        detail.builder_revocations = revoked_count
+
         # Extract states where builder has RERA registrations
         states = set()
         known_states = [
@@ -1566,9 +2076,7 @@ def parse_rera_detail(detail_html: str, search_result: ReraSearchResult) -> Rera
         detail.builder_states = sorted(states)
 
     # --- Complaints ---
-    detail.complaint_rows, detail.complaint_summaries = extract_rera_complaints(
-        detail_html
-    )
+    detail.complaint_rows, detail.complaint_summaries = _extract_complaints(detail_html)
     project_summary = next((summary for summary in detail.complaint_summaries if summary.scope == "project"), None)
     if project_summary:
         detail.complaints_count = (
@@ -1850,6 +2358,8 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
         add_numeric_fact("rera_total_land_area_sqm", detail.total_land_area_sqm, "Total Land Area: {value} sq m")
         add_numeric_fact("project_land_area_sqm", detail.total_land_area_sqm, "Project land area: {value} sq m", ["land area", "large campus", "acres"])
         add_numeric_fact("project_land_area_acres", round(detail.total_land_area_sqm / 4046.8564224, 2), "Project land area: {value} acres", ["land area", "large campus", "acres"])
+        if detail.total_units and detail.total_units > 0:
+            add_numeric_fact("project_units_per_acre", round(detail.total_units / (detail.total_land_area_sqm / 4046.8564224), 2), "{value} units per acre", ["low density", "density", "spacious"])
 
     if detail.open_area_pct is not None:
         add_numeric_fact("project_open_area_pct", detail.open_area_pct, "{value}% open area", ["open area", "open space", "greenery"])
@@ -2001,6 +2511,13 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
             ["builder RERA projects", "track record"],
         )
 
+    add_fact(
+        "rera_builder_revocations",
+        {"type": "Numeric", "data": detail.builder_revocations},
+        "{value} revocations",
+        ["builder revocations"],
+    )
+
     if detail.builder_states:
         add_fact(
             "rera_builder_states",
@@ -2056,7 +2573,7 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
                 "buyer_visibility": artifact.buyer_visibility,
                 "preview_policy": artifact.preview_policy,
                 "preview_role": artifact.preview_role,
-                "classification_basis": artifact.classification_basis,
+                "buyer_label": artifact.buyer_label,
                 "configuration_type": artifact.configuration_type,
                 "bedroom_count": artifact.bedroom_count,
                 "confidence": artifact.confidence,
@@ -2172,7 +2689,7 @@ class FetchReraSkill(BaseSkill):
         "rera_promoter_complaints_disposed_count", "rera_promoter_complaints_open_count",
         "rera_complaint_summary_manifest",
         "project_unit_count", "project_tower_count", "project_max_floor_count",
-        "available_configurations", "configuration_count",
+        "project_units_per_acre", "available_configurations", "configuration_count",
         "has_1bhk", "has_2bhk", "has_3bhk", "has_4bhk",
         "parking_total_car_count", "parking_covered_count", "parking_surface_count",
         "parking_basement_count", "parking_visitor_count", "parking_accessible_count",

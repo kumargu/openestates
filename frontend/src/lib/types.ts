@@ -43,6 +43,8 @@ export type PropertyCard = {
   society_land_acres?: number;
   /** Source-backed open or green-space share; compare UI hides this dimension when absent. */
   open_space_pct?: number;
+  /** Derived homes-per-acre density from promoted project facts. */
+  units_per_acre?: number;
   /** Delivery-record category supplied by a future DAG-backed buyer-surface view. */
   builder_category?: "A" | "B" | "C";
   root_source?: string;
@@ -273,6 +275,7 @@ export type PropertyDetailResponse = {
     delivery_rate?: number;
     project_count?: number;
     delivery_display?: string;
+    zero_revocations?: boolean;
   };
   builder_portfolio?: BuilderPortfolio;
   data_freshness?: DataFreshness;
@@ -292,7 +295,7 @@ export type PropertyDetailResponse = {
   livability_brief?: LivabilityBrief;
   /** Schematic neighborhood plate projected from nearby + water facts. */
   map_context?: PropertyMapContext;
-  /** Site overview + floor plans promoted from RERA brochure pages. */
+  /** Plan images promoted from validated RERA filings. */
   plans?: ProjectPlansView;
 };
 
@@ -344,6 +347,16 @@ export type FloorPlanVariant = {
   confidence: number;
 };
 
+export type FiledPlanPreview = {
+  artifact_id: string;
+  kind: string;
+  label: string;
+  preview_url: string;
+  thumbnail_url?: string;
+  page?: number;
+  confidence: number;
+};
+
 export type ProjectPlansView = {
   provider: string;
   coverage_quality: string;
@@ -352,17 +365,6 @@ export type ProjectPlansView = {
   site_overview?: SiteOverviewPlan;
   floor_plans: FloorPlanVariant[];
   filed_plan_previews?: FiledPlanPreview[];
-};
-
-export type FiledPlanPreview = {
-  artifact_id: string;
-  kind: string;
-  label: string;
-  preview_url: string;
-  thumbnail_url?: string;
-  source_url?: string;
-  page?: number;
-  confidence: number;
 };
 
 export type MapNearbyLayer =
@@ -815,6 +817,7 @@ export type BuilderPortfolio = {
   rera_registered_projects: number;
   delayed_projects: number;
   complaint_projects: number;
+  revocations?: number;
   projects: BuilderProjectRecord[];
 };
 
@@ -1079,6 +1082,7 @@ export type ReraInfo = {
   total_land_area_sqm?: number;
   total_land_area_acres?: number;
   open_area_pct?: number;
+  units_per_acre?: number;
   total_project_cost_inr?: number;
   land_cost_inr?: number;
   construction_cost_inr?: number;
@@ -1096,6 +1100,7 @@ export type ReraInfo = {
   document_groups?: ReraDocumentGroupSummary[];
   affidavit_only_visible?: boolean;
   builder_total_projects?: number;
+  builder_revocations?: number;
   builder_states?: string[];
   land_litigation?: boolean;
   escrow_bank?: string;
@@ -1117,37 +1122,6 @@ export type ReraEvidenceReportResponse = {
   availability: "available" | "partial" | "unavailable";
   evidence: ReraEvidenceProjection;
   surface: ReraReportSurface;
-  buyer_report?: ReraBuyerReport;
-};
-
-export type ReraBuyerReport = {
-  fact_sections: ReraBuyerFactSection[];
-  builder_portfolio?: BuilderPortfolio;
-  schedules?: ReraScheduleSection[];
-  documents?: ReraBuyerDocument[];
-  registry_url?: string;
-};
-
-export type ReraBuyerFactSection = {
-  id: string;
-  title: string;
-  facts: ReraBuyerFact[];
-};
-
-export type ReraBuyerFact = {
-  key: string;
-  label: string;
-  value: string;
-  source_url?: string;
-  learned_at: string;
-};
-
-export type ReraBuyerDocument = {
-  id: string;
-  label: string;
-  group: string;
-  group_label: string;
-  url: string;
 };
 
 export type ReraEvidenceProjection = {
@@ -1161,7 +1135,7 @@ export type ReraEvidenceProjection = {
   events: ReraEvidenceEvent[];
   series: ReraEvidenceSeries[];
   discrepancies: ReraEvidenceDiscrepancy[];
-  regulatory_coverage: ReraRegulatoryCoverage[];
+  coverage: ReraEvidenceCoverage[];
   source_index: ReraEvidenceSource[];
 };
 
@@ -1188,13 +1162,15 @@ export type ReraEvidenceClaim = {
   effective_time?: { start?: string; end?: string; precision: string };
   assertion_mode: "registry_record" | "promoter_declaration" | "complainant_allegation" | "authority_order" | "system_derivation";
   source_trust: string;
+  extraction_confidence: number;
+  validation_state: "accepted" | "quarantined";
+  visibility: "public" | "restricted";
   evidence: Array<{
     source_record_id: string;
     receipt_id: string;
     capture_id: string;
     locator: string;
-    page?: number;
-    supporting_quote?: string;
+    parser_version: string;
   }>;
   derivation?: { rule_id: string; rule_version: string; input_claim_ids: string[] };
 };
@@ -1202,18 +1178,9 @@ export type ReraEvidenceClaim = {
 export type ReraEvidenceEvent = {
   event_id: string;
   registration_id: string;
-  promoter_id?: string;
-  event_class: string;
   event_type: string;
-  occurred_at: string;
-  issuer: string;
-  proceeding_ref?: string;
-  decision_stage: string;
-  disposition?: string;
-  current_effect: string;
-  affected_scope?: string;
+  date: string;
   claim_ids: string[];
-  source_ids: string[];
 };
 
 export type ReraEvidenceSeries = {
@@ -1248,10 +1215,10 @@ export type ReraEvidenceDiscrepancy = {
   }>;
 };
 
-export type ReraRegulatoryCoverage = {
-  source: string;
-  checked_at: string;
-  status: string;
+export type ReraEvidenceCoverage = {
+  source_section: string;
+  record_count: number;
+  latest_observed_at: string;
 };
 
 export type ReraEvidenceSource = {
@@ -1264,19 +1231,17 @@ export type ReraEvidenceSource = {
 
 export type ReraReportSurface = {
   version: number;
-  coverage_note: string;
-  regulatory_event_order: string[];
   sections: ReraReportSurfaceSection[];
 };
 
 export type ReraReportSurfaceSection = {
   id: string;
   title: string;
-  renderer: "fact_list" | "timeline" | "series" | "table" | "documents" | "regulatory_record";
+  renderer: "fact_list" | "timeline" | "series" | "table" | "documents" | "plans";
   selectors: Array<{ key: string; label: string; format?: string }>;
-  items_per_page?: number;
-  preview_kinds: string[];
   empty_behavior: "omit";
+  preview_kinds?: string[];
+  items_per_page?: number;
 };
 
 export type ReraDecisionCard = {
@@ -1327,20 +1292,6 @@ export type ReraDocumentManifestItem = {
 export type ReraDocumentGroupSummary = {
   group: string;
   count: number;
-};
-
-export type ReraScheduleSection = {
-  group: string;
-  label: string;
-  rows: ReraScheduleRow[];
-};
-
-export type ReraScheduleRow = {
-  label: string;
-  available?: boolean;
-  area_sqm?: number;
-  value?: string;
-  confidence?: number;
 };
 
 export type AreaIntelligence = {

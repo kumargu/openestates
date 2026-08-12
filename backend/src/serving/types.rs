@@ -14,6 +14,8 @@ pub struct ServingEntityRecord {
     pub entity_type: String,
     pub name: String,
     pub root_source: Option<String>,
+    #[serde(default)]
+    pub aliases: Vec<String>,
     pub searchable_text: String,
 }
 
@@ -155,18 +157,34 @@ pub fn unique_society_aliases(entities: &[ServingEntityRecord]) -> Vec<(String, 
         .iter()
         .filter(|entity| entity.entity_type == "society")
     {
-        let alias = format!("society:{}", entity_slug(&entity.name));
-        *alias_counts.entry(alias).or_default() += 1;
+        for alias in society_alias_candidates(entity) {
+            *alias_counts.entry(alias).or_default() += 1;
+        }
     }
 
     entities
         .iter()
         .filter(|entity| entity.entity_type == "society")
-        .filter_map(|entity| {
-            let alias = format!("society:{}", entity_slug(&entity.name));
-            (alias != entity.entity_id && alias_counts.get(&alias) == Some(&1))
-                .then_some((alias, entity.entity_id.clone()))
+        .flat_map(|entity| {
+            society_alias_candidates(entity)
+                .into_iter()
+                .filter(|alias| alias != &entity.entity_id && alias_counts.get(alias) == Some(&1))
+                .map(|alias| (alias, entity.entity_id.clone()))
+                .collect::<Vec<_>>()
         })
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn society_alias_candidates(entity: &ServingEntityRecord) -> std::collections::BTreeSet<String> {
+    entity
+        .aliases
+        .iter()
+        .cloned()
+        .chain(std::iter::once_with(|| {
+            format!("society:{}", entity_slug(&entity.name))
+        }))
         .collect()
 }
 
@@ -284,6 +302,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Prestige Falcon City".to_string(),
             root_source: Some("rera".to_string()),
+            aliases: Vec::new(),
             searchable_text: String::new(),
         }]);
 
@@ -292,6 +311,42 @@ mod tests {
             .expect("unique society alias should resolve");
         assert_eq!(rows.facts.len(), 1);
         assert_eq!(rows.facts[0].entity_id, canonical_id);
+    }
+
+    #[test]
+    fn explicit_society_alias_returns_the_same_plan_fact_as_the_canonical_id() {
+        let canonical_id = "society:rera-brigade-laguna";
+        let payload = r#"{"provider":"RERA","filed_plan_previews":[]}"#.to_string();
+        let mut index = ServingFactIndex::from_records(
+            vec![ServingFactRecord {
+                entity_id: canonical_id.to_string(),
+                fact_key: "media.project_plan_frames".to_string(),
+                value_type: "text".to_string(),
+                value_text: Some(payload.clone()),
+                value: FactValue::Text(payload),
+                confidence: 0.86,
+                source_type: "Rera".to_string(),
+                source_url: None,
+                model: None,
+                skill_id: Some("fetch_rera".to_string()),
+                learned_at: Utc::now(),
+            }],
+            Vec::new(),
+        );
+        index.add_society_aliases(&[ServingEntityRecord {
+            entity_id: canonical_id.to_string(),
+            entity_type: "society".to_string(),
+            name: "Brigade Laguna Phase 1".to_string(),
+            root_source: Some("rera".to_string()),
+            aliases: vec!["society:brigade-laguna".to_string()],
+            searchable_text: String::new(),
+        }]);
+
+        let canonical = index.entity(canonical_id).expect("canonical fact rows");
+        let alias = index
+            .entity("society:brigade-laguna")
+            .expect("explicit alias fact rows");
+        assert_eq!(alias.facts, canonical.facts);
     }
 }
 
@@ -305,10 +360,6 @@ pub struct ServingBundleManifest {
     pub search_metadata_count: u64,
     #[serde(default)]
     pub rera_evidence_count: u64,
-    /// RERA evidence collected for societies outside this bundle's catalog.
-    /// These rows remain in durable RERA assets but are never exposed at runtime.
-    #[serde(default)]
-    pub excluded_rera_evidence_society_ids: Vec<String>,
     #[serde(default)]
     pub edge_count: u64,
     pub entity_parquet_key: String,

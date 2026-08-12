@@ -29,7 +29,7 @@ use super::{
 
 pub const RERA_CLAIMS_ASSET_ID: &str = "rera_claims";
 pub const RERA_INVENTORY_RECONCILIATION_RULE_ID: &str = "rera.inventory_reconciliation";
-pub const RERA_INVENTORY_RECONCILIATION_RULE_VERSION: &str = "2";
+pub const RERA_INVENTORY_RECONCILIATION_RULE_VERSION: &str = "1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReraClaimSubject {
@@ -104,10 +104,6 @@ pub struct ReraClaimEvidence {
     pub receipt_id: String,
     pub capture_id: String,
     pub locator: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub page: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub supporting_quote: Option<String>,
     pub parser_version: String,
 }
 
@@ -328,14 +324,6 @@ fn validate_evidence(evidence: &ReraClaimEvidence) -> Result<(), ReraClaimError>
     {
         return Err(ReraClaimError::IncompleteEvidence);
     }
-    if evidence.page == Some(0)
-        || evidence
-            .supporting_quote
-            .as_deref()
-            .is_some_and(|quote| quote.trim().is_empty())
-    {
-        return Err(ReraClaimError::InvalidEvidenceLocator);
-    }
     Ok(())
 }
 
@@ -391,7 +379,6 @@ pub enum ReraClaimError {
     DerivedEvidenceMustBeEmpty,
     DuplicateDerivationInputs,
     IncompleteEvidence,
-    InvalidEvidenceLocator,
     InvalidConfidence(f64),
     InvalidDerivedAssertion,
     InvalidSourceAssertion,
@@ -416,9 +403,6 @@ impl fmt::Display for ReraClaimError {
                 write!(f, "derived RERA claim inputs must be unique")
             }
             Self::IncompleteEvidence => write!(f, "RERA claim evidence is incomplete"),
-            Self::InvalidEvidenceLocator => {
-                write!(f, "RERA claim evidence page or supporting quote is invalid")
-            }
             Self::InvalidConfidence(value) => write!(
                 f,
                 "RERA claim confidence must be between zero and one, got {value}"
@@ -561,15 +545,8 @@ pub fn claims_from_source_records(
             | ReraSourceRecordKind::Completion
             | ReraSourceRecordKind::QuarterlyProgress
             | ReraSourceRecordKind::Inventory
-            | ReraSourceRecordKind::ComplaintOrder
             | ReraSourceRecordKind::DocumentApproval => {
                 claims.extend(project_detail_claims(record)?);
-            }
-            ReraSourceRecordKind::RegulatoryEvent => {
-                claims.extend(regulatory_event_claims(record)?);
-            }
-            ReraSourceRecordKind::RegulatoryRelationship => {
-                claims.extend(regulatory_relationship_claims(record)?);
             }
             _ => {}
         }
@@ -587,341 +564,6 @@ pub fn claims_from_source_records(
     Ok(claims)
 }
 
-#[derive(Debug, Deserialize)]
-struct RegulatoryPromotionGate {
-    official_source: bool,
-    issuer_verified: bool,
-    stage_verified: bool,
-    scope_resolution: String,
-    extractor_verifier_agreement: bool,
-    structured_fields_valid: bool,
-    privacy_validated: bool,
-    unresolved_contradiction: bool,
-    document_format: String,
-}
-
-impl RegulatoryPromotionGate {
-    fn passes(&self, page: Option<u32>, supporting_quote: Option<&str>) -> bool {
-        let exact_scope = matches!(
-            self.scope_resolution.as_str(),
-            "exact_registration"
-                | "official_proceeding_relationship"
-                | "unregistered_triplet_exact"
-        );
-        let common = self.official_source
-            && self.issuer_verified
-            && self.stage_verified
-            && exact_scope
-            && self.structured_fields_valid
-            && self.privacy_validated
-            && !self.unresolved_contradiction;
-        if self.document_format == "structured_list" {
-            return common;
-        }
-        common
-            && self.extractor_verifier_agreement
-            && page.is_some_and(|page| page > 0)
-            && supporting_quote.is_some_and(|quote| !quote.trim().is_empty())
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct RegulatoryEventPayload {
-    event_id: String,
-    #[serde(default)]
-    promoter_id: Option<String>,
-    event_class: String,
-    event_type: String,
-    occurred_at: String,
-    issuer: String,
-    #[serde(default)]
-    proceeding_ref: Option<String>,
-    decision_stage: String,
-    #[serde(default)]
-    disposition: Option<String>,
-    current_effect: String,
-    #[serde(default)]
-    affected_scope: Option<String>,
-    assertion_mode: ReraAssertionMode,
-    source_trust: ReraSourceTrust,
-    #[serde(default = "default_regulatory_extraction_confidence")]
-    extraction_confidence: f64,
-    #[serde(default)]
-    page: Option<u32>,
-    #[serde(default)]
-    supporting_quote: Option<String>,
-    promotion: RegulatoryPromotionGate,
-}
-
-#[derive(Debug, Deserialize)]
-struct RegulatoryRelationshipPayload {
-    relationship_id: String,
-    relationship_type: String,
-    from_event_id: String,
-    to_event_id: String,
-    assertion_mode: ReraAssertionMode,
-    source_trust: ReraSourceTrust,
-    #[serde(default = "default_regulatory_extraction_confidence")]
-    extraction_confidence: f64,
-    #[serde(default)]
-    page: Option<u32>,
-    #[serde(default)]
-    supporting_quote: Option<String>,
-    promotion: RegulatoryPromotionGate,
-}
-
-fn default_regulatory_extraction_confidence() -> f64 {
-    0.0
-}
-
-fn regulatory_event_claims(
-    record: &ReraSourceRecord,
-) -> Result<Vec<ReraClaimV1>, ReraClaimMaterializeError> {
-    let payload: RegulatoryEventPayload = serde_json::from_str(&record.raw_value)?;
-    let accepted = payload
-        .promotion
-        .passes(payload.page, payload.supporting_quote.as_deref())
-        && regulatory_date_is_valid(&payload.occurred_at)
-        && [
-            payload.event_id.as_str(),
-            payload.event_class.as_str(),
-            payload.event_type.as_str(),
-            payload.issuer.as_str(),
-            payload.decision_stage.as_str(),
-            payload.current_effect.as_str(),
-        ]
-        .into_iter()
-        .all(|value| !value.trim().is_empty());
-    let subject = ReraClaimSubject {
-        entity_id: payload.event_id.trim().to_string(),
-        entity_type: "regulatory_event".to_string(),
-    };
-    let evidence = regulatory_evidence(record, payload.page, payload.supporting_quote.as_deref());
-    let mut claims = vec![regulatory_claim(
-        subject.clone(),
-        "part_of_registration",
-        ReraClaimValue::EntityRef {
-            entity_id: record.registration_id.clone(),
-            entity_type: "registration".to_string(),
-        },
-        &payload,
-        accepted,
-        evidence.clone(),
-    )?];
-    if let Some(promoter_id) = non_empty(payload.promoter_id.as_deref()) {
-        claims.push(regulatory_claim(
-            subject.clone(),
-            "regulatory_promoter_id",
-            ReraClaimValue::EntityRef {
-                entity_id: promoter_id.to_string(),
-                entity_type: "promoter".to_string(),
-            },
-            &payload,
-            accepted,
-            evidence.clone(),
-        )?);
-    }
-    for (predicate, value) in [
-        ("regulatory_event_class", payload.event_class.as_str()),
-        ("regulatory_event_type", payload.event_type.as_str()),
-        ("regulatory_issuer", payload.issuer.as_str()),
-        ("regulatory_decision_stage", payload.decision_stage.as_str()),
-        ("regulatory_current_effect", payload.current_effect.as_str()),
-    ] {
-        claims.push(regulatory_claim(
-            subject.clone(),
-            predicate,
-            ReraClaimValue::Text(value.trim().to_string()),
-            &payload,
-            accepted,
-            evidence.clone(),
-        )?);
-    }
-    claims.push(regulatory_claim(
-        subject.clone(),
-        "regulatory_occurred_at",
-        ReraClaimValue::Date(payload.occurred_at.trim().to_string()),
-        &payload,
-        accepted,
-        evidence.clone(),
-    )?);
-    for (predicate, value) in [
-        (
-            "regulatory_proceeding_ref",
-            payload.proceeding_ref.as_deref(),
-        ),
-        ("regulatory_disposition", payload.disposition.as_deref()),
-        (
-            "regulatory_affected_scope",
-            payload.affected_scope.as_deref(),
-        ),
-    ] {
-        if let Some(value) = non_empty(value) {
-            claims.push(regulatory_claim(
-                subject.clone(),
-                predicate,
-                ReraClaimValue::Text(value.to_string()),
-                &payload,
-                accepted,
-                evidence.clone(),
-            )?);
-        }
-    }
-    Ok(claims)
-}
-
-fn regulatory_claim(
-    subject: ReraClaimSubject,
-    predicate: &str,
-    value: ReraClaimValue,
-    payload: &RegulatoryEventPayload,
-    accepted: bool,
-    evidence: ReraClaimEvidence,
-) -> Result<ReraClaimV1, ReraClaimMaterializeError> {
-    ReraClaimInput {
-        subject,
-        predicate: predicate.to_string(),
-        value,
-        unit: None,
-        effective_time: Some(ReraClaimEffectiveTime {
-            start: Some(payload.occurred_at.clone()),
-            end: None,
-            precision: "day".to_string(),
-        }),
-        assertion_mode: payload.assertion_mode,
-        source_trust: payload.source_trust,
-        extraction_confidence: payload.extraction_confidence,
-        validation_state: if accepted {
-            ReraClaimValidationState::Accepted
-        } else {
-            ReraClaimValidationState::Quarantined
-        },
-        visibility: if accepted {
-            ReraClaimVisibility::Public
-        } else {
-            ReraClaimVisibility::Restricted
-        },
-        evidence: vec![evidence],
-        derivation: None,
-    }
-    .into_source_claim()
-    .map_err(ReraClaimMaterializeError::Claim)
-}
-
-fn regulatory_relationship_claims(
-    record: &ReraSourceRecord,
-) -> Result<Vec<ReraClaimV1>, ReraClaimMaterializeError> {
-    let payload: RegulatoryRelationshipPayload = serde_json::from_str(&record.raw_value)?;
-    let valid_relationship = matches!(
-        payload.relationship_type.as_str(),
-        "appeals" | "stays" | "affirms" | "modifies" | "sets_aside" | "enforces" | "supersedes"
-    );
-    let accepted = valid_relationship
-        && payload
-            .promotion
-            .passes(payload.page, payload.supporting_quote.as_deref())
-        && [
-            payload.relationship_id.as_str(),
-            payload.from_event_id.as_str(),
-            payload.to_event_id.as_str(),
-        ]
-        .into_iter()
-        .all(|value| !value.trim().is_empty());
-    let subject = ReraClaimSubject {
-        entity_id: payload.relationship_id.trim().to_string(),
-        entity_type: "regulatory_relationship".to_string(),
-    };
-    let evidence = regulatory_evidence(record, payload.page, payload.supporting_quote.as_deref());
-    let state = if accepted {
-        (
-            ReraClaimValidationState::Accepted,
-            ReraClaimVisibility::Public,
-        )
-    } else {
-        (
-            ReraClaimValidationState::Quarantined,
-            ReraClaimVisibility::Restricted,
-        )
-    };
-    let claim = |predicate: &str, value: ReraClaimValue| {
-        ReraClaimInput {
-            subject: subject.clone(),
-            predicate: predicate.to_string(),
-            value,
-            unit: None,
-            effective_time: record
-                .effective_at
-                .as_ref()
-                .map(|date| ReraClaimEffectiveTime {
-                    start: Some(date.clone()),
-                    end: None,
-                    precision: "day".to_string(),
-                }),
-            assertion_mode: payload.assertion_mode,
-            source_trust: payload.source_trust,
-            extraction_confidence: payload.extraction_confidence,
-            validation_state: state.0,
-            visibility: state.1,
-            evidence: vec![evidence.clone()],
-            derivation: None,
-        }
-        .into_source_claim()
-        .map_err(ReraClaimMaterializeError::Claim)
-    };
-    Ok(vec![
-        claim(
-            "part_of_registration",
-            ReraClaimValue::EntityRef {
-                entity_id: record.registration_id.clone(),
-                entity_type: "registration".to_string(),
-            },
-        )?,
-        claim(
-            "regulatory_relationship_type",
-            ReraClaimValue::Text(payload.relationship_type),
-        )?,
-        claim(
-            "regulatory_relationship_from",
-            ReraClaimValue::EntityRef {
-                entity_id: payload.from_event_id,
-                entity_type: "regulatory_event".to_string(),
-            },
-        )?,
-        claim(
-            "regulatory_relationship_to",
-            ReraClaimValue::EntityRef {
-                entity_id: payload.to_event_id,
-                entity_type: "regulatory_event".to_string(),
-            },
-        )?,
-    ])
-}
-
-fn regulatory_evidence(
-    record: &ReraSourceRecord,
-    page: Option<u32>,
-    supporting_quote: Option<&str>,
-) -> ReraClaimEvidence {
-    ReraClaimEvidence {
-        source_record_id: record.record_id.clone(),
-        receipt_id: record.receipt_id.clone(),
-        capture_id: record.capture_id.clone(),
-        locator: record.source_locator.clone(),
-        page,
-        supporting_quote: non_empty(supporting_quote).map(str::to_string),
-        parser_version: record.parser_version.clone(),
-    }
-}
-
-fn regulatory_date_is_valid(value: &str) -> bool {
-    chrono::NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").is_ok()
-        || chrono::DateTime::parse_from_rfc3339(value.trim()).is_ok()
-}
-
-fn non_empty(value: Option<&str>) -> Option<&str> {
-    value.map(str::trim).filter(|value| !value.is_empty())
-}
-
 fn registration_summary_claims(
     record: &ReraSourceRecord,
 ) -> Result<Vec<ReraClaimV1>, ReraClaimMaterializeError> {
@@ -934,8 +576,6 @@ fn registration_summary_claims(
         receipt_id: record.receipt_id.clone(),
         capture_id: record.capture_id.clone(),
         locator: record.source_locator.clone(),
-        page: None,
-        supporting_quote: None,
         parser_version: record.parser_version.clone(),
     };
     let subject = ReraClaimSubject {
@@ -994,8 +634,6 @@ fn project_detail_claims(
         receipt_id: record.receipt_id.clone(),
         capture_id: record.capture_id.clone(),
         locator: record.source_locator.clone(),
-        page: None,
-        supporting_quote: None,
         parser_version: record.parser_version.clone(),
     };
     let effective_time = record
@@ -1019,27 +657,6 @@ fn project_detail_claims(
             effective_time: effective_time.clone(),
             assertion_mode: ReraAssertionMode::PromoterDeclaration,
             source_trust: ReraSourceTrust::PromoterFiling,
-            extraction_confidence: 0.9,
-            validation_state: ReraClaimValidationState::Accepted,
-            visibility: ReraClaimVisibility::Public,
-            evidence: vec![evidence.clone()],
-            derivation: None,
-        }
-        .into_source_claim()
-        .map_err(ReraClaimMaterializeError::Claim)
-    };
-    let registry_record = |claim_subject: ReraClaimSubject,
-                           predicate: &str,
-                           value: ReraClaimValue,
-                           unit: Option<&str>| {
-        ReraClaimInput {
-            subject: claim_subject,
-            predicate: predicate.to_string(),
-            value,
-            unit: unit.map(ToString::to_string),
-            effective_time: effective_time.clone(),
-            assertion_mode: ReraAssertionMode::RegistryRecord,
-            source_trust: ReraSourceTrust::PrimaryAuthority,
             extraction_confidence: 0.9,
             validation_state: ReraClaimValidationState::Accepted,
             visibility: ReraClaimVisibility::Public,
@@ -1108,12 +725,8 @@ fn project_detail_claims(
         }
         ReraSourceRecordKind::QuarterlyProgress => {
             for (field, predicate) in [
-                ("record_type", "quarterly_record_type"),
                 ("quarter", "quarterly_filing_quarter"),
                 ("financial_year", "quarterly_filing_financial_year"),
-                ("work", "quarterly_work_item"),
-                ("approval_name", "quarterly_approval_name"),
-                ("approval_status", "quarterly_approval_status"),
             ] {
                 if let Some(value) = fields.get(field).and_then(serde_json::Value::as_str) {
                     claims.push(declaration(
@@ -1124,64 +737,18 @@ fn project_detail_claims(
                     )?);
                 }
             }
-            for (field, predicate, unit) in [
-                ("tower_count", "quarterly_reported_tower_count", "units"),
-                ("total_units", "quarterly_reported_total_units", "units"),
-                ("booked_units", "quarterly_reported_booked_units", "units"),
-                ("unsold_units", "quarterly_reported_unsold_units", "units"),
-                ("completion_pct", "quarterly_work_completion_pct", "percent"),
-                (
-                    "total_parkings",
-                    "quarterly_reported_total_parkings",
-                    "parkings",
-                ),
-                (
-                    "booked_parkings",
-                    "quarterly_reported_booked_parkings",
-                    "parkings",
-                ),
-                (
-                    "available_parkings",
-                    "quarterly_reported_available_parkings",
-                    "parkings",
-                ),
+            for (field, predicate) in [
+                ("tower_count", "quarterly_reported_tower_count"),
+                ("total_units", "quarterly_reported_total_units"),
+                ("booked_units", "quarterly_reported_booked_units"),
+                ("unsold_units", "quarterly_reported_unsold_units"),
             ] {
                 if let Some(value) = fields.get(field).and_then(serde_json::Value::as_f64) {
                     claims.push(declaration(
                         subject.clone(),
                         predicate,
                         ReraClaimValue::Number(value),
-                        Some(unit),
-                    )?);
-                }
-            }
-            if let Some(value) = fields
-                .get("applicable")
-                .and_then(serde_json::Value::as_bool)
-            {
-                claims.push(declaration(
-                    subject.clone(),
-                    "quarterly_approval_applicable",
-                    ReraClaimValue::Boolean(value),
-                    None,
-                )?);
-            }
-            for (field, predicate) in [
-                (
-                    "estimated_start_date",
-                    "quarterly_work_estimated_start_date",
-                ),
-                ("estimated_end_date", "quarterly_work_estimated_end_date"),
-                ("actual_start_date", "quarterly_work_actual_start_date"),
-                ("actual_end_date", "quarterly_work_actual_end_date"),
-                ("application_date", "quarterly_approval_application_date"),
-            ] {
-                if let Some(value) = fields.get(field).and_then(serde_json::Value::as_str) {
-                    claims.push(declaration(
-                        subject.clone(),
-                        predicate,
-                        ReraClaimValue::Date(value.to_string()),
-                        None,
+                        Some("units"),
                     )?);
                 }
             }
@@ -1299,115 +866,6 @@ fn project_detail_claims(
                 )?);
             }
         }
-        ReraSourceRecordKind::ComplaintOrder => {
-            let Some(scope) = fields
-                .get("scope")
-                .and_then(serde_json::Value::as_str)
-                .filter(|scope| matches!(*scope, "project" | "promoter"))
-            else {
-                return Ok(claims);
-            };
-            match fields
-                .get("record_type")
-                .and_then(serde_json::Value::as_str)
-            {
-                Some("scope_summary") => {
-                    for (field, suffix, unit) in [
-                        ("recorded_total", "recorded_total", "complaints"),
-                        ("row_count_parsed", "rows_parsed", "complaints"),
-                        (
-                            "open_count_in_parsed_rows",
-                            "open_count_in_parsed_rows",
-                            "complaints",
-                        ),
-                        (
-                            "disposed_count_in_parsed_rows",
-                            "disposed_count_in_parsed_rows",
-                            "complaints",
-                        ),
-                    ] {
-                        if let Some(value) = fields.get(field).and_then(serde_json::Value::as_f64) {
-                            claims.push(registry_record(
-                                subject.clone(),
-                                &format!("complaint_{scope}_{suffix}"),
-                                ReraClaimValue::Number(value),
-                                Some(unit),
-                            )?);
-                        }
-                    }
-                    if let Some(value) = fields
-                        .get("status_counts_complete")
-                        .and_then(serde_json::Value::as_bool)
-                    {
-                        claims.push(registry_record(
-                            subject.clone(),
-                            &format!("complaint_{scope}_status_counts_complete"),
-                            ReraClaimValue::Boolean(value),
-                            None,
-                        )?);
-                    }
-                }
-                Some("complaint_record") => {
-                    let Some(number) = fields
-                        .get("complaint_number")
-                        .and_then(serde_json::Value::as_str)
-                        .filter(|value| !value.trim().is_empty())
-                    else {
-                        return Ok(claims);
-                    };
-                    let complaint_subject = ReraClaimSubject {
-                        entity_id: complaint_record_id(&record.registration_id, scope, number),
-                        entity_type: "complaint_record".to_string(),
-                    };
-                    claims.push(registry_record(
-                        complaint_subject.clone(),
-                        "part_of_registration",
-                        ReraClaimValue::EntityRef {
-                            entity_id: subject.entity_id,
-                            entity_type: subject.entity_type,
-                        },
-                        None,
-                    )?);
-                    claims.push(registry_record(
-                        complaint_subject.clone(),
-                        "complaint_scope",
-                        ReraClaimValue::Text(scope.to_string()),
-                        None,
-                    )?);
-                    claims.push(registry_record(
-                        complaint_subject.clone(),
-                        "complaint_case_number",
-                        ReraClaimValue::Text(number.trim().to_string()),
-                        None,
-                    )?);
-                    if let Some(value) = fields
-                        .get("complaint_date")
-                        .and_then(serde_json::Value::as_str)
-                    {
-                        claims.push(registry_record(
-                            complaint_subject.clone(),
-                            "complaint_date",
-                            ReraClaimValue::Date(value.to_string()),
-                            None,
-                        )?);
-                    }
-                    for (field, predicate) in [
-                        ("status", "complaint_status"),
-                        ("status_group", "complaint_status_group"),
-                    ] {
-                        if let Some(value) = fields.get(field).and_then(serde_json::Value::as_str) {
-                            claims.push(registry_record(
-                                complaint_subject.clone(),
-                                predicate,
-                                ReraClaimValue::Text(value.to_string()),
-                                None,
-                            )?);
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
         ReraSourceRecordKind::DocumentApproval => {
             let Some(url) = fields
                 .get("official_url")
@@ -1468,23 +926,6 @@ fn inventory_configuration_id(registration_id: &str, label: &str) -> String {
     );
     format!(
         "rera_inventory_configuration:sha256:{}",
-        sha256_hex(material.as_bytes())
-    )
-}
-
-fn complaint_record_id(registration_id: &str, scope: &str, number: &str) -> String {
-    let material = format!(
-        "rera_complaint_record.v1\n{}\n{}\n{}",
-        registration_id.trim(),
-        scope.trim().to_ascii_lowercase(),
-        number
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .to_uppercase(),
-    );
-    format!(
-        "rera_complaint_record:sha256:{}",
         sha256_hex(material.as_bytes())
     )
 }
@@ -1551,7 +992,7 @@ fn inventory_reconciliation_unit(predicate: &str) -> Option<&'static str> {
         })
 }
 
-fn inventory_reconciliation_pairs() -> [(&'static str, &'static str, &'static str, &'static str); 3]
+fn inventory_reconciliation_pairs() -> [(&'static str, &'static str, &'static str, &'static str); 2]
 {
     [
         (
@@ -1565,12 +1006,6 @@ fn inventory_reconciliation_pairs() -> [(&'static str, &'static str, &'static st
             "declared_project_total_carpet_area",
             "declared_inventory_total_carpet_area",
             "square_metres",
-        ),
-        (
-            "project_units_vs_qpr_units",
-            "declared_unit_count",
-            "quarterly_reported_total_units",
-            "units",
         ),
     ]
 }
@@ -2030,62 +1465,9 @@ mod tests {
                 receipt_id: "rera_receipt:sha256:fixture".to_string(),
                 capture_id: capture_id.to_string(),
                 locator: "listing[0]".to_string(),
-                page: None,
-                supporting_quote: None,
                 parser_version: "fixture.v1".to_string(),
             }],
             derivation: None,
-        }
-    }
-
-    fn regulatory_event_record(
-        document_format: &str,
-        extractor_verifier_agreement: bool,
-        page: Option<u32>,
-        supporting_quote: Option<&str>,
-    ) -> ReraSourceRecord {
-        ReraSourceRecord {
-            record_id: "rera_source_record:sha256:regulatory-event".to_string(),
-            kind: ReraSourceRecordKind::RegulatoryEvent,
-            registration_id: "rera_registration:in-ka:fixture".to_string(),
-            normalized_registration_number: "PRM/KA/RERA/FIXTURE".to_string(),
-            receipt_id: "rera_receipt:sha256:regulatory-event".to_string(),
-            capture_id: "rera_capture:sha256:regulatory-event".to_string(),
-            source_locator: "order.pdf#page=12".to_string(),
-            raw_label: "Authority order".to_string(),
-            raw_value: serde_json::json!({
-                "event_id": "regulatory_event:fixture-order",
-                "event_class": "final_finding",
-                "event_type": "authority_order",
-                "occurred_at": "2026-07-18",
-                "issuer": "K-RERA",
-                "proceeding_ref": "CMP/20/2026",
-                "decision_stage": "final_authority_order",
-                "disposition": "allowed",
-                "current_effect": "active",
-                "affected_scope": "four additional floors",
-                "assertion_mode": "authority_order",
-                "source_trust": "primary_authority",
-                "extraction_confidence": 0.0,
-                "page": page,
-                "supporting_quote": supporting_quote,
-                "promotion": {
-                    "official_source": true,
-                    "issuer_verified": true,
-                    "stage_verified": true,
-                    "scope_resolution": "exact_registration",
-                    "extractor_verifier_agreement": extractor_verifier_agreement,
-                    "structured_fields_valid": true,
-                    "privacy_validated": true,
-                    "unresolved_contradiction": false,
-                    "document_format": document_format
-                }
-            })
-            .to_string(),
-            observed_at: chrono::Utc::now(),
-            effective_at: Some("2026-07-18".to_string()),
-            filing_at: None,
-            parser_version: "fixture.v1".to_string(),
         }
     }
 
@@ -2099,61 +1481,6 @@ mod tests {
             .unwrap();
         assert_ne!(first.claim_id, second.claim_id);
         assert_eq!(first.value, second.value);
-    }
-
-    #[test]
-    fn accepted_pdf_regulatory_claims_keep_exact_page_support() {
-        let record = regulatory_event_record(
-            "pdf",
-            true,
-            Some(12),
-            Some("The Authority finds four additional floors unauthorized."),
-        );
-
-        let claims = claims_from_source_records(&[record]).unwrap();
-
-        assert!(!claims.is_empty());
-        assert!(claims.iter().all(|claim| {
-            claim.validation_state == ReraClaimValidationState::Accepted
-                && claim.visibility == ReraClaimVisibility::Public
-                && claim.evidence.iter().all(|evidence| {
-                    evidence.page == Some(12)
-                        && evidence.supporting_quote.as_deref()
-                            == Some("The Authority finds four additional floors unauthorized.")
-                })
-        }));
-    }
-
-    #[test]
-    fn extractor_verifier_disagreement_quarantines_pdf_claims() {
-        let record = regulatory_event_record(
-            "pdf",
-            false,
-            Some(12),
-            Some("The Authority finds four additional floors unauthorized."),
-        );
-
-        let claims = claims_from_source_records(&[record]).unwrap();
-
-        assert!(!claims.is_empty());
-        assert!(claims.iter().all(|claim| {
-            claim.validation_state == ReraClaimValidationState::Quarantined
-                && claim.visibility == ReraClaimVisibility::Restricted
-        }));
-    }
-
-    #[test]
-    fn structured_official_status_does_not_require_model_confidence() {
-        let record = regulatory_event_record("structured_list", false, None, None);
-
-        let claims = claims_from_source_records(&[record]).unwrap();
-
-        assert!(!claims.is_empty());
-        assert!(claims.iter().all(|claim| {
-            claim.extraction_confidence == 0.0
-                && claim.validation_state == ReraClaimValidationState::Accepted
-                && claim.visibility == ReraClaimVisibility::Public
-        }));
     }
 
     #[test]
@@ -2229,126 +1556,6 @@ mod tests {
                 .count(),
             3
         );
-    }
-
-    #[test]
-    fn quarterly_work_and_approval_claims_preserve_typed_filing_values() {
-        let record = ReraSourceRecord {
-            record_id: "rera_source_record:sha256:qpr-work".to_string(),
-            kind: ReraSourceRecordKind::QuarterlyProgress,
-            registration_id: "rera_registration:in-ka:fixture".to_string(),
-            normalized_registration_number: "PRM/KA/RERA/FIXTURE".to_string(),
-            receipt_id: "rera_receipt:sha256:fixture".to_string(),
-            capture_id: "rera_capture:sha256:fixture".to_string(),
-            source_locator: "#quarterly-update/q1-2026-27/table-12/work-1".to_string(),
-            raw_label: "Quarterly work progress".to_string(),
-            raw_value: r#"{
-                "record_type":"work_progress",
-                "quarter":"Q1",
-                "financial_year":"2026-27",
-                "work":"Foundation footing work",
-                "completion_pct":85,
-                "estimated_start_date":"2025-01-01",
-                "actual_start_date":"2025-01-15"
-            }"#
-            .to_string(),
-            observed_at: chrono::Utc::now(),
-            effective_at: None,
-            filing_at: Some("2026-07-15".to_string()),
-            parser_version: "fixture.v2".to_string(),
-        };
-
-        let claims = project_detail_claims(&record).unwrap();
-
-        assert!(claims.iter().any(|claim| {
-            claim.predicate == "quarterly_work_completion_pct"
-                && claim.unit.as_deref() == Some("percent")
-                && claim.value == ReraClaimValue::Number(85.0)
-        }));
-        assert!(claims.iter().any(|claim| {
-            claim.predicate == "quarterly_work_estimated_start_date"
-                && claim.value == ReraClaimValue::Date("2025-01-01".to_string())
-        }));
-        assert!(claims.iter().all(|claim| {
-            claim
-                .effective_time
-                .as_ref()
-                .and_then(|time| time.start.as_deref())
-                == Some("2026-07-15")
-        }));
-    }
-
-    #[test]
-    fn complaint_claims_preserve_scope_counts_and_public_case_metadata() {
-        let summary = ReraSourceRecord {
-            record_id: "rera_source_record:sha256:complaint-summary".to_string(),
-            kind: ReraSourceRecordKind::ComplaintOrder,
-            registration_id: "rera_registration:in-ka:fixture".to_string(),
-            normalized_registration_number: "PRM/KA/RERA/FIXTURE".to_string(),
-            receipt_id: "rera_receipt:sha256:fixture".to_string(),
-            capture_id: "rera_capture:sha256:fixture".to_string(),
-            source_locator: "#complaints/promoter/summary".to_string(),
-            raw_label: "Complaint scope summary".to_string(),
-            raw_value: r#"{
-                "record_type":"scope_summary",
-                "scope":"promoter",
-                "recorded_total":75,
-                "row_count_parsed":61,
-                "open_count_in_parsed_rows":1,
-                "disposed_count_in_parsed_rows":60,
-                "status_counts_complete":false
-            }"#
-            .to_string(),
-            observed_at: chrono::Utc::now(),
-            effective_at: None,
-            filing_at: None,
-            parser_version: "fixture.v3".to_string(),
-        };
-        let claims = project_detail_claims(&summary).unwrap();
-
-        assert!(claims.iter().any(|claim| {
-            claim.predicate == "complaint_promoter_recorded_total"
-                && claim.value == ReraClaimValue::Number(75.0)
-        }));
-        assert!(claims.iter().any(|claim| {
-            claim.predicate == "complaint_promoter_status_counts_complete"
-                && claim.value == ReraClaimValue::Boolean(false)
-        }));
-        assert!(claims.iter().all(|claim| {
-            claim.assertion_mode == ReraAssertionMode::RegistryRecord
-                && claim.source_trust == ReraSourceTrust::PrimaryAuthority
-                && claim.visibility == ReraClaimVisibility::Public
-        }));
-
-        let row = ReraSourceRecord {
-            record_id: "rera_source_record:sha256:complaint-row".to_string(),
-            source_locator: "#complaints/project/row-1".to_string(),
-            raw_label: "Complaint record".to_string(),
-            raw_value: r#"{
-                "record_type":"complaint_record",
-                "scope":"project",
-                "complaint_number":"CMP/20/2025",
-                "complaint_date":"2025-03-04",
-                "complaint_subject":"Buyer name and free-form allegation stay restricted",
-                "status":"POSTED FOR ORDERS",
-                "status_group":"posted_for_orders",
-                "theme_tags":["agreement_payment"]
-            }"#
-            .to_string(),
-            effective_at: Some("2025-03-04".to_string()),
-            ..summary
-        };
-        let row_claims = project_detail_claims(&row).unwrap();
-
-        assert!(row_claims
-            .iter()
-            .any(|claim| claim.predicate == "complaint_case_number"));
-        assert!(row_claims
-            .iter()
-            .any(|claim| claim.predicate == "complaint_status"));
-        assert!(!row_claims.iter().any(|claim| {
-            matches!(&claim.value, ReraClaimValue::Text(value) if value.contains("Buyer name"))
-        }));
     }
 
     #[test]
@@ -2524,12 +1731,6 @@ mod tests {
                 698.0,
                 "units",
             ),
-            accepted_registration_number_claim(
-                "claim-qpr-units",
-                "quarterly_reported_total_units",
-                970.0,
-                "units",
-            ),
         ];
 
         let reconciliations = inventory_reconciliations(&claims);
@@ -2559,19 +1760,5 @@ mod tests {
             .unwrap();
         assert_eq!(units.relationship, "matching_values");
         assert_eq!(units.observed_deltas, vec![0.0]);
-        let qpr_units = reconciliations[0]
-            .comparisons
-            .iter()
-            .find(|comparison| comparison.id == "project_units_vs_qpr_units")
-            .unwrap();
-        assert_eq!(qpr_units.relationship, "different_values");
-        assert_eq!(qpr_units.observed_deltas, vec![-272.0]);
-        assert_eq!(
-            qpr_units.input_claim_ids,
-            vec![
-                "claim-project-units".to_string(),
-                "claim-qpr-units".to_string()
-            ]
-        );
     }
 }

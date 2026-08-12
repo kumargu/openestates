@@ -1495,8 +1495,15 @@ impl BuiltInAssetExecutor {
             }
             Self::ReraProjectPlanFrames => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let source_input = context
+                    .options
+                    .source_inputs
+                    .rera_project_plan_frames
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
                 let input = super::rera_project_plan_frames_input(
                     &context.dag.lake,
+                    source_input,
                     &context.run_id.to_string(),
                     context.options.planned_at,
                 )
@@ -2749,6 +2756,7 @@ fn should_skip_missing_optional_source_input(
         return false;
     }
     match asset_id.as_str() {
+        RERA_PROJECT_PLAN_FRAMES_ASSET_ID => source_inputs.rera_project_plan_frames.is_none(),
         BENGALURU_METRO_STATION_FACTS_ASSET_ID => source_inputs.bengaluru_metro_stations.is_none(),
         _ => false,
     }
@@ -2765,6 +2773,7 @@ fn should_skip_missing_source_input(asset_id: &AssetId, source_inputs: &AssetSou
         RERA_RECEIPTS_ASSET_ID => source_inputs.rera_receipts.is_none(),
         RERA_SOURCE_RECORDS_ASSET_ID => source_inputs.rera_source_records.is_none(),
         RERA_REGISTRY_MONTHLY_ASSET_ID => source_inputs.rera_registry_monthly.is_none(),
+        RERA_PROJECT_PLAN_FRAMES_ASSET_ID => source_inputs.rera_project_plan_frames.is_none(),
         GOOGLE_PLACES_WEEKLY_ASSET_ID => source_inputs.google_places_weekly.is_none(),
         GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID => source_inputs.google_nearby_places_weekly.is_none(),
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID => source_inputs.external_listings_weekly.is_none(),
@@ -2833,6 +2842,7 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
     source_inputs.source_entities.is_empty()
         && source_inputs.source_failures.is_empty()
         && source_inputs.rera_registry_monthly.is_none()
+        && source_inputs.rera_project_plan_frames.is_none()
         && source_inputs.reddit_threads_daily.is_none()
         && source_inputs.reddit_resident_facts.is_none()
         && source_inputs.google_places_weekly.is_none()
@@ -2995,6 +3005,24 @@ mod tests {
                 &source_inputs
             ));
         }
+    }
+
+    #[test]
+    fn missing_rera_plan_frames_input_is_optional_unless_collection_failed() {
+        let asset_id = AssetId::new(RERA_PROJECT_PLAN_FRAMES_ASSET_ID).unwrap();
+        assert!(should_skip_missing_optional_source_input(
+            &asset_id,
+            &AssetSourceInputs::default()
+        ));
+
+        let mut source_inputs = AssetSourceInputs::default();
+        source_inputs
+            .source_failures
+            .insert(asset_id.to_string(), "RERA portal unavailable".to_string());
+        assert!(!should_skip_missing_optional_source_input(
+            &asset_id,
+            &source_inputs
+        ));
     }
 
     #[tokio::test]

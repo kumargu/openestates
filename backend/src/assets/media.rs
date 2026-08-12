@@ -906,6 +906,7 @@ fn append_image_facts(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn append_slot_fact(
     entity_id: &str,
     fact_key: &'static str,
@@ -1605,6 +1606,7 @@ mod tests {
             .unwrap_or_default()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn test_row(
         image_url: &str,
         kind: &str,

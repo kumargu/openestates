@@ -548,6 +548,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Century Central".to_string(),
             root_source: Some("rera".to_string()),
+            aliases: Vec::new(),
             searchable_text: "Century Central".to_string(),
         }];
         let index = SearchIndex::build_with_serving_entities(&properties, &entities);

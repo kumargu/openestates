@@ -85,6 +85,7 @@ impl CurrentProjectFactsMaterializer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn materialize_for_run(
         &self,
         parent_records: &[MaterializationRecord],

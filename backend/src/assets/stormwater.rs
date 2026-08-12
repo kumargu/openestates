@@ -132,8 +132,8 @@ pub fn stormwater_drain_facts_input(
         left.entity_id
             .cmp(&right.entity_id)
             .then_with(|| {
-                effective_distance(*left)
-                    .partial_cmp(&effective_distance(*right))
+                effective_distance(left)
+                    .partial_cmp(&effective_distance(right))
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
             .then_with(|| left.drain_id.cmp(&right.drain_id))

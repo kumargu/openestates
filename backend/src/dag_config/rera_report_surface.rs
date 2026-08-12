@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -11,8 +11,6 @@ pub struct ReraReportSurfaceFile {
     pub version: u32,
     #[serde(default)]
     pub description: Option<String>,
-    pub coverage_note: String,
-    pub regulatory_event_order: Vec<String>,
     #[serde(default)]
     pub candidate_rules: ReraReportCandidateRules,
     #[serde(default)]
@@ -24,8 +22,7 @@ pub struct ReraReportSurfaceFile {
     pub tone_rules: Vec<ReraReportToneRule>,
     #[serde(default)]
     pub notebook_label_rules: Vec<ReraReportNotebookLabelRule>,
-    #[serde(default)]
-    pub document_group_labels: BTreeMap<String, String>,
+    pub default_section: ReraReportDefaultSection,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -80,10 +77,6 @@ pub struct ReraReportSectionRule {
     pub renderer: String,
     #[serde(default)]
     pub selectors: Vec<ReraReportSelectorRule>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub items_per_page: Option<usize>,
-    #[serde(default)]
-    pub preview_kinds: Vec<String>,
     #[serde(default = "default_empty_behavior")]
     pub empty_behavior: String,
     #[serde(default)]
@@ -94,6 +87,10 @@ pub struct ReraReportSectionRule {
     pub key_suffixes: Vec<String>,
     #[serde(default)]
     pub fact_keys: Vec<String>,
+    #[serde(default)]
+    pub preview_kinds: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub items_per_page: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -157,6 +154,13 @@ pub struct ReraReportNotebookLabelRule {
     pub key_contains: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReraReportDefaultSection {
+    pub id: String,
+    pub title: String,
+    pub rank: u32,
+}
+
 pub fn rera_report_surface_path() -> PathBuf {
     dag_root().join("rera_report_surface.json")
 }
@@ -207,21 +211,12 @@ fn validate_rera_report_surface(config: &ReraReportSurfaceFile) -> Result<(), Da
             "rera_report_surface.json must define at least one section".to_string(),
         ));
     }
-    if config.coverage_note.trim().is_empty() {
-        return Err(DagConfigError::InvalidConfig(
-            "rera_report_surface.json coverage_note must be non-blank".to_string(),
-        ));
-    }
-    if config.regulatory_event_order.is_empty()
-        || config
-            .regulatory_event_order
-            .iter()
-            .any(|value| value.trim().is_empty())
-    {
-        return Err(DagConfigError::InvalidConfig(
-            "rera_report_surface.json regulatory_event_order must be non-empty".to_string(),
-        ));
-    }
+    validate_section_identity(
+        &config.default_section.id,
+        &config.default_section.title,
+        "default_section",
+    )?;
+
     let mut ids = HashSet::new();
     for section in &config.sections {
         validate_section_identity(&section.id, &section.title, "section")?;
@@ -253,15 +248,9 @@ fn validate_rera_report_surface(config: &ReraReportSurfaceFile) -> Result<(), Da
                 section.id
             )));
         }
-        if section.items_per_page == Some(0) {
-            return Err(DagConfigError::InvalidConfig(format!(
-                "RERA report section {} item counts must be greater than zero",
-                section.id
-            )));
-        }
         if !matches!(
             section.renderer.as_str(),
-            "fact_list" | "timeline" | "series" | "table" | "documents" | "regulatory_record"
+            "fact_list" | "timeline" | "series" | "table" | "documents" | "plans"
         ) {
             return Err(DagConfigError::InvalidConfig(format!(
                 "RERA report section {} has unsupported renderer {}",
@@ -304,16 +293,6 @@ fn validate_rera_report_surface(config: &ReraReportSurfaceFile) -> Result<(), Da
         }
     }
 
-    if config
-        .document_group_labels
-        .iter()
-        .any(|(key, label)| key.trim().is_empty() || label.trim().is_empty())
-    {
-        return Err(DagConfigError::InvalidConfig(
-            "rera_report_surface.json document group labels must be non-blank".to_string(),
-        ));
-    }
-
     Ok(())
 }
 
@@ -347,7 +326,7 @@ mod tests {
         assert!(config
             .sections
             .iter()
-            .any(|section| section.id == "regulatory_record"));
+            .any(|section| section.id == "complaints"));
         assert!(config
             .sections
             .iter()

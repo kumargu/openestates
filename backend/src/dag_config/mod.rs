@@ -72,10 +72,10 @@ pub use rera_decision_labels::{
 };
 pub use rera_report_surface::{
     load_rera_report_surface, load_rera_report_surface_from_path, rera_report_surface_config,
-    rera_report_surface_path, ReraReportCandidateRules, ReraReportDisplayRule,
-    ReraReportNotebookLabelRule, ReraReportNumericUnitRule, ReraReportSectionRule,
-    ReraReportSelectorRule, ReraReportSurfaceFile, ReraReportToneCondition, ReraReportToneRule,
-    ReraReportValueRules,
+    rera_report_surface_path, ReraReportCandidateRules, ReraReportDefaultSection,
+    ReraReportDisplayRule, ReraReportNotebookLabelRule, ReraReportNumericUnitRule,
+    ReraReportSectionRule, ReraReportSelectorRule, ReraReportSurfaceFile, ReraReportToneCondition,
+    ReraReportToneRule, ReraReportValueRules,
 };
 pub use resolution::{
     better_source_type, better_source_type_for_fact, buyer_visible_fact, coordinate_source_allowed,

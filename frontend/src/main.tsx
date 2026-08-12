@@ -3,6 +3,7 @@ import "./styles/evidence.css";
 import "./styles/property-scene.css";
 import "./styles/notebook.css";
 import "./styles/rera-report.css";
+import "./styles/plan-gallery.css";
 import { StrictMode, useEffect, useRef, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import {

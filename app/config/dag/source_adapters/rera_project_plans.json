@@ -1,6 +1,6 @@
 {
-  "_comment": "Buyer-facing RERA project plans discovered from source-derived payloads. Offline rendering produces preview refs and unit area facts. Request paths never download or parse PDFs.",
-  "version": 1,
+  "_comment": "Buyer-facing RERA project plans. Exact catalog registrations are fetched and auto-validated offline; request paths only read promoted preview refs.",
+  "version": 2,
   "source_id": "rera_project_plans",
   "source_type": "Rera",
   "trust_tier": "root",
@@ -12,11 +12,17 @@
     "required_join_phase": "dag_materialization"
   },
   "serving_fact_key": "media.project_plan_frames",
+  "selection": {
+    "policy_path": "app/config/dag/source_adapters/rera_document_previews.json",
+    "automatic_promotion": true,
+    "manual_approval": false,
+    "max_previews_per_society": 3
+  },
   "artifact_kinds": {
     "site_overview": {
       "buyer_surface": "property_detail",
       "policy": "one_optimized_preview_only",
-      "exclude": ["technical_bbmp_site_sheet", "sanction_plan_bundle"]
+      "exclude": ["brochure", "project_media", "legal_or_contract_document", "private_or_financial_document"]
     },
     "floor_plan": {
       "buyer_surface": ["property_detail", "compare_floor_plan_mode"],
@@ -27,16 +33,6 @@
         "preview_url",
         "carpet_area_sqft",
         "sale_area_sqft"
-      ]
-    },
-    "filed_plan_preview": {
-      "buyer_surface": "rera_report",
-      "policy": "source_labeled_preview_only",
-      "required_fields": [
-        "artifact_id",
-        "kind",
-        "label",
-        "preview_url"
       ]
     }
   },

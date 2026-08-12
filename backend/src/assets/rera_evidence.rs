@@ -38,9 +38,6 @@ pub enum ReraReceiptKind {
     ProjectDetail,
     QuarterlyProgress,
     Document,
-    RegulatoryList,
-    Proceeding,
-    PromoterAffidavit,
 }
 
 impl ReraReceiptKind {
@@ -50,9 +47,6 @@ impl ReraReceiptKind {
             Self::ProjectDetail => "project_detail",
             Self::QuarterlyProgress => "quarterly_progress",
             Self::Document => "document",
-            Self::RegulatoryList => "regulatory_list",
-            Self::Proceeding => "proceeding",
-            Self::PromoterAffidavit => "promoter_affidavit",
         }
     }
 
@@ -62,9 +56,6 @@ impl ReraReceiptKind {
             "project_detail" => Ok(Self::ProjectDetail),
             "quarterly_progress" => Ok(Self::QuarterlyProgress),
             "document" => Ok(Self::Document),
-            "regulatory_list" => Ok(Self::RegulatoryList),
-            "proceeding" => Ok(Self::Proceeding),
-            "promoter_affidavit" => Ok(Self::PromoterAffidavit),
             other => Err(ReraEvidenceError::InvalidReceiptKind(other.to_string())),
         }
     }
@@ -566,7 +557,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 fn decode_hex(value: &str) -> Result<Vec<u8>, ReraEvidenceError> {
-    if value.len() % 2 != 0 {
+    if !value.len().is_multiple_of(2) {
         return Err(ReraEvidenceError::InvalidReceiptBodyEncoding);
     }
     value

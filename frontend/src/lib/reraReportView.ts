@@ -1,101 +1,9 @@
 import type {
-  FiledPlanPreview,
-  ReraBuyerDocument,
   ReraEvidenceClaim,
   ReraEvidenceClaimValue,
-  ReraEvidenceEvent,
   ReraEvidenceProjection,
-  ReraEvidenceSource,
-  ReraRegulatoryCoverage,
   ReraReportSurfaceSection,
 } from "./types.ts";
-
-/** Keep registry page sequences readable without project-specific filename rules. */
-export function orderReraDocuments(documents: ReraBuyerDocument[]): ReraBuyerDocument[] {
-  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
-  return [...documents].sort((left, right) => (
-    collator.compare(left.group_label, right.group_label)
-    || collator.compare(left.label, right.label)
-    || collator.compare(left.id, right.id)
-  ));
-}
-
-export function selectReraPlanPreviews(
-  previews: FiledPlanPreview[],
-  allowedKinds: string[],
-): FiledPlanPreview[] {
-  const allowed = new Set(allowedKinds);
-  return previews.filter((preview) => allowed.has(preview.kind));
-}
-
-export function orderReraRegulatoryEvents(
-  events: ReraEvidenceEvent[],
-  eventClassOrder: string[],
-): ReraEvidenceEvent[] {
-  const priority = new Map(eventClassOrder.map((eventClass, index) => [eventClass, index]));
-  return [...events].sort((left, right) => (
-    (priority.get(left.event_class) ?? Number.MAX_SAFE_INTEGER)
-    - (priority.get(right.event_class) ?? Number.MAX_SAFE_INTEGER)
-    || right.occurred_at.localeCompare(left.occurred_at)
-    || left.event_id.localeCompare(right.event_id)
-  ));
-}
-
-export function previewReraRegulatoryEvents(
-  events: ReraEvidenceEvent[],
-  eventClassOrder: string[],
-  limit = 3,
-): ReraEvidenceEvent[] {
-  return orderReraRegulatoryEvents(events, eventClassOrder).slice(0, Math.max(0, limit));
-}
-
-export function regulatoryCoverageNote(
-  coverage: ReraRegulatoryCoverage[],
-  outsideReleaseNote: string,
-): string | null {
-  const checkedSources = [...new Set(
-    coverage
-      .filter((item) => item.status.trim().toLowerCase() === "checked")
-      .map((item) => item.source.trim())
-      .filter(Boolean),
-  )].sort();
-  if (checkedSources.length === 0) return null;
-  const sources = checkedSources.length === 1
-    ? checkedSources[0]
-    : `${checkedSources.slice(0, -1).join(", ")} and ${checkedSources.at(-1)}`;
-  const outside = outsideReleaseNote.trim();
-  return outside ? `${sources} checked; ${outside}` : `${sources} checked.`;
-}
-
-export type ReraRegulatoryEventPresentation = {
-  supportingEvidence?: ReraEvidenceClaim["evidence"][number];
-  source?: ReraEvidenceSource;
-  actionLabel: "Open filing" | "Open order";
-};
-
-export function regulatoryEventPresentation(
-  event: ReraEvidenceEvent,
-  evidence: ReraEvidenceProjection,
-): ReraRegulatoryEventPresentation {
-  const claims = event.claim_ids
-    .map((claimId) => evidence.claims.find((claim) => claim.claim_id === claimId))
-    .filter((claim): claim is ReraEvidenceClaim => Boolean(claim));
-  const supportingEvidence = claims.flatMap((claim) => claim.evidence)
-    .find((item) => item.supporting_quote);
-  const source = event.source_ids
-    .map((sourceId) => evidence.source_index.find((item) => item.receipt_id === sourceId))
-    .find((item): item is ReraEvidenceSource => Boolean(item));
-  const filing = claims.some((claim) => (
-    claim.assertion_mode === "promoter_declaration"
-    || claim.assertion_mode === "complainant_allegation"
-    || claim.assertion_mode === "registry_record"
-  ));
-  return {
-    supportingEvidence,
-    source,
-    actionLabel: filing ? "Open filing" : "Open order",
-  };
-}
 
 export type ReraDisplayFact = {
   id: string;
@@ -196,7 +104,6 @@ export function displayFactsForSection(
   for (const selector of section.selectors.filter(({ key }) => key.startsWith("claim:"))) {
     for (const claim of claimsForSelector(evidence.claims, selector.key)) {
       const value = claimValueText(claim.value, selector.format);
-      if (value.trim().endsWith(":")) continue;
       const key = `${claim.subject.entity_id}\u0000${claim.predicate}\u0000${value}`;
       const existing = grouped.get(key);
       if (existing) {

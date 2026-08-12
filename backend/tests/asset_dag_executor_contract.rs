@@ -18,8 +18,8 @@ use backend::assets::{
     GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
     MaterializationId, MaterializationRecord, OsmPowerInfrastructureInput,
     OsmPowerLineObservationRecord, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
-    RefreshCadence, ReraProjectSnapshotRecord, ReraReceiptInput, ReraReceiptKind,
-    ReraReceiptSourceRecord, ReraReceiptsSourceInput, ReraRegistryMaterializer,
+    RefreshCadence, ReraProjectPlanFramesInput, ReraProjectSnapshotRecord, ReraReceiptInput,
+    ReraReceiptKind, ReraReceiptSourceRecord, ReraReceiptsSourceInput, ReraRegistryMaterializer,
     ReraRegistryMonthlyInput, ReraSourceRecordInput, ReraSourceRecordKind, ReraSourceRecordsInput,
     SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord, SkillFactsInput,
     SourceWatermark, StormwaterDrainObservationRecord, StormwaterDrainRiskInput, TrustTier,
@@ -1310,7 +1310,6 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
             asset_id(BUILDER_RERA_AGGREGATES_ASSET_ID),
             asset_id(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID),
             asset_id(HOME_STATE_SIGNALS_ASSET_ID),
-            asset_id(RERA_PROJECT_PLAN_FRAMES_ASSET_ID),
             asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),
         ]
@@ -1963,6 +1962,18 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                 },
             ],
             source_watermarks: Vec::new(),
+        }),
+        rera_project_plan_frames: Some(ReraProjectPlanFramesInput {
+            source: "fixture_rera_project_plan_frames".to_string(),
+            snapshot_date: "2026-07-13".to_string(),
+            catalog_entity_count: 0,
+            exact_registration_count: 0,
+            projects: Vec::new(),
+            failures: Vec::new(),
+            source_watermarks: vec![SourceWatermark {
+                source: "fixture_rera_project_plan_frames_empty".to_string(),
+                high_watermark: now.to_rfc3339(),
+            }],
         }),
         rera_registry_monthly: Some(mock_rera_input(now)),
         external_listings_weekly: Some(ExternalListingsWeeklyInput {

@@ -1,319 +1,214 @@
 {
-  "_comment": "Config-driven RERA document classification and offline preview selection. Rules apply to source labels and filenames generically; project names never affect classification.",
-  "version": 2,
-  "content_review": {
-    "max_pages": 2,
-    "exclude_patterns": [
-      "\\bnot\\s+appli(?:cable|acble)\\b",
-      "\\bnot\\s+available\\b",
-      "\\buploaded\\s+in\\s+other\\s+docs\\b",
-      "\\bdocuments?\\s+uploaded\\s+under\\s+(?:the\\s+)?other(?:s)?\\s+documents?\\s+section\\b"
-    ]
-  },
+  "_comment": "Config-driven RERA document preview eligibility, validation, and deterministic selection. Rules apply to filing labels and filenames; project names never affect classification.",
+  "version": 1,
   "selection": {
     "max_total": 3,
-    "minimum_preview_count": 0,
-    "fallback_roles": [],
-    "require_source_url": true,
-    "require_rendered_preview": true,
-    "require_source_hash": true,
     "role_order": [
       "master_plan",
       "site_plan",
+      "layout_plan",
       "unit_plan",
-      "elevation",
       "floor_plan",
+      "elevation",
+      "section_plan",
       "development_plan",
       "sanction_plan"
+    ]
+  },
+  "text_review": {
+    "ocr_fallback_below_characters": 48,
+    "private_patterns": [
+      "\\b(?:aadhaar|aadhar|pan\\s*card|passport)\\b",
+      "\\b(?:bank\\s+account|income\\s+tax|itr|balance\\s+sheet|profit\\s+(?:and|&)\\s+loss|auditor(?:'s)?)\\b",
+      "\\b(?:signature|signed\\s+by|digital\\s+signature)\\b"
     ],
-    "role_caps": {
-      "master_plan": 1,
-      "site_plan": 1,
-      "unit_plan": 2,
-      "elevation": 1,
-      "floor_plan": 1,
-      "development_plan": 1,
-      "sanction_plan": 1
-    },
-    "inspection_role_caps": {
-      "master_plan": 2,
-      "site_plan": 3,
-      "unit_plan": 4,
-      "elevation": 2,
-      "floor_plan": 3,
-      "development_plan": 2,
-      "sanction_plan": 3
-    },
-    "dedupe_buckets": {
-      "master_plan": "project_overview",
-      "site_plan": "project_overview",
-      "development_plan": "project_overview"
-    }
+    "legal_patterns": [
+      "\\b(?:affidavit|declaration|agreement\\s+(?:for|of)\\s+sale|sale\\s+deed|title\\s+deed)\\b",
+      "\\b(?:encumbrance|litigation|complaint|notary|form\\s+b|joint\\s+development\\s+agreement)\\b"
+    ],
+    "photo_patterns": [
+      "\\b(?:project|site|construction|progress)\\s+photos?\\b",
+      "\\bphotographs?\\b"
+    ],
+    "cover_patterns": [
+      "\\b(?:cover\\s+page|table\\s+of\\s+contents|index\\s+page|brochure|prospectus|flipchart)\\b"
+    ],
+    "placeholder_patterns": [
+      "\\bnot\\s+appli(?:cable|acble)\\b",
+      "\\bnot\\s+available\\b",
+      "\\buploaded\\s+in\\s+other\\s+docs\\b",
+      "^\\s*n\\s*[/._-]?\\s*a(?:\\.|\\s|$)"
+    ]
+  },
+  "image_review": {
+    "render_size_px": 1600,
+    "analysis_size_px": 360,
+    "min_dark_ratio": 0.003,
+    "max_dark_ratio": 0.45,
+    "max_mid_tone_ratio": 0.62,
+    "max_very_dark_ratio": 0.28,
+    "min_edge_ratio": 0.003
   },
   "roles": [
     {
       "id": "placeholder",
       "kind": "placeholder",
       "group": "other",
-      "buyer_visibility": "hidden",
-      "preview_policy": "hidden",
-      "label_patterns": [
-        "^\\s*n\\s*[/._-]?\\s*a(?:\\.|\\s|$)",
-        "\\bnot\\s+appli(?:cable|acble)\\b",
-        "\\bnot\\s+available\\b",
-        "\\bnablank\\b",
-        "\\bna\\s+blank\\b"
-      ]
+      "buyer_label": "",
+      "eligible": false,
+      "patterns": ["\\bnot\\s+available\\b", "\\bnot\\s+applicable\\b", "^\\s*n\\s*[/._-]?\\s*a(?:\\.|\\s|$)"]
     },
     {
-      "id": "promoter_financial",
-      "kind": "promoter_financial_document",
+      "id": "private_or_financial",
+      "kind": "private_or_financial_document",
       "group": "promoter_financials",
-      "buyer_visibility": "private_or_sensitive",
-      "preview_policy": "hidden",
-      "label_patterns": [
-        "\\bpan\\s*card\\b",
-        "\\bbalance\\s+sheet\\b",
-        "\\bprofit\\s+(?:and|&)\\s+loss\\b",
-        "\\bauditor(?:'s)?\\b",
-        "\\bincome\\s+tax\\s+return\\b",
-        "\\bitr\\b"
-      ]
+      "buyer_label": "",
+      "eligible": false,
+      "patterns": ["\\bpan\\s*card\\b", "\\bbalance\\s+sheet\\b", "\\bprofit\\s+(?:and|&)\\s+loss\\b", "\\bauditor(?:'s)?\\b", "\\bincome\\s+tax\\b", "\\bitr\\b"]
     },
     {
       "id": "customer_contract",
       "kind": "customer_contract_template",
       "group": "buyer_templates",
-      "buyer_visibility": "list_only",
-      "preview_policy": "list_only",
-      "label_patterns": [
-        "\\bagreement\\s+(?:for|of)\\s+sale\\b",
-        "\\bagreement\\s+of\\s+sell\\b",
-        "\\bdraft\\s+afs\\b",
-        "\\bproforma\\s+afs\\b",
-        "\\ballotment\\s+letter\\b",
-        "\\bproforma\\s+(?:for\\s+)?sale\\s+deed\\b"
-      ]
-    },
-    {
-      "id": "project_media",
-      "kind": "project_media",
-      "group": "other",
-      "buyer_visibility": "hidden",
-      "preview_policy": "hidden",
-      "label_patterns": [
-        "\\bproject\\s+photos?\\b",
-        "\\bsite\\s+photos?\\b",
-        "\\bconstruction\\s+photos?\\b",
-        "\\bprogress\\s+photos?\\b",
-        "(?:^|[\\s._-])photos?(?:[\\s._-]|$)"
-      ]
-    },
-    {
-      "id": "master_plan",
-      "kind": "site_plan",
-      "group": "plans",
-      "buyer_visibility": "preview_candidate",
-      "preview_policy": "content_review_required",
-      "label_patterns": [
-        "\\bmaster\\s+plan\\b",
-        "\\bdemarcated\\s+master\\s+plan\\b"
-      ]
-    },
-    {
-      "id": "unit_plan",
-      "kind": "floor_plan",
-      "group": "plans",
-      "buyer_visibility": "preview_candidate",
-      "preview_policy": "content_review_required",
-      "label_patterns": [
-        "\\b[1-6](?:\\.5)?\\s*(?:bhk|bed(?:room)?)\\b.*\\bplan\\b",
-        "\\b(?:unit|flat|apartment)\\s+(?:layout|plan)\\b"
-      ]
-    },
-    {
-      "id": "elevation",
-      "kind": "section_plan",
-      "group": "plans",
-      "buyer_visibility": "preview_candidate",
-      "preview_policy": "content_review_required",
-      "label_patterns": [
-        "\\belevation(?:s|\\s+plan)?\\b",
-        "\\bsection\\s*(?:&|and)\\s*elevation\\b"
-      ]
-    },
-    {
-      "id": "structural_certificate",
-      "kind": "structural_certificate",
-      "group": "approvals_nocs",
-      "buyer_visibility": "list_only",
-      "preview_policy": "list_only",
-      "label_patterns": [
-        "\\bstructural\\s+(?:safety|stability)\\s+certificate\\b",
-        "\\bcertificate\\s+of\\s+structural\\b"
-      ]
-    },
-    {
-      "id": "building_license",
-      "kind": "building_license",
-      "group": "approvals_nocs",
-      "buyer_visibility": "list_only",
-      "preview_policy": "list_only",
-      "label_patterns": [
-        "\\bbuilding\\s+licen[cs]e\\b",
-        "\\bplan\\s+sanction\\s+letter\\b",
-        "\\bsanction\\s+letter\\b"
-      ]
-    },
-    {
-      "id": "project_specification",
-      "kind": "project_specification",
-      "group": "plans",
-      "buyer_visibility": "list_only",
-      "preview_policy": "list_only",
-      "label_patterns": [
-        "\\bproject\\s+specifications?\\b",
-        "\\bspecifications?\\s+(?:and|&)\\s+amenities\\b"
-      ]
-    },
-    {
-      "id": "site_plan",
-      "kind": "site_plan",
-      "group": "plans",
-      "buyer_visibility": "preview_candidate",
-      "preview_policy": "content_review_required",
-      "label_patterns": [
-        "\\bsite\\s*plan\\b",
-        "\\blayout\\s+plan\\b",
-        "\\bapproved\\s+layout\\b"
-      ]
-    },
-    {
-      "id": "floor_plan",
-      "kind": "floor_plan",
-      "group": "plans",
-      "buyer_visibility": "preview_candidate",
-      "preview_policy": "content_review_required",
-      "label_patterns": [
-        "\\bfloor\\s*plan\\b",
-        "\\btypical\\s+floor\\b",
-        "\\bground\\s+floor\\b",
-        "\\bbasement\\s+(?:floor\\s+)?plan\\b",
-        "\\bterrace\\s+(?:floor\\s+)?plan\\b"
-      ]
-    },
-    {
-      "id": "section_plan",
-      "kind": "section_plan",
-      "group": "plans",
-      "buyer_visibility": "preview_candidate",
-      "preview_policy": "content_review_required",
-      "label_patterns": [
-        "\\bsection(?:al)?\\s+(?:drawing|plan)\\b",
-        "\\bsection\\s+of\\s+building\\b"
-      ]
-    },
-    {
-      "id": "development_plan",
-      "kind": "development_plan",
-      "group": "plans",
-      "buyer_visibility": "preview_candidate",
-      "preview_policy": "content_review_required",
-      "label_patterns": [
-        "\\barea\\s+development\\s+plan\\b",
-        "\\bdevelopment\\s+plan\\b",
-        "\\bdp\\s+(?:approved|approval|plan)\\b"
-      ]
-    },
-    {
-      "id": "sanction_plan",
-      "kind": "sanction_plan",
-      "group": "plans",
-      "buyer_visibility": "preview_candidate",
-      "preview_policy": "content_review_required",
-      "label_patterns": [
-        "\\bsanction(?:ed)?\\s+plans?\\b",
-        "\\bapproved\\s+(?:building\\s+)?plans?\\b",
-        "\\bapproval\\s+plans?\\b"
-      ]
-    },
-    {
-      "id": "brochure",
-      "kind": "brochure",
-      "group": "other",
-      "buyer_visibility": "hidden",
-      "preview_policy": "hidden",
-      "label_patterns": [
-        "\\bbrochure\\b",
-        "\\bprospectus\\b",
-        "\\bflipchart\\b"
-      ]
-    },
-    {
-      "id": "commencement_certificate",
-      "kind": "commencement_certificate",
-      "group": "approvals_nocs",
-      "buyer_visibility": "list_only",
-      "preview_policy": "list_only",
-      "label_patterns": ["\\bcommencement\\s+certificate\\b"]
-    },
-    {
-      "id": "encumbrance_certificate",
-      "kind": "encumbrance_certificate",
-      "group": "legal_land",
-      "buyer_visibility": "list_only",
-      "preview_policy": "list_only",
-      "label_patterns": [
-        "\\bencumbrance\\s+certificate\\b",
-        "(?:^|[\\s._-])ec(?:[\\s._-]|$)"
-      ]
-    },
-    {
-      "id": "title_or_land_document",
-      "kind": "title_or_land_document",
-      "group": "legal_land",
-      "buyer_visibility": "list_only",
-      "preview_policy": "list_only",
-      "label_patterns": [
-        "\\btitle\\s+deed\\b",
-        "\\bsale\\s+deed\\b",
-        "\\bjoint\\s+development\\b",
-        "(?:^|[\\s._-])jda(?:[\\s._-]|$)",
-        "\\bconversion\\s+(?:certificate|order)\\b",
-        "\\bkhata\\b",
-        "\\bland\\s+documents?\\b",
-        "\\brelinquishment\\s+deed\\b"
-      ]
-    },
-    {
-      "id": "noc",
-      "kind": "noc",
-      "group": "approvals_nocs",
-      "buyer_visibility": "list_only",
-      "preview_policy": "list_only",
-      "label_patterns": [
-        "\\bbescom\\b",
-        "\\bbwssb\\b",
-        "\\bfire\\s+(?:force|noc)\\b",
-        "\\bairport\\s+authority\\b",
-        "\\baai\\s+noc\\b",
-        "\\bkspcb\\b",
-        "\\bseiaa\\b",
-        "\\bbmrcl\\b",
-        "(?:^|[\\s._-])noc(?:[\\s._-]|$)"
-      ]
+      "buyer_label": "",
+      "eligible": false,
+      "patterns": ["\\bagreement\\s+(?:for|of)\\s+sale\\b", "\\ballotment\\s+letter\\b", "\\bproforma\\s+(?:for\\s+)?sale\\s+deed\\b"]
     },
     {
       "id": "affidavit",
       "kind": "affidavit",
       "group": "affidavits",
-      "buyer_visibility": "list_only",
-      "preview_policy": "list_only",
-      "label_patterns": [
-        "\\baffidavit\\b",
-        "\\bannexure\\s*-?\\s*49\\b",
-        "\\bform\\s+b\\b"
-      ]
+      "buyer_label": "",
+      "eligible": false,
+      "patterns": ["\\baffidavit\\b", "\\bannexure\\s*-?\\s*49\\b", "\\bform\\s+b\\b"]
+    },
+    {
+      "id": "encumbrance_certificate",
+      "kind": "encumbrance_certificate",
+      "group": "legal_land",
+      "buyer_label": "",
+      "eligible": false,
+      "patterns": ["\\bencumbrance\\s+certificate\\b", "(?:^|[\\s._-])ec(?:[\\s._-]|$)"]
+    },
+    {
+      "id": "title_or_land_document",
+      "kind": "title_or_land_document",
+      "group": "legal_land",
+      "buyer_label": "",
+      "eligible": false,
+      "patterns": ["\\btitle\\s+deed\\b", "\\bsale\\s+deed\\b", "\\bjoint\\s+development\\b", "\\bconversion\\s+(?:certificate|order)\\b", "\\bkhata\\b", "\\bland\\s+documents?\\b"]
+    },
+    {
+      "id": "project_media",
+      "kind": "project_media",
+      "group": "other",
+      "buyer_label": "",
+      "eligible": false,
+      "patterns": ["\\b(?:project|site|construction|progress)\\s+photos?\\b", "(?:^|[\\s._-])photos?(?:[\\s._-]|$)"]
+    },
+    {
+      "id": "brochure",
+      "kind": "brochure",
+      "group": "other",
+      "buyer_label": "",
+      "eligible": false,
+      "patterns": ["\\bbrochure\\b", "\\bprospectus\\b", "\\bflipchart\\b"]
+    },
+    {
+      "id": "commencement_certificate",
+      "kind": "commencement_certificate",
+      "group": "approvals_nocs",
+      "buyer_label": "",
+      "eligible": false,
+      "patterns": ["\\bcommencement\\s+certificate\\b", "\\bbuilding\\s+licen[cs]e\\b"]
+    },
+    {
+      "id": "noc",
+      "kind": "noc",
+      "group": "approvals_nocs",
+      "buyer_label": "",
+      "eligible": false,
+      "patterns": ["\\b(?:bescom|bwssb|fire\\s+force|airport\\s+authority|aai|kspcb|seiaa|bmrcl|noc)\\b"]
+    },
+    {
+      "id": "project_specification",
+      "kind": "project_specification",
+      "group": "plans",
+      "buyer_label": "",
+      "eligible": false,
+      "patterns": ["\\bproject\\s+specifications?\\b", "\\bspecifications?\\s+(?:and|&)\\s+amenities\\b"]
+    },
+    {
+      "id": "master_plan",
+      "kind": "site_plan",
+      "group": "plans",
+      "buyer_label": "Master plan",
+      "eligible": true,
+      "patterns": ["\\bmaster\\s*plan\\b", "\\bdemarcated\\s+master\\s*plan\\b"]
+    },
+    {
+      "id": "site_plan",
+      "kind": "site_plan",
+      "group": "plans",
+      "buyer_label": "Site plan",
+      "eligible": true,
+      "patterns": ["\\bsite\\s*plan\\b"]
+    },
+    {
+      "id": "layout_plan",
+      "kind": "site_plan",
+      "group": "plans",
+      "buyer_label": "Layout plan",
+      "eligible": true,
+      "patterns": ["\\blayout\\s*plan\\b", "\\bapproved\\s+layout\\b"]
+    },
+    {
+      "id": "unit_plan",
+      "kind": "floor_plan",
+      "group": "plans",
+      "buyer_label": "Unit plan",
+      "eligible": true,
+      "patterns": ["\\b[1-6](?:\\.5)?\\s*(?:bhk|bed(?:room)?)\\b.*\\bplan\\b", "\\b(?:unit|flat|apartment)\\s+(?:layout|plan)\\b"]
+    },
+    {
+      "id": "floor_plan",
+      "kind": "floor_plan",
+      "group": "plans",
+      "buyer_label": "Floor plan",
+      "eligible": true,
+      "patterns": ["\\bfloor\\s*plan", "\\btypical\\s+floor\\b", "\\b(?:ground|basement|terrace)\\s+floor\\b"]
+    },
+    {
+      "id": "elevation",
+      "kind": "section_plan",
+      "group": "plans",
+      "buyer_label": "Elevation",
+      "eligible": true,
+      "patterns": ["\\belevations?\\b", "\\bsection\\s*(?:&|and)\\s*elevation\\b"]
+    },
+    {
+      "id": "section_plan",
+      "kind": "section_plan",
+      "group": "plans",
+      "buyer_label": "Section plan",
+      "eligible": true,
+      "patterns": ["\\bsection(?:al)?\\s+(?:drawing|plan)\\b", "\\bsection\\s+of\\s+building\\b"]
+    },
+    {
+      "id": "development_plan",
+      "kind": "development_plan",
+      "group": "plans",
+      "buyer_label": "Development plan",
+      "eligible": true,
+      "patterns": ["\\barea\\s+development\\s+plan\\b", "\\bdevelopment\\s+plan\\b", "\\bdp\\s+(?:approved|approval|plan)\\b"]
+    },
+    {
+      "id": "sanction_plan",
+      "kind": "sanction_plan",
+      "group": "plans",
+      "buyer_label": "Approved plan",
+      "eligible": true,
+      "patterns": ["\\bsanction(?:ed)?\\s+plans?\\b", "\\bapproved\\s+(?:building\\s+)?plans?\\b", "\\bapproval\\s+plans?\\b"]
     }
   ]
 }

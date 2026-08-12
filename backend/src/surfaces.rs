@@ -485,15 +485,11 @@ fn candidate_matches_focus(candidate: &SceneFeatureCandidate, focus: &ProofFocus
             .is_some_and(|candidate_distance_m| candidate_distance_m.abs_diff(distance_m) <= 50)
     });
 
-    if focus.entity_id.is_some() {
-        if !entity_matches && !label_matches && !value_matches {
-            return false;
-        }
+    if focus.entity_id.is_some() && !entity_matches && !label_matches && !value_matches {
+        return false;
     }
-    if focus.receipt_id.is_some() {
-        if !receipt_matches {
-            return false;
-        }
+    if focus.receipt_id.is_some() && !receipt_matches {
+        return false;
     }
     if let Some(label) = focus.matched_label.as_deref() {
         if !candidate_text_matches(candidate, label) {
@@ -969,8 +965,7 @@ fn should_keep_linked_claim_label(label: &str) -> bool {
 
 fn readable_fact_label(fact_key: &str) -> String {
     let label = fact_key
-        .replace('.', " ")
-        .replace('_', " ")
+        .replace(['.', '_'], " ")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
@@ -1368,9 +1363,9 @@ fn km_to_meters(distance_km: f64) -> u32 {
 
 fn rounded_scope_m(distance_m: u32) -> u32 {
     if distance_m < 1000 {
-        ((distance_m + 49) / 50) * 50
+        distance_m.div_ceil(50) * 50
     } else {
-        ((distance_m + 249) / 250) * 250
+        distance_m.div_ceil(250) * 250
     }
 }
 
@@ -1510,7 +1505,7 @@ mod tests {
 
         assert_eq!(
             linked_entity_id_for_fact(
-                &rows,
+                rows,
                 &rows.facts[0],
                 0,
                 &["stormwater_drain_place_entity".to_string()],
@@ -1556,7 +1551,7 @@ mod tests {
 
         assert_eq!(
             linked_entity_id_for_fact(
-                &rows,
+                rows,
                 &rows.facts[2],
                 2,
                 &["stormwater_drain_place_entity".to_string()],
@@ -2398,6 +2393,7 @@ mod tests {
             entity_type: entity_type.to_string(),
             name: name.to_string(),
             root_source: None,
+            aliases: Vec::new(),
             searchable_text: name.to_string(),
         }
     }
@@ -2467,7 +2463,6 @@ mod tests {
                 fact_count: facts.len() as u64,
                 search_metadata_count: 0,
                 rera_evidence_count: 0,
-                excluded_rera_evidence_society_ids: Vec::new(),
                 edge_count: 0,
                 entity_parquet_key: "entities.parquet".to_string(),
                 fact_parquet_key: "facts.parquet".to_string(),

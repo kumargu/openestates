@@ -1048,6 +1048,7 @@ fn render_template(template: &str, value: &crate::knowledge::FactValue) -> Strin
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
     use crate::knowledge::fact::{ScoringDirection, ScoringHint};
@@ -1733,6 +1734,53 @@ mod tests {
         assert!(
             result.is_none(),
             "Should NOT match builder fact without BuiltBy edge"
+        );
+    }
+
+    #[test]
+    fn test_builder_zero_revocations_textmatch() {
+        use crate::knowledge::edge::Edge;
+        use crate::knowledge::node::{Node, NodeType};
+
+        let mut graph = crate::knowledge::KnowledgeGraph::new();
+
+        let society_node = Node::new(
+            "society:revoc-test".to_string(),
+            NodeType::Society,
+            "Revoc Test Society",
+        );
+        graph.add_node(society_node);
+
+        let mut builder_node = Node::new(
+            "builder:clean-builder".to_string(),
+            NodeType::Builder,
+            "Clean Builder",
+        );
+        builder_node.add_fact(make_builder_fact(
+            "builder_zero_revocations",
+            FactValue::Text("true".to_string()),
+            vec!["reliable builder", "trusted builder", "no delays"],
+            ScoringDirection::TextMatch,
+            2.0,
+        ));
+        graph.add_node(builder_node);
+
+        let edge = Edge::new(
+            "society:revoc-test".to_string(),
+            "builder:clean-builder".to_string(),
+            Relation::BuiltBy,
+        );
+        graph.add_edge(edge);
+
+        let result = graph_preference_score_detailed(&graph, "revoc-test", "trusted builder");
+        assert!(
+            result.is_some(),
+            "Should match builder_zero_revocations for 'trusted builder'"
+        );
+        let (score, _) = result.unwrap();
+        assert_eq!(
+            score, 2.0,
+            "TextMatch 'true' should score at full weight 2.0"
         );
     }
 

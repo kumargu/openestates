@@ -128,6 +128,9 @@ pub struct PropertyCard {
     /// RERA-backed open-area percentage. Omitted when the source did not expose it clearly.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub open_space_pct: Option<f64>,
+    /// Derived homes-per-acre project density from typed RERA units and land area.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub units_per_acre: Option<f64>,
     /// Where the society data originally came from: "rera", "seller", "discovered", "legacy"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub root_source: Option<String>,

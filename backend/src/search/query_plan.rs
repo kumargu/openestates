@@ -921,8 +921,7 @@ fn scope_prefix_match_ranges(query_lower: &str, prefix: &str) -> Vec<(usize, usi
     exact_pattern_match_ranges(query_lower, prefix)
         .into_iter()
         .filter(|(start, end)| {
-            query_lower[..*start].chars().next_back() != Some('-')
-                && query_lower[*end..].chars().next() != Some('-')
+            !query_lower[..*start].ends_with('-') && !query_lower[*end..].starts_with('-')
         })
         .collect()
 }

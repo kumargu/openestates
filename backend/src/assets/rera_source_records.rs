@@ -44,9 +44,6 @@ pub enum ReraSourceRecordKind {
     DocumentApproval,
     FinanceDeclaration,
     WaterServiceDeclaration,
-    RegulatoryEvent,
-    RegulatoryRelationship,
-    RegulatoryCoverage,
     SourceWarning,
     Unknown,
 }
@@ -65,9 +62,6 @@ impl ReraSourceRecordKind {
             Self::DocumentApproval => "document_approval",
             Self::FinanceDeclaration => "finance_declaration",
             Self::WaterServiceDeclaration => "water_service_declaration",
-            Self::RegulatoryEvent => "regulatory_event",
-            Self::RegulatoryRelationship => "regulatory_relationship",
-            Self::RegulatoryCoverage => "regulatory_coverage",
             Self::SourceWarning => "source_warning",
             Self::Unknown => "unknown",
         }
@@ -86,9 +80,6 @@ impl ReraSourceRecordKind {
             "document_approval" => Ok(Self::DocumentApproval),
             "finance_declaration" => Ok(Self::FinanceDeclaration),
             "water_service_declaration" => Ok(Self::WaterServiceDeclaration),
-            "regulatory_event" => Ok(Self::RegulatoryEvent),
-            "regulatory_relationship" => Ok(Self::RegulatoryRelationship),
-            "regulatory_coverage" => Ok(Self::RegulatoryCoverage),
             "source_warning" => Ok(Self::SourceWarning),
             "unknown" => Ok(Self::Unknown),
             other => Err(ReraSourceRecordsError::InvalidRecordKind(other.to_string())),
@@ -361,7 +352,7 @@ pub async fn read_rera_source_records(
     Ok(rows)
 }
 
-fn all_record_kinds() -> [ReraSourceRecordKind; 16] {
+fn all_record_kinds() -> [ReraSourceRecordKind; 13] {
     [
         ReraSourceRecordKind::RegistrationSummary,
         ReraSourceRecordKind::RegistrationRelation,
@@ -374,9 +365,6 @@ fn all_record_kinds() -> [ReraSourceRecordKind; 16] {
         ReraSourceRecordKind::DocumentApproval,
         ReraSourceRecordKind::FinanceDeclaration,
         ReraSourceRecordKind::WaterServiceDeclaration,
-        ReraSourceRecordKind::RegulatoryEvent,
-        ReraSourceRecordKind::RegulatoryRelationship,
-        ReraSourceRecordKind::RegulatoryCoverage,
         ReraSourceRecordKind::SourceWarning,
         ReraSourceRecordKind::Unknown,
     ]

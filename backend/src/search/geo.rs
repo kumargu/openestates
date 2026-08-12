@@ -1429,6 +1429,7 @@ mod tests {
                 entity_type: "area".to_string(),
                 name: "Whitefield".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -1436,6 +1437,7 @@ mod tests {
                 entity_type: "area".to_string(),
                 name: "Marathahalli".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Marathahalli".to_string(),
             },
         ];
@@ -1490,6 +1492,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Whitefield".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Manipal Hospital Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -1497,6 +1500,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "International Tech Park Bengaluru ITPB".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "International Tech Park Bengaluru ITPB".to_string(),
             },
             ServingEntityRecord {
@@ -1504,6 +1508,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Hebbal".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Manipal Hospital Hebbal".to_string(),
             },
             ServingEntityRecord {
@@ -1511,6 +1516,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital EPIP Whitefield".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Manipal Hospital EPIP Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -1518,6 +1524,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Clinics Begur".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Manipal Clinics Begur".to_string(),
             },
             ServingEntityRecord {
@@ -1525,6 +1532,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Varthur Road".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Manipal Hospital Varthur Road".to_string(),
             },
             ServingEntityRecord {
@@ -1532,6 +1540,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Yeshwanthpur".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Manipal Hospital Yeshwanthpur".to_string(),
             },
         ];
@@ -1622,6 +1631,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Whitefield".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Manipal Hospital Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -1629,6 +1639,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "International Tech Park Bengaluru ITPB".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "International Tech Park Bengaluru ITPB".to_string(),
             },
             ServingEntityRecord {
@@ -1636,6 +1647,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Hebbal".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Manipal Hospital Hebbal".to_string(),
             },
             ServingEntityRecord {
@@ -1643,6 +1655,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital EPIP Whitefield".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Manipal Hospital EPIP Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -1650,6 +1663,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Clinics Begur".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Manipal Clinics Begur".to_string(),
             },
             ServingEntityRecord {
@@ -1657,6 +1671,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Varthur Road".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Manipal Hospital Varthur Road".to_string(),
             },
             ServingEntityRecord {
@@ -1664,6 +1679,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Yeshwanthpur".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Manipal Hospital Yeshwanthpur".to_string(),
             },
         ];

@@ -26,6 +26,7 @@ function portfolio(projects: BuilderProjectRecord[]): BuilderPortfolio {
     rera_registered_projects: projects.filter((item) => item.rera_number).length,
     delayed_projects: projects.filter((item) => (item.delay_months ?? 0) > 0).length,
     complaint_projects: projects.filter((item) => (item.complaints_count ?? 0) > 0).length,
+    revocations: 0,
     projects,
   };
 }
@@ -129,12 +130,12 @@ test("health summary reports evidence-backed project flags", () => {
   });
   const summary = builderHealthSummary(portfolio([delayed, clear]));
   assert.equal(summary.flaggedProjects, 1);
-  assert.equal(summary.label, "Regulatory history");
+  assert.equal(summary.label, "1 project needs review");
   assert.match(summary.read, /2 related projects/);
   assert.match(summary.read, /1 delayed/);
 });
 
-test("health summary uses returned project rows without reputation scoring", () => {
+test("health summary preserves unknown revocations and uses returned rows", () => {
   const data = portfolio([
     project({ rera_number: "PR/003528", rera_registered: true }),
     project({
@@ -144,12 +145,14 @@ test("health summary uses returned project rows without reputation scoring", () 
       rera_registered: true,
     }),
   ]);
+  data.revocations = undefined;
   data.tracked_projects = 10;
   data.rera_registered_projects = 9;
 
   const summary = builderHealthSummary(data);
   assert.equal(summary.metrics.projects, 2);
   assert.equal(summary.metrics.reraLinked, 2);
-  assert.equal(summary.label, "Regulatory history");
+  assert.equal(summary.metrics.revocations, null);
+  assert.equal(summary.label, "Review available records");
   assert.equal(summary.tone, "neutral");
 });

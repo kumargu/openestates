@@ -797,6 +797,7 @@ impl TextSearch {
                         google_reviews_url: None,
                         society_land_acres: None,
                         open_space_pct: None,
+                        units_per_acre: None,
                         root_source: None,
                         project_status: None,
                         project_status_display: None,
@@ -3837,6 +3838,7 @@ mod tests {
             entity_type: entity_type.to_string(),
             name: name.to_string(),
             root_source: None,
+            aliases: Vec::new(),
             searchable_text: name.to_string(),
         }
     }
@@ -6355,7 +6357,7 @@ mod tests {
     }
 
     #[test]
-    fn builder_trust_query_ignores_legacy_revocation_count_evidence() {
+    fn builder_trust_negative_query_uses_rera_revocation_evidence() {
         let properties = vec![local_property(
             "clean-builder",
             "Whitefield",
@@ -6385,20 +6387,22 @@ mod tests {
         let explanation = results[0]
             .match_explanation
             .as_ref()
-            .expect("builder trust preference should remain explainable");
+            .expect("builder trust preference should include RERA coverage");
         assert!(
-            explanation
-                .reasons
-                .iter()
-                .all(|reason| reason.fact_key != "rera_builder_revocations"),
-            "legacy revocation counts must not explain builder trust: {:?}",
+            explanation.reasons.iter().any(|reason| {
+                reason.preference == "avoid builder trust"
+                    && reason.fact_key == "rera_builder_revocations"
+                    && reason.scoring_method == "graph-risk-numeric"
+                    && reason.source_type == "Rera"
+            }),
+            "builder trust should be explained by RERA revocation evidence: {:?}",
             explanation.reasons
         );
         assert!(
             explanation.preference_coverage.iter().any(|coverage| {
-                coverage.preference == "avoid builder trust" && coverage.status != "matched"
+                coverage.preference == "avoid builder trust" && coverage.status == "matched"
             }),
-            "legacy revocation counts must not satisfy builder trust: {:?}",
+            "builder trust coverage should be matched: {:?}",
             explanation.preference_coverage
         );
     }

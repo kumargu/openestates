@@ -140,7 +140,9 @@
     "operating.water_supply_good",
     "positive.maintenance_quality",
     "positive.greenery",
-    "positive.open_space"
+    "positive.open_space",
+    "rera_builder_revocations",
+    "rera_complaints_count"
   ],
   "signals": [
     {
@@ -185,6 +187,8 @@
     {
       "id": "legal_timeline_safety",
       "fact_keys": [
+        "rera_complaints_count",
+        "rera_builder_revocations",
         "home_timeline_state",
         "home_state",
         "legal.oc_status"

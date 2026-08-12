@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -19,13 +19,12 @@ use super::parquet::{
 use super::proximity::derive_proximity_records;
 use super::tantivy_index::{TantivyIndexError, TantivyRecallIndex};
 use super::{
-    unique_society_aliases, BundleArtifact, BundleArtifactKind, ServingBundleManifest,
-    ServingBundleSchema, ServingColumnSchema, ServingEdgeRecord, ServingEntityRecord,
-    ServingFactRecord, ServingReraEvidenceRecord, ServingSearchMetadataRecord, ServingTableSchema,
-    TrustPolicy,
+    BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingBundleSchema,
+    ServingColumnSchema, ServingEdgeRecord, ServingEntityRecord, ServingFactRecord,
+    ServingReraEvidenceRecord, ServingSearchMetadataRecord, ServingTableSchema, TrustPolicy,
 };
 
-pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 6;
+pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 7;
 
 #[derive(Clone)]
 pub struct ServingBundleBuilder {
@@ -69,15 +68,12 @@ impl ServingBundleBuilder {
         let search_metadata =
             serving_search_metadata_records(&current_facts, &current_annotations)?;
         let edges = serving_edge_records(&records.edges);
-        let (rera_evidence, excluded_rera_evidence_society_ids) =
-            catalog_scoped_rera_evidence(&entities, rera_evidence);
         self.build_from_serving_records(
             entities,
             facts,
             search_metadata,
             edges,
             rera_evidence,
-            excluded_rera_evidence_society_ids,
             bundle_version,
             true,
         )
@@ -86,53 +82,26 @@ impl ServingBundleBuilder {
 
     pub async fn build_child_from_serving_records(
         &self,
-        entities: Vec<ServingEntityRecord>,
-        facts: Vec<ServingFactRecord>,
-        search_metadata: Vec<ServingSearchMetadataRecord>,
-        edges: Vec<ServingEdgeRecord>,
-        bundle_version: impl Into<String>,
-    ) -> Result<ServingBundleManifest, ServingBundleError> {
-        self.build_child_from_serving_records_with_rera(
-            entities,
-            facts,
-            search_metadata,
-            edges,
-            Vec::new(),
-            Vec::new(),
-            bundle_version,
-        )
-        .await
-    }
-
-    pub async fn build_child_from_serving_records_with_rera(
-        &self,
         mut entities: Vec<ServingEntityRecord>,
         facts: Vec<ServingFactRecord>,
         search_metadata: Vec<ServingSearchMetadataRecord>,
         edges: Vec<ServingEdgeRecord>,
-        rera_evidence: Vec<ServingReraEvidenceRecord>,
-        known_excluded_rera_evidence_society_ids: Vec<String>,
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         rebuild_serving_entity_searchable_text(&mut entities, &facts);
-        let (rera_evidence, mut excluded_rera_evidence_society_ids) =
-            catalog_scoped_rera_evidence(&entities, rera_evidence);
-        excluded_rera_evidence_society_ids.extend(known_excluded_rera_evidence_society_ids);
-        excluded_rera_evidence_society_ids.sort();
-        excluded_rera_evidence_society_ids.dedup();
         self.build_from_serving_records(
             entities,
             facts,
             search_metadata,
             edges,
-            rera_evidence,
-            excluded_rera_evidence_society_ids,
+            Vec::new(),
             bundle_version,
             false,
         )
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn build_from_serving_records(
         &self,
         entities: Vec<ServingEntityRecord>,
@@ -140,7 +109,6 @@ impl ServingBundleBuilder {
         mut search_metadata: Vec<ServingSearchMetadataRecord>,
         mut edges: Vec<ServingEdgeRecord>,
         rera_evidence: Vec<ServingReraEvidenceRecord>,
-        excluded_rera_evidence_society_ids: Vec<String>,
         bundle_version: impl Into<String>,
         derive_proximity: bool,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
@@ -262,7 +230,6 @@ impl ServingBundleBuilder {
             fact_count: facts.len() as u64,
             search_metadata_count: search_metadata.len() as u64,
             rera_evidence_count: rera_evidence.len() as u64,
-            excluded_rera_evidence_society_ids,
             edge_count: edges.len() as u64,
             entity_parquet_key: entity_key.to_string(),
             fact_parquet_key: fact_key.to_string(),
@@ -330,33 +297,6 @@ fn rebuild_serving_entity_searchable_text(
     }
 }
 
-fn catalog_scoped_rera_evidence(
-    entities: &[ServingEntityRecord],
-    evidence: Vec<ServingReraEvidenceRecord>,
-) -> (Vec<ServingReraEvidenceRecord>, Vec<String>) {
-    let mut catalog_society_ids = entities
-        .iter()
-        .filter(|entity| entity.entity_type == "society")
-        .map(|entity| entity.entity_id.clone())
-        .collect::<BTreeSet<_>>();
-    catalog_society_ids.extend(
-        unique_society_aliases(entities)
-            .into_iter()
-            .map(|(alias, _)| alias),
-    );
-
-    let (included, excluded): (Vec<_>, Vec<_>) = evidence
-        .into_iter()
-        .partition(|record| catalog_society_ids.contains(&record.society_id));
-    let excluded_ids = excluded
-        .into_iter()
-        .map(|record| record.society_id)
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
-    (included, excluded_ids)
-}
-
 pub fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSchema {
     ServingBundleSchema {
         format_version,
@@ -371,6 +311,7 @@ pub fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSch
                     required_column("entity_type", "utf8"),
                     required_column("name", "utf8"),
                     optional_column("root_source", "utf8"),
+                    required_column("aliases", "list<utf8>"),
                     required_column("searchable_text", "utf8"),
                 ],
             },
@@ -474,7 +415,7 @@ fn serving_entity_records(
     current_facts: &[KgViewFactRecord],
 ) -> Vec<ServingEntityRecord> {
     let fact_text_by_entity = serving_fact_text_by_entity(current_facts);
-    records
+    let mut entities = records
         .entities
         .iter()
         .map(|node| ServingEntityRecord {
@@ -482,6 +423,7 @@ fn serving_entity_records(
             entity_type: node.entity_type.clone(),
             name: node.name.clone(),
             root_source: node.root_source.clone(),
+            aliases: Vec::new(),
             searchable_text: format!(
                 "{} {} {} {}",
                 node.entity_id,
@@ -493,7 +435,43 @@ fn serving_entity_records(
                     .unwrap_or("")
             ),
         })
-        .collect()
+        .collect::<Vec<_>>();
+    let mut alias_counts = HashMap::<String, usize>::new();
+    for entity in entities
+        .iter()
+        .filter(|entity| entity.entity_type == "society")
+    {
+        *alias_counts
+            .entry(format!("society:{}", entity_slug(&entity.name)))
+            .or_default() += 1;
+    }
+    for entity in entities
+        .iter_mut()
+        .filter(|entity| entity.entity_type == "society")
+    {
+        let alias = format!("society:{}", entity_slug(&entity.name));
+        if alias != entity.entity_id && alias_counts.get(&alias) == Some(&1) {
+            entity.aliases.push(alias);
+        }
+    }
+    entities
+}
+
+fn entity_slug(value: &str) -> String {
+    let mut output = String::new();
+    let mut separator = false;
+    for character in value.trim().to_ascii_lowercase().chars() {
+        if character.is_ascii_alphanumeric() {
+            if separator && !output.is_empty() {
+                output.push('-');
+            }
+            output.push(character);
+            separator = false;
+        } else {
+            separator = true;
+        }
+    }
+    output
 }
 
 fn current_serving_facts(facts: &[KgViewFactRecord]) -> Vec<KgViewFactRecord> {
@@ -906,46 +884,5 @@ impl From<TantivyIndexError> for ServingBundleError {
 impl From<DagConfigError> for ServingBundleError {
     fn from(err: DagConfigError) -> Self {
         Self::DagConfig(err)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn evidence(society_id: &str) -> ServingReraEvidenceRecord {
-        ServingReraEvidenceRecord {
-            society_id: society_id.to_string(),
-            registration_ids: Vec::new(),
-            entities: Vec::new(),
-            claims: Vec::new(),
-            events: Vec::new(),
-            series: Vec::new(),
-            discrepancies: Vec::new(),
-            regulatory_coverage: Vec::new(),
-            source_index: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn serving_rera_evidence_is_scoped_to_catalog_societies_and_aliases() {
-        let entities = vec![ServingEntityRecord {
-            entity_id: "society:rera-123".to_string(),
-            entity_type: "society".to_string(),
-            name: "Catalog Society".to_string(),
-            root_source: Some("rera".to_string()),
-            searchable_text: String::new(),
-        }];
-        let (included, excluded) = catalog_scoped_rera_evidence(
-            &entities,
-            vec![
-                evidence("society:rera-123"),
-                evidence("society:catalog-society"),
-                evidence("society:rera-outside-catalog"),
-            ],
-        );
-
-        assert_eq!(included.len(), 2);
-        assert_eq!(excluded, vec!["society:rera-outside-catalog"]);
     }
 }

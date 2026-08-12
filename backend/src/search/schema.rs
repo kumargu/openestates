@@ -261,7 +261,7 @@ fn load_search_schema_config() -> SearchSchemaConfig {
     let path = dag_root().join("fact_registry.json");
     let file = load_json::<FactRegistrySearchFile>(&path)
         .expect("app/config/dag/fact_registry.json is required for search schema");
-    let config = SearchSchemaConfig {
+    SearchSchemaConfig {
         version: SEARCH_SCHEMA_VERSION,
         runtime: file.runtime,
         theme_layers: file.search_dimensions,
@@ -271,8 +271,7 @@ fn load_search_schema_config() -> SearchSchemaConfig {
         text_evidence: file.text_evidence,
         numeric_evidence: file.numeric_evidence,
         excluded_search_fact_keys: file.excluded_search_fact_keys,
-    };
-    config
+    }
 }
 
 fn merge_preference_patterns(patterns: Vec<PreferencePatternSpec>) -> Vec<PreferencePatternSpec> {
@@ -1140,10 +1139,19 @@ mod tests {
     }
 
     #[test]
-    fn ignores_removed_zero_complaint_and_revocation_constraints() {
+    fn detects_configured_zero_count_constraints_as_maximums() {
         let constraints =
             detect_hard_constraints("homes with zero RERA complaints and zero builder revocations");
-        assert!(constraints.is_empty());
+        assert!(constraints.iter().any(|constraint| {
+            constraint.field == "rera_complaints_count"
+                && constraint.operator == ConstraintOperator::Max
+                && constraint.value == 0.0
+        }));
+        assert!(constraints.iter().any(|constraint| {
+            constraint.field == "rera_builder_revocations"
+                && constraint.operator == ConstraintOperator::Max
+                && constraint.value == 0.0
+        }));
     }
 
     #[test]
@@ -1203,7 +1211,11 @@ mod tests {
         assert!(labels.contains(&"waterlogging risk"));
         assert!(labels.contains(&"traffic"));
         assert!(numeric_evidence_schema("waterlogging risk").is_some());
-        assert!(numeric_evidence_schema("builder trust").is_none());
+        let builder_trust = numeric_evidence_schema("builder trust")
+            .expect("builder trust should have RERA numeric risk evidence");
+        assert!(builder_trust
+            .fact_keys
+            .contains(&"rera_builder_revocations".to_string()));
         assert!(text_evidence_schema("traffic").is_some());
     }
 

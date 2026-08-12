@@ -29,6 +29,7 @@ import {
   hasApproachRoadTrail,
 } from "../components/evidence/ApproachRoadTrail.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
+import { PlanGallery } from "../components/property/PlanGallery.tsx";
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
@@ -1204,6 +1205,8 @@ function PropertyPageBody({
       />
 
       <main className="property-clean-flow">
+        <PlanGallery plans={data.plans} />
+
         <section className="property-map-section" aria-label="Around this home">
           {showNearbyPlate && aroundThisHomeContext && (
             <AroundThisHomePlate

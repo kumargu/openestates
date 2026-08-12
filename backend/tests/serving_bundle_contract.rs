@@ -12,7 +12,7 @@ use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::{LakeKey, LakeStore};
 use backend::serving::{
     hydrate_tantivy_index, read_facts_parquet, read_search_metadata_parquet, BundleArtifactKind,
-    ServingBundleBuilder, ServingBundleManifest, TantivyRecallIndex,
+    ServingBundleBuilder, ServingBundleManifest, TantivyRecallIndex, SERVING_BUNDLE_FORMAT_VERSION,
 };
 use chrono::Utc;
 use parquet::arrow::ArrowWriter;
@@ -110,7 +110,10 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/manifest.json").unwrap();
     let manifest_body = lake.get_text(&manifest_key).await.unwrap();
     let manifest_json: serde_json::Value = serde_json::from_str(&manifest_body).unwrap();
-    assert_eq!(manifest_json["format_version"], 6);
+    assert_eq!(
+        manifest_json["format_version"],
+        SERVING_BUNDLE_FORMAT_VERSION
+    );
 
     let schema_key =
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/schema.json").unwrap();

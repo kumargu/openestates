@@ -416,7 +416,7 @@ impl<'a> SearchEngine<'a> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn relaxed_results(
         &self,
         query: &str,
@@ -445,7 +445,7 @@ impl<'a> SearchEngine<'a> {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn run_relaxation_sequence(
         &self,
         query: &str,
@@ -1543,7 +1543,7 @@ fn candidate_property_indexes(
         let Some(index) = property_by_id.get(id).copied() else {
             continue;
         };
-        if !indexes.iter().any(|existing| *existing == index) {
+        if !indexes.contains(&index) {
             indexes.push(index);
         }
     }
@@ -1655,6 +1655,7 @@ mod tests {
             entity_type: entity_type.to_string(),
             name: name.to_string(),
             root_source: None,
+            aliases: Vec::new(),
             searchable_text: name.to_string(),
         }
     }
@@ -1721,6 +1722,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn run_relaxation_for_test(
         query: &str,
         intent: &SearchIntent,

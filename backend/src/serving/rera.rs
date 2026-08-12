@@ -10,7 +10,7 @@ use crate::assets::{
     ReraSourceRecordKind,
 };
 
-pub const RERA_EVIDENCE_SCHEMA_VERSION: &str = "rera_evidence_projection.v2";
+pub const RERA_EVIDENCE_SCHEMA_VERSION: &str = "rera_evidence_projection.v1";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ServingReraEvidenceRecord {
@@ -21,7 +21,7 @@ pub struct ServingReraEvidenceRecord {
     pub events: Vec<ReraEvidenceEvent>,
     pub series: Vec<ReraEvidenceSeries>,
     pub discrepancies: Vec<ReraInventoryReconciliationV1>,
-    pub regulatory_coverage: Vec<ReraRegulatoryCoverage>,
+    pub coverage: Vec<ReraEvidenceCoverage>,
     pub source_index: Vec<ReraEvidenceSource>,
 }
 
@@ -39,22 +39,9 @@ pub struct ReraEvidenceEntity {
 pub struct ReraEvidenceEvent {
     pub event_id: String,
     pub registration_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub promoter_id: Option<String>,
-    pub event_class: String,
     pub event_type: String,
-    pub occurred_at: String,
-    pub issuer: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub proceeding_ref: Option<String>,
-    pub decision_stage: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub disposition: Option<String>,
-    pub current_effect: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub affected_scope: Option<String>,
+    pub date: String,
     pub claim_ids: Vec<String>,
-    pub source_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -85,10 +72,10 @@ pub struct ReraEvidenceSeriesPoint {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReraRegulatoryCoverage {
-    pub source: String,
-    pub checked_at: DateTime<Utc>,
-    pub status: String,
+pub struct ReraEvidenceCoverage {
+    pub source_section: String,
+    pub record_count: u64,
+    pub latest_observed_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -132,6 +119,10 @@ impl ReraEvidenceIndex {
 
     pub fn len(&self) -> usize {
         self.by_society.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.by_society.is_empty()
     }
 }
 
@@ -196,7 +187,7 @@ pub fn project_rera_evidence(
             events: evidence_events(&claims),
             series: quarterly_series(&claims),
             discrepancies,
-            regulatory_coverage: regulatory_coverage(&source_records)?,
+            coverage: evidence_coverage(&source_records),
             source_index: sources,
             claims,
         });
@@ -295,96 +286,27 @@ fn evidence_entities(
 }
 
 fn evidence_events(claims: &[ReraClaimV1]) -> Vec<ReraEvidenceEvent> {
-    let mut grouped = BTreeMap::<String, Vec<&ReraClaimV1>>::new();
-    for claim in claims
+    let mut events = claims
         .iter()
-        .filter(|claim| claim.subject.entity_type == "regulatory_event")
-    {
-        grouped
-            .entry(claim.subject.entity_id.clone())
-            .or_default()
-            .push(claim);
-    }
-    let mut events = grouped
-        .into_iter()
-        .filter_map(|(event_id, event_claims)| {
-            let registration_id = claim_entity_ref(&event_claims, "part_of_registration")?;
-            let event_class = claim_text(&event_claims, "regulatory_event_class")?;
-            let event_type = claim_text(&event_claims, "regulatory_event_type")?;
-            let occurred_at = claim_date(&event_claims, "regulatory_occurred_at")?;
-            let issuer = claim_text(&event_claims, "regulatory_issuer")?;
-            let decision_stage = claim_text(&event_claims, "regulatory_decision_stage")?;
-            let current_effect = claim_text(&event_claims, "regulatory_current_effect")?;
-            let mut claim_ids = event_claims
-                .iter()
-                .map(|claim| claim.claim_id.clone())
-                .collect::<Vec<_>>();
-            claim_ids.sort();
-            let mut source_ids = event_claims
-                .iter()
-                .flat_map(|claim| &claim.evidence)
-                .map(|evidence| evidence.receipt_id.clone())
-                .collect::<Vec<_>>();
-            source_ids.sort();
-            source_ids.dedup();
-            Some(ReraEvidenceEvent {
-                event_id,
-                registration_id,
-                promoter_id: claim_entity_ref(&event_claims, "regulatory_promoter_id"),
-                event_class,
-                event_type,
-                occurred_at,
-                issuer,
-                proceeding_ref: claim_text(&event_claims, "regulatory_proceeding_ref"),
-                decision_stage,
-                disposition: claim_text(&event_claims, "regulatory_disposition"),
-                current_effect,
-                affected_scope: claim_text(&event_claims, "regulatory_affected_scope"),
-                claim_ids,
-                source_ids,
+        .filter_map(|claim| {
+            let ReraClaimValue::Date(date) = &claim.value else {
+                return None;
+            };
+            (claim.subject.entity_type == "registration").then(|| ReraEvidenceEvent {
+                event_id: format!("rera_event:{}", claim.claim_id),
+                registration_id: claim.subject.entity_id.clone(),
+                event_type: claim.predicate.clone(),
+                date: date.clone(),
+                claim_ids: vec![claim.claim_id.clone()],
             })
         })
         .collect::<Vec<_>>();
     events.sort_by(|left, right| {
-        right
-            .occurred_at
-            .cmp(&left.occurred_at)
+        left.date
+            .cmp(&right.date)
             .then_with(|| left.event_id.cmp(&right.event_id))
     });
     events
-}
-
-fn claim_text(claims: &[&ReraClaimV1], predicate: &str) -> Option<String> {
-    claims.iter().find_map(|claim| {
-        (claim.predicate == predicate)
-            .then_some(&claim.value)
-            .and_then(|value| match value {
-                ReraClaimValue::Text(value) => Some(value.clone()),
-                _ => None,
-            })
-    })
-}
-
-fn claim_date(claims: &[&ReraClaimV1], predicate: &str) -> Option<String> {
-    claims.iter().find_map(|claim| {
-        (claim.predicate == predicate)
-            .then_some(&claim.value)
-            .and_then(|value| match value {
-                ReraClaimValue::Date(value) => Some(value.clone()),
-                _ => None,
-            })
-    })
-}
-
-fn claim_entity_ref(claims: &[&ReraClaimV1], predicate: &str) -> Option<String> {
-    claims.iter().find_map(|claim| {
-        (claim.predicate == predicate)
-            .then_some(&claim.value)
-            .and_then(|value| match value {
-                ReraClaimValue::EntityRef { entity_id, .. } => Some(entity_id.clone()),
-                _ => None,
-            })
-    })
 }
 
 fn quarterly_series(claims: &[ReraClaimV1]) -> Vec<ReraEvidenceSeries> {
@@ -459,26 +381,15 @@ fn quarterly_point(
                 })
         })
     };
-    let tower_count = number("quarterly_reported_tower_count");
-    let total_units = number("quarterly_reported_total_units");
-    let booked_units = number("quarterly_reported_booked_units");
-    let unsold_units = number("quarterly_reported_unsold_units");
-    if tower_count.is_none()
-        && total_units.is_none()
-        && booked_units.is_none()
-        && unsold_units.is_none()
-    {
-        return None;
-    }
     Some(ReraEvidenceSeriesPoint {
         point_id: source_record_id,
         effective_at,
         quarter: text("quarterly_filing_quarter"),
         financial_year: text("quarterly_filing_financial_year"),
-        tower_count,
-        total_units,
-        booked_units,
-        unsold_units,
+        tower_count: number("quarterly_reported_tower_count"),
+        total_units: number("quarterly_reported_total_units"),
+        booked_units: number("quarterly_reported_booked_units"),
+        unsold_units: number("quarterly_reported_unsold_units"),
         claim_ids: claims
             .into_iter()
             .map(|claim| claim.claim_id.clone())
@@ -486,45 +397,27 @@ fn quarterly_point(
     })
 }
 
-#[derive(Debug, Deserialize)]
-struct RegulatoryCoverageRecord {
-    source: String,
-    checked_at: DateTime<Utc>,
-    status: String,
-}
-
-fn regulatory_coverage(
-    records: &[&ReraSourceRecord],
-) -> Result<Vec<ReraRegulatoryCoverage>, ReraServingProjectionError> {
-    let mut by_source = BTreeMap::<String, ReraRegulatoryCoverage>::new();
-    for record in records
-        .iter()
-        .filter(|record| record.kind == ReraSourceRecordKind::RegulatoryCoverage)
-    {
-        let row: RegulatoryCoverageRecord =
-            serde_json::from_str(&record.raw_value).map_err(|_| {
-                ReraServingProjectionError::MalformedRegulatoryCoverage(record.record_id.clone())
-            })?;
-        if row.source.trim().is_empty() || row.status.trim().is_empty() {
-            return Err(ReraServingProjectionError::MalformedRegulatoryCoverage(
-                record.record_id.clone(),
-            ));
-        }
-        let coverage = ReraRegulatoryCoverage {
-            source: row.source.trim().to_string(),
-            checked_at: row.checked_at,
-            status: row.status.trim().to_string(),
-        };
-        by_source
-            .entry(coverage.source.clone())
-            .and_modify(|current| {
-                if coverage.checked_at > current.checked_at {
-                    *current = coverage.clone();
-                }
-            })
-            .or_insert(coverage);
+fn evidence_coverage(records: &[&ReraSourceRecord]) -> Vec<ReraEvidenceCoverage> {
+    let mut by_kind = BTreeMap::<String, (u64, DateTime<Utc>)>::new();
+    for record in records {
+        let kind = serde_json::to_value(record.kind)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string))
+            .unwrap_or_else(|| "unknown".to_string());
+        let entry = by_kind.entry(kind).or_insert((0, record.observed_at));
+        entry.0 += 1;
+        entry.1 = entry.1.max(record.observed_at);
     }
-    Ok(by_source.into_values().collect())
+    by_kind
+        .into_iter()
+        .map(
+            |(source_section, (record_count, latest_observed_at))| ReraEvidenceCoverage {
+                source_section,
+                record_count,
+                latest_observed_at,
+            },
+        )
+        .collect()
 }
 
 fn sources_for_claims(
@@ -554,7 +447,6 @@ fn sources_for_claims(
 #[derive(Debug)]
 pub enum ReraServingProjectionError {
     MalformedRegistrationRelation(String),
-    MalformedRegulatoryCoverage(String),
     MissingReceiptLineage(String),
     UnsafeRegistrationRelation(String),
 }
@@ -564,12 +456,6 @@ impl fmt::Display for ReraServingProjectionError {
         match self {
             Self::MalformedRegistrationRelation(record_id) => {
                 write!(f, "RERA registration relation {record_id} is malformed")
-            }
-            Self::MalformedRegulatoryCoverage(record_id) => {
-                write!(
-                    f,
-                    "RERA regulatory coverage record {record_id} is malformed"
-                )
             }
             Self::MissingReceiptLineage(record_id) => {
                 write!(f, "RERA claim {record_id} has no receipt lineage")
@@ -621,9 +507,9 @@ mod tests {
         assert_eq!(record.series[0].points[0].booked_units, Some(837.0));
         assert_eq!(record.source_index.len(), 1);
         assert!(record
-            .regulatory_coverage
+            .coverage
             .iter()
-            .any(|coverage| coverage.source == "K-RERA" && coverage.status == "checked"));
+            .any(|coverage| coverage.source_section == "registration_relation"));
 
         let bytes = write_rera_evidence_parquet(&projected).unwrap();
         assert_eq!(read_rera_evidence_parquet(&bytes).unwrap(), projected);
@@ -638,38 +524,6 @@ mod tests {
             project_rera_evidence(&records, &claims, &[fixture_receipt()]),
             Err(ReraServingProjectionError::UnsafeRegistrationRelation(_))
         ));
-    }
-
-    #[test]
-    fn projection_serves_only_accepted_v2_events_with_complete_lineage() {
-        let mut records = fixture_source_records("catalog_project_key_exact", 1.0);
-        records.push(fixture_regulatory_event(
-            "accepted-event",
-            "structured_list",
-            false,
-        ));
-        records.push(fixture_regulatory_event("quarantined-event", "pdf", false));
-        let claims = claims_from_source_records(&records).unwrap();
-
-        let projected = project_rera_evidence(&records, &claims, &[fixture_receipt()]).unwrap();
-
-        let record = &projected[0];
-        assert_eq!(record.events.len(), 1);
-        let event = &record.events[0];
-        assert_eq!(event.event_id, "accepted-event");
-        assert_eq!(event.registration_id, "registration:fixture");
-        assert_eq!(event.current_effect, "active");
-        assert!(!event.claim_ids.is_empty());
-        assert_eq!(event.source_ids, vec!["receipt:fixture"]);
-        assert!(record
-            .claims
-            .iter()
-            .all(|claim| claim.subject.entity_id != "quarantined-event"));
-        assert_eq!(record.regulatory_coverage.len(), 1);
-        assert!(record
-            .regulatory_coverage
-            .iter()
-            .any(|coverage| coverage.source == "K-RERA"));
     }
 
     fn fixture_source_records(method: &str, confidence: f64) -> Vec<ReraSourceRecord> {
@@ -711,26 +565,6 @@ mod tests {
                 filing_at: Some("2026-07-13".to_string()),
                 parser_version: "fixture.v1".to_string(),
             },
-            ReraSourceRecord {
-                record_id: "coverage-record".to_string(),
-                kind: ReraSourceRecordKind::RegulatoryCoverage,
-                registration_id: "registration:fixture".to_string(),
-                normalized_registration_number: "PRM/FIXTURE".to_string(),
-                receipt_id: "receipt:fixture".to_string(),
-                capture_id: "capture:fixture".to_string(),
-                source_locator: "coverage/k-rera".to_string(),
-                raw_label: "Regulatory coverage".to_string(),
-                raw_value: serde_json::json!({
-                    "source": "K-RERA",
-                    "checked_at": observed_at,
-                    "status": "checked",
-                })
-                .to_string(),
-                observed_at,
-                effective_at: None,
-                filing_at: None,
-                parser_version: "fixture.v1".to_string(),
-            },
         ]
     }
 
@@ -748,56 +582,6 @@ mod tests {
             normalized_registration_number: Some("PRM/FIXTURE".to_string()),
             parent_receipt_id: None,
             crawl_run_id: "fixture".to_string(),
-        }
-    }
-
-    fn fixture_regulatory_event(
-        event_id: &str,
-        document_format: &str,
-        extractor_verifier_agreement: bool,
-    ) -> ReraSourceRecord {
-        let observed_at = Utc.with_ymd_and_hms(2026, 8, 9, 10, 30, 0).unwrap();
-        ReraSourceRecord {
-            record_id: format!("record:{event_id}"),
-            kind: ReraSourceRecordKind::RegulatoryEvent,
-            registration_id: "registration:fixture".to_string(),
-            normalized_registration_number: "PRM/FIXTURE".to_string(),
-            receipt_id: "receipt:fixture".to_string(),
-            capture_id: "capture:fixture".to_string(),
-            source_locator: format!("orders/{event_id}"),
-            raw_label: "Regulatory event".to_string(),
-            raw_value: serde_json::json!({
-                "event_id": event_id,
-                "event_class": "final_finding",
-                "event_type": "authority_order",
-                "occurred_at": "2026-07-18",
-                "issuer": "K-RERA",
-                "proceeding_ref": "CMP/20/2026",
-                "decision_stage": "final_authority_order",
-                "disposition": "allowed",
-                "current_effect": "active",
-                "affected_scope": "four additional floors",
-                "assertion_mode": "authority_order",
-                "source_trust": "primary_authority",
-                "page": 12,
-                "supporting_quote": "The Authority finds four additional floors unauthorized.",
-                "promotion": {
-                    "official_source": true,
-                    "issuer_verified": true,
-                    "stage_verified": true,
-                    "scope_resolution": "exact_registration",
-                    "extractor_verifier_agreement": extractor_verifier_agreement,
-                    "structured_fields_valid": true,
-                    "privacy_validated": true,
-                    "unresolved_contradiction": false,
-                    "document_format": document_format
-                }
-            })
-            .to_string(),
-            observed_at,
-            effective_at: Some("2026-07-18".to_string()),
-            filing_at: None,
-            parser_version: "fixture.v1".to_string(),
         }
     }
 }

@@ -30,7 +30,7 @@ use crate::state::{
 };
 use crate::{
     assets::{CatalogEnvironment, CatalogReleaseId, CatalogReleaseStore, MaterializationId},
-    lake::LakeStoreLocation,
+    lake::{LakeStoreLocation, LAKE_URL_ENV},
     serving::ServingBundleLoadError,
 };
 
@@ -127,18 +127,27 @@ pub fn runtime_snapshot_from_serving_bundle(
 pub async fn load_serving_bundle(
     project_root: &Path,
 ) -> Result<Option<Arc<LoadedServingBundle>>, String> {
+    let explicitly_configured = std::env::var_os(LAKE_URL_ENV).is_some();
     let lake_location = LakeStoreLocation::from_env(project_root).map_err(|err| err.to_string())?;
-    load_serving_bundle_from_location(project_root, lake_location).await
+    load_serving_bundle_from_location(project_root, lake_location, explicitly_configured).await
 }
 
 async fn load_serving_bundle_from_location(
     project_root: &Path,
     lake_location: LakeStoreLocation,
+    explicitly_configured: bool,
 ) -> Result<Option<Arc<LoadedServingBundle>>, String> {
     let cache_root = project_root.join("data").join("cache").join("serving");
-    let lake = lake_location
-        .open()
-        .map_err(|err| format!("lake unavailable at {lake_location}: {err}"))?;
+    let lake = match lake_location.open() {
+        Ok(lake) => lake,
+        Err(err) if explicitly_configured => {
+            return Err(format!("lake unavailable at {lake_location}: {err}"));
+        }
+        Err(err) => {
+            eprintln!("WARN: Serving bundle lake unavailable at {lake_location}: {err}");
+            return Ok(None);
+        }
+    };
 
     let loader = ServingBundleLoader::new(lake, cache_root);
     match load_selected_search_bundle(&loader).await {
@@ -151,12 +160,20 @@ async fn load_serving_bundle_from_location(
             );
             Ok(Some(Arc::new(bundle)))
         }
-        Ok(None) => Err(format!(
-            "selected catalog release points to no serving bundle at {lake_location}"
+        Ok(None) if explicitly_configured => Err(format!(
+            "no promoted search serving bundle found at explicitly configured lake {lake_location}"
         )),
-        Err(err) => Err(format!(
+        Ok(None) => {
+            println!("No promoted serving bundle found; using local property recall only");
+            Ok(None)
+        }
+        Err(err) if explicitly_configured => Err(format!(
             "failed to load promoted search serving bundle from {lake_location}: {err}"
         )),
+        Err(err) => {
+            log_serving_load_error(err);
+            Ok(None)
+        }
     }
 }
 
@@ -175,6 +192,9 @@ async fn load_selected_search_bundle(
     }
     let explicit_release = std::env::var(SERVING_RELEASE_ID_ENV).ok();
     let explicit_environment = std::env::var(SERVING_ENV_ENV).ok();
+    if explicit_release.is_none() && explicit_environment.is_none() {
+        return loader.load_current_search_bundle().await;
+    }
 
     let release_id = match explicit_release {
         Some(value) => value.parse::<CatalogReleaseId>().map_err(|err| {
@@ -185,7 +205,7 @@ async fn load_selected_search_bundle(
         None => {
             let environment = explicit_environment
                 .as_deref()
-                .unwrap_or("dev")
+                .unwrap_or("production")
                 .parse::<CatalogEnvironment>()
                 .map_err(ServingBundleLoadError::Configuration)?;
             let store = CatalogReleaseStore::new(loader.lake().clone());
@@ -210,6 +230,10 @@ async fn load_selected_search_bundle(
     loader
         .load_search_bundle_by_materialization(&release.derived_assets.serving_materialization_id)
         .await
+}
+
+fn log_serving_load_error(err: ServingBundleLoadError) {
+    eprintln!("WARN: Failed to load serving bundle; using local property recall only: {err}");
 }
 
 pub fn properties_from_serving_bundle(bundle: &LoadedServingBundle) -> Vec<Property> {
@@ -1678,17 +1702,19 @@ mod tests {
         let root = tempdir().unwrap();
         let lake_location = LakeStoreLocation::Local(root.path().join("lake"));
 
-        let err = match load_serving_bundle_from_location(root.path(), lake_location.clone()).await
+        let err = match load_serving_bundle_from_location(root.path(), lake_location.clone(), true)
+            .await
         {
             Ok(_) => panic!("explicit lake without a promoted bundle should fail"),
             Err(err) => err,
         };
-        assert!(err.contains("OPENESTATES_SERVING_ENV=dev has no catalog release pointer"));
+        assert!(err.contains("no promoted search serving bundle found"));
 
         assert!(
-            load_serving_bundle_from_location(root.path(), lake_location)
+            load_serving_bundle_from_location(root.path(), lake_location, false)
                 .await
-                .is_err()
+                .unwrap()
+                .is_none()
         );
     }
 
@@ -1700,6 +1726,7 @@ mod tests {
                 entity_type: "property".to_string(),
                 name: "3 BHK in Prestige Lavender Fields".to_string(),
                 root_source: Some("discovered".to_string()),
+                aliases: Vec::new(),
                 searchable_text: String::new(),
             },
             ServingEntityRecord {
@@ -1707,6 +1734,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Prestige Lavender Fields".to_string(),
                 root_source: Some("rera".to_string()),
+                aliases: Vec::new(),
                 searchable_text: String::new(),
             },
         ];
@@ -1802,6 +1830,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Godrej Splendour".to_string(),
                 root_source: Some("rera".to_string()),
+                aliases: Vec::new(),
                 searchable_text: String::new(),
             },
             ServingEntityRecord {
@@ -1809,6 +1838,7 @@ mod tests {
                 entity_type: "area".to_string(),
                 name: "Whitefield".to_string(),
                 root_source: Some("rera".to_string()),
+                aliases: Vec::new(),
                 searchable_text: String::new(),
             },
         ];
@@ -1852,6 +1882,7 @@ mod tests {
             entity_type: "property".to_string(),
             name: "3 BHK in Svamitva Soul Spring".to_string(),
             root_source: Some("discovered".to_string()),
+            aliases: Vec::new(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -1892,6 +1923,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Godrej Splendour".to_string(),
             root_source: Some("rera".to_string()),
+            aliases: Vec::new(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -1925,6 +1957,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Prestige Elm Park".to_string(),
             root_source: Some("rera".to_string()),
+            aliases: Vec::new(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -1971,6 +2004,7 @@ mod tests {
                 entity_type: "property".to_string(),
                 name: "3 BHK in Prestige Waterford".to_string(),
                 root_source: Some("external_listing".to_string()),
+                aliases: Vec::new(),
                 searchable_text: "3 BHK in Prestige Waterford".to_string(),
             },
             ServingEntityRecord {
@@ -1978,6 +2012,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Prestige Elm Park".to_string(),
                 root_source: Some("builder_official".to_string()),
+                aliases: Vec::new(),
                 searchable_text: "Prestige Elm Park".to_string(),
             },
         ];
@@ -2018,6 +2053,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Prestige Elm Park".to_string(),
                 root_source: Some("rera".to_string()),
+                aliases: Vec::new(),
                 searchable_text: String::new(),
             },
             ServingEntityRecord {
@@ -2025,6 +2061,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Prestige Elm Park".to_string(),
                 root_source: Some("rera".to_string()),
+                aliases: Vec::new(),
                 searchable_text: String::new(),
             },
         ];
@@ -2063,6 +2100,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "RERA Only Project".to_string(),
             root_source: Some("rera".to_string()),
+            aliases: Vec::new(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2089,6 +2127,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Pursuit of a Radical Rhapsody Phase 2".to_string(),
             root_source: Some("rera".to_string()),
+            aliases: Vec::new(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2141,6 +2180,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Priced Project".to_string(),
             root_source: Some("rera".to_string()),
+            aliases: Vec::new(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2563,6 +2603,7 @@ mod tests {
             entity_type: "property".to_string(),
             name: "3 BHK in Prestige Lakeside Habitat".to_string(),
             root_source: Some("discovered".to_string()),
+            aliases: Vec::new(),
             searchable_text: "3 BHK in Prestige Lakeside Habitat".to_string(),
         }];
         let fact_index = ServingFactIndex::from_records(

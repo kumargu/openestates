@@ -235,6 +235,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Godrej Air".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Godrej Air".to_string(),
             },
             ServingEntityRecord {
@@ -242,6 +243,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Godrej Air".to_string(),
                 root_source: None,
+                aliases: Vec::new(),
                 searchable_text: "Godrej Air high voltage transmission line nearby".to_string(),
             },
         ];

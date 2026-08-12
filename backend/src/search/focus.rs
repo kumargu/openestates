@@ -204,6 +204,7 @@ fn area_language_tokens() -> &'static HashSet<String> {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_named_society_focus(
     society_entity_id: &str,
     society_name: &str,
@@ -311,6 +312,7 @@ fn strip_display_only(society_entity_id: &str) -> &str {
     strip_society_prefix(society_entity_id)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn sibling_config_cards(
     raw_society_id: &str,
     society_name: &str,
@@ -419,6 +421,7 @@ fn sibling_result_card(
             google_reviews_url: None,
             society_land_acres: None,
             open_space_pct: None,
+            units_per_acre: None,
             root_source: None,
             project_status: None,
             project_status_display: None,
@@ -498,6 +501,7 @@ mod tests {
                 google_reviews_url: None,
                 society_land_acres: None,
                 open_space_pct: None,
+                units_per_acre: None,
                 root_source: None,
                 project_status: None,
                 project_status_display: None,
