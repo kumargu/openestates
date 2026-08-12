@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { PageState } from "../components/PageState.tsx";
 import { PlanGallery } from "../components/property/PlanGallery.tsx";
 import { getProperty, getPropertyRera } from "../lib/api.ts";
+import { hasPlanGalleryItems } from "../lib/planGallery.ts";
 import {
   assertionLabel,
   claimValueText,
@@ -407,7 +408,7 @@ function ReraReportPageContent({ id }: { id: string }) {
     if (state.status !== "ready") return [];
     return state.report.surface.sections.filter((section) => (
       section.renderer === "plans"
-        ? Boolean(state.detail.plans)
+        ? hasPlanGalleryItems(state.detail.plans)
         : sectionHasEvidence(section, state.report.evidence)
     ));
   }, [state]);
@@ -422,6 +423,9 @@ function ReraReportPageContent({ id }: { id: string }) {
     .map((coverage) => coverage.latest_observed_at)
     .sort()
     .at(-1);
+  const sections = report.availability === "unavailable"
+    ? visibleSections.filter((section) => section.renderer === "plans")
+    : visibleSections;
   return (
     <main className="page-container-wide rera-report-page">
       <Helmet>
@@ -438,13 +442,8 @@ function ReraReportPageContent({ id }: { id: string }) {
         {report.availability === "partial" && <span>Some filed sections are not available.</span>}
       </header>
 
-      {report.availability === "unavailable" ? (
-        <section className="rera-empty">
-          <h2>RERA record unavailable</h2>
-          <p>No matched filing is available for this property yet.</p>
-        </section>
-      ) : (
-        visibleSections.map((section) => (
+      {sections.length > 0 ? (
+        sections.map((section) => (
           <ReportSection
             key={section.id}
             section={section}
@@ -453,7 +452,12 @@ function ReraReportPageContent({ id }: { id: string }) {
             onOpen={setDrawerClaims}
           />
         ))
-      )}
+      ) : report.availability === "unavailable" ? (
+        <section className="rera-empty">
+          <h2>RERA record unavailable</h2>
+          <p>No matched filing is available for this property yet.</p>
+        </section>
+      ) : null}
 
       {drawerClaims.length > 0 && (
         <EvidenceDrawer

@@ -363,7 +363,7 @@ export type ProjectPlansView = {
   source_url?: string;
   registration_number?: string;
   site_overview?: SiteOverviewPlan;
-  floor_plans: FloorPlanVariant[];
+  floor_plans?: FloorPlanVariant[];
   filed_plan_previews?: FiledPlanPreview[];
 };
 
