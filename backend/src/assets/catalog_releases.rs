@@ -479,9 +479,9 @@ impl CatalogReleaseStore {
             || kg_record.status != MaterializationStatus::Succeeded
             || project_record.status != MaterializationStatus::Succeeded
         {
-            return Ok(vec![failed_gate(format!(
-                "pinned serving lineage contains a non-succeeded materialization"
-            ))]);
+            return Ok(vec![failed_gate(
+                "pinned serving lineage contains a non-succeeded materialization".to_string(),
+            )]);
         }
         if !serving_record
             .parent_materializations

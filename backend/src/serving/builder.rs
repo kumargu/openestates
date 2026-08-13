@@ -104,6 +104,7 @@ impl ServingBundleBuilder {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn build_child_from_serving_records_with_rera(
         &self,
         mut entities: Vec<ServingEntityRecord>,
@@ -133,6 +134,7 @@ impl ServingBundleBuilder {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn build_from_serving_records(
         &self,
         entities: Vec<ServingEntityRecord>,

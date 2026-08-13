@@ -1167,17 +1167,16 @@ async fn rebase_rera_serving(
         let Some(parent) = materializations.record_by_id(parent_id).await? else {
             return Err(format!("evidence serving parent {parent_id} is missing").into());
         };
-        if required_rera_assets.contains(&parent.asset_id.as_str()) {
-            if rera_parents
+        if required_rera_assets.contains(&parent.asset_id.as_str())
+            && rera_parents
                 .insert(parent.asset_id.to_string(), parent.materialization_id)
                 .is_some()
-            {
-                return Err(format!(
-                    "evidence serving bundle has multiple {} parents",
-                    parent.asset_id
-                )
-                .into());
-            }
+        {
+            return Err(format!(
+                "evidence serving bundle has multiple {} parents",
+                parent.asset_id
+            )
+            .into());
         }
     }
     let mut parents = vec![

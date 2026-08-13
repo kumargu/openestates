@@ -69,7 +69,7 @@ pub fn resolve_serving_coordinates(
             ))
         })
         .collect::<Vec<_>>();
-    complete.sort_by(|left, right| right.1.cmp(&left.1));
+    complete.sort_by_key(|item| std::cmp::Reverse(item.1));
     let resolved = resolve_coordinate_pair(
         scope,
         complete.iter().map(|(candidate, _)| *candidate),

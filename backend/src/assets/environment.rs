@@ -76,7 +76,7 @@ pub async fn society_groundwater_potential_facts_input(
 
     let mut facts = Vec::new();
     let mut annotations = Vec::new();
-    for (entity_id, _) in &society_names {
+    for entity_id in society_names.keys() {
         let Some(coordinate) = coordinates.get(entity_id.as_str()) else {
             continue;
         };

@@ -165,7 +165,7 @@ fn build_graph(
         let Some(entity_facts) = facts_by_entity.get(entity_id.as_str()) else {
             continue;
         };
-        let mut selected_facts = entity_facts.iter().copied().collect::<Vec<_>>();
+        let mut selected_facts = entity_facts.to_vec();
         selected_facts.sort_by_key(|fact| fact_priority(fact));
         selected_facts.truncate(max_facts_per_entity);
         for (index, fact) in selected_facts.iter().enumerate() {
