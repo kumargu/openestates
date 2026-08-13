@@ -309,6 +309,9 @@ class CollectAssetSourcesTest(unittest.TestCase):
             ), patch(
                 "pipeline.collect_asset_sources.load_scoped_rera_detail_receipts",
                 return_value=[],
+            ), patch(
+                "pipeline.collect_asset_sources.load_scoped_rera_regulatory_payloads",
+                return_value=[],
             ):
                 payload = collect_rera_source_records(request)
 
