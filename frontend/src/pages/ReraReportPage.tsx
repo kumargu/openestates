@@ -483,7 +483,7 @@ function Complaints({
                 )}
                 {subjects.length > 0 && (
                   <details className="rera-complaint-subjects">
-                    <summary>Example filed subjects</summary>
+                    <summary>Sample complaint subjects</summary>
                     <ul>{subjects.map((subject) => <li key={subject}>{subject}</li>)}</ul>
                   </details>
                 )}
