@@ -103,7 +103,7 @@ class ReraDocumentIntelligenceTest(unittest.TestCase):
         self.assertEqual(classification["preview_policy"], "content_review_required")
 
     def test_typical_floor_plan_filename_is_a_preview_candidate(self):
-        classification = classify_rera_document("Typical Floor Plans - Crimson.PDF")
+        classification = classify_rera_document("Typical Floor Plans - Tower A.PDF")
 
         self.assertEqual(classification["kind"], "floor_plan")
         self.assertEqual(classification["preview_role"], "floor_plan")

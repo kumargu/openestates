@@ -355,7 +355,7 @@ mod tests {
             snapshot_date: "2026-08-12".to_string(),
             projects: vec![ReraProjectPlanProjectInput {
                 society_entity_id: "society:rera-canonical".to_string(),
-                aliases: vec!["society:brigade-laguna".to_string()],
+                aliases: vec!["society:catalog-alias".to_string()],
                 registration_number: "PRM/TEST/1".to_string(),
                 previews: vec![ReraProjectPlanPreviewInput {
                     artifact_id: "plan-1".to_string(),

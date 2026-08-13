@@ -3231,9 +3231,9 @@ class CollectAssetSourcesTest(unittest.TestCase):
             "planned_at": "2026-08-12T09:30:00Z",
             "source_entities": [
                 {
-                    "entity_id": "society:rera-brigade-laguna",
-                    "alias_entity_id": "society:brigade-laguna",
-                    "name": "Brigade Laguna",
+                    "entity_id": "society:rera-example-heights",
+                    "alias_entity_id": "society:example-heights",
+                    "name": "Example Heights",
                     "project_key": "PRM-1",
                 },
                 {
@@ -3290,7 +3290,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
         )
         self.assertEqual(
             result["projects"][0]["aliases"],
-            ["society:brigade-laguna", "society:rera-brigade-laguna"],
+            ["society:example-heights", "society:rera-example-heights"],
         )
         self.assertEqual(result["projects"][0]["payload_hash"], "payload-PRM-1")
         failure_reasons = {failure["reason"] for failure in result["failures"]}

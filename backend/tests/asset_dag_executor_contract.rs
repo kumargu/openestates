@@ -1964,6 +1964,7 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
             ],
             source_watermarks: Vec::new(),
         }),
+        rera_project_plan_frames: None,
         rera_registry_monthly: Some(mock_rera_input(now)),
         external_listings_weekly: Some(ExternalListingsWeeklyInput {
             snapshot_date: "2026-07-13".to_string(),
