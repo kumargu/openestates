@@ -894,6 +894,11 @@ function ReraReportContent({ id }: { id: string }) {
             plans={detail.plans}
             surface={surfaceById(report.surface.sections, "plans")}
           />
+          <Documents
+            documents={buyer?.documents ?? []}
+            evidence={report.evidence}
+            surface={surfaceById(report.surface.sections, "documents")}
+          />
           <Complaints
             complaints={buyer?.complaints ?? []}
             fallback={sectionById(factSections, "complaints")}
@@ -902,11 +907,6 @@ function ReraReportContent({ id }: { id: string }) {
             report={report}
             finance={sectionById(factSections, "finance")}
             water={sectionById(factSections, "water")}
-          />
-          <Documents
-            documents={buyer?.documents ?? []}
-            evidence={report.evidence}
-            surface={surfaceById(report.surface.sections, "documents")}
           />
           <FiledSchedules sections={buyer?.schedules ?? []} />
           {sectionById(factSections, "location")?.facts.length ? (
