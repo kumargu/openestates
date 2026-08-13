@@ -18,7 +18,7 @@ use crate::knowledge::fact::{google_reviews_url_from_facts, FactValue};
 use crate::knowledge::graph::KnowledgeGraph;
 use crate::knowledge::node::NodeType;
 use crate::models::area_profile::{PriceRange, RedditSignals};
-use crate::models::{AreaProfile, Property, Society};
+use crate::models::{AreaProfile, Property, PropertyMedia, Society};
 use crate::search::SearchIndex;
 use crate::serving::{
     LoadedServingBundle, ServingBundleLoader, ServingEntityFactRows, ServingEntityRecord,
@@ -343,6 +343,13 @@ fn representative_property_from_serving_society(
         transparency_tags.push("Price unavailable".to_string());
     }
 
+    let media = trusted_property_media(Some(rows), entity_id);
+    let hero_image = media
+        .iter()
+        .find(|asset| asset.hero_eligible)
+        .map(|asset| asset.url.clone())
+        .unwrap_or_default();
+    let images = media.iter().map(|asset| asset.url.clone()).collect();
     Property {
         id,
         title: format!("{bhk} BHK in {society_name}"),
@@ -385,8 +392,9 @@ fn representative_property_from_serving_society(
         interest_level: None,
         saves_last_7d: None,
         offers_last_7d: None,
-        images: latest_tags(Some(rows), "images").unwrap_or_default(),
-        hero_image: latest_text(Some(rows), "hero_image").unwrap_or_default(),
+        images,
+        hero_image,
+        media,
         description_summary: latest_text(Some(rows), "summary")
             .unwrap_or_else(|| format!("{society_name} in {area}")),
         transparency_tags,
@@ -530,6 +538,15 @@ fn property_from_serving_entity(
         .or_else(|| serving_society_text(fact_index, &society_id, "rera_status"))
         .unwrap_or_else(|| "unknown".to_string());
 
+    let canonical_society_id = society_entity_id(&society_id);
+    let media_rows = fact_index.entity(&canonical_society_id).or(rows);
+    let media = trusted_property_media(media_rows, &canonical_society_id);
+    let hero_image = media
+        .iter()
+        .find(|asset| asset.hero_eligible)
+        .map(|asset| asset.url.clone())
+        .unwrap_or_default();
+    let images = media.iter().map(|asset| asset.url.clone()).collect();
     Property {
         id,
         title,
@@ -586,8 +603,9 @@ fn property_from_serving_entity(
         interest_level: latest_text(rows, "interest_level"),
         saves_last_7d: latest_numeric(rows, "saves_last_7d").map(|value| value.round() as u32),
         offers_last_7d: latest_numeric(rows, "offers_last_7d").map(|value| value.round() as u32),
-        images: latest_tags(rows, "images").unwrap_or_default(),
-        hero_image: latest_text(rows, "hero_image").unwrap_or_default(),
+        images,
+        hero_image,
+        media,
         description_summary,
         transparency_tags,
         source_reference: format!("search_serving_bundle:{bundle_version}"),
@@ -1037,6 +1055,111 @@ fn latest_tags(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<V
     })
 }
 
+#[derive(serde::Deserialize)]
+struct PropertyMediaEnvelope {
+    version: u32,
+    canonical_entity_id: String,
+    assets: Vec<PropertyMedia>,
+}
+
+/// Parse only the versioned media contract. Legacy URL arrays fail closed so an
+/// old bundle cannot silently regain buyer-gallery eligibility.
+fn trusted_property_media(
+    rows: Option<&ServingEntityFactRows>,
+    expected_entity_id: &str,
+) -> Vec<PropertyMedia> {
+    let Some(payload) = latest_text(rows, "image_gallery") else {
+        return Vec::new();
+    };
+    let Ok(mut envelope) = serde_json::from_str::<PropertyMediaEnvelope>(&payload) else {
+        return Vec::new();
+    };
+    if envelope.version != 2 || envelope.canonical_entity_id != expected_entity_id {
+        return Vec::new();
+    }
+    envelope.assets.retain(|asset| {
+        let valid_hash = asset.content_sha256.as_deref().is_some_and(|hash| {
+            hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+        });
+        (asset.hero_eligible || asset.gallery_eligible)
+            && asset.canonical_entity_id == expected_entity_id
+            && asset.media_kind != "unknown"
+            && valid_hash
+            && asset.url.starts_with("/media/images/sha256/")
+            && asset.quality_flags.is_empty()
+            && asset.validation_state == "source_identity_matched"
+    });
+    envelope.assets.sort_by(|left, right| {
+        left.display_order
+            .cmp(&right.display_order)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    let mut id_hashes = HashMap::<String, String>::new();
+    let mut hash_indexes = HashMap::<String, usize>::new();
+    let mut trusted = Vec::<PropertyMedia>::new();
+    for asset in envelope.assets {
+        let Some(content_hash) = asset.content_sha256.as_ref() else {
+            continue;
+        };
+        if let Some(previous_hash) = id_hashes.get(&asset.id) {
+            if previous_hash != content_hash {
+                if let Some(index) = hash_indexes.get(previous_hash).copied() {
+                    let existing = &mut trusted[index];
+                    existing.hero_eligible = false;
+                    existing.gallery_eligible = false;
+                    existing
+                        .quality_flags
+                        .push("conflicting_media_identity".to_string());
+                }
+                continue;
+            }
+        } else {
+            id_hashes.insert(asset.id.clone(), content_hash.clone());
+        }
+        if let Some(index) = hash_indexes.get(content_hash).copied() {
+            let existing = &mut trusted[index];
+            let scene_conflict = existing.scene_category.is_some()
+                && asset.scene_category.is_some()
+                && existing.scene_category != asset.scene_category;
+            if existing.media_kind != asset.media_kind || scene_conflict {
+                existing.hero_eligible = false;
+                existing.gallery_eligible = false;
+                existing
+                    .quality_flags
+                    .push("conflicting_media_classification".to_string());
+                continue;
+            }
+            existing.hero_eligible |= asset.hero_eligible;
+            existing.gallery_eligible |= asset.gallery_eligible;
+            if existing.scene_category.is_none() {
+                existing.scene_category = asset.scene_category;
+            }
+            if existing.source_entity_label.is_none() {
+                existing.source_entity_label = asset.source_entity_label;
+            }
+            if existing.identity_proof_method.is_none() {
+                existing.identity_proof_method = asset.identity_proof_method;
+            }
+            if existing.media_classification_method.is_none() {
+                existing.media_classification_method = asset.media_classification_method;
+            }
+            if existing.fetched_at.is_none() {
+                existing.fetched_at = asset.fetched_at;
+            }
+            if existing.alt_text.is_none() {
+                existing.alt_text = asset.alt_text;
+            }
+            continue;
+        }
+        hash_indexes.insert(content_hash.clone(), trusted.len());
+        trusted.push(asset);
+    }
+    trusted.retain(|asset| {
+        (asset.hero_eligible || asset.gallery_eligible) && asset.quality_flags.is_empty()
+    });
+    trusted
+}
+
 fn latest_confidence(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<f32> {
     latest_fact(rows, fact_key).map(|fact| fact.confidence)
 }
@@ -1325,6 +1448,7 @@ pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
                     imgs
                 },
                 hero_image: fact_text(node, "hero_image").into(),
+                media: Vec::new(),
                 description_summary: description,
                 transparency_tags: tags,
                 source_reference: {
@@ -2524,6 +2648,163 @@ mod tests {
             skill_id: Some("test".to_string()),
             learned_at: Utc.timestamp_opt(1, 0).unwrap(),
         }
+    }
+
+    #[test]
+    fn typed_media_contract_filters_untrusted_assets_and_orders_deterministically() {
+        let entity_id = "society:example-green";
+        let payload = serde_json::json!({
+            "version": 2,
+            "canonical_entity_id": entity_id,
+            "assets": [
+                media_fixture(entity_id, "hero-only", 0, "site_photo", false, "source_identity_matched"),
+                media_fixture(entity_id, "second", 2, "render", true, "source_identity_matched"),
+                media_fixture(entity_id, "mismatch", 0, "site_photo", true, "source_identity_mismatch"),
+                media_fixture(entity_id, "first", 1, "site_photo", true, "source_identity_matched"),
+                hero_only_media_fixture(entity_id, "first", 1, "site_photo", "source_identity_matched"),
+                media_fixture(entity_id, "unknown", 4, "unknown", true, "source_identity_matched"),
+                media_fixture(entity_id, "conflicting-photo", 5, "site_photo", true, "source_identity_matched"),
+                media_fixture(entity_id, "conflicting-render", 5, "render", true, "source_identity_matched"),
+                media_fixture(entity_id, "ad", 3, "marketing_artwork", false, "source_identity_matched")
+            ]
+        });
+        let index = ServingFactIndex::from_records(
+            vec![serving_fact(
+                entity_id,
+                "image_gallery",
+                FactValue::Text(payload.to_string()),
+                1.0,
+            )],
+            Vec::new(),
+        );
+        let media = trusted_property_media(index.entity(entity_id), entity_id);
+        assert_eq!(media.len(), 3);
+        assert!(media[0].hero_eligible);
+        assert!(!media[0].gallery_eligible);
+        assert!(media[1].hero_eligible);
+        assert!(media[1].gallery_eligible);
+        assert_eq!(media[2].media_kind, "render");
+    }
+
+    #[test]
+    fn legacy_media_array_and_wrong_entity_contract_fail_closed() {
+        let entity_id = "society:example-green";
+        for payload in [
+            serde_json::json!([{"image_url": "https://example.test/legacy.jpg"}]),
+            serde_json::json!({
+                "version": 2,
+                "canonical_entity_id": "society:another-project",
+                "assets": [media_fixture(entity_id, "cross-project", 0, "site_photo", true, "source_identity_matched")]
+            }),
+        ] {
+            let index = ServingFactIndex::from_records(
+                vec![serving_fact(
+                    entity_id,
+                    "image_gallery",
+                    FactValue::Text(payload.to_string()),
+                    1.0,
+                )],
+                Vec::new(),
+            );
+            assert!(trusted_property_media(index.entity(entity_id), entity_id).is_empty());
+        }
+    }
+
+    #[test]
+    fn serving_property_loads_only_trusted_v2_media_from_its_canonical_society() {
+        let property_id = "property:discovered-example-green-3bhk";
+        let society_id = "society:example-green";
+        let payload = serde_json::json!({
+            "version": 2,
+            "canonical_entity_id": society_id,
+            "assets": [
+                media_fixture(society_id, "hero-only", 0, "site_photo", false, "source_identity_matched"),
+                media_fixture(society_id, "gallery-photo", 1, "site_photo", true, "source_identity_matched"),
+                media_fixture(society_id, "gallery-photo", 1, "site_photo", true, "source_identity_matched"),
+                media_fixture(society_id, "render", 2, "render", true, "source_identity_matched"),
+                media_fixture(society_id, "unknown", 3, "unknown", true, "source_identity_matched"),
+                media_fixture("society:different", "cross-project", 4, "site_photo", true, "source_identity_matched")
+            ]
+        });
+        let entities = vec![ServingEntityRecord {
+            entity_id: property_id.to_string(),
+            entity_type: "property".to_string(),
+            name: "3 BHK in Example Green".to_string(),
+            root_source: Some("discovered".to_string()),
+            searchable_text: String::new(),
+        }];
+        let fact_index = ServingFactIndex::from_records(
+            vec![
+                serving_fact(property_id, "price", FactValue::Numeric(10_000_000.0), 1.0),
+                serving_fact(
+                    society_id,
+                    "image_gallery",
+                    FactValue::Text(payload.to_string()),
+                    1.0,
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v2");
+
+        assert_eq!(properties.len(), 1);
+        assert_eq!(properties[0].media.len(), 3);
+        assert!(properties[0].media[0].hero_eligible);
+        assert!(!properties[0].media[0].gallery_eligible);
+        assert_eq!(properties[0].media[1].media_kind, "site_photo");
+        assert_eq!(properties[0].media[2].media_kind, "render");
+        assert!(properties[0]
+            .media
+            .iter()
+            .all(|asset| asset.canonical_entity_id == society_id));
+        assert_eq!(properties[0].hero_image, properties[0].media[0].url);
+    }
+
+    fn media_fixture(
+        entity_id: &str,
+        id: &str,
+        display_order: u64,
+        media_kind: &str,
+        gallery_eligible: bool,
+        validation_state: &str,
+    ) -> serde_json::Value {
+        let content_sha256 = format!("{:064x}", display_order + 1);
+        serde_json::json!({
+            "id": format!("sha256:{content_sha256}"),
+            "url": format!("/media/images/sha256/aa/{id}.jpg"),
+            "media_kind": media_kind,
+            "canonical_entity_id": entity_id,
+            "validation_state": validation_state,
+            "source_type": "external_image",
+            "source_name": "Fixture",
+            "source_url": "https://example.test/source",
+            "observed_at": "2026-08-13T00:00:00Z",
+            "quality_flags": [],
+            "content_sha256": content_sha256,
+            "hero_eligible": id.ends_with("hero-only"),
+            "gallery_eligible": gallery_eligible,
+            "display_order": display_order
+        })
+    }
+
+    fn hero_only_media_fixture(
+        entity_id: &str,
+        id: &str,
+        display_order: u64,
+        media_kind: &str,
+        validation_state: &str,
+    ) -> serde_json::Value {
+        let mut asset = media_fixture(
+            entity_id,
+            id,
+            display_order,
+            media_kind,
+            false,
+            validation_state,
+        );
+        asset["hero_eligible"] = serde_json::Value::Bool(true);
+        asset
     }
 
     #[test]

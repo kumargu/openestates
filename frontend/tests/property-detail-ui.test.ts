@@ -16,11 +16,12 @@ import {
 } from "../src/lib/nearbyPlateProjection.ts";
 import { resolveBuyerProjectStatus } from "../src/lib/projectStatus.ts";
 import {
-  initialPropertySceneUrls,
-  propertySceneImageAt,
+  propertyMediaLabel,
+  propertySceneMediaAt,
+  trustedPropertyMedia,
 } from "../src/lib/propertyScene.ts";
 import { propertyMapContextFromSurfaceScene } from "../src/lib/surfaceSceneProjection.ts";
-import type { PropertyMapContext, ProofFocus, SurfaceSceneResponse } from "../src/lib/types.ts";
+import type { PropertyMapContext, PropertyMedia, ProofFocus, SurfaceSceneResponse } from "../src/lib/types.ts";
 
 const emptyMapContext: PropertyMapContext = {
   home: {
@@ -526,26 +527,87 @@ test("project status exposes only known buyer labels", () => {
 });
 
 test("recommendation scenes are stable and wrap after exhaustion", () => {
-  const scenes = ["one.jpg", "two.jpg", "three.jpg"];
-  assert.equal(propertySceneImageAt(scenes, 0), "one.jpg");
-  assert.equal(propertySceneImageAt(scenes, 1), "two.jpg");
-  assert.equal(propertySceneImageAt(scenes, 4), "two.jpg");
-  assert.equal(propertySceneImageAt(scenes, -1), "one.jpg");
-  assert.equal(propertySceneImageAt([], 2, "fallback.jpg"), "fallback.jpg");
+  const scenes = [media("one", 0), media("two", 1), media("three", 2)];
+  assert.equal(propertySceneMediaAt(scenes, 0)?.id, "one");
+  assert.equal(propertySceneMediaAt(scenes, 4)?.id, "two");
+  assert.equal(propertySceneMediaAt(scenes, -1)?.id, "one");
+  assert.equal(propertySceneMediaAt([], 2), null);
 });
 
-test("property scene URLs are returned immediately from the serving payload", () => {
-  assert.deepEqual(
-    initialPropertySceneUrls({
-      heroImage: "/media/images/sha256/aa/hero.avif",
-      images: [
-        "/media/images/sha256/aa/hero.avif",
-        "/media/images/sha256/bb/gallery.avif",
-      ],
+test("property media accepts only validated typed assets in deterministic order", () => {
+  const renderHash = mediaHash(3);
+  const renderId = `sha256:${renderHash}`;
+  const conflictHash = mediaHash(7);
+  const conflictId = `sha256:${conflictHash}`;
+  const accepted = trustedPropertyMedia([
+    media("render", 2, {
+      id: renderId,
+      media_kind: "render",
+      content_sha256: renderHash,
+      hero_eligible: true,
+      gallery_eligible: false,
     }),
-    [
-      "/media/images/sha256/aa/hero.avif",
-      "/media/images/sha256/bb/gallery.avif",
-    ],
-  );
+    media("hero-only", 8, { hero_eligible: true, gallery_eligible: false }),
+    media("mismatch", 0, { validation_state: "source_identity_mismatch" }),
+    media("photo", 1),
+    media("render", 5, {
+      id: renderId,
+      media_kind: "render",
+      content_sha256: renderHash,
+      hero_eligible: false,
+      gallery_eligible: true,
+    }),
+    media("conflict-photo", 6, {
+      id: conflictId,
+      media_kind: "site_photo",
+      content_sha256: conflictHash,
+    }),
+    media("conflict-render", 6, {
+      id: conflictId,
+      media_kind: "render",
+      content_sha256: conflictHash,
+    }),
+    media("unknown", 6, { media_kind: "unknown" }),
+    media("ad", 3, { media_kind: "marketing_artwork", gallery_eligible: false }),
+  ]);
+  assert.deepEqual(accepted.map((asset) => asset.id), [renderId, "hero-only", "photo"]);
+  assert.equal(propertyMediaLabel(accepted[0]), "Render");
+  assert.equal(propertyMediaLabel(accepted[1]), null);
+  assert.equal(accepted[0]?.hero_eligible, true);
+  assert.equal(accepted[0]?.gallery_eligible, true);
 });
+
+test("property media handles empty, single, mosaic, and long galleries", () => {
+  for (const count of [0, 1, 4, 9]) {
+    const assets = Array.from({ length: count }, (_, index) => media(`asset-${index}`, index));
+    assert.equal(trustedPropertyMedia(assets).length, count);
+  }
+});
+
+function media(
+  id: string,
+  display_order: number,
+  overrides: Partial<PropertyMedia> = {},
+): PropertyMedia {
+  return {
+    id,
+    url: `/media/images/sha256/aa/${id}.jpg`,
+    media_kind: "site_photo",
+    canonical_entity_id: "society:test",
+    validation_state: "source_identity_matched",
+    source_type: "external_image",
+    source_name: "Fixture",
+    source_url: "https://example.test/source",
+    observed_at: "2026-08-13T00:00:00Z",
+    content_sha256: mediaHash(display_order + 1),
+    quality_flags: [],
+    hero_eligible: display_order === 0,
+    gallery_eligible: true,
+    display_order,
+    ...overrides,
+  };
+}
+
+function mediaHash(value: number): string {
+  return Math.max(1, value).toString(16).padStart(64, "0");
+}

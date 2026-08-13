@@ -7,7 +7,7 @@ import type {
 } from "../../lib/types.ts";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
 import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
-import { propertySceneImageAt } from "../../lib/propertyScene.ts";
+import { propertySceneMediaAt } from "../../lib/propertyScene.ts";
 import {
   BuildingIcon,
   RupeeIcon,
@@ -105,14 +105,10 @@ function RecommendationCard({
   spine?: string;
   sceneIndex: number;
 }) {
-  const { images } = usePropertySceneImages({
-    heroImage: property.hero_image,
+  const { media } = usePropertySceneImages({
+    media: property.hero_media ? [property.hero_media] : [],
   });
-  const cardImage = propertySceneImageAt(
-    images,
-    sceneIndex,
-    property.hero_image,
-  );
+  const cardImage = propertySceneMediaAt(media, sceneIndex)?.url ?? null;
   const Icon = badge
     ? Object.values(LENS_META).find((meta) => meta.gainLabel === badge)?.icon
     : undefined;

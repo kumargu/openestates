@@ -783,6 +783,7 @@ impl TextSearch {
                         builder_name: p.builder_name.clone(),
                         images: p.images.clone(),
                         hero_image: p.hero_image.clone(),
+                        hero_media: p.media.iter().find(|asset| asset.hero_eligible).cloned(),
                         transparency_tags: crate::routes::enrichment::compact_transparency_tags(
                             &p.transparency_tags,
                         ),
@@ -3702,6 +3703,7 @@ mod tests {
             offers_last_7d: None,
             images: Vec::new(),
             hero_image: String::new(),
+            media: Vec::new(),
             description_summary: "Local test listing".to_string(),
             transparency_tags: Vec::new(),
             source_reference: "unit-test".to_string(),

@@ -55,7 +55,7 @@ export function societyKey(
 
 function discoverRepresentativeScore(property: PropertyCard): number {
   let score = 0;
-  if (property.hero_image) score += 40;
+  if (property.hero_media) score += 40;
   if (typeof property.google_rating === "number" && property.google_rating > 0) {
     score += property.google_rating * 10;
   }

@@ -1,3 +1,28 @@
+export type PropertyMedia = {
+  id: string;
+  url: string;
+  media_kind: "site_photo" | "render" | string;
+  media_classification_method?: string;
+  scene_category?: string;
+  canonical_entity_id: string;
+  source_entity_label?: string;
+  identity_proof_method?: string;
+  validation_state: "source_identity_matched" | string;
+  source_type: string;
+  source_name: string;
+  source_url: string;
+  observed_at: string;
+  fetched_at?: string;
+  quality_flags: string[];
+  content_sha256?: string;
+  width?: number;
+  height?: number;
+  alt_text?: string;
+  hero_eligible: boolean;
+  gallery_eligible: boolean;
+  display_order: number;
+};
+
 export type PropertyCard = {
   id: string;
   /**
@@ -29,6 +54,7 @@ export type PropertyCard = {
   builder_name: string;
   images?: string[];
   hero_image: string | null;
+  hero_media?: PropertyMedia;
   transparency_tags: string[];
   description_summary: string;
   possession_status: string;
@@ -211,6 +237,7 @@ export type PropertyDetailResponse = {
     offers_last_7d?: number;
     images: string[];
     hero_image: string;
+    media: PropertyMedia[];
     description_summary: string;
     transparency_tags: string[];
     source_reference: string;

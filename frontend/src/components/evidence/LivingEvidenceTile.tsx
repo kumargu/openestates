@@ -56,10 +56,10 @@ export function LivingEvidenceTile({
   matchLabels = [],
   allowSave = false,
 }: Props) {
-  const { images } = usePropertySceneImages({
-    heroImage: property.hero_image,
+  const { media } = usePropertySceneImages({
+    media: property.hero_media ? [property.hero_media] : [],
   });
-  const cardImage = images[0] ?? property.hero_image ?? null;
+  const cardImage = media[0]?.url ?? null;
 
   const societyKnown = isKnownText(property.society_name);
   const metaParts = [

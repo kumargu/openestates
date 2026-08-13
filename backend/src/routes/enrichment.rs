@@ -1039,12 +1039,8 @@ pub fn enrich_property_card(
         .get_node(&node_id)
         .and_then(|node| google_reviews_url_from_facts(&node.facts, &node.name));
 
-    // Use photo_url from KG if property has no hero_image
-    let hero_image = if p.hero_image.is_empty() {
-        kg_text(graph, &node_id, "photo_url").unwrap_or_default()
-    } else {
-        p.hero_image.clone()
-    };
+    let hero_image = p.hero_image.clone();
+    let hero_media = p.media.iter().find(|asset| asset.hero_eligible).cloned();
 
     // Extract root_source and project_status from the society KG node
     let (root_source, project_status, project_status_display) =
@@ -1087,6 +1083,7 @@ pub fn enrich_property_card(
         builder_name: p.builder_name.clone(),
         images: p.images.clone(),
         hero_image,
+        hero_media,
         transparency_tags: compact_transparency_tags(&p.transparency_tags),
         description_summary: p.description_summary.clone(),
         possession_status: p.possession_status.clone(),

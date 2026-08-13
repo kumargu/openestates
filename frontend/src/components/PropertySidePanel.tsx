@@ -143,11 +143,13 @@ export function PropertySidePanel({ propertyId, card, onClose }: Props) {
 
         {/* Hero image */}
         <div className="side-panel-hero">
-          <ImageWithFallback
-            src={card.hero_image}
-            alt={card.title}
-            className="side-panel-hero__image"
-          />
+          {card.hero_media && (
+            <ImageWithFallback
+              src={card.hero_media.url}
+              alt={card.hero_media.alt_text || card.title}
+              className="side-panel-hero__image"
+            />
+          )}
           {card.transparency_tags.length > 0 && (
             <div className="side-panel-hero-tags">
               {card.transparency_tags.slice(0, 3).map((tag) => {

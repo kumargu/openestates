@@ -3,6 +3,43 @@ use serde::{Deserialize, Serialize};
 use crate::decision_labels::{DecisionCheckSummary, DecisionLabel};
 use crate::routes::enrichment::DataFreshness;
 
+/// Versioned, provenance-aware media selected by the offline DAG pipeline.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PropertyMedia {
+    pub id: String,
+    pub url: String,
+    pub media_kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_classification_method: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene_category: Option<String>,
+    pub canonical_entity_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_entity_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_proof_method: Option<String>,
+    pub validation_state: String,
+    pub source_type: String,
+    pub source_name: String,
+    pub source_url: String,
+    pub observed_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fetched_at: Option<String>,
+    #[serde(default)]
+    pub quality_flags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alt_text: Option<String>,
+    pub hero_eligible: bool,
+    pub gallery_eligible: bool,
+    pub display_order: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Property {
     pub id: String,
@@ -58,6 +95,8 @@ pub struct Property {
     pub offers_last_7d: Option<u32>,
     pub images: Vec<String>,
     pub hero_image: String,
+    #[serde(default)]
+    pub media: Vec<PropertyMedia>,
     pub description_summary: String,
     pub transparency_tags: Vec<String>,
     pub source_reference: String,
@@ -109,6 +148,8 @@ pub struct PropertyCard {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<String>,
     pub hero_image: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hero_media: Option<PropertyMedia>,
     pub transparency_tags: Vec<String>,
     pub description_summary: String,
     pub possession_status: String,

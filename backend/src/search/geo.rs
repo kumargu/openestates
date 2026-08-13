@@ -1200,6 +1200,7 @@ mod tests {
             offers_last_7d: None,
             images: Vec::new(),
             hero_image: String::new(),
+            media: Vec::new(),
             description_summary: "Local test listing".to_string(),
             transparency_tags: Vec::new(),
             source_reference: "unit-test".to_string(),

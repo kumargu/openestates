@@ -392,6 +392,7 @@ fn property_with_description(
         offers_last_7d: None,
         images: Vec::new(),
         hero_image: String::new(),
+        media: Vec::new(),
         description_summary: description_summary.to_string(),
         transparency_tags: Vec::new(),
         source_reference: "search-efficiency-contract".to_string(),

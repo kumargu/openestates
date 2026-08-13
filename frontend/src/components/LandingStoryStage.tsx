@@ -405,9 +405,7 @@ function ResolveCanvas({
             property.bhk > 0 ? `${property.bhk} BHK` : null,
             formatPrice(property.price) || null,
           ].filter((value): value is string => Boolean(value));
-          const image = property.hero_image
-            || property.images?.find((candidate) => candidate && !candidate.startsWith("placeholder://"))
-            || null;
+          const image = property.hero_media?.url ?? null;
 
           return (
             <article

@@ -742,6 +742,7 @@ fn property(id: &str, area: &str, society_id: &str, bhk: u32, price: u64) -> Pro
         offers_last_7d: None,
         images: Vec::new(),
         hero_image: String::new(),
+        media: Vec::new(),
         description_summary: "Local quality harness listing".to_string(),
         transparency_tags: Vec::new(),
         source_reference: "search-quality-contract".to_string(),

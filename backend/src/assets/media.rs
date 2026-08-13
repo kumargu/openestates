@@ -27,7 +27,7 @@ use super::{
 pub const EXTERNAL_IMAGES_WEEKLY_ASSET_ID: &str = "external_images_weekly";
 pub const IMAGE_MEDIA_FACTS_ASSET_ID: &str = "image_media_facts";
 
-const EXTERNAL_IMAGE_FORMAT_VERSION: u32 = 1;
+const EXTERNAL_IMAGE_FORMAT_VERSION: u32 = 2;
 const STAGED_MEDIA_PREFIX: &str = "/_staged_media/";
 const CONTENT_ADDRESSED_MEDIA_PREFIX: &str = "media/images/sha256";
 const MAX_RETAINED_MEDIA_PER_ENTITY: usize = 8;
@@ -65,6 +65,18 @@ pub struct ExternalImageObservationRecord {
     pub original_image_url: Option<String>,
     pub image_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene_category: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_entity_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_entity_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_proof_method: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_bucket: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub candidate_kind: Option<String>,
@@ -74,6 +86,8 @@ pub struct ExternalImageObservationRecord {
     pub relevance_score: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reject_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub quality_flags: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allowed_slots: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -585,11 +599,18 @@ async fn read_external_image_rows(
         let image_url = string_column(&batch, "image_url")?;
         let original_image_url = string_column(&batch, "original_image_url")?;
         let image_kind = string_column(&batch, "image_kind")?;
+        let media_kind = optional_string_column(&batch, "media_kind");
+        let scene_category = optional_string_column(&batch, "scene_category");
+        let source_entity_id = optional_string_column(&batch, "source_entity_id");
+        let source_entity_label = optional_string_column(&batch, "source_entity_label");
+        let identity_proof_method = optional_string_column(&batch, "identity_proof_method");
+        let validation_state = optional_string_column(&batch, "validation_state");
         let source_bucket = optional_string_column(&batch, "source_bucket");
         let candidate_kind = optional_string_column(&batch, "candidate_kind");
         let quality_score = optional_f64_column(&batch, "quality_score");
         let relevance_score = optional_f64_column(&batch, "relevance_score");
         let reject_reason = optional_string_column(&batch, "reject_reason");
+        let quality_flags = optional_string_column(&batch, "quality_flags");
         let allowed_slots = optional_string_column(&batch, "allowed_slots");
         let dedupe_key = optional_string_column(&batch, "dedupe_key");
         let classification_method = optional_string_column(&batch, "classification_method");
@@ -610,11 +631,18 @@ async fn read_external_image_rows(
                 image_url: required_string(image_url, row, "image_url")?,
                 original_image_url: optional_string(original_image_url, row),
                 image_kind: optional_string(image_kind, row),
+                media_kind: optional_string_opt(media_kind, row),
+                scene_category: optional_string_opt(scene_category, row),
+                source_entity_id: optional_string_opt(source_entity_id, row),
+                source_entity_label: optional_string_opt(source_entity_label, row),
+                identity_proof_method: optional_string_opt(identity_proof_method, row),
+                validation_state: optional_string_opt(validation_state, row),
                 source_bucket: optional_string_opt(source_bucket, row),
                 candidate_kind: optional_string_opt(candidate_kind, row),
                 quality_score: optional_f64_opt(quality_score, row),
                 relevance_score: optional_f64_opt(relevance_score, row),
                 reject_reason: optional_string_opt(reject_reason, row),
+                quality_flags: parse_allowed_slots(optional_string_opt(quality_flags, row))?,
                 allowed_slots: parse_allowed_slots(optional_string_opt(allowed_slots, row))?,
                 dedupe_key: optional_string_opt(dedupe_key, row),
                 classification_method: optional_string_opt(classification_method, row),
@@ -643,11 +671,18 @@ fn write_external_images_parquet(
         Field::new("image_url", DataType::Utf8, false),
         Field::new("original_image_url", DataType::Utf8, true),
         Field::new("image_kind", DataType::Utf8, true),
+        Field::new("media_kind", DataType::Utf8, true),
+        Field::new("scene_category", DataType::Utf8, true),
+        Field::new("source_entity_id", DataType::Utf8, true),
+        Field::new("source_entity_label", DataType::Utf8, true),
+        Field::new("identity_proof_method", DataType::Utf8, true),
+        Field::new("validation_state", DataType::Utf8, true),
         Field::new("source_bucket", DataType::Utf8, true),
         Field::new("candidate_kind", DataType::Utf8, true),
         Field::new("quality_score", DataType::Float64, true),
         Field::new("relevance_score", DataType::Float64, true),
         Field::new("reject_reason", DataType::Utf8, true),
+        Field::new("quality_flags", DataType::Utf8, true),
         Field::new("allowed_slots", DataType::Utf8, true),
         Field::new("dedupe_key", DataType::Utf8, true),
         Field::new("classification_method", DataType::Utf8, true),
@@ -674,11 +709,32 @@ fn write_external_images_parquet(
                     .map(|record| record.original_image_url.clone()),
             ),
             optional_strings(records.iter().map(|record| record.image_kind.clone())),
+            optional_strings(records.iter().map(|record| record.media_kind.clone())),
+            optional_strings(records.iter().map(|record| record.scene_category.clone())),
+            optional_strings(records.iter().map(|record| record.source_entity_id.clone())),
+            optional_strings(
+                records
+                    .iter()
+                    .map(|record| record.source_entity_label.clone()),
+            ),
+            optional_strings(
+                records
+                    .iter()
+                    .map(|record| record.identity_proof_method.clone()),
+            ),
+            optional_strings(records.iter().map(|record| record.validation_state.clone())),
             optional_strings(records.iter().map(|record| record.source_bucket.clone())),
             optional_strings(records.iter().map(|record| record.candidate_kind.clone())),
             optional_f64s(records.iter().map(|record| record.quality_score)),
             optional_f64s(records.iter().map(|record| record.relevance_score)),
             optional_strings(records.iter().map(|record| record.reject_reason.clone())),
+            optional_strings(records.iter().map(|record| {
+                if record.quality_flags.is_empty() {
+                    None
+                } else {
+                    Some(serde_json::to_string(&record.quality_flags).unwrap_or_default())
+                }
+            })),
             optional_strings(records.iter().map(|record| {
                 if record.allowed_slots.is_empty() {
                     None
@@ -844,34 +900,98 @@ fn append_image_facts(
         facts,
         annotations,
     )?;
-    let gallery = rows
+    let mut ordered_rows = rows.iter().collect::<Vec<_>>();
+    ordered_rows.sort_by(|left, right| {
+        let left_gallery = left.allowed_slots.iter().any(|slot| slot == "gallery");
+        let right_gallery = right.allowed_slots.iter().any(|slot| slot == "gallery");
+        right_gallery
+            .cmp(&left_gallery)
+            .then_with(|| {
+                right
+                    .quality_score
+                    .unwrap_or(0.0)
+                    .partial_cmp(&left.quality_score.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| {
+                left.rank
+                    .unwrap_or(u64::MAX)
+                    .cmp(&right.rank.unwrap_or(u64::MAX))
+            })
+            .then_with(|| left.image_url.cmp(&right.image_url))
+    });
+    let gallery = ordered_rows
         .iter()
-        .map(|row| {
+        .enumerate()
+        .map(|(display_order, row)| {
+            let validation_state = row.validation_state.as_deref().unwrap_or("unvalidated");
+            let identity_valid = validation_state == "source_identity_matched";
+            let known_kind = row
+                .media_kind
+                .as_deref()
+                .is_some_and(|kind| kind != "unknown");
+            let content_hash_valid = row.content_sha256.as_deref().is_some_and(|hash| {
+                hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+            });
+            let durable_url = row.image_url.starts_with("/media/images/sha256/");
+            let gallery_eligible = identity_valid
+                && known_kind
+                && content_hash_valid
+                && durable_url
+                && row.reject_reason.is_none()
+                && row.allowed_slots.iter().any(|slot| slot == "gallery");
+            let hero_eligible = identity_valid
+                && known_kind
+                && content_hash_valid
+                && durable_url
+                && row.reject_reason.is_none()
+                && row.allowed_slots.iter().any(|slot| slot == "hero");
+            let mut quality_flags = row.quality_flags.clone();
+            quality_flags.extend(row.reject_reason.iter().cloned());
+            if !content_hash_valid {
+                quality_flags.push("missing_content_hash".to_string());
+            }
+            if !durable_url {
+                quality_flags.push("unpromoted_storage".to_string());
+            }
+            let id = row
+                .content_sha256
+                .as_deref()
+                .map(|hash| format!("sha256:{hash}"))
+                .or_else(|| row.dedupe_key.clone())
+                .unwrap_or_else(|| format!("url:{}", row.image_url));
             serde_json::json!({
-                "image_url": row.image_url,
-                "original_image_url": row.original_image_url,
+                "id": id,
+                "url": row.image_url,
+                "canonical_entity_id": entity_id,
+                "source_entity_id": row.source_entity_id,
+                "source_entity_label": row.source_entity_label,
+                "identity_proof_method": row.identity_proof_method,
+                "source_type": "external_image",
                 "source_name": row.source_name,
-                "source_page_url": row.source_page_url,
-                "image_kind": row.image_kind,
-                "source_bucket": row.source_bucket,
-                "candidate_kind": row.candidate_kind,
-                "quality_score": row.quality_score,
-                "relevance_score": row.relevance_score,
-                "reject_reason": row.reject_reason,
-                "allowed_slots": row.allowed_slots,
-                "dedupe_key": row.dedupe_key,
-                "classification_method": row.classification_method,
+                "source_url": row.source_page_url,
+                "media_kind": row.media_kind.as_deref().unwrap_or("unknown"),
+                "media_classification_method": row.classification_method,
+                "scene_category": row.scene_category,
+                "validation_state": validation_state,
+                "quality_flags": quality_flags,
                 "width": row.width,
                 "height": row.height,
-                "rank": row.rank,
-                "score": row.score,
                 "alt_text": row.alt_text,
-                "storage_policy": row.storage_policy,
                 "content_sha256": row.content_sha256,
                 "observed_at": row.observed_at.to_rfc3339(),
+                "fetched_at": row.observed_at.to_rfc3339(),
+                "hero_eligible": hero_eligible,
+                "gallery_eligible": gallery_eligible,
+                "display_order": display_order,
             })
         })
         .collect::<Vec<_>>();
+    let gallery = serde_json::json!({
+        "version": 2,
+        "canonical_entity_id": entity_id,
+        "assets": gallery,
+    });
     append_fact(
         entity_id,
         FactValue::Text(serde_json::to_string(&gallery)?),
@@ -1486,10 +1606,20 @@ mod tests {
     }
 
     #[test]
-    fn media_promotion_excludes_floor_plan_from_hero_and_gallery() {
+    fn media_promotion_keeps_hero_independent_and_excludes_floor_plan_from_gallery() {
         let rows = vec![
             test_row(
-                "https://img.example.com/floor-plan.webp",
+                "/media/images/sha256/cc/hero-only.webp",
+                "exterior",
+                vec!["hero"],
+                None,
+                Some(0.98),
+                Some(0.96),
+                Some(1600),
+                Some(900),
+            ),
+            test_row(
+                "/media/images/sha256/aa/floor-plan.webp",
                 "floor_plan",
                 vec!["floor_plan"],
                 None,
@@ -1499,7 +1629,7 @@ mod tests {
                 Some(566),
             ),
             test_row(
-                "https://img.example.com/tower.webp",
+                "/media/images/sha256/bb/tower.webp",
                 "exterior",
                 vec!["hero", "gallery"],
                 None,
@@ -1513,15 +1643,47 @@ mod tests {
 
         assert_eq!(
             text_fact(&facts, "hero_image").as_deref(),
-            Some("https://img.example.com/tower.webp")
+            Some("/media/images/sha256/cc/hero-only.webp")
         );
         assert_eq!(
             tags_fact(&facts, "images"),
-            vec!["https://img.example.com/tower.webp"]
+            vec!["/media/images/sha256/bb/tower.webp"]
         );
         assert_eq!(
             tags_fact(&facts, "floor_plan_images"),
-            vec!["https://img.example.com/floor-plan.webp"]
+            vec!["/media/images/sha256/aa/floor-plan.webp"]
+        );
+
+        let contract: serde_json::Value = serde_json::from_str(
+            &text_fact(&facts, "image_gallery").expect("typed media contract"),
+        )
+        .unwrap();
+        assert_eq!(contract["version"], 2);
+        assert_eq!(contract["canonical_entity_id"], "society:example-green");
+        let assets = contract["assets"].as_array().expect("typed assets");
+        let hero_only = assets
+            .iter()
+            .find(|asset| asset["url"] == "/media/images/sha256/cc/hero-only.webp")
+            .expect("hero-only asset");
+        assert_eq!(hero_only["hero_eligible"], true);
+        assert_eq!(hero_only["gallery_eligible"], false);
+        assert_eq!(hero_only["identity_proof_method"], "manual_review");
+        let gallery = assets
+            .iter()
+            .find(|asset| asset["url"] == "/media/images/sha256/bb/tower.webp")
+            .expect("gallery asset");
+        assert_eq!(gallery["gallery_eligible"], true);
+        let floor_plan = assets
+            .iter()
+            .find(|asset| asset["media_kind"] == "floor_plan")
+            .expect("floor plan asset");
+        assert_eq!(floor_plan["gallery_eligible"], false);
+
+        let mut reversed = rows.clone();
+        reversed.reverse();
+        assert_eq!(
+            text_fact(&facts, "image_gallery"),
+            text_fact(&facts_for(&reversed), "image_gallery"),
         );
     }
 
@@ -1624,21 +1786,35 @@ mod tests {
             image_url: image_url.to_string(),
             original_image_url: Some(image_url.to_string()),
             image_kind: Some(kind.to_string()),
+            media_kind: Some(
+                if kind == "floor_plan" {
+                    "floor_plan"
+                } else {
+                    "render"
+                }
+                .to_string(),
+            ),
+            scene_category: None,
+            source_entity_id: Some("society:example-green".to_string()),
+            source_entity_label: Some("Example Green".to_string()),
+            identity_proof_method: Some("manual_review".to_string()),
+            validation_state: Some("source_identity_matched".to_string()),
             source_bucket: None,
             candidate_kind: Some(kind.to_string()),
             quality_score,
             relevance_score,
             reject_reason: reject_reason.map(str::to_string),
+            quality_flags: Vec::new(),
             allowed_slots: slots.into_iter().map(str::to_string).collect(),
             dedupe_key: Some(format!("url:{image_url}")),
-            classification_method: Some("heuristic".to_string()),
+            classification_method: Some("manual_review".to_string()),
             width,
             height,
             rank: Some(1),
             score: Some(80.0),
             alt_text: Some(kind.to_string()),
             storage_policy: Some("link_only".to_string()),
-            content_sha256: None,
+            content_sha256: Some(sha256_hex(&Sha256::digest(image_url.as_bytes()))),
             observed_at: Utc::now(),
         }
     }

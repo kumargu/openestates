@@ -11,6 +11,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError
 
+from pipeline.sources.external_images import classify_media_candidate, media_qa_report
+
 from pipeline.collect_asset_sources import (
     bengaluru_metro_stations_from_overpass,
     collect_asset_sources,
@@ -2069,6 +2071,12 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
     def test_external_image_collection_extracts_magicbricks_images(self):
         with tempfile.TemporaryDirectory() as temp_dir:
+            policy_dir = Path(temp_dir) / "app/config/dag/crawl_policies"
+            policy_dir.mkdir(parents=True)
+            shutil.copy(
+                Path(__file__).parents[1] / "app/config/dag/crawl_policies/media_source_policy.json",
+                policy_dir / "media_source_policy.json",
+            )
             output = collect_asset_sources(
                 {
                     "project_root": temp_dir,
@@ -2084,6 +2092,12 @@ class CollectAssetSourcesTest(unittest.TestCase):
                                 {
                                     "source_name": "magicbricks",
                                     "source_page_url": "https://www.magicbricks.com/example-green",
+                                    "source_entity_id": "society:example-green",
+                                    "source_entity_label": "Example Green",
+                                    "identity_proof_method": "source_manifest",
+                                    "media_kind": "render",
+                                    "scene_category": "exterior",
+                                    "media_classification_method": "source_manifest",
                                     "reject_url_patterns": ["Photo_h300_w450"],
                                     "html": """
                                         <html>
@@ -2120,6 +2134,10 @@ class CollectAssetSourcesTest(unittest.TestCase):
             "https://img.staticmb.com/mbimages/project/example-green-elevation.jpg",
         )
         self.assertEqual(elevation["image_kind"], "exterior")
+        self.assertEqual(elevation["media_kind"], "render")
+        self.assertEqual(elevation["scene_category"], "exterior")
+        self.assertEqual(elevation["validation_state"], "source_identity_matched")
+        self.assertEqual(elevation["identity_proof_method"], "source_manifest")
         self.assertEqual(elevation["width"], 1200)
         self.assertEqual(elevation["height"], 800)
         self.assertEqual(elevation["storage_policy"], "link_only")
@@ -2163,13 +2181,14 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertIn("amenity", by_kind)
         self.assertIn("floor_plan", by_kind)
         self.assertIn("site_plan", by_kind)
-        self.assertIn("hero", by_kind["exterior"]["allowed_slots"])
-        self.assertIn("gallery", by_kind["amenity"]["allowed_slots"])
-        self.assertEqual(by_kind["floor_plan"]["allowed_slots"], ["floor_plan"])
-        self.assertEqual(by_kind["site_plan"]["allowed_slots"], ["site_plan"])
-        self.assertEqual(by_kind["logo"]["reject_reason"], "kind:logo")
+        for record in records:
+            self.assertEqual(record["validation_state"], "unverified")
+            self.assertEqual(record["media_kind"], "unknown")
+            self.assertEqual(record["reject_reason"], "identity:unverified")
+            self.assertEqual(record["allowed_slots"], [])
         report = output["external_images_weekly"]["media_qa_report"]
         self.assertEqual(report["entities"]["society:godrej-splendour"]["candidate_count"], 5)
+        self.assertEqual(report["entities"]["society:godrej-splendour"]["gallery_eligible_count"], 0)
 
     def test_external_image_collection_records_source_health_on_fetch_failure(self):
         def fake_fetch(url, source_name=None):
@@ -2203,6 +2222,175 @@ class CollectAssetSourcesTest(unittest.TestCase):
             output["external_images_weekly"]["source_health"][0]["status"],
             "fetch_failed",
         )
+
+    def test_external_image_collection_quarantines_explicit_cross_entity_media(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = collect_asset_sources(
+                {
+                    "project_root": temp_dir,
+                    "partition": {"parts": [["dt", "2026-07-16"]]},
+                    "planned_at": "2026-07-16T09:30:00Z",
+                    "requested_assets": ["external_images_weekly"],
+                    "source_entities": [{
+                        "entity_id": "society:expected",
+                        "name": "Expected",
+                        "image_source_pages": [{
+                            "source_name": "BuilderOfficial",
+                            "source_page_url": "https://example.test/expected",
+                            "source_entity_id": "society:different",
+                            "source_entity_label": "Different project",
+                            "html": '<img src="https://example.test/exterior.jpg" alt="Exterior" width="1200" height="800">',
+                        }],
+                    }],
+                }
+            )
+        record = output["external_images_weekly"]["records"][0]
+        self.assertEqual(record["validation_state"], "source_identity_mismatch")
+        self.assertEqual(record["reject_reason"], "identity:source_entity_mismatch")
+        self.assertEqual(record["allowed_slots"], [])
+
+    def test_external_image_collection_requires_explicit_identity_evidence(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            policy_dir = Path(temp_dir) / "app/config/dag/crawl_policies"
+            policy_dir.mkdir(parents=True)
+            shutil.copy(
+                Path(__file__).parents[1] / "app/config/dag/crawl_policies/media_source_policy.json",
+                policy_dir / "media_source_policy.json",
+            )
+            output = collect_asset_sources(
+                {
+                    "project_root": temp_dir,
+                    "partition": {"parts": [["dt", "2026-07-16"]]},
+                    "planned_at": "2026-07-16T09:30:00Z",
+                    "requested_assets": ["external_images_weekly"],
+                    "source_entities": [{
+                        "entity_id": "society:expected",
+                        "name": "Expected",
+                        "image_source_pages": [{
+                            "source_name": "BuilderOfficial",
+                            "source_page_url": "https://example.test/expected",
+                            "media_kind": "render",
+                            "media_classification_method": "source_manifest",
+                            "html": '<img src="https://example.test/tower.jpg" width="1200" height="800">',
+                        }],
+                    }],
+                }
+            )
+        record = output["external_images_weekly"]["records"][0]
+        self.assertEqual(record["validation_state"], "unverified")
+        self.assertEqual(record["media_kind"], "render")
+        self.assertEqual(record["reject_reason"], "identity:unverified")
+        self.assertEqual(record["allowed_slots"], [])
+
+    def test_external_image_collection_accepts_only_explicit_photo_and_render_labels(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            policy_dir = Path(temp_dir) / "app/config/dag/crawl_policies"
+            policy_dir.mkdir(parents=True)
+            shutil.copy(
+                Path(__file__).parents[1] / "app/config/dag/crawl_policies/media_source_policy.json",
+                policy_dir / "media_source_policy.json",
+            )
+            common = {
+                "source_entity_id": "society:expected",
+                "source_entity_label": "Expected",
+                "identity_proof_method": "source_manifest",
+                "media_classification_method": "source_manifest",
+            }
+            output = collect_asset_sources(
+                {
+                    "project_root": temp_dir,
+                    "partition": {"parts": [["dt", "2026-07-16"]]},
+                    "planned_at": "2026-07-16T09:30:00Z",
+                    "requested_assets": ["external_images_weekly"],
+                    "source_entities": [{
+                        "entity_id": "society:expected",
+                        "name": "Expected",
+                        "image_source_pages": [
+                            {
+                                **common,
+                                "source_name": "VerifiedPhotoManifest",
+                                "source_page_url": "https://example.test/photo",
+                                "media_kind": "site_photo",
+                                "html": '<img src="https://example.test/site-photo.jpg" width="1200" height="800">',
+                            },
+                            {
+                                **common,
+                                "source_name": "VerifiedRenderManifest",
+                                "source_page_url": "https://example.test/render",
+                                "media_kind": "render",
+                                "scene_category": "exterior",
+                                "html": '<img src="https://example.test/tower-render.jpg" width="1200" height="800">',
+                            },
+                            {
+                                **common,
+                                "source_name": "UnclassifiedManifest",
+                                "source_page_url": "https://example.test/unclassified",
+                                "html": '<img src="https://example.test/unclassified.jpg" width="1200" height="800">',
+                            },
+                        ],
+                    }],
+                }
+            )
+        records = output["external_images_weekly"]["records"]
+        accepted = [record for record in records if record["allowed_slots"]]
+        unknown = next(record for record in records if record["source_name"] == "UnclassifiedManifest")
+        self.assertEqual({record["media_kind"] for record in accepted}, {"site_photo", "render"})
+        self.assertTrue(all(record["validation_state"] == "source_identity_matched" for record in records))
+        self.assertTrue(all(record["allowed_slots"] == ["hero", "gallery"] for record in accepted))
+        self.assertEqual(unknown["media_kind"], "unknown")
+        self.assertEqual(unknown["reject_reason"], "classification:unverified_media_kind")
+        self.assertEqual(unknown["allowed_slots"], [])
+
+    def test_media_qa_report_counts_hero_independently_from_gallery(self):
+        report = media_qa_report(
+            [{
+                "entity_id": "society:hero-only",
+                "source_name": "VerifiedManifest",
+                "source_page_url": "https://example.test/hero",
+                "image_url": "/media/images/sha256/aa/hero.jpg",
+                "candidate_kind": "exterior",
+                "media_kind": "site_photo",
+                "validation_state": "source_identity_matched",
+                "content_sha256": "a" * 64,
+                "allowed_slots": ["hero"],
+                "quality_flags": [],
+                "reject_reason": None,
+                "width": 1600,
+                "height": 900,
+            }],
+            [],
+        )
+        entity = report["entities"]["society:hero-only"]
+        self.assertEqual(entity["hero_eligible_count"], 1)
+        self.assertEqual(entity["gallery_eligible_count"], 0)
+        self.assertTrue(entity["assets"][0]["hero_eligible"])
+        self.assertFalse(entity["assets"][0]["gallery_eligible"])
+        self.assertNotIn("missing_buyer_eligible_hero", entity["validation_failures"])
+
+    def test_media_classifier_quarantines_phone_and_text_heavy_artwork(self):
+        policy = json.loads(
+            (Path(__file__).parents[1] / "app/config/dag/crawl_policies/media_source_policy.json")
+            .read_text(encoding="utf-8")
+        )
+        for alt_text, expected_flag in [
+            ("Call now 9876543210", "phone_number_overlay"),
+            ("Limited offer — book now", "text_heavy"),
+        ]:
+            result = classify_media_candidate(
+                image_url="https://example.test/project-exterior.jpg",
+                original_image_url="https://example.test/project-exterior.jpg",
+                alt_text=alt_text,
+                width=1200,
+                height=800,
+                source_name="Fixture",
+                source_bucket=None,
+                source_page={},
+                policy=policy,
+                score=90.0,
+            )
+            self.assertIn(expected_flag, result["quality_flags"])
+            self.assertEqual(result["reject_reason"], "quality:{}".format(expected_flag))
+            self.assertEqual(result["allowed_slots"], [])
 
     def test_external_image_collection_prefers_downloaded_society_photos(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2248,6 +2436,10 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(records[0]["image_url"], "/_staged_media/societies/example-green/1.jpg")
         self.assertEqual(records[0]["source_name"], "LocalSocietyPhotos")
         self.assertEqual(records[0]["storage_policy"], "staged_local_asset")
+        self.assertEqual(records[0]["validation_state"], "unverified")
+        self.assertEqual(records[0]["media_kind"], "unknown")
+        self.assertEqual(records[0]["reject_reason"], "identity:unverified")
+        self.assertEqual(records[0]["allowed_slots"], [])
         self.assertEqual(records[1]["image_url"], "/_staged_media/societies/example-green/2.jpg")
         self.assertEqual(records[2]["source_name"], "SquareYards")
         self.assertGreater(records[2]["rank"], records[1]["rank"])
@@ -2611,7 +2803,9 @@ class CollectAssetSourcesTest(unittest.TestCase):
             records[0]["original_image_url"],
             "https://static.squareyards.com/resources/images/example-green.jpg",
         )
-        self.assertEqual(records[0]["reject_reason"], "watermark:squareyards")
+        self.assertEqual(records[0]["validation_state"], "unverified")
+        self.assertEqual(records[0]["reject_reason"], "identity:unverified")
+        self.assertIn("watermark:squareyards", records[0]["quality_flags"])
         self.assertEqual(records[0]["allowed_slots"], [])
 
     def test_external_image_optimizer_writes_webp_preview(self):

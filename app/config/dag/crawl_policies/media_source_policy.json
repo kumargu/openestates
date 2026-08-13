@@ -1,6 +1,6 @@
 {
   "id": "media_source_policy",
-  "version": 1,
+  "version": 2,
   "enabled": true,
   "pilot_limit": 10,
   "reason": "Collect project media candidates from direct source pages, then promote only QA-approved slot-specific media.",
@@ -23,6 +23,15 @@
     ],
     "rejected_content_sha256": []
   },
+  "media_contract": {
+    "version": 2,
+    "allowed_media_kinds": ["site_photo", "render", "floor_plan", "map", "marketing_artwork"],
+    "allowed_scene_categories": ["exterior", "entrance", "amenity", "site_plan", "location"],
+    "identity_proof_methods": ["manual_review", "official_entity_page", "source_manifest"],
+    "media_classification_methods": ["manual_review", "source_manifest", "vision"],
+    "buyer_gallery_media_kinds": ["site_photo", "render"],
+    "hero_media_kinds": ["site_photo", "render"]
+  },
   "promotion_slots": {
     "hero": ["exterior", "tower", "entrance"],
     "gallery": ["exterior", "tower", "entrance", "amenity"],
@@ -39,6 +48,16 @@
     "qr",
     "unknown"
   ],
+  "reject_quality_flags": [
+    "text_heavy",
+    "phone_number_overlay",
+    "entity_mismatch",
+    "corrupted"
+  ],
+  "quality_flag_patterns": {
+    "text_heavy": ["book now", "limited offer", "download brochure"],
+    "phone_number_overlay": ["whatsapp", "call now", "contact us"]
+  },
   "global_reject_url_patterns": [
     "Photo_h180_w240",
     "Photo_h300_w450",

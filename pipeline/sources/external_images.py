@@ -169,6 +169,11 @@ def records_for_entity(
                 score=candidate["score"],
                 content_sha256=content_sha256,
             )
+            media_contract = media_contract_for(source_page, policy)
+            source_entity_id = optional_string(source_page.get("source_entity_id"))
+            identity_proof_method = optional_string(source_page.get("identity_proof_method"))
+            validation_state = validation_state_for_source(entity_id, source_page, policy)
+            apply_typed_media_gates(qa, media_contract, validation_state, width, policy)
             records.append(
                 {
                     "entity_id": entity_id,
@@ -178,11 +183,18 @@ def records_for_entity(
                     "image_url": image_url,
                     "original_image_url": candidate["image_url"],
                     "image_kind": qa["candidate_kind"],
+                    "media_kind": media_contract["media_kind"],
+                    "scene_category": media_contract.get("scene_category"),
+                    "source_entity_id": source_entity_id,
+                    "source_entity_label": optional_string(source_page.get("source_entity_label")),
+                    "identity_proof_method": identity_proof_method,
+                    "validation_state": validation_state,
                     "source_bucket": source_bucket,
                     "candidate_kind": qa["candidate_kind"],
                     "quality_score": qa["quality_score"],
                     "relevance_score": qa["relevance_score"],
                     "reject_reason": qa["reject_reason"],
+                    "quality_flags": qa["quality_flags"],
                     "allowed_slots": qa["allowed_slots"],
                     "dedupe_key": qa["dedupe_key"],
                     "classification_method": qa["classification_method"],
@@ -298,22 +310,25 @@ def local_society_photo_records(
             content_sha256 = optimized["content_sha256"]
             width = optimized["width"]
             height = optimized["height"]
+        declared_alt_text = optional_string(provenance.get("alt_text"))
         qa = classify_media_candidate(
             image_url=image_url,
             original_image_url=original_image_url,
-            alt_text="{} photo {}".format(society_name, rank),
+            alt_text=declared_alt_text,
             width=width,
             height=height,
             source_name="LocalSocietyPhotos",
             source_bucket="local_society_photo",
-            source_page={
-                "source_name": provenance_source_name,
-                "source_page_url": source_page_url,
-            },
+            source_page=provenance,
             policy=policy,
             score=100.0 + max(0, 10 - rank),
             content_sha256=content_sha256,
         )
+        media_contract = media_contract_for(provenance, policy)
+        source_entity_id = optional_string(provenance.get("source_entity_id"))
+        identity_proof_method = optional_string(provenance.get("identity_proof_method"))
+        validation_state = validation_state_for_source(entity_id, provenance, policy)
+        apply_typed_media_gates(qa, media_contract, validation_state, width, policy)
         records.append(
             {
                 "entity_id": entity_id,
@@ -323,11 +338,18 @@ def local_society_photo_records(
                 "image_url": image_url,
                 "original_image_url": original_image_url,
                 "image_kind": qa["candidate_kind"],
+                "media_kind": media_contract["media_kind"],
+                "scene_category": media_contract.get("scene_category"),
+                "source_entity_id": source_entity_id,
+                "source_entity_label": optional_string(provenance.get("source_entity_label")),
+                "identity_proof_method": identity_proof_method,
+                "validation_state": validation_state,
                 "source_bucket": "local_society_photo",
                 "candidate_kind": qa["candidate_kind"],
                 "quality_score": qa["quality_score"],
                 "relevance_score": qa["relevance_score"],
                 "reject_reason": qa["reject_reason"],
+                "quality_flags": qa["quality_flags"],
                 "allowed_slots": qa["allowed_slots"],
                 "dedupe_key": qa["dedupe_key"],
                 "classification_method": qa["classification_method"],
@@ -335,7 +357,7 @@ def local_society_photo_records(
                 "height": height,
                 "rank": rank,
                 "score": 100.0 + max(0, 10 - rank),
-                "alt_text": "{} photo {}".format(society_name, rank),
+                "alt_text": declared_alt_text,
                 "storage_policy": storage_policy,
                 "content_sha256": content_sha256,
                 "observed_at": observed_at,
@@ -873,6 +895,9 @@ def classify_media_candidate(
         policy=policy,
     )
     classification_method = "heuristic"
+    quality_flags = deterministic_quality_flags(
+        original_image_url or image_url, alt_text, width, height, policy
+    )
     if should_run_vision(kind, policy):
         vision = vision_classification(
             image_url=image_url,
@@ -886,6 +911,11 @@ def classify_media_candidate(
         )
         if vision:
             kind = optional_string(vision.get("candidate_kind")) or kind
+            quality_flags.extend(
+                str(flag).strip()
+                for flag in vision.get("quality_flags") or []
+                if str(flag).strip()
+            )
             classification_method = "vision"
         else:
             classification_method = "heuristic_only"
@@ -900,6 +930,7 @@ def classify_media_candidate(
         source_page=source_page,
         policy=policy,
         content_sha256=content_sha256,
+        quality_flags=quality_flags,
     )
     allowed_slots = allowed_slots_for(kind, width, reject_reason, policy)
     quality_score = media_quality_score(kind, width, height, source_name, reject_reason, score)
@@ -909,10 +940,132 @@ def classify_media_candidate(
         "quality_score": round(quality_score, 4),
         "relevance_score": round(relevance_score, 4),
         "reject_reason": reject_reason,
+        "quality_flags": sorted(set(quality_flags)),
         "allowed_slots": allowed_slots,
         "dedupe_key": dedupe_key_for(original_image_url or image_url, image_url),
         "classification_method": classification_method,
     }
+
+
+def media_contract_for(
+    declaration: Dict[str, Any], policy: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Accept only an explicitly classified media declaration.
+
+    URL, alt-text, source family, and folder placement may quarantine an asset,
+    but they never prove whether bytes are a site photo, render, or scene.
+    """
+    contract = (policy or {}).get("media_contract") or {}
+    method = optional_string(declaration.get("media_classification_method"))
+    media_kind = optional_string(declaration.get("media_kind"))
+    allowed_methods = set(str(value) for value in contract.get("media_classification_methods") or [])
+    allowed_kinds = set(str(value) for value in contract.get("allowed_media_kinds") or [])
+    if not method or method not in allowed_methods or not media_kind or media_kind not in allowed_kinds:
+        return {
+            "media_kind": "unknown",
+            "scene_category": None,
+            "media_classification_method": None,
+        }
+    scene_category = optional_string(declaration.get("scene_category"))
+    allowed_scenes = set(str(value) for value in contract.get("allowed_scene_categories") or [])
+    if scene_category not in allowed_scenes:
+        scene_category = None
+    return {
+        "media_kind": media_kind,
+        "scene_category": scene_category,
+        "media_classification_method": method,
+    }
+
+
+def validation_state_for_source(
+    entity_id: str, source: Dict[str, Any], policy: Optional[Dict[str, Any]]
+) -> str:
+    source_entity_id = optional_string(source.get("source_entity_id"))
+    if source_entity_id and source_entity_id != entity_id:
+        return "source_identity_mismatch"
+    proof_method = optional_string(source.get("identity_proof_method"))
+    allowed_methods = set(
+        str(value)
+        for value in ((policy or {}).get("media_contract") or {}).get(
+            "identity_proof_methods"
+        )
+        or []
+    )
+    if source_entity_id == entity_id and proof_method in allowed_methods:
+        return "source_identity_matched"
+    return "unverified"
+
+
+def apply_typed_media_gates(
+    qa: Dict[str, Any],
+    media_contract: Dict[str, Any],
+    validation_state: str,
+    width: Optional[int],
+    policy: Optional[Dict[str, Any]],
+) -> None:
+    prior_reject = optional_string(qa.get("reject_reason"))
+    if prior_reject:
+        qa.setdefault("quality_flags", []).append(prior_reject)
+        qa["quality_flags"] = sorted(set(qa["quality_flags"]))
+    if validation_state != "source_identity_matched":
+        qa["reject_reason"] = (
+            "identity:source_entity_mismatch"
+            if validation_state == "source_identity_mismatch"
+            else "identity:unverified"
+        )
+        qa["allowed_slots"] = []
+        return
+    media_kind = optional_string(media_contract.get("media_kind")) or "unknown"
+    if media_kind == "unknown":
+        qa["reject_reason"] = "classification:unverified_media_kind"
+        qa["allowed_slots"] = []
+        return
+    qa["classification_method"] = media_contract["media_classification_method"]
+    if qa.get("reject_reason") == "kind:unknown":
+        qa["reject_reason"] = None
+    if qa.get("reject_reason"):
+        qa["allowed_slots"] = []
+        return
+    qa["allowed_slots"] = typed_media_slots(media_kind, width, policy)
+
+
+def typed_media_slots(
+    media_kind: str, width: Optional[int], policy: Optional[Dict[str, Any]]
+) -> List[str]:
+    contract = (policy or {}).get("media_contract") or {}
+    slots = []  # type: List[str]
+    if media_kind in (contract.get("hero_media_kinds") or []) and (
+        width is not None and width >= hero_min_width(policy)
+    ):
+        slots.append("hero")
+    if media_kind in (contract.get("buyer_gallery_media_kinds") or []) and (
+        width is None or width >= gallery_min_width(policy)
+    ):
+        slots.append("gallery")
+    if media_kind == "floor_plan":
+        slots.append("floor_plan")
+    if media_kind == "map":
+        slots.append("site_plan")
+    return slots
+
+
+def deterministic_quality_flags(
+    image_url: str,
+    alt_text: Optional[str],
+    width: Optional[int],
+    height: Optional[int],
+    policy: Optional[Dict[str, Any]],
+) -> List[str]:
+    text = "{} {}".format(image_url or "", alt_text or "").lower()
+    flags = []  # type: List[str]
+    for flag, patterns in ((policy or {}).get("quality_flag_patterns") or {}).items():
+        if any(str(pattern).lower() in text for pattern in patterns or []):
+            flags.append(str(flag))
+    if re.search(r"(?:\+?91[-\s]?)?[6-9]\d{9}", text):
+        flags.append("phone_number_overlay")
+    if width is not None and height is not None and (width < 600 or height < 400):
+        flags.append("low_resolution")
+    return sorted(set(flags))
 
 
 def deterministic_candidate_kind(
@@ -982,6 +1135,7 @@ def reject_reason_for(
     source_page: Dict[str, Any],
     policy: Optional[Dict[str, Any]],
     content_sha256: Optional[str] = None,
+    quality_flags: Optional[List[str]] = None,
 ) -> Optional[str]:
     lower = "{} {} {}".format(image_url or "", alt_text or "", source_name or "").lower()
     content_reject = watermark_content_reject_reason(policy, content_sha256)
@@ -995,6 +1149,10 @@ def reject_reason_for(
     )
     if watermark_reject:
         return watermark_reject
+    rejected_flags = set(str(flag) for flag in (policy or {}).get("reject_quality_flags") or [])
+    for flag in quality_flags or []:
+        if flag in rejected_flags:
+            return "quality:{}".format(flag)
     for pattern in reject_url_patterns(policy, source_page):
         if str(pattern).lower() in lower:
             return "reject_pattern:{}".format(pattern)
@@ -1305,8 +1463,14 @@ def media_qa_report(
                 "candidate_count": 0,
                 "approved_count": 0,
                 "rejected_count": 0,
+                "gallery_eligible_count": 0,
+                "hero_eligible_count": 0,
+                "content_hash_count": 0,
+                "dimension_count": 0,
                 "by_source": {},
                 "by_kind": {},
+                "assets": [],
+                "duplicate_groups": [],
                 "selected": {
                     "hero": None,
                     "gallery": [],
@@ -1322,6 +1486,49 @@ def media_qa_report(
         entity["by_source"][source] = entity["by_source"].get(source, 0) + 1
         kind = optional_string(record.get("candidate_kind") or record.get("image_kind")) or "unknown"
         entity["by_kind"][kind] = entity["by_kind"].get(kind, 0) + 1
+        content_hash = optional_string(record.get("content_sha256"))
+        if content_hash:
+            entity["content_hash_count"] += 1
+        if record.get("width") and record.get("height"):
+            entity["dimension_count"] += 1
+        slots = record.get("allowed_slots") or []
+        identity_valid = record.get("validation_state") == "source_identity_matched"
+        known_kind = optional_string(record.get("media_kind")) not in (None, "unknown")
+        gallery_eligible = bool(
+            "gallery" in slots
+            and not record.get("reject_reason")
+            and identity_valid
+            and known_kind
+            and content_hash
+        )
+        hero_eligible = bool(
+            "hero" in slots
+            and not record.get("reject_reason")
+            and identity_valid
+            and known_kind
+            and content_hash
+        )
+        if gallery_eligible:
+            entity["gallery_eligible_count"] += 1
+        if hero_eligible:
+            entity["hero_eligible_count"] += 1
+        entity["assets"].append(
+            {
+                "project_key": record.get("project_key"),
+                "content_sha256": content_hash,
+                "source_name": record.get("source_name"),
+                "source_page_url": record.get("source_page_url"),
+                "width": record.get("width"),
+                "height": record.get("height"),
+                "media_kind": record.get("media_kind") or "unknown",
+                "scene_category": record.get("scene_category"),
+                "validation_state": record.get("validation_state") or "unvalidated",
+                "reject_reason": record.get("reject_reason"),
+                "quality_flags": record.get("quality_flags") or [],
+                "gallery_eligible": gallery_eligible,
+                "hero_eligible": hero_eligible,
+            }
+        )
         if record.get("reject_reason"):
             entity["rejected_count"] += 1
             continue
@@ -1332,8 +1539,20 @@ def media_qa_report(
             elif slot in entity["selected"] and slot != "hero":
                 entity["selected"][slot].append(record.get("image_url"))
     for entity_id, entity in by_entity.items():
+        by_hash = {}  # type: Dict[str, List[int]]
+        for index, asset in enumerate(entity["assets"]):
+            content_hash = optional_string(asset.get("content_sha256"))
+            if content_hash:
+                by_hash.setdefault(content_hash, []).append(index)
+        entity["duplicate_groups"] = [
+            {"content_sha256": content_hash, "asset_indexes": indexes}
+            for content_hash, indexes in sorted(by_hash.items())
+            if len(indexes) > 1
+        ]
         if not entity["selected"]["hero"]:
             entity["validation_failures"].append("missing_approved_hero")
+        if not entity["hero_eligible_count"]:
+            entity["validation_failures"].append("missing_buyer_eligible_hero")
     health_by_entity = {}  # type: Dict[str, List[Dict[str, Any]]]
     for health in source_health:
         health_by_entity.setdefault(health.get("entity_id") or "unknown", []).append(health)

@@ -1804,6 +1804,7 @@ mod tests {
             offers_last_7d: None,
             images: vec![],
             hero_image: String::new(),
+            media: Vec::new(),
             description_summary: "Test property".into(),
             transparency_tags: vec![],
             source_reference: "test".into(),

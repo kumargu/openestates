@@ -409,6 +409,11 @@ fn sibling_result_card(
             builder_name: property.builder_name.clone(),
             images: property.images.clone(),
             hero_image: property.hero_image.clone(),
+            hero_media: property
+                .media
+                .iter()
+                .find(|asset| asset.hero_eligible)
+                .cloned(),
             transparency_tags: property.transparency_tags.iter().take(3).cloned().collect(),
             description_summary: property.description_summary.clone(),
             possession_status: property.possession_status.clone(),
@@ -488,6 +493,7 @@ mod tests {
                 builder_name: "Builder".to_string(),
                 images: Vec::new(),
                 hero_image: String::new(),
+                hero_media: None,
                 transparency_tags: Vec::new(),
                 description_summary: String::new(),
                 possession_status: "Ready".to_string(),
@@ -562,6 +568,7 @@ mod tests {
             offers_last_7d: None,
             images: Vec::new(),
             hero_image: String::new(),
+            media: Vec::new(),
             description_summary: String::new(),
             transparency_tags: Vec::new(),
             source_reference: String::new(),

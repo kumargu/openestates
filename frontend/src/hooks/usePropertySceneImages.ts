@@ -14,22 +14,15 @@
  * search local folders for an alternative source of truth.
  */
 import { useMemo } from "react";
-import { initialPropertySceneUrls } from "../lib/propertyScene.ts";
+import type { PropertyMedia } from "../lib/types.ts";
+import { trustedPropertyMedia } from "../lib/propertyScene.ts";
 
 type Input = {
-  heroImage?: string | null;
-  images?: string[];
+  media?: PropertyMedia[];
 };
 
 export function usePropertySceneImages(input: Input) {
-  const images = useMemo(
-    () =>
-      initialPropertySceneUrls({
-        heroImage: input.heroImage,
-        images: input.images,
-      }),
-    [input.heroImage, input.images],
-  );
+  const media = useMemo(() => trustedPropertyMedia(input.media), [input.media]);
 
-  return { images, loading: false, hasImages: images.length > 0 };
+  return { media, loading: false, hasImages: media.length > 0 };
 }

@@ -638,6 +638,7 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
       offers_last_7d: card.root_source === "rera" ? 2 : 0,
       images: [],
       hero_image: "",
+      media: [],
       description_summary: card.description_summary,
       transparency_tags: card.transparency_tags,
       source_reference: "Local development fixture",

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Link,
   useParams,
@@ -12,6 +12,7 @@ import type {
   ExternalReviewCard,
   PropertyCard,
   PropertyDetailResponse,
+  PropertyMedia,
   RecommendationResponse,
   RecommendationStatus,
   SurfaceSceneResponse,
@@ -39,8 +40,9 @@ import {
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
 import {
-  propertySceneImageAt,
-  sceneLabelForIndex,
+  propertyMediaAlt,
+  propertyMediaLabel,
+  propertySceneMediaAt,
 } from "../lib/propertyScene.ts";
 import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
 import { isRedundantHomeState } from "../lib/property-signals.ts";
@@ -198,6 +200,7 @@ function propertyToCard(data: PropertyDetailResponse): PropertyCard {
     builder_name: p.builder_name,
     images: p.images,
     hero_image: p.hero_image,
+    hero_media: p.media.find((asset) => asset.hero_eligible),
     transparency_tags: p.transparency_tags,
     description_summary: p.description_summary,
     possession_status: p.possession_status,
@@ -293,7 +296,7 @@ function nearbyRailItems(
     .filter((property) => !used.has(property.id))
     .filter((property) => allowedAreas.has(property.area))
     .filter(isDifferentSociety)
-    .filter((property) => property.hero_image || property.society_name)
+    .filter((property) => property.hero_media || property.society_name)
     .sort((left, right) => {
       const leftAreaRank = areaRank.get(left.area) ?? 99;
       const rightAreaRank = areaRank.get(right.area) ?? 99;
@@ -413,18 +416,46 @@ function CleanDialog({
   children: ReactNode;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") closeRef.current();
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", closeOnEscape);
+    window.requestAnimationFrame(() => {
+      dialogRef.current?.querySelector<HTMLElement>("button")?.focus();
+    });
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", closeOnEscape);
+      previousFocus?.focus();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div
@@ -435,6 +466,7 @@ function CleanDialog({
       }}
     >
       <section
+        ref={dialogRef}
         className="property-clean-dialog"
         role="dialog"
         aria-modal="true"
@@ -471,61 +503,61 @@ function CleanDialog({
 
 function PropertyPhotoMosaic({
   title,
-  societyName,
-  heroImage,
-  images,
+  media,
 }: {
   title: string;
-  societyName?: string;
-  heroImage?: string | null;
-  images?: string[];
+  media?: PropertyMedia[];
 }) {
   const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState(0);
   const [readyLeadImage, setReadyLeadImage] = useState<string | null>(null);
   const {
-    images: sceneImages,
+    media: sceneMedia,
     loading,
     hasImages,
-  } = usePropertySceneImages({
-    heroImage,
-    images,
-  });
-  const leadImage = propertySceneImageAt(sceneImages, 0, heroImage);
-  const leadImageReady = Boolean(leadImage && readyLeadImage === leadImage);
-  const mosaicImages = sceneImages.slice(1, 5);
-  const total = sceneImages.length || (heroImage ? 1 : 0);
+  } = usePropertySceneImages({ media });
+  const leadMedia = propertySceneMediaAt(sceneMedia, 0);
+  const leadImageReady = Boolean(leadMedia && readyLeadImage === leadMedia.url);
+  const mosaicMedia = sceneMedia.slice(1, 5);
+  const inspectedMedia = propertySceneMediaAt(sceneMedia, selected);
+  const total = sceneMedia.length;
+  const inspect = (index: number) => {
+    setSelected(index);
+    setOpen(true);
+  };
 
   return (
-    <section className="property-photo-mosaic" aria-label="Property photos">
+    <section className={`property-photo-mosaic${hasImages ? "" : " property-photo-mosaic--empty"}`} aria-label="Property photos">
       <div
         className={`property-photo-mosaic__lead${leadImageReady ? " is-ready" : ""}`}
       >
-        {leadImage ? (
-          <ImageWithFallback
-            src={leadImage}
-            alt={title}
-            loading="eager"
-            decoding="auto"
-            fetchPriority="high"
-            onReady={() => setReadyLeadImage(leadImage)}
-          />
+        {leadMedia ? (
+          <button type="button" onClick={() => inspect(0)}>
+            <ImageWithFallback
+              src={leadMedia.url}
+              alt={propertyMediaAlt(leadMedia, title)}
+              loading="eager"
+              decoding="auto"
+              fetchPriority="high"
+              onReady={() => setReadyLeadImage(leadMedia.url)}
+            />
+          </button>
         ) : (
           <div className="property-photo-mosaic__empty">
             <span>{loading ? "Loading photos" : "Photos unavailable"}</span>
-            <strong>{societyName || title}</strong>
           </div>
         )}
       </div>
       <div className="property-photo-mosaic__grid">
-        {mosaicImages.map((src, index) => (
-          <button key={src} type="button" onClick={() => setOpen(true)}>
+        {mosaicMedia.map((asset, index) => (
+          <button key={asset.id} type="button" onClick={() => inspect(index + 1)}>
             <ImageWithFallback
-              src={src}
-              alt={`${title} - ${sceneLabelForIndex(index + 1)}`}
+              src={asset.url}
+              alt={propertyMediaAlt(asset, title)}
               loading="lazy"
               fetchPriority="low"
             />
-            <span>{sceneLabelForIndex(index + 1)}</span>
+            {propertyMediaLabel(asset) && <span>{propertyMediaLabel(asset)}</span>}
           </button>
         ))}
       </div>
@@ -533,7 +565,7 @@ function PropertyPhotoMosaic({
         <button
           type="button"
           className="property-photo-mosaic__all"
-          onClick={() => setOpen(true)}
+          onClick={() => inspect(0)}
         >
           Show all photos
           <span>{total}</span>
@@ -542,22 +574,39 @@ function PropertyPhotoMosaic({
 
       {open && (
         <CleanDialog
-          title="All photos"
-          kicker="Gallery"
+          title="Photos"
           onClose={() => setOpen(false)}
         >
-          <div className="property-photo-grid">
-            {sceneImages.map((src, index) => (
-              <figure key={src}>
+          <div className="property-photo-viewer">
+            {inspectedMedia && (
+              <figure className="property-photo-viewer__focus">
                 <ImageWithFallback
-                  src={src}
-                  alt={`${title} - ${sceneLabelForIndex(index)}`}
-                  loading="lazy"
-                  fetchPriority="low"
+                  src={inspectedMedia.url}
+                  alt={propertyMediaAlt(inspectedMedia, title)}
+                  loading="eager"
+                  fetchPriority="high"
                 />
-                <figcaption>{sceneLabelForIndex(index)}</figcaption>
+                <figcaption>
+                  {propertyMediaLabel(inspectedMedia) && <span>{propertyMediaLabel(inspectedMedia)}</span>}
+                  <a href={inspectedMedia.source_url} target="_blank" rel="noreferrer">Source</a>
+                </figcaption>
               </figure>
-            ))}
+            )}
+            {sceneMedia.length > 1 && (
+              <div className="property-photo-viewer__strip" aria-label="Choose photo">
+                {sceneMedia.map((asset, index) => (
+                  <button
+                    key={asset.id}
+                    type="button"
+                    aria-label={`View photo ${index + 1}`}
+                    aria-current={index === selected ? "true" : undefined}
+                    onClick={() => setSelected(index)}
+                  >
+                    <ImageWithFallback src={asset.url} alt="" loading="lazy" fetchPriority="low" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </CleanDialog>
       )}
@@ -655,11 +704,10 @@ function NearbyHomeCard({
   sceneIndex: number;
 }) {
   const property = item.property;
-  const { images } = usePropertySceneImages({
-    heroImage: property.hero_image,
-    images: property.images,
+  const { media } = usePropertySceneImages({
+    media: property.hero_media ? [property.hero_media] : [],
   });
-  const image = propertySceneImageAt(images, sceneIndex, property.hero_image);
+  const image = propertySceneMediaAt(media, sceneIndex)?.url ?? null;
   const title = property.title.trim();
   const note = `${property.area} · ${property.bhk} BHK`;
 
@@ -675,7 +723,7 @@ function NearbyHomeCard({
               fetchPriority="low"
             />
           ) : (
-            <span>{property.society_name || property.title}</span>
+            <span aria-hidden="true" />
           )}
         </span>
         <strong>{title}</strong>
@@ -1198,9 +1246,7 @@ function PropertyPageBody({
 
       <PropertyPhotoMosaic
         title={displayTitle}
-        societyName={society?.name}
-        heroImage={p.hero_image}
-        images={p.images}
+        media={p.media}
       />
 
       <main className="property-clean-flow">

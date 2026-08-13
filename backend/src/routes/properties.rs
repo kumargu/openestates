@@ -5450,6 +5450,7 @@ mod serving_state_tests {
             offers_last_7d: None,
             images: Vec::new(),
             hero_image: String::new(),
+            media: Vec::new(),
             description_summary: String::new(),
             transparency_tags: Vec::new(),
             source_reference: String::new(),
