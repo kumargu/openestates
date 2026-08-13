@@ -41,6 +41,13 @@ from pipeline.skills.rera_regulatory_intelligence import (
     redacted_document,
     structured_list_event_candidates,
 )
+from pipeline.skills.prepare_rera_document_previews import (
+    document_artifacts_from_skill_result,
+    prepare_rera_plan_previews,
+)
+from pipeline.skills.rera_document_intelligence import (
+    canonical_rera_society_entity_id,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -137,6 +144,7 @@ def annotation_from_registry(fact_key, skill_scoring=None):
 RERA_REGISTRY_MONTHLY = "rera_registry_monthly"
 RERA_RECEIPTS = "rera_receipts"
 RERA_SOURCE_RECORDS = "rera_source_records"
+RERA_PROJECT_PLAN_FRAMES = "rera_project_plan_frames"
 GOOGLE_PLACES_WEEKLY = "google_places_weekly"
 GOOGLE_NEARBY_PLACES_WEEKLY = "google_nearby_places_weekly"
 EXTERNAL_LISTINGS_WEEKLY = "external_listings_weekly"
@@ -166,6 +174,7 @@ SUPPORTED_ASSETS = frozenset(
         RERA_RECEIPTS,
         RERA_SOURCE_RECORDS,
         RERA_REGISTRY_MONTHLY,
+        RERA_PROJECT_PLAN_FRAMES,
         GOOGLE_PLACES_WEEKLY,
         GOOGLE_NEARBY_PLACES_WEEKLY,
         EXTERNAL_LISTINGS_WEEKLY,
@@ -207,6 +216,11 @@ def collect_asset_sources(
             output[RERA_SOURCE_RECORDS] = collect_rera_source_records(request)
         except Exception as error:
             record_source_failure(source_failures, [RERA_SOURCE_RECORDS], error)
+    if RERA_PROJECT_PLAN_FRAMES in requested:
+        try:
+            output[RERA_PROJECT_PLAN_FRAMES] = collect_rera_project_plan_frames(request)
+        except Exception as error:
+            record_source_failure(source_failures, [RERA_PROJECT_PLAN_FRAMES], error)
     google_address_input = None
     google_requested = (
         GOOGLE_PLACES_WEEKLY in requested or GOOGLE_NEARBY_PLACES_WEEKLY in requested
@@ -2593,9 +2607,188 @@ def scoped_rera_entities(request: Dict[str, Any]) -> List[Dict[str, str]]:
                 "registration_number": registration_number,
                 "project_name": name,
                 "entity_id": entity_id,
+                "alias_entity_id": str(entity.get("alias_entity_id") or "").strip(),
             }
         )
     return entities
+
+
+def _skill_result_text(result: Any, fact_key: str) -> Optional[str]:
+    for fact in getattr(result, "facts", []):
+        if getattr(fact, "key", None) != fact_key:
+            continue
+        value = getattr(fact, "value", None)
+        raw = value.get("data") if isinstance(value, dict) else value
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
+
+
+def collect_rera_project_plan_frames(
+    request: Dict[str, Any], skill: Any = None
+) -> Dict[str, Any]:
+    """Prepare page-one previews only for exact catalog registration mappings."""
+    planned_at = normalized_planned_at(request)
+    snapshot_date = partition_values(request).get("dt") or planned_at[:10]
+    scoped = scoped_rera_entities(request)
+    projects = []  # type: List[Dict[str, Any]]
+    failures = []  # type: List[Dict[str, Any]]
+    active_skill = skill or get_skill_instance("fetch_rera")
+    force_refresh = RERA_PROJECT_PLAN_FRAMES in request.get("force_refresh_assets", [])
+
+    mapped_entity_ids = {entity["entity_id"] for entity in scoped}
+    for seed in request.get("source_entities") or []:
+        entity_id = str(seed.get("entity_id") or "").strip()
+        if entity_id and entity_id not in mapped_entity_ids:
+            failures.append(
+                {
+                    "society_entity_id": entity_id,
+                    "reason": "missing_exact_registration_mapping",
+                }
+            )
+
+    for entity in scoped:
+        canonical_entity_id = canonical_rera_society_entity_id(
+            entity["registration_number"]
+        )
+        input_data = {
+            "entity_id": entity["entity_id"],
+            "project_name": entity["project_name"],
+            "project_key": entity["registration_number"],
+            "area": next(
+                (
+                    optional_string(seed.get("area"))
+                    for seed in request.get("source_entities") or []
+                    if optional_string(seed.get("entity_id")) == entity["entity_id"]
+                ),
+                None,
+            ),
+            "city": next(
+                (
+                    optional_string(seed.get("city"))
+                    for seed in request.get("source_entities") or []
+                    if optional_string(seed.get("entity_id")) == entity["entity_id"]
+                ),
+                None,
+            )
+            or "Bengaluru",
+            "latitude": next(
+                (
+                    optional_float(seed.get("latitude"))
+                    for seed in request.get("source_entities") or []
+                    if optional_string(seed.get("entity_id")) == entity["entity_id"]
+                ),
+                None,
+            ),
+            "longitude": next(
+                (
+                    optional_float(seed.get("longitude"))
+                    for seed in request.get("source_entities") or []
+                    if optional_string(seed.get("entity_id")) == entity["entity_id"]
+                ),
+                None,
+            ),
+            "triggered_by": "asset_dag",
+        }
+        try:
+            result = active_skill.run(input_data, force=force_refresh)
+            found_registration = normalized_registration_number(
+                _skill_result_text(result, "rera_number") or ""
+            )
+            if found_registration != entity["registration_number"]:
+                raise ValueError(
+                    "RERA detail returned {}, not requested {}".format(
+                        found_registration or "no registration number",
+                        entity["registration_number"],
+                    )
+                )
+            prepared = prepare_rera_plan_previews(
+                document_artifacts_from_skill_result(result),
+                entity["registration_number"],
+            )
+            aliases = sorted(
+                {
+                    alias
+                    for alias in (
+                        entity["entity_id"],
+                        entity.get("alias_entity_id"),
+                    )
+                    if alias and alias != canonical_entity_id
+                }
+            )
+            projects.append(
+                {
+                    "society_entity_id": canonical_entity_id,
+                    "aliases": aliases,
+                    "registration_number": entity["registration_number"],
+                    "previews": prepared["previews"],
+                    "payload_hash": prepared["payload_hash"],
+                }
+            )
+            audit_path = (
+                PROJECT_ROOT
+                / "data"
+                / "cache"
+                / "rera_project_plan_frames"
+                / "audits"
+                / "{}.json".format(
+                    hashlib.sha256(
+                        entity["registration_number"].encode("utf-8")
+                    ).hexdigest()
+                )
+            )
+            audit_path.parent.mkdir(parents=True, exist_ok=True)
+            audit_path.write_text(
+                json.dumps(
+                    {
+                        "society_entity_id": canonical_entity_id,
+                        "registration_number": entity["registration_number"],
+                        "document_reviews": prepared["document_reviews"],
+                        "selection_exclusions": prepared["selection_exclusions"],
+                        "payload_hash": prepared["payload_hash"],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        except Exception as error:
+            logger.error(
+                "RERA plan preview collection failed for %s: %s",
+                entity["registration_number"],
+                error,
+            )
+            failures.append(
+                {
+                    "society_entity_id": canonical_entity_id,
+                    "registration_number": entity["registration_number"],
+                    "reason": str(error),
+                }
+            )
+
+    projects.sort(key=lambda project: project["society_entity_id"])
+    failures.sort(
+        key=lambda failure: (
+            failure.get("society_entity_id", ""),
+            failure.get("registration_number", ""),
+            failure.get("reason", ""),
+        )
+    )
+    return {
+        "source": "karnataka_rera_project_documents",
+        "snapshot_date": snapshot_date,
+        "catalog_entity_count": len(request.get("source_entities") or []),
+        "exact_registration_count": len(scoped),
+        "projects": projects,
+        "failures": failures,
+        "source_watermarks": [
+            {
+                "source": "karnataka_rera_project_plan_frames",
+                "high_watermark": planned_at,
+            }
+        ],
+    }
 
 
 def detail_receipt_metadata_path(registration_number: str) -> Path:

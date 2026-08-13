@@ -147,7 +147,9 @@ pub use rera_evidence::{
     RERA_RECEIPTS_ASSET_ID,
 };
 pub use rera_plans::{
-    rera_project_plan_frames_input, ReraPlanFramesAssetError, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
+    rera_project_plan_frames_input, ReraPlanFramesAssetError, ReraProjectPlanFailureInput,
+    ReraProjectPlanFramesInput, ReraProjectPlanPreviewInput, ReraProjectPlanProjectInput,
+    RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
 };
 pub use rera_source_records::{
     read_rera_source_records, ReraSourceRecord, ReraSourceRecordInput, ReraSourceRecordKind,

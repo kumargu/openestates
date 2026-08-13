@@ -50,7 +50,7 @@ class ReraDocumentIntelligenceTest(unittest.TestCase):
         policy = load_document_policy()
         serialized = str(policy).lower()
 
-        self.assertEqual(policy["version"], 2)
+        self.assertEqual(policy["version"], 3)
         self.assertNotIn("godrej", serialized)
         self.assertNotIn("sobha", serialized)
         self.assertNotIn("prestige", serialized)
@@ -76,11 +76,17 @@ class ReraDocumentIntelligenceTest(unittest.TestCase):
     def test_filename_matching_handles_portal_separators(self):
         sensitive = classify_rera_document("GPL_PAN Card-signed.pdf")
         unavailable = classify_rera_document("Not_Available.jpg", "Section plan")
+        non_applicable = classify_rera_document(
+            "Layout Plan - Non Applicability.pdf",
+            "Approved Layout Plan",
+        )
 
         self.assertEqual(sensitive["preview_role"], "promoter_financial")
         self.assertEqual(sensitive["preview_policy"], "hidden")
         self.assertEqual(unavailable["preview_role"], "placeholder")
         self.assertEqual(unavailable["preview_policy"], "hidden")
+        self.assertEqual(non_applicable["preview_role"], "placeholder")
+        self.assertEqual(non_applicable["preview_policy"], "hidden")
 
     def test_generic_filename_uses_source_field_context(self):
         classification = classify_rera_document(
@@ -96,7 +102,14 @@ class ReraDocumentIntelligenceTest(unittest.TestCase):
         self.assertEqual(classification["kind"], "sanction_plan")
         self.assertEqual(classification["preview_policy"], "content_review_required")
 
-    def test_selection_requires_render_and_rejects_not_applicable_content(self):
+    def test_typical_floor_plan_filename_is_a_preview_candidate(self):
+        classification = classify_rera_document("Typical Floor Plans - Crimson.PDF")
+
+        self.assertEqual(classification["kind"], "floor_plan")
+        self.assertEqual(classification["preview_role"], "floor_plan")
+        self.assertEqual(classification["preview_policy"], "content_review_required")
+
+    def test_selection_requires_render_and_uses_filename_policy(self):
         artifacts = [
             artifact("master", "Updated Master Plan.pdf", "master_plan"),
             artifact("site", "Approved Site Plan.pdf", "site_plan", source_url="https://rera.test/site"),
@@ -107,7 +120,6 @@ class ReraDocumentIntelligenceTest(unittest.TestCase):
         result = select_rera_document_previews(
             artifacts,
             rendered("master", "site", "photo"),
-            {"site": "Approved layout plan is NOT APPLICABLE for this project."},
         )
 
         self.assertEqual(
@@ -115,7 +127,7 @@ class ReraDocumentIntelligenceTest(unittest.TestCase):
             ["master"],
         )
         reasons = {item["artifact_id"]: item["reason"] for item in result["excluded"]}
-        self.assertEqual(reasons["site"], "content_excluded")
+        self.assertEqual(reasons["site"], "dedupe_bucket")
         self.assertEqual(reasons["photo"], "role_not_selected")
         self.assertEqual(reasons["missing"], "missing_rendered_preview")
 

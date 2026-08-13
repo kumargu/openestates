@@ -57,6 +57,20 @@ def load_document_policy(path: str = str(DEFAULT_POLICY_PATH)) -> dict[str, Any]
             raise ReraDocumentPolicyError(f"roles[{index}].label_patterns must be non-empty")
         for pattern in patterns:
             re.compile(_non_empty_string(pattern, f"roles[{index}].label_patterns[]"), re.IGNORECASE)
+    render_review = policy.get("render_review")
+    required_render_fields = (
+        "analysis_size_px",
+        "min_dark_ratio",
+        "max_dark_ratio",
+        "max_mid_tone_ratio",
+        "max_very_dark_ratio",
+        "min_edge_ratio",
+    )
+    if not isinstance(render_review, dict) or any(
+        not isinstance(render_review.get(field), (int, float))
+        for field in required_render_fields
+    ):
+        raise ReraDocumentPolicyError("render_review must define numeric render thresholds")
     return policy
 
 
@@ -131,19 +145,6 @@ def classify_rera_document(
     }
 
 
-def _content_exclusion(
-    content: Optional[str], policy: Mapping[str, Any]
-) -> Optional[str]:
-    if not isinstance(content, str) or not content.strip():
-        return None
-    review = policy.get("content_review", {})
-    patterns = review.get("exclude_patterns", []) if isinstance(review, dict) else []
-    for pattern in patterns:
-        if re.search(pattern, content, re.IGNORECASE):
-            return pattern
-    return None
-
-
 def _artifact_text(artifact: Mapping[str, Any], key: str) -> Optional[str]:
     value = artifact.get(key)
     return value.strip() if isinstance(value, str) and value.strip() else None
@@ -158,7 +159,6 @@ def _dedupe_key(artifact: Mapping[str, Any]) -> tuple[str, str]:
 def select_rera_document_previews(
     artifacts: Sequence[Mapping[str, Any]],
     rendered_previews: Mapping[str, Mapping[str, Any]],
-    extracted_text: Optional[Mapping[str, str]] = None,
     *,
     policy: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, list[dict[str, Any]]]:
@@ -179,7 +179,6 @@ def select_rera_document_previews(
         raise ReraDocumentPolicyError("selection role_order and role_caps are required")
 
     role_rank = {role_id: index for index, role_id in enumerate(role_order)}
-    text_by_id = extracted_text or {}
     eligible: list[dict[str, Any]] = []
     excluded: list[dict[str, Any]] = []
     seen_documents: set[tuple[str, str]] = set()
@@ -202,11 +201,6 @@ def select_rera_document_previews(
             rendered_previews.get(artifact_id, {}), "source_hash"
         ):
             reason = "missing_source_hash"
-        else:
-            exclusion = _content_exclusion(text_by_id.get(artifact_id, ""), active_policy)
-            if exclusion:
-                reason = "content_excluded"
-
         if reason:
             excluded.append({"artifact_id": artifact_id, "reason": reason})
             continue

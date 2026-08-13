@@ -25,6 +25,7 @@ from pipeline.collect_asset_sources import (
     google_nearby_collection_categories,
     groundwater_zones_from_kml,
     collect_reddit_assets,
+    collect_rera_project_plan_frames,
     collect_rera_receipts,
     collect_rera_source_records,
     collect_rera_registry,
@@ -3222,6 +3223,79 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["place_name"], "Varthur Lake")
+
+    def test_rera_plan_collection_requires_exact_registration_and_keeps_partial_success(self):
+        request = {
+            "requested_assets": ["rera_project_plan_frames"],
+            "partition": {"parts": [["dt", "2026-08-12"]]},
+            "planned_at": "2026-08-12T09:30:00Z",
+            "source_entities": [
+                {
+                    "entity_id": "society:rera-brigade-laguna",
+                    "alias_entity_id": "society:brigade-laguna",
+                    "name": "Brigade Laguna",
+                    "project_key": "PRM-1",
+                },
+                {
+                    "entity_id": "society:rera-mismatch",
+                    "name": "Mismatched project",
+                    "project_key": "PRM-2",
+                },
+                {
+                    "entity_id": "society:missing-registration",
+                    "name": "Missing registration",
+                },
+            ],
+        }
+
+        def result_for(input_data, force=False):
+            registration = "PRM-1" if input_data["project_key"] == "PRM-1" else "PRM-OTHER"
+            return SkillResult(
+                facts=[
+                    SourcedFact(
+                        key="rera_number",
+                        value={"type": "Text", "data": registration},
+                        confidence=1.0,
+                        source=FactSource(source_type="Rera"),
+                    ),
+                    SourcedFact(
+                        key="rera_document_manifest",
+                        value={"type": "Text", "data": "[]"},
+                        confidence=0.85,
+                        source=FactSource(source_type="Rera"),
+                    ),
+                ]
+            )
+
+        skill = MagicMock()
+        skill.run.side_effect = result_for
+        prepared = {
+            "previews": [{"artifact_id": "plan-1", "status": "accepted"}],
+            "document_reviews": [],
+            "selection_exclusions": [],
+            "payload_hash": "payload-PRM-1",
+        }
+        with tempfile.TemporaryDirectory() as temp_dir, patch(
+            "pipeline.collect_asset_sources.PROJECT_ROOT", Path(temp_dir)
+        ), patch(
+            "pipeline.collect_asset_sources.prepare_rera_plan_previews",
+            return_value=prepared,
+        ):
+            result = collect_rera_project_plan_frames(request, skill=skill)
+
+        self.assertEqual(len(result["projects"]), 1)
+        self.assertEqual(
+            result["projects"][0]["society_entity_id"],
+            "society:rera-689919f925875215",
+        )
+        self.assertEqual(
+            result["projects"][0]["aliases"],
+            ["society:brigade-laguna", "society:rera-brigade-laguna"],
+        )
+        self.assertEqual(result["projects"][0]["payload_hash"], "payload-PRM-1")
+        failure_reasons = {failure["reason"] for failure in result["failures"]}
+        self.assertIn("missing_exact_registration_mapping", failure_reasons)
+        self.assertTrue(any("PRM-OTHER" in reason for reason in failure_reasons))
 
     def test_collects_exact_rust_source_input_shape(self):
         request = {

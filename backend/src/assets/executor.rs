@@ -1495,8 +1495,15 @@ impl BuiltInAssetExecutor {
             }
             Self::ReraProjectPlanFrames => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let source_input = context
+                    .options
+                    .source_inputs
+                    .rera_project_plan_frames
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
                 let input = super::rera_project_plan_frames_input(
                     &context.dag.lake,
+                    source_input,
                     &context.run_id.to_string(),
                     context.options.planned_at,
                 )

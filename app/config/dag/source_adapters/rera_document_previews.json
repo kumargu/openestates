@@ -1,14 +1,13 @@
 {
   "_comment": "Config-driven RERA document classification and offline preview selection. Rules apply to source labels and filenames generically; project names never affect classification.",
-  "version": 2,
-  "content_review": {
-    "max_pages": 2,
-    "exclude_patterns": [
-      "\\bnot\\s+appli(?:cable|acble)\\b",
-      "\\bnot\\s+available\\b",
-      "\\buploaded\\s+in\\s+other\\s+docs\\b",
-      "\\bdocuments?\\s+uploaded\\s+under\\s+(?:the\\s+)?other(?:s)?\\s+documents?\\s+section\\b"
-    ]
+  "version": 3,
+  "render_review": {
+    "analysis_size_px": 360,
+    "min_dark_ratio": 0.003,
+    "max_dark_ratio": 0.45,
+    "max_mid_tone_ratio": 0.62,
+    "max_very_dark_ratio": 0.28,
+    "min_edge_ratio": 0.003
   },
   "selection": {
     "max_total": 3,
@@ -23,6 +22,7 @@
       "unit_plan",
       "elevation",
       "floor_plan",
+      "section_plan",
       "development_plan",
       "sanction_plan"
     ],
@@ -32,6 +32,7 @@
       "unit_plan": 2,
       "elevation": 1,
       "floor_plan": 1,
+      "section_plan": 1,
       "development_plan": 1,
       "sanction_plan": 1
     },
@@ -41,6 +42,7 @@
       "unit_plan": 4,
       "elevation": 2,
       "floor_plan": 3,
+      "section_plan": 2,
       "development_plan": 2,
       "sanction_plan": 3
     },
@@ -60,6 +62,7 @@
       "label_patterns": [
         "^\\s*n\\s*[/._-]?\\s*a(?:\\.|\\s|$)",
         "\\bnot\\s+appli(?:cable|acble)\\b",
+        "\\bnon\\s+applicab(?:ility|le)\\b",
         "\\bnot\\s+available\\b",
         "\\bnablank\\b",
         "\\bna\\s+blank\\b"
