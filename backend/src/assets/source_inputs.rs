@@ -10,15 +10,16 @@ use super::transit::BengaluruMetroStationsInput;
 use super::{
     AssetDagPlan, AssetDagRunManifest, AssetId, AssetRunStepStatus, ExternalImagesWeeklyInput,
     ExternalListingsWeeklyInput, GoogleNearbyPlacesWeeklyInput, GooglePlacesWeeklyInput,
-    PlanReason, RedditThreadSnapshotRecord, ReraReceiptsSourceInput, ReraRegistryMonthlyInput,
-    ReraSourceRecordsInput, SkillFactAnnotationRecord, SkillFactRecord, SourceWatermark,
-    BENGALURU_METRO_STATION_FACTS_ASSET_ID, CURRENT_PROJECT_FACTS_ASSET_ID,
+    PlanReason, RedditThreadSnapshotRecord, ReraProjectPlanFramesInput, ReraReceiptsSourceInput,
+    ReraRegistryMonthlyInput, ReraSourceRecordsInput, SkillFactAnnotationRecord, SkillFactRecord,
+    SourceWatermark, BENGALURU_METRO_STATION_FACTS_ASSET_ID, CURRENT_PROJECT_FACTS_ASSET_ID,
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
     EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
     GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
     GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID,
-    RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
-    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID, STORMWATER_DRAIN_FACTS_ASSET_ID,
+    RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    RERA_SOURCE_RECORDS_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+    STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 
 /// Control-plane input for source executors.
@@ -37,6 +38,8 @@ pub struct AssetSourceInputs {
     pub rera_receipts: Option<ReraReceiptsSourceInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rera_source_records: Option<ReraSourceRecordsInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rera_project_plan_frames: Option<ReraProjectPlanFramesInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reddit_threads_daily: Option<RedditThreadsDailyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -72,6 +75,7 @@ impl AssetSourceInputs {
             RERA_RECEIPTS_ASSET_ID,
             RERA_SOURCE_RECORDS_ASSET_ID,
             RERA_REGISTRY_MONTHLY_ASSET_ID,
+            RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
             GOOGLE_PLACES_WEEKLY_ASSET_ID,
             GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
             EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
@@ -92,6 +96,7 @@ impl AssetSourceInputs {
             RERA_RECEIPTS_ASSET_ID
                 | RERA_SOURCE_RECORDS_ASSET_ID
                 | RERA_REGISTRY_MONTHLY_ASSET_ID
+                | RERA_PROJECT_PLAN_FRAMES_ASSET_ID
                 | GOOGLE_PLACES_WEEKLY_ASSET_ID
                 | GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID
                 | EXTERNAL_LISTINGS_WEEKLY_ASSET_ID

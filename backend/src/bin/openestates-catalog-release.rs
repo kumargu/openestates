@@ -6,8 +6,8 @@ use backend::assets::{
     AssetId, AssetMaterializationStore, CatalogEnvironment, CatalogMembership, CatalogRelease,
     CatalogReleaseId, CatalogReleaseStore, CatalogTombstone, CatalogValidationStatus,
     DerivedCatalogAssets, MaterializationId, MaterializationRecord, PinnedMaterialization,
-    PromoteCatalogReleaseOptions, SourceWatermark, RERA_CLAIMS_ASSET_ID,
-    IMAGE_MEDIA_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID,
+    PromoteCatalogReleaseOptions, SourceWatermark, IMAGE_MEDIA_FACTS_ASSET_ID,
+    RERA_CLAIMS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID,
     RERA_SOURCE_RECORDS_ASSET_ID,
 };
 use backend::data_loader::properties_from_serving_bundle;
@@ -254,6 +254,7 @@ struct RebaseReraOptions {
     base_release_id: CatalogReleaseId,
     evidence_serving_materialization_id: MaterializationId,
     media_facts_materialization_id: Option<MaterializationId>,
+    plans_only: bool,
     version: String,
 }
 
@@ -417,6 +418,7 @@ fn parse_rebase_rera(args: Vec<String>) -> Result<RebaseReraOptions, String> {
     let mut base_release_id = None;
     let mut evidence_serving_materialization_id = None;
     let mut media_facts_materialization_id = None;
+    let mut plans_only = false;
     let mut version = None;
     while cursor < args.len() {
         match args[cursor].as_str() {
@@ -444,6 +446,10 @@ fn parse_rebase_rera(args: Vec<String>) -> Result<RebaseReraOptions, String> {
                     "--media-facts",
                 )?)?);
             }
+            "--plans-only" => {
+                cursor += 1;
+                plans_only = true;
+            }
             "--version" => {
                 cursor += 1;
                 version = Some(take_value(&args, &mut cursor, "--version")?);
@@ -457,6 +463,7 @@ fn parse_rebase_rera(args: Vec<String>) -> Result<RebaseReraOptions, String> {
         evidence_serving_materialization_id: evidence_serving_materialization_id
             .ok_or_else(|| "rebase-rera requires --evidence-serving".to_string())?,
         media_facts_materialization_id,
+        plans_only,
         version: version.ok_or_else(|| "rebase-rera requires --version".to_string())?,
     })
 }
@@ -1046,17 +1053,27 @@ async fn rebase_rera_serving(
         Some(key) => read_edges_parquet(&lake.get_bytes(&LakeKey::new(key.clone())?).await?)?,
         None => Vec::new(),
     };
-    let evidence_key = evidence_manifest
-        .rera_evidence_parquet_key
-        .as_ref()
-        .ok_or("evidence serving bundle has no RERA evidence table")?;
+    let evidence_key = if options.plans_only {
+        base_manifest
+            .rera_evidence_parquet_key
+            .as_ref()
+            .ok_or("base serving bundle has no RERA evidence table")?
+    } else {
+        evidence_manifest
+            .rera_evidence_parquet_key
+            .as_ref()
+            .ok_or("evidence serving bundle has no RERA evidence table")?
+    };
     let evidence =
         read_rera_evidence_parquet(&lake.get_bytes(&LakeKey::new(evidence_key.clone())?).await?)?;
     if evidence.is_empty() {
         return Err("evidence serving bundle has no RERA evidence rows".into());
     }
-    let excluded_rera_evidence_society_ids =
-        evidence_manifest.excluded_rera_evidence_society_ids.clone();
+    let excluded_rera_evidence_society_ids = if options.plans_only {
+        base_manifest.excluded_rera_evidence_society_ids.clone()
+    } else {
+        evidence_manifest.excluded_rera_evidence_society_ids.clone()
+    };
 
     let catalog_subject_ids =
         catalog_rera_subject_ids(&base_release.memberships, &entities, &edges);
@@ -1088,51 +1105,57 @@ async fn rebase_rera_serving(
         .map(|artifact| artifact.key.clone())
         .ok_or("RERA project-plan materialization has no fact artifact")?;
     let plan_facts = read_facts_parquet(&lake.get_bytes(&LakeKey::new(plan_fact_key)?).await?)?;
-    rebase_source_facts(
-        &mut facts,
-        &mut search_metadata,
-        evidence_facts.clone(),
-        evidence_search_metadata.clone(),
-        &catalog_subject_ids,
-        "rera",
-    );
-    let (media_facts, media_record) = match options.media_facts_materialization_id.as_ref() {
-        Some(materialization_id) => {
-            let media_asset = AssetId::new(IMAGE_MEDIA_FACTS_ASSET_ID)
-                .expect("static image media asset id is valid");
-            let record = materializations
-                .record_by_id_for_asset(&media_asset, materialization_id)
-                .await?
-                .ok_or_else(|| {
-                    format!("image media materialization {materialization_id} was not found")
-                })?;
-            let fact_key = record
-                .artifacts
-                .iter()
-                .find(|artifact| artifact.key.ends_with("/facts/part-00000.parquet"))
-                .map(|artifact| artifact.key.clone())
-                .ok_or("image media materialization has no fact artifact")?;
-            let rows = read_facts_parquet(&lake.get_bytes(&LakeKey::new(fact_key)?).await?)?;
-            (rows, Some(record))
-        }
-        None => (evidence_facts, None),
+    let media_record = if options.plans_only {
+        rebase_plan_facts(&mut facts, plan_facts, &catalog_society_ids);
+        None
+    } else {
+        rebase_source_facts(
+            &mut facts,
+            &mut search_metadata,
+            evidence_facts.clone(),
+            evidence_search_metadata.clone(),
+            &catalog_subject_ids,
+            "rera",
+        );
+        let (media_facts, media_record) = match options.media_facts_materialization_id.as_ref() {
+            Some(materialization_id) => {
+                let media_asset = AssetId::new(IMAGE_MEDIA_FACTS_ASSET_ID)
+                    .expect("static image media asset id is valid");
+                let record = materializations
+                    .record_by_id_for_asset(&media_asset, materialization_id)
+                    .await?
+                    .ok_or_else(|| {
+                        format!("image media materialization {materialization_id} was not found")
+                    })?;
+                let fact_key = record
+                    .artifacts
+                    .iter()
+                    .find(|artifact| artifact.key.ends_with("/facts/part-00000.parquet"))
+                    .map(|artifact| artifact.key.clone())
+                    .ok_or("image media materialization has no fact artifact")?;
+                let rows = read_facts_parquet(&lake.get_bytes(&LakeKey::new(fact_key)?).await?)?;
+                (rows, Some(record))
+            }
+            None => (evidence_facts, None),
+        };
+        rebase_source_facts(
+            &mut facts,
+            &mut search_metadata,
+            media_facts,
+            evidence_search_metadata,
+            &catalog_society_ids,
+            "externalimage",
+        );
+        rebase_source_facts(
+            &mut facts,
+            &mut search_metadata,
+            plan_facts,
+            Vec::new(),
+            &catalog_society_ids,
+            "rera",
+        );
+        media_record
     };
-    rebase_source_facts(
-        &mut facts,
-        &mut search_metadata,
-        media_facts,
-        evidence_search_metadata,
-        &catalog_society_ids,
-        "externalimage",
-    );
-    rebase_source_facts(
-        &mut facts,
-        &mut search_metadata,
-        plan_facts,
-        Vec::new(),
-        &catalog_society_ids,
-        "rera",
-    );
 
     let required_rera_assets = [
         RERA_RECEIPTS_ASSET_ID,
@@ -1144,17 +1167,16 @@ async fn rebase_rera_serving(
         let Some(parent) = materializations.record_by_id(parent_id).await? else {
             return Err(format!("evidence serving parent {parent_id} is missing").into());
         };
-        if required_rera_assets.contains(&parent.asset_id.as_str()) {
-            if rera_parents
+        if required_rera_assets.contains(&parent.asset_id.as_str())
+            && rera_parents
                 .insert(parent.asset_id.to_string(), parent.materialization_id)
                 .is_some()
-            {
-                return Err(format!(
-                    "evidence serving bundle has multiple {} parents",
-                    parent.asset_id
-                )
-                .into());
-            }
+        {
+            return Err(format!(
+                "evidence serving bundle has multiple {} parents",
+                parent.asset_id
+            )
+            .into());
         }
     }
     let mut parents = vec![
@@ -1244,6 +1266,48 @@ fn rebase_source_facts(
     base_search_metadata.extend(candidate_search_metadata.into_iter().filter(|metadata| {
         refreshed_keys.contains(&(metadata.entity_id.clone(), metadata.fact_key.clone()))
     }));
+}
+
+fn rebase_plan_facts(
+    base_facts: &mut Vec<backend::serving::ServingFactRecord>,
+    candidate_facts: Vec<backend::serving::ServingFactRecord>,
+    catalog_society_ids: &BTreeSet<String>,
+) {
+    const PROJECT_PLAN_FACT_KEY: &str = "media.project_plan_frames";
+
+    let refreshed_facts = candidate_facts
+        .into_iter()
+        .filter(|fact| {
+            catalog_society_ids.contains(&fact.entity_id)
+                && fact.fact_key == PROJECT_PLAN_FACT_KEY
+                && fact.source_type.eq_ignore_ascii_case("rera")
+        })
+        .fold(
+            BTreeMap::<String, backend::serving::ServingFactRecord>::new(),
+            |mut current, fact| {
+                match current.get(&fact.entity_id) {
+                    Some(existing)
+                        if existing.learned_at > fact.learned_at
+                            || (existing.learned_at == fact.learned_at
+                                && existing.confidence >= fact.confidence) => {}
+                    _ => {
+                        current.insert(fact.entity_id.clone(), fact);
+                    }
+                }
+                current
+            },
+        )
+        .into_values()
+        .collect::<Vec<_>>();
+    let refreshed_entities = refreshed_facts
+        .iter()
+        .map(|fact| fact.entity_id.clone())
+        .collect::<BTreeSet<_>>();
+
+    base_facts.retain(|fact| {
+        fact.fact_key != PROJECT_PLAN_FACT_KEY || !refreshed_entities.contains(&fact.entity_id)
+    });
+    base_facts.extend(refreshed_facts);
 }
 
 fn catalog_rera_subject_ids(
@@ -1375,7 +1439,10 @@ fn print_help() {
     println!("  --membership-file <path>    JSON array of CatalogMembership records");
     println!("  --membership-from-serving   Derive memberships from the pinned serving bundle");
     println!("  --evidence-serving <uuid>   Unpromoted serving candidate containing refreshed RERA evidence");
-    println!("  --media-facts <uuid>        Optional scoped image-media facts used during the rebase");
+    println!(
+        "  --media-facts <uuid>        Optional scoped image-media facts used during the rebase"
+    );
+    println!("  --plans-only                Replace only RERA plan-frame facts during the rebase");
     println!("  --candidate-serving <uuid>  Scoped serving candidate used to extend a catalog");
     println!("  --society <canonical-id>    Society expected in the scoped candidate; repeatable");
     println!(
@@ -1467,6 +1534,37 @@ mod tests {
             metadata_rows[0].display_template.as_deref(),
             Some("new plans")
         );
+    }
+
+    #[test]
+    fn plan_only_rebase_preserves_every_unrelated_fact() {
+        let society = "society:rera-catalog";
+        let outside = "society:rera-outside";
+        let mut facts = vec![
+            fact(society, "media.project_plan_frames", "Rera", "old"),
+            fact(society, "rera_status", "Rera", "approved"),
+            fact(society, "google_rating", "Google", "4.2"),
+        ];
+
+        rebase_plan_facts(
+            &mut facts,
+            vec![
+                fact(society, "media.project_plan_frames", "Rera", "new"),
+                fact(society, "rera_status", "Rera", "changed"),
+                fact(outside, "media.project_plan_frames", "Rera", "outside"),
+            ],
+            &BTreeSet::from([society.to_string()]),
+        );
+
+        assert_eq!(facts.len(), 3);
+        assert!(facts.iter().any(|row| {
+            row.fact_key == "media.project_plan_frames"
+                && row.value == FactValue::Text("new".to_string())
+        }));
+        assert!(facts.iter().any(|row| {
+            row.fact_key == "rera_status" && row.value == FactValue::Text("approved".to_string())
+        }));
+        assert!(!facts.iter().any(|row| row.entity_id == outside));
     }
 
     #[test]

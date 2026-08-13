@@ -7,10 +7,11 @@ use backend::assets::{
     EnvironmentRingPoint, ExternalImageObservationRecord, ExternalImagesWeeklyInput,
     ExternalListingObservationRecord, ExternalListingsWeeklyInput, GoogleNearbyPlaceRecord,
     GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
-    OsmPowerInfrastructureInput, OsmPowerLineObservationRecord, ReraProjectSnapshotRecord,
-    ReraRegistryMonthlyInput, SkillFactAnnotationRecord, SkillFactRecord, SourceWatermark,
-    StormwaterDrainObservationRecord, StormwaterDrainRiskInput, BUILDER_RERA_AGGREGATES_ASSET_ID,
-    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+    OsmPowerInfrastructureInput, OsmPowerLineObservationRecord, ReraProjectPlanFramesInput,
+    ReraProjectSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
+    SkillFactRecord, SourceWatermark, StormwaterDrainObservationRecord, StormwaterDrainRiskInput,
+    BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID,
 };
 use backend::knowledge::{FactValue, KnowledgeGraph};
 use backend::lake::LakeStore;
@@ -342,6 +343,18 @@ fn source_inputs(
             detail_facts,
             detail_fact_annotations,
             source_watermarks: watermark.clone(),
+        }),
+        rera_project_plan_frames: Some(ReraProjectPlanFramesInput {
+            source: "fixture_rera_plans".to_string(),
+            snapshot_date: "2026-07-14".to_string(),
+            catalog_entity_count: projects.len(),
+            exact_registration_count: projects.len(),
+            projects: Vec::new(),
+            failures: Vec::new(),
+            source_watermarks: vec![SourceWatermark {
+                source: "fixture_rera_plans_empty".to_string(),
+                high_watermark: observed_at.to_rfc3339(),
+            }],
         }),
         google_places_weekly: Some(GooglePlacesWeeklyInput {
             snapshot_date: "2026-07-14".to_string(),

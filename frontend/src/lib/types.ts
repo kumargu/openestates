@@ -815,6 +815,7 @@ export type BuilderPortfolio = {
   rera_registered_projects: number;
   delayed_projects: number;
   complaint_projects: number;
+  revocations?: number;
   projects: BuilderProjectRecord[];
 };
 
@@ -1123,6 +1124,7 @@ export type ReraEvidenceReportResponse = {
 export type ReraBuyerReport = {
   fact_sections: ReraBuyerFactSection[];
   builder_portfolio?: BuilderPortfolio;
+  complaints?: ReraBuyerComplaintSummary[];
   schedules?: ReraScheduleSection[];
   documents?: ReraBuyerDocument[];
   registry_url?: string;
@@ -1140,6 +1142,17 @@ export type ReraBuyerFact = {
   value: string;
   source_url?: string;
   learned_at: string;
+};
+
+export type ReraBuyerComplaintSummary = {
+  scope: string;
+  total: number;
+  open: number;
+  disposed: number;
+  rows_parsed: number;
+  status_counts_complete: boolean;
+  theme_counts: Record<string, number>;
+  sample_subjects?: string[];
 };
 
 export type ReraBuyerDocument = {

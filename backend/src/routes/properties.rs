@@ -194,6 +194,8 @@ pub struct ReraBuyerReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub builder_portfolio: Option<BuilderPortfolio>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub complaints: Vec<ReraBuyerComplaintSummary>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub schedules: Vec<ReraScheduleSection>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub documents: Vec<ReraBuyerDocument>,
@@ -216,6 +218,19 @@ pub struct ReraBuyerFact {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
     pub learned_at: String,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraBuyerComplaintSummary {
+    pub scope: String,
+    pub total: i32,
+    pub open: i32,
+    pub disposed: i32,
+    pub rows_parsed: i32,
+    pub status_counts_complete: bool,
+    pub theme_counts: BTreeMap<String, i32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sample_subjects: Vec<String>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -394,6 +409,8 @@ pub struct BuilderPortfolio {
     pub rera_registered_projects: usize,
     pub delayed_projects: usize,
     pub complaint_projects: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revocations: Option<i32>,
     pub projects: Vec<BuilderProjectRecord>,
 }
 
@@ -655,6 +672,14 @@ fn find_property_by_request_id<'a>(
     properties.iter().find(|p| p.id == canonical_id)
 }
 
+fn normalized_promoter_identity(name: &str) -> String {
+    name.to_lowercase()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn project_name_for(property: &crate::models::Property) -> String {
     let in_prefix = format!("{} BHK in ", property.bhk);
     let at_prefix = format!("{} BHK at ", property.bhk);
@@ -664,6 +689,27 @@ fn project_name_for(property: &crate::models::Property) -> String {
         .or_else(|| property.title.strip_prefix(&at_prefix))
         .unwrap_or(&property.title)
         .to_string()
+}
+
+fn project_status_display_for(
+    graph: &crate::knowledge::KnowledgeGraph,
+    society_id: &str,
+) -> Option<String> {
+    let node = graph.get_node(&society_node_id(society_id))?;
+    node.facts
+        .iter()
+        .filter(|fact| fact.key == "project_status")
+        .max_by_key(|fact| fact.version)
+        .and_then(|fact| {
+            fact.display_template.clone().map(|template| {
+                if let (true, FactValue::Text(value)) = (template.contains("{value}"), &fact.value)
+                {
+                    template.replace("{value}", value)
+                } else {
+                    template
+                }
+            })
+        })
 }
 
 fn area_lookup_key(id_or_name: &str) -> String {
@@ -2176,6 +2222,100 @@ fn unique_sorted(mut values: Vec<String>) -> Vec<String> {
     values
 }
 
+fn build_builder_portfolio(
+    graph: &crate::knowledge::KnowledgeGraph,
+    properties: &[crate::models::Property],
+    current: &crate::models::Property,
+    serving_facts: Option<&ServingFactIndex>,
+) -> Option<BuilderPortfolio> {
+    let builder_key = normalized_promoter_identity(&current.builder_name);
+    if builder_key.is_empty() {
+        return None;
+    }
+
+    let mut seen_societies = HashSet::new();
+    let mut projects = Vec::new();
+    let mut rera_registered_projects = 0;
+    let mut delayed_projects = 0;
+    let mut complaint_projects = 0;
+    let mut revocations: Option<i32> = None;
+
+    for property in properties {
+        if normalized_promoter_identity(&property.builder_name) != builder_key
+            || !seen_societies.insert(property.society_id.clone())
+        {
+            continue;
+        }
+
+        let rera = rera_info_for(&property.society_id, graph, serving_facts);
+        if rera.as_ref().is_some_and(|record| record.registered) {
+            rera_registered_projects += 1;
+        }
+        if rera
+            .as_ref()
+            .and_then(|record| record.delay_months)
+            .is_some_and(|months| months > 0)
+        {
+            delayed_projects += 1;
+        }
+        if rera
+            .as_ref()
+            .and_then(|record| record.complaints_count)
+            .is_some_and(|count| count > 0)
+        {
+            complaint_projects += 1;
+        }
+        if let Some(builder_revocations) =
+            rera.as_ref().and_then(|record| record.builder_revocations)
+        {
+            revocations = Some(revocations.unwrap_or(0).max(builder_revocations));
+        }
+
+        projects.push(BuilderProjectRecord {
+            property_id: property.id.clone(),
+            project_name: project_name_for(property),
+            area: property.area.clone(),
+            rera_number: rera
+                .as_ref()
+                .and_then(|record| record.registration_number.clone()),
+            rera_portal_url: rera
+                .as_ref()
+                .and_then(|record| record.rera_portal_url.clone()),
+            rera_status: rera.as_ref().and_then(|record| record.status.clone()),
+            rera_registered: rera.as_ref().is_some_and(|record| record.registered),
+            start_date: rera.as_ref().and_then(|record| record.start_date.clone()),
+            completion_date: rera
+                .as_ref()
+                .and_then(|record| record.completion_date.clone()),
+            delay_months: rera.as_ref().and_then(|record| record.delay_months),
+            complaints_count: rera.as_ref().and_then(|record| record.complaints_count),
+            project_status_display: project_status_display_for(graph, &property.society_id),
+            current: property.society_id == current.society_id,
+        });
+    }
+
+    if projects.len() <= 1 && rera_registered_projects == 0 {
+        return None;
+    }
+
+    projects.sort_by(|left, right| {
+        right
+            .current
+            .cmp(&left.current)
+            .then_with(|| left.project_name.cmp(&right.project_name))
+    });
+
+    Some(BuilderPortfolio {
+        builder_name: current.builder_name.clone(),
+        tracked_projects: projects.len(),
+        rera_registered_projects,
+        delayed_projects,
+        complaint_projects,
+        revocations,
+        projects,
+    })
+}
+
 /// GET /api/properties/:id/evidence — returns backend-shaped dynamic evidence
 /// sections for the UI. React should render these sections, not interpret raw KG
 /// facts itself.
@@ -2561,7 +2701,12 @@ pub async fn get_property(
 
     // Extract builder trust from KG
     let builder_trust = extract_builder_trust(&graph, &property.society_id);
-    let builder_portfolio = None;
+    let builder_portfolio = build_builder_portfolio(
+        &graph,
+        &properties,
+        &property,
+        serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+    );
     let entity_refs = kg_entity_refs_for_property(&property, &graph);
     let mut source_panels = build_source_panels(
         &graph,
@@ -3247,6 +3392,134 @@ fn rera_buyer_fact_sections_for_society(
     sections.into_iter().map(|(_, section)| section).collect()
 }
 
+fn rera_buyer_complaints(
+    info: Option<&ReraInfo>,
+    evidence: Option<&ServingReraEvidenceRecord>,
+) -> Vec<ReraBuyerComplaintSummary> {
+    let mut by_scope = info
+        .into_iter()
+        .flat_map(|record| &record.complaint_summaries)
+        .filter_map(|summary| {
+            let scope = summary.scope.trim().to_ascii_lowercase();
+            if scope.is_empty() {
+                return None;
+            }
+            let total = summary
+                .total_count_from_tab_label
+                .unwrap_or(summary.row_count_parsed);
+            Some((
+                scope.clone(),
+                ReraBuyerComplaintSummary {
+                    scope,
+                    total,
+                    open: summary.open_count,
+                    disposed: summary.disposed_count,
+                    rows_parsed: summary.row_count_parsed,
+                    status_counts_complete: total == summary.row_count_parsed,
+                    theme_counts: summary
+                        .theme_counts
+                        .iter()
+                        .filter(|(_, count)| **count > 0)
+                        .map(|(theme, count)| (theme.clone(), *count))
+                        .collect(),
+                    sample_subjects: summary
+                        .sample_subjects
+                        .iter()
+                        .map(|subject| subject.trim())
+                        .filter(|subject| !subject.is_empty())
+                        .take(3)
+                        .map(str::to_string)
+                        .collect(),
+                },
+            ))
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    if let Some(evidence) = evidence {
+        for scope in ["project", "promoter"] {
+            let Some(total) = complaint_claim_i32(
+                &evidence.claims,
+                &format!("complaint_{scope}_recorded_total"),
+            ) else {
+                continue;
+            };
+            let rows_parsed =
+                complaint_claim_i32(&evidence.claims, &format!("complaint_{scope}_rows_parsed"))
+                    .unwrap_or(0);
+            let entry =
+                by_scope
+                    .entry(scope.to_string())
+                    .or_insert_with(|| ReraBuyerComplaintSummary {
+                        scope: scope.to_string(),
+                        total,
+                        open: 0,
+                        disposed: 0,
+                        rows_parsed,
+                        status_counts_complete: false,
+                        theme_counts: BTreeMap::new(),
+                        sample_subjects: Vec::new(),
+                    });
+            entry.total = total;
+            entry.rows_parsed = rows_parsed;
+            entry.open = complaint_claim_i32(
+                &evidence.claims,
+                &format!("complaint_{scope}_open_count_in_parsed_rows"),
+            )
+            .unwrap_or(0);
+            entry.disposed = complaint_claim_i32(
+                &evidence.claims,
+                &format!("complaint_{scope}_disposed_count_in_parsed_rows"),
+            )
+            .unwrap_or(0);
+            entry.status_counts_complete = complaint_claim_bool(
+                &evidence.claims,
+                &format!("complaint_{scope}_status_counts_complete"),
+            )
+            .unwrap_or(false);
+        }
+    }
+
+    by_scope
+        .into_values()
+        .filter(|summary| {
+            summary.total > 0
+                || summary.rows_parsed > 0
+                || summary.open > 0
+                || summary.disposed > 0
+                || !summary.theme_counts.is_empty()
+        })
+        .collect()
+}
+
+fn complaint_claim_i32(claims: &[ReraClaimV1], predicate: &str) -> Option<i32> {
+    claims.iter().find_map(|claim| {
+        (claim.predicate == predicate)
+            .then_some(&claim.value)
+            .and_then(|value| match value {
+                ReraClaimValue::Number(value)
+                    if value.is_finite()
+                        && value.fract() == 0.0
+                        && *value >= 0.0
+                        && *value <= i32::MAX as f64 =>
+                {
+                    Some(*value as i32)
+                }
+                _ => None,
+            })
+    })
+}
+
+fn complaint_claim_bool(claims: &[ReraClaimV1], predicate: &str) -> Option<bool> {
+    claims.iter().find_map(|claim| {
+        (claim.predicate == predicate)
+            .then_some(&claim.value)
+            .and_then(|value| match value {
+                ReraClaimValue::Boolean(value) => Some(*value),
+                _ => None,
+            })
+    })
+}
+
 fn rera_buyer_documents(info: &ReraInfo, config: &ReraReportSurfaceFile) -> Vec<ReraBuyerDocument> {
     let mut documents = info
         .document_manifest
@@ -3521,15 +3794,22 @@ pub async fn get_property_rera(
         &graph,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
     );
+    let evidence_record = serving_bundle
+        .as_ref()
+        .and_then(|bundle| rera_evidence_for_property(bundle, property));
     let buyer_report = ReraBuyerReport {
         fact_sections: rera_buyer_fact_sections_for_society(
             &property.society_id,
             serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
             config,
         ),
-        // Regulatory history needs a globally structured official denominator.
-        // Local catalog aggregates are intentionally not exposed as reputation.
-        builder_portfolio: None,
+        builder_portfolio: build_builder_portfolio(
+            &graph,
+            &properties,
+            property,
+            serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+        ),
+        complaints: rera_buyer_complaints(project_record.as_ref(), evidence_record),
         schedules: project_record
             .as_ref()
             .map(|record| record.schedule_sections.clone())
@@ -3540,12 +3820,12 @@ pub async fn get_property_rera(
             .unwrap_or_default(),
         registry_url: project_record.and_then(|record| record.rera_portal_url),
     };
-    let mut response = if let Some(bundle) = serving_bundle {
+    let mut response = if let Some(bundle) = serving_bundle.as_ref() {
         rera_evidence_report_for_property(
             &property.id,
             &bundle.manifest.bundle_version,
             bundle.manifest.created_at,
-            rera_evidence_for_property(&bundle, property),
+            evidence_record,
             surface,
         )
     } else {
@@ -3753,6 +4033,9 @@ fn rera_info_for(
     if let Some(fact) = projection.latest_numeric("rera_builder_projects_count") {
         info.builder_total_projects = projected_i32(fact.value);
     }
+    if let Some(fact) = projection.latest_numeric("rera_builder_revocations") {
+        info.builder_revocations = projected_i32(fact.value);
+    }
     if let Some(fact) = projection.latest_text("rera_builder_states") {
         info.builder_states = fact
             .value
@@ -3908,6 +4191,99 @@ mod serving_state_tests {
             .expect("configured registration fact should have a buyer section");
         assert_eq!(registration.0, "registration");
         assert!(rera_buyer_section_for_key(config, "rera_unmapped_internal_fact").is_none());
+    }
+
+    #[test]
+    fn buyer_report_maps_legal_finance_and_complaints_to_explicit_sections() {
+        let config = rera_report_surface_config().expect("RERA surface config");
+
+        assert_eq!(
+            rera_buyer_section_for_key(config, "rera_land_litigation").map(|section| section.0),
+            Some("finance")
+        );
+        assert_eq!(
+            rera_buyer_section_for_key(config, "rera_has_borrowing").map(|section| section.0),
+            Some("finance")
+        );
+        assert_eq!(
+            rera_buyer_section_for_key(config, "rera_project_complaints_count")
+                .map(|section| section.0),
+            Some("complaints")
+        );
+    }
+
+    #[test]
+    fn buyer_complaint_projection_retains_scope_coverage_themes_and_subjects() {
+        let info = ReraInfo {
+            complaint_summaries: vec![
+                ReraComplaintScopeSummary {
+                    scope: "project".to_string(),
+                    total_count_from_tab_label: Some(62),
+                    row_count_parsed: 10,
+                    disposed_count: 7,
+                    open_count: 3,
+                    theme_counts: [("refund".to_string(), 6), ("delay".to_string(), 2)]
+                        .into_iter()
+                        .collect(),
+                    sample_subjects: vec![
+                        "Refund after cancellation".to_string(),
+                        "Possession delay".to_string(),
+                    ],
+                    confidence: 0.88,
+                    validation_notes: vec!["Status counts cover returned rows".to_string()],
+                },
+                ReraComplaintScopeSummary {
+                    scope: "promoter".to_string(),
+                    total_count_from_tab_label: Some(0),
+                    ..ReraComplaintScopeSummary::default()
+                },
+            ],
+            ..ReraInfo::default()
+        };
+
+        let complaints = rera_buyer_complaints(Some(&info), None);
+        assert_eq!(complaints.len(), 1);
+        assert_eq!(complaints[0].scope, "project");
+        assert_eq!(complaints[0].total, 62);
+        assert_eq!(complaints[0].rows_parsed, 10);
+        assert!(!complaints[0].status_counts_complete);
+        assert_eq!(complaints[0].theme_counts["refund"], 6);
+        assert_eq!(
+            complaints[0].sample_subjects,
+            vec!["Refund after cancellation", "Possession delay"]
+        );
+    }
+
+    #[test]
+    fn builder_portfolio_is_limited_to_unique_projects_in_the_local_catalog() {
+        let graph = legacy_graph();
+        let current = property();
+        let mut sibling = property();
+        sibling.id = "sibling-3bhk".to_string();
+        sibling.title = "3 BHK in Sibling Society".to_string();
+        sibling.society_id = "sibling".to_string();
+        sibling.area = "Varthur".to_string();
+        let mut duplicate_configuration = sibling.clone();
+        duplicate_configuration.id = "sibling-2bhk".to_string();
+        duplicate_configuration.bhk = 2;
+
+        let portfolio = build_builder_portfolio(
+            &graph,
+            &[current.clone(), sibling, duplicate_configuration],
+            &current,
+            None,
+        )
+        .expect("two catalog projects from one builder should be projected");
+
+        assert_eq!(portfolio.tracked_projects, 2);
+        assert_eq!(
+            portfolio
+                .projects
+                .iter()
+                .filter(|project| project.current)
+                .count(),
+            1
+        );
     }
 
     fn rera_record_with_coverage(

@@ -826,7 +826,7 @@ fn map_linked_place_pin(
         });
     let note = parsed
         .as_ref()
-        .map(|parsed| linked_pin_note(parsed))
+        .map(linked_pin_note)
         .filter(|note| !note.is_empty());
 
     Some(MapPlacePin {
@@ -1001,8 +1001,7 @@ fn sentence_case(value: &str) -> String {
 fn readable_fact_label(fact_key: &str) -> String {
     sentence_case(
         &fact_key
-            .replace('.', " ")
-            .replace('_', " ")
+            .replace(['.', '_'], " ")
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" "),

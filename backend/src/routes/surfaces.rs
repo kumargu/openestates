@@ -70,7 +70,7 @@ pub async fn get_property_surface(
     let response = build_property_surfaces_response(
         &state,
         &property_id,
-        &[surface_id.clone()],
+        std::slice::from_ref(&surface_id),
         focus.as_ref(),
     )
     .await

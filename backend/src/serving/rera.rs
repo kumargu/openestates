@@ -133,6 +133,10 @@ impl ReraEvidenceIndex {
     pub fn len(&self) -> usize {
         self.by_society.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.by_society.is_empty()
+    }
 }
 
 #[derive(Debug, Deserialize)]

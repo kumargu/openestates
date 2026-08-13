@@ -1547,7 +1547,10 @@ def legacy_society_node(
 
 def entity_slug(entity_id: str, society_name: str) -> str:
     if entity_id.startswith("society:"):
-        return slug(entity_id.split(":", 1)[1])
+        value = slug(entity_id.split(":", 1)[1])
+        if value.startswith("rera-") and society_name:
+            return slug(society_name)
+        return value
     return slug(society_name)
 
 

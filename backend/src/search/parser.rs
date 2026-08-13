@@ -191,7 +191,7 @@ fn parse_relations(
                     .then_some((relation_alias, alias_tokens.len()))
             })
             .collect::<Vec<_>>();
-        matches.sort_by(|left, right| right.1.cmp(&left.1));
+        matches.sort_by_key(|item| std::cmp::Reverse(item.1));
         let Some((relation_alias, token_count)) = matches.into_iter().next() else {
             index += 1;
             continue;

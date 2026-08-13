@@ -7,10 +7,42 @@
     "groups": [
       { "id": "attention", "title": "Cautions" },
       { "id": "project_facts", "title": "Project facts" },
-      { "id": "documents", "title": "Documents" }
+      { "id": "documents", "title": "Documents" },
+      { "id": "finance", "title": "Finance" }
     ]
   },
   "labels": [
+    {
+      "key": "rera_land_litigation",
+      "scope": "project",
+      "source": { "type": "fact", "fact_key": "rera_land_litigation" },
+      "condition": { "eq_bool": true },
+      "severity": "risk",
+      "label_template": "Land litigation declared",
+      "surfaces": ["property_header", "compare_primary", "note_suggestion"],
+      "priority": 100,
+      "visual_id": "legal",
+      "notebook_labels": ["legal", "risk", "rera_land_litigation"],
+      "compare_group": "legal_risk",
+      "group_id": "attention",
+      "placement": "primary"
+    },
+    {
+      "key": "builder_revocation_history",
+      "scope": "builder",
+      "source": { "type": "fact", "fact_key": "rera_builder_revocations" },
+      "condition": { "gte": 1 },
+      "severity": "risk",
+      "label_template": "{value} builder revocations",
+      "surfaces": ["property_header", "compare_primary", "note_suggestion"],
+      "priority": 95,
+      "value_precision": 0,
+      "visual_id": "risk",
+      "notebook_labels": ["risk", "builder_revocation_history"],
+      "compare_group": "builder_history",
+      "group_id": "attention",
+      "placement": "primary"
+    },
     {
       "key": "project_major_delay",
       "scope": "project",
@@ -42,6 +74,92 @@
       "visual_id": "risk",
       "notebook_labels": ["risk", "project_delay"],
       "compare_group": "delivery_history",
+      "group_id": "attention",
+      "placement": "primary"
+    },
+    {
+      "key": "project_high_complaints",
+      "scope": "project",
+      "source": {
+        "type": "fact_any",
+        "fact_keys": ["rera_project_complaints_count", "rera_complaints_count"]
+      },
+      "condition": { "gte": 6 },
+      "severity": "risk",
+      "label_template": "{value} project complaints",
+      "surfaces": ["property_header", "compare_primary", "note_suggestion"],
+      "priority": 88,
+      "value_precision": 0,
+      "visual_id": "risk",
+      "notebook_labels": ["risk", "project_complaints"],
+      "compare_group": "complaints",
+      "group_id": "attention",
+      "placement": "primary"
+    },
+    {
+      "key": "project_complaints_watch",
+      "scope": "project",
+      "source": {
+        "type": "fact_any",
+        "fact_keys": ["rera_project_complaints_count", "rera_complaints_count"]
+      },
+      "condition": { "gte": 3, "lt": 6 },
+      "severity": "caution",
+      "label_template": "{value} project complaints",
+      "surfaces": ["property_context", "compare_secondary"],
+      "priority": 62,
+      "value_precision": 0,
+      "visual_id": "risk",
+      "notebook_labels": ["risk", "project_complaints"],
+      "compare_group": "complaints",
+      "group_id": "attention",
+      "placement": "more"
+    },
+    {
+      "key": "project_open_complaints",
+      "scope": "project",
+      "source": { "type": "fact", "fact_key": "rera_project_complaints_open_count" },
+      "condition": { "gte": 2 },
+      "severity": "caution",
+      "label_template": "{value} open complaints",
+      "surfaces": ["property_context", "compare_primary", "note_suggestion"],
+      "priority": 84,
+      "value_precision": 0,
+      "visual_id": "risk",
+      "notebook_labels": ["risk", "project_complaints"],
+      "compare_group": "complaints",
+      "group_id": "attention",
+      "placement": "primary"
+    },
+    {
+      "key": "builder_complaint_history",
+      "scope": "builder",
+      "source": { "type": "fact", "fact_key": "rera_promoter_complaints_count" },
+      "condition": { "gte": 50, "lt": 100 },
+      "severity": "caution",
+      "label_template": "{value} builder complaints",
+      "surfaces": ["property_context", "compare_primary", "note_suggestion"],
+      "priority": 76,
+      "value_precision": 0,
+      "visual_id": "risk",
+      "notebook_labels": ["risk", "builder_complaints"],
+      "compare_group": "builder_history",
+      "group_id": "attention",
+      "placement": "primary"
+    },
+    {
+      "key": "builder_heavy_complaint_history",
+      "scope": "builder",
+      "source": { "type": "fact", "fact_key": "rera_promoter_complaints_count" },
+      "condition": { "gte": 100 },
+      "severity": "risk",
+      "label_template": "{value} builder complaints",
+      "surfaces": ["property_header", "compare_primary", "note_suggestion"],
+      "priority": 86,
+      "value_precision": 0,
+      "visual_id": "risk",
+      "notebook_labels": ["risk", "builder_complaints"],
+      "compare_group": "builder_history",
       "group_id": "attention",
       "placement": "primary"
     },
@@ -231,6 +349,36 @@
       "compare_group": "layout",
       "group_id": "documents",
       "placement": "audit"
+    },
+    {
+      "key": "mortgage_declared",
+      "scope": "project",
+      "source": { "type": "fact", "fact_key": "rera_has_mortgage" },
+      "condition": { "eq_bool": true },
+      "severity": "info",
+      "label_template": "Mortgage declared",
+      "surfaces": ["admin_audit"],
+      "priority": 18,
+      "visual_id": "finance",
+      "notebook_labels": ["finance", "mortgage"],
+      "compare_group": "finance",
+      "group_id": "finance",
+      "placement": "more"
+    },
+    {
+      "key": "borrowing_declared",
+      "scope": "project",
+      "source": { "type": "fact", "fact_key": "rera_has_borrowing" },
+      "condition": { "eq_bool": true },
+      "severity": "info",
+      "label_template": "Borrowing declared",
+      "surfaces": ["admin_audit"],
+      "priority": 16,
+      "visual_id": "finance",
+      "notebook_labels": ["finance", "borrowing"],
+      "compare_group": "finance",
+      "group_id": "finance",
+      "placement": "more"
     }
   ]
 }

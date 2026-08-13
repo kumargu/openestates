@@ -392,6 +392,7 @@ async fn current_source_entities(
     let mut seeds = BTreeMap::new();
     let mut unmatched: BTreeSet<_> = selected_entity_ids.iter().cloned().collect();
     for mapping in rows.mappings {
+        let project_key_selected = unmatched.contains(mapping.project_key.as_str());
         let identifiers = [
             Some(mapping.canonical_entity_id.as_str()),
             mapping.alias_entity_id.as_deref(),
@@ -406,18 +407,21 @@ async fn current_source_entities(
         if !selected {
             continue;
         }
-        seeds
-            .entry(mapping.canonical_entity_id.clone())
-            .or_insert_with(|| SourceEntitySeed {
-                entity_id: mapping.canonical_entity_id.clone(),
-                alias_entity_id: mapping.alias_entity_id,
-                name: mapping.project_name,
-                area: areas.get(mapping.canonical_entity_id.as_str()).cloned(),
-                city: Some("Bengaluru".to_string()),
-                project_key: Some(mapping.project_key),
-                latitude: None,
-                longitude: None,
-            });
+        let seed_key = source_entity_seed_key(
+            &mapping.canonical_entity_id,
+            &mapping.project_key,
+            project_key_selected,
+        );
+        seeds.entry(seed_key).or_insert_with(|| SourceEntitySeed {
+            entity_id: mapping.canonical_entity_id.clone(),
+            alias_entity_id: mapping.alias_entity_id,
+            name: mapping.project_name,
+            area: areas.get(mapping.canonical_entity_id.as_str()).cloned(),
+            city: Some("Bengaluru".to_string()),
+            project_key: Some(mapping.project_key),
+            latitude: None,
+            longitude: None,
+        });
     }
     if !unmatched.is_empty() {
         return Err(format!(
@@ -427,6 +431,18 @@ async fn current_source_entities(
         .into());
     }
     Ok(seeds.into_values().collect())
+}
+
+fn source_entity_seed_key(
+    canonical_entity_id: &str,
+    project_key: &str,
+    project_key_selected: bool,
+) -> String {
+    if project_key_selected {
+        project_key.to_string()
+    } else {
+        canonical_entity_id.to_string()
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -1177,6 +1193,22 @@ mod tests {
         assert!(error
             .to_string()
             .contains("must provide latitude and longitude together"));
+    }
+
+    #[test]
+    fn explicit_registration_selectors_preserve_each_project_mapping() {
+        assert_eq!(
+            source_entity_seed_key("society:shared", "PRM-PHASE-1", true),
+            "PRM-PHASE-1"
+        );
+        assert_eq!(
+            source_entity_seed_key("society:shared", "PRM-PHASE-2", true),
+            "PRM-PHASE-2"
+        );
+        assert_eq!(
+            source_entity_seed_key("society:shared", "PRM-PHASE-2", false),
+            "society:shared"
+        );
     }
 
     #[test]

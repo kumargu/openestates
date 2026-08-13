@@ -906,6 +906,7 @@ fn append_image_facts(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn append_slot_fact(
     entity_id: &str,
     fact_key: &'static str,
