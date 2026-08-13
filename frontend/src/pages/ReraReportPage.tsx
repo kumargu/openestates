@@ -21,6 +21,7 @@ import type {
   BuilderProjectRecord,
   PropertyDetailResponse,
   ProjectPlansView,
+  ReraBuyerComplaintSummary,
   ReraBuyerDocument,
   ReraBuyerFact,
   ReraBuyerFactSection,
@@ -406,7 +407,7 @@ function BuilderRecord({ portfolio }: { portfolio?: BuilderPortfolio }) {
   const otherProjects = portfolio?.projects.filter((project) => !project.current) ?? [];
   if (!portfolio || otherProjects.length === 0) return null;
   return (
-    <Section id="builder" title={`Other projects from ${portfolio.builder_name}`}>
+    <Section id="builder" title={`More ${portfolio.builder_name} projects in this catalog`}>
       <div className="rera-table-wrap" role="region" aria-label={`${portfolio.builder_name} projects`} tabIndex={0}>
         <table className="rera-table rera-builder-table">
           <thead>
@@ -434,6 +435,65 @@ function BuilderRecord({ portfolio }: { portfolio?: BuilderPortfolio }) {
           </tbody>
         </table>
       </div>
+    </Section>
+  );
+}
+
+function Complaints({
+  complaints,
+  fallback,
+}: {
+  complaints: ReraBuyerComplaintSummary[];
+  fallback?: ReraBuyerFactSection;
+}) {
+  if (complaints.length === 0 && !fallback?.facts.length) return null;
+  return (
+    <Section id="complaints" title="Complaints and orders">
+      {complaints.length > 0 ? (
+        <div className="rera-complaint-groups">
+          {complaints.map((complaint) => {
+            const themes = Object.entries(complaint.theme_counts)
+              .filter(([, count]) => count > 0)
+              .sort((left, right) => right[1] - left[1])
+              .slice(0, 4);
+            const subjects = complaint.sample_subjects?.filter((subject) => subject.trim()).slice(0, 3) ?? [];
+            const statusValue = (count: number) => {
+              if (complaint.status_counts_complete) return count.toLocaleString("en-IN");
+              return count > 0 ? `${count.toLocaleString("en-IN")}+` : "—";
+            };
+            return (
+              <article key={complaint.scope || "complaints"}>
+                <h3>{complaint.scope === "promoter" ? "Promoter" : "Project"}</h3>
+                <dl className="rera-metric-grid">
+                  <div><dt>Recorded</dt><dd>{complaint.total.toLocaleString("en-IN")}</dd></div>
+                  <div><dt>Open</dt><dd>{statusValue(complaint.open)}</dd></div>
+                  <div><dt>Disposed</dt><dd>{statusValue(complaint.disposed)}</dd></div>
+                </dl>
+                {!complaint.status_counts_complete && complaint.rows_parsed > 0 && (
+                  <p className="rera-complaint-coverage">
+                    Status and themes cover {complaint.rows_parsed.toLocaleString("en-IN")} returned cases.
+                  </p>
+                )}
+                {themes.length > 0 && (
+                  <ul className="rera-theme-list">
+                    {themes.map(([theme, count]) => (
+                      <li key={theme}>{humanize(theme)} · {count.toLocaleString("en-IN")}</li>
+                    ))}
+                  </ul>
+                )}
+                {subjects.length > 0 && (
+                  <details className="rera-complaint-subjects">
+                    <summary>Example filed subjects</summary>
+                    <ul>{subjects.map((subject) => <li key={subject}>{subject}</li>)}</ul>
+                  </details>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <BuyerFactList facts={fallback?.facts ?? []} />
+      )}
     </Section>
   );
 }
@@ -606,54 +666,75 @@ function Plans({
 
 function Documents({
   documents,
+  evidence,
   surface,
 }: {
   documents: ReraBuyerDocument[];
+  evidence: ReraEvidenceProjection;
   surface?: ReraReportSurfaceSection;
 }) {
-  const orderedDocuments = useMemo(() => orderReraDocuments(documents), [documents]);
-  const itemsPerPage = Math.max(1, surface?.items_per_page ?? 10);
-  const [page, setPage] = useState(0);
-  const pageCount = Math.max(1, Math.ceil(orderedDocuments.length / itemsPerPage));
-  const visiblePage = Math.min(page, pageCount - 1);
+  const grouped = useMemo(() => {
+    const filingDocuments = evidence.entities
+      .filter((entity) => entity.entity_type === "document")
+      .flatMap((entity): ReraBuyerDocument[] => {
+        const claims = evidence.claims.filter((claim) => claim.subject.entity_id === entity.entity_id);
+        const urlClaim = claims.find((claim) => claim.predicate === "official_document_url");
+        if (urlClaim?.value.type !== "document_ref") return [];
+        const url = httpUrl(urlClaim.value.data);
+        if (!url) return [];
+        const period = ["document_quarter", "document_financial_year"]
+          .map((predicate) => claims.find((claim) => claim.predicate === predicate))
+          .filter((claim): claim is ReraEvidenceClaim => Boolean(claim))
+          .map((claim) => claimValueText(claim.value))
+          .filter(Boolean)
+          .join(" · ");
+        return [{
+          id: entity.entity_id,
+          label: [period, entity.label ?? "Filed document"].filter(Boolean).join(" · "),
+          group: "quarterly_filings",
+          group_label: "Quarterly filings",
+          url,
+        }];
+      });
+    const unique = new Map<string, ReraBuyerDocument>();
+    for (const document of [...documents, ...filingDocuments]) {
+      if (document.group.toLowerCase() !== "plans") unique.set(document.url, document);
+    }
+    const groups = new Map<string, { label: string; items: ReraBuyerDocument[] }>();
+    for (const document of unique.values()) {
+      const key = document.group || "documents";
+      const group = groups.get(key);
+      groups.set(key, {
+        label: document.group_label || humanize(key),
+        items: [...(group?.items ?? []), document],
+      });
+    }
+    return [...groups.entries()]
+      .map(([key, group]) => ({ ...group, key, items: orderReraDocuments(group.items) }))
+      .sort((left, right) => right.items.length - left.items.length || left.label.localeCompare(right.label));
+  }, [documents, evidence]);
 
-  if (orderedDocuments.length === 0) return null;
-  const visibleDocuments = orderedDocuments.slice(
-    visiblePage * itemsPerPage,
-    (visiblePage + 1) * itemsPerPage,
-  );
+  if (grouped.length === 0) return null;
 
   return (
     <Section id="documents" title={surface?.title ?? "Approvals and documents"}>
-      <ul className="rera-document-list">
-        {visibleDocuments.map((document) => (
-          <li key={document.id}>
-            <span>{document.group_label}</span>
-            <a href={document.url} target="_blank" rel="noreferrer">{document.label}</a>
-          </li>
+      <div className="rera-document-groups">
+        {grouped.map(({ key, label, items }) => (
+          <details key={key}>
+            <summary>
+              <span>{label}</span>
+              <strong>{items.length.toLocaleString("en-IN")} {items.length === 1 ? "document" : "documents"}</strong>
+            </summary>
+            <ul>
+              {items.map((document) => (
+                <li key={`${document.id}:${document.url}`}>
+                  <a href={document.url} target="_blank" rel="noreferrer">{document.label}</a>
+                </li>
+              ))}
+            </ul>
+          </details>
         ))}
-      </ul>
-      {pageCount > 1 && (
-        <nav className="rera-document-pager" aria-label="Document pages">
-          <button
-            type="button"
-            aria-label="Previous documents"
-            disabled={visiblePage === 0}
-            onClick={() => setPage(Math.max(0, visiblePage - 1))}
-          >
-            Previous
-          </button>
-          <span>{visiblePage + 1} / {pageCount}</span>
-          <button
-            type="button"
-            aria-label="Next documents"
-            disabled={visiblePage + 1 >= pageCount}
-            onClick={() => setPage(Math.min(pageCount - 1, visiblePage + 1))}
-          >
-            Next
-          </button>
-        </nav>
-      )}
+      </div>
     </Section>
   );
 }
@@ -686,20 +767,40 @@ function FiledSchedules({ sections }: { sections: ReraScheduleSection[] }) {
   );
 }
 
-function WaterDeclarations({
+function Declarations({
   report,
+  finance,
   water,
 }: {
   report: ReraEvidenceReportResponse;
+  finance?: ReraBuyerFactSection;
   water?: ReraBuyerFactSection;
 }) {
+  const financeSurface = surfaceById(report.surface.sections, "finance");
   const waterSurface = surfaceById(report.surface.sections, "water");
+  const hasFinance = Boolean(finance?.facts.length || (financeSurface && displayFactsForSection(financeSurface, report.evidence).length));
   const hasWater = Boolean(water?.facts.length || (waterSurface && displayFactsForSection(waterSurface, report.evidence).length));
-  if (!hasWater) return null;
+  if (!hasFinance && !hasWater) return null;
   return (
-    <Section id="water" title="Water and service declarations">
-      <BuyerFactList facts={water?.facts ?? []} />
-      <ClaimFactList section={waterSurface} evidence={report.evidence} />
+    <Section id="declarations" title="Filed declarations">
+      <div className="rera-declaration-groups">
+        {hasFinance && (
+          <div>
+            <h3>Legal and financial</h3>
+            {finance?.facts.length
+              ? <BuyerFactList facts={finance.facts} />
+              : <ClaimFactList section={financeSurface} evidence={report.evidence} />}
+          </div>
+        )}
+        {hasWater && (
+          <div>
+            <h3>Water and services</h3>
+            {water?.facts.length
+              ? <BuyerFactList facts={water.facts} />
+              : <ClaimFactList section={waterSurface} evidence={report.evidence} />}
+          </div>
+        )}
+      </div>
     </Section>
   );
 }
@@ -793,13 +894,19 @@ function ReraReportContent({ id }: { id: string }) {
             plans={detail.plans}
             surface={surfaceById(report.surface.sections, "plans")}
           />
+          <Complaints
+            complaints={buyer?.complaints ?? []}
+            fallback={sectionById(factSections, "complaints")}
+          />
+          <Declarations
+            report={report}
+            finance={sectionById(factSections, "finance")}
+            water={sectionById(factSections, "water")}
+          />
           <Documents
             documents={buyer?.documents ?? []}
+            evidence={report.evidence}
             surface={surfaceById(report.surface.sections, "documents")}
-          />
-          <WaterDeclarations
-            report={report}
-            water={sectionById(factSections, "water")}
           />
           <FiledSchedules sections={buyer?.schedules ?? []} />
           {sectionById(factSections, "location")?.facts.length ? (

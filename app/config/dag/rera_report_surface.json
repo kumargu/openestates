@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "description": "Buyer-journey RERA report with a high-confidence, source-attributed regulatory chronology. Only accepted public evidence enters the report.",
   "coverage_note": "High Court proceedings are outside this release.",
   "regulatory_event_order": [
@@ -202,6 +202,32 @@
       "fact_keys": ["floor_plan_asset_count", "site_plan_asset_count"]
     },
     {
+      "id": "complaints",
+      "title": "Complaints and orders",
+      "rank": 5,
+      "renderer": "timeline",
+      "selectors": [
+        { "key": "claim:complaint_*", "label": "Complaint record" },
+        { "key": "claim:authority_order_*", "label": "Authority order" }
+      ],
+      "empty_behavior": "omit",
+      "key_prefixes": ["complaint_", "authority_order_", "rera_complaint", "rera_project_complaint", "rera_promoter_complaint"],
+      "fact_keys": ["rera_complaints_count", "rera_complaints_resolved_pct"]
+    },
+    {
+      "id": "finance",
+      "title": "Filed legal and financial declarations",
+      "rank": 6,
+      "renderer": "fact_list",
+      "selectors": [
+        { "key": "claim:finance_*", "label": "Financial declaration" },
+        { "key": "claim:declared_charge_*", "label": "Charge" }
+      ],
+      "empty_behavior": "omit",
+      "key_prefixes": ["finance_", "declared_charge_"],
+      "fact_keys": ["rera_land_litigation", "rera_has_borrowing", "rera_has_mortgage", "rera_escrow_bank"]
+    },
+    {
       "id": "documents",
       "title": "Approvals and documents",
       "rank": 8,
@@ -220,7 +246,7 @@
     {
       "id": "water",
       "title": "Water and service declarations",
-      "rank": 6,
+      "rank": 7,
       "renderer": "fact_list",
       "selectors": [
         { "key": "claim:declared_water_source", "label": "Declared water source" },
@@ -228,6 +254,18 @@
       ],
       "empty_behavior": "omit",
       "fact_keys": ["declared_water_source", "declared_water_local_authority"]
+    },
+    {
+      "id": "builder",
+      "title": "Builder track record",
+      "rank": 10,
+      "renderer": "fact_list",
+      "selectors": [
+        { "key": "claim:registry_promoter_name", "label": "Promoter" }
+      ],
+      "empty_behavior": "omit",
+      "key_prefixes": ["rera_builder_"],
+      "fact_keys": ["rera_promoter_name"]
     },
     {
       "id": "location",
@@ -267,7 +305,21 @@
     { "fact_keys": ["rera_original_completion_date"], "label": "Original completion" },
     { "fact_keys": ["rera_completion_date"], "label": "Current completion" },
     { "fact_keys": ["rera_delay_months"], "label": "Schedule movement" },
+    { "fact_keys": ["rera_builder_projects_count"], "label": "Projects reported" },
+    { "fact_keys": ["rera_builder_states"], "label": "States reported" },
+    { "fact_keys": ["rera_builder_revocations"], "label": "Revocations recorded" },
     { "fact_keys": ["rera_promoter_name"], "label": "Promoter" },
+    { "fact_keys": ["rera_complaints_count"], "label": "Complaints" },
+    { "fact_keys": ["rera_complaints_resolved_pct"], "label": "Complaints disposed" },
+    { "fact_keys": ["rera_project_complaints_count"], "label": "Project complaints" },
+    { "fact_keys": ["rera_project_complaints_open_count"], "label": "Open project complaints" },
+    { "fact_keys": ["rera_project_complaints_disposed_count"], "label": "Disposed project complaints" },
+    { "fact_keys": ["rera_promoter_complaints_count"], "label": "Promoter complaints" },
+    { "fact_keys": ["rera_promoter_complaints_open_count"], "label": "Open promoter complaints" },
+    { "fact_keys": ["rera_promoter_complaints_disposed_count"], "label": "Disposed promoter complaints" },
+    { "fact_keys": ["rera_land_litigation"], "label": "Land litigation declared" },
+    { "fact_keys": ["rera_has_borrowing"], "label": "Borrowing declared" },
+    { "fact_keys": ["rera_has_mortgage"], "label": "Mortgage declared" },
     { "fact_keys": ["rera_escrow_bank"], "label": "Escrow bank" },
     { "fact_keys": ["rera_affidavit_document_count"], "label": "Affidavits" },
     { "fact_keys": ["rera_legal_land_document_count"], "label": "Land records" },

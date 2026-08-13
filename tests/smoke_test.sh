@@ -198,19 +198,19 @@ if [[ -n "$FIRST_ID" ]]; then
   if [[ -n "$RERA_ID" ]]; then
     check "Property RERA dossier returns report fields" \
       "${BASE}/api/properties/${RERA_ID}/rera" \
-      'has("source", "fact_sections", "compare_items", "complaint_sections", "document_sections", "timeline") and (.source | has("registered")) and (.fact_sections | type == "array")' \
-      "expected source and flexible RERA fact sections"
+      'has("availability") and has("evidence") and has("surface") and has("buyer_report") and (.buyer_report.fact_sections | type == "array")' \
+      "expected evidence, surface config, and buyer report"
 
     check "Property RERA dossier facts have clean labels" \
       "${BASE}/api/properties/${RERA_ID}/rera" \
-      '([.fact_sections[]?.facts[]? | select(((.label // "") | test("_")) or ((.label // "") | test("source-backed|extracted|pipeline|debug|RERA file"; "i")) or ((.value // "") == ""))] | length) == 0' \
+      '([.buyer_report.fact_sections[]?.facts[]? | select(((.label // "") | test("_")) or ((.label // "") | test("source-backed|extracted|pipeline|debug|RERA file"; "i")) or ((.value // "") == ""))] | length) == 0' \
       "expected buyer-facing fact labels without raw keys or empty values"
 
     RERA_DOC_ID=""
     while IFS= read -r CANDIDATE_ID; do
       [[ -z "$CANDIDATE_ID" ]] && continue
       if curl -s "${BASE}/api/properties/${CANDIDATE_ID}/rera" 2>/dev/null \
-        | jq -e '([.document_sections[]?.items[]? | select((.source_url // "") | test("^https?://"))] | length) > 0' >/dev/null 2>&1; then
+        | jq -e '([.buyer_report.documents[]? | select((.url // "") | test("^https?://"))] | length) > 0' >/dev/null 2>&1; then
         RERA_DOC_ID="$CANDIDATE_ID"
         break
       fi
@@ -219,7 +219,7 @@ if [[ -n "$FIRST_ID" ]]; then
     if [[ -n "$RERA_DOC_ID" ]]; then
       check "Property RERA dossier exposes official document links" \
         "${BASE}/api/properties/${RERA_DOC_ID}/rera" \
-        '([.document_sections[]?.items[]? | select((.source_url // "") | test("^https?://"))] | length) > 0' \
+        '([.buyer_report.documents[]? | select((.url // "") | test("^https?://"))] | length) > 0' \
         "expected at least one usable official document link"
     else
       echo "  $(green "✓") Skipping RERA document link check — no linked RERA document in this bundle"
@@ -227,6 +227,26 @@ if [[ -n "$FIRST_ID" ]]; then
   else
     echo "  $(green "✓") Skipping RERA dossier shape — no RERA-backed property in this bundle"
   fi
+
+  check "Waterford keeps complaint analysis and catalog builder context" \
+    "${BASE}/api/properties/discovered-prestige-waterford-3bhk/rera" \
+    '(.buyer_report.complaints | length >= 2) and ([.buyer_report.complaints[].theme_counts | length] | add > 0) and (.buyer_report.builder_portfolio.projects | length > 1)' \
+    "expected scoped complaints, themes, and related catalog projects"
+
+  check "Elysium keeps filed legal and finance declarations" \
+    "${BASE}/api/properties/discovered-elysium-at-brigade-cornerstone-utopia-3bhk/rera" \
+    '([.buyer_report.fact_sections[] | select(.id == "finance") | .facts[].key] | index("rera_land_litigation") != null and index("rera_has_borrowing") != null)' \
+    "expected litigation and borrowing declarations"
+
+  check "Cloud Forest keeps quarterly progress and filing receipts" \
+    "${BASE}/api/properties/discovered-cloud-forest-3bhk/rera" \
+    '([.evidence.series[] | select(.series_type == "quarterly_inventory")] | length > 0) and ([.evidence.entities[] | select(.entity_type == "document")] | length > 0)' \
+    "expected quarterly series and filing documents"
+
+  check "Crimson keeps complaint context and promoted plans" \
+    "${BASE}/api/properties/discovered-brigade-lakefront-crimson-3bhk" \
+    '(.builder_portfolio.projects | length > 1) and (.plans.filed_plan_previews | length > 0)' \
+    "expected catalog builder context and a promoted plan preview"
 else
   echo "  $(red "✗") Skipping detail tests — no property ID available"
   FAIL=$((FAIL + 1))
