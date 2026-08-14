@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ApiRequestError,
   parseProofFocusParam,
   propertyDetailPath,
   propertySurfacePath,
@@ -30,6 +31,21 @@ const emptyMapContext: PropertyMapContext = {
   },
   places: [],
 };
+
+test("typed API errors preserve not-ready and not-found contracts", () => {
+  const unavailable = new ApiRequestError(
+    409,
+    "Conflict",
+    JSON.stringify({ error: "property_not_ready", reason_codes: ["missing_price"] }),
+  );
+  assert.equal(unavailable.status, 409);
+  assert.equal(unavailable.code, "property_not_ready");
+  assert.deepEqual(unavailable.reasonCodes, ["missing_price"]);
+
+  const notFound = new ApiRequestError(404, "Not Found", "");
+  assert.equal(notFound.status, 404);
+  assert.equal(notFound.code, null);
+});
 
 test("proof focus URL contract round-trips through detail and surface paths", () => {
   const focus: ProofFocus = {

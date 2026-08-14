@@ -18,6 +18,7 @@
 //! **Instances** (society:*, road:*, fact values) live in `data/lake/` Parquet only.
 //! See `app/config/coverage.json` for full audit.
 
+mod buyer_eligibility;
 mod community_themes;
 mod concern_taxonomy;
 mod evidence_sections;
@@ -31,6 +32,11 @@ mod search_guardrails;
 mod search_intent;
 mod ui_surfaces;
 
+pub use buyer_eligibility::{
+    buyer_eligibility_config, buyer_eligibility_path, load_buyer_eligibility,
+    load_buyer_eligibility_from_path, BuyerEligibilityFile, BuyerEligibilityRequirement,
+    BuyerSurfacePolicy,
+};
 pub use community_themes::{
     community_themes_config, community_themes_path, load_community_themes,
     load_community_themes_from_path, CommunityEmbeddingExpansion,

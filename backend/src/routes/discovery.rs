@@ -61,7 +61,7 @@ pub async fn discovery_home(State(state): State<Arc<AppState>>) -> Json<Discover
 
     let candidates: Vec<DiscoveryCandidate> = properties
         .iter()
-        .filter(|property| property.is_listable())
+        .filter(|property| property.is_eligible_for(crate::buyer_eligibility::DISCOVERY_SURFACE))
         .map(|property| {
             let card = enrich_property_card(property, &societies, &graph);
             let card = overlay_serving_google_reviews(card, &property.society_id, serving_facts);

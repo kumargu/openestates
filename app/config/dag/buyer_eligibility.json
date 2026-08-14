@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "description": "Versioned buyer-surface readiness policy. Missing media is observed until the catalog is rematerialized with the v2 media contract.",
+  "statusFields": {
+    "regulatory_status": ["rera_status", "registration_status"],
+    "lifecycle_status": ["project_status", "construction_status"],
+    "possession_status": ["possession_status"],
+    "possession_timing": ["possession_date", "possession_timing"],
+    "age_display": ["home_state_display"],
+    "conflict_state": ["status_conflict"]
+  },
+  "requirements": {
+    "identity": { "reasonCode": "missing_identity" },
+    "area": { "reasonCode": "missing_area" },
+    "price": { "reasonCode": "missing_price" },
+    "configuration": { "reasonCode": "missing_configuration" },
+    "lifecycle": { "reasonCode": "missing_lifecycle" },
+    "trusted_media": { "reasonCode": "missing_trusted_media" }
+  },
+  "surfaces": {
+    "discovery": { "required": ["identity", "area", "price", "configuration"] },
+    "search": { "required": ["identity", "area", "price", "configuration"] },
+    "recommendations": { "required": ["identity", "area", "price", "configuration"] },
+    "detail": { "required": ["identity", "area", "price", "configuration"] },
+    "compare": { "required": ["identity", "area", "price", "configuration"] },
+    "plan": { "required": ["identity", "area", "price", "configuration"] }
+  },
+  "observed": ["lifecycle", "trusted_media"]
+}

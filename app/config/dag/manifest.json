@@ -8,6 +8,7 @@
   },
   "includes": [
     "asset_registry.json",
+    "buyer_eligibility.json",
     "community_themes.json",
     "concern_taxonomy.json",
     "compaction_policies.json",

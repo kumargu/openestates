@@ -722,6 +722,10 @@ fn property(id: &str, area: &str, society_id: &str, bhk: u32, price: u64) -> Pro
         total_floors: 20,
         facing: "East".to_string(),
         possession_status: "Ready to Move".to_string(),
+        status: Default::default(),
+        buyer_eligibility: backend::buyer_eligibility::evaluate_signals(
+            backend::buyer_eligibility::BuyerEligibilitySignals::complete_without_media(),
+        ),
         metro_distance_mins: 8,
         maintenance_cost_monthly: 6_000,
         society_quality_score: Some(0.7),

@@ -58,6 +58,48 @@ check() {
   printf "  %s %s\n" "$(green "✓")" "$name"
 }
 
+check_status() {
+  local name="$1"
+  local url="$2"
+  local expected_status="$3"
+  local jq_expr="$4"
+  local desc="$5"
+
+  local http_code body result
+  http_code=$(curl -s -o /tmp/oe_test_body.json -w "%{http_code}" "$url" 2>/dev/null) || {
+    FAIL=$((FAIL + 1))
+    ERRORS+="  FAIL: $name — connection refused (is backend running on port $PORT?)\n"
+    printf "  %s %s — connection refused\n" "$(red "✗")" "$name"
+    return
+  }
+  body=$(cat /tmp/oe_test_body.json)
+  result=$(echo "$body" | jq -r "$jq_expr" 2>/dev/null) || result="jq_error"
+  if [[ "$http_code" != "$expected_status" || "$result" == "false" || "$result" == "null" || "$result" == "jq_error" || -z "$result" ]]; then
+    FAIL=$((FAIL + 1))
+    ERRORS+="  FAIL: $name — expected HTTP $expected_status and $desc\n"
+    printf "  %s %s — expected HTTP %s and %s\n" "$(red "✗")" "$name" "$expected_status" "$desc"
+    return
+  fi
+  PASS=$((PASS + 1))
+  printf "  %s %s\n" "$(green "✓")" "$name"
+}
+
+check_text_absent() {
+  local name="$1"
+  local url="$2"
+  local forbidden="$3"
+  local body
+  body=$(curl -s "$url" 2>/dev/null) || body=""
+  if [[ -z "$body" || "$body" == *"$forbidden"* ]]; then
+    FAIL=$((FAIL + 1))
+    ERRORS+="  FAIL: $name — response was empty or contained $forbidden\n"
+    printf "  %s %s\n" "$(red "✗")" "$name"
+    return
+  fi
+  PASS=$((PASS + 1))
+  printf "  %s %s\n" "$(green "✓")" "$name"
+}
+
 check_post() {
   local name="$1"
   local url="$2"
@@ -150,6 +192,8 @@ check "GET /api/properties items have transparency_tags" \
   '.[0] | has("transparency_tags")' \
   "expected transparency_tags field"
 
+PROP_COUNT=$(curl -s "${BASE}/api/properties" 2>/dev/null | jq 'length' 2>/dev/null || echo "0")
+
 # ── Property Detail ──
 echo ""
 echo "Property Detail"
@@ -233,15 +277,58 @@ if [[ -n "$FIRST_ID" ]]; then
     '(.buyer_report.complaints | length >= 2) and ([.buyer_report.complaints[].theme_counts | length] | add > 0) and (.buyer_report.builder_portfolio.projects | length > 1)' \
     "expected scoped complaints, themes, and related catalog projects"
 
-  check "Elysium keeps filed legal and finance declarations" \
-    "${BASE}/api/properties/discovered-elysium-at-brigade-cornerstone-utopia-3bhk/rera" \
-    '([.buyer_report.fact_sections[] | select(.id == "finance") | .facts[].key] | index("rera_land_litigation") != null and index("rera_has_borrowing") != null)' \
-    "expected litigation and borrowing declarations"
+  FINANCE_RERA_ID="missing-finance-rera-fixture"
+  PROGRESS_RERA_ID="missing-progress-rera-fixture"
+  while IFS= read -r candidate_id; do
+    candidate_report=$(curl -s "${BASE}/api/properties/${candidate_id}/rera")
+    if [[ "$FINANCE_RERA_ID" == "missing-finance-rera-fixture" ]] && echo "$candidate_report" | jq -e '([.buyer_report.fact_sections[]? | select(.id == "finance") | .facts[].key] | index("rera_land_litigation") != null and index("rera_has_borrowing") != null)' >/dev/null 2>&1; then
+      FINANCE_RERA_ID="$candidate_id"
+    fi
+    if [[ "$PROGRESS_RERA_ID" == "missing-progress-rera-fixture" ]] && echo "$candidate_report" | jq -e '([.evidence.series[]? | select(.series_type == "quarterly_inventory")] | length > 0) and ([.evidence.entities[]? | select(.entity_type == "document")] | length > 0)' >/dev/null 2>&1; then
+      PROGRESS_RERA_ID="$candidate_id"
+    fi
+    if [[ "$FINANCE_RERA_ID" != "missing-finance-rera-fixture" && "$PROGRESS_RERA_ID" != "missing-progress-rera-fixture" ]]; then
+      break
+    fi
+  done < <(curl -s "${BASE}/api/properties" | jq -r '.[].id')
 
-  check "Cloud Forest keeps quarterly progress and filing receipts" \
+  check "An eligible RERA record keeps filed legal and finance declarations" \
+    "${BASE}/api/properties/${FINANCE_RERA_ID}/rera" \
+    '([.buyer_report.fact_sections[]? | select(.id == "finance") | .facts[].key] | index("rera_land_litigation") != null and index("rera_has_borrowing") != null)' \
+    "expected litigation and borrowing declarations on an eligible home"
+
+  check "An eligible RERA record keeps quarterly progress and filing receipts" \
+    "${BASE}/api/properties/${PROGRESS_RERA_ID}/rera" \
+    '([.evidence.series[]? | select(.series_type == "quarterly_inventory")] | length > 0) and ([.evidence.entities[]? | select(.entity_type == "document")] | length > 0)' \
+    "expected quarterly series and filing documents on an eligible home"
+
+  check_status "Unconfigured Elysium RERA route returns not-ready" \
+    "${BASE}/api/properties/discovered-elysium-at-brigade-cornerstone-utopia-unconfigured/rera" \
+    "409" \
+    '(.error == "property_not_ready") and (.reason_codes | index("missing_configuration") != null)' \
+    "a typed missing-configuration reason"
+
+  check_status "Unpriced Cloud Forest RERA route returns not-ready" \
     "${BASE}/api/properties/discovered-cloud-forest-3bhk/rera" \
-    '([.evidence.series[] | select(.series_type == "quarterly_inventory")] | length > 0) and ([.evidence.entities[] | select(.entity_type == "document")] | length > 0)' \
-    "expected quarterly series and filing documents"
+    "409" \
+    '(.error == "property_not_ready") and (.reason_codes | index("missing_price") != null)' \
+    "a typed missing-price reason"
+
+  check_status "Incomplete property surfaces return typed not-ready reasons" \
+    "${BASE}/api/properties/discovered-cloud-forest-3bhk/surfaces" \
+    "409" \
+    '(.error == "property_not_ready") and (.reason_codes | index("missing_price") != null)' \
+    "a typed surface eligibility reason"
+
+  check_status "Incomplete property interest count returns not-ready" \
+    "${BASE}/api/properties/discovered-cloud-forest-3bhk/interests/count" \
+    "409" \
+    '(.error == "property_not_ready") and (.reason_codes | index("missing_price") != null)' \
+    "a typed interest eligibility reason"
+
+  check_text_absent "Sitemap excludes incomplete property URLs" \
+    "${BASE}/api/sitemap.xml" \
+    "/property/discovered-cloud-forest-3bhk"
 
   check "Crimson keeps complaint context and promoted plans" \
     "${BASE}/api/properties/discovered-brigade-lakefront-crimson-3bhk" \
@@ -342,8 +429,8 @@ check "Area items have required fields" \
 
 check "GET /api/areas/tracker returns markets" \
   "${BASE}/api/areas/tracker" \
-  '.total_areas > 0 and (.markets | type == "array" and length > 0) and (.markets[0] | has("id", "name", "listing_count", "avg_price_per_sqft", "price_min", "price_max", "bhks", "ready_to_move", "near_metro", "top_builder", "societies", "demand_score", "recent_searches"))' \
-  "expected backend area tracker market summaries"
+  ".total_listings == ${PROP_COUNT} and .total_areas > 0 and (.markets | type == \"array\" and length > 0 and all(.[]; all(.bhks[]; . > 0))) and (.markets[0] | has(\"id\", \"name\", \"listing_count\", \"avg_price_per_sqft\", \"price_min\", \"price_max\", \"bhks\", \"ready_to_move\", \"near_metro\", \"top_builder\", \"societies\", \"demand_score\", \"recent_searches\"))" \
+  "expected eligible-only area summaries without synthetic BHK zero"
 
 # ── Area Detail ──
 echo ""
@@ -465,7 +552,6 @@ check "GET /api/shortlist returns object with array" \
 # ── Cross-cutting: Data Consistency ──
 echo ""
 echo "Data Consistency"
-PROP_COUNT=$(curl -s "${BASE}/api/properties" 2>/dev/null | jq 'length' 2>/dev/null || echo "0")
 if [[ "$PROP_COUNT" -gt 0 ]]; then
   PASS=$((PASS + 1))
   printf "  %s Properties count = %s (consistent)\n" "$(green "✓")" "$PROP_COUNT"

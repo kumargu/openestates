@@ -331,7 +331,7 @@ fn sibling_config_cards(
     let mut siblings: Vec<SearchResultCard> = properties
         .iter()
         .filter(|property| {
-            property.is_listable()
+            property.is_eligible_for(crate::buyer_eligibility::SEARCH_SURFACE)
                 && !exclude_ids.contains(&property.id)
                 && property.bhk != asked_bhk
                 && property_belongs_to_society(
@@ -417,6 +417,8 @@ fn sibling_result_card(
             transparency_tags: property.transparency_tags.iter().take(3).cloned().collect(),
             description_summary: property.description_summary.clone(),
             possession_status: property.possession_status.clone(),
+            status: property.status.clone(),
+            buyer_eligibility: property.buyer_eligibility.clone(),
             metro_distance_mins: property.metro_distance_mins,
             floor: property.floor,
             total_floors: property.total_floors,
@@ -497,6 +499,10 @@ mod tests {
                 transparency_tags: Vec::new(),
                 description_summary: String::new(),
                 possession_status: "Ready".to_string(),
+                status: Default::default(),
+                buyer_eligibility: crate::buyer_eligibility::evaluate_signals(
+                    crate::buyer_eligibility::BuyerEligibilitySignals::complete_without_media(),
+                ),
                 metro_distance_mins: 10,
                 floor: 5,
                 total_floors: 20,
@@ -548,6 +554,10 @@ mod tests {
             total_floors: 18,
             facing: "East".to_string(),
             possession_status: "Ready".to_string(),
+            status: Default::default(),
+            buyer_eligibility: crate::buyer_eligibility::evaluate_signals(
+                crate::buyer_eligibility::BuyerEligibilitySignals::complete_without_media(),
+            ),
             metro_distance_mins: 12,
             maintenance_cost_monthly: 5000,
             society_quality_score: None,

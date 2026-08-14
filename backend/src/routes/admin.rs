@@ -39,6 +39,21 @@ pub async fn data_health(
     }
 
     let bundle = state.serving_bundle.read().await;
+    let properties = state.properties.read().await;
+    let mut eligible_by_surface = BTreeMap::<String, usize>::new();
+    let mut ineligible_by_reason = BTreeMap::<String, usize>::new();
+    for property in properties.iter() {
+        let mut property_reasons = std::collections::BTreeSet::new();
+        for (surface, decision) in &property.buyer_eligibility.surfaces {
+            if decision.eligible {
+                *eligible_by_surface.entry(surface.clone()).or_default() += 1;
+            }
+            property_reasons.extend(decision.reason_codes.iter().cloned());
+        }
+        for reason in property_reasons {
+            *ineligible_by_reason.entry(reason).or_default() += 1;
+        }
+    }
     let payload = bundle.as_ref().map(|loaded| {
         let all_facts = loaded.fact_index.all_facts();
         let reddit_theme_fact_count = all_facts
@@ -54,6 +69,12 @@ pub async fn data_health(
 
         serde_json::json!({
             "serving_bundle": serving_bundle_summary(loaded),
+            "buyer_eligibility": {
+                "policy_version": properties.first().map(|property| property.buyer_eligibility.policy_version),
+                "candidate_count": properties.len(),
+                "eligible_by_surface": eligible_by_surface,
+                "ineligible_by_reason": ineligible_by_reason,
+            },
             "reddit_theme": {
                 "fact_count": reddit_theme_fact_count,
                 "entity_count": reddit_theme_entity_count,

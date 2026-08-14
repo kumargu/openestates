@@ -16,11 +16,6 @@ import type {
   SurfaceSceneResponse,
 } from "./types.ts";
 import { getFixtureResponse } from "./dev-fixtures.ts";
-import {
-  filterListableProperties,
-  filterListableSearchResponse,
-  isListableProperty,
-} from "./property-filters.ts";
 
 const META_ENV = (import.meta as ImportMeta & {
   env?: Record<string, string | boolean | undefined>;
@@ -34,6 +29,31 @@ const inFlightSearches = new Map<string, Promise<SearchResponse>>();
 type ApiFetchOptions = {
   signal?: AbortSignal;
 };
+
+type ApiErrorPayload = {
+  error?: string;
+  reason_codes?: string[];
+};
+
+export class ApiRequestError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+  readonly reasonCodes: string[];
+
+  constructor(status: number, statusText: string, body: string) {
+    let payload: ApiErrorPayload = {};
+    try {
+      payload = JSON.parse(body) as ApiErrorPayload;
+    } catch {
+      // Non-JSON upstream failures still retain their HTTP status.
+    }
+    super(payload.error || body || statusText || `Request failed (${status})`);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.code = payload.error ?? null;
+    this.reasonCodes = Array.isArray(payload.reason_codes) ? payload.reason_codes : [];
+  }
+}
 
 function getDevFixture<T>(path: string): T | null {
   if (!ENABLE_DEV_FIXTURES) return null;
@@ -53,9 +73,7 @@ async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promis
       if (fixture !== null) return fixture;
 
       const text = await res.text().catch(() => "");
-      throw new Error(
-        `API ${res.status}: ${text || res.statusText}`
-      );
+      throw new ApiRequestError(res.status, res.statusText, text);
     }
     return res.json();
   } catch (error) {
@@ -77,7 +95,7 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     if (fixture !== null) return fixture;
 
     const text = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+    throw new ApiRequestError(res.status, res.statusText, text);
   }
   return res.json();
 }
@@ -94,7 +112,7 @@ export function getHealth(): Promise<{
 }
 
 export function getProperties(options?: ApiFetchOptions): Promise<PropertyCard[]> {
-  return fetchJson<PropertyCard[]>("/api/properties", options).then(filterListableProperties);
+  return fetchJson<PropertyCard[]>("/api/properties", options);
 }
 
 export function getProperty(id: string, options?: ApiFetchOptions): Promise<PropertyDetailResponse> {
@@ -197,7 +215,6 @@ export function searchProperties(query: string): Promise<SearchResponse> {
   if (existing) return existing;
 
   const request = fetchJson<SearchResponse>(`/api/search?q=${encodeURIComponent(query)}`)
-    .then(filterListableSearchResponse)
     .finally(() => {
       if (inFlightSearches.get(key) === request) {
         inFlightSearches.delete(key);
@@ -208,13 +225,7 @@ export function searchProperties(query: string): Promise<SearchResponse> {
 }
 
 export function getDiscovery(options?: ApiFetchOptions): Promise<DiscoveryResponse> {
-  return fetchJson<DiscoveryResponse>("/api/discovery", options).then((response) => ({
-    ...response,
-    shelves: response.shelves.map((shelf) => ({
-      ...shelf,
-      cards: shelf.cards.filter((card) => isListableProperty(card.property)),
-    })),
-  }));
+  return fetchJson<DiscoveryResponse>("/api/discovery", options);
 }
 
 export type PlatformStats = {

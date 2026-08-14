@@ -71,11 +71,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let properties = properties_from_serving_bundle(&bundle);
+    let property_baseline = PropertyBaseline::from_properties(&properties);
     let selected_facts = selected_fact_rows(&bundle, &options);
     let profile = ServingBundleProfile {
         bundle_version: bundle.manifest.bundle_version.clone(),
         entity_count: bundle.entities.len(),
         property_count: properties.len(),
+        property_baseline,
         fact_count: bundle.manifest.fact_count,
         search_metadata_count: bundle.manifest.search_metadata_count,
         fact_keys,
@@ -95,11 +97,75 @@ struct ServingBundleProfile {
     bundle_version: String,
     entity_count: usize,
     property_count: usize,
+    property_baseline: PropertyBaseline,
     fact_count: u64,
     search_metadata_count: u64,
     fact_keys: Vec<FactKeyStats>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     selected_facts: Vec<SelectedFactRow>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+struct PropertyBaseline {
+    missing_title: usize,
+    missing_area: usize,
+    missing_price: usize,
+    missing_configuration: usize,
+    missing_lifecycle: usize,
+    missing_media: usize,
+    regulatory_approved: usize,
+    lifecycle_approved: usize,
+    approved_as_possession_status: usize,
+    eligible_by_surface: BTreeMap<String, usize>,
+    ineligible_reason_counts: BTreeMap<String, usize>,
+}
+
+impl PropertyBaseline {
+    fn from_properties(properties: &[backend::models::Property]) -> Self {
+        properties
+            .iter()
+            .fold(Self::default(), |mut counts, property| {
+                counts.missing_title += usize::from(property.title.trim().is_empty());
+                counts.missing_area += usize::from(property.area.trim().is_empty());
+                counts.missing_price += usize::from(property.price == 0);
+                counts.missing_configuration += usize::from(property.bhk == 0);
+                counts.missing_lifecycle += usize::from(property.status.lifecycle.is_none());
+                counts.missing_media += usize::from(
+                    property.media.iter().all(|asset| !asset.hero_eligible)
+                        && property.hero_image.trim().is_empty(),
+                );
+                counts.approved_as_possession_status +=
+                    usize::from(property.possession_status.eq_ignore_ascii_case("approved"));
+                counts.regulatory_approved += usize::from(
+                    property
+                        .status
+                        .regulatory
+                        .as_ref()
+                        .is_some_and(|status| status.0.eq_ignore_ascii_case("approved")),
+                );
+                counts.lifecycle_approved += usize::from(
+                    property
+                        .status
+                        .lifecycle
+                        .as_ref()
+                        .is_some_and(|status| status.0.eq_ignore_ascii_case("approved")),
+                );
+                let mut property_reasons = BTreeSet::new();
+                for (surface, decision) in &property.buyer_eligibility.surfaces {
+                    if decision.eligible {
+                        *counts
+                            .eligible_by_surface
+                            .entry(surface.clone())
+                            .or_default() += 1;
+                    }
+                    property_reasons.extend(decision.reason_codes.iter().cloned());
+                }
+                for reason in property_reasons {
+                    *counts.ineligible_reason_counts.entry(reason).or_default() += 1;
+                }
+                counts
+            })
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

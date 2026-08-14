@@ -36,7 +36,11 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
       subtitle: "This property could not be loaded right now.",
       actions: [{ label: "Explore", path: "/" }],
     },
-    empty: { title: "No details available", subtitle: "This property doesn't have detailed information yet." },
+    empty: {
+      title: "No details available",
+      subtitle: "This property doesn't have detailed information yet.",
+      actions: [{ label: "Explore", path: "/" }],
+    },
     not_found: {
       title: "Property not found",
       subtitle: "This listing may no longer be available or the link may be incorrect.",

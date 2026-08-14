@@ -18,6 +18,7 @@ import type {
   SurfaceSceneResponse,
 } from "../lib/types.ts";
 import {
+  ApiRequestError,
   getProperties,
   getProperty,
   getPropertyRecommendations,
@@ -213,6 +214,8 @@ function propertyToCard(data: PropertyDetailResponse): PropertyCard {
     google_reviews_url:
       data.external_reviews?.google_reviews_url ?? society?.google_reviews_url,
     root_source: data.root_source,
+    status: p.status,
+    buyer_eligibility: p.buyer_eligibility,
     project_status: data.project_status,
     project_status_display: data.project_status_display,
     home_state_display: data.home_state_display,
@@ -862,6 +865,7 @@ function MicroMarketTracker({
 }
 
 function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
+  const location = [p.area, p.city].map((part) => part.trim()).filter(Boolean).join(", ");
   const sizeDescription = hasKnownNumber(p.carpet_area_sqft)
     ? `${p.carpet_area_sqft} sqft`
     : "available configuration";
@@ -871,7 +875,7 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
     name: p.title,
     description:
       p.description_summary ||
-      `${p.bhk} BHK, ${sizeDescription} in ${p.area}, ${p.city}`,
+      `${p.bhk} BHK, ${sizeDescription} in ${location}`,
     url: `https://openestates.in/property/${p.id}`,
     offers: {
       "@type": "Offer",
@@ -881,7 +885,7 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
     address: {
       "@type": "PostalAddress",
       addressLocality: p.area,
-      addressRegion: p.city,
+      ...(p.city.trim() ? { addressRegion: p.city } : {}),
     },
     numberOfRooms: p.bhk,
   };
@@ -938,7 +942,7 @@ function PropertyPageBody({
   const [recommendationStatus, setRecommendationStatus] =
     useState<RecommendationStatus>("pending");
   const [status, setStatus] = useState<
-    "loading" | "error" | "not_found" | "ok"
+    "loading" | "error" | "not_found" | "unavailable" | "ok"
   >("loading");
 
   useEffect(() => {
@@ -950,9 +954,15 @@ function PropertyPageBody({
         setData(d);
         setStatus("ok");
       })
-      .catch((err: Error) => {
+      .catch((error: unknown) => {
         if (cancelled) return;
-        setStatus(err.message.includes("404") ? "not_found" : "error");
+        setStatus(
+          error instanceof ApiRequestError && error.code === "property_not_ready"
+            ? "unavailable"
+            : error instanceof ApiRequestError && error.status === 404
+              ? "not_found"
+              : "error",
+        );
       });
 
     return () => {
@@ -1095,11 +1105,23 @@ function PropertyPageBody({
         message={`Property "${id}" was not found.`}
       />
     );
+  if (status === "unavailable")
+    return (
+      <PageState
+        variant="empty"
+        context="property"
+        message="This home isn't ready to review yet. Explore other homes while we verify the essentials."
+      />
+    );
   if (status === "error")
     return <PageState variant="error" context="property" />;
   if (!data) return null;
 
   const { property: p, society } = data;
+  const locationLabel = [p.area, p.city]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(", ");
 
   const pageTitle = `${p.title} — ${p.bhk} BHK in ${p.area} | OpenEstates`;
   const pricePerSqftLabel = hasKnownNumber(p.price_per_sqft)
@@ -1114,7 +1136,7 @@ function PropertyPageBody({
     `in ${society?.name ? society.name + ", " : ""}${p.area}`,
     hasKnownNumber(p.price) ? formatPrice(p.price) : null,
     pricePerSqftLabel,
-    `${p.area}, ${p.city}`,
+    locationLabel,
   ]
     .filter(Boolean)
     .join(". ");
@@ -1203,7 +1225,7 @@ function PropertyPageBody({
       <section className="property-clean-head">
         <div className="property-clean-head__copy">
           <p>
-            {p.area}, {p.city}
+            {locationLabel}
           </p>
           <h1>{displayTitle}</h1>
         </div>

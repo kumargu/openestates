@@ -1,19 +1,13 @@
 import type { PropertyCard, SearchResponse } from "./types.ts";
 
-type ListabilityFields = Pick<PropertyCard, "price"> &
-  Partial<Pick<PropertyCard, "bhk" | "transparency_tags">>;
+type ListabilityFields = Partial<Pick<PropertyCard, "buyer_eligibility">>;
 
 export function isListableProperty(property: ListabilityFields): boolean {
-  return (
-    property.price > 0 ||
-    Boolean(
-      property.bhk &&
-      property.bhk > 0 &&
-      property.transparency_tags?.some(
-        (tag) => tag.toLowerCase() === "price unavailable",
-      ),
-    )
-  );
+  return property.buyer_eligibility?.surfaces.discovery?.eligible === true;
+}
+
+function isSearchEligible(property: ListabilityFields): boolean {
+  return property.buyer_eligibility?.surfaces.search?.eligible === true;
 }
 
 export function filterListableProperties<T extends ListabilityFields>(
@@ -25,13 +19,13 @@ export function filterListableProperties<T extends ListabilityFields>(
 export function filterListableSearchResponse(
   response: SearchResponse,
 ): SearchResponse {
-  const results = filterListableProperties(response.results);
+  const results = response.results.filter(isSearchEligible);
   const focus = response.focus
     ? {
         ...response.focus,
-        focus_results: filterListableProperties(response.focus.focus_results),
-        sibling_configs: filterListableProperties(response.focus.sibling_configs ?? []),
-        more_homes: filterListableProperties(response.focus.more_homes ?? []),
+        focus_results: response.focus.focus_results.filter(isSearchEligible),
+        sibling_configs: (response.focus.sibling_configs ?? []).filter(isSearchEligible),
+        more_homes: (response.focus.more_homes ?? []).filter(isSearchEligible),
       }
     : response.focus;
   return {
@@ -73,7 +67,7 @@ function discoverRepresentativeScore(property: PropertyCard): number {
  */
 export function uniqueSocietiesForDiscovery(properties: PropertyCard[]): PropertyCard[] {
   const bestBySociety = new Map<string, PropertyCard>();
-  for (const property of filterListableProperties(properties)) {
+  for (const property of properties) {
     const key = societyKey(property);
     const existing = bestBySociety.get(key);
     if (!existing || discoverRepresentativeScore(property) > discoverRepresentativeScore(existing)) {

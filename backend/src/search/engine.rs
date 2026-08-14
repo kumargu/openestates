@@ -826,7 +826,10 @@ fn area_radius_candidate_ids(
         .collect::<Vec<_>>();
     let mut ids = Vec::new();
     let mut distances = HashMap::new();
-    for property in properties.iter().filter(|property| property.is_listable()) {
+    for property in properties
+        .iter()
+        .filter(|property| property.is_eligible_for(crate::buyer_eligibility::SEARCH_SURFACE))
+    {
         let society_name = society_names
             .get(&property.society_id)
             .map(String::as_str)
@@ -1679,6 +1682,10 @@ mod tests {
             total_floors: 10,
             facing: "East".to_string(),
             possession_status: "Ready".to_string(),
+            status: Default::default(),
+            buyer_eligibility: crate::buyer_eligibility::evaluate_signals(
+                crate::buyer_eligibility::BuyerEligibilitySignals::complete_without_media(),
+            ),
             metro_distance_mins: 10,
             maintenance_cost_monthly: 5_000,
             society_quality_score: None,

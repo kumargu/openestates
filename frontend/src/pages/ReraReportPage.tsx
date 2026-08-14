@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useParams } from "react-router-dom";
 import { PageState } from "../components/PageState.tsx";
-import { getProperty, getPropertyRera } from "../lib/api.ts";
+import { ApiRequestError, getProperty, getPropertyRera } from "../lib/api.ts";
 import {
   claimValueText,
   claimsForSelector,
@@ -35,6 +35,8 @@ import type {
 type LoadState =
   | { status: "loading" }
   | { status: "ready"; detail: PropertyDetailResponse; report: ReraEvidenceReportResponse }
+  | { status: "unavailable" }
+  | { status: "not_found" }
   | { status: "error"; message: string };
 
 function sectionById(
@@ -817,10 +819,16 @@ function ReraReportContent({ id }: { id: string }) {
     let active = true;
     Promise.all([getProperty(id), getPropertyRera(id)])
       .then(([detail, report]) => active && setState({ status: "ready", detail, report }))
-      .catch((error: unknown) => active && setState({
-        status: "error",
-        message: error instanceof Error ? error.message : "RERA record could not be loaded.",
-      }));
+      .catch((error: unknown) => {
+        if (!active) return;
+        if (error instanceof ApiRequestError && error.code === "property_not_ready") {
+          setState({ status: "unavailable" });
+        } else if (error instanceof ApiRequestError && error.status === 404) {
+          setState({ status: "not_found" });
+        } else {
+          setState({ status: "error", message: "RERA record could not be loaded." });
+        }
+      });
     return () => { active = false; };
   }, [id]);
 
@@ -833,6 +841,14 @@ function ReraReportContent({ id }: { id: string }) {
   }, [state]);
 
   if (state.status === "loading") return <PageState variant="loading" context="property" />;
+  if (state.status === "unavailable") return (
+    <PageState
+      variant="empty"
+      context="property"
+      message="This home's record isn't ready to review yet. Explore other homes while we verify the essentials."
+    />
+  );
+  if (state.status === "not_found") return <PageState variant="not_found" context="property" />;
   if (state.status === "error") return <PageState variant="error" context="property" message={state.message} />;
 
   const { detail, report } = state;

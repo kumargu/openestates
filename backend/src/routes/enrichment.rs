@@ -1087,6 +1087,8 @@ pub fn enrich_property_card(
         transparency_tags: compact_transparency_tags(&p.transparency_tags),
         description_summary: p.description_summary.clone(),
         possession_status: p.possession_status.clone(),
+        status: p.status.clone(),
+        buyer_eligibility: p.buyer_eligibility.clone(),
         metro_distance_mins: p.metro_distance_mins,
         floor: p.floor,
         total_floors: p.total_floors,

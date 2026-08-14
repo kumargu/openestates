@@ -65,7 +65,7 @@ pub async fn list_properties(State(state): State<Arc<AppState>>) -> Json<Vec<Pro
 
     let cards: Vec<PropertyCard> = properties
         .iter()
-        .filter(|property| property.is_listable())
+        .filter(|property| property.is_eligible_for(crate::buyer_eligibility::DISCOVERY_SURFACE))
         .map(|p| {
             let card = enrich_property_card(p, &societies, &graph);
             overlay_serving_google_reviews(card, &p.society_id, serving_facts)
@@ -595,12 +595,15 @@ pub struct PropertyEvidenceBatchResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub serving_bundle_version: Option<String>,
     pub results: Vec<PropertyEvidenceResponse>,
+    pub not_ready_property_ids: Vec<String>,
     pub missing_property_ids: Vec<String>,
 }
 
 #[derive(Serialize)]
 pub struct ErrorResponse {
     pub error: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reason_codes: Vec<String>,
 }
 
 fn canonical_property_id(id: &str) -> &str {
@@ -670,6 +673,45 @@ fn find_property_by_request_id<'a>(
 ) -> Option<&'a crate::models::Property> {
     let canonical_id = canonical_property_id(id);
     properties.iter().find(|p| p.id == canonical_id)
+}
+
+fn property_not_ready_error(
+    property: &crate::models::Property,
+    surface: &str,
+) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        StatusCode::CONFLICT,
+        Json(ErrorResponse {
+            error: "property_not_ready".to_string(),
+            reason_codes: property
+                .buyer_eligibility
+                .decision(surface)
+                .map(|decision| decision.reason_codes.clone())
+                .unwrap_or_default(),
+        }),
+    )
+}
+
+enum EvidenceBatchProperty<'a> {
+    Ready(&'a crate::models::Property),
+    NotReady,
+    Missing,
+}
+
+fn evidence_batch_property<'a>(
+    properties: &'a [crate::models::Property],
+    property_id: &str,
+) -> EvidenceBatchProperty<'a> {
+    match properties
+        .iter()
+        .find(|property| property.id == property_id)
+    {
+        Some(property) if property.is_eligible_for(crate::buyer_eligibility::COMPARE_SURFACE) => {
+            EvidenceBatchProperty::Ready(property)
+        }
+        Some(_) => EvidenceBatchProperty::NotReady,
+        None => EvidenceBatchProperty::Missing,
+    }
 }
 
 fn normalized_promoter_identity(name: &str) -> String {
@@ -2241,7 +2283,8 @@ fn build_builder_portfolio(
     let mut revocations: Option<i32> = None;
 
     for property in properties {
-        if normalized_promoter_identity(&property.builder_name) != builder_key
+        if !property.is_eligible_for(crate::buyer_eligibility::DETAIL_SURFACE)
+            || normalized_promoter_identity(&property.builder_name) != builder_key
             || !seen_societies.insert(property.society_id.clone())
         {
             continue;
@@ -2330,9 +2373,16 @@ pub async fn get_property_evidence(
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
                 error: "property_not_found".to_string(),
+                reason_codes: Vec::new(),
             }),
         )
     })?;
+    if !property.is_eligible_for(crate::buyer_eligibility::DETAIL_SURFACE) {
+        return Err(property_not_ready_error(
+            property,
+            crate::buyer_eligibility::DETAIL_SURFACE,
+        ));
+    }
     let graph = state.knowledge.read().await;
 
     Ok(Json(build_property_evidence_response(
@@ -2369,20 +2419,20 @@ pub async fn get_property_evidence_batch(
     let properties = state.properties.read().await;
     let graph = state.knowledge.read().await;
     let mut results = Vec::new();
+    let mut not_ready_property_ids = Vec::new();
     let mut missing_property_ids = Vec::new();
 
     for property_id in requested {
-        if let Some(property) = properties
-            .iter()
-            .find(|property| property.id == property_id)
-        {
-            results.push(build_property_evidence_response(
-                &graph,
-                property,
-                serving_bundle.as_deref(),
-            ));
-        } else {
-            missing_property_ids.push(property_id);
+        match evidence_batch_property(&properties, &property_id) {
+            EvidenceBatchProperty::Ready(property) => {
+                results.push(build_property_evidence_response(
+                    &graph,
+                    property,
+                    serving_bundle.as_deref(),
+                ));
+            }
+            EvidenceBatchProperty::NotReady => not_ready_property_ids.push(property_id),
+            EvidenceBatchProperty::Missing => missing_property_ids.push(property_id),
         }
     }
 
@@ -2391,6 +2441,7 @@ pub async fn get_property_evidence_batch(
             .as_ref()
             .map(|bundle| bundle.manifest.bundle_version.clone()),
         results,
+        not_ready_property_ids,
         missing_property_ids,
     })
 }
@@ -2412,15 +2463,14 @@ pub async fn get_property_recommendations(
                 StatusCode::NOT_FOUND,
                 Json(ErrorResponse {
                     error: "property_not_found".to_string(),
+                    reason_codes: Vec::new(),
                 }),
             )
         })?;
-    if !property.is_listable() {
-        return Err((
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: "property_not_found".to_string(),
-            }),
+    if !property.is_eligible_for(crate::buyer_eligibility::RECOMMENDATIONS_SURFACE) {
+        return Err(property_not_ready_error(
+            &property,
+            crate::buyer_eligibility::RECOMMENDATIONS_SURFACE,
         ));
     }
 
@@ -2483,15 +2533,14 @@ pub async fn get_property(
                 StatusCode::NOT_FOUND,
                 Json(ErrorResponse {
                     error: "property_not_found".to_string(),
+                    reason_codes: Vec::new(),
                 }),
             )
         })?;
-    if !property.is_listable() {
-        return Err((
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: "property_not_found".to_string(),
-            }),
+    if !property.is_eligible_for(crate::buyer_eligibility::DETAIL_SURFACE) {
+        return Err(property_not_ready_error(
+            &property,
+            crate::buyer_eligibility::DETAIL_SURFACE,
         ));
     }
 
@@ -2545,6 +2594,7 @@ pub async fn get_property(
                 society_node_id(&p.society_id) == sim_soc.node_id
                     && p.bhk == property.bhk
                     && !seen.contains(&p.id)
+                    && p.is_eligible_for(crate::buyer_eligibility::RECOMMENDATIONS_SURFACE)
             }) {
                 seen.insert(prop.id.clone());
                 let card = enrich_property_card(prop, &societies, &graph);
@@ -2567,6 +2617,7 @@ pub async fn get_property(
                         && p.area_id == property.area_id
                         && p.bhk == property.bhk
                         && !seen.contains(&p.id)
+                        && p.is_eligible_for(crate::buyer_eligibility::RECOMMENDATIONS_SURFACE)
                 })
                 .collect();
             area_props.sort_by_key(|p| p.price_per_sqft.abs_diff(property.price_per_sqft.max(1)));
@@ -3776,14 +3827,22 @@ pub async fn get_property_rera(
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
                 error: "property_not_found".to_string(),
+                reason_codes: Vec::new(),
             }),
         )
     })?;
+    if !property.is_eligible_for(crate::buyer_eligibility::DETAIL_SURFACE) {
+        return Err(property_not_ready_error(
+            property,
+            crate::buyer_eligibility::DETAIL_SURFACE,
+        ));
+    }
     let config = rera_report_surface_config().map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
                 error: "rera_surface_config_invalid".to_string(),
+                reason_codes: Vec::new(),
             }),
         )
     })?;
@@ -4266,16 +4325,30 @@ mod serving_state_tests {
         let mut duplicate_configuration = sibling.clone();
         duplicate_configuration.id = "sibling-2bhk".to_string();
         duplicate_configuration.bhk = 2;
+        let mut internal = property();
+        internal.id = "internal-unconfigured".to_string();
+        internal.title = "Internal unconfigured project".to_string();
+        internal.society_id = "internal-unconfigured".to_string();
+        internal
+            .buyer_eligibility
+            .surfaces
+            .get_mut(crate::buyer_eligibility::DETAIL_SURFACE)
+            .expect("detail decision")
+            .eligible = false;
 
         let portfolio = build_builder_portfolio(
             &graph,
-            &[current.clone(), sibling, duplicate_configuration],
+            &[current.clone(), sibling, duplicate_configuration, internal],
             &current,
             None,
         )
         .expect("two catalog projects from one builder should be projected");
 
         assert_eq!(portfolio.tracked_projects, 2);
+        assert!(portfolio
+            .projects
+            .iter()
+            .all(|project| project.property_id != "internal-unconfigured"));
         assert_eq!(
             portfolio
                 .projects
@@ -5410,6 +5483,57 @@ mod serving_state_tests {
         }
     }
 
+    #[test]
+    fn buyer_route_contract_distinguishes_not_ready_aliases_from_unknown_ids() {
+        let mut property = property();
+        property.id = "discovered-prestige-lakeside-habitat-3bhk".to_string();
+        for decision in property.buyer_eligibility.surfaces.values_mut() {
+            decision.eligible = false;
+            decision.reason_codes = vec!["missing_price".to_string()];
+        }
+        let properties = vec![property];
+
+        let resolved = find_property_by_request_id(&properties, "fixture-prestige-lakeside-3bhk")
+            .expect("legacy alias resolves before readiness check");
+        for surface in [
+            crate::buyer_eligibility::DETAIL_SURFACE,
+            crate::buyer_eligibility::RECOMMENDATIONS_SURFACE,
+        ] {
+            let (status, Json(error)) = property_not_ready_error(resolved, surface);
+            assert_eq!(status, StatusCode::CONFLICT);
+            assert_eq!(error.error, "property_not_ready");
+            assert_eq!(error.reason_codes, ["missing_price"]);
+        }
+        assert!(find_property_by_request_id(&properties, "does-not-exist").is_none());
+    }
+
+    #[test]
+    fn evidence_batch_separates_ready_not_ready_and_missing_properties() {
+        let ready = property();
+        let mut not_ready = property();
+        not_ready.id = "not-ready-3bhk".to_string();
+        not_ready
+            .buyer_eligibility
+            .surfaces
+            .get_mut(crate::buyer_eligibility::COMPARE_SURFACE)
+            .expect("compare decision")
+            .eligible = false;
+        let properties = vec![ready, not_ready];
+
+        assert!(matches!(
+            evidence_batch_property(&properties, "sample-3bhk"),
+            EvidenceBatchProperty::Ready(_)
+        ));
+        assert!(matches!(
+            evidence_batch_property(&properties, "not-ready-3bhk"),
+            EvidenceBatchProperty::NotReady
+        ));
+        assert!(matches!(
+            evidence_batch_property(&properties, "does-not-exist"),
+            EvidenceBatchProperty::Missing
+        ));
+    }
+
     fn property() -> Property {
         Property {
             id: "sample-3bhk".to_string(),
@@ -5430,6 +5554,10 @@ mod serving_state_tests {
             total_floors: 20,
             facing: "East".to_string(),
             possession_status: "Ready to move".to_string(),
+            status: Default::default(),
+            buyer_eligibility: crate::buyer_eligibility::evaluate_signals(
+                crate::buyer_eligibility::BuyerEligibilitySignals::complete_without_media(),
+            ),
             metro_distance_mins: 10,
             maintenance_cost_monthly: 8_000,
             society_quality_score: Some(0.8),

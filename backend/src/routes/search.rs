@@ -1784,6 +1784,10 @@ mod tests {
             total_floors: 20,
             facing: "East".into(),
             possession_status: "Ready to Move".into(),
+            status: Default::default(),
+            buyer_eligibility: crate::buyer_eligibility::evaluate_signals(
+                crate::buyer_eligibility::BuyerEligibilitySignals::complete_without_media(),
+            ),
             metro_distance_mins: 5,
             maintenance_cost_monthly: 5000,
             society_quality_score: Some(0.8),

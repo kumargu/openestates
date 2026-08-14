@@ -407,7 +407,7 @@ impl<'a> GeoSearchQuery<'a> {
         let mut ids = Vec::new();
         let has_hard_clauses = self.has_hard_clauses();
         for property in properties {
-            if !property.is_listable() {
+            if !property.is_eligible_for(crate::buyer_eligibility::SEARCH_SURFACE) {
                 continue;
             }
             let Some(coordinates) = self.index.society_coordinates(&property.society_id) else {
@@ -437,7 +437,7 @@ impl<'a> GeoSearchQuery<'a> {
     ) -> Vec<String> {
         let mut ids = Vec::new();
         for property in properties {
-            if !property.is_listable()
+            if !property.is_eligible_for(crate::buyer_eligibility::SEARCH_SURFACE)
                 || ids.iter().any(|existing| existing == &property.id)
                 || !self.society_has_matching_nearby_fact(&property.society_id, fact_index)
             {
@@ -1180,6 +1180,10 @@ mod tests {
             total_floors: 20,
             facing: "East".to_string(),
             possession_status: "Ready to Move".to_string(),
+            status: Default::default(),
+            buyer_eligibility: crate::buyer_eligibility::evaluate_signals(
+                crate::buyer_eligibility::BuyerEligibilitySignals::complete_without_media(),
+            ),
             metro_distance_mins: 0,
             maintenance_cost_monthly: 6_000,
             society_quality_score: Some(0.7),

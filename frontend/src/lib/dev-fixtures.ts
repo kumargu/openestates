@@ -10,7 +10,7 @@ import type {
 
 const now = "2026-07-11T00:00:00.000Z";
 
-const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
+const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs" | "status" | "buyer_eligibility">> = [
   {
     id: "fixture-prestige-lakeside-3bhk",
     title: "3 BHK at Prestige Lakeside Habitat",
@@ -231,6 +231,19 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
 
 export const fixtureProperties: PropertyCard[] = fixturePropertyRows.map((property) => ({
   ...property,
+  status: {
+    lifecycle: property.project_status,
+    possession: property.possession_status,
+    age_display: property.home_state_display,
+    validation_state: "supported",
+  },
+  buyer_eligibility: {
+    policy_version: 1,
+    surfaces: Object.fromEntries(
+      ["discovery", "search", "recommendations", "detail", "compare", "plan"]
+        .map((surface) => [surface, { eligible: true }]),
+    ),
+  },
   kg_entity_refs: fixtureKgEntityRefs(property),
 }));
 
@@ -642,6 +655,8 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
       description_summary: card.description_summary,
       transparency_tags: card.transparency_tags,
       source_reference: "Local development fixture",
+      status: card.status,
+      buyer_eligibility: card.buyer_eligibility,
     },
     entity_refs: card.kg_entity_refs,
     society: {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getProperties, getProperty } from "../lib/api.ts";
+import { ApiRequestError, getProperties, getProperty } from "../lib/api.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
 import { WorkspacePropertySwitcher } from "../components/workspace/WorkspacePropertySwitcher.tsx";
@@ -98,7 +98,7 @@ export function HomePlanPage() {
   const [catalog, setCatalog] = useState<PropertyCard[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
   const [propertyData, setPropertyData] = useState<PropertyDetailResponse | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "not_found" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "ready" | "not_found" | "unavailable" | "error">("loading");
   const [inputs, setInputs] = useState<PlanInputs | null>(null);
   const [previewYear, setPreviewYear] = useState<number | null>(null);
   const [pinnedYear, setPinnedYear] = useState<number | null>(null);
@@ -149,8 +149,13 @@ export function HomePlanPage() {
       })
       .catch((error: unknown) => {
         if (!active) return;
-        const message = error instanceof Error ? error.message : "";
-        setStatus(message.includes("404") ? "not_found" : "error");
+        setStatus(
+          error instanceof ApiRequestError && error.code === "property_not_ready"
+            ? "unavailable"
+            : error instanceof ApiRequestError && error.status === 404
+              ? "not_found"
+              : "error",
+        );
       });
     return () => { active = false; };
   }, [id]);
@@ -167,7 +172,7 @@ export function HomePlanPage() {
 
   const workspacePropertyIds = [...new Set([...(id ? [id] : []), ...propertyIds])];
   const homeOptions = workspacePropertyIds.flatMap((propertyId) => {
-    if (status === "not_found" && propertyId === id) return [];
+    if ((status === "not_found" || status === "unavailable") && propertyId === id) return [];
     const catalogHome = catalog.find((home) => home.id === propertyId);
     if (catalogHome) {
       return [{
@@ -191,7 +196,7 @@ export function HomePlanPage() {
   });
   const compareHref = workspaceCompareHref(compareIds, id);
   const buyVsRentHref = workspaceBuyVsRentHref(id ?? propertyIds[0]);
-  const planReplacementId = catalogReady && (!id || status === "not_found")
+  const planReplacementId = catalogReady && (!id || status === "not_found" || status === "unavailable")
     ? workspacePlanReplacementId(id, homeOptions.map((home) => home.id))
     : null;
 
@@ -224,6 +229,12 @@ export function HomePlanPage() {
       </section>
     ) : status === "loading" || propertyIsChanging ? (
       <LoadingPlan />
+    ) : status === "unavailable" ? (
+      <section className="home-plan-empty">
+        <h1>This home isn't ready to plan yet.</h1>
+        <p>Explore another home while we verify the price and configuration.</p>
+        <Link to="/">Explore</Link>
+      </section>
     ) : status === "not_found" ? (
       <section className="home-plan-empty">
         <h1>This home is no longer available.</h1>

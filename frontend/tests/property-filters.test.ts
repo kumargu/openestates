@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  filterListableProperties,
   filterListableSearchResponse,
   societyKey,
   uniqueSocietiesForDiscovery,
@@ -8,6 +9,13 @@ import {
 import type { PropertyCard } from "../src/lib/types.ts";
 
 function card(overrides: Partial<PropertyCard> & Pick<PropertyCard, "id" | "bhk">): PropertyCard {
+  const eligible = overrides.buyer_eligibility ?? {
+    policy_version: 1,
+    surfaces: {
+      discovery: { eligible: true },
+      search: { eligible: true },
+    },
+  };
   return {
     kg_entity_refs: {
       property_entity_id: `property:${overrides.id}`,
@@ -30,6 +38,8 @@ function card(overrides: Partial<PropertyCard> & Pick<PropertyCard, "id" | "bhk"
     floor: 5,
     total_floors: 20,
     facing: "East",
+    status: { validation_state: "missing" },
+    buyer_eligibility: eligible,
     ...overrides,
   };
 }
@@ -50,7 +60,18 @@ test("uniqueSocietiesForDiscovery keeps one card per society", () => {
       },
       hero_image: "/img/p.jpg",
     }),
-    card({ id: "zero-price", bhk: 2, price: 0 }),
+    card({
+      id: "zero-price",
+      bhk: 2,
+      price: 0,
+      buyer_eligibility: {
+        policy_version: 1,
+        surfaces: {
+          discovery: { eligible: false, reason_codes: ["missing_price"] },
+          search: { eligible: false, reason_codes: ["missing_price"] },
+        },
+      },
+    }),
   ];
 
   const unique = uniqueSocietiesForDiscovery(properties);
@@ -73,7 +94,18 @@ test("filterListableSearchResponse keeps focus rails listable", () => {
     },
     results: [
       card({ id: "waterford-3", bhk: 3 }),
-      card({ id: "zero", bhk: 2, price: 0 }),
+      card({
+        id: "zero",
+        bhk: 2,
+        price: 0,
+        buyer_eligibility: {
+          policy_version: 1,
+          surfaces: {
+            discovery: { eligible: false, reason_codes: ["missing_price"] },
+            search: { eligible: false, reason_codes: ["missing_price"] },
+          },
+        },
+      }),
     ],
     area_context: null,
     total_results: 2,
@@ -83,7 +115,18 @@ test("filterListableSearchResponse keeps focus rails listable", () => {
       focus_results: [card({ id: "waterford-3", bhk: 3 })],
       sibling_configs: [
         card({ id: "waterford-2", bhk: 2 }),
-        card({ id: "waterford-0", bhk: 1, price: 0 }),
+        card({
+          id: "waterford-0",
+          bhk: 1,
+          price: 0,
+          buyer_eligibility: {
+            policy_version: 1,
+            surfaces: {
+              discovery: { eligible: false, reason_codes: ["missing_price"] },
+              search: { eligible: false, reason_codes: ["missing_price"] },
+            },
+          },
+        }),
       ],
       more_homes: [card({
         id: "other-3",
@@ -103,4 +146,21 @@ test("filterListableSearchResponse keeps focus rails listable", () => {
   assert.equal(response.focus?.sibling_configs?.length, 1);
   assert.equal(response.focus?.sibling_configs?.[0]?.id, "waterford-2");
   assert.equal(response.focus?.more_homes?.length, 1);
+});
+
+test("eligibility, not a price tag shortcut, controls buyer visibility", () => {
+  const eligibleZeroPrice = card({ id: "eligible-zero", bhk: 2, price: 0 });
+  const ineligiblePriced = card({
+    id: "ineligible-priced",
+    bhk: 3,
+    price: 20_000_000,
+    transparency_tags: ["Price unavailable"],
+    buyer_eligibility: {
+      policy_version: 1,
+      surfaces: { discovery: { eligible: false, reason_codes: ["missing_area"] } },
+    },
+  });
+
+  const visible = filterListableProperties([eligibleZeroPrice, ineligiblePriced]);
+  assert.deepEqual(visible.map((property) => property.id), ["eligible-zero"]);
 });

@@ -23,6 +23,26 @@ export type PropertyMedia = {
   display_order: number;
 };
 
+export type PropertyStatus = {
+  regulatory?: string;
+  lifecycle?: string;
+  possession?: string;
+  possession_timing?: string;
+  age_display?: string;
+  validation_state: "missing" | "supported" | "conflict";
+};
+
+export type BuyerEligibilityDecision = {
+  eligible: boolean;
+  reason_codes?: string[];
+};
+
+export type BuyerEligibility = {
+  policy_version: number;
+  surfaces: Record<string, BuyerEligibilityDecision>;
+  observed_reasons?: string[];
+};
+
 export type PropertyCard = {
   id: string;
   /**
@@ -58,6 +78,8 @@ export type PropertyCard = {
   transparency_tags: string[];
   description_summary: string;
   possession_status: string;
+  status: PropertyStatus;
+  buyer_eligibility: BuyerEligibility;
   metro_distance_mins: number;
   floor: number;
   total_floors: number;
@@ -217,6 +239,8 @@ export type PropertyDetailResponse = {
     total_floors: number;
     facing: string;
     possession_status: string;
+    status: PropertyStatus;
+    buyer_eligibility: BuyerEligibility;
     metro_distance_mins: number;
     maintenance_cost_monthly: number;
     society_quality_score: number | null;
@@ -833,6 +857,7 @@ export type PropertyEvidenceResponse = {
 export type PropertyEvidenceBatchResponse = {
   serving_bundle_version?: string;
   results: PropertyEvidenceResponse[];
+  not_ready_property_ids: string[];
   missing_property_ids: string[];
 };
 

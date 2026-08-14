@@ -64,7 +64,7 @@ export function writePlanDraft(
 export function canPersistPlanDraft(
   routePropertyId: string | undefined,
   loadedPropertyId: string | undefined,
-  status: "loading" | "ready" | "not_found" | "error",
+  status: "loading" | "ready" | "not_found" | "unavailable" | "error",
 ): boolean {
   return status === "ready"
     && Boolean(routePropertyId)

@@ -27,6 +27,26 @@ pub struct InterestRequest {
 #[derive(Serialize)]
 pub struct InterestError {
     pub error: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reason_codes: Vec<String>,
+}
+
+fn interest_error(error: &str) -> InterestError {
+    InterestError {
+        error: error.to_string(),
+        reason_codes: Vec::new(),
+    }
+}
+
+fn property_not_ready_error(property: &crate::models::Property) -> InterestError {
+    InterestError {
+        error: "property_not_ready".to_string(),
+        reason_codes: property
+            .buyer_eligibility
+            .decision(crate::buyer_eligibility::DETAIL_SURFACE)
+            .map(|decision| decision.reason_codes.clone())
+            .unwrap_or_default(),
+    }
 }
 
 /// POST /api/interests — express interest in a property.
@@ -38,9 +58,7 @@ pub async fn express_interest(
     if property_id.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(InterestError {
-                error: "property_id is required".to_string(),
-            }),
+            Json(interest_error("property_id is required")),
         ));
     }
 
@@ -54,9 +72,7 @@ pub async fn express_interest(
         } else if limiter.1 >= RATE_LIMIT_MAX {
             return Err((
                 StatusCode::TOO_MANY_REQUESTS,
-                Json(InterestError {
-                    error: "rate limit exceeded — try again shortly".to_string(),
-                }),
+                Json(interest_error("rate limit exceeded — try again shortly")),
             ));
         } else {
             limiter.1 += 1;
@@ -66,13 +82,25 @@ pub async fn express_interest(
     // Validate property exists
     {
         let properties = state.properties.read().await;
-        if !properties.iter().any(|p| p.id == property_id) {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(InterestError {
-                    error: format!("property '{}' not found", property_id),
-                }),
-            ));
+        match properties
+            .iter()
+            .find(|property| property.id == property_id)
+        {
+            None => {
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    Json(interest_error("property_not_found")),
+                ));
+            }
+            Some(property)
+                if !property.is_eligible_for(crate::buyer_eligibility::DETAIL_SURFACE) =>
+            {
+                return Err((
+                    StatusCode::CONFLICT,
+                    Json(property_not_ready_error(property)),
+                ));
+            }
+            Some(_) => {}
         }
     }
 
@@ -105,9 +133,9 @@ pub async fn express_interest(
     if let Err(e) = tokio::fs::create_dir_all(&interests_dir).await {
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(InterestError {
-                error: format!("failed to create interests directory: {}", e),
-            }),
+            Json(interest_error(&format!(
+                "failed to create interests directory: {e}"
+            ))),
         ));
     }
 
@@ -117,9 +145,9 @@ pub async fn express_interest(
         Err(e) => {
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(InterestError {
-                    error: format!("failed to serialize interest: {}", e),
-                }),
+                Json(interest_error(&format!(
+                    "failed to serialize interest: {e}"
+                ))),
             ));
         }
     };
@@ -136,9 +164,9 @@ pub async fn express_interest(
         Err(e) => {
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(InterestError {
-                    error: format!("failed to open interests file: {}", e),
-                }),
+                Json(interest_error(&format!(
+                    "failed to open interests file: {e}"
+                ))),
             ));
         }
     };
@@ -146,9 +174,7 @@ pub async fn express_interest(
     if let Err(e) = file.write_all(line.as_bytes()).await {
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(InterestError {
-                error: format!("failed to write interest: {}", e),
-            }),
+            Json(interest_error(&format!("failed to write interest: {e}"))),
         ));
     }
 
@@ -170,13 +196,22 @@ pub async fn get_interest_count(
     // Validate property exists
     {
         let properties = state.properties.read().await;
-        if !properties.iter().any(|p| p.id == id) {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(InterestError {
-                    error: format!("property '{}' not found", id),
-                }),
-            ));
+        match properties.iter().find(|property| property.id == id) {
+            None => {
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    Json(interest_error("property_not_found")),
+                ));
+            }
+            Some(property)
+                if !property.is_eligible_for(crate::buyer_eligibility::DETAIL_SURFACE) =>
+            {
+                return Err((
+                    StatusCode::CONFLICT,
+                    Json(property_not_ready_error(property)),
+                ));
+            }
+            Some(_) => {}
         }
     }
 

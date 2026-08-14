@@ -8,9 +8,13 @@ use arc_swap::ArcSwap;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
+use crate::buyer_eligibility::{
+    evaluate_property, LifecycleStatus, PossessionStatus, PossessionTiming, PropertyStatus,
+    RegulatoryStatus, StatusValidationState,
+};
 use crate::dag_config::{
-    better_source_type_for_fact, buyer_visible_fact, load_resolution_policies,
-    ResolutionPoliciesFile,
+    better_source_type_for_fact, buyer_eligibility_config, buyer_visible_fact,
+    load_resolution_policies, ResolutionPoliciesFile,
 };
 use crate::discovery::load_discovery_config;
 use crate::knowledge;
@@ -249,10 +253,53 @@ fn properties_from_serving_records_with_edges(
         &area_lookup,
         bundle_version,
     ));
-    properties.retain(|property| property.is_listable());
-    properties.sort_by(|left, right| left.id.cmp(&right.id));
+    dedupe_property_candidates(properties)
+}
+
+fn dedupe_property_candidates(mut properties: Vec<Property>) -> Vec<Property> {
+    properties.sort_by(|left, right| {
+        left.id
+            .cmp(&right.id)
+            .then_with(|| compare_duplicate_property_candidates(left, right))
+    });
     properties.dedup_by(|left, right| left.id == right.id);
     properties
+}
+
+fn compare_duplicate_property_candidates(left: &Property, right: &Property) -> std::cmp::Ordering {
+    let eligible_surfaces = |property: &Property| {
+        property
+            .buyer_eligibility
+            .surfaces
+            .values()
+            .filter(|decision| decision.eligible)
+            .count()
+    };
+    let blocking_reasons = |property: &Property| {
+        property
+            .buyer_eligibility
+            .surfaces
+            .values()
+            .map(|decision| decision.reason_codes.len())
+            .sum::<usize>()
+    };
+
+    eligible_surfaces(right)
+        .cmp(&eligible_surfaces(left))
+        .then_with(|| blocking_reasons(left).cmp(&blocking_reasons(right)))
+        .then_with(|| {
+            left.buyer_eligibility
+                .observed_reasons
+                .len()
+                .cmp(&right.buyer_eligibility.observed_reasons.len())
+        })
+        .then_with(|| right.price.cmp(&left.price))
+        .then_with(|| right.carpet_area_sqft.cmp(&left.carpet_area_sqft))
+        .then_with(|| right.bhk.cmp(&left.bhk))
+        .then_with(|| right.media.len().cmp(&left.media.len()))
+        .then_with(|| left.source_reference.cmp(&right.source_reference))
+        .then_with(|| left.society_id.cmp(&right.society_id))
+        .then_with(|| format!("{left:?}").cmp(&format!("{right:?}")))
 }
 
 fn representative_properties_from_serving_societies(
@@ -266,14 +313,24 @@ fn representative_properties_from_serving_societies(
         .map(|entity| (entity.entity_id.as_str(), entity))
         .collect::<BTreeMap<_, _>>();
 
-    fact_index
+    let mut source_rows = fact_index
         .rows()
         .filter(|(entity_id, rows)| {
-            entity_id.starts_with("society:") && has_representative_property_signal(rows)
+            entity_id.starts_with("society:")
+                && entities_by_id.contains_key(*entity_id)
+                && has_representative_property_signal(rows)
         })
+        .collect::<Vec<_>>();
+    source_rows.sort_by(|left, right| left.0.cmp(right.0));
+
+    source_rows
+        .into_iter()
         .flat_map(|(entity_id, rows)| {
             let entity = entities_by_id.get(entity_id).copied();
-            let bhks = serving_society_bhks(rows);
+            let mut bhks = serving_society_bhks(rows);
+            if bhks.is_empty() {
+                bhks.push(0);
+            }
             bhks.into_iter()
                 .map(|bhk| {
                     representative_property_from_serving_society(
@@ -311,7 +368,11 @@ fn representative_property_from_serving_society(
         .unwrap_or_else(|| title_case_slug(strip_entity_prefix(entity_id, "society:").as_str()));
     let society_id = society_runtime_id_from_parts(entity_id, &society_name);
     let society_slug = society_id.strip_prefix("soc-").unwrap_or(&society_id);
-    let id = format!("discovered-{society_slug}-{bhk}bhk");
+    let id = if bhk > 0 {
+        format!("discovered-{society_slug}-{bhk}bhk")
+    } else {
+        format!("discovered-{society_slug}-unconfigured")
+    };
     let area = resolve_serving_society_area(Some(rows), area_lookup, entity_id);
     let area_slug = slug(&area);
     let pricing = serving_market_pricing(rows, bhk);
@@ -339,10 +400,6 @@ fn representative_property_from_serving_society(
     if latest_bool(Some(rows), "rera_registered").unwrap_or(false) {
         transparency_tags.push("RERA verified".to_string());
     }
-    if price == 0 {
-        transparency_tags.push("Price unavailable".to_string());
-    }
-
     let media = trusted_property_media(Some(rows), entity_id);
     let hero_image = media
         .iter()
@@ -350,56 +407,67 @@ fn representative_property_from_serving_society(
         .map(|asset| asset.url.clone())
         .unwrap_or_default();
     let images = media.iter().map(|asset| asset.url.clone()).collect();
-    Property {
-        id,
-        title: format!("{bhk} BHK in {society_name}"),
-        area: area.clone(),
-        area_id: format!("area-{area_slug}"),
-        city: latest_text(Some(rows), "city").unwrap_or_else(|| "Bengaluru".to_string()),
-        society_id,
-        builder_name,
-        property_type: latest_text(Some(rows), "rera_project_type")
-            .unwrap_or_else(|| "Apartment".to_string()),
-        listing_type: "Project".to_string(),
-        bhk,
-        price,
-        price_per_sqft,
-        carpet_area_sqft,
-        super_builtup_sqft: carpet_area_sqft,
-        floor: 0,
-        total_floors: 0,
-        facing: "Not specified".to_string(),
-        possession_status: latest_text(Some(rows), "rera_status")
-            .unwrap_or_else(|| "unknown".to_string()),
-        metro_distance_mins: latest_numeric(Some(rows), "metro_distance_mins")
-            .unwrap_or(0.0)
-            .round()
-            .max(0.0) as u32,
-        maintenance_cost_monthly: 0,
-        society_quality_score: latest_numeric(Some(rows), "society_quality_score"),
-        builder_quality_score: latest_numeric(Some(rows), "builder_quality_score"),
-        document_completeness_score: latest_numeric(Some(rows), "document_completeness_score"),
-        litigation_risk: latest_numeric(Some(rows), "litigation_risk"),
-        noise_score: latest_numeric(Some(rows), "noise_score"),
-        sunlight_score: latest_numeric(Some(rows), "sunlight_score"),
-        airport_noise_score: latest_numeric(Some(rows), "airport_noise_score"),
-        waterlogging_risk_score: latest_numeric(Some(rows), "waterlogging_risk_score"),
-        traffic_score: latest_numeric(Some(rows), "traffic_score"),
-        days_on_market: 0,
-        greenery_score: latest_numeric(Some(rows), "greenery_score"),
-        open_space_score: latest_numeric(Some(rows), "open_space_score"),
-        resale_strength_score: latest_numeric(Some(rows), "resale_strength_score"),
-        interest_level: None,
-        saves_last_7d: None,
-        offers_last_7d: None,
-        images,
-        hero_image,
-        media,
-        description_summary: latest_text(Some(rows), "summary")
-            .unwrap_or_else(|| format!("{society_name} in {area}")),
-        transparency_tags,
-        source_reference: format!("search_serving_bundle:{bundle_version}"),
-    }
+    let status = typed_property_status(&[Some(rows)]);
+    materialize_buyer_view(
+        Property {
+            id,
+            title: if bhk > 0 {
+                format!("{bhk} BHK in {society_name}")
+            } else {
+                society_name.clone()
+            },
+            area: area.clone(),
+            area_id: (!area_slug.is_empty())
+                .then(|| format!("area-{area_slug}"))
+                .unwrap_or_default(),
+            city: latest_text(Some(rows), "city").unwrap_or_default(),
+            society_id,
+            builder_name,
+            property_type: latest_text(Some(rows), "rera_project_type")
+                .unwrap_or_else(|| "Apartment".to_string()),
+            listing_type: "Project".to_string(),
+            bhk,
+            price,
+            price_per_sqft,
+            carpet_area_sqft,
+            super_builtup_sqft: carpet_area_sqft,
+            floor: 0,
+            total_floors: 0,
+            facing: "Not specified".to_string(),
+            possession_status: String::new(),
+            status: PropertyStatus::default(),
+            buyer_eligibility: Default::default(),
+            metro_distance_mins: latest_numeric(Some(rows), "metro_distance_mins")
+                .unwrap_or(0.0)
+                .round()
+                .max(0.0) as u32,
+            maintenance_cost_monthly: 0,
+            society_quality_score: latest_numeric(Some(rows), "society_quality_score"),
+            builder_quality_score: latest_numeric(Some(rows), "builder_quality_score"),
+            document_completeness_score: latest_numeric(Some(rows), "document_completeness_score"),
+            litigation_risk: latest_numeric(Some(rows), "litigation_risk"),
+            noise_score: latest_numeric(Some(rows), "noise_score"),
+            sunlight_score: latest_numeric(Some(rows), "sunlight_score"),
+            airport_noise_score: latest_numeric(Some(rows), "airport_noise_score"),
+            waterlogging_risk_score: latest_numeric(Some(rows), "waterlogging_risk_score"),
+            traffic_score: latest_numeric(Some(rows), "traffic_score"),
+            days_on_market: 0,
+            greenery_score: latest_numeric(Some(rows), "greenery_score"),
+            open_space_score: latest_numeric(Some(rows), "open_space_score"),
+            resale_strength_score: latest_numeric(Some(rows), "resale_strength_score"),
+            interest_level: None,
+            saves_last_7d: None,
+            offers_last_7d: None,
+            images,
+            hero_image,
+            media,
+            description_summary: latest_text(Some(rows), "summary")
+                .unwrap_or_else(|| join_nonempty([society_name.as_str(), area.as_str()], " in ")),
+            transparency_tags,
+            source_reference: format!("search_serving_bundle:{bundle_version}"),
+        },
+        status,
+    )
 }
 
 fn bhk_from_property_slug(property_id: &str) -> Option<u32> {
@@ -534,12 +602,9 @@ fn property_from_serving_entity(
         ));
         transparency_tags.push("Lake indexed".to_string());
     }
-    let possession_status = latest_text(rows, "possession_status")
-        .or_else(|| serving_society_text(fact_index, &society_id, "rera_status"))
-        .unwrap_or_else(|| "unknown".to_string());
-
     let canonical_society_id = society_entity_id(&society_id);
-    let media_rows = fact_index.entity(&canonical_society_id).or(rows);
+    let society_rows = fact_index.entity(&canonical_society_id);
+    let media_rows = society_rows.or(rows);
     let media = trusted_property_media(media_rows, &canonical_society_id);
     let hero_image = media
         .iter()
@@ -547,69 +612,87 @@ fn property_from_serving_entity(
         .map(|asset| asset.url.clone())
         .unwrap_or_default();
     let images = media.iter().map(|asset| asset.url.clone()).collect();
-    Property {
-        id,
-        title,
-        area: area.clone(),
-        area_id: format!("area-{area_slug}"),
-        city: latest_text(rows, "city").unwrap_or_else(|| "Bengaluru".to_string()),
-        society_id,
-        builder_name,
-        property_type: latest_text(rows, "property_type")
-            .unwrap_or_else(|| "Apartment".to_string()),
-        listing_type: latest_text(rows, "listing_type").unwrap_or_else(|| "Resale".to_string()),
-        bhk,
-        price,
-        price_per_sqft,
-        carpet_area_sqft,
-        super_builtup_sqft: latest_numeric(rows, "super_builtup_sqft")
-            .unwrap_or(0.0)
-            .round()
-            .max(0.0) as u32,
-        floor: latest_numeric(rows, "floor")
-            .unwrap_or(0.0)
-            .round()
-            .max(0.0) as u32,
-        total_floors: latest_numeric(rows, "total_floors")
-            .unwrap_or(0.0)
-            .round()
-            .max(0.0) as u32,
-        facing: latest_text(rows, "facing").unwrap_or_else(|| "Not specified".to_string()),
-        possession_status,
-        metro_distance_mins: latest_numeric(rows, "metro_distance_mins")
-            .unwrap_or(0.0)
-            .round()
-            .max(0.0) as u32,
-        maintenance_cost_monthly: latest_numeric(rows, "maintenance_cost_monthly")
-            .unwrap_or(0.0)
-            .round()
-            .max(0.0) as u32,
-        society_quality_score: latest_numeric(rows, "society_quality_score"),
-        builder_quality_score: latest_numeric(rows, "builder_quality_score"),
-        document_completeness_score: latest_numeric(rows, "document_completeness_score"),
-        litigation_risk: latest_numeric(rows, "litigation_risk"),
-        noise_score: latest_numeric(rows, "noise_score"),
-        sunlight_score: latest_numeric(rows, "sunlight_score"),
-        airport_noise_score: latest_numeric(rows, "airport_noise_score"),
-        waterlogging_risk_score: latest_numeric(rows, "waterlogging_risk_score"),
-        traffic_score: latest_numeric(rows, "traffic_score"),
-        days_on_market: latest_numeric(rows, "days_on_market")
-            .unwrap_or(0.0)
-            .round()
-            .max(0.0) as u32,
-        greenery_score: latest_numeric(rows, "greenery_score"),
-        open_space_score: latest_numeric(rows, "open_space_score"),
-        resale_strength_score: latest_numeric(rows, "resale_strength_score"),
-        interest_level: latest_text(rows, "interest_level"),
-        saves_last_7d: latest_numeric(rows, "saves_last_7d").map(|value| value.round() as u32),
-        offers_last_7d: latest_numeric(rows, "offers_last_7d").map(|value| value.round() as u32),
-        images,
-        hero_image,
-        media,
-        description_summary,
-        transparency_tags,
-        source_reference: format!("search_serving_bundle:{bundle_version}"),
-    }
+    let status = typed_property_status(&[rows, society_rows]);
+    materialize_buyer_view(
+        Property {
+            id,
+            title,
+            area: area.clone(),
+            area_id: (!area_slug.is_empty())
+                .then(|| format!("area-{area_slug}"))
+                .unwrap_or_default(),
+            city: latest_text(rows, "city").unwrap_or_default(),
+            society_id,
+            builder_name,
+            property_type: latest_text(rows, "property_type")
+                .unwrap_or_else(|| "Apartment".to_string()),
+            listing_type: latest_text(rows, "listing_type").unwrap_or_else(|| "Resale".to_string()),
+            bhk,
+            price,
+            price_per_sqft,
+            carpet_area_sqft,
+            super_builtup_sqft: latest_numeric(rows, "super_builtup_sqft")
+                .unwrap_or(0.0)
+                .round()
+                .max(0.0) as u32,
+            floor: latest_numeric(rows, "floor")
+                .unwrap_or(0.0)
+                .round()
+                .max(0.0) as u32,
+            total_floors: latest_numeric(rows, "total_floors")
+                .unwrap_or(0.0)
+                .round()
+                .max(0.0) as u32,
+            facing: latest_text(rows, "facing").unwrap_or_else(|| "Not specified".to_string()),
+            possession_status: String::new(),
+            status: PropertyStatus::default(),
+            buyer_eligibility: Default::default(),
+            metro_distance_mins: latest_numeric(rows, "metro_distance_mins")
+                .unwrap_or(0.0)
+                .round()
+                .max(0.0) as u32,
+            maintenance_cost_monthly: latest_numeric(rows, "maintenance_cost_monthly")
+                .unwrap_or(0.0)
+                .round()
+                .max(0.0) as u32,
+            society_quality_score: latest_numeric(rows, "society_quality_score"),
+            builder_quality_score: latest_numeric(rows, "builder_quality_score"),
+            document_completeness_score: latest_numeric(rows, "document_completeness_score"),
+            litigation_risk: latest_numeric(rows, "litigation_risk"),
+            noise_score: latest_numeric(rows, "noise_score"),
+            sunlight_score: latest_numeric(rows, "sunlight_score"),
+            airport_noise_score: latest_numeric(rows, "airport_noise_score"),
+            waterlogging_risk_score: latest_numeric(rows, "waterlogging_risk_score"),
+            traffic_score: latest_numeric(rows, "traffic_score"),
+            days_on_market: latest_numeric(rows, "days_on_market")
+                .unwrap_or(0.0)
+                .round()
+                .max(0.0) as u32,
+            greenery_score: latest_numeric(rows, "greenery_score"),
+            open_space_score: latest_numeric(rows, "open_space_score"),
+            resale_strength_score: latest_numeric(rows, "resale_strength_score"),
+            interest_level: latest_text(rows, "interest_level"),
+            saves_last_7d: latest_numeric(rows, "saves_last_7d").map(|value| value.round() as u32),
+            offers_last_7d: latest_numeric(rows, "offers_last_7d")
+                .map(|value| value.round() as u32),
+            images,
+            hero_image,
+            media,
+            description_summary,
+            transparency_tags,
+            source_reference: format!("search_serving_bundle:{bundle_version}"),
+        },
+        status,
+    )
+}
+
+fn join_nonempty<const N: usize>(parts: [&str; N], separator: &str) -> String {
+    parts
+        .into_iter()
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(separator)
 }
 
 pub fn societies_from_serving_bundle(bundle: &LoadedServingBundle) -> Vec<Society> {
@@ -822,15 +905,72 @@ fn serving_society_bhks(rows: &ServingEntityFactRows) -> Vec<u32> {
             configured_bhks.insert(bhk);
         }
     }
-    let mut bhks = if priced_bhks.is_empty() {
+    let bhks = if priced_bhks.is_empty() {
         configured_bhks
     } else {
         priced_bhks
     };
-    if bhks.is_empty() {
-        bhks.insert(3);
-    }
     bhks.into_iter().collect()
+}
+
+fn typed_property_status(rows: &[Option<&ServingEntityFactRows>]) -> PropertyStatus {
+    let config = buyer_eligibility_config().expect("buyer eligibility config must be valid");
+    let value = |field: &str| {
+        config.status_fields.get(field).and_then(|fact_keys| {
+            fact_keys
+                .iter()
+                .find_map(|fact_key| rows.iter().find_map(|rows| latest_text(*rows, fact_key)))
+        })
+    };
+    let regulatory = value("regulatory_status").map(RegulatoryStatus);
+    let lifecycle = value("lifecycle_status").map(LifecycleStatus);
+    let possession = value("possession_status").map(PossessionStatus);
+    let possession_timing = value("possession_timing").map(PossessionTiming);
+    let age_display = value("age_display");
+    let has_explicit_conflict =
+        config
+            .status_fields
+            .get("conflict_state")
+            .is_some_and(|fact_keys| {
+                fact_keys.iter().any(|fact_key| {
+                    rows.iter().any(|rows| {
+                        latest_fact(*rows, fact_key).is_some_and(|fact| match &fact.value {
+                            FactValue::Bool(value) => *value,
+                            FactValue::Text(value) => matches!(
+                                value.trim().to_ascii_lowercase().as_str(),
+                                "conflict" | "conflicting" | "true"
+                            ),
+                            _ => false,
+                        })
+                    })
+                })
+            });
+    let validation_state = if has_explicit_conflict {
+        StatusValidationState::Conflict
+    } else if lifecycle.is_some() || possession.is_some() {
+        StatusValidationState::Supported
+    } else {
+        StatusValidationState::Missing
+    };
+    PropertyStatus {
+        regulatory,
+        lifecycle,
+        possession,
+        possession_timing,
+        age_display,
+        validation_state,
+    }
+}
+
+fn materialize_buyer_view(mut property: Property, status: PropertyStatus) -> Property {
+    property.possession_status = status
+        .possession
+        .as_ref()
+        .map(|status| status.0.clone())
+        .unwrap_or_default();
+    property.status = status;
+    property.buyer_eligibility = evaluate_property(&property);
+    property
 }
 
 fn bhk_from_serving_fact_key(fact_key: &str) -> Option<u32> {
@@ -1375,91 +1515,102 @@ pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
                 tags.push("Verification Pending".to_string());
             }
 
-            Property {
-                id,
-                title,
-                area: area.clone(),
-                area_id: format!("area-{}", area_slug),
-                city: fact_text(node, "city").into(),
-                society_id,
-                builder_name: fact_text(node, "builder_name").into(),
-                property_type: {
-                    let t: String = fact_text(node, "property_type").into();
-                    if t.is_empty() {
-                        "Apartment".to_string()
-                    } else {
-                        t
-                    }
+            let possession_status: String = fact_text(node, "possession_status").into();
+            let has_possession = !possession_status.trim().is_empty();
+            let status = PropertyStatus {
+                possession: has_possession.then(|| PossessionStatus(possession_status)),
+                validation_state: if has_possession {
+                    StatusValidationState::Supported
+                } else {
+                    StatusValidationState::Missing
                 },
-                listing_type: {
-                    let t: String = fact_text(node, "listing_type").into();
-                    if t.is_empty() {
-                        "Resale".to_string()
-                    } else {
-                        t
-                    }
+                ..PropertyStatus::default()
+            };
+            materialize_buyer_view(
+                Property {
+                    id,
+                    title,
+                    area: area.clone(),
+                    area_id: (!area_slug.is_empty())
+                        .then(|| format!("area-{area_slug}"))
+                        .unwrap_or_default(),
+                    city: fact_text(node, "city").into(),
+                    society_id,
+                    builder_name: fact_text(node, "builder_name").into(),
+                    property_type: {
+                        let t: String = fact_text(node, "property_type").into();
+                        if t.is_empty() {
+                            "Apartment".to_string()
+                        } else {
+                            t
+                        }
+                    },
+                    listing_type: {
+                        let t: String = fact_text(node, "listing_type").into();
+                        if t.is_empty() {
+                            "Resale".to_string()
+                        } else {
+                            t
+                        }
+                    },
+                    bhk,
+                    price,
+                    price_per_sqft,
+                    carpet_area_sqft,
+                    super_builtup_sqft: fact_numeric(node, "super_builtup_sqft") as u32,
+                    floor: fact_numeric(node, "floor") as u32,
+                    total_floors: fact_numeric(node, "total_floors") as u32,
+                    facing: {
+                        let f: String = fact_text(node, "facing").into();
+                        if f.is_empty() {
+                            "Not specified".to_string()
+                        } else {
+                            f
+                        }
+                    },
+                    possession_status: String::new(),
+                    status: PropertyStatus::default(),
+                    buyer_eligibility: Default::default(),
+                    metro_distance_mins: fact_numeric(node, "metro_distance_mins") as u32,
+                    maintenance_cost_monthly: fact_numeric(node, "maintenance_cost_monthly") as u32,
+                    society_quality_score: optional_fact_numeric(node, "society_quality_score"),
+                    builder_quality_score: optional_fact_numeric(node, "builder_quality_score"),
+                    document_completeness_score: optional_fact_numeric(
+                        node,
+                        "document_completeness_score",
+                    ),
+                    litigation_risk: optional_fact_numeric(node, "litigation_risk"),
+                    noise_score: optional_fact_numeric(node, "noise_score"),
+                    sunlight_score: optional_fact_numeric(node, "sunlight_score"),
+                    airport_noise_score: optional_fact_numeric(node, "airport_noise_score"),
+                    waterlogging_risk_score: optional_fact_numeric(node, "waterlogging_risk_score"),
+                    traffic_score: optional_fact_numeric(node, "traffic_score"),
+                    days_on_market: fact_numeric(node, "days_on_market") as u32,
+                    greenery_score: None,
+                    open_space_score: None,
+                    resale_strength_score: None,
+                    interest_level: None,
+                    saves_last_7d: None,
+                    offers_last_7d: None,
+                    images: {
+                        let imgs: Vec<String> = fact_tags(node, "images").into();
+                        imgs
+                    },
+                    hero_image: fact_text(node, "hero_image").into(),
+                    media: Vec::new(),
+                    description_summary: description,
+                    transparency_tags: tags,
+                    source_reference: {
+                        let s: String = fact_text(node, "source_reference").into();
+                        if s.is_empty() {
+                            "Knowledge Graph".to_string()
+                        } else {
+                            s
+                        }
+                    },
                 },
-                bhk,
-                price,
-                price_per_sqft,
-                carpet_area_sqft,
-                super_builtup_sqft: fact_numeric(node, "super_builtup_sqft") as u32,
-                floor: fact_numeric(node, "floor") as u32,
-                total_floors: fact_numeric(node, "total_floors") as u32,
-                facing: {
-                    let f: String = fact_text(node, "facing").into();
-                    if f.is_empty() {
-                        "Not specified".to_string()
-                    } else {
-                        f
-                    }
-                },
-                possession_status: {
-                    let p: String = fact_text(node, "possession_status").into();
-                    if p.is_empty() {
-                        "unknown".to_string()
-                    } else {
-                        p
-                    }
-                },
-                metro_distance_mins: fact_numeric(node, "metro_distance_mins") as u32,
-                maintenance_cost_monthly: fact_numeric(node, "maintenance_cost_monthly") as u32,
-                society_quality_score: optional_fact_numeric(node, "society_quality_score"),
-                builder_quality_score: optional_fact_numeric(node, "builder_quality_score"),
-                document_completeness_score: optional_fact_numeric(
-                    node,
-                    "document_completeness_score",
-                ),
-                litigation_risk: optional_fact_numeric(node, "litigation_risk"),
-                noise_score: optional_fact_numeric(node, "noise_score"),
-                sunlight_score: optional_fact_numeric(node, "sunlight_score"),
-                airport_noise_score: optional_fact_numeric(node, "airport_noise_score"),
-                waterlogging_risk_score: optional_fact_numeric(node, "waterlogging_risk_score"),
-                traffic_score: optional_fact_numeric(node, "traffic_score"),
-                days_on_market: fact_numeric(node, "days_on_market") as u32,
-                greenery_score: None,
-                open_space_score: None,
-                resale_strength_score: None,
-                interest_level: None,
-                saves_last_7d: None,
-                offers_last_7d: None,
-                images: {
-                    let imgs: Vec<String> = fact_tags(node, "images").into();
-                    imgs
-                },
-                hero_image: fact_text(node, "hero_image").into(),
-                media: Vec::new(),
-                description_summary: description,
-                transparency_tags: tags,
-                source_reference: {
-                    let s: String = fact_text(node, "source_reference").into();
-                    if s.is_empty() {
-                        "Knowledge Graph".to_string()
-                    } else {
-                        s
-                    }
-                },
-            }
+                status,
+            )
         })
         .collect()
 }
@@ -1910,12 +2061,75 @@ mod tests {
         assert_eq!(property.area, "Varthur");
         assert_eq!(property.price, 30_000_000);
         assert_eq!(property.carpet_area_sqft, 2_000);
-        assert_eq!(property.possession_status, "Completed");
+        assert_eq!(property.possession_status, "");
+        assert_eq!(
+            property
+                .status
+                .regulatory
+                .as_ref()
+                .map(|status| status.0.as_str()),
+            Some("Completed")
+        );
+        assert!(property.status.lifecycle.is_none());
+        for surface in [
+            crate::buyer_eligibility::DISCOVERY_SURFACE,
+            crate::buyer_eligibility::SEARCH_SURFACE,
+            crate::buyer_eligibility::RECOMMENDATIONS_SURFACE,
+            crate::buyer_eligibility::DETAIL_SURFACE,
+            crate::buyer_eligibility::COMPARE_SURFACE,
+            crate::buyer_eligibility::PLAN_SURFACE,
+        ] {
+            assert!(
+                property.is_eligible_for(surface),
+                "alias hydration lost {surface} eligibility"
+            );
+        }
         assert_eq!(property.source_reference, "search_serving_bundle:bundle-v1");
 
         let society = society_from_serving_entity(&entities[1], &fact_index, &[]);
         assert_eq!(society.id, "soc-prestige-lavender-fields");
         assert_eq!(society.review_summary, "Google signal is mixed-positive.");
+    }
+
+    #[test]
+    fn serving_records_preserve_incomplete_properties_with_surface_reason_codes() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "property:discovered-unready-home-3bhk".to_string(),
+            entity_type: "property".to_string(),
+            name: "3 BHK in Unready Home".to_string(),
+            root_source: Some("rera".to_string()),
+            searchable_text: String::new(),
+        }];
+        let fact_index = ServingFactIndex::from_records(
+            vec![serving_fact(
+                "property:discovered-unready-home-3bhk",
+                "rera_status",
+                FactValue::Text("APPROVED".to_string()),
+                0.95,
+            )],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+
+        assert_eq!(properties.len(), 1, "internal records must stay available");
+        let property = &properties[0];
+        let search = property
+            .buyer_eligibility
+            .decision(crate::buyer_eligibility::SEARCH_SURFACE)
+            .expect("search decision");
+        assert!(!search.eligible);
+        assert_eq!(search.reason_codes, ["missing_area", "missing_price"]);
+        assert_eq!(property.possession_status, "");
+        assert_eq!(
+            property
+                .status
+                .regulatory
+                .as_ref()
+                .map(|status| status.0.as_str()),
+            Some("APPROVED")
+        );
+        assert!(property.status.lifecycle.is_none());
     }
 
     #[test]
@@ -2080,7 +2294,16 @@ mod tests {
         let property = &properties[0];
         assert_eq!(property.id, "discovered-prestige-elm-park-3bhk");
         assert_eq!(property.price, 12_500_000);
-        assert_eq!(property.possession_status, "New Launch");
+        assert_eq!(property.possession_status, "");
+        assert_eq!(
+            property
+                .status
+                .regulatory
+                .as_ref()
+                .map(|status| status.0.as_str()),
+            Some("New Launch")
+        );
+        assert!(property.status.lifecycle.is_none());
         assert!(property
             .transparency_tags
             .iter()
@@ -2161,9 +2384,15 @@ mod tests {
                     0.95,
                 ),
                 serving_fact(
+                    "society:prestige-elm-park",
+                    "area",
+                    FactValue::Text("Whitefield".to_string()),
+                    0.95,
+                ),
+                serving_fact(
                     "society:rera-elm-park-alias",
-                    "listing_3bhk",
-                    FactValue::Text(listing_payload(12_500_000.0, 1_250.0)),
+                    "available_configurations",
+                    FactValue::Text("3 BHK".to_string()),
                     0.95,
                 ),
             ],
@@ -2178,6 +2407,107 @@ mod tests {
                 .count(),
             1
         );
+        let property = properties
+            .iter()
+            .find(|property| property.id == "discovered-prestige-elm-park-3bhk")
+            .expect("deduplicated property");
+        assert_eq!(property.area, "Whitefield");
+        assert_eq!(property.price, 12_500_000);
+        assert!(property.is_eligible_for(crate::buyer_eligibility::SEARCH_SURFACE));
+        let mut complete = property.clone();
+        complete.id = "duplicate-home".to_string();
+        let mut incomplete = complete.clone();
+        incomplete.area.clear();
+        incomplete.price = 0;
+        incomplete.buyer_eligibility = evaluate_property(&incomplete);
+        let mut other = complete.clone();
+        other.id = "another-home".to_string();
+
+        let first =
+            dedupe_property_candidates(vec![incomplete.clone(), other.clone(), complete.clone()]);
+        let second = dedupe_property_candidates(vec![complete, incomplete, other]);
+
+        assert_eq!(
+            first
+                .iter()
+                .map(|property| property.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["another-home", "duplicate-home"]
+        );
+        assert_eq!(
+            first
+                .iter()
+                .map(|property| (&property.id, &property.status, &property.buyer_eligibility))
+                .collect::<Vec<_>>(),
+            second
+                .iter()
+                .map(|property| (&property.id, &property.status, &property.buyer_eligibility))
+                .collect::<Vec<_>>()
+        );
+        assert!(first[1].is_eligible_for(crate::buyer_eligibility::SEARCH_SURFACE));
+
+        let mut equal_left = first[1].clone();
+        equal_left.id = "equal-quality-home".to_string();
+        equal_left.title = "Alpha Home".to_string();
+        equal_left.buyer_eligibility = evaluate_property(&equal_left);
+        let mut equal_right = equal_left.clone();
+        equal_right.title = "Beta Home".to_string();
+        equal_right.buyer_eligibility = evaluate_property(&equal_right);
+
+        let forward = dedupe_property_candidates(vec![equal_left.clone(), equal_right.clone()]);
+        let reverse = dedupe_property_candidates(vec![equal_right, equal_left]);
+        assert_eq!(forward.len(), 1);
+        assert_eq!(forward[0].title, reverse[0].title);
+        assert_eq!(forward[0].source_reference, reverse[0].source_reference);
+    }
+
+    #[test]
+    fn typed_status_keeps_possession_timing_separate_and_false_conflicts_clear() {
+        let entity_id = "property:typed-status";
+        let fact_index = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    entity_id,
+                    "possession_status",
+                    FactValue::Text("under_construction".to_string()),
+                    1.0,
+                ),
+                serving_fact(
+                    entity_id,
+                    "possession_date",
+                    FactValue::Text("2028-12-31".to_string()),
+                    1.0,
+                ),
+                serving_fact(entity_id, "status_conflict", FactValue::Bool(false), 1.0),
+            ],
+            Vec::new(),
+        );
+        let status = typed_property_status(&[fact_index.entity(entity_id)]);
+
+        assert_eq!(
+            status.possession.as_ref().map(|value| value.0.as_str()),
+            Some("under_construction")
+        );
+        assert_eq!(
+            status
+                .possession_timing
+                .as_ref()
+                .map(|value| value.0.as_str()),
+            Some("2028-12-31")
+        );
+        assert_eq!(status.validation_state, StatusValidationState::Supported);
+
+        let conflict_index = ServingFactIndex::from_records(
+            vec![serving_fact(
+                entity_id,
+                "status_conflict",
+                FactValue::Text("conflict".to_string()),
+                1.0,
+            )],
+            Vec::new(),
+        );
+        let conflict = typed_property_status(&[conflict_index.entity(entity_id)]);
+        assert_eq!(conflict.validation_state, StatusValidationState::Conflict);
     }
 
     #[test]
@@ -2251,7 +2581,19 @@ mod tests {
             .iter()
             .all(|property| property.price_per_sqft == 0));
         assert!(properties.iter().all(|property| {
-            property
+            [
+                crate::buyer_eligibility::DISCOVERY_SURFACE,
+                crate::buyer_eligibility::SEARCH_SURFACE,
+                crate::buyer_eligibility::RECOMMENDATIONS_SURFACE,
+                crate::buyer_eligibility::DETAIL_SURFACE,
+                crate::buyer_eligibility::COMPARE_SURFACE,
+                crate::buyer_eligibility::PLAN_SURFACE,
+            ]
+            .into_iter()
+            .all(|surface| !property.is_eligible_for(surface))
+        }));
+        assert!(properties.iter().all(|property| {
+            !property
                 .transparency_tags
                 .iter()
                 .any(|tag| tag == "Price unavailable")
@@ -2456,7 +2798,7 @@ mod tests {
         assert_eq!(p.carpet_area_sqft, 0);
         assert_eq!(p.property_type, "Apartment");
         assert_eq!(p.facing, "Not specified");
-        assert_eq!(p.possession_status, "unknown");
+        assert_eq!(p.possession_status, "");
         // Missing quality/risk scores stay absent — no bootstrap defaults.
         assert!(p.society_quality_score.is_none());
         assert!(p.litigation_risk.is_none());
@@ -2838,7 +3180,7 @@ mod tests {
     }
 
     #[test]
-    fn serving_properties_without_price_are_excluded_from_runtime_catalog() {
+    fn serving_properties_without_price_stay_internal_and_are_buyer_ineligible() {
         let entities = vec![ServingEntityRecord {
             entity_id: "property:discovered-prestige-lakeside-habitat-3bhk".to_string(),
             entity_type: "property".to_string(),
@@ -2857,9 +3199,25 @@ mod tests {
         );
 
         let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
-        assert!(
-            properties.is_empty(),
-            "zero-price homes must not enter the catalog"
-        );
+        assert_eq!(properties.len(), 1, "incomplete homes remain enrichable");
+        let property = &properties[0];
+        for surface in [
+            crate::buyer_eligibility::DISCOVERY_SURFACE,
+            crate::buyer_eligibility::SEARCH_SURFACE,
+            crate::buyer_eligibility::RECOMMENDATIONS_SURFACE,
+            crate::buyer_eligibility::DETAIL_SURFACE,
+            crate::buyer_eligibility::COMPARE_SURFACE,
+            crate::buyer_eligibility::PLAN_SURFACE,
+        ] {
+            let decision = property
+                .buyer_eligibility
+                .decision(surface)
+                .expect("surface decision");
+            assert!(!decision.eligible, "{surface} must reject incomplete home");
+            assert!(decision
+                .reason_codes
+                .iter()
+                .any(|reason| reason == "missing_price"));
+        }
     }
 }

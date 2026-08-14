@@ -18,6 +18,8 @@ const MAX_SURFACE_IDS: usize = 8;
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
     pub error: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reason_codes: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -141,6 +143,9 @@ async fn build_property_surfaces_response(
         .find(|property| property.id == *property_id)
         .cloned()
         .ok_or_else(|| SurfaceRouteError::not_found("property_not_found"))?;
+    if !property.is_eligible_for(crate::buyer_eligibility::DETAIL_SURFACE) {
+        return Err(SurfaceRouteError::not_ready(&property));
+    }
     drop(properties);
 
     let config = ui_surfaces_config()
@@ -250,6 +255,7 @@ fn validate_surface_ids(surface_ids: Vec<String>) -> Result<Vec<String>, Surface
 struct SurfaceRouteError {
     status: StatusCode,
     message: String,
+    reason_codes: Vec<String>,
 }
 
 impl SurfaceRouteError {
@@ -257,6 +263,19 @@ impl SurfaceRouteError {
         Self {
             status,
             message: message.into(),
+            reason_codes: Vec::new(),
+        }
+    }
+
+    fn not_ready(property: &crate::models::Property) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            message: "property_not_ready".to_string(),
+            reason_codes: property
+                .buyer_eligibility
+                .decision(crate::buyer_eligibility::DETAIL_SURFACE)
+                .map(|decision| decision.reason_codes.clone())
+                .unwrap_or_default(),
         }
     }
 
@@ -274,7 +293,13 @@ impl SurfaceRouteError {
 }
 
 fn route_error(err: SurfaceRouteError) -> (StatusCode, Json<ErrorResponse>) {
-    error(err.status, &err.message)
+    (
+        err.status,
+        Json(ErrorResponse {
+            error: err.message,
+            reason_codes: err.reason_codes,
+        }),
+    )
 }
 
 fn error(status: StatusCode, message: &str) -> (StatusCode, Json<ErrorResponse>) {
@@ -282,6 +307,7 @@ fn error(status: StatusCode, message: &str) -> (StatusCode, Json<ErrorResponse>)
         status,
         Json(ErrorResponse {
             error: message.to_string(),
+            reason_codes: Vec::new(),
         }),
     )
 }

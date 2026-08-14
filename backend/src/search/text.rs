@@ -254,7 +254,7 @@ impl TextSearch {
         let mut results: Vec<RankedSearchResult> = candidate_properties
             .into_iter()
             .filter_map(|(ordinal, p)| {
-                if !p.is_listable() {
+                if !p.is_eligible_for(crate::buyer_eligibility::SEARCH_SURFACE) {
                     return None;
                 }
 
@@ -789,6 +789,8 @@ impl TextSearch {
                         ),
                         description_summary: p.description_summary.clone(),
                         possession_status: p.possession_status.clone(),
+                        status: p.status.clone(),
+                        buyer_eligibility: p.buyer_eligibility.clone(),
                         metro_distance_mins: p.metro_distance_mins,
                         floor: p.floor,
                         total_floors: p.total_floors,
@@ -3683,6 +3685,10 @@ mod tests {
             total_floors: 20,
             facing: "East".to_string(),
             possession_status: "Ready to Move".to_string(),
+            status: Default::default(),
+            buyer_eligibility: crate::buyer_eligibility::evaluate_signals(
+                crate::buyer_eligibility::BuyerEligibilitySignals::complete_without_media(),
+            ),
             metro_distance_mins,
             maintenance_cost_monthly: 6_000,
             society_quality_score: Some(0.7),

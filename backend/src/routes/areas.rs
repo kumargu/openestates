@@ -104,6 +104,7 @@ pub async fn get_area(
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
                 error: "area_not_found".to_string(),
+                reason_codes: Vec::new(),
             }),
         )
     })?;
@@ -117,12 +118,17 @@ fn build_area_tracker(
     search_log: &[SearchEvent],
     policy: &AreaTrackerPolicy,
 ) -> AreaTrackerResponse {
+    let buyer_properties = properties
+        .iter()
+        .filter(|property| property.is_eligible_for(crate::buyer_eligibility::DISCOVERY_SURFACE))
+        .collect::<Vec<_>>();
     let markets = areas
         .iter()
         .filter_map(|area| {
             let area_key = normalize_area(&area.name);
-            let area_properties = properties
+            let area_properties = buyer_properties
                 .iter()
+                .copied()
                 .filter(|property| normalize_area(&property.area) == area_key)
                 .collect::<Vec<_>>();
             let listing_count = area_properties.len();
@@ -231,7 +237,7 @@ fn build_area_tracker(
     AreaTrackerResponse {
         generated_at: chrono::Utc::now().to_rfc3339(),
         total_areas: areas.len(),
-        total_listings: properties.len(),
+        total_listings: buyer_properties.len(),
         markets,
     }
 }
@@ -355,6 +361,8 @@ mod tests {
             total_floors: 0,
             facing: String::new(),
             possession_status: "ready".to_string(),
+            status: Default::default(),
+            buyer_eligibility: Default::default(),
             metro_distance_mins: 15,
             maintenance_cost_monthly: 0,
             society_quality_score: None,
@@ -380,6 +388,8 @@ mod tests {
             transparency_tags: Vec::new(),
             source_reference: String::new(),
         };
+        let mut property = property;
+        property.buyer_eligibility = crate::buyer_eligibility::evaluate_property(&property);
         let mut second_property = property.clone();
         second_property.id = "p2".to_string();
         second_property.builder_name = "Builder B".to_string();
@@ -387,6 +397,13 @@ mod tests {
         second_property.price_per_sqft = 20;
         second_property.possession_status = "under_construction".to_string();
         second_property.metro_distance_mins = 16;
+        second_property.buyer_eligibility =
+            crate::buyer_eligibility::evaluate_property(&second_property);
+        let mut incomplete_property = property.clone();
+        incomplete_property.id = "incomplete".to_string();
+        incomplete_property.bhk = 0;
+        incomplete_property.buyer_eligibility =
+            crate::buyer_eligibility::evaluate_property(&incomplete_property);
         let mut event = SearchEvent::new(
             "3BHK Whitefield".to_string(),
             SearchIntent {
@@ -413,7 +430,7 @@ mod tests {
 
         let tracker = build_area_tracker(
             &[area],
-            &[property, second_property],
+            &[property, second_property, incomplete_property],
             &[event],
             crate::scoring::area_tracker_policy(),
         );

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::buyer_eligibility::{BuyerEligibility, PropertyStatus};
 use crate::decision_labels::{DecisionCheckSummary, DecisionLabel};
 use crate::routes::enrichment::DataFreshness;
 
@@ -60,6 +61,8 @@ pub struct Property {
     pub total_floors: u32,
     pub facing: String,
     pub possession_status: String,
+    pub status: PropertyStatus,
+    pub buyer_eligibility: BuyerEligibility,
     pub metro_distance_mins: u32,
     pub maintenance_cost_monthly: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -103,15 +106,8 @@ pub struct Property {
 }
 
 impl Property {
-    /// Buyer-facing surfaces can show priced homes, or explicit project
-    /// configurations whose price is still unavailable.
-    pub fn is_listable(&self) -> bool {
-        self.price > 0
-            || (self.bhk > 0
-                && self
-                    .transparency_tags
-                    .iter()
-                    .any(|tag| tag.eq_ignore_ascii_case("Price unavailable")))
+    pub fn is_eligible_for(&self, surface: &str) -> bool {
+        self.buyer_eligibility.eligible_for(surface)
     }
 }
 
@@ -153,6 +149,8 @@ pub struct PropertyCard {
     pub transparency_tags: Vec<String>,
     pub description_summary: String,
     pub possession_status: String,
+    pub status: PropertyStatus,
+    pub buyer_eligibility: BuyerEligibility,
     pub metro_distance_mins: u32,
     pub floor: u32,
     pub total_floors: u32,

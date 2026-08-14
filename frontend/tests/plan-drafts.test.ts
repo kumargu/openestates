@@ -52,5 +52,6 @@ test("draft persistence requires the route and loaded property to match", () => 
   assert.equal(canPersistPlanDraft("home-a", "home-a", "ready"), true);
   assert.equal(canPersistPlanDraft("home-b", "home-a", "ready"), false);
   assert.equal(canPersistPlanDraft("home-a", "home-a", "loading"), false);
+  assert.equal(canPersistPlanDraft("home-a", "home-a", "unavailable"), false);
   assert.equal(canPersistPlanDraft(undefined, "home-a", "ready"), false);
 });

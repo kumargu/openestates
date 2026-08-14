@@ -126,7 +126,9 @@ fn recall_candidates(
     let mut channels_by_id = HashMap::<String, Vec<RecallChannelHit>>::new();
 
     for property in properties {
-        if property.id == current.id || !property.is_listable() {
+        if property.id == current.id
+            || !property.is_eligible_for(crate::buyer_eligibility::RECOMMENDATIONS_SURFACE)
+        {
             continue;
         }
         if property.bhk == current.bhk && same_area(current, property) {
@@ -158,7 +160,10 @@ fn recall_candidates(
         .into_iter()
         .take(RECALL_LIMIT)
         .filter_map(|(id, channels)| {
-            let property = properties.iter().find(|property| property.id == id)?;
+            let property = properties.iter().find(|property| {
+                property.id == id
+                    && property.is_eligible_for(crate::buyer_eligibility::RECOMMENDATIONS_SURFACE)
+            })?;
             let card = overlay_serving_google_reviews(
                 enrich_property_card(property, societies, graph),
                 &property.society_id,
@@ -215,7 +220,10 @@ fn add_serving_graph_recall(
 
     let society_to_property = properties
         .iter()
-        .filter(|property| property.id != current.id && property.is_listable())
+        .filter(|property| {
+            property.id != current.id
+                && property.is_eligible_for(crate::buyer_eligibility::RECOMMENDATIONS_SURFACE)
+        })
         .map(|property| (society_node_id(&property.society_id), property.id.as_str()))
         .collect::<HashMap<_, _>>();
 
@@ -262,7 +270,10 @@ fn add_tantivy_recall(
 
 fn property_ids_for_tantivy_hit(hit: &TantivyRecallHit, properties: &[Property]) -> Vec<String> {
     if let Some(id) = hit.entity_id.strip_prefix("property:") {
-        return if properties.iter().any(|property| property.id == id) {
+        return if properties.iter().any(|property| {
+            property.id == id
+                && property.is_eligible_for(crate::buyer_eligibility::RECOMMENDATIONS_SURFACE)
+        }) {
             vec![id.to_string()]
         } else {
             Vec::new()
@@ -271,7 +282,10 @@ fn property_ids_for_tantivy_hit(hit: &TantivyRecallHit, properties: &[Property])
     if hit.entity_id.starts_with("society:") {
         return properties
             .iter()
-            .filter(|property| society_node_id(&property.society_id) == hit.entity_id)
+            .filter(|property| {
+                society_node_id(&property.society_id) == hit.entity_id
+                    && property.is_eligible_for(crate::buyer_eligibility::RECOMMENDATIONS_SURFACE)
+            })
             .map(|property| property.id.clone())
             .collect();
     }
@@ -566,4 +580,97 @@ fn normalize(value: &str) -> String {
         .filter(|ch| ch.is_ascii_alphanumeric())
         .flat_map(|ch| ch.to_lowercase())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tantivy_hits_do_not_recall_buyer_ineligible_properties() {
+        let ready = property("ready-home", "shared-society", true);
+        let blocked = property("blocked-home", "shared-society", false);
+        let properties = vec![ready, blocked];
+
+        let property_hit = TantivyRecallHit {
+            entity_id: "property:blocked-home".to_string(),
+            entity_type: "property".to_string(),
+            name: "Blocked home".to_string(),
+            score: 1.0,
+            matched_fields: vec!["name".to_string()],
+        };
+        assert!(property_ids_for_tantivy_hit(&property_hit, &properties).is_empty());
+
+        let society_hit = TantivyRecallHit {
+            entity_id: "society:shared-society".to_string(),
+            entity_type: "society".to_string(),
+            name: "Shared Society".to_string(),
+            score: 1.0,
+            matched_fields: vec!["name".to_string()],
+        };
+        assert_eq!(
+            property_ids_for_tantivy_hit(&society_hit, &properties),
+            ["ready-home"]
+        );
+    }
+
+    fn property(id: &str, society_id: &str, eligible: bool) -> Property {
+        let mut buyer_eligibility = crate::buyer_eligibility::evaluate_signals(
+            crate::buyer_eligibility::BuyerEligibilitySignals::complete_without_media(),
+        );
+        if !eligible {
+            let decision = buyer_eligibility
+                .surfaces
+                .get_mut(crate::buyer_eligibility::RECOMMENDATIONS_SURFACE)
+                .expect("recommendations decision");
+            decision.eligible = false;
+            decision.reason_codes = vec!["missing_price".to_string()];
+        }
+        Property {
+            id: id.to_string(),
+            title: "3 BHK in Test Home".to_string(),
+            area: "Test Area".to_string(),
+            area_id: "test-area".to_string(),
+            city: "Test City".to_string(),
+            society_id: society_id.to_string(),
+            builder_name: "Test Builder".to_string(),
+            property_type: "Apartment".to_string(),
+            listing_type: "Resale".to_string(),
+            bhk: 3,
+            price: 10_000_000,
+            price_per_sqft: 10_000,
+            carpet_area_sqft: 1_000,
+            super_builtup_sqft: 1_200,
+            floor: 1,
+            total_floors: 10,
+            facing: String::new(),
+            possession_status: String::new(),
+            status: Default::default(),
+            buyer_eligibility,
+            metro_distance_mins: 0,
+            maintenance_cost_monthly: 0,
+            society_quality_score: None,
+            builder_quality_score: None,
+            document_completeness_score: None,
+            litigation_risk: None,
+            noise_score: None,
+            sunlight_score: None,
+            airport_noise_score: None,
+            waterlogging_risk_score: None,
+            traffic_score: None,
+            days_on_market: 0,
+            greenery_score: None,
+            open_space_score: None,
+            resale_strength_score: None,
+            interest_level: None,
+            saves_last_7d: None,
+            offers_last_7d: None,
+            images: Vec::new(),
+            hero_image: String::new(),
+            media: Vec::new(),
+            description_summary: String::new(),
+            transparency_tags: Vec::new(),
+            source_reference: String::new(),
+        }
+    }
 }
