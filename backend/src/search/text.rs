@@ -26,8 +26,8 @@ use super::intent::{ConstraintOperator, HardConstraint, SearchIntent};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text};
 use super::schema::{self, NumericConstraintSchema, NumericEvidenceSchema, TextEvidenceSchema};
 use super::{
-    ConfidenceComponent, ConfidenceScore, MatchExplanation, MatchReason, PreferenceCoverage,
-    SearchResultCard,
+    BuyerProofCoverageGap, BuyerProofProjection, BuyerProofReceipt, ConfidenceComponent,
+    ConfidenceScore, MatchExplanation, MatchReason, PreferenceCoverage, SearchResultCard,
 };
 
 /// Simple text-matching search engine.
@@ -729,6 +729,8 @@ impl TextSearch {
                 } else {
                     None
                 };
+                let buyer_proof =
+                    buyer_proof_projection(match_explanation.as_ref(), &proof_focuses);
 
                 // Structured preference queries should still return local candidates
                 // with no-data coverage instead of disappearing behind a penalty.
@@ -864,6 +866,7 @@ impl TextSearch {
                         match_reason,
                         match_explanation,
                         proof_focuses,
+                        buyer_proof,
                         confidence_score,
                     },
                 })
@@ -1027,6 +1030,114 @@ fn distance_m(distance_km: f64) -> Option<u32> {
         .then(|| (distance_km * 1000.0).round())
         .filter(|meters| *meters >= 0.0 && *meters <= u32::MAX as f64)
         .map(|meters| meters as u32)
+}
+
+fn buyer_proof_projection(
+    explanation: Option<&MatchExplanation>,
+    focuses: &[ProofFocus],
+) -> Option<BuyerProofProjection> {
+    let explanation = explanation?;
+    let receipt = focuses.first().and_then(|focus| {
+        let reason = explanation.reasons.iter().find(|reason| {
+            reason.fact_key.eq_ignore_ascii_case(&focus.fact_key)
+                && focus
+                    .requested_constraint
+                    .as_deref()
+                    .is_none_or(|requested| reason.preference.eq_ignore_ascii_case(requested))
+        })?;
+        let concrete_value = focus
+            .matched_label
+            .as_deref()
+            .or(focus.matched_value.as_deref())
+            .map(proof_value_from_display)
+            .filter(|value| !value.is_empty());
+        let (label, parsed_distance_m) = concrete_value
+            .as_deref()
+            .map(concrete_receipt_parts)
+            .unwrap_or_else(|| (reason.display.clone(), None));
+        let match_status = explanation
+            .preference_coverage
+            .iter()
+            .find(|coverage| coverage.preference.eq_ignore_ascii_case(&reason.preference))
+            .map(|coverage| coverage.status.clone())
+            .unwrap_or_else(|| "matched".to_string());
+
+        Some(BuyerProofReceipt {
+            label,
+            matched_value: concrete_value,
+            matched_entity_id: focus.entity_id.clone(),
+            distance_m: focus.distance_m.or(parsed_distance_m),
+            requested_preference: focus.requested_constraint.clone(),
+            match_status,
+            source_type: reason.source_type.clone(),
+            evidence_confidence: reason.confidence,
+            focus: focus.clone(),
+        })
+    });
+    let coverage_gap = explanation
+        .preference_coverage
+        .iter()
+        .find(|coverage| {
+            matches!(coverage.status.as_str(), "no_data" | "conflicted")
+                && !receipt
+                    .as_ref()
+                    .is_some_and(|receipt| no_data_coverage_overlaps_receipt(coverage, receipt))
+        })
+        .map(|coverage| BuyerProofCoverageGap {
+            preference: coverage.preference.clone(),
+            status: coverage.status.clone(),
+        });
+
+    (receipt.is_some() || coverage_gap.is_some()).then_some(BuyerProofProjection {
+        receipt,
+        coverage_gap,
+    })
+}
+
+fn no_data_coverage_overlaps_receipt(
+    coverage: &PreferenceCoverage,
+    receipt: &BuyerProofReceipt,
+) -> bool {
+    if coverage.status != "no_data" {
+        return false;
+    }
+    if receipt
+        .requested_preference
+        .as_deref()
+        .is_some_and(|preference| preference.eq_ignore_ascii_case(&coverage.preference))
+        || coverage
+            .fact_key
+            .as_deref()
+            .is_some_and(|fact_key| fact_key.eq_ignore_ascii_case(&receipt.focus.fact_key))
+    {
+        return true;
+    }
+    schema::expanded_keys_for_preference_label(&coverage.preference, false)
+        .iter()
+        .any(|fact_key| fact_key.eq_ignore_ascii_case(&receipt.focus.fact_key))
+}
+
+fn proof_value_from_display(display: &str) -> String {
+    display
+        .split_once(':')
+        .map(|(_, value)| value.trim())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| display.trim())
+        .to_string()
+}
+
+fn concrete_receipt_parts(value: &str) -> (String, Option<u32>) {
+    let distance = geo::extract_first_distance_km(value).and_then(distance_m);
+    let label = value
+        .rsplit_once(" (")
+        .filter(|(_, suffix)| {
+            suffix.ends_with(')') && geo::extract_first_distance_km(suffix).is_some()
+        })
+        .map(|(label, _)| label.trim())
+        .filter(|label| !label.is_empty())
+        .unwrap_or(value)
+        .to_string();
+    (label, distance)
 }
 
 impl From<geo::HaversineEvidence> for NamedPlaceEvidence {
@@ -7163,5 +7274,67 @@ mod tests {
         );
 
         assert_eq!(results[0].card.id, "target-3bhk");
+    }
+
+    #[test]
+    fn buyer_proof_projects_concrete_receipt_separately_from_missing_coverage() {
+        let focus = ProofFocus {
+            surface_id: "configured_surface".to_string(),
+            layer_id: "configured_layer".to_string(),
+            fact_key: "nearby_lakes".to_string(),
+            entity_id: None,
+            feature_id: None,
+            receipt_id: None,
+            matched_label: None,
+            matched_value: Some("Configured label: Buyer receipt (0.6 km)".to_string()),
+            requested_constraint: Some("near configured place".to_string()),
+            distance_m: None,
+            reason: "matches near configured place".to_string(),
+        };
+        let explanation = MatchExplanation {
+            reasons: vec![MatchReason {
+                preference: "near configured place".to_string(),
+                fact_key: "nearby_lakes".to_string(),
+                display: "Configured label: Buyer receipt (0.6 km)".to_string(),
+                score: 0.8,
+                confidence: 0.82,
+                source_type: "Configured source".to_string(),
+                scoring_method: "serving".to_string(),
+            }],
+            preference_coverage: vec![
+                PreferenceCoverage {
+                    preference: "near configured place".to_string(),
+                    status: "matched".to_string(),
+                    fact_key: Some("nearby_lakes".to_string()),
+                },
+                PreferenceCoverage {
+                    preference: "lake proximity".to_string(),
+                    status: "no_data".to_string(),
+                    fact_key: None,
+                },
+                PreferenceCoverage {
+                    preference: "unverified preference".to_string(),
+                    status: "no_data".to_string(),
+                    fact_key: None,
+                },
+            ],
+            graph_driven_pct: 100.0,
+            total_facts_consulted: 1,
+        };
+
+        let projection = buyer_proof_projection(Some(&explanation), &[focus])
+            .expect("projection should be available");
+        let receipt = projection.receipt.expect("receipt should be projected");
+        assert_eq!(receipt.label, "Buyer receipt");
+        assert_eq!(receipt.distance_m, Some(600));
+        assert_eq!(receipt.match_status, "matched");
+        assert_eq!(receipt.evidence_confidence, 0.82);
+        assert_eq!(
+            projection
+                .coverage_gap
+                .expect("gap should be projected")
+                .preference,
+            "unverified preference"
+        );
     }
 }

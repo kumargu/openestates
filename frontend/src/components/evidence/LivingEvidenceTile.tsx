@@ -1,9 +1,17 @@
 import { Link } from "react-router-dom";
-import type { PropertyCard, ProofFocus } from "../../lib/types.ts";
+import type {
+  BuyerProofProjection,
+  PropertyCard,
+  ProofFocus,
+} from "../../lib/types.ts";
 import { propertyDetailPath } from "../../lib/api.ts";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
 import { SaveHeartButton } from "../SaveHeartButton.tsx";
 import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
+import {
+  buyerProofCoverageLabel,
+  buyerProofReceiptLabel,
+} from "../../lib/buyerProof.ts";
 
 function formatPrice(price: number): string {
   if (!hasKnownNumber(price)) return "Price unavailable";
@@ -43,6 +51,7 @@ type Props = {
   /** Landing/browse surfaces — same card shell, minimal meta. */
   variant?: "default" | "browse";
   proofFocus?: ProofFocus;
+  buyerProof?: BuyerProofProjection;
   matchLabels?: string[];
   /** Keep shortlist entry points explicit instead of enabling them on every card surface. */
   allowSave?: boolean;
@@ -53,6 +62,7 @@ export function LivingEvidenceTile({
   onQuickView,
   variant = "default",
   proofFocus,
+  buyerProof,
   matchLabels = [],
   allowSave = false,
 }: Props) {
@@ -80,6 +90,8 @@ export function LivingEvidenceTile({
     e.stopPropagation();
     onQuickView?.(property.id);
   };
+  const receipt = buyerProof?.receipt;
+  const coverageGap = buyerProof?.coverage_gap;
 
   return (
     <article
@@ -152,7 +164,12 @@ export function LivingEvidenceTile({
               </span>
             ) : null}
           </div>
-          {matchLabels.length > 0 && (
+          {receipt ? (
+            <p className="catalog-card__receipt">
+              <span>Why it fits</span>
+              {buyerProofReceiptLabel(receipt)}
+            </p>
+          ) : matchLabels.length > 0 ? (
             <div className="catalog-card__signals" aria-label="Search match">
               {matchLabels.slice(0, 2).map((label) => (
                 <span key={label} className="catalog-card__signal">
@@ -160,7 +177,12 @@ export function LivingEvidenceTile({
                 </span>
               ))}
             </div>
-          )}
+          ) : null}
+          {coverageGap ? (
+            <p className="catalog-card__coverage-gap">
+              {buyerProofCoverageLabel(coverageGap)}
+            </p>
+          ) : null}
         </div>
       </Link>
     </article>

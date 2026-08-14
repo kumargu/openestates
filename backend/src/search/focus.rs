@@ -456,6 +456,7 @@ fn sibling_result_card(
         ),
         match_explanation: None,
         proof_focuses: Vec::new(),
+        buyer_proof: None,
         confidence_score: None,
     }
 }
@@ -530,6 +531,7 @@ mod tests {
             match_reason: "matches".to_string(),
             match_explanation: None,
             proof_focuses: Vec::new(),
+            buyer_proof: None,
             confidence_score: None,
         }
     }

@@ -109,9 +109,44 @@ pub struct SearchResultCard {
     /// Generic detail-surface focus handles backed by the same proof reasons.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub proof_focuses: Vec<ProofFocus>,
+    /// Buyer-edited projection of one inspectable receipt and one
+    /// decision-relevant coverage gap.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub buyer_proof: Option<BuyerProofProjection>,
     /// Data confidence score — how trustworthy is this result's data?
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence_score: Option<ConfidenceScore>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BuyerProofProjection {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<BuyerProofReceipt>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coverage_gap: Option<BuyerProofCoverageGap>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BuyerProofReceipt {
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_entity_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub distance_m: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub requested_preference: Option<String>,
+    pub match_status: String,
+    pub source_type: String,
+    pub evidence_confidence: f32,
+    pub focus: ProofFocus,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BuyerProofCoverageGap {
+    pub preference: String,
+    pub status: String,
 }
 
 /// Sourced claim — a piece of knowledge with provenance, shown alongside results.

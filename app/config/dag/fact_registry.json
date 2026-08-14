@@ -1590,6 +1590,7 @@
         "label": "lake proximity",
         "expanded_keys": [
           "nearest_lake_distance_m",
+          "nearby_lakes",
           "lake_proximity",
           "lake_waterlogging_context",
           "waterlogging_risk"

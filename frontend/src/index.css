@@ -7552,7 +7552,7 @@ button.oe-label-pill:focus-visible {
 
   .home-inline-results-anchor {
     scroll-margin-top: 68px;
-    padding: 0 1rem 2rem;
+    padding: 0 1rem calc(2rem + env(safe-area-inset-bottom));
   }
 
   .home-discovery-section {

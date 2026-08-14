@@ -149,6 +149,10 @@ export function propertySurfacePath(id: string, surfaceId: string, focus?: Proof
   return `/api/properties/${encodeURIComponent(id)}/surfaces/${encodeURIComponent(surfaceId)}${params}`;
 }
 
+export function propertyDetailSurfaceId(focus?: ProofFocus): string {
+  return focus?.surfaceId ?? "around_this_home";
+}
+
 export function parseProofFocusParam(value: string | null): ProofFocus | undefined {
   if (!value) return undefined;
   try {

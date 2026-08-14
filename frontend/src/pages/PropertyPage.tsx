@@ -23,6 +23,7 @@ import {
   getProperty,
   getPropertyRecommendations,
   getPropertySurface,
+  propertyDetailSurfaceId,
   parseProofFocusParam,
 } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
@@ -936,7 +937,7 @@ function PropertyPageBody({
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
   const [recommendations, setRecommendations] =
     useState<RecommendationResponse | null>(null);
-  const [aroundThisHomeScene, setAroundThisHomeScene] =
+  const [detailSurfaceScene, setDetailSurfaceScene] =
     useState<SurfaceSceneResponse | null>(null);
   const [allProperties, setAllProperties] = useState<PropertyCard[]>([]);
   const [recommendationStatus, setRecommendationStatus] =
@@ -998,12 +999,23 @@ function PropertyPageBody({
     let cancelled = false;
 
     const focus = parseProofFocusParam(focusParam);
-    getPropertySurface(propertyId, "around_this_home", focus)
+    const surfaceId = propertyDetailSurfaceId(focus);
+    getPropertySurface(propertyId, surfaceId, focus)
       .then((scene) => {
-        if (!cancelled) setAroundThisHomeScene(scene);
+        if (!cancelled) setDetailSurfaceScene(scene);
       })
-      .catch(() => {
-        if (!cancelled) setAroundThisHomeScene(null);
+      .catch(async () => {
+        if (cancelled) return;
+        if (surfaceId === "around_this_home") {
+          setDetailSurfaceScene(null);
+          return;
+        }
+        try {
+          const fallback = await getPropertySurface(propertyId, "around_this_home");
+          if (!cancelled) setDetailSurfaceScene(fallback);
+        } catch {
+          if (!cancelled) setDetailSurfaceScene(null);
+        }
       });
 
     return () => {
@@ -1143,7 +1155,7 @@ function PropertyPageBody({
   const detailEvidenceSections = data.evidence?.sections ?? [];
   const showApproachTrail = hasApproachRoadTrail(detailEvidenceSections);
   const aroundThisHomeContext = propertyMapContextFromSurfaceScene(
-    aroundThisHomeScene,
+    detailSurfaceScene,
     data.map_context,
   );
   const showNearbyPlate = hasAroundThisHomePlate(aroundThisHomeContext);

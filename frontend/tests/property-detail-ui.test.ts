@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   ApiRequestError,
   parseProofFocusParam,
+  propertyDetailSurfaceId,
   propertyDetailPath,
   propertySurfacePath,
 } from "../src/lib/api.ts";
@@ -72,6 +73,12 @@ test("proof focus URL contract round-trips through detail and surface paths", ()
   );
   assert.equal(surfaceUrl.pathname, "/api/properties/property%20id%2Fwith%20slash/surfaces/around_this_home");
   assert.deepEqual(parseProofFocusParam(surfaceUrl.searchParams.get("focus")), focus);
+  assert.equal(propertyDetailSurfaceId(parsed), "around_this_home");
+  assert.equal(
+    propertyDetailSurfaceId({ ...focus, surfaceId: "configured_surface" }),
+    "configured_surface",
+  );
+  assert.equal(propertyDetailSurfaceId(), "around_this_home");
 });
 
 test("around-this-home stays hidden without usable context", () => {

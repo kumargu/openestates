@@ -14,7 +14,7 @@ import type {
   SearchResultItem,
 } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
-import { searchResultReasonLabels, type MatchResult } from "../lib/search.ts";
+import { type MatchResult } from "../lib/search.ts";
 import { PageState } from "../components/PageState.tsx";
 import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
 import { addRecentSearch } from "../lib/recent-searches.ts";
@@ -408,8 +408,8 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
     <LivingEvidenceTile
       property={result}
       onQuickView={setPanelPropertyId}
-      matchLabels={hasQuery ? searchResultReasonLabels(result) : []}
-      proofFocus={result.proof_focuses?.find((focus) => focus.surfaceId === "around_this_home")}
+      buyerProof={hasQuery ? result.buyer_proof : undefined}
+      proofFocus={result.buyer_proof?.receipt?.focus ?? result.proof_focuses?.[0]}
     />
   );
 

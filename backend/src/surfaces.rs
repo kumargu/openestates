@@ -521,6 +521,15 @@ fn candidate_text_matches(candidate: &SceneFeatureCandidate, needle: &str) -> bo
     if needle.is_empty() {
         return false;
     }
+    candidate_text_matches_exact(candidate, needle)
+        || needle
+            .split_once(':')
+            .map(|(_, value)| value.trim())
+            .filter(|value| !value.is_empty())
+            .is_some_and(|value| candidate_text_matches_exact(candidate, value))
+}
+
+fn candidate_text_matches_exact(candidate: &SceneFeatureCandidate, needle: &str) -> bool {
     text_contains_ci(&candidate.label, needle)
         || candidate
             .short_label
@@ -1863,10 +1872,10 @@ mod tests {
             entity_id: None,
             feature_id: None,
             receipt_id: None,
-            matched_label: Some("Burial ground".to_string()),
-            matched_value: Some("Burial ground (50 m)".to_string()),
+            matched_label: None,
+            matched_value: Some("Nearby risks: Burial ground (50 m)".to_string()),
             requested_constraint: Some("near Burial ground".to_string()),
-            distance_m: Some(50),
+            distance_m: None,
             reason: "matched near Burial ground".to_string(),
         };
 
@@ -1898,6 +1907,7 @@ mod tests {
         assert_eq!(scene.layers[0].shown_count, 2);
         let applied = scene.proof_focus.expect("focus should be applied");
         assert_eq!(applied.fact_key, "nearby_graveyards");
+        assert_eq!(applied.distance_m, Some(50));
         assert!(applied.feature_id.is_some());
         assert!(applied.receipt_id.is_some());
     }

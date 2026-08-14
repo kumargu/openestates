@@ -527,6 +527,28 @@ export type ProofFocus = {
   reason: string;
 };
 
+export type BuyerProofReceipt = {
+  label: string;
+  matched_value?: string;
+  matched_entity_id?: string;
+  distance_m?: number;
+  requested_preference?: string;
+  match_status: "matched" | "partial" | "conflicted";
+  source_type: string;
+  evidence_confidence: number;
+  focus: ProofFocus;
+};
+
+export type BuyerProofCoverageGap = {
+  preference: string;
+  status: "no_data" | "conflicted";
+};
+
+export type BuyerProofProjection = {
+  receipt?: BuyerProofReceipt;
+  coverage_gap?: BuyerProofCoverageGap;
+};
+
 export type PropertySurfacesResponse = {
   contractVersion: 1;
   propertyId: string;
@@ -1061,6 +1083,7 @@ export type SearchResultItem = PropertyCard & {
   match_reason: string;
   match_explanation?: MatchExplanation;
   proof_focuses?: ProofFocus[];
+  buyer_proof?: BuyerProofProjection;
   confidence_score?: ConfidenceScore;
 };
 

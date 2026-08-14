@@ -420,6 +420,9 @@ function AroundThisHomePlateInner({
       <div className="nearby-plate__head">
         <div>
           <h2 id="around-this-home-title" className="nearby-plate__title">Around this home</h2>
+          {focus ? (
+            <p className="nearby-plate__match-context">Matched your search</p>
+          ) : null}
         </div>
       </div>
 
