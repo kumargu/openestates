@@ -107,17 +107,20 @@ pub fn rera_decision_check_summary_for_society(
         return None;
     }
 
-    let attention_count = labels
-        .iter()
-        .filter(|label| matches!(label.severity.as_str(), "risk" | "caution"))
-        .count();
-    let has_attention = attention_count > 0;
-    let primary_labels = labels
+    let summary_labels = labels
         .iter()
         .filter(|label| {
-            label.placement == "primary" || (!has_attention && label.severity == "positive")
+            label.surfaces.iter().any(|surface| {
+                config
+                    .summary
+                    .primary_surfaces
+                    .iter()
+                    .any(|candidate| candidate == surface)
+            })
         })
-        .filter(|label| !has_attention || label.severity != "positive")
+        .collect::<Vec<_>>();
+    let primary_labels = summary_labels
+        .into_iter()
         .take(config.summary.primary_limit)
         .cloned()
         .collect::<Vec<_>>();
@@ -432,6 +435,16 @@ mod tests {
                 "rera_land_litigation",
                 FactValue::Bool(true),
             ),
+            fact(
+                "society:sample",
+                "rera_builder_revocations",
+                FactValue::Numeric(2.0),
+            ),
+            fact(
+                "society:sample",
+                "rera_project_complaints_count",
+                FactValue::Numeric(8.0),
+            ),
             fact("society:sample", "rera_registered", FactValue::Bool(true)),
             fact(
                 "society:sample",
@@ -473,7 +486,16 @@ mod tests {
             .expect("summary should be present");
         assert_eq!(summary.tile_label, "RERA");
         assert_eq!(summary.tone, "risk");
-        assert_eq!(summary.primary_count, 2);
+        assert_eq!(summary.primary_count, 3);
+        assert_eq!(summary.primary_labels.len(), 3);
+        assert!(summary
+            .primary_labels
+            .iter()
+            .all(|label| matches!(label.severity.as_str(), "risk" | "caution")));
+        assert!(!summary
+            .primary_labels
+            .iter()
+            .any(|label| label.key == "project_high_complaints"));
         assert_eq!(
             summary.registration_number_compact.as_deref(),
             Some("PRM/KA/.../003528")
@@ -512,6 +534,34 @@ mod tests {
         assert_eq!(labels.len(), 1);
         assert_eq!(labels[0].key, "project_high_complaints");
         assert_eq!(labels[0].label, "8 project complaints");
+    }
+
+    #[test]
+    fn detail_summary_omits_positive_audit_and_compare_only_labels() {
+        let index = index(vec![
+            fact(
+                "society:sample",
+                "parking_total_car_count",
+                FactValue::Numeric(100.0),
+            ),
+            fact(
+                "society:sample",
+                "project_unit_count",
+                FactValue::Numeric(100.0),
+            ),
+            fact(
+                "society:sample",
+                "rera_legal_land_document_count",
+                FactValue::Numeric(2.0),
+            ),
+        ]);
+
+        let summary = rera_decision_check_summary_for_society(&index, "sample")
+            .expect("available labels should still build the drill-down summary");
+
+        assert_eq!(summary.total_count, 3);
+        assert_eq!(summary.primary_count, 0);
+        assert!(summary.primary_labels.is_empty());
     }
 
     fn index(facts: Vec<ServingFactRecord>) -> ServingFactIndex {

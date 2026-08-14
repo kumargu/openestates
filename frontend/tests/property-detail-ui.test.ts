@@ -23,7 +23,21 @@ import {
   trustedPropertyMedia,
 } from "../src/lib/propertyScene.ts";
 import { propertyMapContextFromSurfaceScene } from "../src/lib/surfaceSceneProjection.ts";
-import type { PropertyMapContext, PropertyMedia, ProofFocus, SurfaceSceneResponse } from "../src/lib/types.ts";
+import {
+  decisionSummaryLabels,
+  formatReviewDate,
+  propertyDisplayName,
+  reviewExcerpts,
+  uniqueBySociety,
+} from "../src/lib/propertyDetailPresentation.ts";
+import type {
+  DecisionLabel,
+  ExternalReviewCard,
+  PropertyMapContext,
+  PropertyMedia,
+  ProofFocus,
+  SurfaceSceneResponse,
+} from "../src/lib/types.ts";
 
 const emptyMapContext: PropertyMapContext = {
   home: {
@@ -32,6 +46,74 @@ const emptyMapContext: PropertyMapContext = {
   },
   places: [],
 };
+
+function decisionLabel(
+  key: string,
+  severity: "risk" | "caution" | "positive",
+): DecisionLabel {
+  return {
+    key,
+    label: `${key} label`,
+    severity,
+    scope: "project",
+    visualId: key,
+    priority: 1,
+    confidence: 0.9,
+    groupId: "attention",
+    placement: "primary",
+  };
+}
+
+function review(id: string, text = "Useful resident context"): ExternalReviewCard {
+  return { id, source: "Google", text, tone: "neutral" };
+}
+
+test("property decision labels preserve the backend projection and review previews stay capped", () => {
+  const blank = decisionLabel("blank", "positive");
+  blank.label = " ";
+  assert.deepEqual(
+    decisionSummaryLabels([
+      decisionLabel("risk", "risk"),
+      decisionLabel("caution", "caution"),
+      blank,
+      decisionLabel("positive", "positive"),
+      decisionLabel("fourth", "positive"),
+    ]).map((label) => label.key),
+    ["risk", "caution", "positive", "fourth"],
+  );
+  assert.deepEqual(
+    reviewExcerpts([review("one"), review("blank", " "), review("two"), review("three"), review("four")])
+      .map((item) => item.id),
+    ["one", "two", "three"],
+  );
+});
+
+test("property headings do not repeat the configuration from the meta line", () => {
+  assert.equal(
+    propertyDisplayName("3 BHK in Sample Society", "Sample Society"),
+    "Sample Society",
+  );
+  assert.equal(propertyDisplayName("3 BHK in Fallback Home", undefined), "Fallback Home");
+});
+
+test("review dates render ISO values as stable human dates", () => {
+  assert.equal(formatReviewDate("2026-07-20T14:32:00Z"), "20 Jul 2026");
+  assert.equal(formatReviewDate("2 months ago"), "2 months ago");
+  assert.equal(formatReviewDate(undefined), null);
+});
+
+test("nearby recommendations keep one configuration per society", () => {
+  const items = [
+    { id: "first", property: { id: "p1", society_name: "One", kg_entity_refs: { property_entity_id: "p1", society_entity_id: "society:one", area_entity_id: "area:a" } } },
+    { id: "sibling", property: { id: "p2", society_name: "One", kg_entity_refs: { property_entity_id: "p2", society_entity_id: "society:one", area_entity_id: "area:a" } } },
+    { id: "second", property: { id: "p3", society_name: "Two", kg_entity_refs: { property_entity_id: "p3", society_entity_id: "society:two", area_entity_id: "area:a" } } },
+  ];
+
+  assert.deepEqual(
+    uniqueBySociety(items, (item) => item.property).map((item) => item.id),
+    ["first", "second"],
+  );
+});
 
 test("typed API errors preserve not-ready and not-found contracts", () => {
   const unavailable = new ApiRequestError(
@@ -84,6 +166,36 @@ test("proof focus URL contract round-trips through detail and surface paths", ()
 test("around-this-home stays hidden without usable context", () => {
   assert.equal(hasAroundThisHomePlate(null), false);
   assert.equal(hasAroundThisHomePlate(emptyMapContext), false);
+});
+
+test("map projection omits runtime null coordinates and invalid overlay lines", () => {
+  const invalidNumber = null as unknown as number;
+  const projected = propertyMapContextFromSurfaceScene(null, {
+    home: {
+      entity_id: "society:test",
+      name: "Test society",
+      latitude: invalidNumber,
+      longitude: 77.7,
+    },
+    places: [{
+      layer: "schools",
+      name: "School",
+      latitude: 12.9,
+      longitude: invalidNumber,
+      source_type: "test",
+    }],
+    metro_lines: [{
+      id: "invalid",
+      name: "Invalid line",
+      kind: "metro",
+      coordinates: [[invalidNumber, 12.9], [77.71, 12.91]],
+      source_type: "test",
+    }],
+  });
+
+  assert.equal(projected?.home.latitude, undefined);
+  assert.equal(projected?.places[0]?.longitude, undefined);
+  assert.deepEqual(projected?.metro_lines, []);
 });
 
 test("around-this-home accepts places, water, or metro evidence", () => {

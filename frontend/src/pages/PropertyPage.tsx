@@ -7,9 +7,7 @@ import {
 } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import type {
-  DetailSignal,
-  EvidenceSection,
-  ExternalReviewCard,
+  DecisionCheckSummary,
   PropertyCard,
   PropertyDetailResponse,
   PropertyMedia,
@@ -46,10 +44,17 @@ import {
   propertyMediaLabel,
   propertySceneMediaAt,
 } from "../lib/propertyScene.ts";
-import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
 import { isRedundantHomeState } from "../lib/property-signals.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
+import {
+  decisionSummaryLabels,
+  formatReviewDate,
+  propertyDisplayName,
+  reviewExcerpts,
+  societyIdentityKey,
+  uniqueBySociety,
+} from "../lib/propertyDetailPresentation.ts";
 
 function formatPrice(price: number): string {
   if (!hasKnownNumber(price)) return "Price unavailable";
@@ -75,24 +80,6 @@ function compactLifecycleLabel(value: string): string {
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
-function truncateCopy(value: string, limit = 220): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= limit) return normalized;
-  const trimmed = normalized.slice(0, limit).replace(/\s+\S*$/, "");
-  return `${trimmed}...`;
-}
-
-function reviewSnippetCopy(value: string): string {
-  return truncateCopy(
-    value
-      .replace(/^Google review feedback reads/i, "Google reviews read")
-      .replace(
-        /,?\s*though recurring themes are still being extracted\.?/i,
-        ".",
-      ),
-  );
-}
-
 function formatGoogleRating(value: number | null | undefined): string | null {
   if (!hasKnownNumber(value)) return null;
   return value.toFixed(1);
@@ -108,61 +95,6 @@ function formatReviewCount(value: number | null | undefined): string | null {
   return `${value.toLocaleString("en-IN")} Google ${value === 1 ? "review" : "reviews"}`;
 }
 
-function reviewSpaceCost(review: ExternalReviewCard): number {
-  const words = review.text.trim().split(/\s+/).filter(Boolean).length;
-  if (words <= 32) return 1;
-  if (words <= 70) return 1.8;
-  return 2.4;
-}
-
-function fitReviewCards(
-  reviewCards: ExternalReviewCard[],
-  budget = 22,
-): ExternalReviewCard[] {
-  const selected: ExternalReviewCard[] = [];
-  let used = 0;
-  for (const review of reviewCards) {
-    const cost = reviewSpaceCost(review);
-    if (selected.length >= 8 && used + cost > budget) break;
-    if (selected.length >= 12) break;
-    selected.push(review);
-    used += cost;
-  }
-  return selected;
-}
-
-function detailSignalPills(
-  signals: DetailSignal[] | undefined,
-): DetailSignal[] {
-  return (signals ?? []).filter((signal) => signal.label.trim()).slice(0, 8);
-}
-
-function PropertySignalPills({
-  signals,
-}: {
-  signals: DetailSignal[] | undefined;
-}) {
-  const signalPills = detailSignalPills(signals);
-  if (signalPills.length === 0) return null;
-
-  return (
-    <section
-      className="property-signal-section"
-      aria-label="Positive review themes"
-    >
-      <span className="property-signal-section__label">Positive themes</span>
-      <div className="property-signal-pills">
-        {signalPills.map((signal) => (
-          <span key={signal.key} className="property-signal-pill">
-            <LabelVisualIcon id={signal.icon || signal.key} size={22} />
-            <strong>{signal.label}</strong>
-          </span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function cleanAreaToken(value: string): string {
   return value
     .toLowerCase()
@@ -174,15 +106,6 @@ function cleanAreaToken(value: string): string {
 
 function areaTokens(value: string): Set<string> {
   return new Set(cleanAreaToken(value).split(" ").filter(Boolean));
-}
-
-function societyKey(
-  property: Pick<PropertyCard, "kg_entity_refs" | "society_name">,
-): string {
-  return (
-    property.kg_entity_refs?.society_entity_id ||
-    property.society_name.trim().toLowerCase()
-  );
 }
 
 function propertyToCard(data: PropertyDetailResponse): PropertyCard {
@@ -262,21 +185,20 @@ function rankedRecommendationItems(
       property,
     }));
 
-  return [...branchItems, ...nearbyItems]
-    .sort((left, right) => {
-      const reviewDelta =
-        reviewStrength(right.property) - reviewStrength(left.property);
-      if (Math.abs(reviewDelta) > 0.001) return reviewDelta;
-      const branchDelta =
-        (right.kind === "branch" ? right.branch.magnitude : 0) -
-        (left.kind === "branch" ? left.branch.magnitude : 0);
-      if (Math.abs(branchDelta) > 0.001) return branchDelta;
-      return (
-        comparablePrice(left.property.price) -
-        comparablePrice(right.property.price)
-      );
-    })
-    .slice(0, 8);
+  const ranked = [...branchItems, ...nearbyItems].sort((left, right) => {
+    const reviewDelta =
+      reviewStrength(right.property) - reviewStrength(left.property);
+    if (Math.abs(reviewDelta) > 0.001) return reviewDelta;
+    const branchDelta =
+      (right.kind === "branch" ? right.branch.magnitude : 0) -
+      (left.kind === "branch" ? left.branch.magnitude : 0);
+    if (Math.abs(branchDelta) > 0.001) return branchDelta;
+    return (
+      comparablePrice(left.property.price) -
+      comparablePrice(right.property.price)
+    );
+  });
+  return uniqueBySociety(ranked, (item) => item.property).slice(0, 8);
 }
 
 function nearbyRailItems(
@@ -285,18 +207,21 @@ function nearbyRailItems(
   currentProperty: PropertyCard,
   preferredAreas: string[],
 ): RankedRecommendationItem[] {
-  const currentSocietyKey = societyKey(currentProperty);
+  const currentSocietyKey = societyIdentityKey(currentProperty);
   const allowedAreas = new Set([currentProperty.area, ...preferredAreas]);
   const isDifferentSociety = (property: PropertyCard) =>
-    !currentSocietyKey || societyKey(property) !== currentSocietyKey;
-  const scopedPrimaryItems = primaryItems.filter(
-    (item) =>
-      allowedAreas.has(item.property.area) && isDifferentSociety(item.property),
+    societyIdentityKey(property) !== currentSocietyKey;
+  const scopedPrimaryItems = uniqueBySociety(
+    primaryItems.filter(
+      (item) =>
+        allowedAreas.has(item.property.area) && isDifferentSociety(item.property),
+    ),
+    (item) => item.property,
   );
   const used = new Set(scopedPrimaryItems.map((item) => item.property.id));
   used.add(currentProperty.id);
   const areaRank = new Map(preferredAreas.map((area, index) => [area, index]));
-  const fillers: RankedRecommendationItem[] = properties
+  const fillerCandidates: RankedRecommendationItem[] = properties
     .filter((property) => !used.has(property.id))
     .filter((property) => allowedAreas.has(property.area))
     .filter(isDifferentSociety)
@@ -309,14 +234,21 @@ function nearbyRailItems(
       if (Math.abs(reviewDelta) > 0.001) return reviewDelta;
       return comparablePrice(left.price) - comparablePrice(right.price);
     })
-    .slice(0, Math.max(0, 8 - scopedPrimaryItems.length))
     .map((property) => ({
       kind: "nearby",
       id: `nearby-${property.id}`,
       property,
     }));
 
-  return [...scopedPrimaryItems, ...fillers].slice(0, 8);
+  const fillers = uniqueBySociety(
+    fillerCandidates,
+    (item) => item.property,
+  ).slice(0, Math.max(0, 8 - scopedPrimaryItems.length));
+
+  return uniqueBySociety(
+    [...scopedPrimaryItems, ...fillers],
+    (item) => item.property,
+  ).slice(0, 8);
 }
 
 function InlinePriceRangeSignal({
@@ -395,18 +327,6 @@ function microMarketAreas(
     )
     .slice(0, 5)
     .map((item) => item.area);
-}
-
-function reviewEvidenceSections(
-  sections: EvidenceSection[],
-): EvidenceSection[] {
-  return sections.filter(
-    (section) =>
-      ["community", "community_pulse", "resident_reviews", "reviews"].includes(
-        section.kind,
-      ) ||
-      /review|resident|community/i.test(`${section.kind} ${section.title}`),
-  );
 }
 
 function CleanDialog({
@@ -618,42 +538,58 @@ function PropertyPhotoMosaic({
   );
 }
 
-function GoogleReviewsSection({
-  data,
-  reviewSections,
+function humanizeDecisionToken(value: string): string {
+  return value
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function PropertyDecisionSummary({
+  summary,
+  reportHref,
 }: {
-  data: PropertyDetailResponse;
-  reviewSections: EvidenceSection[];
+  summary: DecisionCheckSummary | undefined;
+  reportHref: string | undefined;
 }) {
+  const labels = decisionSummaryLabels(summary?.primaryLabels);
+  if (!summary || labels.length === 0) return null;
+
+  return (
+    <section
+      className="property-decision-summary"
+      aria-labelledby="property-decision-summary-title"
+    >
+      <div className="property-section-line">
+        <h2 id="property-decision-summary-title">Before you decide</h2>
+        {reportHref && <Link to={reportHref}>RERA report</Link>}
+      </div>
+      <ul className="property-decision-summary__list">
+        {labels.map((label) => (
+          <li key={label.key} data-tone={label.severity}>
+            <strong>{label.label}</strong>
+            <span>
+              {humanizeDecisionToken(label.severity)} · {humanizeDecisionToken(label.scope)} · {summary.tileLabel}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function GoogleReviewsSection({ data }: { data: PropertyDetailResponse }) {
   const { society } = data;
   const reviews = data.external_reviews;
   const googleUrl = reviews?.google_reviews_url ?? society?.google_reviews_url;
-  const rating = formatGoogleRating(reviews?.google_rating);
   const reviewCount = formatReviewCount(reviews?.google_review_count);
-  const communityPulse = reviewSections.find(
-    (section) => section.community_pulse,
-  )?.community_pulse;
-  const fallbackCards: ExternalReviewCard[] = [
-    communityPulse?.paragraph,
-    ...(communityPulse?.quotes?.slice(0, 2).map((quote) => quote.text) ?? []),
-  ]
-    .filter((value): value is string => Boolean(value?.trim()))
-    .map((value, index) => ({
-      id: `review-fallback-${index}`,
-      source: "Google",
-      author: "Google reviewer",
-      text: reviewSnippetCopy(value),
-      tone: "neutral" as const,
-    }));
-  const reviewSourceCards = reviews?.reviews?.length
-    ? reviews.reviews
-    : fallbackCards;
-  const reviewCards = fitReviewCards(reviewSourceCards);
-  const reviewButtonLabel = reviewCount
-    ? `Show all ${reviewCount.replace(" Google ", " ")}`
-    : "Show more Google reviews";
+  const reviewCards = reviewExcerpts(reviews?.reviews);
+  const reviewSummary = reviewCards.length > 0
+    ? `${reviewCards.length} ${reviewCards.length === 1 ? "excerpt" : "excerpts"}${reviewCount ? ` from ${reviewCount}` : ""}`
+    : reviewCount;
 
-  if (!googleUrl && reviewCards.length === 0 && !rating) return null;
+  if (!googleUrl && reviewCards.length === 0) return null;
 
   return (
     <section
@@ -661,28 +597,29 @@ function GoogleReviewsSection({
       aria-labelledby="property-google-reviews-title"
     >
       <div className="property-section-line">
-        <h2 id="property-google-reviews-title">
-          {rating ? `★ ${rating}` : "Google reviews"}
-          {reviewCount ? ` · ${reviewCount}` : ""}
-        </h2>
+        <h2 id="property-google-reviews-title">Resident reviews</h2>
+        {reviewSummary && <span>{reviewSummary}</span>}
       </div>
 
       {reviewCards.length > 0 && (
         <div className="property-review-grid">
-          {reviewCards.map((review) => (
-            <article key={review.id} className="property-review-card">
-              {(review.rating || review.date_label) && (
+          {reviewCards.map((review) => {
+            const date = formatReviewDate(review.date_label);
+            return (
+              <article
+                key={review.id}
+                className="property-review-card"
+                data-tone={review.tone}
+              >
                 <p className="property-review-card__meta">
-                  {review.rating && (
-                    <span>{"★".repeat(Math.round(review.rating))}</span>
-                  )}
-                  {review.rating && review.date_label && " · "}
-                  {review.date_label}
+                  <strong>{review.author?.trim() || review.source}</strong>
+                  {review.rating ? ` · ★ ${review.rating.toFixed(1)}` : ""}
+                  {date ? ` · ${date}` : ""}
                 </p>
-              )}
-              <p>{review.text}</p>
-            </article>
-          ))}
+                <p>{review.text}</p>
+              </article>
+            );
+          })}
         </div>
       )}
 
@@ -693,7 +630,7 @@ function GoogleReviewsSection({
           target="_blank"
           rel="noreferrer"
         >
-          {reviewButtonLabel}
+          Read reviews on Google
         </a>
       )}
     </section>
@@ -712,7 +649,7 @@ function NearbyHomeCard({
     media: property.hero_media ? [property.hero_media] : [],
   });
   const image = propertySceneMediaAt(media, sceneIndex)?.url ?? null;
-  const title = property.title.trim();
+  const title = propertyDisplayName(property.title, property.society_name);
   const note = `${property.area} · ${property.bhk} BHK`;
 
   return (
@@ -1041,72 +978,22 @@ function PropertyPageBody({
 
   if (status === "loading")
     return (
-      <div className="page-container-wide">
-        {/* Hero placeholder */}
-        <div
-          className="skeleton-bar"
-          style={{
-            width: "100%",
-            height: "320px",
-            borderRadius: "var(--radius-md)",
-            marginBottom: "1.5rem",
-          }}
-        />
-        {/* Title bar */}
-        <div
-          className="skeleton-bar"
-          style={{ width: "60%", height: "28px", marginBottom: "0.5rem" }}
-        />
-        {/* Subtitle */}
-        <div
-          className="skeleton-bar"
-          style={{ width: "40%", height: "16px", marginBottom: "1rem" }}
-        />
-        {/* Price bar */}
-        <div
-          className="skeleton-bar"
-          style={{ width: "25%", height: "24px", marginBottom: "0.75rem" }}
-        />
-        {/* Tags row */}
-        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "2rem" }}>
-          <div
-            className="skeleton-bar"
-            style={{ width: "60px", height: "24px", borderRadius: "999px" }}
-          />
-          <div
-            className="skeleton-bar"
-            style={{ width: "80px", height: "24px", borderRadius: "999px" }}
-          />
-          <div
-            className="skeleton-bar"
-            style={{ width: "70px", height: "24px", borderRadius: "999px" }}
-          />
-          <div
-            className="skeleton-bar"
-            style={{ width: "90px", height: "24px", borderRadius: "999px" }}
-          />
+      <div
+        className="page-container-wide property-decision-page property-detail-loading"
+        aria-label="Loading property"
+        aria-busy="true"
+      >
+        <div className="property-detail-loading__identity">
+          <span className="skeleton-bar" />
+          <span className="skeleton-bar" />
         </div>
-        {/* Two-column layout */}
-        <div className="property-layout">
-          <div className="property-main">
-            <div className="skeleton-detail-section skeleton-bar" />
-            <div className="skeleton-detail-section skeleton-bar" />
-            <div
-              className="skeleton-detail-section skeleton-bar"
-              style={{ height: "140px" }}
-            />
-          </div>
-          <div className="property-sidebar">
-            <div
-              className="skeleton-detail-section skeleton-bar"
-              style={{ height: "120px" }}
-            />
-            <div
-              className="skeleton-detail-section skeleton-bar"
-              style={{ height: "160px" }}
-            />
-          </div>
+        <div className="property-detail-loading__facts">
+          <span className="skeleton-bar" />
+          <span className="skeleton-bar" />
+          <span className="skeleton-bar" />
         </div>
+        <div className="property-detail-loading__media skeleton-bar" />
+        <div className="property-detail-loading__decision skeleton-bar" />
       </div>
     );
   if (status === "not_found")
@@ -1114,7 +1001,7 @@ function PropertyPageBody({
       <PageState
         variant="not_found"
         context="property"
-        message={`Property "${id}" was not found.`}
+        message="We couldn't find this home."
       />
     );
   if (status === "unavailable")
@@ -1122,7 +1009,7 @@ function PropertyPageBody({
       <PageState
         variant="empty"
         context="property"
-        message="This home isn't ready to review yet. Explore other homes while we verify the essentials."
+        message="This home isn't ready to review yet. Explore other homes for now."
       />
     );
   if (status === "error")
@@ -1210,11 +1097,13 @@ function PropertyPageBody({
   )
     ?.split("·")[0]
     ?.trim();
-  const reviewsSections = reviewEvidenceSections(detailEvidenceSections);
-  const displayTitle = p.title.trim();
+  const displayTitle = propertyDisplayName(p.title, society?.name);
   const reraReport = data.rera_report_ref.availability === "unavailable"
     ? undefined
     : data.rera_report_ref;
+  const decisionLabels = decisionSummaryLabels(
+    data.decision_check_summary?.primaryLabels,
+  );
 
   function handleAreaSelect(area: string) {
     navigate(`/?q=${encodeURIComponent(area)}`);
@@ -1284,6 +1173,11 @@ function PropertyPageBody({
       />
 
       <main className="property-clean-flow">
+        <PropertyDecisionSummary
+          summary={data.decision_check_summary}
+          reportHref={reraReport?.href}
+        />
+
         <section className="property-map-section" aria-label="Around this home">
           {showNearbyPlate && aroundThisHomeContext && (
             <AroundThisHomePlate
@@ -1293,7 +1187,7 @@ function PropertyPageBody({
           )}
         </section>
 
-        {(showApproachTrail || reraReport) && (
+        {(showApproachTrail || (reraReport && decisionLabels.length === 0)) && (
           <section className="property-popup-row" aria-label="Home details">
             {showApproachTrail && (
               <ApproachRoadTrail
@@ -1302,7 +1196,7 @@ function PropertyPageBody({
                 variant="compact"
               />
             )}
-            {reraReport && (
+            {reraReport && decisionLabels.length === 0 && (
               <Link className="property-popup-action" to={reraReport.href}>
                 <span><strong>RERA report</strong></span>
                 <svg
@@ -1321,9 +1215,7 @@ function PropertyPageBody({
           </section>
         )}
 
-        <PropertySignalPills signals={data.detail_signals} />
-
-        <GoogleReviewsSection data={data} reviewSections={reviewsSections} />
+        <GoogleReviewsSection data={data} />
 
         <NearbyHomesRail items={nearbyItems} status={recommendationStatus} />
 

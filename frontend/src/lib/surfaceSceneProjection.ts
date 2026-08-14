@@ -13,7 +13,7 @@ export function propertyMapContextFromSurfaceScene(
   scene: SurfaceSceneResponse | null | undefined,
   fallback?: PropertyMapContext | null,
 ): PropertyMapContext | null {
-  if (!scene) return fallback ?? null;
+  if (!scene) return sanitizedMapContext(fallback);
 
   const anchorCoordinates = pointCoordinates(scene.anchor.geometry);
   const receiptsById = new Map(scene.receipts.map((receipt) => [receipt.id, receipt]));
@@ -30,11 +30,11 @@ export function propertyMapContextFromSurfaceScene(
     .map((feature) => mapLineFromFeature(feature, receiptsById))
     .filter((line): line is MapOverlayLine => Boolean(line));
 
-  const mergedRedFlagLines = [
+  const mergedRedFlagLines = validOverlayLines([
     ...redFlagLines,
     ...(fallback?.red_flag_lines ?? []).filter((line) =>
       !redFlagLines.some((candidate) => candidate.id === line.id)),
-  ];
+  ]) ?? [];
   const layers = mergedLayers(scene, fallback, mergedRedFlagLines);
 
   return {
@@ -46,14 +46,62 @@ export function propertyMapContextFromSurfaceScene(
       longitude: anchorCoordinates?.longitude,
     },
     layers,
-    places,
+    places: places.map(sanitizedPlacePin),
     proof_focus: scene.proofFocus,
     water: fallback?.water,
-    metro_lines: fallback?.metro_lines,
+    metro_lines: validOverlayLines(fallback?.metro_lines),
     red_flag_lines: mergedRedFlagLines,
     green_patches: fallback?.green_patches,
     lakes: fallback?.lakes,
   };
+}
+
+function sanitizedMapContext(
+  context: PropertyMapContext | null | undefined,
+): PropertyMapContext | null {
+  if (!context) return null;
+  return {
+    ...context,
+    home: {
+      ...context.home,
+      latitude: finiteNumber(context.home.latitude),
+      longitude: finiteNumber(context.home.longitude),
+    },
+    places: context.places.map(sanitizedPlacePin),
+    metro_lines: validOverlayLines(context.metro_lines),
+    red_flag_lines: validOverlayLines(context.red_flag_lines),
+  };
+}
+
+function sanitizedPlacePin(place: MapPlacePin): MapPlacePin {
+  return {
+    ...place,
+    latitude: finiteNumber(place.latitude),
+    longitude: finiteNumber(place.longitude),
+    distance_km: finiteNumber(place.distance_km),
+    rating: finiteNumber(place.rating),
+    review_count: finiteNumber(place.review_count),
+  };
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function validOverlayLines(
+  lines: MapOverlayLine[] | undefined,
+): MapOverlayLine[] | undefined {
+  if (!lines) return undefined;
+  return lines.filter((line) => validLineCoordinates(line.coordinates));
+}
+
+function validLineCoordinates(value: unknown): value is [number, number][] {
+  return Array.isArray(value)
+    && value.length >= 2
+    && value.every((coordinate) =>
+      Array.isArray(coordinate)
+      && finiteNumber(coordinate[0]) !== undefined
+      && finiteNumber(coordinate[1]) !== undefined);
 }
 
 function mergedLayers(
@@ -157,15 +205,16 @@ function pointCoordinates(geometry?: SceneGeometry): {
 } | null {
   if (!geometry || geometry.type !== "Point") return null;
   const [longitude, latitude] = geometry.coordinates;
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if (finiteNumber(latitude) === undefined || finiteNumber(longitude) === undefined) {
+    return null;
+  }
   return { latitude, longitude };
 }
 
 function lineCoordinates(geometry?: SceneGeometry): [number, number][] | null {
   if (!geometry || geometry.type !== "LineString") return null;
   if (geometry.coordinates.length < 2) return null;
-  return geometry.coordinates.every(([longitude, latitude]) =>
-    Number.isFinite(latitude) && Number.isFinite(longitude))
+  return validLineCoordinates(geometry.coordinates)
     ? geometry.coordinates
     : null;
 }

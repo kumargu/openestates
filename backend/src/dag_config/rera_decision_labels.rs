@@ -22,6 +22,8 @@ pub struct ReraDecisionLabelSummaryConfig {
     pub tile_label: String,
     #[serde(default = "default_primary_limit")]
     pub primary_limit: usize,
+    #[serde(default = "default_primary_surfaces")]
+    pub primary_surfaces: Vec<String>,
     #[serde(default = "default_groups")]
     pub groups: Vec<ReraDecisionLabelGroupDefinition>,
 }
@@ -31,6 +33,7 @@ impl Default for ReraDecisionLabelSummaryConfig {
         Self {
             tile_label: default_tile_label(),
             primary_limit: default_primary_limit(),
+            primary_surfaces: default_primary_surfaces(),
             groups: default_groups(),
         }
     }
@@ -135,7 +138,14 @@ fn default_tile_label() -> String {
 }
 
 fn default_primary_limit() -> usize {
-    4
+    3
+}
+
+fn default_primary_surfaces() -> Vec<String> {
+    vec![
+        "property_header".to_string(),
+        "property_context".to_string(),
+    ]
 }
 
 fn default_groups() -> Vec<ReraDecisionLabelGroupDefinition> {
@@ -186,6 +196,17 @@ fn validate_rera_decision_labels(config: &ReraDecisionLabelsFile) -> Result<(), 
     if config.summary.primary_limit == 0 {
         return Err(DagConfigError::InvalidConfig(
             "rera_decision_labels.json summary.primary_limit must be greater than zero".to_string(),
+        ));
+    }
+    if config.summary.primary_surfaces.is_empty()
+        || config
+            .summary
+            .primary_surfaces
+            .iter()
+            .any(|surface| surface.trim().is_empty())
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "rera_decision_labels.json summary.primary_surfaces must not be empty".to_string(),
         ));
     }
 
@@ -310,6 +331,11 @@ mod tests {
     #[test]
     fn rera_decision_labels_load_from_dag_config() {
         let config = load_rera_decision_labels().expect("RERA label config should load");
+        assert_eq!(config.summary.primary_limit, 3);
+        assert_eq!(
+            config.summary.primary_surfaces,
+            ["property_header", "property_context"]
+        );
         assert!(config
             .labels
             .iter()

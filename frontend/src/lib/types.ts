@@ -335,7 +335,6 @@ export type PropertyDetailResponse = {
     google_reviews_url?: string;
     reviews?: ExternalReviewCard[];
   };
-  detail_signals?: DetailSignal[];
   /** Config-derived labels intended for notes and compare surfaces. */
   decision_labels?: DecisionLabel[];
   /** Grouped compact checks for property-detail decision labels. */
@@ -356,13 +355,6 @@ export type ExternalReviewCard = {
   helpful_count?: number;
   text: string;
   tone: "positive" | "concern" | "neutral";
-};
-
-export type DetailSignal = {
-  key: string;
-  label: string;
-  icon: string;
-  count?: number;
 };
 
 export type SiteOverviewPlan = {

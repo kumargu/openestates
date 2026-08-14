@@ -3,7 +3,8 @@
   "description": "Buyer-facing decision labels derived from RERA-backed serving facts. Source facts remain the receipt; these labels are compact comparison and notes anchors.",
   "summary": {
     "tile_label": "RERA",
-    "primary_limit": 4,
+    "primary_limit": 3,
+    "primary_surfaces": ["property_header", "property_context"],
     "groups": [
       { "id": "attention", "title": "Cautions" },
       { "id": "project_facts", "title": "Project facts" },

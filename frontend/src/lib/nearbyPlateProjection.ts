@@ -103,6 +103,8 @@ export function resolveHomeAnchor(context: PropertyMapContext): {
   if (
     typeof context.home.latitude === "number"
     && typeof context.home.longitude === "number"
+    && Number.isFinite(context.home.latitude)
+    && Number.isFinite(context.home.longitude)
   ) {
     return {
       latitude: context.home.latitude,
@@ -113,7 +115,8 @@ export function resolveHomeAnchor(context: PropertyMapContext): {
 
   const coords = context.places.filter(
     (place): place is MapPlacePin & { latitude: number; longitude: number } =>
-      typeof place.latitude === "number" && typeof place.longitude === "number",
+      typeof place.latitude === "number" && Number.isFinite(place.latitude)
+      && typeof place.longitude === "number" && Number.isFinite(place.longitude),
   );
   if (coords.length === 0) return null;
 
@@ -248,7 +251,8 @@ export function metroStationsAroundHome(
   const ranked = places
     .filter(
       (place): place is MapPlacePin & { latitude: number; longitude: number } =>
-        typeof place.latitude === "number" && typeof place.longitude === "number",
+        typeof place.latitude === "number" && Number.isFinite(place.latitude)
+        && typeof place.longitude === "number" && Number.isFinite(place.longitude),
     )
     .map((place) => {
       const point = toLocalPoint(place.longitude, place.latitude);
@@ -305,7 +309,12 @@ export function chooseRadiusKm(
   let mapFar = 0;
   if (home) {
     for (const place of places) {
-      if (typeof place.latitude !== "number" || typeof place.longitude !== "number") continue;
+      if (
+        typeof place.latitude !== "number"
+        || !Number.isFinite(place.latitude)
+        || typeof place.longitude !== "number"
+        || !Number.isFinite(place.longitude)
+      ) continue;
       mapFar = Math.max(
         mapFar,
         distanceKm(home.latitude, home.longitude, place.latitude, place.longitude),
@@ -349,7 +358,8 @@ export function buildNumberedPlaces(
   const withCoords = places
     .filter(
       (place): place is MapPlacePin & { latitude: number; longitude: number } =>
-        typeof place.latitude === "number" && typeof place.longitude === "number",
+        typeof place.latitude === "number" && Number.isFinite(place.latitude)
+        && typeof place.longitude === "number" && Number.isFinite(place.longitude),
     )
     .slice()
     .slice(0, limit);
