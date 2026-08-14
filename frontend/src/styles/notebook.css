@@ -463,7 +463,7 @@
 
 .notion-entry__heading {
   display: grid;
-  grid-template-columns: 2.1rem 1.05rem minmax(0, 1fr);
+  grid-template-columns: 2.1rem auto minmax(0, 1fr);
   gap: 0.75rem;
   align-items: start;
   margin-bottom: 1.2rem;
@@ -505,20 +505,65 @@
 
 .notion-compare-check {
   display: inline-flex;
+  min-width: 5rem;
+  min-height: 2.75rem;
   align-items: center;
   justify-content: center;
-  width: 1.05rem;
-  height: 1.05rem;
-  margin-top: 0.3rem;
+  gap: 0.4rem;
+  margin-top: 0.05rem;
+  padding: 0 0.65rem;
+  border: 1px solid rgba(50, 38, 30, 0.12);
+  border-radius: 999px;
+  color: #756b62;
+  font-size: 0.7rem;
+  font-weight: 720;
   cursor: pointer;
 }
 
+.notion-compare-check.is-selected {
+  border-color: rgba(47, 79, 114, 0.24);
+  background: rgba(47, 79, 114, 0.07);
+  color: #2f4f72;
+}
+
 .notion-compare-check input {
-  width: 1.05rem;
-  height: 1.05rem;
+  width: 1rem;
+  height: 1rem;
   margin: 0;
   accent-color: #2f4f72;
   cursor: pointer;
+}
+
+.notion-compare-action {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 12;
+  display: flex;
+  width: fit-content;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0 auto;
+  padding: 0.35rem 0.4rem 0.35rem 0.8rem;
+  border: 1px solid rgba(50, 38, 30, 0.1);
+  border-radius: 999px;
+  background: rgba(248, 246, 243, 0.96);
+  box-shadow: 0 8px 24px rgba(40, 30, 20, 0.08);
+  backdrop-filter: blur(14px);
+  color: #756b62;
+  font-size: 0.72rem;
+}
+
+.notion-compare-action a {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  background: #2f4f72;
+  color: #fff;
+  font-weight: 760;
+  text-decoration: none;
 }
 
 .notion-entry__paper {
@@ -1014,6 +1059,24 @@
   padding-left: 1.8rem;
 }
 
+.notion-add-note {
+  min-height: 2.75rem;
+  border: 0;
+  padding: 0 0.25rem;
+  background: transparent;
+  color: #2f4f72;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.notion-add-note:hover,
+.notion-add-note:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
 .notion-saved-home__writer .notion-writing {
   margin-top: 0;
 }
@@ -1034,9 +1097,6 @@
 
 .workspace-compare-empty h2 {
   margin: 0.28rem 0 0;
-}
-
-.workspace-compare-empty h2 {
   color: #2c2824;
   font-size: clamp(1.45rem, 2.7vw, 2.15rem);
   font-weight: 650;
@@ -1044,13 +1104,10 @@
   line-height: 1.08;
 }
 
-.workspace-compare-empty p {
-  margin: 0.42rem 0 0;
-  color: #756b62;
-  font-size: 0.8rem;
-}
-
 .workspace-compare-empty a {
+  display: inline-flex;
+  margin-top: 1rem;
+  padding: 0.48rem 0.8rem;
   flex: 0 0 auto;
   border: 1px solid rgba(50, 38, 30, 0.1);
   border-radius: 999px;
@@ -1060,12 +1117,6 @@
   font-size: 0.72rem;
   font-weight: 720;
   text-decoration: none;
-}
-
-.workspace-compare-empty a {
-  display: inline-flex;
-  margin-top: 1rem;
-  padding: 0.48rem 0.8rem;
 }
 
 .workspace-compare-view .compare-editorial {
@@ -1090,6 +1141,13 @@
 
 .workspace-compare-loading div:first-child {
   height: 4.5rem;
+}
+
+.workspace-compare-notice {
+  width: min(100%, 70rem);
+  margin: 0.75rem auto 0;
+  color: #756b62;
+  font-size: 0.75rem;
 }
 
 .workspace-compare-empty {
@@ -1394,7 +1452,7 @@
   }
 
   .notion-entry__heading {
-    grid-template-columns: 1.6rem 1.05rem minmax(0, 1fr);
+    grid-template-columns: 1.2rem minmax(5rem, auto) minmax(0, 1fr);
   }
 
   .notion-entry__paper {

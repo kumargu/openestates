@@ -7,7 +7,6 @@ import {
   type WorkspaceView,
 } from "../../lib/workspaceNav.ts";
 import { OpenEstatesMark } from "../brand/OpenEstatesMark.tsx";
-import { requestDiscoveryReturn } from "../../lib/navigationContext.ts";
 
 type WorkspaceIconName =
   | "browse"
@@ -24,7 +23,6 @@ type WorkspaceSidebarProps = {
   collapsed: boolean;
   reduced: boolean;
   mode: "discovery" | "property-context" | "workspace";
-  discoveryHref: string;
   onToggle: () => void;
   onFocus: (propertyId: string) => void;
   onRemove: (propertyId: string) => void;
@@ -111,6 +109,12 @@ function homeStateHint(home: PropertyCard): string | null {
   return home.home_state_display || home.project_status_display || null;
 }
 
+function homeMeta(home: PropertyCard): string {
+  return [home.area.trim(), `${home.bhk}BHK`, formatCompactPrice(home.price)]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export function WorkspaceSidebar({
   homes,
   focusedId,
@@ -118,19 +122,17 @@ export function WorkspaceSidebar({
   collapsed,
   reduced,
   mode,
-  discoveryHref,
   onToggle,
   onFocus,
   onRemove,
 }: WorkspaceSidebarProps) {
+  const { notes, compareIds } = useNotebook();
   const focusedHome = homes.find((home) => home.id === focusedId);
   const navItems = workspaceNavItems(focusedId, activeView, {
     mode,
-    discoveryHref,
-    compareIds: homes.map((home) => home.id),
+    compareIds,
   });
   const [showAllHomes, setShowAllHomes] = useState(false);
-  const { notes } = useNotebook();
   const noteCount = notes.length;
   const previewHomes = homes.slice(0, 4);
   if (focusedHome && !previewHomes.some((home) => home.id === focusedHome.id)) {
@@ -203,9 +205,6 @@ export function WorkspaceSidebar({
               aria-label={item.label}
               aria-current={item.active ? "page" : undefined}
               title={title}
-              onClick={() => {
-                if (item.view === "browse") requestDiscoveryReturn(item.to);
-              }}
             >
               <WorkspaceIcon name={item.icon} />
               {!collapsed && <span>{item.label}</span>}
@@ -248,10 +247,7 @@ export function WorkspaceSidebar({
                     onClick={() => onFocus(home.id)}
                   >
                     <strong>{name}</strong>
-                    <span>
-                      {home.area} · {home.bhk}BHK ·{" "}
-                      {formatCompactPrice(home.price)}
-                    </span>
+                    <span>{homeMeta(home)}</span>
                     {state && <em>{state}</em>}
                   </button>
                   <button

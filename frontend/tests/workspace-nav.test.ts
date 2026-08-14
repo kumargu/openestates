@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   activeWorkspaceView,
+  workspaceComparedIds,
   workspaceBuyVsRentHref,
   workspaceCompareHref,
   workspaceFocusedHomeId,
@@ -24,12 +25,11 @@ test("workspace view detection includes RERA property reports", () => {
 test("workspace nav follows the focused home across property views", () => {
   const items = workspaceNavItems("home one/with slash", "rera", {
     mode: "property-context",
-    discoveryHref: "/?q=quiet+3bhk",
   });
   const byView = new Map(items.map((item) => [item.view, item]));
 
   assert.equal(byView.get("browse")?.label, "Explore");
-  assert.equal(byView.get("browse")?.to, "/?q=quiet+3bhk");
+  assert.equal(byView.get("browse")?.to, "/");
   assert.equal(byView.get("home")?.label, "Property overview");
   assert.equal(byView.get("notebook")?.label, "Workspace");
   assert.equal(byView.get("home")?.to, "/property/home%20one%2Fwith%20slash");
@@ -67,11 +67,10 @@ test("workspace and compare destinations keep distinct active states", () => {
 test("workspace sidebar keeps RERA attached to the focused home", () => {
   const items = workspaceNavItems("home-1", "notebook", {
     mode: "workspace",
-    discoveryHref: "/?q=near+metro",
     compareIds: ["home-1", "home-2"],
   });
-  assert.deepEqual(items.map((item) => item.label), ["Explore", "Workspace", "Compare", "RERA evidence"]);
-  assert.equal(items[0]?.to, "/?q=near+metro");
+  assert.deepEqual(items.map((item) => item.label), ["Explore", "Workspace", "Compare 2", "RERA evidence"]);
+  assert.equal(items[0]?.to, "/");
   assert.equal(items[2]?.to, "/workspace/compare?ids=home-1%2Chome-2&focus=home-1");
   assert.equal(items[2]?.available, true);
   assert.equal(items[3]?.to, "/property/home-1/rera");
@@ -128,4 +127,19 @@ test("Buy vs Rent repairs missing and stale home routes", () => {
   assert.equal(workspacePlanReplacementId("stale-home", ["home-one", "home-two"]), "home-one");
   assert.equal(workspacePlanReplacementId("home-two", ["home-one", "home-two"]), null);
   assert.equal(workspacePlanReplacementId("stale-home", []), null);
+});
+
+test("compare hands a home to Rent vs buy without losing comparison context", () => {
+  assert.equal(
+    workspaceBuyVsRentHref("home one", ["home one", "home-two"]),
+    "/workspace/buy-vs-rent/home%20one?from=compare&ids=home+one%2Chome-two&focus=home+one",
+  );
+});
+
+test("comparison IDs restore from URLs with stable ordering and limits", () => {
+  assert.deepEqual(workspaceComparedIds(null), []);
+  assert.deepEqual(
+    workspaceComparedIds(" home-one,home-two,home-one,,home-three,home-four,home-five "),
+    ["home-one", "home-two", "home-three", "home-four"],
+  );
 });

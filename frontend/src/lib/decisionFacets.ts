@@ -55,6 +55,7 @@ export type DecisionFacet = Readonly<{
   origin: DecisionOrigin;
   label: string;
   value?: string | number;
+  unit?: string;
   detail?: string;
   state: DecisionState;
   sourceRef?: DecisionSourceRef;
@@ -236,6 +237,7 @@ export function decisionLabelFacets(input: {
     origin: "canonical_fact",
     label: label.label,
     value: label.value ?? label.valueText,
+    unit: label.unit,
     detail: label.valueText && label.value != null ? label.valueText : undefined,
     confidence: label.confidence,
     sourceRef: {
@@ -260,6 +262,8 @@ export function propertyBaselineFacets(property: PropertyCard): DecisionFacet[] 
       origin: "canonical_fact",
       label: "Property price",
       value: property.price,
+      unit: "INR",
+      state: property.price > 0 ? "known" : "unknown",
       sourceRef: { surface: "property", recordId: property.id },
       compare: { group: "baseline", rank: 10 },
     },
@@ -272,8 +276,38 @@ export function propertyBaselineFacets(property: PropertyCard): DecisionFacet[] 
       origin: "canonical_fact",
       label: "Price per sqft",
       value: property.price_per_sqft,
+      unit: "INR_PER_SQFT",
+      state: property.price_per_sqft > 0 ? "known" : "unknown",
       sourceRef: { surface: "property", recordId: property.id },
       compare: { group: "baseline", rank: 20 },
+    },
+    {
+      id: `canonical:${property.id}:configuration`,
+      propertyId: property.id,
+      societyId,
+      scope: "property",
+      topic: "configuration",
+      origin: "canonical_fact",
+      label: "Configuration",
+      value: property.bhk,
+      unit: "BHK",
+      state: property.bhk > 0 ? "known" : "unknown",
+      sourceRef: { surface: "property", recordId: property.id },
+      compare: { group: "baseline", rank: 30 },
+    },
+    {
+      id: `canonical:${property.id}:listed-area`,
+      propertyId: property.id,
+      societyId,
+      scope: "property",
+      topic: "listed_area",
+      origin: "canonical_fact",
+      label: "Listed area",
+      value: property.sqft,
+      unit: "SQFT",
+      state: property.sqft > 0 ? "known" : "unknown",
+      sourceRef: { surface: "property", recordId: property.id },
+      compare: { group: "baseline", rank: 40 },
     },
     {
       id: `canonical:${property.id}:home-state`,
@@ -288,8 +322,13 @@ export function propertyBaselineFacets(property: PropertyCard): DecisionFacet[] 
         property.project_status_display,
         property.possession_status,
       ]),
+      state: property.status?.validation_state === "conflict"
+        ? "conflicting"
+        : property.status?.validation_state === "missing"
+          ? "unknown"
+          : undefined,
       sourceRef: { surface: "property", recordId: property.id },
-      compare: { group: "legal_project", rank: 30 },
+      compare: { group: "legal_project", rank: 50 },
     },
   ];
   return [
@@ -349,6 +388,7 @@ export function mapContextFacets(propertyId: string, context: PropertyMapContext
     origin: "map_fact",
     label: place.name,
     value: place.distance_km,
+    unit: "KM",
     detail: mapDetail(place),
     confidence: 1,
     sourceRef: {
@@ -356,7 +396,7 @@ export function mapContextFacets(propertyId: string, context: PropertyMapContext
       recordId: place.feature_id ?? place.place_entity_id ?? mapPlaceId(propertyId, place, index),
       url: place.source_url,
     },
-    compare: { group: `map_${compactIdPart(String(place.layer))}`, rank: index },
+    compare: { group: `map_${compactIdPart(String(place.layer))}`, rank: 200 + index },
   }));
 
   const waterFacet = context.water ? [facet({
@@ -374,7 +414,7 @@ export function mapContextFacets(propertyId: string, context: PropertyMapContext
       recordId: "water",
       url: context.water.source_url,
     },
-    compare: { group: "map_water", rank: 0 },
+    compare: { group: "map_water", rank: 180 },
   })] : [];
 
   return [...placeFacets, ...waterFacet];
@@ -476,7 +516,7 @@ export function notebookNoteFacets(notes: readonly NotebookNote[]): DecisionFace
       detail: note.detail,
       sourceRef: { surface: "notebook", recordId: note.id },
       compare: compareGroup
-        ? { group: compareGroup }
+        ? { group: compareGroup, rank: 100 }
         : undefined,
     });
 
@@ -495,7 +535,7 @@ export function notebookNoteFacets(notes: readonly NotebookNote[]): DecisionFace
         detail: note.detail,
         sourceRef: { surface: "notebook", recordId: note.id },
         compare: definition.compareGroup
-          ? { group: definition.compareGroup }
+          ? { group: definition.compareGroup, rank: 110 }
           : undefined,
       });
     });

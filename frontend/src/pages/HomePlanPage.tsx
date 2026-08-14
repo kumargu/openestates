@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ApiRequestError, getProperties, getProperty } from "../lib/api.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
 import { WorkspacePropertySwitcher } from "../components/workspace/WorkspacePropertySwitcher.tsx";
 import { useNotebook } from "../hooks/useNotebook.ts";
 import {
+  workspaceComparedIds,
   workspaceBuyVsRentHref,
-  workspaceCompareHref,
   workspacePlanReplacementId,
 } from "../lib/workspaceNav.ts";
 import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
@@ -94,7 +94,14 @@ function propertyMeta(bhk: number, sqft: number, price: number): string {
 export function HomePlanPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { compareIds, propertyIds } = useNotebook();
+  const [searchParams] = useSearchParams();
+  const { compareIds: storedCompareIds, propertyIds, setCompareIds } = useNotebook();
+  const requestedCompareIds = useMemo(
+    () => workspaceComparedIds(searchParams.get("ids"))
+      .filter((propertyId) => propertyIds.includes(propertyId)),
+    [propertyIds, searchParams],
+  );
+  const compareIds = requestedCompareIds.length >= 2 ? requestedCompareIds : storedCompareIds;
   const [catalog, setCatalog] = useState<PropertyCard[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
   const [propertyData, setPropertyData] = useState<PropertyDetailResponse | null>(null);
@@ -103,6 +110,15 @@ export function HomePlanPage() {
   const [previewYear, setPreviewYear] = useState<number | null>(null);
   const [pinnedYear, setPinnedYear] = useState<number | null>(null);
   const [extraEmisPerYear, setExtraEmisPerYear] = useState(0);
+
+  useEffect(() => {
+    if (requestedCompareIds.length < 2) return;
+    if (
+      requestedCompareIds.length === storedCompareIds.length
+      && requestedCompareIds.every((propertyId, index) => propertyId === storedCompareIds[index])
+    ) return;
+    setCompareIds(requestedCompareIds);
+  }, [requestedCompareIds, setCompareIds, storedCompareIds]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -194,19 +210,17 @@ export function HomePlanPage() {
     }
     return [];
   });
-  const compareHref = workspaceCompareHref(compareIds, id);
-  const buyVsRentHref = workspaceBuyVsRentHref(id ?? propertyIds[0]);
   const planReplacementId = catalogReady && (!id || status === "not_found" || status === "unavailable")
     ? workspacePlanReplacementId(id, homeOptions.map((home) => home.id))
     : null;
 
   useEffect(() => {
     if (!planReplacementId) return;
-    navigate(workspaceBuyVsRentHref(planReplacementId), { replace: true });
-  }, [navigate, planReplacementId]);
+    navigate(workspaceBuyVsRentHref(planReplacementId, compareIds), { replace: true });
+  }, [compareIds, navigate, planReplacementId]);
 
   const selectProperty = (propertyId: string) => {
-    if (propertyId) navigate(workspaceBuyVsRentHref(propertyId));
+    if (propertyId) navigate(workspaceBuyVsRentHref(propertyId, compareIds));
   };
 
   if (
@@ -256,10 +270,6 @@ export function HomePlanPage() {
           <meta name="robots" content="noindex" />
         </Helmet>
         <WorkspaceHeader
-          mode="buy-vs-rent"
-          compareHref={compareHref}
-          buyVsRentHref={buyVsRentHref}
-          compareCount={compareIds.length}
           context={homeOptions.length > 0 ? (
             <WorkspacePropertySwitcher
               selectedId={homeOptions.some((home) => home.id === id) ? id : undefined}
@@ -314,10 +324,6 @@ export function HomePlanPage() {
       </Helmet>
 
       <WorkspaceHeader
-        mode="buy-vs-rent"
-        compareHref={compareHref}
-        buyVsRentHref={workspaceBuyVsRentHref(id)}
-        compareCount={compareIds.length}
         context={(
           <WorkspacePropertySwitcher
             selectedId={id}

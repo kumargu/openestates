@@ -8,14 +8,13 @@ import {
   addNotebookNoteLabel,
   addSelectionNote,
   anchorNotebookProperty,
-  hideNotebookCompareLabel,
   isCatalogPinned,
   readNotebook,
   removeNotebookNote,
   removeNotebookNoteLabel,
   removeNotebookProperty,
+  setNotebookCompareIds,
   setNotebookNoteLabels,
-  showNotebookCompareLabel,
   toggleCatalogNote,
   toggleNotebookCompareId,
   updateNotebookNote,
@@ -110,12 +109,8 @@ export function useNotebook() {
     setState(toggleNotebookCompareId(propertyId));
   }, []);
 
-  const hideCompareLabel = useCallback((label: NotebookLabelId) => {
-    setState(hideNotebookCompareLabel(label));
-  }, []);
-
-  const showCompareLabel = useCallback((label: NotebookLabelId) => {
-    setState(showNotebookCompareLabel(label));
+  const setCompareIds = useCallback((propertyIds: string[]) => {
+    setState(setNotebookCompareIds(propertyIds));
   }, []);
 
   const removeProperty = useCallback((propertyId: string) => {
@@ -137,7 +132,6 @@ export function useNotebook() {
     documents: state.documents,
     propertyIds: state.propertyIds,
     compareIds: state.compareIds,
-    hiddenCompareLabels: state.hiddenCompareLabels ?? [],
     isPinned: (catalogKey: string) => isCatalogPinned(catalogKey, state),
     toggleFact,
     rememberSelection,
@@ -151,8 +145,7 @@ export function useNotebook() {
     addNoteLabel,
     removeNoteLabel,
     toggleCompare,
-    hideCompareLabel,
-    showCompareLabel,
+    setCompareIds,
     removeProperty,
     anchorProperty,
     notesFor,

@@ -19,7 +19,6 @@ import { detachNotebookPropertyFromShortlist } from "../../lib/notebook.ts";
 import {
   captureDiscoveryDeparture,
   clearDiscoveryContext,
-  discoveryReturnHref,
   navigationMode,
   requestDiscoveryReturn,
   writeDiscoveryContext,
@@ -27,6 +26,7 @@ import {
 import {
   activeWorkspaceView,
   shouldShowWorkspaceSidebar,
+  workspaceBuyVsRentHref,
   workspaceFocusedHomeId,
 } from "../../lib/workspaceNav.ts";
 import { WorkspaceSidebar } from "./WorkspaceSidebar.tsx";
@@ -199,7 +199,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       return;
     }
     if (activeView === "plan" && focus) {
-      navigate(`/workspace/buy-vs-rent/${encodeURIComponent(focus)}`);
+      navigate(workspaceBuyVsRentHref(focus, queryIds.filter((id) => nextIds.includes(id))));
     }
   }
 
@@ -214,7 +214,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   function focusHome(nextId: string) {
     window.localStorage.setItem(FOCUS_STORAGE_KEY, nextId);
     if (activeView === "plan") {
-      navigate(`/workspace/buy-vs-rent/${encodeURIComponent(nextId)}`);
+      navigate(workspaceBuyVsRentHref(nextId, queryIds));
       return;
     }
     if (activeView === "rera") {
@@ -249,7 +249,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       ? "workspace"
       : "discovery";
   const effectiveSidebarCollapsed = sidebarMode === "workspace" && sidebarCollapsed;
-  const discoveryHref = discoveryReturnHref();
   const sidebarHomes = homes;
 
   return (
@@ -262,7 +261,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
           collapsed={effectiveSidebarCollapsed}
           reduced={reducedBeforeDecision}
           mode={sidebarMode}
-          discoveryHref={discoveryHref}
           onToggle={toggleSidebar}
           onFocus={focusHome}
           onRemove={removeHome}

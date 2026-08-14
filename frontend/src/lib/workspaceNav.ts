@@ -12,6 +12,14 @@ export type WorkspaceNavItem = {
   available: boolean;
 };
 
+const MAX_WORKSPACE_COMPARE_HOMES = 4;
+
+export function workspaceComparedIds(value: string | null | undefined): string[] {
+  if (!value) return [];
+  return [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))]
+    .slice(0, MAX_WORKSPACE_COMPARE_HOMES);
+}
+
 export function activeWorkspaceView(pathname: string): WorkspaceView {
   if (pathname === "/workspace" || pathname === "/notebook") return "notebook";
   if (pathname === "/workspace/compare" || pathname === "/compare") return "compare";
@@ -27,7 +35,6 @@ export function workspaceNavItems(
   activeView: WorkspaceView,
   options: {
     mode?: "discovery" | "property-context" | "workspace";
-    discoveryHref?: string;
     compareIds?: string[];
   } = {},
 ): WorkspaceNavItem[] {
@@ -45,7 +52,7 @@ export function workspaceNavItems(
         view: "browse",
         label: "Explore",
         icon: "browse",
-        to: options.discoveryHref ?? "/",
+        to: "/",
         active: false,
         available: true,
       },
@@ -63,9 +70,9 @@ export function workspaceNavItems(
   }
 
   return [
-    { view: "browse" as const, label: "Explore", icon: "browse" as const, to: options.discoveryHref ?? "/", available: true },
+    { view: "browse" as const, label: "Explore", icon: "browse" as const, to: "/", available: true },
     { view: "notebook" as const, label: "Workspace", icon: "notebook" as const, to: "/workspace", available: true },
-    { view: "compare" as const, label: "Compare", icon: "compare" as const, to: compareHref, available: compareIds.length > 0 },
+    { view: "compare" as const, label: compareIds.length >= 2 ? `Compare ${compareIds.length}` : "Compare", icon: "compare" as const, to: compareHref, available: compareIds.length >= 2 },
     { view: "rera" as const, label: "RERA evidence", icon: "rera" as const, to: reraHref, available: hasFocus },
   ].map((item) => ({
     ...item,
@@ -84,7 +91,7 @@ export function shouldShowWorkspaceSidebar(
 }
 
 export function workspaceCompareHref(ids: string[], focusId?: string): string {
-  const uniqueIds = [...new Set(ids.map((id) => id.trim()).filter(Boolean))].slice(0, 4);
+  const uniqueIds = workspaceComparedIds(ids.join(","));
   if (uniqueIds.length < 2) return "/workspace/compare";
   const params = new URLSearchParams();
   params.set("ids", uniqueIds.join(","));
@@ -92,10 +99,20 @@ export function workspaceCompareHref(ids: string[], focusId?: string): string {
   return `/workspace/compare?${params.toString()}`;
 }
 
-export function workspaceBuyVsRentHref(propertyId?: string | null): string {
-  return propertyId
+export function workspaceBuyVsRentHref(
+  propertyId?: string | null,
+  compareIds: string[] = [],
+): string {
+  const path = propertyId
     ? `/workspace/buy-vs-rent/${encodeURIComponent(propertyId)}`
     : "/workspace/buy-vs-rent";
+  const ids = workspaceComparedIds(compareIds.join(","));
+  if (ids.length < 2) return path;
+  const params = new URLSearchParams();
+  params.set("from", "compare");
+  params.set("ids", ids.join(","));
+  if (propertyId && ids.includes(propertyId)) params.set("focus", propertyId);
+  return `${path}?${params.toString()}`;
 }
 
 export function workspaceFocusedHomeId(

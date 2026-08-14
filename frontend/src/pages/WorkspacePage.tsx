@@ -4,7 +4,6 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../hooks/useNotebook.ts";
 import { FOCUS_STORAGE_KEY, readShortlistIds } from "../lib/compare.ts";
 import { SocietyComparisonMatrix } from "../components/compare/SocietyComparisonMatrix.tsx";
-import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
 import { LabelPill } from "../components/ui/LabelPill.tsx";
 import { getProperties, getProperty } from "../lib/api.ts";
 import {
@@ -23,7 +22,7 @@ import {
 } from "../lib/notebook.ts";
 import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
 import {
-  workspaceBuyVsRentHref,
+  workspaceComparedIds,
   workspaceCompareHref,
   workspaceFocusedHomeId,
 } from "../lib/workspaceNav.ts";
@@ -34,22 +33,17 @@ const MAX_WORKSPACE_COMPARE_HOMES = 4;
 const NOTEBOOK_COMPOSER_PLACEHOLDER = "Write a note, /visit, /budget, /payment";
 
 type WorkspaceMode = "notes" | "compare";
-type CompareStatus = "idle" | "loading" | "ready" | "error";
+type CompareStatus = "idle" | "loading" | "ready";
 
 type CompareState = {
   key: string;
   status: CompareStatus;
   details: PropertyDetailResponse[];
+  unavailableIds: string[];
 };
 
-function parseComparedIds(value: string | null): string[] {
-  if (!value) return [];
-  return [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))]
-    .slice(0, MAX_WORKSPACE_COMPARE_HOMES);
-}
-
-function societyLabel(home: PropertyCard | undefined, id: string): string {
-  if (!home) return id.slice(0, 12);
+function societyLabel(home: PropertyCard | undefined): string {
+  if (!home) return "Home unavailable";
   return home.society_name?.trim() || home.title;
 }
 
@@ -145,6 +139,7 @@ export function WorkspacePage() {
     propertyIds,
     compareIds,
     toggleCompare,
+    setCompareIds,
     addHandwritten,
     addCommandBlock,
     addParagraphAfter,
@@ -154,20 +149,31 @@ export function WorkspacePage() {
     removeNote,
   } = useNotebook();
   const [homes, setHomes] = useState<PropertyCard[]>([]);
+  const [homesReady, setHomesReady] = useState(false);
   const [compareState, setCompareState] = useState<CompareState>({
     key: "",
     status: "idle",
     details: [],
+    unavailableIds: [],
   });
 
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
     getProperties({ signal: controller.signal })
-      .then(setHomes)
+      .then((nextHomes) => {
+        if (active) setHomes(nextHomes);
+      })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
+      })
+      .finally(() => {
+        if (active) setHomesReady(true);
       });
-    return () => controller.abort();
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, []);
 
   const byId = useMemo(
@@ -175,14 +181,18 @@ export function WorkspacePage() {
     [homes],
   );
   const requestedCompareIds = useMemo(
-    () => parseComparedIds(searchParams.get("ids")),
+    () => workspaceComparedIds(searchParams.get("ids")),
     [searchParams],
   );
+  const validRequestedCompareIds = useMemo(
+    () => requestedCompareIds.filter((id) => propertyIds.includes(id) && (!homesReady || byId.has(id))),
+    [byId, homesReady, propertyIds, requestedCompareIds],
+  );
   const activeCompareIds = useMemo(
-    () => requestedCompareIds.length > 0
-      ? requestedCompareIds
+    () => validRequestedCompareIds.length > 0
+      ? validRequestedCompareIds
       : compareIds.slice(0, MAX_WORKSPACE_COMPARE_HOMES),
-    [compareIds, requestedCompareIds],
+    [compareIds, validRequestedCompareIds],
   );
   const selectedHomes = useMemo(
     () => activeCompareIds
@@ -198,9 +208,15 @@ export function WorkspacePage() {
       .sort((a, b) => a.createdAt - b.createdAt),
     [notes, propertyIds],
   );
+  const visiblePropertyIds = useMemo(
+    () => homesReady
+      ? propertyIds.filter((id) => byId.has(id) || visible.some((note) => note.propertyId === id))
+      : propertyIds,
+    [byId, homesReady, propertyIds, visible],
+  );
   const orderedPropertyIds = useMemo(
-    () => propertyIdsWithNotesFirst(propertyIds, visible),
-    [propertyIds, visible],
+    () => propertyIdsWithNotesFirst(visiblePropertyIds, visible),
+    [visible, visiblePropertyIds],
   );
   const shortlistedWorkspaceIds = readShortlistIds()
     .filter((id) => orderedPropertyIds.includes(id));
@@ -209,8 +225,16 @@ export function WorkspacePage() {
     window.localStorage.getItem(FOCUS_STORAGE_KEY),
     shortlistedWorkspaceIds.length > 0 ? shortlistedWorkspaceIds : orderedPropertyIds,
   );
-  const compareHref = workspaceCompareHref(activeCompareIds, focusedWorkspaceId);
-  const buyVsRentHref = workspaceBuyVsRentHref(focusedWorkspaceId);
+  const compareHref = workspaceCompareHref(compareIds, focusedWorkspaceId);
+
+  useEffect(() => {
+    if (mode !== "compare" || requestedCompareIds.length === 0) return;
+    if (
+      validRequestedCompareIds.length === compareIds.length
+      && validRequestedCompareIds.every((id, index) => id === compareIds[index])
+    ) return;
+    setCompareIds(validRequestedCompareIds);
+  }, [compareIds, mode, requestedCompareIds.length, setCompareIds, validRequestedCompareIds]);
 
   function quickAdd(propertyId: string, text: string, labels: NotebookLabelId[] = []) {
     if (!propertyId || !text.trim()) return;
@@ -232,11 +256,24 @@ export function WorkspacePage() {
             result.status === "fulfilled"
           )
           .map((result) => result.value);
-        setCompareState({ key: compareKey, status: "ready", details });
+        const unavailableIds = results.flatMap((result, index) =>
+          result.status === "rejected" ? [selectedHomes[index].id] : []
+        );
+        setCompareState({
+          key: compareKey,
+          status: "ready",
+          details,
+          unavailableIds,
+        });
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setCompareState({ key: compareKey, status: "error", details: [] });
+        setCompareState({
+          key: compareKey,
+          status: "ready",
+          details: [],
+          unavailableIds: selectedHomes.map((home) => home.id),
+        });
       });
 
     return () => controller.abort();
@@ -245,9 +282,7 @@ export function WorkspacePage() {
   function removeCompareHomes(propertyIdsToRemove: string[]) {
     const removeSet = new Set(propertyIdsToRemove);
     const nextIds = activeCompareIds.filter((id) => !removeSet.has(id));
-    for (const id of propertyIdsToRemove) {
-      if (compareIds.includes(id)) toggleCompare(id);
-    }
+    setCompareIds(nextIds);
 
     const next = new URLSearchParams(searchParams);
     if (nextIds.length > 0) {
@@ -269,15 +304,9 @@ export function WorkspacePage() {
         <meta name="robots" content="noindex" />
       </Helmet>
 
-      <WorkspaceHeader
-        mode={mode}
-        compareHref={compareHref}
-        buyVsRentHref={buyVsRentHref}
-        compareCount={activeCompareIds.length}
-      />
       <h1 className="visually-hidden">Workspace</h1>
 
-      {propertyIds.length === 0 ? (
+      {orderedPropertyIds.length === 0 ? (
         <div className="notion-empty">
           <h2>Empty workspace</h2>
           <p>Save a home or add a note from a property page to start your decision workspace.</p>
@@ -286,8 +315,9 @@ export function WorkspacePage() {
       ) : mode === "compare" ? (
         <CompareWorkspaceView
           selectedHomes={selectedHomes}
-          catalog={homes}
+          homesReady={homesReady}
           details={compareState.key === compareKey ? compareState.details : []}
+          unavailableCount={compareState.key === compareKey ? compareState.unavailableIds.length : 0}
           status={compareState.key === compareKey ? compareState.status : "loading"}
           onRemoveHome={removeCompareHomes}
         />
@@ -297,6 +327,7 @@ export function WorkspacePage() {
           notes={visible}
           homes={byId}
           compareIds={compareIds}
+          compareHref={compareHref}
           onToggleCompare={toggleCompare}
           onAddLabel={addNoteLabel}
           onRemoveLabel={removeNoteLabel}
@@ -315,35 +346,35 @@ export function WorkspacePage() {
 
 function CompareWorkspaceView({
   selectedHomes,
-  catalog,
+  homesReady,
   details,
+  unavailableCount,
   status,
   onRemoveHome,
 }: {
   selectedHomes: PropertyCard[];
-  catalog: PropertyCard[];
+  homesReady: boolean;
   details: PropertyDetailResponse[];
+  unavailableCount: number;
   status: CompareStatus;
   onRemoveHome: (propertyIds: string[]) => void;
 }) {
+  if (!homesReady) {
+    return (
+      <section className="workspace-compare-view" aria-label="Loading comparison">
+        <div className="workspace-compare-loading">
+          <div />
+          <div />
+        </div>
+      </section>
+    );
+  }
   if (selectedHomes.length < 2) {
     return (
       <section className="workspace-compare-empty">
         <span>Compare</span>
         <h2>Add one more home to compare.</h2>
-        <p>Use the compare toggle beside saved homes in Notes. The workspace keeps the same notes and labels when you switch views.</p>
-        <Link to="/workspace">Back to notes</Link>
-      </section>
-    );
-  }
-
-  if (status === "error") {
-    return (
-      <section className="workspace-compare-empty">
-        <span>Compare</span>
-        <h2>Comparison is unavailable.</h2>
-        <p>Property details could not be loaded for this comparison.</p>
-        <Link to="/workspace">Back to notes</Link>
+        <Link to="/workspace">Choose saved homes</Link>
       </section>
     );
   }
@@ -356,12 +387,18 @@ function CompareWorkspaceView({
           <div />
         </div>
       ) : (
-        <SocietyComparisonMatrix
-          selectedHomes={selectedHomes}
-          catalog={catalog}
-          details={details}
-          onRemoveColumn={onRemoveHome}
-        />
+        <>
+          {unavailableCount > 0 && (
+            <p className="workspace-compare-notice" role="status">
+              Some details are temporarily unavailable. Known facts are still shown.
+            </p>
+          )}
+          <SocietyComparisonMatrix
+            selectedHomes={selectedHomes}
+            details={details}
+            onRemoveColumn={onRemoveHome}
+          />
+        </>
       )}
     </section>
   );
@@ -372,6 +409,7 @@ function EditorialView({
   notes,
   homes,
   compareIds,
+  compareHref,
   onToggleCompare,
   onAddLabel,
   onRemoveLabel,
@@ -386,6 +424,7 @@ function EditorialView({
   notes: NotebookNote[];
   homes: Map<string, PropertyCard>;
   compareIds: string[];
+  compareHref: string;
   onToggleCompare: (propertyId: string) => void;
   onAddLabel: (id: string, label: NotebookLabelId) => void;
   onRemoveLabel: (id: string, label: NotebookLabelId) => void;
@@ -404,7 +443,13 @@ function EditorialView({
   );
 
   return (
-    <article className="notion-editorial" aria-label="Home notebook document">
+    <article className="notion-editorial" aria-label="Saved homes and notes">
+      {compareIds.length >= 2 && (
+        <div className="notion-compare-action" role="status">
+          <span>{compareIds.length} homes selected</span>
+          <Link to={compareHref}>Compare {compareIds.length}</Link>
+        </div>
+      )}
       {notedPropertyIds.map((propertyId, index) => {
         const homeNotes = notes.filter((n) => n.propertyId === propertyId);
         const home = homes.get(propertyId);
@@ -417,12 +462,12 @@ function EditorialView({
               </span>
               <CompareCheckbox
                 checked={inCompare}
-                label={`Include ${societyLabel(homes.get(propertyId), propertyId)} in compare`}
+                label={`Include ${societyLabel(homes.get(propertyId))} in compare`}
                 onChange={() => onToggleCompare(propertyId)}
               />
               <div className="notion-entry__title">
                 <Link to={`/property/${encodeURIComponent(propertyId)}`}>
-                  {societyLabel(homes.get(propertyId), propertyId)}
+                  {societyLabel(homes.get(propertyId))}
                 </Link>
                 <span>
                   {home?.area ? `${home.area} · ` : ""}
@@ -445,7 +490,7 @@ function EditorialView({
                 />
               ))}
               <NotebookComposer
-                ariaLabel={`Continue writing about ${societyLabel(homes.get(propertyId), propertyId)}`}
+                ariaLabel={`Continue writing about ${societyLabel(homes.get(propertyId))}`}
                 onSubmit={(text) => onQuickAdd(propertyId, text)}
                 onCommand={(command) => onCommand(propertyId, command.id)}
               />
@@ -454,10 +499,10 @@ function EditorialView({
         );
       })}
       {savedOnlyPropertyIds.length > 0 && (
-        <section className="notion-saved-stack" aria-label="Saved homes without notes">
+        <section className="notion-saved-stack" aria-label="Saved homes">
           <header>
-            <span>Saved without notes</span>
-            <p>Blank notebook spaces for homes you have saved.</p>
+            <span>Saved homes</span>
+            <p>Add only the thoughts you want to remember.</p>
           </header>
           <div className="notion-saved-stack__list">
             {savedOnlyPropertyIds.map((propertyId) => {
@@ -467,7 +512,7 @@ function EditorialView({
                 <SavedHomeRow
                   key={propertyId}
                   propertyId={propertyId}
-                  title={societyLabel(home, propertyId)}
+                  title={societyLabel(home)}
                   area={home?.area}
                   inCompare={inCompare}
                   onToggleCompare={() => onToggleCompare(propertyId)}
@@ -500,6 +545,7 @@ function SavedHomeRow({
   onQuickAdd: (text: string) => void;
   onCommand: (command: NotebookCommand) => void;
 }) {
+  const [writing, setWriting] = useState(false);
   return (
     <div className="notion-saved-home">
       <div className="notion-saved-home__heading">
@@ -514,11 +560,23 @@ function SavedHomeRow({
         </div>
       </div>
       <div className="notion-saved-home__writer">
-        <NotebookComposer
-          ariaLabel={`Start writing about ${title}`}
-          onSubmit={onQuickAdd}
-          onCommand={onCommand}
-        />
+        {writing ? (
+          <NotebookComposer
+            ariaLabel={`Write a note about ${title}`}
+            onSubmit={(text) => {
+              onQuickAdd(text);
+              setWriting(false);
+            }}
+            onCommand={(command) => {
+              onCommand(command);
+              setWriting(false);
+            }}
+          />
+        ) : (
+          <button type="button" className="notion-add-note" onClick={() => setWriting(true)}>
+            Add note
+          </button>
+        )}
       </div>
     </div>
   );
@@ -534,13 +592,14 @@ function CompareCheckbox({
   onChange: () => void;
 }) {
   return (
-    <label className="notion-compare-check" title={checked ? "In compare" : "Add to compare"}>
+    <label className={`notion-compare-check${checked ? " is-selected" : ""}`}>
       <input
         type="checkbox"
         checked={checked}
+        aria-label={label}
         onChange={onChange}
       />
-      <span className="sr-only">{label}</span>
+      <span>{checked ? "Selected" : "Compare"}</span>
     </label>
   );
 }

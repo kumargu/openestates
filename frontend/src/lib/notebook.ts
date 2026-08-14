@@ -1118,6 +1118,21 @@ export function toggleNotebookCompareId(propertyId: string): NotebookState {
   return writeNotebook({ ...withProp, compareIds });
 }
 
+export function setNotebookCompareIds(propertyIds: string[]): NotebookState {
+  const state = readNotebook();
+  const availableIds = new Set(state.propertyIds);
+  const compareIds = [...new Set(propertyIds)]
+    .filter((propertyId) => availableIds.has(propertyId))
+    .slice(0, MAX_COMPARE_FROM_NOTEBOOK);
+  if (
+    compareIds.length === state.compareIds.length
+    && compareIds.every((propertyId, index) => propertyId === state.compareIds[index])
+  ) {
+    return state;
+  }
+  return writeNotebook({ ...state, compareIds });
+}
+
 export function hideNotebookCompareLabel(label: NotebookLabelId): NotebookState {
   const state = readNotebook();
   if (state.hiddenCompareLabels.includes(label)) return state;

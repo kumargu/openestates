@@ -54,10 +54,6 @@ export function writeDiscoveryContext(url: string, scrollY = 0): void {
   window.sessionStorage.setItem(DISCOVERY_STORAGE_KEY, JSON.stringify(context));
 }
 
-export function discoveryReturnHref(): string {
-  return readDiscoveryContext()?.url ?? "/";
-}
-
 export function requestDiscoveryReturn(url: string): void {
   if (typeof window === "undefined") return;
   const context = readDiscoveryContext();

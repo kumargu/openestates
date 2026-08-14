@@ -36,6 +36,7 @@ const {
   detachNotebookPropertyFromShortlist,
   hideNotebookCompareLabel,
   readNotebook,
+  setNotebookCompareIds,
   showNotebookCompareLabel,
   toggleNotebookCompareId,
   updateNotebookNote,
@@ -112,6 +113,18 @@ test("compare selection is explicit and does not rewrite saved homes", () => {
   assert.deepEqual(state.propertyIds, ["saved-home", "noted-home"]);
   assert.deepEqual(state.compareIds, ["saved-home"]);
   assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "saved-home,noted-home");
+});
+
+test("compare selection can be restored from a URL without becoming a second store", () => {
+  storage.clear();
+  storage.setItem(SHORTLIST_STORAGE_KEY, "home-1,home-2,home-3");
+
+  const selected = setNotebookCompareIds(["home-2", "home-1", "unknown", "home-2"]);
+  const reloaded = readNotebook();
+
+  assert.deepEqual(selected.compareIds, ["home-2", "home-1"]);
+  assert.deepEqual(reloaded.compareIds, ["home-2", "home-1"]);
+  assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "home-1,home-2,home-3");
 });
 
 test("removing a shortlisted home clears compare state without deleting buyer notes", () => {
