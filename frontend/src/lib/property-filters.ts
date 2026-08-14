@@ -65,8 +65,8 @@ function discoverRepresentativeScore(property: PropertyCard): number {
  * Discover / landing rails: one card per society.
  * Search results keep all BHK configs when the ask needs them.
  */
-export function uniqueSocietiesForDiscovery(properties: PropertyCard[]): PropertyCard[] {
-  const bestBySociety = new Map<string, PropertyCard>();
+export function uniqueSocietiesForDiscovery<T extends PropertyCard>(properties: T[]): T[] {
+  const bestBySociety = new Map<string, T>();
   for (const property of properties) {
     const key = societyKey(property);
     const existing = bestBySociety.get(key);

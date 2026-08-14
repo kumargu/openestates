@@ -52,6 +52,8 @@ type Props = {
   variant?: "default" | "browse";
   proofFocus?: ProofFocus;
   buyerProof?: BuyerProofProjection;
+  /** Landing previews keep one concrete receipt and defer coverage gaps to search. */
+  proofDensity?: "full" | "receipt";
   matchLabels?: string[];
   /** Keep shortlist entry points explicit instead of enabling them on every card surface. */
   allowSave?: boolean;
@@ -63,6 +65,7 @@ export function LivingEvidenceTile({
   variant = "default",
   proofFocus,
   buyerProof,
+  proofDensity = "full",
   matchLabels = [],
   allowSave = false,
 }: Props) {
@@ -110,6 +113,7 @@ export function LivingEvidenceTile({
             {allowSave ? (
               <SaveHeartButton
                 propertyId={property.id}
+                itemLabel={property.title}
                 className="catalog-card__action catalog-card__save"
               />
             ) : null}
@@ -165,8 +169,8 @@ export function LivingEvidenceTile({
             ) : null}
           </div>
           {receipt ? (
-            <p className="catalog-card__receipt">
-              <span>Why it fits</span>
+            <p className={`catalog-card__receipt${proofDensity === "receipt" ? " catalog-card__receipt--compact" : ""}`}>
+              {proofDensity === "full" ? <span>Why it fits</span> : null}
               {buyerProofReceiptLabel(receipt)}
             </p>
           ) : matchLabels.length > 0 ? (
@@ -178,7 +182,7 @@ export function LivingEvidenceTile({
               ))}
             </div>
           ) : null}
-          {coverageGap ? (
+          {coverageGap && proofDensity === "full" ? (
             <p className="catalog-card__coverage-gap">
               {buyerProofCoverageLabel(coverageGap)}
             </p>

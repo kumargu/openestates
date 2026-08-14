@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
-import type { AreaTrackerResponse, PropertyCard } from "../lib/types.ts";
-import { getAreaTracker, getProperties } from "../lib/api.ts";
+import type { AreaTrackerResponse, PropertyCard, SearchResponse } from "../lib/types.ts";
+import { getAreaTracker, getProperties, searchProperties } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
 import { SearchExperience as InlineSearchExperience } from "./SearchExperience.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { LandingStoryStage } from "../components/LandingStoryStage.tsx";
 import { OpenEstatesMark } from "../components/brand/OpenEstatesMark.tsx";
 import { consumeDiscoveryReturn } from "../lib/navigationContext.ts";
+import { LANDING_PROOF_QUERY } from "../lib/landing-discovery.ts";
 
 const SEARCH_SUGGESTIONS = [
   { label: "Under ₹2.5Cr", query: "3BHK under 2.5Cr with clear price context" },
@@ -16,43 +17,6 @@ const SEARCH_SUGGESTIONS = [
   { label: "Ready to move", query: "Ready-to-move homes with delivery proof" },
   { label: "Whitefield", query: "Low commute-pain home near Whitefield tech parks" },
 ];
-
-const HERO_THEMES = [
-  "proof you can trust",
-  "risks made visible",
-  "prices in context",
-  "clear tradeoffs",
-] as const;
-
-function RotatingHeroTheme() {
-  const [index, setIndex] = useState(0);
-  const [fading, setFading] = useState(false);
-
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
-    let swapTimer: number | undefined;
-    const interval = window.setInterval(() => {
-      setFading(true);
-      swapTimer = window.setTimeout(() => {
-        setIndex((current) => (current + 1) % HERO_THEMES.length);
-        setFading(false);
-      }, 240);
-    }, 3_000);
-    return () => {
-      window.clearInterval(interval);
-      if (swapTimer) window.clearTimeout(swapTimer);
-    };
-  }, []);
-
-  return (
-    <span
-      className={`home-hero__rotating${fading ? " is-fading" : ""}`}
-      aria-hidden="true"
-    >
-      {HERO_THEMES[index]}
-    </span>
-  );
-}
 
 type ViewTransitionDocument = Document & {
   startViewTransition?: (update: () => void) => { finished: Promise<void> };
@@ -105,6 +69,7 @@ export function HomePage() {
   const hasActiveSearch = activeSearchQuery.trim().length > 0;
   const [properties, setProperties] = useState<PropertyCard[]>([]);
   const [areaTracker, setAreaTracker] = useState<AreaTrackerResponse | null>(null);
+  const [proofSearch, setProofSearch] = useState<SearchResponse | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [propertiesLoading, setPropertiesLoading] = useState(true);
   const [query, setQuery] = useState(activeSearchQuery);
@@ -127,7 +92,8 @@ export function HomePage() {
     Promise.allSettled([
       getProperties({ signal: controller.signal }),
       getAreaTracker({ signal: controller.signal }),
-    ]).then(([propertyResult, trackerResult]) => {
+      searchProperties(LANDING_PROOF_QUERY),
+    ]).then(([propertyResult, trackerResult, proofResult]) => {
       if (cancelled) return;
 
       if (propertyResult.status === "fulfilled") {
@@ -138,6 +104,9 @@ export function HomePage() {
 
       if (trackerResult.status === "fulfilled") {
         setAreaTracker(trackerResult.value);
+      }
+      if (proofResult.status === "fulfilled") {
+        setProofSearch(proofResult.value);
       }
       setPropertiesLoading(false);
     });
@@ -230,13 +199,20 @@ export function HomePage() {
       >
         <div className="home-hero__wash" aria-hidden="true" />
 
+        <nav className="home-topbar" aria-label="Primary">
+          <Link to="/" className="home-topbar__brand" aria-label="OpenEstates home">
+            <span aria-hidden="true"><OpenEstatesMark size={26} /></span>
+            <span>OpenEstates</span>
+          </Link>
+          <Link to="/workspace" className="home-topbar__workspace">Workspace</Link>
+        </nav>
+
         {!hasActiveSearch && (
           <div className="fade-up home-hero__copy">
             <h1 className="home-hero__title">
-              <span>Find homes with</span>
-              <RotatingHeroTheme />
-              <span className="sr-only">proof you can trust</span>
+              Tell us the life you want.
             </h1>
+            <p>We'll show homes with receipts.</p>
           </div>
         )}
       </section>
@@ -320,31 +296,6 @@ export function HomePage() {
           </div>
         )}
 
-        {!hasActiveSearch && recents.length > 0 && (
-          <div className="fade-up fade-up-delay-3 recent-searches">
-            <span className="recent-searches-label">Recent</span>
-            {recents.map((s) => (
-              <button
-                key={s}
-                type="button"
-                className="empty-state-chip"
-                onClick={() => {
-                  commitSearch(s);
-                }}
-              >
-                {s}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="recent-clear-btn"
-              onClick={() => { clearRecentSearches(); setRecents([]); }}
-            >
-              Clear
-            </button>
-          </div>
-        )}
-
         <div className="home-body" aria-live="polite">
           {hasActiveSearch ? (
             <section className="home-inline-results-anchor" aria-label="Homes matching your search">
@@ -355,7 +306,33 @@ export function HomePage() {
             </section>
           ) : properties.length > 0 ? (
             <>
-              <LandingStoryStage properties={properties} onSearch={commitSearch} />
+              <LandingStoryStage
+                properties={properties}
+                proofSearch={proofSearch}
+                onSearch={commitSearch}
+              />
+              {recents.length > 0 && (
+                <div className="recent-searches recent-searches--after-homes">
+                  <span className="recent-searches-label">Recent</span>
+                  {recents.map((recent) => (
+                    <button
+                      key={recent}
+                      type="button"
+                      className="empty-state-chip"
+                      onClick={() => commitSearch(recent)}
+                    >
+                      {recent}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="recent-clear-btn"
+                    onClick={() => { clearRecentSearches(); setRecents([]); }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
               <AreaTrackerSection
                 properties={properties}
                 areaTracker={areaTracker}

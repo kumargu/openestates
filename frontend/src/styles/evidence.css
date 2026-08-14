@@ -244,6 +244,11 @@
   color: var(--color-text, #1a1a1a);
 }
 
+.catalog-card__receipt--compact {
+  color: var(--color-cool-deep, #3f5c8a);
+  font-weight: 620;
+}
+
 .catalog-card__receipt span {
   display: block;
   margin-bottom: 0.08rem;

@@ -9,9 +9,17 @@ type SaveHeartButtonProps = {
   propertyId: string;
   className?: string;
   label?: string;
+  itemLabel?: string;
 };
 
-export function SaveHeartButton({ propertyId, className = "", label }: SaveHeartButtonProps) {
+function saveButtonLabel(saved: boolean, itemLabel?: string): string {
+  if (!itemLabel) return saved ? "Remove from shortlist" : "Save for later";
+  return saved
+    ? `Remove ${itemLabel} from shortlist`
+    : `Save ${itemLabel} for later`;
+}
+
+export function SaveHeartButton({ propertyId, className = "", label, itemLabel }: SaveHeartButtonProps) {
   const [saved, setSaved] = useState(() => isShortlisted(propertyId));
 
   useEffect(() => {
@@ -38,7 +46,7 @@ export function SaveHeartButton({ propertyId, className = "", label }: SaveHeart
     <button
       type="button"
       className={`save-heart${saved ? " is-saved" : ""}${className ? ` ${className}` : ""}`}
-      aria-label={saved ? "Remove from shortlist" : "Save for later"}
+      aria-label={saveButtonLabel(saved, itemLabel)}
       aria-pressed={saved}
       title={saved ? "Saved" : "Save for later"}
       onClick={handleClick}

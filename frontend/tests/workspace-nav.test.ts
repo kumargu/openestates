@@ -85,13 +85,13 @@ test("workspace RERA is disabled until a home is selected", () => {
   assert.equal(rera?.available, false);
 });
 
-test("landing shows workspace navigation only after a home is saved", () => {
-  assert.equal(shouldShowWorkspaceSidebar("landing", 0), false);
-  assert.equal(shouldShowWorkspaceSidebar("discovery", 0), false);
-  assert.equal(shouldShowWorkspaceSidebar("landing", 1), true);
-  assert.equal(shouldShowWorkspaceSidebar("discovery", 2), true);
-  assert.equal(shouldShowWorkspaceSidebar("property-context", 0), true);
-  assert.equal(shouldShowWorkspaceSidebar("workspace", 0), true);
+test("landing owns navigation even after a home is saved", () => {
+  assert.equal(shouldShowWorkspaceSidebar("/", "landing", 0), false);
+  assert.equal(shouldShowWorkspaceSidebar("/", "landing", 1), false);
+  assert.equal(shouldShowWorkspaceSidebar("/", "discovery", 2), false);
+  assert.equal(shouldShowWorkspaceSidebar("/property/home-1", "property-context", 0), true);
+  assert.equal(shouldShowWorkspaceSidebar("/workspace", "workspace", 0), true);
+  assert.equal(shouldShowWorkspaceSidebar("/missing", "landing", 1), true);
 });
 
 test("workspace view links preserve explicit property context", () => {

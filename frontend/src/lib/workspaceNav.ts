@@ -83,9 +83,11 @@ export function workspaceNavItems(
 }
 
 export function shouldShowWorkspaceSidebar(
+  pathname: string,
   mode: NavigationMode,
   savedHomeCount: number,
 ): boolean {
+  if (pathname === "/") return false;
   if (mode === "property-context" || mode === "workspace") return true;
   return savedHomeCount > 0;
 }
