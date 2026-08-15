@@ -4,30 +4,26 @@ import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { Link } from "react-router-dom";
 import { ImageWithFallback } from "./ImageWithFallback.tsx";
 import { LivingEvidenceTile } from "./evidence/LivingEvidenceTile.tsx";
-import { getProperty, propertyDetailPath } from "../lib/api.ts";
-import { availableLayers, layerLabel } from "../lib/nearbyPlateProjection.ts";
+import { AroundThisHomePlate } from "./evidence/AroundThisHomePlate.tsx";
+import { LandingReraCanvas } from "./LandingReraCanvas.tsx";
+import { getProperty, getPropertyRera, propertyDetailPath } from "../lib/api.ts";
 import { filterListableProperties, uniqueSocietiesForDiscovery } from "../lib/property-filters.ts";
 import type {
-  MapPlacePin,
   PropertyCard,
   PropertyDetailResponse,
   PropertyMapContext,
+  ReraEvidenceReportResponse,
 } from "../lib/types.ts";
 import { useLandingSceneController } from "../hooks/useLandingSceneController.ts";
-import {
-  useLandingChapterSequence,
-  useLandingLoopSequence,
-} from "../hooks/useLandingChapterSequence.ts";
+import { useLandingLoopSequence } from "../hooks/useLandingChapterSequence.ts";
 import { useLandingResolveSequence } from "../hooks/useLandingResolveSequence.ts";
 import { useLandingStoryMotion } from "../hooks/useLandingStoryMotion.ts";
 
 const FEATURED_LIMIT = 6;
 const STORY_SCENE_IDS = ["resolve", "reveal", "remember", "converge", "record"] as const;
 const RESOLVE_QUERY = "3BHK under 2Cr with strong reviews and generous open space";
-const REVEAL_SEQUENCE_DELAYS = [620, 760] as const;
 const NOTEBOOK_SEQUENCE_DURATIONS = [1_400, 1_100, 2_200] as const;
 const COMPARE_SEQUENCE_DURATIONS = [1_800, 1_500, 2_200] as const;
-const RERA_SEQUENCE_DURATIONS = [1_800, 1_800, 1_800, 2_200] as const;
 const CARD_UNFOLD_TRANSITION = {
   type: "spring",
   visualDuration: 0.55,
@@ -49,13 +45,6 @@ type EvidenceFact = {
   id: string;
   label: string;
   value: string;
-};
-
-type LandingMapStory = {
-  id: string;
-  label: string;
-  places: MapPlacePin[];
-  visual: "places" | "metro" | "lakes" | "water" | "lines";
 };
 
 function useDesktopStory(): boolean {
@@ -83,6 +72,7 @@ const FEATURED_LENSES: FeaturedLens[] = [
 type LandingStoryStageProps = {
   properties: PropertyCard[];
   onSearch: (query: string) => void;
+  compactOpening?: boolean;
 };
 
 function hasKnownNumber(value: number | null | undefined): value is number {
@@ -109,54 +99,6 @@ function homeName(property: PropertyCard): string {
   return isKnownText(property.society_name) ? property.society_name : property.title;
 }
 
-function landingMapStories(context?: PropertyMapContext): LandingMapStory[] {
-  if (!context) return [];
-
-  const stories = availableLayers(context).map((layer): LandingMapStory => ({
-    id: layer,
-    label: layerLabel(layer, context),
-    places: context.places.filter((place) => place.layer === layer),
-    visual: layer === "metro"
-      ? "metro"
-      : layer === "lakes"
-        ? "lakes"
-        : layer === "red_flags"
-          ? "lines"
-          : "places",
-  }));
-
-  if ((context.metro_lines?.length ?? 0) > 0 && !stories.some((story) => story.id === "metro")) {
-    stories.unshift({ id: "metro", label: layerLabel("metro", context), places: [], visual: "metro" });
-  }
-  if ((context.lakes?.length ?? 0) > 0 && !stories.some((story) => story.id === "lakes")) {
-    stories.push({ id: "lakes", label: layerLabel("lakes", context), places: [], visual: "lakes" });
-  }
-  if (context.water) {
-    stories.push({ id: "water", label: "Groundwater", places: [], visual: "water" });
-  }
-
-  return stories;
-}
-
-function useLandingMapStoryIndex(
-  storyCount: number,
-  active: boolean,
-  paused: boolean,
-  reducedMotion: boolean,
-): number {
-  const [storyIndex, setStoryIndex] = useState(0);
-
-  useEffect(() => {
-    if (!active || paused || reducedMotion || storyCount <= 1) return undefined;
-    const timer = window.setInterval(() => {
-      setStoryIndex((current) => (current + 1) % storyCount);
-    }, 2_500);
-    return () => window.clearInterval(timer);
-  }, [active, paused, reducedMotion, storyCount]);
-
-  return storyCount > 0 ? storyIndex % storyCount : 0;
-}
-
 function usePropertyDetail(propertyId?: string): PropertyDetailResponse | undefined {
   const [loaded, setLoaded] = useState<{
     propertyId: string;
@@ -179,18 +121,21 @@ function usePropertyDetail(propertyId?: string): PropertyDetailResponse | undefi
   return loaded && loaded.propertyId === propertyId ? loaded.detail : undefined;
 }
 
-function buyerFacingDetail(value: string): string {
-  return value
-    .replace(/\s*·\s*parsed with caveats/gi, "")
-    .replace(/\bparsed with caveats\b/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
+function usePropertyRera(propertyId?: string): ReraEvidenceReportResponse | undefined {
+  const [loaded, setLoaded] = useState<{
+    propertyId: string;
+    report?: ReraEvidenceReportResponse;
+  }>();
 
-function toneLabel(tone?: string): string {
-  if (tone === "risk" || tone === "watch" || tone === "caution") return "Attention";
-  if (tone === "positive") return "Clear";
-  return "Neutral";
+  useEffect(() => {
+    if (!propertyId) return undefined;
+    getPropertyRera(propertyId)
+      .then((report) => setLoaded({ propertyId, report }))
+      .catch(() => setLoaded({ propertyId, report: undefined }));
+    return undefined;
+  }, [propertyId]);
+
+  return loaded && loaded.propertyId === propertyId ? loaded.report : undefined;
 }
 
 function rankHomesForLens(properties: PropertyCard[], lensId: FeaturedLensId): PropertyCard[] {
@@ -472,63 +417,17 @@ function selectEvidenceHome(properties: PropertyCard[]): PropertyCard {
   return rankEvidenceHomes(properties)[0];
 }
 
-function evidenceFacts(property: PropertyCard): EvidenceFact[] {
-  const facts: EvidenceFact[] = [];
-  const checks = property.decision_check_summary;
-  const primaryCheck = checks?.primaryLabels?.[0]?.label;
-  const registration = checks?.registrationNumberCompact;
-  const projectState = isKnownText(property.home_state_display)
-    ? property.home_state_display
-    : isKnownText(property.project_status_display)
-      ? property.project_status_display
-      : null;
-
-  if (isKnownText(primaryCheck)) {
-    facts.push({ id: "attention", label: "Watch", value: primaryCheck });
-  }
-  if (isKnownText(registration)) {
-    facts.push({ id: "registration", label: "Registration", value: registration });
-  }
-  if (projectState) facts.push({ id: "state", label: "Project", value: projectState });
-  if (hasKnownNumber(property.open_space_pct)) {
-    facts.push({ id: "open-space", label: "Open space", value: `${Math.round(property.open_space_pct)}%` });
-  } else if (hasKnownNumber(property.society_land_acres)) {
-    facts.push({ id: "land", label: "Project land", value: `${Math.round(property.society_land_acres)} acres` });
-  }
-
-  return facts.slice(0, 4);
-}
-
 function RevealCanvas({
   active,
   mapContext,
-  paused,
   property,
   reducedMotion,
 }: {
   active: boolean;
   mapContext?: PropertyMapContext;
-  paused: boolean;
   property: PropertyCard;
   reducedMotion: boolean;
 }) {
-  const phase = useLandingChapterSequence({
-    active,
-    delays: REVEAL_SEQUENCE_DELAYS,
-    paused,
-    reducedMotion,
-  });
-  const mapStories = useMemo(() => landingMapStories(mapContext), [mapContext]);
-  const mapStoryIndex = useLandingMapStoryIndex(
-    mapStories.length,
-    active,
-    paused,
-    reducedMotion,
-  );
-  const mapStory = mapStories[mapStoryIndex];
-  const facts = evidenceFacts(property);
-  const hasResidentSignal = hasKnownNumber(property.google_rating);
-  const checkLabel = property.decision_check_summary?.tileLabel;
   const homeMeta = [
     property.bhk > 0 ? `${property.bhk} BHK` : null,
     formatPrice(property.price) || null,
@@ -538,7 +437,6 @@ function RevealCanvas({
     <div
       className="landing-product landing-product--reveal"
       data-active={active ? "true" : "false"}
-      data-phase={phase}
     >
       <header className="landing-reveal__home">
         <div>
@@ -550,84 +448,10 @@ function RevealCanvas({
         {homeMeta.length > 0 ? <p>{homeMeta.join(" · ")}</p> : null}
       </header>
 
-      <div className="landing-reveal__layout">
-        <section className="landing-reveal__field">
-          <header>
-            <h3>Around this home</h3>
-            {mapStory ? <span className="landing-reveal__map-label">{mapStory.label}</span> : null}
-          </header>
-          <div className="landing-reveal__map" aria-hidden="true">
-            <AnimatePresence mode="popLayout" initial={false}>
-              <motion.div
-                key={mapStory?.id ?? "home"}
-                className="landing-reveal__map-frame"
-                data-visual={mapStory?.visual ?? "places"}
-                initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
-                transition={{
-                  ...CARD_UNFOLD_TRANSITION,
-                  visualDuration: reducedMotion ? 0 : CARD_UNFOLD_TRANSITION.visualDuration,
-                }}
-              >
-                {mapStory?.visual === "places" || mapStory?.visual === "metro" ? (
-                  <>
-                    <span className="landing-reveal__route landing-reveal__route--one" />
-                    <span className="landing-reveal__route landing-reveal__route--two" />
-                  </>
-                ) : null}
-                {mapStory?.visual === "metro" ? (
-                  <svg className="landing-reveal__metro-line" viewBox="0 0 320 220" preserveAspectRatio="none">
-                    <path d="M-14 56 C50 80, 70 142, 136 130 S214 64, 336 92" />
-                  </svg>
-                ) : null}
-                {mapStory?.visual === "lakes" ? <span className="landing-reveal__lake" /> : null}
-                {mapStory?.visual === "water" ? <span className="landing-reveal__water-zone" /> : null}
-                {mapStory?.visual === "lines" ? (
-                  <span className="landing-reveal__power-line">
-                    <i /><i /><i />
-                  </span>
-                ) : null}
-                <span className="landing-reveal__pin" />
-                {(mapStory?.places ?? []).slice(0, 3).map((place, index) => (
-                  <span
-                    key={place.feature_id ?? place.place_entity_id ?? `${place.name}-${index}`}
-                    className={`landing-reveal__marker landing-reveal__marker--${["one", "two", "three"][index]}`}
-                  >
-                    {index + 1}
-                  </span>
-                ))}
-                {mapStory?.visual === "metro" ? <span className="landing-reveal__transit">M</span> : null}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </section>
-
-        <section className="landing-reveal__dossier">
-          <header>
-            <h3>Project checks</h3>
-            {isKnownText(checkLabel) ? <span>{checkLabel}</span> : null}
-          </header>
-          <ul>
-            {facts.map((fact) => (
-              <li key={fact.id}>
-                <span>{fact.label}</span>
-                <strong>{fact.value}</strong>
-              </li>
-            ))}
-          </ul>
-          {hasResidentSignal ? (
-            <div className="landing-reveal__resident">
-              <span>Resident reviews</span>
-              <strong>
-                Google {property.google_rating?.toFixed(1)}
-                {hasKnownNumber(property.google_review_count)
-                  ? ` · ${property.google_review_count.toLocaleString("en-IN")} reviews`
-                  : ""}
-              </strong>
-            </div>
-          ) : null}
-        </section>
+      <div className="landing-reveal__real-map">
+        {mapContext ? (
+          <AroundThisHomePlate propertyId={property.id} context={mapContext} />
+        ) : null}
       </div>
     </div>
   );
@@ -897,220 +721,6 @@ function ConvergeCanvas({
   );
 }
 
-function formatRecordDate(value?: string): string | undefined {
-  if (!value) return undefined;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(date);
-}
-
-function ReraCanvas({
-  active,
-  detail,
-  paused,
-  property,
-  reducedMotion,
-}: {
-  active: boolean;
-  detail?: PropertyDetailResponse;
-  paused: boolean;
-  property: PropertyCard;
-  reducedMotion: boolean;
-}) {
-  const phase = useLandingLoopSequence({
-    active,
-    durations: RERA_SEQUENCE_DURATIONS,
-    paused,
-    reducedMotion,
-  });
-  const summary = property.decision_check_summary;
-  const rera = detail?.rera;
-  const portfolio = detail?.builder_portfolio;
-  const registration = rera?.registration_number ?? summary?.registrationNumberCompact;
-  const status = rera?.status;
-  const documentFallback = summary?.groups
-    ?.find((group) => group.id === "documents")
-    ?.labels.slice(0, 3)
-    .map((label) => ({ group: label.key, label: label.label, count: 1 })) ?? [];
-  const summaryCards = (rera?.decision_cards ?? [])
-    .filter((card) => isKnownText(card.title) || isKnownText(card.detail))
-    .filter((card) => !(isKnownText(registration) && /rera registered|registration/i.test(card.title)))
-    .slice(0, 3);
-  const glanceCards = summaryCards.length > 0
-    ? summaryCards
-    : (summary?.primaryLabels ?? []).slice(0, 3).map((label) => ({
-      id: label.key,
-      title: label.label,
-      detail: label.valueText ?? "",
-      tone: label.severity,
-    }));
-  const documentSections = documentFallback;
-  const complaintSections = (rera?.complaint_summaries ?? [])
-    .map((section) => ({
-      scope: section.scope,
-      label: section.scope === "promoter" ? "Promoter complaints" : "Project complaints",
-      total: section.total_count_from_tab_label ?? section.row_count_parsed,
-      open: section.open_count,
-      disposed: section.disposed_count,
-    }))
-    .filter((section) => section.total > 0 || section.open > 0 || section.disposed > 0)
-    .slice(0, 2);
-  const timeline = {
-    start_date: rera?.start_date,
-    original_completion_date: rera?.original_completion_date,
-    completion_date: rera?.completion_date,
-    delay_months: rera?.delay_months,
-  };
-  const builderProjects = (portfolio?.projects ?? []).slice(0, 3);
-  const phaseLabels = ["At a glance", "Documents", "Builder record", "Schedule"];
-  const sceneTransition = {
-    ...CARD_UNFOLD_TRANSITION,
-    visualDuration: reducedMotion ? 0 : CARD_UNFOLD_TRANSITION.visualDuration,
-  };
-
-  return (
-    <div className="landing-product landing-product--record" data-phase={phase}>
-      <header className="landing-record__head">
-        <div>
-          <span>RERA</span>
-          <JourneyHomeName active={active} reducedMotion={reducedMotion}>
-            {homeName(property)}
-          </JourneyHomeName>
-        </div>
-        <em>{phaseLabels[phase]}</em>
-      </header>
-
-      <div className="landing-record__movie">
-        <AnimatePresence mode="popLayout" initial={false}>
-          {phase === 0 ? (
-            <motion.section
-              key="glance"
-              className="landing-record__scene landing-record__glance"
-              initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
-              transition={sceneTransition}
-            >
-              {(isKnownText(registration) || isKnownText(status)) ? (
-                <div className="landing-record__registry">
-                  {isKnownText(registration) ? <strong>{registration}</strong> : null}
-                  {isKnownText(status) ? <span>{status}</span> : null}
-                </div>
-              ) : null}
-              <div className="landing-record__summary-rows">
-                {glanceCards.map((card) => (
-                  <article key={card.id} className={`is-${toneLabel(card.tone).toLowerCase()}`}>
-                    <span>{toneLabel(card.tone)}</span>
-                    <strong>{card.title}</strong>
-                    {isKnownText(card.detail) ? <p>{buyerFacingDetail(card.detail)}</p> : null}
-                  </article>
-                ))}
-              </div>
-            </motion.section>
-          ) : phase === 1 ? (
-            <motion.section
-              key="documents"
-              className="landing-record__scene landing-record__documents"
-              initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
-              transition={sceneTransition}
-            >
-              <div className="landing-record__tabs" aria-hidden="true">
-                <span className="is-active">All</span>
-                {documentSections.map((section) => (
-                  <span key={section.group}>{section.label}</span>
-                ))}
-              </div>
-              <div className="landing-record__document-list">
-                {documentSections.map((section) => (
-                  <p key={section.group}>
-                    <i aria-hidden="true" />
-                    <strong>{section.label}</strong>
-                    <small>{section.count}</small>
-                  </p>
-                ))}
-              </div>
-            </motion.section>
-          ) : phase === 2 ? (
-            <motion.section
-              key="builder"
-              className="landing-record__scene landing-record__builder"
-              initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
-              transition={sceneTransition}
-            >
-              <div className="landing-record__builder-name">
-                <strong>{portfolio?.builder_name || property.builder_name}</strong>
-              </div>
-              <div className="landing-record__builder-stats">
-                {portfolio ? (
-                  <>
-                    <p><strong>{portfolio.tracked_projects}</strong><span>tracked projects</span></p>
-                    <p><strong>{portfolio.rera_registered_projects}/{portfolio.tracked_projects}</strong><span>RERA linked</span></p>
-                    <p><strong>{portfolio.delayed_projects}</strong><span>delayed</span></p>
-                  </>
-                ) : null}
-                {complaintSections.map((section) => (
-                  <p key={section.scope}>
-                    <strong>{section.total}{section.open > 0 ? ` · ${section.open} open` : ""}</strong>
-                    <span>{section.label}</span>
-                  </p>
-                ))}
-              </div>
-              {builderProjects.length > 0 ? (
-                <div className="landing-record__builder-projects">
-                  {builderProjects.map((project) => (
-                    <article key={`${project.property_id}-${project.project_name}`}>
-                      <strong>{project.project_name}</strong>
-                      <span>
-                        {project.area}
-                        {project.current ? " · This home" : ""}
-                        {hasKnownNumber(project.delay_months) ? ` · ${project.delay_months} mo` : ""}
-                      </span>
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-            </motion.section>
-          ) : (
-            <motion.section
-              key="schedule"
-              className="landing-record__scene landing-record__schedule"
-              initial={reducedMotion ? false : { opacity: 0, y: "110%" }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={reducedMotion ? undefined : { opacity: 0, y: "-110%" }}
-              transition={sceneTransition}
-            >
-              <div className="landing-record__metrics">
-                {formatRecordDate(timeline?.start_date) ? (
-                  <p><span>Start</span><strong>{formatRecordDate(timeline?.start_date)}</strong></p>
-                ) : null}
-                {formatRecordDate(timeline?.original_completion_date) ? (
-                  <p><span>Original target</span><strong>{formatRecordDate(timeline?.original_completion_date)}</strong></p>
-                ) : null}
-                {formatRecordDate(timeline?.completion_date) ? (
-                  <p><span>Current target</span><strong>{formatRecordDate(timeline?.completion_date)}</strong></p>
-                ) : null}
-                {hasKnownNumber(timeline?.delay_months) ? (
-                  <p className="is-attention"><span>Movement</span><strong>{timeline?.delay_months} months</strong></p>
-                ) : null}
-              </div>
-            </motion.section>
-          )}
-        </AnimatePresence>
-      </div>
-
-      <div className="landing-record__progress" aria-hidden="true">
-        {phaseLabels.map((label, index) => (
-          <span key={label} className={index === phase ? "is-active" : ""} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 type StorySceneProps = {
   id: StorySceneId;
   side: "left" | "right";
@@ -1189,7 +799,7 @@ type StoryChapter = {
   canvas: ReactNode;
 };
 
-export function LandingStoryStage({ properties, onSearch }: LandingStoryStageProps) {
+export function LandingStoryStage({ properties, onSearch, compactOpening = false }: LandingStoryStageProps) {
   const listable = filterListableProperties(properties);
   const uniqueHomes = uniqueSocietiesForDiscovery(listable);
   const isDesktopStory = useDesktopStory();
@@ -1198,6 +808,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
   const resolveHomes = storyHomesForResolve(uniqueHomes);
   const revealHome = resolveHomes[0] ?? selectEvidenceHome(uniqueHomes);
   const revealDetail = usePropertyDetail(revealHome?.id);
+  const revealRera = usePropertyRera(revealHome?.id);
 
   if (!revealHome || resolveHomes.length === 0) return null;
 
@@ -1237,18 +848,17 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
     {
       id: "reveal",
       side: "left",
-      title: "Open a home, not a listing",
-      description: "The result expands into map context, project checks and resident reviews without losing why it matched.",
+      title: "See the home in context",
+      description: "Map context, project checks and resident reviews—together.",
       action: (
         <Link to={propertyDetailPath(revealHome.id)}>
-          See the full picture <span aria-hidden="true">→</span>
+          Open details <span aria-hidden="true">→</span>
         </Link>
       ),
       canvas: (
         <RevealCanvas
           active={controller.activeSceneId === "reveal" || middleChaptersActive}
           mapContext={revealDetail?.map_context}
-          paused={controller.isPaused("reveal")}
           property={revealHome}
           reducedMotion={controller.isReducedMotion}
         />
@@ -1257,11 +867,11 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
     {
       id: "remember",
       side: "right",
-      title: "Keep your judgment with the home",
-      description: "Save the home, write what you noticed, then turn a slash command into a visit checklist.",
+      title: "Keep notes with the home",
+      description: "Save what you notice and turn it into a visit checklist.",
       action: (
         <Link to="/workspace">
-          Open notebook <span aria-hidden="true">→</span>
+          Open notes <span aria-hidden="true">→</span>
         </Link>
       ),
       canvas: (
@@ -1276,11 +886,11 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
     ...(compareHomes.length >= 2 ? [{
       id: "converge" as const,
       side: "left" as const,
-      title: "Make the tradeoffs visible",
-      description: "Put two saved homes side by side, then carry the stronger option into a Buy vs Rent horizon.",
+      title: "Compare what matters",
+      description: "Put saved homes side by side, then check Buy vs Rent.",
       action: (
         <Link to="/workspace/compare">
-          Open workspace <span aria-hidden="true">→</span>
+          Compare homes <span aria-hidden="true">→</span>
         </Link>
       ),
       canvas: (
@@ -1295,25 +905,26 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
     {
       id: "record",
       side: "right",
-      title: "Read the official record",
-      description: "At a glance, documents, builder record and schedule stay connected to the same home.",
+      title: "Check the official record",
+      description: "Registration, schedule, filings and complaints in one place.",
       action: (
         <Link to={`${propertyDetailPath(revealHome.id)}/rera`}>
-          Inspect RERA evidence <span aria-hidden="true">→</span>
+          Open RERA record <span aria-hidden="true">→</span>
         </Link>
       ),
       canvas: (
-        <ReraCanvas
+        <LandingReraCanvas
           active={controller.activeSceneId === "record"}
           detail={revealDetail}
           paused={controller.isPaused("record")}
           property={revealHome}
           reducedMotion={controller.isReducedMotion}
+          report={revealRera}
         />
       ),
     },
   ];
-  const searchChapter = chapters[0];
+  const searchChapter = compactOpening ? undefined : chapters[0];
   const middleChapters = chapters.slice(1, -1);
   const recordChapter = chapters[chapters.length - 1];
 
@@ -1323,7 +934,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
       aria-label="A buyer journey through OpenEstates"
       data-reduced-motion={controller.isReducedMotion ? "true" : "false"}
     >
-      <FeaturedSuggestions properties={uniqueHomes} onSearch={onSearch} />
+      {compactOpening ? null : <FeaturedSuggestions properties={uniqueHomes} onSearch={onSearch} />}
 
       <div ref={storyRef} className="landing-stage__story">
         <LayoutGroup id="landing-home-journey">
@@ -1357,7 +968,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
             ) : null}
           </div> : (
           <div className="landing-story__mobile">
-            {chapters.map((chapter) => (
+            {(compactOpening ? chapters.slice(1) : chapters).map((chapter) => (
               <StoryScene key={chapter.id} {...chapter} controller={controller} />
             ))}
           </div>

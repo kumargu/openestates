@@ -12,8 +12,14 @@ export type PlateStory =
 
 export const PLATE_MAX_MAP_LABEL_LENGTH = 22;
 
-/** Muted OSM basemap — no API key. */
-export const NEARBY_MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
+const META_ENV = (import.meta as ImportMeta & {
+  env?: Record<string, string | boolean | undefined>;
+}).env ?? {};
+
+/** Muted OSM basemap — no API key. The override supports offline visual review. */
+export const NEARBY_MAP_STYLE = typeof META_ENV.VITE_NEARBY_MAP_STYLE === "string"
+  ? META_ENV.VITE_NEARBY_MAP_STYLE
+  : "https://tiles.openfreemap.org/styles/positron";
 
 const NEARBY_RADIUS_STEPS_KM = [0.35, 0.5, 0.8, 1.2, 1.8, 2.5] as const;
 const AREA_RADIUS_STEPS_KM = [3, 5, 8, 10, 15] as const;

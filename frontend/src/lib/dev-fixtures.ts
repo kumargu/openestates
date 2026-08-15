@@ -4,11 +4,14 @@ import type {
   MatchExplanation,
   PropertyCard,
   PropertyDetailResponse,
+  ReraEvidenceReportResponse,
   SearchAreaContext,
   SearchResponse,
 } from "./types.ts";
 
 const now = "2026-07-11T00:00:00.000Z";
+const RERA_DEMO_PROPERTY_ID = "fixture-samadhura-capitol-3bhk";
+const RERA_DEMO_REGISTRATION = "PRM/KA/RERA/1251/446/PR/051024/007125";
 
 const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
   {
@@ -49,7 +52,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     society_name: "Samadhura Capitol Residences",
     builder_name: "Samadhura",
     hero_image: null,
-    transparency_tags: ["Below median", "Plan visible", "RERA rooted"],
+    transparency_tags: ["Below median", "RERA registered", "Registry linked"],
     description_summary: "Efficient resale option near the corridor with strong price discipline.",
     possession_status: "ready",
     metro_distance_mins: 8,
@@ -375,6 +378,13 @@ export function getFixtureResponse(path: string): unknown | null {
     return searchFixtureProperties(params.get("q") ?? "");
   }
 
+  const reraMatch = pathname.match(/^\/api\/properties\/([^/]+)\/rera$/);
+  if (reraMatch) {
+    const id = decodeURIComponent(reraMatch[1]);
+    const card = fixtureProperties.find((property) => property.id === id);
+    return card ? makeReraReport(card) : null;
+  }
+
   const propertyMatch = pathname.match(/^\/api\/properties\/([^/]+)$/);
   if (propertyMatch) {
     const id = decodeURIComponent(propertyMatch[1]);
@@ -592,6 +602,101 @@ function reason(preference: string, factKey: string, display: string, score: num
   };
 }
 
+function makeReraReport(card: PropertyCard): ReraEvidenceReportResponse {
+  const surface: ReraEvidenceReportResponse["surface"] = {
+    version: 7,
+    coverage_note: "",
+    regulatory_event_order: [],
+    sections: [
+      {
+        id: "overview",
+        title: "Project at a glance",
+        renderer: "fact_list",
+        selectors: [],
+        preview_kinds: [],
+        empty_behavior: "omit",
+      },
+    ],
+  };
+  const emptyEvidence: ReraEvidenceReportResponse["evidence"] = {
+    schema_version: "rera-evidence-v1",
+    property_id: card.id,
+    bundle_id: "fixture-rera-landing",
+    generated_at: now,
+    registration_ids: [],
+    entities: [],
+    claims: [],
+    events: [],
+    series: [],
+    discrepancies: [],
+    regulatory_coverage: [],
+    source_index: [],
+  };
+  if (card.id !== RERA_DEMO_PROPERTY_ID) {
+    return { availability: "unavailable", evidence: emptyEvidence, surface };
+  }
+
+  return {
+    availability: "available",
+    surface,
+    evidence: {
+      ...emptyEvidence,
+      registration_ids: [RERA_DEMO_REGISTRATION],
+      claims: [{
+        claim_id: "fixture-registration",
+        subject: { entity_id: card.kg_entity_refs.society_entity_id, entity_type: "society" },
+        predicate: "official_registration_number",
+        value: { type: "text", data: RERA_DEMO_REGISTRATION },
+        assertion_mode: "registry_record",
+        source_trust: "official_registry",
+        evidence: [],
+      }],
+      series: [],
+    },
+    buyer_report: {
+      fact_sections: [
+        {
+          id: "registration",
+          title: "Official registration",
+          facts: [
+            { key: "rera_status", label: "Status", value: "Approved", learned_at: now },
+          ],
+        },
+        {
+          id: "overview",
+          title: "Project at a glance",
+          facts: [
+            { key: "rera_total_units", label: "Homes", value: "405", learned_at: now },
+            { key: "rera_num_towers", label: "Towers", value: "4", learned_at: now },
+            { key: "rera_project_type", label: "Project type", value: "Residential / Group Housing", learned_at: now },
+            { key: "rera_land_litigation", label: "Land litigation", value: "No", learned_at: now },
+          ],
+        },
+        {
+          id: "schedule",
+          title: "Schedule and progress",
+          facts: [
+            { key: "rera_start_date", label: "Registration start", value: "2024-10-05", learned_at: now },
+            { key: "rera_completion_date", label: "Proposed completion", value: "2027-12-31", learned_at: now },
+          ],
+        },
+      ],
+      complaints: [{
+        scope: "project",
+        total: 0,
+        open: 0,
+        disposed: 0,
+        rows_parsed: 0,
+        status_counts_complete: true,
+        theme_counts: {},
+      }],
+      schedules: [],
+      documents: [],
+      registry_url: "https://rera.karnataka.gov.in/",
+    },
+  };
+}
+
 function makeDetail(card: PropertyCard): PropertyDetailResponse {
   const area = areaContexts[card.area.toLowerCase()] ?? areaContexts.whitefield;
   const trust = confidenceFor(card);
@@ -674,8 +779,56 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
       community_notes: area.community_notes,
     },
     similar_properties: fixtureProperties.filter((property) => property.id !== card.id && property.area === card.area).slice(0, 3),
+    map_context: card.id === RERA_DEMO_PROPERTY_ID ? {
+      home: {
+        entity_id: card.kg_entity_refs.property_entity_id,
+        name: card.society_name,
+        area: card.area,
+        latitude: 12.993123517243305,
+        longitude: 77.75236189370663,
+      },
+      layers: [{
+        id: "metro",
+        label: "Metro",
+        rank: 1,
+        enabledByDefault: true,
+      }],
+      places: [{
+        place_entity_id: "place:kadugodi-tree-park-metro",
+        layer: "metro",
+        name: "Kadugodi Tree Park Metro",
+        latitude: 12.98565,
+        longitude: 77.7469,
+        distance_km: 1.0,
+        lines: ["Purple Line"],
+        source_type: "OpenStreetMap / Wikidata",
+        source_url: "https://www.wikidata.org/wiki/Q112683401",
+      }],
+      proof_focus: {
+        surfaceId: "around-this-home",
+        layerId: "metro",
+        factKey: "nearby.metro.kadugodi-tree-park",
+        entityId: "place:kadugodi-tree-park-metro",
+        matchedLabel: "Kadugodi Tree Park Metro",
+        requestedConstraint: "Near metro",
+        distanceM: 1_000,
+        reason: "Nearest mapped Purple Line station",
+      },
+    } : undefined,
+    rera: card.id === RERA_DEMO_PROPERTY_ID ? {
+      registered: true,
+      registration_number: RERA_DEMO_REGISTRATION,
+      status: "Approved",
+      start_date: "2024-10-05",
+      completion_date: "2027-12-31",
+      total_units: 405,
+      complaints_count: 0,
+      project_complaints_count: 0,
+      project_complaints_open_count: 0,
+      project_complaints_disposed_count: 0,
+    } : undefined,
     rera_report_ref: {
-      registration_ids: [],
+      registration_ids: card.id === RERA_DEMO_PROPERTY_ID ? [RERA_DEMO_REGISTRATION] : [],
       href: `/property/${card.id}/rera`,
       availability: card.root_source === "rera" ? "partial" : "unavailable",
     },

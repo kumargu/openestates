@@ -107,6 +107,7 @@ export function MapEvidenceTray({
           onClick={() => setComposerOpen(true)}
         >
           <NotebookSaveIcon size={16} />
+          <span>Add note</span>
         </button>
       )}
     </aside>

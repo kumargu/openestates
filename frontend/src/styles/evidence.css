@@ -1286,14 +1286,21 @@
 }
 
 .nearby-map-selection__note {
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   align-self: end;
-  width: 44px;
-  padding: 0;
+  width: auto;
+  padding: 0 0.55rem;
   border-color: transparent !important;
   background: transparent !important;
   color: #7d746c !important;
+}
+
+.nearby-map-selection__note span {
+  font-size: 0.68rem;
+  font-weight: 650;
+  white-space: nowrap;
 }
 
 .nearby-map-selection__note:hover,

@@ -6,53 +6,10 @@ import { getAreaTracker, getProperties } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
 import { SearchExperience as InlineSearchExperience } from "./SearchExperience.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
+import { LayeredDiscoveryHero } from "../components/LayeredDiscoveryHero.tsx";
 import { LandingStoryStage } from "../components/LandingStoryStage.tsx";
 import { OpenEstatesMark } from "../components/brand/OpenEstatesMark.tsx";
 import { consumeDiscoveryReturn } from "../lib/navigationContext.ts";
-
-const SEARCH_SUGGESTIONS = [
-  { label: "Under ₹2.5Cr", query: "3BHK under 2.5Cr with clear price context" },
-  { label: "Near schools", query: "Quiet family home near good schools" },
-  { label: "Ready to move", query: "Ready-to-move homes with delivery proof" },
-  { label: "Whitefield", query: "Low commute-pain home near Whitefield tech parks" },
-];
-
-const HERO_THEMES = [
-  "proof you can trust",
-  "risks made visible",
-  "prices in context",
-  "clear tradeoffs",
-] as const;
-
-function RotatingHeroTheme() {
-  const [index, setIndex] = useState(0);
-  const [fading, setFading] = useState(false);
-
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
-    let swapTimer: number | undefined;
-    const interval = window.setInterval(() => {
-      setFading(true);
-      swapTimer = window.setTimeout(() => {
-        setIndex((current) => (current + 1) % HERO_THEMES.length);
-        setFading(false);
-      }, 240);
-    }, 3_000);
-    return () => {
-      window.clearInterval(interval);
-      if (swapTimer) window.clearTimeout(swapTimer);
-    };
-  }, []);
-
-  return (
-    <span
-      className={`home-hero__rotating${fading ? " is-fading" : ""}`}
-      aria-hidden="true"
-    >
-      {HERO_THEMES[index]}
-    </span>
-  );
-}
 
 type ViewTransitionDocument = Document & {
   startViewTransition?: (update: () => void) => { finished: Promise<void> };
@@ -223,84 +180,68 @@ export function HomePage() {
 
   return (
     <div className={`home-page${hasActiveSearch ? " home-page--searching" : ""}`}>
-      <section
-        id="home-search"
-        className={`home-hero${hasActiveSearch ? " home-hero--search-active" : ""}`}
-        aria-label="Explore"
-      >
-        <div className="home-hero__wash" aria-hidden="true" />
-
-        {!hasActiveSearch && (
-          <div className="fade-up home-hero__copy">
-            <h1 className="home-hero__title">
-              <span>Find homes with</span>
-              <RotatingHeroTheme />
-              <span className="sr-only">proof you can trust</span>
-            </h1>
-          </div>
-        )}
-      </section>
+      {!hasActiveSearch ? (
+        <div id="home-search">
+          <LayeredDiscoveryHero
+            properties={properties}
+            query={query}
+            onQueryChange={setQuery}
+            onSearch={commitSearch}
+          />
+        </div>
+      ) : (
+        <section
+          id="home-search"
+          className="home-hero home-hero--search-active"
+          aria-label="Explore"
+        >
+          <div className="home-hero__wash" aria-hidden="true" />
+        </section>
+      )}
 
       <div className="home-scroll-shell">
-        <form
-          onSubmit={handleSearch}
-          className={`home-composer${hasActiveSearch ? " home-composer--search-active" : " home-composer--landing fade-up fade-up-delay-1"}${searchFocused ? " home-composer--focused" : ""}`}
-          aria-label="Search homes"
-          role="search"
-        >
-          <div className="home-composer__field">
-            <svg className="home-composer__lead" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              className="home-composer__input"
-              type="text"
-              placeholder="Quiet 3BHK near schools under 2.5Cr"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-              aria-label="Describe the property you are looking for"
-              autoComplete="off"
-            />
-            {hasActiveSearch && query.trim() && (
-              <button
-                type="button"
-                className="home-composer__clear"
-                aria-label="Clear search"
-                onClick={clearSearch}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-                  <path d="M18 6L6 18M6 6l12 12" />
+        {hasActiveSearch ? (
+          <form
+            onSubmit={handleSearch}
+            className={`home-composer home-composer--search-active${searchFocused ? " home-composer--focused" : ""}`}
+            aria-label="Search homes"
+            role="search"
+          >
+            <div className="home-composer__field">
+              <svg className="home-composer__lead" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                className="home-composer__input"
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                aria-label="Describe the property you are looking for"
+                autoComplete="off"
+              />
+              {query.trim() ? (
+                <button
+                  type="button"
+                  className="home-composer__clear"
+                  aria-label="Clear search"
+                  onClick={clearSearch}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              ) : null}
+              <button type="submit" className="home-composer__submit" aria-label="Search">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
                 </svg>
               </button>
-            )}
-            <button type="submit" className="home-composer__submit" aria-label="Search">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
-            </button>
-          </div>
-        </form>
-
-        {!hasActiveSearch && (
-          <div
-            className="home-search-suggestions fade-up fade-up-delay-2"
-            aria-label="Suggested searches"
-          >
-            {SEARCH_SUGGESTIONS.map((suggestion) => (
-              <button
-                key={suggestion.label}
-                type="button"
-                className="home-search-suggestion"
-                onClick={() => commitSearch(suggestion.query)}
-              >
-                {suggestion.label}
-              </button>
-            ))}
-          </div>
-        )}
+            </div>
+          </form>
+        ) : null}
 
         {loadError && (
           <div className={`home-error-banner${hasActiveSearch ? "" : " fade-up fade-up-delay-2"}`}>
@@ -320,7 +261,7 @@ export function HomePage() {
           </div>
         )}
 
-        {!hasActiveSearch && recents.length > 0 && (
+        {hasActiveSearch && recents.length > 0 && (
           <div className="fade-up fade-up-delay-3 recent-searches">
             <span className="recent-searches-label">Recent</span>
             {recents.map((s) => (
@@ -355,7 +296,7 @@ export function HomePage() {
             </section>
           ) : properties.length > 0 ? (
             <>
-              <LandingStoryStage properties={properties} onSearch={commitSearch} />
+              <LandingStoryStage properties={properties} onSearch={commitSearch} compactOpening />
               <AreaTrackerSection
                 properties={properties}
                 areaTracker={areaTracker}
