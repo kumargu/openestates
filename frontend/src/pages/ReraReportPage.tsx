@@ -59,11 +59,82 @@ function humanize(value: string): string {
     .replace(/(^|\s)\S/g, (letter) => letter.toUpperCase());
 }
 
+function statusTone(value: string): "positive" | "risk" | "neutral" {
+  if (/revoked|rejected|cancelled|suspended|expired/i.test(value)) return "risk";
+  if (/approved|active|registered|valid/i.test(value)) return "positive";
+  return "neutral";
+}
+
 function buyerFactValue(fact: ReraBuyerFact): string {
   const key = fact.key.toLowerCase();
   return key.endsWith("_date") || key.endsWith("_on")
     ? formatReraDate(fact.value)
     : fact.value;
+}
+
+type RecordFact = { id: string; label: string; value: string };
+
+function OfficialRecord({
+  registration,
+  registrationText,
+  promoter,
+  completion,
+  latestFiling,
+  registryUrl,
+}: {
+  registration?: ReraBuyerFactSection;
+  registrationText?: string;
+  promoter?: ReraBuyerFact;
+  completion?: ReraBuyerFact;
+  latestFiling?: { quarter?: string; financial_year?: string; effective_at: string };
+  registryUrl: string | null;
+}) {
+  const facts = registration?.facts ?? [];
+  const registrationNumber = facts.find((fact) => /registration number/i.test(fact.label));
+  const highlights: Array<RecordFact | null> = [
+    registrationNumber || registrationText ? {
+      id: registrationNumber?.key ?? "registration-number",
+      label: registrationNumber?.label ?? "Registration number",
+      value: registrationNumber ? buyerFactValue(registrationNumber) : registrationText ?? "",
+    } : null,
+    promoter ? { id: promoter.key, label: promoter.label, value: buyerFactValue(promoter) } : null,
+    completion ? { id: completion.key, label: completion.label, value: buyerFactValue(completion) } : null,
+    latestFiling ? {
+      id: "latest-filing",
+      label: "Latest quarterly filing",
+      value: [latestFiling.quarter, latestFiling.financial_year].filter(Boolean).join(" · ")
+        || formatReraDate(latestFiling.effective_at),
+    } : null,
+  ];
+  const visibleHighlights = highlights.filter((fact): fact is RecordFact => Boolean(fact));
+  const shownKeys = new Set(["rera_status", ...visibleHighlights.map((fact) => fact.id)]);
+  const remainingFacts = facts.filter((fact) => !shownKeys.has(fact.key));
+  if (visibleHighlights.length === 0 && remainingFacts.length === 0) return null;
+
+  return (
+    <section className="rera-dossier" aria-labelledby="rera-record-title">
+      <div className="rera-record">
+        <div className="rera-record__heading">
+          <div>
+            <span>Filed with Karnataka RERA</span>
+            <h2 id="rera-record-title">Official project record</h2>
+          </div>
+          {registryUrl && <a href={registryUrl} target="_blank" rel="noreferrer">Open registry <span aria-hidden="true">↗</span></a>}
+        </div>
+        {visibleHighlights.length > 0 && (
+          <dl className="rera-record__facts">
+            {visibleHighlights.map((fact) => (
+              <div key={fact.id}>
+                <dt>{fact.label}</dt>
+                <dd>{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {remainingFacts.length > 0 && <BuyerFactList facts={remainingFacts} />}
+      </div>
+    </section>
+  );
 }
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
@@ -270,6 +341,7 @@ function QuarterlyProgress({
   const series = evidence.series.find((item) => item.series_type === "quarterly_inventory");
   if (!series || !section) return null;
   const labels = Object.fromEntries(section.selectors.map((selector) => [selector.key.split(".").at(-1), selector.label]));
+  const points = [...series.points].sort((left, right) => right.effective_at.localeCompare(left.effective_at));
   return (
     <Section id="quarterly-progress" title="Quarterly progress">
       <div className="rera-series" role="region" aria-label="Quarterly progress" tabIndex={0}>
@@ -283,13 +355,16 @@ function QuarterlyProgress({
             </tr>
           </thead>
           <tbody>
-            {series.points.map((point) => {
+            {points.map((point, index) => {
               const total = point.total_units ?? 0;
               const booked = point.booked_units ?? 0;
               return (
                 <tr key={point.point_id}>
                   <th scope="row">
-                    <strong>{[point.quarter, point.financial_year].filter(Boolean).join(" · ")}</strong>
+                    <strong>
+                      {[point.quarter, point.financial_year].filter(Boolean).join(" · ")}
+                      {index === 0 && <span className="rera-latest-label">Latest</span>}
+                    </strong>
                     <span>{formatReraDate(point.effective_at)}</span>
                   </th>
                   <td>
@@ -849,6 +924,15 @@ function ReraReportContent({ id }: { id: string }) {
   const statusLabel = status ? humanize(status) : undefined;
   const registryUrl = httpUrl(buyer?.registry_url);
   const hasReportData = report.evidence.claims.length > 0 || (factSections?.some((section) => section.facts.length) ?? false);
+  const schedule = sectionById(factSections, "schedule");
+  const completion = schedule?.facts.find((fact) => fact.key === "rera_completion_date");
+  const builderFacts = sectionById(factSections, "builder")?.facts ?? [];
+  const promoter = builderFacts.find((fact) => fact.key === "rera_promoter_name");
+  const promoterFacts = builderFacts.filter((fact) => fact.key !== "rera_promoter_name");
+  const quarterlySeries = report.evidence.series.find((item) => item.series_type === "quarterly_inventory");
+  const latestFiling = quarterlySeries
+    ? [...quarterlySeries.points].sort((left, right) => left.effective_at.localeCompare(right.effective_at)).at(-1)
+    : undefined;
 
   return (
     <main className="page-container-wide rera-report-page">
@@ -857,15 +941,15 @@ function ReraReportContent({ id }: { id: string }) {
         <meta name="description" content={`Filed project details for ${title}.`} />
       </Helmet>
       <header className="rera-hero">
-        <Link to={`/property/${encodeURIComponent(id)}`}>Back to property</Link>
-        <h1>{title}</h1>
-        <p>{[property.area, property.city, statusLabel, latestCapture ? `Updated ${formatReraDate(latestCapture)}` : null].filter(Boolean).join(" · ")}</p>
-        {(registrationText || registryUrl) && (
-          <div className="rera-registry-line">
-            {registrationText && <strong>{registrationText}</strong>}
-            {registryUrl && <a href={registryUrl} target="_blank" rel="noreferrer">Open registry</a>}
+        <Link to={`/property/${encodeURIComponent(id)}`}><span aria-hidden="true">←</span> Property</Link>
+        <div className="rera-hero__main">
+          <div>
+            <span className="rera-hero__label">RERA record</span>
+            <h1>{title}</h1>
+            <p>{[property.area, property.city, latestCapture ? `Updated ${formatReraDate(latestCapture)}` : null].filter(Boolean).join(" · ")}</p>
           </div>
-        )}
+          {statusLabel && <strong className={`rera-status is-${statusTone(statusLabel)}`}><span aria-hidden="true" />{statusLabel}</strong>}
+        </div>
         {report.availability === "partial" && <span>Some filing sections are not available.</span>}
       </header>
 
@@ -876,6 +960,14 @@ function ReraReportContent({ id }: { id: string }) {
         </section>
       ) : (
         <>
+          <OfficialRecord
+            registration={registration}
+            registrationText={registrationText}
+            promoter={promoter}
+            completion={completion}
+            latestFiling={latestFiling}
+            registryUrl={registryUrl}
+          />
           <RegulatoryRecord report={report} />
           <ProjectOverview
             section={sectionById(factSections, "overview")}
@@ -884,7 +976,7 @@ function ReraReportContent({ id }: { id: string }) {
           />
           <Discrepancies evidence={report.evidence} />
           <Schedule
-            section={sectionById(factSections, "schedule")}
+            section={schedule}
             surface={surfaceById(report.surface.sections, "schedule")}
             evidence={report.evidence}
           />
@@ -914,6 +1006,11 @@ function ReraReportContent({ id }: { id: string }) {
               <BuyerFactList facts={sectionById(factSections, "location")!.facts} />
             </Section>
           ) : null}
+          {promoterFacts.length > 0 && (
+            <Section id="promoter" title="Promoter record">
+              <BuyerFactList facts={promoterFacts} />
+            </Section>
+          )}
           <BuilderRecord portfolio={buyer?.builder_portfolio} />
         </>
       )}
