@@ -183,7 +183,7 @@
 
 .home-plan-inline-studio__rates {
   display: grid;
-  grid-template-columns: 8.5rem 8.5rem auto;
+  grid-template-columns: repeat(3, 8.5rem) auto;
   align-items: end;
   justify-content: start;
   gap: 1rem;
@@ -1754,7 +1754,7 @@
   }
 
   .home-plan-inline-studio__rates {
-    grid-template-columns: 8.5rem 8.5rem auto;
+    grid-template-columns: repeat(3, 8.5rem) auto;
   }
 
   .home-plan-payoff__year-focus {

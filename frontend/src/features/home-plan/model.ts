@@ -25,6 +25,8 @@ export type PlanAssumptions = {
 
 export type PlanInputs = {
   propertyPriceLakh: number;
+  /** Share of each builder payment paid in cash rather than borrowed. */
+  downPaymentPercent: number;
   /** EMI after possession. With the loan rate, it sets how fast the home is paid off. */
   monthlyEmiThousands: number;
   loanRate: number;
@@ -39,6 +41,7 @@ export type PlanInputs = {
 };
 
 export type EditablePlanInput =
+  | "downPaymentPercent"
   | "monthlyEmiThousands"
   | "currentRentThousands"
   | "monthlySipThousands"
@@ -106,6 +109,7 @@ const MONTHS_IN_YEAR = 12;
 const LAKH = 100_000;
 
 const DEFAULT_LOAN_RATE = 7.5;
+export const DEFAULT_DOWN_PAYMENT_PERCENT = 20;
 /** Gross rental yield used to estimate what the same home rents for. */
 const DEFAULT_RENTAL_YIELD_RATE = 0.032;
 /** Monthly amounts read as round thousands, so they move in ₹5K steps. */
@@ -123,6 +127,14 @@ function finiteAmount(value: number, field: string, min = 0): number {
   return value;
 }
 
+function finitePercent(value: number, field: string): number {
+  const percent = finiteAmount(value, field);
+  if (percent > 100) {
+    throw new RangeError(`${field} must be a finite number between 0 and 100`);
+  }
+  return percent;
+}
+
 function normalizeExtraEmisPerYear(value: number): number {
   if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
     throw new RangeError("extraEmisPerYear must be a finite whole number >= 0");
@@ -132,10 +144,13 @@ function normalizeExtraEmisPerYear(value: number): number {
 
 export function normalizePlanInputs(inputs: PlanInputs): PlanInputs {
   const propertyPriceLakh = finiteAmount(inputs.propertyPriceLakh, "propertyPriceLakh", 0.01);
+  const downPaymentPercent = finitePercent(inputs.downPaymentPercent, "downPaymentPercent");
+  const minimumEmi = downPaymentPercent === 100 ? 0 : 1;
   return {
     ...inputs,
     propertyPriceLakh,
-    monthlyEmiThousands: finiteAmount(inputs.monthlyEmiThousands, "monthlyEmiThousands", 1),
+    downPaymentPercent,
+    monthlyEmiThousands: finiteAmount(inputs.monthlyEmiThousands, "monthlyEmiThousands", minimumEmi),
     loanRate: finiteAmount(inputs.loanRate, "loanRate"),
     currentRentThousands: finiteAmount(inputs.currentRentThousands, "currentRentThousands"),
     equityReturn: finiteAmount(inputs.equityReturn, "equityReturn"),
@@ -149,17 +164,28 @@ export function normalizePlanInputs(inputs: PlanInputs): PlanInputs {
   };
 }
 
-/** Updates exactly the input the buyer changed. */
+/** Updates one buyer input; down payment also refreshes its 20-year EMI. */
 export function updatePlanInput(
   inputs: PlanInputs,
   key: EditablePlanInput,
   value: number,
 ): PlanInputs {
-  const minimum = key === "monthlyEmiThousands" ? 1 : 0;
-  if (!Number.isFinite(value) || value < minimum) {
+  const minimum = key === "monthlyEmiThousands" && inputs.downPaymentPercent < 100 ? 1 : 0;
+  const maximum = key === "downPaymentPercent" ? 100 : Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(value) || value < minimum || value > maximum) {
     throw new RangeError(`${key} must be a finite number >= ${minimum}`);
   }
-  return { ...inputs, [key]: value };
+  const updated = { ...inputs, [key]: value };
+  if (key !== "downPaymentPercent") return updated;
+
+  const loanPrincipal = buildPaymentSchedule(updated)
+    .reduce((sum, payment) => sum + payment.loanAmount, 0);
+  return {
+    ...updated,
+    monthlyEmiThousands: rupeesToRoundedThousands(
+      monthlyPayment(loanPrincipal, updated.loanRate, DEFAULT_LOAN_TENURE_YEARS),
+    ),
+  };
 }
 
 function rupeesToRoundedThousands(value: number): number {
@@ -179,10 +205,10 @@ export function hasPlannablePrice(propertyPriceInr: number): boolean {
 }
 
 /**
- * The opening plan is the ordinary Indian home loan: the whole price financed
- * over 20 years at the default bank rate. The EMI that repays exactly that loan
- * is the only honest starting point — a flat default would either overstate the
- * monthly cost or close the loan years early.
+ * The opening plan is the ordinary Indian home loan: 20% paid as down payment
+ * and the balance financed over 20 years at the default bank rate. The EMI
+ * that repays exactly that loan is the only honest starting point — a flat
+ * default would either overstate the monthly cost or close the loan years early.
  */
 export function buildBaselinePlanInputs(
   propertyPriceInr: number,
@@ -196,7 +222,11 @@ export function buildBaselinePlanInputs(
     propertyPriceInr * DEFAULT_RENTAL_YIELD_RATE / MONTHS_IN_YEAR,
   );
   const monthlyEmiThousands = rupeesToRoundedThousands(
-    monthlyPayment(propertyPriceInr, DEFAULT_LOAN_RATE, DEFAULT_LOAN_TENURE_YEARS),
+    monthlyPayment(
+      propertyPriceInr * (1 - DEFAULT_DOWN_PAYMENT_PERCENT / 100),
+      DEFAULT_LOAN_RATE,
+      DEFAULT_LOAN_TENURE_YEARS,
+    ),
   );
   // The rent path spends the same money: rent first, the rest invested.
   const monthlySipThousands = Math.max(
@@ -205,6 +235,7 @@ export function buildBaselinePlanInputs(
   );
   return {
     propertyPriceLakh,
+    downPaymentPercent: DEFAULT_DOWN_PAYMENT_PERCENT,
     monthlyEmiThousands,
     loanRate: DEFAULT_LOAN_RATE,
     currentRentThousands: estimatedRentThousands,
@@ -375,6 +406,7 @@ export function calculateProjection(
 
 export const BASE_INPUTS: PlanInputs = {
   propertyPriceLakh: 150,
+  downPaymentPercent: DEFAULT_DOWN_PAYMENT_PERCENT,
   monthlyEmiThousands: 90,
   loanRate: 7.5,
   currentRentThousands: 55,

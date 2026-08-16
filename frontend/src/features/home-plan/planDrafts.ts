@@ -3,10 +3,11 @@ import { normalizePlanInputs, type PlanInputs } from "./model.ts";
 const PLAN_DRAFT_STORAGE_PREFIX = "openestates:buy-vs-rent-draft:";
 /**
  * Version 1 autosaved the baseline on load, so a stored draft could not be told
- * apart from a default. Version 2 stores buyer edits only; older drafts are
- * dropped so improved defaults reach returning buyers.
+ * apart from a default. Version 2 stores buyer edits only. Version 3 adds a
+ * required down-payment assumption; older drafts are dropped so returning
+ * buyers receive the complete financing model and current defaults.
  */
-const PLAN_DRAFT_VERSION = 2;
+const PLAN_DRAFT_VERSION = 3;
 
 export type PropertyPlanDraft = {
   version: typeof PLAN_DRAFT_VERSION;

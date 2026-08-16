@@ -5,7 +5,7 @@ const LAKH = 100_000;
 const MONTHS_IN_YEAR = 12;
 
 function monthlyInterestThresholdThousands(inputs: PlanInputs): number {
-  const principal = inputs.propertyPriceLakh * LAKH;
+  const principal = inputs.propertyPriceLakh * LAKH * (1 - inputs.downPaymentPercent / 100);
   return Math.ceil((principal * inputs.loanRate / 100 / MONTHS_IN_YEAR) / 1_000);
 }
 
@@ -140,6 +140,15 @@ export function PlanAssumptionRail({
 
   const rateInputs: InputSpec[] = [
     {
+      key: "downPaymentPercent",
+      label: "Down payment",
+      min: 0,
+      max: 100,
+      step: 1,
+      suffix: "%",
+      note: "Cash share of price",
+    },
+    {
       key: "loanRate",
       label: "Loan rate",
       min: 0,
@@ -165,7 +174,7 @@ export function PlanAssumptionRail({
         <div className="home-plan-inline-studio__buy">
           <PlanInput
             label="Monthly EMI"
-            min={1}
+            min={inputs.downPaymentPercent === 100 ? 0 : 1}
             step={5}
             prefix="₹"
             suffix="K / mo"
