@@ -23,7 +23,6 @@ type InputSpec = {
   label: string;
   min: number;
   max?: number;
-  step: number;
   prefix?: string;
   suffix: string;
   note: string;
@@ -43,7 +42,6 @@ function PlanInput({
   value: number;
   min: number;
   max?: number;
-  step: number;
   prefix?: string;
   suffix: string;
   note: string;
@@ -123,7 +121,6 @@ export function PlanAssumptionRail({
       label: "Down payment",
       min: 0,
       max: 100,
-      step: 1,
       suffix: "%",
       note: "Cash share of price",
     },
@@ -132,7 +129,6 @@ export function PlanAssumptionRail({
       label: "Loan rate",
       min: 0,
       max: 15,
-      step: 0.1,
       suffix: "%",
       note: "Bank rate",
     },
@@ -142,7 +138,6 @@ export function PlanAssumptionRail({
       key: "currentRentThousands",
       label: "Monthly rent",
       min: 0,
-      step: 5,
       prefix: "₹",
       suffix: "K / mo",
       note: "Monthly housing cost",
@@ -151,7 +146,6 @@ export function PlanAssumptionRail({
       key: "monthlySipThousands",
       label: "Monthly SIP",
       min: 0,
-      step: 5,
       prefix: "₹",
       suffix: "K / mo",
       note: "Rent-path investment",
@@ -161,7 +155,6 @@ export function PlanAssumptionRail({
       label: "SIP return",
       min: 0,
       max: 20,
-      step: 0.5,
       suffix: "%",
       note: "Expected yearly gain",
     },
@@ -182,7 +175,6 @@ export function PlanAssumptionRail({
           <PlanInput
             label="Monthly EMI"
             min={inputs.downPaymentPercent === 100 ? 0 : 1}
-            step={5}
             prefix="₹"
             suffix="K / mo"
             note={emiNote}

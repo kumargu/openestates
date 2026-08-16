@@ -27,6 +27,7 @@ import {
 } from "../features/home-plan/model.ts";
 import "../features/home-plan/home-plan.css";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
+import { DEFAULT_PLAN_MODEL_CONFIG } from "../features/home-plan/modelConfig.ts";
 import {
   isExplicitlyReadyStatus,
   parsePlanDate,
@@ -105,7 +106,9 @@ export function HomePlanPage() {
   const [inputs, setInputs] = useState<PlanInputs | null>(null);
   const [previewYear, setPreviewYear] = useState<number | null>(null);
   const [pinnedYear, setPinnedYear] = useState<number | null>(null);
-  const [extraEmisPerYear, setExtraEmisPerYear] = useState(0);
+  const [extraEmisPerYear, setExtraEmisPerYear] = useState(
+    DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear,
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -142,7 +145,7 @@ export function HomePlanPage() {
         setPinnedYear(null);
         if (!hasPlannablePrice(data.property.price)) {
           setInputs(null);
-          setExtraEmisPerYear(0);
+          setExtraEmisPerYear(DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear);
           setStatus("no_price");
           return;
         }
@@ -153,7 +156,9 @@ export function HomePlanPage() {
           propertyPriceLakh: baseline.propertyPriceLakh,
           construction: baseline.construction,
         } : baseline);
-        setExtraEmisPerYear(draft?.extraEmisPerYear ?? 0);
+        setExtraEmisPerYear(
+          draft?.extraEmisPerYear ?? DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear,
+        );
         setStatus("ready");
       })
       .catch((error: unknown) => {
@@ -311,7 +316,7 @@ export function HomePlanPage() {
     setInputs(baseline);
     setPreviewYear(null);
     setPinnedYear(null);
-    setExtraEmisPerYear(0);
+    setExtraEmisPerYear(DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear);
     clearPlanDraft(id);
   };
 

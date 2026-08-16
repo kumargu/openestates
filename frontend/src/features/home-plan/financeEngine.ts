@@ -4,6 +4,11 @@ import type {
   PlanInputs,
   ProjectionPoint,
 } from "./model.ts";
+import {
+  DEFAULT_PLAN_MODEL_CONFIG,
+  type PlanModelConfig,
+  validatePlanModelConfig,
+} from "./modelConfig.ts";
 
 /**
  * Rent vs buy algorithm (monthly)
@@ -34,22 +39,12 @@ import type {
  * still be credited with the original SIP, and a buyer with a closed loan would
  * be credited with nothing, so renting would win on spending more money.
  *
- * Under-construction homes still use a 6-month builder schedule.
+ * Under-construction homes use the configured builder-payment schedule.
  * Until possession the buyer pays rent + pre-EMI interest instead of EMI.
  */
 
 const LAKH = 100_000;
 const MONTHS_IN_YEAR = 12;
-const PAYMENT_INTERVAL_MONTHS = 6;
-const DEFAULT_REMAINING_CONSTRUCTION_MONTHS = 24;
-const DEFAULT_TOTAL_CONSTRUCTION_MONTHS = 36;
-const MINIMUM_BOOKING_RATE = 0.1;
-const MAX_LOAN_SIMULATION_YEARS = 60;
-export const DEFAULT_LOAN_TENURE_YEARS = 20;
-export const DEFAULT_HOME_APPRECIATION_RATE = 6;
-export const DEFAULT_RENT_INFLATION_RATE = 10;
-export const FIXED_HOME_GROWTH_RATE = DEFAULT_HOME_APPRECIATION_RATE;
-export const FIXED_RENT_INFLATION_RATE = DEFAULT_RENT_INFLATION_RATE;
 
 type ConstructionPlan = {
   startDate: Date;
@@ -157,7 +152,11 @@ export function monthsToPayoff(
   );
 }
 
-export function constructionPlanFor(inputs: PlanInputs): ConstructionPlan {
+export function constructionPlanFor(
+  inputs: PlanInputs,
+  config: PlanModelConfig = DEFAULT_PLAN_MODEL_CONFIG,
+): ConstructionPlan {
+  validatePlanModelConfig(config);
   const asOfDate = parsePlanDate(inputs.construction.asOfDate) ?? new Date("2026-01-01T00:00:00Z");
   const purchaseMonth = Math.max(0, Math.round(inputs.purchaseYear * MONTHS_IN_YEAR));
   const purchaseDate = addMonths(asOfDate, purchaseMonth);
@@ -188,11 +187,11 @@ export function constructionPlanFor(inputs: PlanInputs): ConstructionPlan {
   }
   const possessionDateValue = suppliedCompletion && suppliedCompletion > purchaseDate
     ? suppliedCompletion
-    : addMonths(purchaseDate, DEFAULT_REMAINING_CONSTRUCTION_MONTHS);
+    : addMonths(purchaseDate, config.construction.estimatedRemainingMonths);
   const suppliedStart = parsePlanDate(inputs.construction.startDate);
   const startDate = suppliedStart && suppliedStart < possessionDateValue
     ? suppliedStart
-    : addMonths(possessionDateValue, -DEFAULT_TOTAL_CONSTRUCTION_MONTHS);
+    : addMonths(possessionDateValue, -config.construction.estimatedTotalMonths);
   const usedEstimate = !suppliedCompletion || suppliedCompletion <= purchaseDate || !suppliedStart;
 
   return {
@@ -206,8 +205,11 @@ export function constructionPlanFor(inputs: PlanInputs): ConstructionPlan {
   };
 }
 
-export function buildPaymentSchedule(inputs: PlanInputs): BuilderPayment[] {
-  const plan = constructionPlanFor(inputs);
+export function buildPaymentSchedule(
+  inputs: PlanInputs,
+  config: PlanModelConfig = DEFAULT_PLAN_MODEL_CONFIG,
+): BuilderPayment[] {
+  const plan = constructionPlanFor(inputs, config);
   const purchasePrice = compoundMonthly(
     inputs.propertyPriceLakh * LAKH,
     inputs.assumptions.homeAppreciationRate,
@@ -234,9 +236,9 @@ export function buildPaymentSchedule(inputs: PlanInputs): BuilderPayment[] {
   );
   const eventMonths = [plan.purchaseMonth];
   for (
-    let month = plan.purchaseMonth + PAYMENT_INTERVAL_MONTHS;
+    let month = plan.purchaseMonth + config.construction.paymentIntervalMonths;
     month < plan.possessionMonth;
-    month += PAYMENT_INTERVAL_MONTHS
+    month += config.construction.paymentIntervalMonths
   ) {
     eventMonths.push(month);
   }
@@ -253,7 +255,7 @@ export function buildPaymentSchedule(inputs: PlanInputs): BuilderPayment[] {
       (eventDate.getTime() - plan.startDate.getTime()) / totalDuration
     );
     const cumulativeRate = index === 0
-      ? Math.min(1, Math.max(MINIMUM_BOOKING_RATE, elapsedAtPurchase))
+      ? Math.min(1, Math.max(config.construction.minimumBookingPercent / 100, elapsedAtPurchase))
       : Math.min(1, Math.max(previousCumulativeRate, elapsedRate));
     const amount = index === eventMonths.length - 1
       ? purchasePrice * (1 - previousCumulativeRate)
@@ -280,21 +282,25 @@ export function buildPaymentSchedule(inputs: PlanInputs): BuilderPayment[] {
 
 export function calculateFinancingInterest(
   inputs: PlanInputs,
-  extraEmisPerYear = 0,
+  extraEmisPerYear?: number,
+  config: PlanModelConfig = DEFAULT_PLAN_MODEL_CONFIG,
 ): number | null {
-  const plan = constructionPlanFor(inputs);
-  const schedule = buildPaymentSchedule(inputs);
+  extraEmisPerYear ??= config.defaults.extraEmisPerYear;
+  const plan = constructionPlanFor(inputs, config);
+  const schedule = buildPaymentSchedule(inputs, config);
   const monthlyRate = inputs.loanRate / 100 / MONTHS_IN_YEAR;
   const paymentsByMonth = new Map(schedule.map((payment) => [payment.month, payment]));
   const emi = inputs.monthlyEmiThousands * 1_000;
   const annualPrepayment = emi * Math.max(0, extraEmisPerYear);
-  const maxMonth = plan.possessionMonth + MAX_LOAN_SIMULATION_YEARS * MONTHS_IN_YEAR;
+  const maxMonth = plan.possessionMonth + config.simulation.maximumLoanYears * MONTHS_IN_YEAR;
   let balance = 0;
   let totalInterest = 0;
 
   for (let month = plan.purchaseMonth; month <= maxMonth; month += 1) {
     balance += paymentsByMonth.get(month)?.loanAmount ?? 0;
-    if (month >= plan.possessionMonth && balance <= 0.5) return totalInterest;
+    if (month >= plan.possessionMonth && balance <= config.simulation.closedBalanceRupees) {
+      return totalInterest;
+    }
 
     const interest = balance * monthlyRate;
     if (month < plan.possessionMonth) {
@@ -311,7 +317,7 @@ export function calculateFinancingInterest(
     if (
       paymentNumber > 0
       && paymentNumber % MONTHS_IN_YEAR === 0
-      && balance > 0.5
+      && balance > config.simulation.closedBalanceRupees
       && annualPrepayment > 0
     ) {
       balance = Math.max(0, balance - Math.min(balance, annualPrepayment));
@@ -323,10 +329,12 @@ export function calculateFinancingInterest(
 
 export function calculateProjectionPoints(
   inputs: PlanInputs,
-  extraEmisPerYear = 0,
+  extraEmisPerYear?: number,
+  config: PlanModelConfig = DEFAULT_PLAN_MODEL_CONFIG,
 ): ProjectionPoint[] {
-  const plan = constructionPlanFor(inputs);
-  const schedule = buildPaymentSchedule(inputs);
+  extraEmisPerYear ??= config.defaults.extraEmisPerYear;
+  const plan = constructionPlanFor(inputs, config);
+  const schedule = buildPaymentSchedule(inputs, config);
   const purchasePrice = schedule.reduce((sum, payment) => sum + payment.amount, 0);
   const emi = inputs.monthlyEmiThousands * 1_000;
   const loanRateMonthly = inputs.loanRate / 100 / MONTHS_IN_YEAR;
@@ -391,7 +399,9 @@ export function calculateProjectionPoints(
         loanBalance,
         builderBalance,
         annualRent: monthlyRent * MONTHS_IN_YEAR,
-        annualEmi: hasPossession && loanBalance > 0.5 ? emi * MONTHS_IN_YEAR : 0,
+        annualEmi: hasPossession && loanBalance > config.simulation.closedBalanceRupees
+          ? emi * MONTHS_IN_YEAR
+          : 0,
         monthlyBuyerHousingCost,
       });
     }
@@ -406,7 +416,7 @@ export function calculateProjectionPoints(
     rentInvestments = rentInvestments * (1 + sipRateMonthly)
       + Math.max(0, rentMonthlyBudget - monthlyRent);
 
-    if (hasPossession && loanBalance > 0.5) {
+    if (hasPossession && loanBalance > config.simulation.closedBalanceRupees) {
       const interest = loanBalance * loanRateMonthly;
       loanBalance = Math.max(0, loanBalance + interest - regularPayment);
     }
@@ -415,7 +425,7 @@ export function calculateProjectionPoints(
     if (
       paymentNumber > 0
       && paymentNumber % MONTHS_IN_YEAR === 0
-      && loanBalance > 0.5
+      && loanBalance > config.simulation.closedBalanceRupees
       && annualPrepayment > 0
     ) {
       loanBalance = Math.max(0, loanBalance - Math.min(loanBalance, annualPrepayment));

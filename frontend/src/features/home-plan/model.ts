@@ -3,12 +3,14 @@ import {
   calculateFinancingInterest,
   calculateProjectionPoints,
   constructionPlanFor,
-  DEFAULT_HOME_APPRECIATION_RATE,
-  DEFAULT_LOAN_TENURE_YEARS,
-  DEFAULT_RENT_INFLATION_RATE,
   monthlyPayment,
   monthsToPayoff,
 } from "./financeEngine.ts";
+import {
+  DEFAULT_PLAN_MODEL_CONFIG,
+  type PlanModelConfig,
+  validatePlanModelConfig,
+} from "./modelConfig.ts";
 
 export type ConstructionProfile = {
   state: "ready" | "under_construction";
@@ -108,18 +110,6 @@ export type LoanJourney = {
 const MONTHS_IN_YEAR = 12;
 const LAKH = 100_000;
 
-const DEFAULT_LOAN_RATE = 7.5;
-export const DEFAULT_DOWN_PAYMENT_PERCENT = 20;
-/** Gross rental yield used to estimate what the same home rents for. */
-const DEFAULT_RENTAL_YIELD_RATE = 0.032;
-/** Monthly amounts read as round thousands, so they move in ₹5K steps. */
-const MONTHLY_STEP_THOUSANDS = 5;
-
-export const DEFAULT_PLAN_ASSUMPTIONS: PlanAssumptions = {
-  homeAppreciationRate: DEFAULT_HOME_APPRECIATION_RATE,
-  rentInflationRate: DEFAULT_RENT_INFLATION_RATE,
-};
-
 function finiteAmount(value: number, field: string, min = 0): number {
   if (!Number.isFinite(value) || value < min) {
     throw new RangeError(`${field} must be a finite number >= ${min}`);
@@ -164,11 +154,12 @@ export function normalizePlanInputs(inputs: PlanInputs): PlanInputs {
   };
 }
 
-/** Updates one buyer input; down payment also refreshes its 20-year EMI. */
+/** Updates one buyer input; down payment also refreshes its configured-tenure EMI. */
 export function updatePlanInput(
   inputs: PlanInputs,
   key: EditablePlanInput,
   value: number,
+  config: PlanModelConfig = DEFAULT_PLAN_MODEL_CONFIG,
 ): PlanInputs {
   const minimum = key === "monthlyEmiThousands" && inputs.downPaymentPercent < 100 ? 1 : 0;
   const maximum = key === "downPaymentPercent" ? 100 : Number.POSITIVE_INFINITY;
@@ -178,24 +169,27 @@ export function updatePlanInput(
   const updated = { ...inputs, [key]: value };
   if (key !== "downPaymentPercent") return updated;
 
-  const loanPrincipal = buildPaymentSchedule(updated)
+  const loanPrincipal = buildPaymentSchedule(updated, config)
     .reduce((sum, payment) => sum + payment.loanAmount, 0);
   return {
     ...updated,
     monthlyEmiThousands: rupeesToRoundedThousands(
-      monthlyPayment(loanPrincipal, updated.loanRate, DEFAULT_LOAN_TENURE_YEARS),
+      monthlyPayment(loanPrincipal, updated.loanRate, config.defaults.loanTenureYears),
+      config,
     ),
   };
 }
 
-function rupeesToRoundedThousands(value: number): number {
-  return Math.ceil(value / (MONTHLY_STEP_THOUSANDS * 1_000)) * MONTHLY_STEP_THOUSANDS;
+function rupeesToRoundedThousands(value: number, config: PlanModelConfig): number {
+  const step = config.simulation.monthlyAmountStepThousands;
+  return Math.ceil(value / (step * 1_000)) * step;
 }
 
-function rupeesToNearestThousands(value: number): number {
+function rupeesToNearestThousands(value: number, config: PlanModelConfig): number {
+  const step = config.simulation.monthlyAmountStepThousands;
   return Math.max(
-    MONTHLY_STEP_THOUSANDS,
-    Math.round(value / (MONTHLY_STEP_THOUSANDS * 1_000)) * MONTHLY_STEP_THOUSANDS,
+    step,
+    Math.round(value / (step * 1_000)) * step,
   );
 }
 
@@ -205,28 +199,31 @@ export function hasPlannablePrice(propertyPriceInr: number): boolean {
 }
 
 /**
- * The opening plan is the ordinary Indian home loan: 20% paid as down payment
- * and the balance financed over 20 years at the default bank rate. The EMI
- * that repays exactly that loan is the only honest starting point — a flat
- * default would either overstate the monthly cost or close the loan years early.
+ * The opening plan derives rent, SIP, and EMI from one model configuration.
+ * A flat EMI would either overstate monthly cost or close the loan too early.
  */
 export function buildBaselinePlanInputs(
   propertyPriceInr: number,
   construction?: ConstructionProfile,
+  config: PlanModelConfig = DEFAULT_PLAN_MODEL_CONFIG,
 ): PlanInputs {
+  validatePlanModelConfig(config);
   if (!hasPlannablePrice(propertyPriceInr)) {
     throw new RangeError("propertyPriceInr must be a finite number > 0");
   }
+  const defaults = config.defaults;
   const propertyPriceLakh = propertyPriceInr / LAKH;
   const estimatedRentThousands = rupeesToNearestThousands(
-    propertyPriceInr * DEFAULT_RENTAL_YIELD_RATE / MONTHS_IN_YEAR,
+    propertyPriceInr * (defaults.rentalYieldPercent / 100) / MONTHS_IN_YEAR,
+    config,
   );
   const monthlyEmiThousands = rupeesToRoundedThousands(
     monthlyPayment(
-      propertyPriceInr * (1 - DEFAULT_DOWN_PAYMENT_PERCENT / 100),
-      DEFAULT_LOAN_RATE,
-      DEFAULT_LOAN_TENURE_YEARS,
+      propertyPriceInr * (1 - defaults.downPaymentPercent / 100),
+      defaults.loanRate,
+      defaults.loanTenureYears,
     ),
+    config,
   );
   // The rent path spends the same money: rent first, the rest invested.
   const monthlySipThousands = Math.max(
@@ -235,35 +232,42 @@ export function buildBaselinePlanInputs(
   );
   return {
     propertyPriceLakh,
-    downPaymentPercent: DEFAULT_DOWN_PAYMENT_PERCENT,
+    downPaymentPercent: defaults.downPaymentPercent,
     monthlyEmiThousands,
-    loanRate: DEFAULT_LOAN_RATE,
+    loanRate: defaults.loanRate,
     currentRentThousands: estimatedRentThousands,
-    equityReturn: 10,
+    equityReturn: defaults.equityReturn,
     monthlySipThousands,
-    holdingPeriodYears: 20,
-    purchaseYear: 0,
+    holdingPeriodYears: defaults.holdingPeriodYears,
+    purchaseYear: defaults.purchaseYear,
     construction: construction ?? {
       state: "ready",
       asOfDate: new Date().toISOString().slice(0, 10),
       dateSource: "not_applicable",
     },
-    assumptions: { ...DEFAULT_PLAN_ASSUMPTIONS },
+    assumptions: {
+      homeAppreciationRate: defaults.homeAppreciationRate,
+      rentInflationRate: defaults.rentInflationRate,
+    },
   };
 }
 
 export function calculateLoanJourney(
   inputs: PlanInputs,
-  extraEmisPerYear: number,
+  extraEmisPerYear?: number,
+  config: PlanModelConfig = DEFAULT_PLAN_MODEL_CONFIG,
 ): LoanJourney {
   inputs = normalizePlanInputs(inputs);
-  extraEmisPerYear = normalizeExtraEmisPerYear(extraEmisPerYear);
-  const schedule = buildPaymentSchedule(inputs);
-  const constructionPlan = constructionPlanFor(inputs);
+  extraEmisPerYear = normalizeExtraEmisPerYear(
+    extraEmisPerYear ?? config.defaults.extraEmisPerYear,
+  );
+  const schedule = buildPaymentSchedule(inputs, config);
+  const constructionPlan = constructionPlanFor(inputs, config);
   const principal = schedule.reduce((sum, payment) => sum + payment.loanAmount, 0);
   const monthlyEmi = inputs.monthlyEmiThousands * 1_000;
   const repaymentMonths = monthsToPayoff(principal, inputs.loanRate, monthlyEmi);
-  const maxSimMonths = constructionPlan.possessionMonth + 60 * MONTHS_IN_YEAR;
+  const maxSimMonths = constructionPlan.possessionMonth
+    + config.simulation.maximumLoanYears * MONTHS_IN_YEAR;
   const baselineLoanFreeMonth = Number.isFinite(repaymentMonths)
     ? constructionPlan.possessionMonth + repaymentMonths
     : maxSimMonths;
@@ -280,7 +284,7 @@ export function calculateLoanJourney(
   points.push({ year: 0, balance, interestPaid: 0, principalPaid: 0, extraPaid: 0 });
 
   while (
-    (month < constructionPlan.possessionMonth || balance > 0.5)
+    (month < constructionPlan.possessionMonth || balance > config.simulation.closedBalanceRupees)
     && month < baselineLoanFreeMonth
     && month < maxSimMonths
   ) {
@@ -309,7 +313,10 @@ export function calculateLoanJourney(
 
     if (
       month % MONTHS_IN_YEAR === 0
-      || (month >= constructionPlan.possessionMonth && balance <= 0.5)
+      || (
+        month >= constructionPlan.possessionMonth
+        && balance <= config.simulation.closedBalanceRupees
+      )
     ) {
       points.push({
         year: Math.ceil(month / MONTHS_IN_YEAR),
@@ -325,15 +332,15 @@ export function calculateLoanJourney(
   }
 
   const lastPlanYear = Math.min(
-    40,
+    config.simulation.maximumJourneyYears,
     Math.ceil(baselineLoanFreeMonth / MONTHS_IN_YEAR),
   );
   for (let year = points.at(-1)?.year ?? 0; year < lastPlanYear; year += 1) {
     points.push({ year: year + 1, balance: 0, interestPaid: 0, principalPaid: 0, extraPaid: 0 });
   }
 
-  const originalInterest = calculateFinancingInterest(inputs, 0);
-  const closed = balance <= 0.5;
+  const originalInterest = calculateFinancingInterest(inputs, 0, config);
+  const closed = balance <= config.simulation.closedBalanceRupees;
 
   return {
     monthlyEmi,
@@ -369,18 +376,21 @@ function findBreakEvenYear(points: ProjectionPoint[], purchaseYear: number): num
 
 export function calculateProjection(
   inputs: PlanInputs,
-  extraEmisPerYear = 0,
+  extraEmisPerYear?: number,
+  config: PlanModelConfig = DEFAULT_PLAN_MODEL_CONFIG,
 ): PlanProjection {
   inputs = normalizePlanInputs(inputs);
-  extraEmisPerYear = normalizeExtraEmisPerYear(extraEmisPerYear);
-  const schedule = buildPaymentSchedule(inputs);
+  extraEmisPerYear = normalizeExtraEmisPerYear(
+    extraEmisPerYear ?? config.defaults.extraEmisPerYear,
+  );
+  const schedule = buildPaymentSchedule(inputs, config);
   const loanAmount = schedule.reduce((sum, payment) => sum + payment.loanAmount, 0);
   const monthlyEmi = inputs.monthlyEmiThousands * 1_000;
   const upfrontPayment = schedule.reduce((sum, payment) => sum + payment.cashAmount, 0);
-  const journey = calculateLoanJourney(inputs, extraEmisPerYear);
+  const journey = calculateLoanJourney(inputs, extraEmisPerYear, config);
   const totalInterest = journey.totalInterest;
-  const points = calculateProjectionPoints(inputs, extraEmisPerYear);
-  const constructionPlan = constructionPlanFor(inputs);
+  const points = calculateProjectionPoints(inputs, extraEmisPerYear, config);
+  const constructionPlan = constructionPlanFor(inputs, config);
   const loanFreeYear = journey.totalInterest == null
     ? null
     : Math.ceil(journey.loanFreeMonths / MONTHS_IN_YEAR);
@@ -403,24 +413,6 @@ export function calculateProjection(
     points,
   };
 }
-
-export const BASE_INPUTS: PlanInputs = {
-  propertyPriceLakh: 150,
-  downPaymentPercent: DEFAULT_DOWN_PAYMENT_PERCENT,
-  monthlyEmiThousands: 90,
-  loanRate: 7.5,
-  currentRentThousands: 55,
-  equityReturn: 10,
-  monthlySipThousands: 35,
-  holdingPeriodYears: 15,
-  purchaseYear: 0,
-  construction: {
-    state: "ready",
-    asOfDate: "2026-01-01",
-    dateSource: "not_applicable",
-  },
-  assumptions: { ...DEFAULT_PLAN_ASSUMPTIONS },
-};
 
 export function formatCurrency(value: number, compact = false): string {
   if (compact && Math.abs(value) >= 10_000_000) {
