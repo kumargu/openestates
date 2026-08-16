@@ -105,9 +105,11 @@ export type LoanJourney = {
 const MONTHS_IN_YEAR = 12;
 const LAKH = 100_000;
 
-const DEFAULT_MONTHLY_EMI_THOUSANDS = 90;
-const MIN_DEFAULT_MONTHLY_SIP_THOUSANDS = 35;
 const DEFAULT_LOAN_RATE = 7.5;
+/** Gross rental yield used to estimate what the same home rents for. */
+const DEFAULT_RENTAL_YIELD_RATE = 0.032;
+/** Monthly amounts read as round thousands, so they move in ₹5K steps. */
+const MONTHLY_STEP_THOUSANDS = 5;
 
 export const DEFAULT_PLAN_ASSUMPTIONS: PlanAssumptions = {
   homeAppreciationRate: DEFAULT_HOME_APPRECIATION_RATE,
@@ -161,28 +163,42 @@ export function updatePlanInput(
 }
 
 function rupeesToRoundedThousands(value: number): number {
-  return Math.ceil(value / 5_000) * 5;
+  return Math.ceil(value / (MONTHLY_STEP_THOUSANDS * 1_000)) * MONTHLY_STEP_THOUSANDS;
 }
 
+function rupeesToNearestThousands(value: number): number {
+  return Math.max(
+    MONTHLY_STEP_THOUSANDS,
+    Math.round(value / (MONTHLY_STEP_THOUSANDS * 1_000)) * MONTHLY_STEP_THOUSANDS,
+  );
+}
+
+/** A plan needs a real price; without one there is nothing to finance. */
+export function hasPlannablePrice(propertyPriceInr: number): boolean {
+  return Number.isFinite(propertyPriceInr) && propertyPriceInr > 0;
+}
+
+/**
+ * The opening plan is the ordinary Indian home loan: the whole price financed
+ * over 20 years at the default bank rate. The EMI that repays exactly that loan
+ * is the only honest starting point — a flat default would either overstate the
+ * monthly cost or close the loan years early.
+ */
 export function buildBaselinePlanInputs(
   propertyPriceInr: number,
   construction?: ConstructionProfile,
 ): PlanInputs {
-  const propertyPriceLakh = Math.max(20, propertyPriceInr / LAKH);
-  const estimatedRentThousands = Math.max(
-    20,
-    Math.round((propertyPriceInr * 0.032 / MONTHS_IN_YEAR) / 1_000 / 5) * 5,
+  if (!hasPlannablePrice(propertyPriceInr)) {
+    throw new RangeError("propertyPriceInr must be a finite number > 0");
+  }
+  const propertyPriceLakh = propertyPriceInr / LAKH;
+  const estimatedRentThousands = rupeesToNearestThousands(
+    propertyPriceInr * DEFAULT_RENTAL_YIELD_RATE / MONTHS_IN_YEAR,
   );
-  const amortizingEmiThousands = rupeesToRoundedThousands(
+  const monthlyEmiThousands = rupeesToRoundedThousands(
     monthlyPayment(propertyPriceInr, DEFAULT_LOAN_RATE, DEFAULT_LOAN_TENURE_YEARS),
   );
-  // Keep the rent-path cash out aligned with the buy EMI by default, while
-  // preserving a visible SIP even when the estimated rent is high.
-  const monthlyEmiThousands = Math.max(
-    DEFAULT_MONTHLY_EMI_THOUSANDS,
-    amortizingEmiThousands,
-    estimatedRentThousands + MIN_DEFAULT_MONTHLY_SIP_THOUSANDS,
-  );
+  // The rent path spends the same money: rent first, the rest invested.
   const monthlySipThousands = Math.max(
     0,
     monthlyEmiThousands - estimatedRentThousands,
@@ -303,6 +319,23 @@ export function calculateLoanJourney(
   };
 }
 
+/**
+ * Break-even is the year buying overtakes renting. If buying never trails there
+ * is nothing to break even from, so the answer is null rather than year one.
+ */
+function findBreakEvenYear(points: ProjectionPoint[], purchaseYear: number): number | null {
+  let rentHasLed = false;
+  for (const point of points) {
+    if (point.year <= purchaseYear) continue;
+    if (point.buyNetWorth < point.rentNetWorth) {
+      rentHasLed = true;
+    } else if (rentHasLed) {
+      return point.year;
+    }
+  }
+  return null;
+}
+
 export function calculateProjection(
   inputs: PlanInputs,
   extraEmisPerYear = 0,
@@ -316,9 +349,6 @@ export function calculateProjection(
   const journey = calculateLoanJourney(inputs, extraEmisPerYear);
   const totalInterest = journey.totalInterest;
   const points = calculateProjectionPoints(inputs, extraEmisPerYear);
-  const breakEvenPoint = points.find((point) => (
-    point.year > inputs.purchaseYear && point.buyNetWorth >= point.rentNetWorth
-  ));
   const constructionPlan = constructionPlanFor(inputs);
   const loanFreeYear = journey.totalInterest == null
     ? null
@@ -331,7 +361,7 @@ export function calculateProjection(
     loanAmount,
     upfrontPayment,
     totalInterest,
-    breakEvenYear: breakEvenPoint?.year ?? null,
+    breakEvenYear: findBreakEvenYear(points, inputs.purchaseYear),
     loanFreeYear,
     extraEmisPerYear,
     possessionMonth: constructionPlan.possessionMonth,

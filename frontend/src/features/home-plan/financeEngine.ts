@@ -21,9 +21,16 @@ import type {
  * - When EMI is positive, the loan starts at the purchase price.
  * - Extra EMIs each year pull the loan-free date forward.
  *
- * Wealth:
- * - Buy = home value − loan left (no phantom post-payoff investments)
- * - Rent = the stated monthly SIP only
+ * Wealth, on one rule: each path commits the same money every month, and
+ * whatever housing does not consume is invested at the SIP return.
+ * - The buyer commits the EMI. Once the loan closes, that EMI is invested.
+ * - The renter commits rent + SIP. As rent rises, less of it is left to invest.
+ * - Buy = home value − loan left + what the buyer invested
+ * - Rent = what the renter invested
+ *
+ * Without that rule the comparison drifts: a renter whose rent has tripled would
+ * still be credited with the original SIP, and a buyer with a closed loan would
+ * be credited with nothing, so renting would win on spending more money.
  *
  * Under-construction homes still use a 6-month builder schedule.
  * Until possession the buyer pays rent + pre-EMI interest instead of EMI.
@@ -323,8 +330,13 @@ export function calculateProjectionPoints(
   const paymentByMonth = new Map(schedule.map((payment) => [payment.month, payment]));
   const points: ProjectionPoint[] = [];
 
+  // What each path commits per month. The baseline sets these equal, and the
+  // buyer's surplus only appears once the loan stops consuming the EMI.
+  const buyMonthlyBudget = emi;
+  const rentMonthlyBudget = startingRent + monthlySip;
+
   // Buyer starts with the financed home, not an invented cash buffer.
-  // Renter builds wealth only through the stated SIP.
+  let buyInvestments = 0;
   let rentInvestments = 0;
   let loanBalance = 0;
   let builderPaid = 0;
@@ -361,7 +373,7 @@ export function calculateProjectionPoints(
       points.push({
         year: month / MONTHS_IN_YEAR,
         buyNetWorth: hasPurchased
-          ? propertyValue - loanBalance - builderBalance
+          ? propertyValue - loanBalance - builderBalance + buyInvestments
           : 0,
         rentNetWorth: rentInvestments,
         propertyValue,
@@ -375,8 +387,13 @@ export function calculateProjectionPoints(
 
     if (month === endMonth) break;
 
-    rentInvestments *= 1 + sipRateMonthly;
-    rentInvestments += monthlySip;
+    // Whatever the monthly commitment does not spend on housing is invested.
+    buyInvestments = hasPurchased
+      ? buyInvestments * (1 + sipRateMonthly)
+        + Math.max(0, buyMonthlyBudget - monthlyBuyerHousingCost)
+      : 0;
+    rentInvestments = rentInvestments * (1 + sipRateMonthly)
+      + Math.max(0, rentMonthlyBudget - monthlyRent);
 
     if (hasPossession && loanBalance > 0.5) {
       const interest = loanBalance * loanRateMonthly;

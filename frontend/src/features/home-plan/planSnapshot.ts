@@ -68,7 +68,7 @@ export function buildPlanSnapshotNote({
   const homeValue = formatCurrency(activePoint.propertyValue, true);
   const title = `${propertyTitle} plan, ${emi} EMI`;
   const detailVariants = [
-    `For ${propertyTitle} at ${propertyPrice}, this plan uses about ${emi} EMI with ${extraEmiText(projection.extraEmisPerYear)}; the ${loanFree}. The rent path is ${rent} rent plus ${sip} SIP, and ${inspectedWindow}, ${choice} is ahead by about ${formatCurrency(advantage, true)}. At that point the home is projected near ${homeValue}, so the note is mainly the property-value versus loan tradeoff.`,
+    `For ${propertyTitle} at ${propertyPrice}, this plan uses about ${emi} EMI with ${extraEmiText(projection.extraEmisPerYear)}; the ${loanFree}. The rent path is ${rent} rent plus ${sip} SIP, and ${inspectedWindow}, ${choice} is ahead by about ${formatCurrency(advantage, true)}. At that point the home is projected near ${homeValue}.`,
     `${propertyTitle} was tested at ${propertyPrice} with a monthly EMI near ${emi}; with ${extraEmiText(projection.extraEmisPerYear)}, the ${loanFree}. Against that, renting uses ${rent} rent and ${sip} SIP, leaving ${choice} ahead by about ${formatCurrency(advantage, true)} ${inspectedWindow}. The home value reads near ${homeValue} in the same window.`,
     `This ${propertyTitle} plan keeps the buy side simple: ${propertyPrice} home, ${emi} EMI, ${extraEmiText(projection.extraEmisPerYear)}, and ${loanFree}. The other side is ${rent} rent with ${sip} SIP; ${inspectedWindow}, ${choice} leads by about ${formatCurrency(advantage, true)}. The home itself is projected near ${homeValue} then.`,
   ];

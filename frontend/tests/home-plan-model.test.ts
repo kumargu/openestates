@@ -5,11 +5,13 @@ import {
   buildBaselinePlanInputs,
   calculateLoanJourney,
   calculateProjection,
+  hasPlannablePrice,
   updatePlanInput,
 } from "../src/features/home-plan/model.ts";
 import { buildPlanSnapshotNote } from "../src/features/home-plan/planSnapshot.ts";
 import { buildMonthlyPlanVerdict, defaultPlanFocusYear } from "../src/features/home-plan/monthlyPlanView.ts";
 import {
+  DEFAULT_LOAN_TENURE_YEARS,
   FIXED_HOME_GROWTH_RATE,
   FIXED_RENT_INFLATION_RATE,
   isExplicitlyReadyStatus,
@@ -167,6 +169,31 @@ test("baseline exposes monthly inputs", () => {
   assert.equal(inputs.equityReturn, 10);
 });
 
+test("baseline EMI repays the price over the default tenure at any price", () => {
+  for (const price of [6_700_000, 8_000_000, 15_100_000, 33_100_000, 90_000_000]) {
+    const inputs = buildBaselinePlanInputs(price);
+    const projection = calculateProjection(inputs);
+    const exactEmi = monthlyPayment(price, inputs.loanRate, DEFAULT_LOAN_TENURE_YEARS);
+
+    // Rounded up to the nearest ₹5K step, so never below the amortizing EMI
+    // and never more than one step above it.
+    assert.ok(inputs.monthlyEmiThousands * 1_000 >= exactEmi);
+    assert.ok(inputs.monthlyEmiThousands * 1_000 - exactEmi < 5_000);
+    // A 20-year loan should read as a 20-year loan, not close in single digits.
+    assert.ok(projection.loanFreeYear !== null);
+    assert.ok(projection.loanFreeYear! > DEFAULT_LOAN_TENURE_YEARS - 3);
+    assert.ok(projection.loanFreeYear! <= DEFAULT_LOAN_TENURE_YEARS);
+  }
+});
+
+test("baseline rejects homes without a price instead of inventing one", () => {
+  assert.equal(hasPlannablePrice(0), false);
+  assert.equal(hasPlannablePrice(Number.NaN), false);
+  assert.equal(hasPlannablePrice(6_700_000), true);
+  assert.throws(() => buildBaselinePlanInputs(0), /propertyPriceInr/);
+  assert.equal(buildBaselinePlanInputs(6_700_000).propertyPriceLakh, 67);
+});
+
 test("high-price baseline keeps a visible SIP while preserving EMI equals rent plus SIP", () => {
   const inputs = buildBaselinePlanInputs(33_100_000);
   const projection = calculateProjection(inputs);
@@ -218,13 +245,14 @@ test("plan input edits change only the selected variable", () => {
   assert.throws(() => updatePlanInput(ready, "monthlyEmiThousands", 0), /monthlyEmiThousands/);
 });
 
-test("rent path compounds the stated monthly SIP", () => {
+test("rent path compounds the stated SIP when rent holds steady", () => {
   const inputs = {
     ...ready,
     currentRentThousands: 35,
     monthlySipThousands: 40,
     equityReturn: 10,
     holdingPeriodYears: 20,
+    assumptions: { ...ready.assumptions, rentInflationRate: 0 },
   };
   const projection = calculateProjection(inputs);
   const monthlyRate = inputs.equityReturn / 100 / 12;
@@ -233,17 +261,60 @@ test("rent path compounds the stated monthly SIP", () => {
     * (((1 + monthlyRate) ** months - 1) / monthlyRate);
 
   assert.ok(Math.abs(projection.points.at(-1)!.rentNetWorth - expectedSipValue) < 10);
+});
 
-  const withDifferentRent = calculateProjection({
+test("rising rent eats into the rent path's investing", () => {
+  const inputs = {
+    ...ready,
+    currentRentThousands: 35,
+    monthlySipThousands: 40,
+    holdingPeriodYears: 20,
+  };
+  const steadyRent = calculateProjection({
     ...inputs,
-    currentRentThousands: 80,
+    assumptions: { ...inputs.assumptions, rentInflationRate: 0 },
   });
-  assert.ok(
-    Math.abs(
-      withDifferentRent.points.at(-1)!.rentNetWorth
-      - projection.points.at(-1)!.rentNetWorth,
-    ) < 1,
-  );
+  const risingRent = calculateProjection(inputs);
+  const higherStartingRent = calculateProjection({ ...inputs, currentRentThousands: 80 });
+
+  // The renter commits rent + SIP; rent rises, so less of it reaches the SIP.
+  assert.ok(risingRent.points.at(-1)!.rentNetWorth < steadyRent.points.at(-1)!.rentNetWorth);
+  // A costlier rental leaves less to invest out of the same commitment.
+  assert.ok(higherStartingRent.points.at(-1)!.rentNetWorth < risingRent.points.at(-1)!.rentNetWorth);
+});
+
+test("break-even is reported only when buying actually overtakes renting", () => {
+  const buyAhead = calculateProjection(buildBaselinePlanInputs(15_100_000));
+  assert.ok(buyAhead.points[1].buyNetWorth >= buyAhead.points[1].rentNetWorth);
+  assert.equal(buyAhead.breakEvenYear, null);
+
+  // A large SIP puts renting ahead first, so a real crossover exists.
+  const rentAheadFirst = calculateProjection({
+    ...ready,
+    monthlyEmiThousands: 135,
+    monthlySipThousands: 400,
+    holdingPeriodYears: 20,
+  });
+  const crossover = rentAheadFirst.breakEvenYear;
+  assert.ok(crossover === null || rentAheadFirst.points[crossover - 1].buyNetWorth
+    < rentAheadFirst.points[crossover - 1].rentNetWorth);
+});
+
+test("a closed loan frees the EMI into the buyer's wealth", () => {
+  const inputs = {
+    ...ready,
+    monthlyEmiThousands: 220,
+    holdingPeriodYears: 20,
+  };
+  const projection = calculateProjection(inputs);
+  const loanFreeYear = projection.loanFreeYear!;
+  const atPayoff = projection.points[loanFreeYear];
+  const later = projection.points.at(-1)!;
+
+  assert.ok(loanFreeYear < inputs.holdingPeriodYears);
+  // Past payoff the buyer's wealth must outgrow the home's appreciation alone.
+  const homeGrowth = later.propertyValue - atPayoff.propertyValue;
+  assert.ok(later.buyNetWorth - atPayoff.buyNetWorth > homeGrowth);
 });
 
 test("home value uses the fixed six percent yearly growth assumption", () => {
