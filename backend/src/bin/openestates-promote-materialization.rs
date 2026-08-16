@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use backend::assets::{
-    promote_search_serving_release, AssetId, AssetMaterializationStore, MaterializationId,
+    promote_search_serving_release, validate_search_serving_convergence, AssetId,
+    AssetMaterializationStore, MaterializationId,
 };
 use backend::lake::{LakeStoreLocation, LAKE_URL_ENV};
 use backend::serving::{
@@ -50,6 +51,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     if cli.check_only {
+        if record.asset_id.as_str() == SEARCH_SERVING_BUNDLE_ASSET_ID && !cli.force {
+            validate_search_serving_convergence(&store, &record).await?;
+        }
         println!("{}", serde_json::to_string_pretty(&validation)?);
         return Ok(());
     }

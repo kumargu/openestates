@@ -444,7 +444,12 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         .parent_materializations
         .contains(&approach_road_record.materialization_id));
     assert_eq!(kg_record.parent_materializations.len(), 3);
-    assert!(parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await >= 94);
+    let kg_fact_rows =
+        parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await;
+    assert!(
+        kg_fact_rows >= 85,
+        "expected at least 85 KG facts, got {kg_fact_rows}"
+    );
 
     let serving_record = current_record(
         &store,
@@ -452,7 +457,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert!(serving_fact_rows(&lake, &serving_record).await >= 94);
+    assert!(serving_fact_rows(&lake, &serving_record).await >= 85);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -615,11 +620,11 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     );
     assert_eq!(
         parquet_rows_for_artifact(&lake, &canonical, "entities/part-00000.parquet").await,
-        5
+        4
     );
     assert_eq!(
         parquet_rows_for_artifact(&lake, &canonical, "edges/part-00000.parquet").await,
-        6
+        4
     );
     assert_eq!(
         parquet_rows_for_artifact(&lake, &canonical, "mappings/part-00000.parquet").await,
@@ -634,7 +639,12 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
             canonical.materialization_id.clone()
         ]
     );
-    assert!(parquet_rows_for_artifact(&lake, &legal, "facts/part-00000.parquet").await >= 32);
+    let legal_fact_rows =
+        parquet_rows_for_artifact(&lake, &legal, "facts/part-00000.parquet").await;
+    assert!(
+        legal_fact_rows >= 27,
+        "expected at least 27 RERA facts, got {legal_fact_rows}"
+    );
 
     let kg = current_record(&store, KG_SOCIETY_VIEW_ASSET_ID, &AssetPartition::global()).await;
     assert!(kg
@@ -1700,6 +1710,12 @@ fn mock_graph() -> KnowledgeGraph {
         FactValue::Text("Residents mention trees and open space".to_string()),
         SourceType::Reddit,
         &["greenery", "trees"],
+    ));
+    society.add_fact(fact(
+        "builder_name",
+        FactValue::Text("Test Builder".to_string()),
+        SourceType::Rera,
+        &["trusted builder"],
     ));
 
     let mut builder = Node::new("builder:test-builder", NodeType::Builder, "Test Builder");

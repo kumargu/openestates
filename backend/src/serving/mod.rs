@@ -6,6 +6,7 @@
 
 pub mod builder;
 pub mod coordinates;
+mod eligibility;
 pub mod loader;
 pub mod materializer;
 pub mod parquet;
@@ -45,8 +46,9 @@ pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,
 };
 pub use types::{
-    unique_society_aliases, BundleArtifact, BundleArtifactKind, ServingBundleManifest,
-    ServingBundleSchema, ServingColumnSchema, ServingEdgeRecord, ServingEntityFactRows,
-    ServingEntityRecord, ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
-    ServingTableSchema, TrustPolicy, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    unique_society_aliases, BundleArtifact, BundleArtifactKind, QuarantinedSociety,
+    ServingBundleManifest, ServingBundleSchema, ServingColumnSchema, ServingEdgeRecord,
+    ServingEntityFactRows, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
+    ServingQuarantineReport, ServingSearchMetadataRecord, ServingTableSchema, TrustPolicy,
+    SEARCH_SERVING_BUNDLE_ASSET_ID,
 };

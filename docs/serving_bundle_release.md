@@ -4,6 +4,21 @@ The serving bundle is the runtime commit point. A release is usable only when
 its Parquet/Tantivy artifacts, pinned lineage, and every local media reference
 are available together.
 
+Format 7 classifies societies before serving artifacts are written. A society
+enters the clean bundle only when every projected property satisfies the
+configured area, configuration, size, builder, and media requirements and the society
+has configured RERA and approach-road evidence. The policy lives in
+`app/config/dag/serving_eligibility.json`; fact keys and edge types are not
+branched in the builder.
+
+All property rows for an ineligible society are removed atomically, together
+with their facts and incident edges. Related area, road, builder, and place
+entities remain when a retained society still references them. The builder
+writes `quarantine/societies.json` with stable reason codes, source bundle
+version, affected entity IDs, and a manifest hash. It does not copy or mutate
+durable DAG facts. Fixing those facts therefore readmits the society on the
+next build without a repair API.
+
 ## One-command promotion
 
 Promote an existing candidate:
@@ -35,6 +50,21 @@ CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo run \
 Normal production DAG runs use the same pre-promotion validator. Catalog
 release validate/promote/rollback commands also run it.
 
+## Convergence and rollback
+
+Partitioned DAG assets may advance independently. A forward promotion is
+allowed only after `current_project_facts` pins every dependency partition that
+is current at promotion time; KG and the serving bundle must then pin that
+checkpoint. Immutable bundle validation is separate from this live check so a
+previously validated release remains a usable rollback snapshot.
+
+Keep every bundle referenced by a dev, staging, or production environment;
+every bundle or ancestor referenced by an in-progress DAG run; the current
+production release; and the five preceding validated production releases.
+Future cleanup must be reachability-based, print a dry-run plan first, and
+observe a grace period. Bundle version numbers are labels, not a safe deletion
+order.
+
 ## Release gates
 
 - materialization succeeded and pinned lineage is coherent
@@ -42,6 +72,9 @@ release validate/promote/rollback commands also run it.
 - all artifacts remain under the immutable bundle version prefix
 - every artifact size and SHA-256 matches the manifest
 - required Parquet, schema, trust-policy, and Tantivy artifacts exist
+- format 7 policy version and hashed quarantine report agree
+- recomputing eligibility over the clean records excludes no society
+- pre-format-7 bundles remain inspectable but cannot be promoted
 - manifest row counts match decoded tables
 - every local URL nested anywhere in serving facts resolves
 - gallery media bytes match their recorded `content_sha256`

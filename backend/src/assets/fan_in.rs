@@ -57,6 +57,49 @@ pub async fn all_current_materialization_records_for_dependency(
     Ok(records)
 }
 
+/// Return current dependency partitions that are absent from a fan-in
+/// materialization's pinned parents.
+///
+/// Partitioned leaves may advance independently, but a downstream global
+/// checkpoint is only promotable after it has incorporated every partition
+/// that is current at validation time.
+pub async fn missing_current_dependency_records(
+    registry: &AssetRegistry,
+    materializations: &AssetMaterializationStore,
+    record: &MaterializationRecord,
+) -> Result<Vec<MaterializationRecord>, AssetFanInError> {
+    let definition =
+        registry
+            .get(&record.asset_id)
+            .ok_or_else(|| AssetFanInError::UnknownAsset {
+                asset_id: record.asset_id.clone(),
+            })?;
+    let mut missing = Vec::new();
+    for dependency in &definition.dependencies {
+        let mut current = all_current_materialization_records_for_dependency(
+            registry,
+            materializations,
+            dependency,
+        )
+        .await?;
+        if definition.dependency_fan_in_policy(dependency)
+            == DependencyFanInPolicy::ResolvedPartition
+        {
+            let expected_partition = registry
+                .partition_for(dependency, &record.partition)
+                .map_err(|error| AssetFanInError::Partition(error.to_string()))?;
+            current.retain(|candidate| candidate.partition == expected_partition);
+        }
+        missing.extend(current.into_iter().filter(|candidate| {
+            !record
+                .parent_materializations
+                .contains(&candidate.materialization_id)
+        }));
+    }
+    sort_materialization_records(&mut missing);
+    Ok(missing)
+}
+
 pub fn sort_materialization_records(records: &mut [MaterializationRecord]) {
     records.sort_by(|left, right| {
         left.partition
@@ -73,6 +116,7 @@ pub fn sort_materialization_records(records: &mut [MaterializationRecord]) {
 #[derive(Debug)]
 pub enum AssetFanInError {
     UnknownAsset { asset_id: AssetId },
+    Partition(String),
     Lake(LakeError),
 }
 
@@ -82,6 +126,7 @@ impl fmt::Display for AssetFanInError {
             Self::UnknownAsset { asset_id } => {
                 write!(f, "asset {asset_id} is not registered in the DAG")
             }
+            Self::Partition(message) => write!(f, "asset fan-in partition error: {message}"),
             Self::Lake(err) => write!(f, "asset fan-in lake operation failed: {err}"),
         }
     }

@@ -31,10 +31,12 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         .unwrap();
 
     assert_eq!(manifest.entity_count, 2);
-    assert_eq!(manifest.fact_count, 4);
-    assert_eq!(manifest.search_metadata_count, 4);
+    assert_eq!(manifest.fact_count, 18);
+    assert_eq!(manifest.search_metadata_count, 18);
     assert_eq!(manifest.rera_evidence_count, 0);
     assert_eq!(manifest.edge_count, 0);
+    assert_eq!(manifest.eligibility_policy_version, 1);
+    assert_eq!(manifest.quarantined_society_count, 0);
     assert_eq!(
         manifest.entity_parquet_key,
         "serving/search_bundle/version=2026-07-12t18-30z/entities/part-00000.parquet"
@@ -55,6 +57,10 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         .artifacts
         .iter()
         .any(|artifact| artifact.kind == BundleArtifactKind::ReraEvidenceParquet));
+    assert!(manifest
+        .artifacts
+        .iter()
+        .any(|artifact| artifact.kind == BundleArtifactKind::QuarantineJson));
 
     let entity_bytes = lake
         .get_bytes(&LakeKey::new(manifest.entity_parquet_key.clone()).unwrap())
@@ -72,8 +78,8 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert_is_parquet(&fact_bytes);
     assert_is_parquet(&search_metadata_bytes);
     assert_eq!(parquet_rows(&entity_bytes), 2);
-    assert_eq!(parquet_rows(&fact_bytes), 4);
-    assert_eq!(parquet_rows(&search_metadata_bytes), 4);
+    assert_eq!(parquet_rows(&fact_bytes), 18);
+    assert_eq!(parquet_rows(&search_metadata_bytes), 18);
     let fact_columns = parquet_columns(&fact_bytes);
     let search_metadata_columns = parquet_columns(&search_metadata_bytes);
     assert!(fact_columns.contains(&"value_text".to_string()));
@@ -110,7 +116,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/manifest.json").unwrap();
     let manifest_body = lake.get_text(&manifest_key).await.unwrap();
     let manifest_json: serde_json::Value = serde_json::from_str(&manifest_body).unwrap();
-    assert_eq!(manifest_json["format_version"], 6);
+    assert_eq!(manifest_json["format_version"], 7);
 
     let schema_key =
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/schema.json").unwrap();
@@ -242,6 +248,7 @@ fn mock_graph() -> KnowledgeGraph {
         SourceType::Reddit,
         &["greenery", "trees", "calm layout"],
     ));
+    add_serving_eligibility_facts(&mut green, "Whitefield", "/media/green.webp");
 
     let mut dense = Node::new(
         "society:dense-tower-whitefield",
@@ -261,10 +268,33 @@ fn mock_graph() -> KnowledgeGraph {
         SourceType::Reddit,
         &["traffic", "congestion"],
     ));
+    add_serving_eligibility_facts(&mut dense, "Whitefield", "/media/dense.webp");
 
     graph.add_node(green);
     graph.add_node(dense);
     graph
+}
+
+fn add_serving_eligibility_facts(node: &mut Node, area: &str, hero_image: &str) {
+    for (key, value) in [
+        ("rera_registered", FactValue::Bool(true)),
+        (
+            "approach_road_condition",
+            FactValue::Text("documented".to_string()),
+        ),
+        ("area", FactValue::Text(area.to_string())),
+        ("builder_name", FactValue::Text("Test Builder".to_string())),
+        (
+            "listing_3bhk",
+            FactValue::Text(
+                serde_json::json!({"price": 12_000_000.0, "area_sqft": 1_200.0}).to_string(),
+            ),
+        ),
+        ("hero_image", FactValue::Text(hero_image.to_string())),
+        ("images", FactValue::Tags(vec![hero_image.to_string()])),
+    ] {
+        node.add_fact(fact(key, value, SourceType::Rera, &[]));
+    }
 }
 
 fn fact(

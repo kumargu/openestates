@@ -13,6 +13,7 @@
 //! | `ui_surfaces.json` | UI surface → leaves | Frontend/API mappers |
 //! | `evidence_sections.json` | Property evidence section metadata | Property detail API |
 //! | `search_intent.json` | Buyer archetypes | Search intent (migration pending) |
+//! | `serving_eligibility.json` | Clean-bundle admission policy | Serving bundle builder + release validator |
 //! | `crawl_policies/*.json` | Crawl skip/cadence | Python collectors |
 //!
 //! **Instances** (society:*, road:*, fact values) live in `data/lake/` Parquet only.
@@ -29,6 +30,7 @@ mod rera_report_surface;
 mod resolution;
 mod search_guardrails;
 mod search_intent;
+mod serving_eligibility;
 mod ui_surfaces;
 
 pub use community_themes::{
@@ -95,6 +97,11 @@ pub use search_intent::{
     search_parser_config, search_resolution_config, AreaAliasEntry, BhkParserConfig, NumberWord,
     RelationAliasConfig, RelationParserConfig, SearchIntentFile, SearchParserConfig,
     SearchPlaceFamilyAlias, SearchResolutionConfig, UnitAliasConfig, UnitValueParserConfig,
+};
+pub use serving_eligibility::{
+    load_serving_eligibility, load_serving_eligibility_from_path, serving_eligibility_path,
+    EligibilityValuePredicate, ProjectedPropertyRequirement, ServingEligibilityFile,
+    SocietyEvidenceRequirement,
 };
 pub use ui_surfaces::{
     load_ui_surfaces, load_ui_surfaces_from_path, ui_surfaces_config, ui_surfaces_path,

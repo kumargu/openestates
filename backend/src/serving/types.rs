@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -214,6 +214,7 @@ pub enum BundleArtifactKind {
     ReraEvidenceParquet,
     SchemaJson,
     TrustPolicyJson,
+    QuarantineJson,
     TantivyIndexFile,
     #[serde(other)]
     Other,
@@ -228,6 +229,26 @@ pub struct BundleArtifact {
     pub hash_algorithm: String,
     pub size_bytes: usize,
     pub row_count: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ServingQuarantineReport {
+    pub format_version: u32,
+    pub eligibility_policy_version: u32,
+    pub source_bundle_version: String,
+    pub excluded_society_count: u64,
+    pub reason_counts: BTreeMap<String, u64>,
+    pub societies: Vec<QuarantinedSociety>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuarantinedSociety {
+    pub runtime_society_id: String,
+    pub society_entity_ids: Vec<String>,
+    pub society_names: Vec<String>,
+    pub property_entity_ids: Vec<String>,
+    pub projected_property_ids: Vec<String>,
+    pub reason_codes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -311,6 +332,12 @@ pub struct ServingBundleManifest {
     pub excluded_rera_evidence_society_ids: Vec<String>,
     #[serde(default)]
     pub edge_count: u64,
+    #[serde(default)]
+    pub eligibility_policy_version: u32,
+    #[serde(default)]
+    pub quarantined_society_count: u64,
+    #[serde(default)]
+    pub quarantine_reason_counts: BTreeMap<String, u64>,
     pub entity_parquet_key: String,
     pub fact_parquet_key: String,
     pub search_metadata_parquet_key: String,
@@ -318,6 +345,8 @@ pub struct ServingBundleManifest {
     pub rera_evidence_parquet_key: Option<String>,
     #[serde(default)]
     pub edge_parquet_key: Option<String>,
+    #[serde(default)]
+    pub quarantine_report_key: Option<String>,
     pub schema_key: String,
     pub trust_policy_key: String,
     pub tantivy_index_prefix: String,

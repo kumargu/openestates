@@ -24,6 +24,7 @@
     "scoring_policy.json",
     "search_guardrails.json",
     "search_intent.json",
+    "serving_eligibility.json",
     "source_adapters/",
     "ui_surfaces.json"
   ],

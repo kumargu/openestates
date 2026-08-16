@@ -5,6 +5,7 @@ use crate::lake::LakeError;
 use crate::serving::SEARCH_SERVING_BUNDLE_ASSET_ID;
 
 use super::{
+    default_openestates_registry, missing_current_dependency_records, AssetId,
     AssetMaterializationStore, MaterializationId, MaterializationRecord, MaterializationStatus,
     CURRENT_PROJECT_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
 };
@@ -58,7 +59,11 @@ pub async fn promote_search_serving_release(
     serving_record: &MaterializationRecord,
     force: bool,
 ) -> Result<ServingReleasePromotion, ServingReleasePromotionError> {
-    let lineage = validate_search_serving_lineage(store, serving_record).await?;
+    let lineage = if force {
+        validate_search_serving_lineage(store, serving_record).await?
+    } else {
+        validate_search_serving_convergence(store, serving_record).await?
+    };
     let ordered = lineage.promoted_materializations.clone();
 
     for (index, record) in ordered.iter().enumerate() {
@@ -87,6 +92,44 @@ pub async fn promote_search_serving_release(
         promoted_materializations: ordered,
         ..lineage
     })
+}
+
+/// Validate a forward serving promotion against every dependency partition
+/// that is current now. Intentional rollbacks use the immutable lineage check
+/// instead, so a previously good release remains deployable.
+pub async fn validate_search_serving_convergence(
+    store: &AssetMaterializationStore,
+    serving_record: &MaterializationRecord,
+) -> Result<ServingReleasePromotion, ServingReleasePromotionError> {
+    let lineage = validate_search_serving_lineage(store, serving_record).await?;
+    let project_asset =
+        AssetId::new(CURRENT_PROJECT_FACTS_ASSET_ID).expect("static asset id is valid");
+    let project_record = store
+        .record_by_id_for_asset(
+            &project_asset,
+            &lineage.current_project_facts_materialization_id,
+        )
+        .await?
+        .ok_or_else(|| {
+            ServingReleasePromotionError::MissingParent(
+                lineage.current_project_facts_materialization_id.clone(),
+            )
+        })?;
+    let missing =
+        missing_current_dependency_records(&default_openestates_registry(), store, &project_record)
+            .await
+            .map_err(|error| ServingReleasePromotionError::InvalidLineage(error.to_string()))?;
+    if !missing.is_empty() {
+        return Err(ServingReleasePromotionError::InvalidLineage(format!(
+            "current project facts did not converge current DAG inputs: {}",
+            missing
+                .iter()
+                .map(|record| format!("{}/{}", record.asset_id, record.materialization_id))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )));
+    }
+    Ok(lineage)
 }
 
 async fn verify_current_records(
@@ -522,6 +565,37 @@ mod tests {
         assert!(error
             .to_string()
             .contains("references non-current current_project_facts"));
+    }
+
+    #[tokio::test]
+    async fn rejects_forward_promotion_before_an_advanced_partition_converges() {
+        let root = tempdir().unwrap();
+        let store = AssetMaterializationStore::new(LakeStore::local(root.path()).unwrap());
+        let release = release_records("candidate");
+        write_records(&store, &release).await;
+        let image_media = MaterializationRecord::succeeded(
+            AssetId::new("image_media_facts").unwrap(),
+            AssetStage::Silver,
+            AssetPartition::new([("source", "external_image")]),
+            "new-media",
+            Vec::new(),
+        );
+        store.write_materialization(&image_media).await.unwrap();
+        store.force_promote_current(&image_media).await.unwrap();
+
+        let error = promote_search_serving_release(&store, &release[2], false)
+            .await
+            .unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("did not converge current DAG inputs"));
+        assert!(error.to_string().contains("image_media_facts"));
+        assert!(store
+            .current_record(&release[2].asset_id, &release[2].partition)
+            .await
+            .unwrap_err()
+            .is_not_found());
     }
 
     fn release_records(version: &str) -> Vec<MaterializationRecord> {
