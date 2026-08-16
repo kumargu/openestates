@@ -286,6 +286,19 @@ function waterZoneFeatureCollection(
   };
 }
 
+function camerasMatch(
+  map: MapLibreMap,
+  center: { latitude: number; longitude: number },
+  zoom: number,
+): boolean {
+  const current = map.getCenter();
+  return (
+    Math.abs(current.lng - center.longitude) < 0.00001
+    && Math.abs(current.lat - center.latitude) < 0.00001
+    && Math.abs(map.getZoom() - zoom) < 0.05
+  );
+}
+
 function ringRadiiForViewport(radiusKm: number): number[] {
   if (radiusKm <= 0.6) return [0.25, 0.5];
   if (radiusKm <= 1.2) return [0.5, 1];
@@ -565,11 +578,6 @@ export function AroundThisHomeMap({
       touchPitch: false,
       keyboard: false,
     });
-    map.addControl(new maplibregl.ScaleControl({ unit: "metric", maxWidth: 90 }), "bottom-left");
-    map.addControl(
-      new maplibregl.NavigationControl({ showCompass: false, visualizePitch: false }),
-      "top-right",
-    );
     map.on("load", () => {
       quietBasemap(map, showMetroLines);
       ensureOverlayLayers(map);
@@ -608,8 +616,6 @@ export function AroundThisHomeMap({
       resizeFrame = window.requestAnimationFrame(() => {
         resizeFrame = null;
         map.resize();
-        const anchor = viewportCenterRef.current;
-        map.jumpTo({ center: [anchor.longitude, anchor.latitude] });
       });
     };
     const resizeObserver = typeof ResizeObserver === "undefined"
@@ -635,11 +641,13 @@ export function AroundThisHomeMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.jumpTo({
+    if (camerasMatch(map, viewport.center, viewport.zoom)) return;
+    map.easeTo({
       center: [viewport.center.longitude, viewport.center.latitude],
       zoom: viewport.zoom,
+      duration: 280,
     });
-  }, [viewport.center.latitude, viewport.center.longitude, viewport.zoom, viewport.radiusKm]);
+  }, [viewport.center.latitude, viewport.center.longitude, viewport.zoom]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -654,14 +662,9 @@ export function AroundThisHomeMap({
       map.scrollZoom.disable();
       map.touchZoomRotate.disable();
       map.keyboard.disable();
-      map.easeTo({
-        center: [viewport.center.longitude, viewport.center.latitude],
-        zoom: viewport.zoom,
-        duration: 250,
-      });
     }
     map.resize();
-  }, [expanded, viewport.center.latitude, viewport.center.longitude, viewport.zoom]);
+  }, [expanded]);
 
   useEffect(() => {
     if (!expanded) return undefined;

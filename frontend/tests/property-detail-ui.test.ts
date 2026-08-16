@@ -17,7 +17,9 @@ import {
 import { resolveBuyerProjectStatus } from "../src/lib/projectStatus.ts";
 import {
   initialPropertySceneUrls,
+  photoIndexFromMosaicSlot,
   propertySceneImageAt,
+  wrapPhotoIndex,
 } from "../src/lib/propertyScene.ts";
 import { propertyMapContextFromSurfaceScene } from "../src/lib/surfaceSceneProjection.ts";
 import type { PropertyMapContext, ProofFocus, SurfaceSceneResponse } from "../src/lib/types.ts";
@@ -523,6 +525,17 @@ test("project status exposes only known buyer labels", () => {
   assert.equal(resolveBuyerProjectStatus({ status: "Under construction" }), null);
   assert.equal(resolveBuyerProjectStatus({ possessionStatus: "approved" }), null);
   assert.equal(resolveBuyerProjectStatus({ status: "constructor" }), null);
+});
+
+test("photo walker wraps and opens the clicked mosaic slot", () => {
+  assert.equal(wrapPhotoIndex(0, 5), 0);
+  assert.equal(wrapPhotoIndex(5, 5), 0);
+  assert.equal(wrapPhotoIndex(-1, 5), 4);
+  assert.equal(wrapPhotoIndex(2, 0), 0);
+  assert.equal(photoIndexFromMosaicSlot("lead"), 0);
+  assert.equal(photoIndexFromMosaicSlot("all"), 0);
+  assert.equal(photoIndexFromMosaicSlot({ tile: 0 }), 1);
+  assert.equal(photoIndexFromMosaicSlot({ tile: 3 }), 4);
 });
 
 test("recommendation scenes are stable and wrap after exhaustion", () => {

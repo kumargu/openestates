@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import {
   Link,
   useParams,
@@ -39,9 +39,10 @@ import {
 } from "../components/AreaPriceBands.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
+import { PropertyPhotoWalker } from "../components/property/PropertyPhotoWalker.tsx";
 import {
+  photoIndexFromMosaicSlot,
   propertySceneImageAt,
-  sceneLabelForIndex,
 } from "../lib/propertyScene.ts";
 import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
 import { isRedundantHomeState } from "../lib/property-signals.ts";
@@ -403,73 +404,6 @@ function reviewEvidenceSections(
   );
 }
 
-function CleanDialog({
-  title,
-  kicker,
-  children,
-  onClose,
-}: {
-  title: string;
-  kicker?: string;
-  children: ReactNode;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.body.style.overflow = "hidden";
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      className="property-clean-dialog__backdrop"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <section
-        className="property-clean-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="property-clean-dialog-title"
-      >
-        <div className="property-clean-dialog__head">
-          <div>
-            {kicker && <span>{kicker}</span>}
-            <h2 id="property-clean-dialog-title">{title}</h2>
-          </div>
-          <button
-            type="button"
-            className="property-clean-dialog__close"
-            onClick={onClose}
-            aria-label={`Close ${title}`}
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="property-clean-dialog__body">{children}</div>
-      </section>
-    </div>
-  );
-}
-
 function PropertyPhotoMosaic({
   title,
   societyName,
@@ -481,7 +415,7 @@ function PropertyPhotoMosaic({
   heroImage?: string | null;
   images?: string[];
 }) {
-  const [open, setOpen] = useState(false);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
   const [readyLeadImage, setReadyLeadImage] = useState<string | null>(null);
   const {
     images: sceneImages,
@@ -496,12 +430,19 @@ function PropertyPhotoMosaic({
   const mosaicImages = sceneImages.slice(1, 5);
   const total = sceneImages.length || (heroImage ? 1 : 0);
 
+  function openFrom(slot: "lead" | "all" | { tile: number }) {
+    if (!hasImages) return;
+    setOpenIndex(photoIndexFromMosaicSlot(slot));
+  }
+
   return (
     <section className="property-photo-mosaic" aria-label="Property photos">
-      <div
-        className={`property-photo-mosaic__lead${leadImageReady ? " is-ready" : ""}`}
-      >
-        {leadImage ? (
+      {leadImage ? (
+        <button
+          type="button"
+          className={`property-photo-mosaic__lead${leadImageReady ? " is-ready" : ""}`}
+          onClick={() => openFrom("lead")}
+        >
           <ImageWithFallback
             src={leadImage}
             alt={title}
@@ -510,23 +451,28 @@ function PropertyPhotoMosaic({
             fetchPriority="high"
             onReady={() => setReadyLeadImage(leadImage)}
           />
-        ) : (
+        </button>
+      ) : (
+        <div className="property-photo-mosaic__lead">
           <div className="property-photo-mosaic__empty">
             <span>{loading ? "Loading photos" : "Photos unavailable"}</span>
             <strong>{societyName || title}</strong>
           </div>
-        )}
-      </div>
+        </div>
+      )}
       <div className="property-photo-mosaic__grid">
         {mosaicImages.map((src, index) => (
-          <button key={src} type="button" onClick={() => setOpen(true)}>
+          <button
+            key={src}
+            type="button"
+            onClick={() => openFrom({ tile: index })}
+          >
             <ImageWithFallback
               src={src}
-              alt={`${title} - ${sceneLabelForIndex(index + 1)}`}
+              alt={`${title}, photo ${index + 2} of ${total}`}
               loading="lazy"
               fetchPriority="low"
             />
-            <span>{sceneLabelForIndex(index + 1)}</span>
           </button>
         ))}
       </div>
@@ -534,33 +480,21 @@ function PropertyPhotoMosaic({
         <button
           type="button"
           className="property-photo-mosaic__all"
-          onClick={() => setOpen(true)}
+          onClick={() => openFrom("all")}
         >
           Show all photos
           <span>{total}</span>
         </button>
       )}
 
-      {open && (
-        <CleanDialog
-          title="All photos"
-          kicker="Gallery"
-          onClose={() => setOpen(false)}
-        >
-          <div className="property-photo-grid">
-            {sceneImages.map((src, index) => (
-              <figure key={src}>
-                <ImageWithFallback
-                  src={src}
-                  alt={`${title} - ${sceneLabelForIndex(index)}`}
-                  loading="lazy"
-                  fetchPriority="low"
-                />
-                <figcaption>{sceneLabelForIndex(index)}</figcaption>
-              </figure>
-            ))}
-          </div>
-        </CleanDialog>
+      {openIndex !== null && hasImages && (
+        <PropertyPhotoWalker
+          title={title}
+          images={sceneImages}
+          index={openIndex}
+          onIndexChange={setOpenIndex}
+          onClose={() => setOpenIndex(null)}
+        />
       )}
     </section>
   );

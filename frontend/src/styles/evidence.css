@@ -1001,7 +1001,7 @@
 .nearby-map__canvas {
   position: relative;
   width: 100%;
-  height: clamp(520px, 60vw, 610px);
+  height: clamp(280px, 34vw, 380px);
 }
 
 .nearby-map.is-expanded {
@@ -1338,7 +1338,7 @@
   display: grid;
   place-content: center;
   gap: 0.35rem;
-  min-height: 360px;
+  min-height: 280px;
   padding: 1.5rem;
   text-align: center;
   color: var(--color-text-secondary, #777);
@@ -1360,25 +1360,6 @@
   cursor: pointer;
 }
 
-.nearby-map .maplibregl-ctrl-group {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 10px;
-  box-shadow: none;
-  overflow: hidden;
-}
-
-.nearby-map .maplibregl-ctrl-group button {
-  width: 44px;
-  height: 44px;
-}
-
-.nearby-map .maplibregl-ctrl-scale {
-  border-color: rgba(35, 31, 28, 0.55);
-  background: rgba(255, 255, 255, 0.72);
-  color: #514b46;
-  font-size: 0.62rem;
-}
-
 .nearby-map .maplibregl-ctrl-attrib {
   font-size: 0.58rem;
   background: rgba(255, 255, 255, 0.85);
@@ -1386,7 +1367,7 @@
 
 @media (max-width: 640px) {
   .nearby-map__canvas {
-    height: clamp(360px, 52dvh, 520px);
+    height: clamp(220px, 36dvh, 300px);
   }
 
   .nearby-map-selection {
