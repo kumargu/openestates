@@ -37,21 +37,24 @@ const ready = {
   },
 };
 
-test("buyer starts fully financed with no invented down payment", () => {
+test("buyer and renter start with matching down-payment capital", () => {
   const projection = calculateProjection(ready);
   const day0 = projection.points[0];
+  const price = ready.propertyPriceLakh * 100_000;
+  const downPayment = price * ready.downPaymentPercent / 100;
 
-  assert.equal(projection.loanAmount, ready.propertyPriceLakh * 100_000);
-  assert.equal(projection.upfrontPayment, 0);
-  assert.ok(Math.abs(day0.buyNetWorth) < 1);
-  assert.equal(day0.rentNetWorth, 0);
+  assert.equal(projection.loanAmount, price - downPayment);
+  assert.equal(projection.upfrontPayment, downPayment);
+  assert.ok(Math.abs(day0.buyNetWorth - downPayment) < 1);
+  assert.ok(Math.abs(day0.rentNetWorth - downPayment) < 1);
 });
 
-test("EMI and loan rate keep the loan at the home price", () => {
+test("EMI and loan rate apply to the balance after down payment", () => {
   const projection = calculateProjection(ready);
+  const price = ready.propertyPriceLakh * 100_000;
 
-  assert.equal(projection.loanAmount, ready.propertyPriceLakh * 100_000);
-  assert.equal(projection.upfrontPayment, 0);
+  assert.equal(projection.loanAmount, price * (1 - ready.downPaymentPercent / 100));
+  assert.equal(projection.upfrontPayment, price * ready.downPaymentPercent / 100);
   assert.ok(Math.abs(projection.monthlyEmi - ready.monthlyEmiThousands * 1_000) < 1);
 });
 
@@ -156,9 +159,10 @@ test("rent rises by the fixed yearly assumption", () => {
 test("baseline exposes monthly inputs", () => {
   const inputs = buildBaselinePlanInputs(15_000_000);
   const expectedEmi = Math.ceil(
-    monthlyPayment(15_000_000, 7.5, 20) / 5_000,
+    monthlyPayment(12_000_000, 7.5, 20) / 5_000,
   ) * 5;
 
+  assert.equal(inputs.downPaymentPercent, 20);
   assert.equal(inputs.monthlyEmiThousands, expectedEmi);
   assert.ok(inputs.currentRentThousands > 0);
   assert.equal(
@@ -173,8 +177,11 @@ test("baseline EMI repays the price over the default tenure at any price", () =>
   for (const price of [6_700_000, 8_000_000, 15_100_000, 33_100_000, 90_000_000]) {
     const inputs = buildBaselinePlanInputs(price);
     const projection = calculateProjection(inputs);
-    const exactEmi = monthlyPayment(price, inputs.loanRate, DEFAULT_LOAN_TENURE_YEARS);
+    const loanPrincipal = price * (1 - inputs.downPaymentPercent / 100);
+    const exactEmi = monthlyPayment(loanPrincipal, inputs.loanRate, DEFAULT_LOAN_TENURE_YEARS);
 
+    assert.equal(projection.loanAmount, loanPrincipal);
+    assert.equal(projection.upfrontPayment, price - loanPrincipal);
     // Rounded up to the nearest ₹5K step, so never below the amortizing EMI
     // and never more than one step above it.
     assert.ok(inputs.monthlyEmiThousands * 1_000 >= exactEmi);
@@ -234,15 +241,23 @@ test("monthly SIP grows only the rent and invest path", () => {
   assert.ok(Math.abs(withEnd.buyNetWorth - withoutEnd.buyNetWorth) < 1);
 });
 
-test("plan input edits change only the selected variable", () => {
+test("plan input edits stay independent except down payment recalculates EMI", () => {
   const higherRent = updatePlanInput(ready, "currentRentThousands", 65);
   const higherEmi = updatePlanInput(ready, "monthlyEmiThousands", 155);
+  const higherDownPayment = updatePlanInput(ready, "downPaymentPercent", 30);
+  const expectedEmi = Math.ceil(
+    monthlyPayment(ready.propertyPriceLakh * 100_000 * 0.7, ready.loanRate, 20) / 5_000,
+  ) * 5;
 
   assert.equal(higherRent.currentRentThousands, 65);
   assert.equal(higherRent.monthlySipThousands, ready.monthlySipThousands);
   assert.equal(higherEmi.monthlyEmiThousands, 155);
   assert.equal(higherEmi.monthlySipThousands, ready.monthlySipThousands);
+  assert.equal(higherDownPayment.downPaymentPercent, 30);
+  assert.equal(higherDownPayment.monthlyEmiThousands, expectedEmi);
+  assert.equal(higherDownPayment.monthlySipThousands, ready.monthlySipThousands);
   assert.throws(() => updatePlanInput(ready, "monthlyEmiThousands", 0), /monthlyEmiThousands/);
+  assert.throws(() => updatePlanInput(ready, "downPaymentPercent", 101), /downPaymentPercent/);
 });
 
 test("rent path compounds the stated SIP when rent holds steady", () => {
@@ -257,7 +272,10 @@ test("rent path compounds the stated SIP when rent holds steady", () => {
   const projection = calculateProjection(inputs);
   const monthlyRate = inputs.equityReturn / 100 / 12;
   const months = inputs.holdingPeriodYears * 12;
-  const expectedSipValue = inputs.monthlySipThousands * 1_000
+  const matchingDownPayment = inputs.propertyPriceLakh * 100_000
+    * inputs.downPaymentPercent / 100;
+  const expectedSipValue = matchingDownPayment * (1 + monthlyRate) ** months
+    + inputs.monthlySipThousands * 1_000
     * (((1 + monthlyRate) ** months - 1) / monthlyRate);
 
   assert.ok(Math.abs(projection.points.at(-1)!.rentNetWorth - expectedSipValue) < 10);
@@ -342,8 +360,18 @@ test("under-construction homes still stage builder payments every six months", (
   assert.equal(projection.possessionMonth, 24);
   assert.equal(projection.points[0].annualEmi, 0);
   assert.ok(projection.points[2].annualEmi > 0);
-  assert.equal(projection.points[0].rentNetWorth, 0);
-  assert.ok(Math.abs(projection.upfrontPayment) < 1);
+  assert.ok(projection.points[0].rentNetWorth > 0);
+  assert.ok(Math.abs(
+    projection.points[0].rentNetWorth - projection.points[0].buyNetWorth,
+  ) < 1);
+  assert.equal(
+    projection.upfrontPayment,
+    ready.propertyPriceLakh * 100_000 * ready.downPaymentPercent / 100,
+  );
+  for (const payment of projection.paymentSchedule) {
+    assert.ok(Math.abs(payment.cashAmount - payment.amount * 0.2) < 1);
+    assert.ok(Math.abs(payment.loanAmount - payment.amount * 0.8) < 1);
+  }
 });
 
 test("payoff journey matches financing interest for a ready home", () => {
@@ -562,6 +590,20 @@ test("monthly plan rejects invalid numeric inputs at the algorithm boundary", ()
   }), /rentInflationRate/);
   assert.throws(() => calculateProjection(ready, Number.NaN), /extraEmisPerYear/);
   assert.throws(() => calculateProjection(ready, 1.5), /extraEmisPerYear/);
+  assert.throws(() => calculateProjection({
+    ...ready,
+    downPaymentPercent: 101,
+  }), /downPaymentPercent/);
+});
+
+test("a fully cash purchase has no loan or EMI", () => {
+  const inputs = updatePlanInput(ready, "downPaymentPercent", 100);
+  const projection = calculateProjection(inputs);
+
+  assert.equal(inputs.monthlyEmiThousands, 0);
+  assert.equal(projection.loanAmount, 0);
+  assert.equal(projection.upfrontPayment, ready.propertyPriceLakh * 100_000);
+  assert.equal(projection.loanFreeYear, 0);
 });
 
 test("payment and principal formulas are inverses", () => {

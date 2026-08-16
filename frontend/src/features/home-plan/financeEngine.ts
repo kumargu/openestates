@@ -9,6 +9,7 @@ import type {
  * Rent vs buy algorithm (monthly)
  *
  * User levers:
+ * - down payment percentage
  * - monthly EMI
  * - monthly rent (cash-out context; under-construction housing cost)
  * - monthly SIP on the rent path
@@ -17,16 +18,17 @@ import type {
  * - extra EMIs per year
  *
  * Financing story (deliberately simple):
- * - The home price is the goal. EMI + rate decide how fast the loan clears.
- * - When EMI is positive, the loan starts at the purchase price.
+ * - The down payment is paid in cash at each builder milestone.
+ * - EMI + rate decide how fast the remaining loan clears.
  * - Extra EMIs each year pull the loan-free date forward.
  *
- * Wealth, on one rule: each path commits the same money every month, and
- * whatever housing does not consume is invested at the SIP return.
+ * Wealth, on one rule: each path starts with the same cash and commits the
+ * same money every month, and whatever housing does not consume is invested
+ * at the SIP return.
  * - The buyer commits the EMI. Once the loan closes, that EMI is invested.
  * - The renter commits rent + SIP. As rent rises, less of it is left to invest.
  * - Buy = home value − loan left + what the buyer invested
- * - Rent = what the renter invested
+ * - Rent = the matching down-payment cash + what the renter invested
  *
  * Without that rule the comparison drifts: a renter whose rent has tripled would
  * still be credited with the original SIP, and a buyer with a closed loan would
@@ -211,15 +213,16 @@ export function buildPaymentSchedule(inputs: PlanInputs): BuilderPayment[] {
     inputs.assumptions.homeAppreciationRate,
     plan.purchaseMonth,
   );
-  const financed = inputs.monthlyEmiThousands > 0;
-  const requestedLoan = financed ? purchasePrice : 0;
+  const downPaymentRate = inputs.downPaymentPercent / 100;
+  const requestedCash = purchasePrice * downPaymentRate;
+  const requestedLoan = purchasePrice - requestedCash;
 
   if (plan.possessionMonth === plan.purchaseMonth) {
     return [{
       month: plan.purchaseMonth,
       date: isoDate(plan.purchaseDate),
       amount: purchasePrice,
-      cashAmount: 0,
+      cashAmount: requestedCash,
       loanAmount: requestedLoan,
     }];
   }
@@ -240,6 +243,7 @@ export function buildPaymentSchedule(inputs: PlanInputs): BuilderPayment[] {
   eventMonths.push(plan.possessionMonth);
 
   let previousCumulativeRate = 0;
+  let cashRemaining = requestedCash;
   let loanRemaining = requestedLoan;
   return eventMonths.map((month, index) => {
     const eventDate = month === plan.possessionMonth
@@ -255,16 +259,20 @@ export function buildPaymentSchedule(inputs: PlanInputs): BuilderPayment[] {
       ? purchasePrice * (1 - previousCumulativeRate)
       : purchasePrice * (cumulativeRate - previousCumulativeRate);
     previousCumulativeRate = cumulativeRate;
+    const cashAmount = index === eventMonths.length - 1
+      ? cashRemaining
+      : Math.min(cashRemaining, amount * downPaymentRate);
+    cashRemaining = Math.max(0, cashRemaining - cashAmount);
     const loanAmount = index === eventMonths.length - 1
       ? loanRemaining
-      : Math.min(loanRemaining, amount);
+      : Math.min(loanRemaining, amount - cashAmount);
     loanRemaining = Math.max(0, loanRemaining - loanAmount);
 
     return {
       month,
       date: isoDate(eventDate),
       amount,
-      cashAmount: 0,
+      cashAmount,
       loanAmount,
     };
   });
@@ -346,6 +354,9 @@ export function calculateProjectionPoints(
     if (payment) {
       loanBalance += payment.loanAmount;
       builderPaid += payment.amount;
+      // The rent path gets the same cash at the same time. Otherwise buying
+      // would begin with down-payment equity while renting began at zero.
+      rentInvestments += payment.cashAmount;
     }
 
     const hasPurchased = month >= plan.purchaseMonth;

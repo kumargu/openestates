@@ -49,10 +49,10 @@ test("invalid stored drafts fail closed", () => {
   assert.equal(readPlanDraft("home-1"), null);
 });
 
-test("drafts autosaved by the previous version are dropped", () => {
+test("drafts without the current down-payment model are dropped", () => {
   values.clear();
   values.set(planDraftStorageKey("home-1"), JSON.stringify({
-    version: 1,
+    version: 2,
     propertyId: "home-1",
     inputs: { ...buildBaselinePlanInputs(20_000_000), monthlyEmiThousands: 90 },
     extraEmisPerYear: 0,

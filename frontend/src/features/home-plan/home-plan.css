@@ -153,15 +153,15 @@
 
 .home-plan-inline-studio__primary {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.65fr) auto minmax(0, 1fr);
   align-items: end;
   gap: clamp(0.85rem, 2vw, 1.5rem);
-  padding: 0.7rem 0.15rem 0.6rem;
+  padding: 0.7rem 0.15rem;
 }
 
 .home-plan-inline-studio__buy {
   display: grid;
-  grid-template-columns: minmax(7rem, 9rem) minmax(0, auto);
+  grid-template-columns: minmax(6.5rem, 0.75fr) minmax(6.5rem, 0.75fr) minmax(7rem, 1fr) minmax(15rem, 1.6fr);
   align-items: end;
   gap: 0.85rem 1rem;
   min-width: 0;
@@ -176,19 +176,10 @@
 
 .home-plan-inline-studio__rent {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(7rem, 1fr)) auto;
+  align-items: end;
   gap: clamp(0.75rem, 2vw, 1.5rem);
   min-width: 0;
-}
-
-.home-plan-inline-studio__rates {
-  display: grid;
-  grid-template-columns: 8.5rem 8.5rem auto;
-  align-items: end;
-  justify-content: start;
-  gap: 1rem;
-  padding: 0.6rem 0.15rem;
-  border-top: 1px solid rgba(50, 38, 30, 0.06);
 }
 
 .home-plan-inline-studio__extra {
@@ -282,10 +273,6 @@
   font-size: clamp(1.15rem, 1.8vw, 1.45rem);
   font-weight: 680;
   font-variant-numeric: tabular-nums;
-}
-
-.home-plan-inline-studio__rates .home-plan-inline-input input {
-  font-size: 1.15rem;
 }
 
 .home-plan-inline-input input:focus {
@@ -1753,14 +1740,23 @@
     max-width: none;
   }
 
-  .home-plan-inline-studio__rates {
-    grid-template-columns: 8.5rem 8.5rem auto;
-  }
-
   .home-plan-payoff__year-focus {
     grid-template-columns: 1fr;
   }
 
+}
+
+@media (max-width: 1200px) and (min-width: 641px) {
+  .home-plan-inline-studio__primary {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .home-plan-inline-studio__divider {
+    width: auto;
+    height: 1px;
+    margin: 0;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1819,7 +1815,7 @@
   }
 
   .home-plan-inline-studio__buy {
-    grid-template-columns: minmax(7rem, 9rem) minmax(0, 1fr);
+    grid-template-columns: 1fr 1fr;
   }
 
   .home-plan-inline-studio__divider {
@@ -1829,10 +1825,6 @@
   }
 
   .home-plan-inline-studio__rent {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .home-plan-inline-studio__rates {
     grid-template-columns: 1fr 1fr;
   }
 

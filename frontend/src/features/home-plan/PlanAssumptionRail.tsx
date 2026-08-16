@@ -5,7 +5,7 @@ const LAKH = 100_000;
 const MONTHS_IN_YEAR = 12;
 
 function monthlyInterestThresholdThousands(inputs: PlanInputs): number {
-  const principal = inputs.propertyPriceLakh * LAKH;
+  const principal = inputs.propertyPriceLakh * LAKH * (1 - inputs.downPaymentPercent / 100);
   return Math.ceil((principal * inputs.loanRate / 100 / MONTHS_IN_YEAR) / 1_000);
 }
 
@@ -117,6 +117,26 @@ export function PlanAssumptionRail({
     : loanFreeYear == null
       ? "Loan stays open at this EMI"
       : `Loan-free around year ${loanFreeYear}`;
+  const buyPathInputs: InputSpec[] = [
+    {
+      key: "downPaymentPercent",
+      label: "Down payment",
+      min: 0,
+      max: 100,
+      step: 1,
+      suffix: "%",
+      note: "Cash share of price",
+    },
+    {
+      key: "loanRate",
+      label: "Loan rate",
+      min: 0,
+      max: 15,
+      step: 0.1,
+      suffix: "%",
+      note: "Bank rate",
+    },
+  ];
   const rentPathInputs: InputSpec[] = [
     {
       key: "currentRentThousands",
@@ -136,18 +156,6 @@ export function PlanAssumptionRail({
       suffix: "K / mo",
       note: "Rent-path investment",
     },
-  ];
-
-  const rateInputs: InputSpec[] = [
-    {
-      key: "loanRate",
-      label: "Loan rate",
-      min: 0,
-      max: 15,
-      step: 0.1,
-      suffix: "%",
-      note: "Bank rate",
-    },
     {
       key: "equityReturn",
       label: "SIP return",
@@ -162,10 +170,18 @@ export function PlanAssumptionRail({
   return (
     <section className="home-plan-inline-studio" aria-label="Your monthly plan">
       <div className="home-plan-inline-studio__primary">
-        <div className="home-plan-inline-studio__buy">
+        <div className="home-plan-inline-studio__buy" role="group" aria-label="Buy plan">
+          {buyPathInputs.map(({ key, ...input }) => (
+            <PlanInput
+              key={key}
+              {...input}
+              value={inputs[key]}
+              onChange={(value) => onInputChange(key, value)}
+            />
+          ))}
           <PlanInput
             label="Monthly EMI"
-            min={1}
+            min={inputs.downPaymentPercent === 100 ? 0 : 1}
             step={5}
             prefix="₹"
             suffix="K / mo"
@@ -193,7 +209,7 @@ export function PlanAssumptionRail({
 
         <div className="home-plan-inline-studio__divider" aria-hidden="true" />
 
-        <div className="home-plan-inline-studio__rent">
+        <div className="home-plan-inline-studio__rent" role="group" aria-label="Rent plan">
           {rentPathInputs.map(({ key, ...input }) => (
             <PlanInput
               key={key}
@@ -202,21 +218,10 @@ export function PlanAssumptionRail({
               onChange={(value) => onInputChange(key, value)}
             />
           ))}
+          <button type="button" className="home-plan-inline-studio__reset" onClick={onReset}>
+            Reset
+          </button>
         </div>
-      </div>
-
-      <div className="home-plan-inline-studio__rates">
-        {rateInputs.map(({ key, ...input }) => (
-          <PlanInput
-            key={key}
-            {...input}
-            value={inputs[key]}
-            onChange={(value) => onInputChange(key, value)}
-          />
-        ))}
-        <button type="button" className="home-plan-inline-studio__reset" onClick={onReset}>
-          Reset
-        </button>
       </div>
     </section>
   );
