@@ -1,24 +1,46 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  BASE_INPUTS,
   buildBaselinePlanInputs,
   calculateLoanJourney,
   calculateProjection,
   hasPlannablePrice,
+  type PlanInputs,
   updatePlanInput,
 } from "../src/features/home-plan/model.ts";
+import {
+  DEFAULT_PLAN_MODEL_CONFIG,
+  type PlanModelConfig,
+} from "../src/features/home-plan/modelConfig.ts";
 import { buildPlanSnapshotNote } from "../src/features/home-plan/planSnapshot.ts";
 import { buildMonthlyPlanVerdict, defaultPlanFocusYear } from "../src/features/home-plan/monthlyPlanView.ts";
 import {
-  DEFAULT_LOAN_TENURE_YEARS,
-  FIXED_HOME_GROWTH_RATE,
-  FIXED_RENT_INFLATION_RATE,
   isExplicitlyReadyStatus,
   monthlyPayment,
   principalFromMonthlyPayment,
   rentInMonth,
 } from "../src/features/home-plan/financeEngine.ts";
+
+const BASE_INPUTS: PlanInputs = {
+  propertyPriceLakh: 150,
+  downPaymentPercent: DEFAULT_PLAN_MODEL_CONFIG.defaults.downPaymentPercent,
+  monthlyEmiThousands: 90,
+  loanRate: DEFAULT_PLAN_MODEL_CONFIG.defaults.loanRate,
+  currentRentThousands: 55,
+  equityReturn: DEFAULT_PLAN_MODEL_CONFIG.defaults.equityReturn,
+  monthlySipThousands: 35,
+  holdingPeriodYears: 15,
+  purchaseYear: DEFAULT_PLAN_MODEL_CONFIG.defaults.purchaseYear,
+  construction: {
+    state: "ready",
+    asOfDate: "2026-01-01",
+    dateSource: "not_applicable",
+  },
+  assumptions: {
+    homeAppreciationRate: DEFAULT_PLAN_MODEL_CONFIG.defaults.homeAppreciationRate,
+    rentInflationRate: DEFAULT_PLAN_MODEL_CONFIG.defaults.rentInflationRate,
+  },
+};
 
 const ready = {
   ...BASE_INPUTS,
@@ -151,9 +173,10 @@ test("plan snapshot captures monthly assumptions and inspected outcome", () => {
 });
 
 test("rent rises by the fixed yearly assumption", () => {
-  assert.equal(FIXED_RENT_INFLATION_RATE, 10);
-  assert.equal(rentInMonth(55_000, FIXED_RENT_INFLATION_RATE, 0), 55_000);
-  assert.equal(rentInMonth(55_000, FIXED_RENT_INFLATION_RATE, 120), 142_656);
+  const rentInflation = DEFAULT_PLAN_MODEL_CONFIG.defaults.rentInflationRate;
+  assert.equal(rentInflation, 10);
+  assert.equal(rentInMonth(55_000, rentInflation, 0), 55_000);
+  assert.equal(rentInMonth(55_000, rentInflation, 120), 142_656);
 });
 
 test("baseline exposes monthly inputs", () => {
@@ -173,12 +196,78 @@ test("baseline exposes monthly inputs", () => {
   assert.equal(inputs.equityReturn, 10);
 });
 
+test("one model config drives baseline defaults and engine policy", () => {
+  const config: PlanModelConfig = {
+    defaults: {
+      ...DEFAULT_PLAN_MODEL_CONFIG.defaults,
+      downPaymentPercent: 30,
+      loanRate: 9,
+      loanTenureYears: 15,
+      rentalYieldPercent: 4,
+      equityReturn: 8,
+      holdingPeriodYears: 10,
+      extraEmisPerYear: 2,
+      homeAppreciationRate: 5,
+      rentInflationRate: 6,
+    },
+    construction: {
+      ...DEFAULT_PLAN_MODEL_CONFIG.construction,
+      paymentIntervalMonths: 3,
+    },
+    simulation: {
+      ...DEFAULT_PLAN_MODEL_CONFIG.simulation,
+      monthlyAmountStepThousands: 1,
+    },
+  };
+  const inputs = buildBaselinePlanInputs(15_000_000, {
+    state: "under_construction",
+    asOfDate: "2026-01-01",
+    startDate: "2025-01-01",
+    completionDate: "2028-01-01",
+    dateSource: "rera",
+  }, config);
+  const expectedEmi = Math.ceil(monthlyPayment(10_500_000, 9, 15) / 1_000);
+
+  assert.equal(inputs.downPaymentPercent, 30);
+  assert.equal(inputs.loanRate, 9);
+  assert.equal(inputs.currentRentThousands, 50);
+  assert.equal(inputs.monthlyEmiThousands, expectedEmi);
+  assert.equal(inputs.equityReturn, 8);
+  assert.equal(inputs.holdingPeriodYears, 10);
+  assert.deepEqual(inputs.assumptions, {
+    homeAppreciationRate: 5,
+    rentInflationRate: 6,
+  });
+  const projection = calculateProjection(inputs, undefined, config);
+  assert.equal(projection.extraEmisPerYear, 2);
+  assert.deepEqual(
+    projection.paymentSchedule.map((payment) => payment.month),
+    [0, 3, 6, 9, 12, 15, 18, 21, 24],
+  );
+});
+
+test("invalid model policy fails before simulation", () => {
+  const invalidConfig: PlanModelConfig = {
+    ...DEFAULT_PLAN_MODEL_CONFIG,
+    construction: {
+      ...DEFAULT_PLAN_MODEL_CONFIG.construction,
+      paymentIntervalMonths: 0,
+    },
+  };
+
+  assert.throws(
+    () => buildBaselinePlanInputs(15_000_000, undefined, invalidConfig),
+    /construction\.paymentIntervalMonths/,
+  );
+});
+
 test("baseline EMI repays the price over the default tenure at any price", () => {
   for (const price of [6_700_000, 8_000_000, 15_100_000, 33_100_000, 90_000_000]) {
     const inputs = buildBaselinePlanInputs(price);
     const projection = calculateProjection(inputs);
     const loanPrincipal = price * (1 - inputs.downPaymentPercent / 100);
-    const exactEmi = monthlyPayment(loanPrincipal, inputs.loanRate, DEFAULT_LOAN_TENURE_YEARS);
+    const loanTenure = DEFAULT_PLAN_MODEL_CONFIG.defaults.loanTenureYears;
+    const exactEmi = monthlyPayment(loanPrincipal, inputs.loanRate, loanTenure);
 
     assert.equal(projection.loanAmount, loanPrincipal);
     assert.equal(projection.upfrontPayment, price - loanPrincipal);
@@ -188,8 +277,8 @@ test("baseline EMI repays the price over the default tenure at any price", () =>
     assert.ok(inputs.monthlyEmiThousands * 1_000 - exactEmi < 5_000);
     // A 20-year loan should read as a 20-year loan, not close in single digits.
     assert.ok(projection.loanFreeYear !== null);
-    assert.ok(projection.loanFreeYear! > DEFAULT_LOAN_TENURE_YEARS - 3);
-    assert.ok(projection.loanFreeYear! <= DEFAULT_LOAN_TENURE_YEARS);
+    assert.ok(projection.loanFreeYear! > loanTenure - 3);
+    assert.ok(projection.loanFreeYear! <= loanTenure);
   }
 });
 
@@ -338,8 +427,9 @@ test("a closed loan frees the EMI into the buyer's wealth", () => {
 test("home value uses the fixed six percent yearly growth assumption", () => {
   const projection = calculateProjection(ready);
   const end = projection.points.at(-1)!;
+  const homeAppreciation = DEFAULT_PLAN_MODEL_CONFIG.defaults.homeAppreciationRate;
   const expected = ready.propertyPriceLakh * 100_000
-    * (1 + FIXED_HOME_GROWTH_RATE / 100 / 12) ** (ready.holdingPeriodYears * 12);
+    * (1 + homeAppreciation / 100 / 12) ** (ready.holdingPeriodYears * 12);
 
   assert.ok(Math.abs(end.propertyValue - expected) < 10);
 });
