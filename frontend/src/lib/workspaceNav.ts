@@ -51,22 +51,22 @@ export function workspaceNavItems(
       },
       {
         view: "home",
-        label: "Property overview",
+        label: "Home",
         icon: "listing",
         to: detailHref,
         active: activeView === "home",
         available: hasFocus,
       },
-      { view: "rera", label: "RERA evidence", icon: "rera", to: reraHref, active: activeView === "rera", available: hasFocus },
-      { view: "notebook", label: "Workspace", icon: "notebook", to: "/workspace", active: false, available: true },
+      { view: "rera", label: "RERA", icon: "rera", to: reraHref, active: activeView === "rera", available: hasFocus },
+      { view: "notebook", label: "Notes", icon: "notebook", to: "/workspace", active: false, available: true },
     ];
   }
 
   return [
     { view: "browse" as const, label: "Explore", icon: "browse" as const, to: options.discoveryHref ?? "/", available: true },
-    { view: "notebook" as const, label: "Workspace", icon: "notebook" as const, to: "/workspace", available: true },
+    { view: "notebook" as const, label: "Notes", icon: "notebook" as const, to: "/workspace", available: true },
     { view: "compare" as const, label: "Compare", icon: "compare" as const, to: compareHref, available: compareIds.length > 0 },
-    { view: "rera" as const, label: "RERA evidence", icon: "rera" as const, to: reraHref, available: hasFocus },
+    { view: "rera" as const, label: "RERA", icon: "rera" as const, to: reraHref, available: hasFocus },
   ].map((item) => ({
     ...item,
     active: item.view === "notebook"

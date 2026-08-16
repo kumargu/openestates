@@ -15,7 +15,7 @@ type WorkspaceIconName =
   | "notebook"
   | "compare"
   | "rera"
-  | "chevron";
+  | "saved";
 
 type WorkspaceSidebarProps = {
   homes: PropertyCard[];
@@ -32,7 +32,7 @@ type WorkspaceSidebarProps = {
 
 function WorkspaceIcon({
   name,
-  size = 17,
+  size = 20,
 }: {
   name: WorkspaceIconName;
   size?: number;
@@ -43,7 +43,7 @@ function WorkspaceIcon({
     viewBox: "0 0 24 24",
     fill: "none",
     stroke: "currentColor",
-    strokeWidth: 1.65,
+    strokeWidth: 1.8,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
     "aria-hidden": true,
@@ -52,46 +52,47 @@ function WorkspaceIcon({
   if (name === "browse") {
     return (
       <svg {...common}>
-        <circle cx="12" cy="12" r="8.25" />
-        <path d="m15.35 8.65-2.2 4.5-4.5 2.2 2.2-4.5 4.5-2.2Z" />
+        <circle cx="12" cy="12" r="8" />
+        <path d="m16 8-2.6 5.4L8 16l2.6-5.4Z" />
       </svg>
     );
   }
   if (name === "listing") {
     return (
       <svg {...common}>
-        <path d="m4 10 8-6.5 8 6.5v9.25a1.25 1.25 0 0 1-1.25 1.25H5.25A1.25 1.25 0 0 1 4 19.25Z" />
-        <path d="M9 20.5v-6h6v6" />
+        <path d="M4.5 10.2 12 4.25l7.5 5.95V19a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 19Z" />
+        <path d="M9.5 20.5v-6h5v6" />
       </svg>
     );
   }
   if (name === "notebook") {
     return (
       <svg {...common}>
-        <path d="M6.5 3.75h7l4 4v12.5H6.5Z" />
-        <path d="M13.5 3.75v4h4M9.25 12h5.5M9.25 15.5h4" />
+        <path d="M8 4.75h7.25A1.75 1.75 0 0 1 17 6.5v13H8A1.75 1.75 0 0 1 6.25 17.75v-11A2 2 0 0 1 8 4.75Z" />
+        <path d="M9.75 9.25h4.5M9.75 12.5h4.5M9.75 15.75h3" />
       </svg>
     );
   }
   if (name === "compare") {
     return (
       <svg {...common}>
-        <rect x="3.75" y="5.25" width="16.5" height="13.5" rx="2" />
-        <path d="M12 5.25v13.5" />
+        <rect x="3.5" y="5" width="7" height="14" rx="1.4" />
+        <rect x="13.5" y="5" width="7" height="14" rx="1.4" />
       </svg>
     );
   }
   if (name === "rera") {
     return (
       <svg {...common}>
-        <path d="M12 3.5 18.5 6v5.5c0 4.2-2.6 7-6.5 9-3.9-2-6.5-4.8-6.5-9V6Z" />
-        <path d="m9.2 11.9 1.75 1.75 3.9-4.1" />
+        <path d="M12 3.75 18.25 6.2v5.3c0 4-2.5 6.7-6.25 8.75C8.25 18.2 5.75 15.5 5.75 11.5V6.2Z" />
+        <path d="m9.15 12 1.85 1.85 3.85-4" />
       </svg>
     );
   }
   return (
     <svg {...common}>
-      <path d="m9 18 6-6-6-6" />
+      <rect x="4.5" y="5" width="6.25" height="14" rx="1.3" />
+      <path d="M13.25 8.5h6.25M13.25 12h6.25M13.25 15.5h4.25" />
     </svg>
   );
 }
@@ -144,42 +145,24 @@ export function WorkspaceSidebar({
     >
       <div className="workspace-sidebar__brand-row">
         <Link to="/" className="workspace-sidebar__brand" aria-label="OpenEstates home">
-          <OpenEstatesMark size={26} className="workspace-sidebar__mark" />
+          <OpenEstatesMark size={28} className="workspace-sidebar__mark" />
           {!collapsed && <strong>OpenEstates</strong>}
         </Link>
-        {mode === "workspace" ? (
-          <button
-            type="button"
-            className="workspace-sidebar__toggle"
-            aria-label={
-              reduced
-                ? "Shortlist opens after you save a home"
-                : collapsed
-                  ? "Expand shortlist sidebar"
-                  : "Collapse shortlist sidebar"
-            }
-            aria-expanded={!collapsed}
-            disabled={reduced}
-            onClick={onToggle}
-          >
-            <span
-              className={
-                collapsed ? "" : "workspace-sidebar__toggle-icon--reversed"
-              }
-            >
-              <WorkspaceIcon name="chevron" size={15} />
-            </span>
-          </button>
-        ) : null}
       </div>
 
       <nav className="workspace-sidebar__nav" aria-label={mode === "property-context" ? "Property navigation" : "Buyer workspace"}>
         {navItems.map((item) => {
-          const title = !item.available
-            ? `${item.label} — save a home first`
-            : collapsed
-              ? item.label
-              : undefined;
+          const title = !item.available ? `${item.label} — save a home first` : undefined;
+          const badge = item.view === "notebook" && noteCount > 0 ? noteCount : null;
+          const body = (
+            <>
+              <span className="workspace-sidebar__nav-icon">
+                <WorkspaceIcon name={item.icon} />
+                {badge ? <em className="workspace-sidebar__nav-badge">{badge}</em> : null}
+              </span>
+              <span className="workspace-sidebar__nav-label">{item.label}</span>
+            </>
+          );
 
           if (!item.available) {
             return (
@@ -189,8 +172,7 @@ export function WorkspaceSidebar({
                 aria-disabled="true"
                 title={title}
               >
-                <WorkspaceIcon name={item.icon} />
-                {!collapsed && <span>{item.label}</span>}
+                {body}
               </span>
             );
           }
@@ -200,18 +182,13 @@ export function WorkspaceSidebar({
               key={item.label}
               to={item.to}
               className={`workspace-sidebar__nav-item${item.active ? " is-active" : ""}`}
-              aria-label={item.label}
               aria-current={item.active ? "page" : undefined}
               title={title}
               onClick={() => {
                 if (item.view === "browse") requestDiscoveryReturn(item.to);
               }}
             >
-              <WorkspaceIcon name={item.icon} />
-              {!collapsed && <span>{item.label}</span>}
-              {!collapsed && item.view === "notebook" && noteCount > 0 && (
-                <em className="workspace-sidebar__note-count">{noteCount}</em>
-              )}
+              {body}
             </Link>
           );
         })}
@@ -280,9 +257,29 @@ export function WorkspaceSidebar({
         </section>
       )}
 
-      <div className="workspace-sidebar__footer" aria-hidden="true">
-        <span>OE</span>
-        {!collapsed && <p>{mode === "property-context" ? "Property guide" : "Your shortlist"}</p>}
+      <div className="workspace-sidebar__footer">
+        <button
+          type="button"
+          className={`workspace-sidebar__nav-item workspace-sidebar__saved${collapsed ? "" : " is-open"}`}
+          aria-label={
+            reduced
+              ? "Save a home to open the shortlist"
+              : collapsed
+                ? "Show saved homes"
+                : "Hide saved homes"
+          }
+          aria-expanded={!collapsed}
+          disabled={reduced}
+          onClick={onToggle}
+        >
+          <span className="workspace-sidebar__nav-icon">
+            <WorkspaceIcon name="saved" />
+            {homes.length > 0 ? (
+              <em className="workspace-sidebar__nav-badge">{homes.length}</em>
+            ) : null}
+          </span>
+          <span className="workspace-sidebar__nav-label">Saved</span>
+        </button>
       </div>
     </aside>
   );

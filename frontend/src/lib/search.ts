@@ -39,9 +39,7 @@ function extractDistinctiveMatchParts(reason: string): string[] {
 
   const preferenceHints = /greenery|metro|quiet|premium|family|school|traffic|ready|verified|proof|society|builder|value|maintenance|commute|noise|water/i;
 
-  return trimmed
-    .replace(/^matches\s+/i, "")
-    .split(/,\s*/)
+  return splitLabelParts(trimmed.replace(/^matches\s+/i, ""))
     .map((part) => part.trim())
     .filter(Boolean)
     .filter((segment) => {
@@ -67,20 +65,24 @@ export function displayMatchReason(
 export function searchResultReasonLabels(
   result: Pick<
     SearchResultItem,
-    "match_reason" | "match_explanation" | "title" | "society_name" | "builder_name"
+    "match_reason" | "match_explanation" | "title" | "society_name" | "builder_name" | "area"
   >,
 ): string[] {
   const labels: string[] = [];
 
   for (const reason of result.match_explanation?.reasons ?? []) {
-    pushUniqueLabel(labels, compactExplanationLabel(reason));
+    const label = compactExplanationLabel(reason);
+    if (isAreaRestatingLabel(label, result)) continue;
+    pushUniqueLabel(labels, label);
     if (labels.length >= 2) return labels;
   }
 
   const displayReason = displayMatchReason(result.match_reason);
-  for (const part of displayReason?.split(/\s*[;·,]\s*/) ?? []) {
+  for (const part of splitLabelParts(displayReason ?? "")) {
     if (isNameOnlyReason(part, result)) continue;
-    pushUniqueLabel(labels, compactReasonPart(part));
+    const label = compactReasonPart(part);
+    if (isAreaRestatingLabel(label, result)) continue;
+    pushUniqueLabel(labels, label);
     if (labels.length >= 2) return labels;
   }
 
@@ -112,9 +114,61 @@ function compactLabel(value: string): string {
     .replace(/^avoid\s+/i, "Avoid ")
     .replace(/\s+/g, " ")
     .trim();
-  const words = cleaned.split(" ");
-  const short = words.length > 4 ? words.slice(0, 4).join(" ") : cleaned;
+  const withoutBrokenParen = collapsePlaceParenthetical(cleaned);
+  const words = withoutBrokenParen.split(" ");
+  const short = words.length > 4 && !withoutBrokenParen.includes("(")
+    ? words.slice(0, 4).join(" ")
+    : withoutBrokenParen;
   return short.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+/** Keep "Near Whitefield (ITPL, Whitefield)" as one phrase. */
+export function splitLabelParts(value: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const char of value) {
+    if (char === "(") depth += 1;
+    if (char === ")") depth = Math.max(0, depth - 1);
+    if (depth === 0 && /[;·,]/.test(char)) {
+      if (current.trim()) parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+function collapsePlaceParenthetical(value: string): string {
+  return value.replace(/\s*\(([^)]*)\)\s*$/, (full, inner: string) => {
+    const tokens = inner.split(/,\s*/).map((part) => part.trim()).filter(Boolean);
+    if (tokens.length === 0) return "";
+    const head = value.slice(0, value.length - full.length).trim();
+    if (tokens.every((token) => head.toLowerCase().includes(token.toLowerCase()))) {
+      return "";
+    }
+    return ` (${tokens[0]})`;
+  });
+}
+
+function isAreaRestatingLabel(
+  label: string | null,
+  result: Pick<SearchResultItem, "area" | "title" | "society_name">,
+): boolean {
+  if (!label) return false;
+  const tokens = label
+    .toLowerCase()
+    .replace(/^near\s+/i, "")
+    .replace(/[()]/g, " ")
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 3);
+  if (tokens.length === 0) return false;
+  const haystack = [result.area, result.title, result.society_name]
+    .join(" ")
+    .toLowerCase();
+  return tokens.every((token) => haystack.includes(token));
 }
 
 function pushUniqueLabel(labels: string[], label: string | null) {

@@ -41,7 +41,7 @@ export function FocusOnNavigate() {
   useEffect(() => {
     const routeChanged = previousPathname.current !== pathname;
     previousPathname.current = pathname;
-    if (!routeChanged && pathname !== "/") return undefined;
+    if (!routeChanged) return undefined;
     window.scrollTo(0, 0);
     const main = document.getElementById("main-content");
     if (main) main.focus({ preventScroll: true });

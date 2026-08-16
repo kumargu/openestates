@@ -248,7 +248,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     : shellMode === "workspace"
       ? "workspace"
       : "discovery";
-  const effectiveSidebarCollapsed = sidebarMode === "workspace" && sidebarCollapsed;
+  const effectiveSidebarCollapsed = sidebarCollapsed;
   const discoveryHref = discoveryReturnHref();
   const sidebarHomes = homes;
 

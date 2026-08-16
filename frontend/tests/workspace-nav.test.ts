@@ -30,11 +30,11 @@ test("workspace nav follows the focused home across property views", () => {
 
   assert.equal(byView.get("browse")?.label, "Explore");
   assert.equal(byView.get("browse")?.to, "/?q=quiet+3bhk");
-  assert.equal(byView.get("home")?.label, "Property overview");
-  assert.equal(byView.get("notebook")?.label, "Workspace");
+  assert.equal(byView.get("home")?.label, "Home");
+  assert.equal(byView.get("notebook")?.label, "Notes");
   assert.equal(byView.get("home")?.to, "/property/home%20one%2Fwith%20slash");
   assert.equal(byView.get("rera")?.to, "/property/home%20one%2Fwith%20slash/rera");
-  assert.equal(byView.get("rera")?.label, "RERA evidence");
+  assert.equal(byView.get("rera")?.label, "RERA");
   assert.equal(byView.get("rera")?.active, true);
   assert.equal(byView.get("home")?.active, false);
   assert.equal(byView.get("home")?.available, true);
@@ -70,7 +70,7 @@ test("workspace sidebar keeps RERA attached to the focused home", () => {
     discoveryHref: "/?q=near+metro",
     compareIds: ["home-1", "home-2"],
   });
-  assert.deepEqual(items.map((item) => item.label), ["Explore", "Workspace", "Compare", "RERA evidence"]);
+  assert.deepEqual(items.map((item) => item.label), ["Explore", "Notes", "Compare", "RERA"]);
   assert.equal(items[0]?.to, "/?q=near+metro");
   assert.equal(items[2]?.to, "/workspace/compare?ids=home-1%2Chome-2&focus=home-1");
   assert.equal(items[2]?.available, true);
