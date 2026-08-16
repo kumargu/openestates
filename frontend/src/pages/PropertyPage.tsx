@@ -24,6 +24,7 @@ import {
   parseProofFocusParam,
 } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
+import { RailPageControls } from "../components/RailPageControls.tsx";
 import {
   ApproachRoadTrail,
   hasApproachRoadTrail,
@@ -725,49 +726,12 @@ function NearbyHomesRail({
     >
       <div className="property-section-line">
         <h2 id="property-nearby-title">More homes nearby</h2>
-        {items.length > pageSize && (
-          <div className="property-rail-controls" aria-label="More homes pages">
-            <button
-              type="button"
-              onClick={() => setPage(Math.max(0, safePage - 1))}
-              disabled={safePage === 0}
-              aria-label="Previous homes"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                aria-hidden="true"
-              >
-                <path d="m15 18-6-6 6-6" />
-              </svg>
-            </button>
-            <span>
-              {safePage + 1} / {pageCount}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage(Math.min(pageCount - 1, safePage + 1))}
-              disabled={safePage >= pageCount - 1}
-              aria-label="Next homes"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                aria-hidden="true"
-              >
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </button>
-          </div>
-        )}
+        <RailPageControls
+          page={safePage}
+          pageCount={items.length > pageSize ? pageCount : 1}
+          onPageChange={setPage}
+          label="More homes pages"
+        />
       </div>
       <div className="property-nearby-rail__scroller">
         {status === "pending" && items.length === 0 && (

@@ -1,16 +1,18 @@
 .rera-report-page {
-  width: min(1080px, calc(100% - 2rem));
-  padding: 1.5rem 0 5rem;
+  --rera-positive: #257a45;
+  width: min(1120px, calc(100% - 2.5rem));
+  padding: 1.25rem 0 5rem;
 }
 
 .rera-hero {
-  padding: 0.5rem 0 1.8rem;
-  border-bottom: 1px solid var(--color-border);
+  padding: 0.5rem 0 1.65rem;
 }
 
 .rera-hero > a {
   display: inline-flex;
-  margin-bottom: 1.35rem;
+  align-items: center;
+  gap: 0.38rem;
+  margin-bottom: 1.65rem;
   color: var(--color-text-secondary);
   font-size: 0.86rem;
   font-weight: 720;
@@ -19,8 +21,8 @@
 
 .rera-hero > a:hover,
 .rera-hero > a:focus-visible,
-.rera-registry-line a:hover,
-.rera-registry-line a:focus-visible,
+.rera-record__heading a:hover,
+.rera-record__heading a:focus-visible,
 .rera-table a:hover,
 .rera-table a:focus-visible,
 .rera-document-groups a:hover,
@@ -32,7 +34,7 @@
 
 .rera-hero h1 {
   max-width: 52rem;
-  margin: 0;
+  margin: 0.42rem 0 0;
   color: var(--color-text);
   font-size: clamp(1.75rem, 1.35rem + 1vw, 2.35rem);
   line-height: 1.12;
@@ -51,26 +53,125 @@
   font-size: 0.82rem;
 }
 
-.rera-registry-line {
+.rera-hero__main {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem 1rem;
-  margin-top: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2rem;
 }
 
-.rera-registry-line strong {
-  color: var(--color-text);
+.rera-hero__label {
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 790;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.rera-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.25rem;
+  color: var(--rera-positive);
   font-size: 0.88rem;
   font-weight: 760;
+  white-space: nowrap;
+}
+
+.rera-status > span {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.rera-status.is-neutral { color: var(--color-text-secondary); }
+.rera-status.is-risk { color: #a23d2f; }
+
+.rera-dossier {
+  padding: 0 0 2rem;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.rera-record {
+  min-width: 0;
+  padding: 1.55rem 0 0;
+}
+
+.rera-record__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.rera-record__heading > div > span {
+  display: block;
+  margin-bottom: 0.28rem;
+  color: var(--color-text-muted);
+  font-size: 0.69rem;
+  font-weight: 720;
+  letter-spacing: 0.065em;
+  text-transform: uppercase;
+}
+
+.rera-record__heading h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 1.05rem;
+  font-weight: 820;
+}
+
+.rera-record__heading a {
+  flex: 0 0 auto;
+  color: var(--color-text);
+  font-size: 0.8rem;
+  font-weight: 760;
+  text-underline-offset: 0.18em;
+}
+
+.rera-record__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+.rera-record__facts > div {
+  min-width: 0;
+  padding: 1rem 1.2rem 1rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+.rera-record__facts > div:nth-child(odd) {
+  border-right: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+}
+
+.rera-record__facts > div:nth-child(even) {
+  padding-left: 1.2rem;
+}
+
+.rera-record__facts dt {
+  margin-bottom: 0.28rem;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.rera-record__facts dd {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.93rem;
+  font-weight: 760;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
-.rera-registry-line a {
-  color: var(--color-text-secondary);
-  font-size: 0.82rem;
-  font-weight: 740;
-  text-decoration: none;
+.rera-record .rera-fact-list {
+  margin-top: 1rem;
 }
 
 .rera-section,
@@ -164,19 +265,45 @@
 }
 
 .rera-timeline {
-  display: grid;
+  display: flex;
+  overflow-x: auto;
   margin: 0;
-  padding: 0;
+  padding: 0.3rem 0 0;
   list-style: none;
 }
 
 .rera-timeline li {
-  display: grid;
-  grid-template-columns: minmax(11rem, 0.55fr) minmax(0, 1fr);
-  gap: 1rem;
-  align-items: baseline;
-  padding: 0.82rem 0;
-  border-top: 1px solid color-mix(in srgb, var(--color-border) 65%, transparent);
+  position: relative;
+  display: flex;
+  min-width: 11rem;
+  flex: 1 0 11rem;
+  flex-direction: column;
+  gap: 0.28rem;
+  padding: 2rem 1.2rem 0.5rem 0;
+}
+
+.rera-timeline li::before {
+  position: absolute;
+  top: 0.55rem;
+  left: 0;
+  z-index: 1;
+  width: 0.62rem;
+  height: 0.62rem;
+  border: 3px solid var(--color-bg);
+  border-radius: 999px;
+  background: var(--rera-positive);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--rera-positive) 36%, var(--color-border));
+  content: "";
+}
+
+.rera-timeline li:not(:last-child)::after {
+  position: absolute;
+  top: 0.86rem;
+  right: 0;
+  left: 0.62rem;
+  height: 1px;
+  background: color-mix(in srgb, var(--rera-positive) 36%, var(--color-border));
+  content: "";
 }
 
 .rera-timeline span {
@@ -223,6 +350,13 @@
 .rera-series tbody th strong {
   color: var(--color-text);
   font-size: 0.88rem;
+  font-weight: 720;
+}
+
+.rera-series th .rera-latest-label {
+  margin-left: 0.4rem;
+  color: var(--rera-positive);
+  font-size: 0.67rem;
   font-weight: 720;
 }
 
@@ -776,8 +910,30 @@
 
 @media (max-width: 680px) {
   .rera-report-page {
-    width: min(100% - 1.25rem, 1080px);
+    width: min(100% - 1.25rem, 1120px);
     padding-top: 0.75rem;
+  }
+
+  .rera-hero__main {
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .rera-status { margin-top: 0; }
+
+  .rera-record__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .rera-record__facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rera-record__facts > div,
+  .rera-record__facts > div:nth-child(even) {
+    padding: 0.82rem 0;
+    border-right: 0;
   }
 
   .rera-hero h1 {
@@ -793,11 +949,6 @@
 
   .rera-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .rera-registry-line {
-    align-items: flex-start;
-    flex-direction: column;
   }
 
   .rera-regulatory-events li {

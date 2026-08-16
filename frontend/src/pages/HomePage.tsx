@@ -1,62 +1,38 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
 import type { AreaTrackerResponse, PropertyCard } from "../lib/types.ts";
 import { getAreaTracker, getProperties } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
-import { SearchExperience as InlineSearchExperience } from "./SearchExperience.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { LandingStoryStage } from "../components/LandingStoryStage.tsx";
 import { OpenEstatesMark } from "../components/brand/OpenEstatesMark.tsx";
 import { consumeDiscoveryReturn } from "../lib/navigationContext.ts";
 
 const SEARCH_SUGGESTIONS = [
+  { label: "Quiet near schools", query: "Quiet family home near good schools" },
   { label: "Under ₹2.5Cr", query: "3BHK under 2.5Cr with clear price context" },
-  { label: "Near schools", query: "Quiet family home near good schools" },
   { label: "Ready to move", query: "Ready-to-move homes with delivery proof" },
-  { label: "Whitefield", query: "Low commute-pain home near Whitefield tech parks" },
+  { label: "Low commute", query: "Low commute-pain home near Whitefield tech parks" },
 ];
 
-const HERO_THEMES = [
-  "proof you can trust",
-  "risks made visible",
-  "prices in context",
-  "clear tradeoffs",
-] as const;
-
-function RotatingHeroTheme() {
-  const [index, setIndex] = useState(0);
-  const [fading, setFading] = useState(false);
+function useStickyComposer() {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const [stuck, setStuck] = useState(false);
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
-    let swapTimer: number | undefined;
-    const interval = window.setInterval(() => {
-      setFading(true);
-      swapTimer = window.setTimeout(() => {
-        setIndex((current) => (current + 1) % HERO_THEMES.length);
-        setFading(false);
-      }, 240);
-    }, 3_000);
-    return () => {
-      window.clearInterval(interval);
-      if (swapTimer) window.clearTimeout(swapTimer);
-    };
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return undefined;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      setStuck(!entry.isIntersecting);
+    }, { threshold: 0, rootMargin: "-10px 0px 0px 0px" });
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
   }, []);
 
-  return (
-    <span
-      className={`home-hero__rotating${fading ? " is-fading" : ""}`}
-      aria-hidden="true"
-    >
-      {HERO_THEMES[index]}
-    </span>
-  );
+  return { sentinelRef, stuck };
 }
-
-type ViewTransitionDocument = Document & {
-  startViewTransition?: (update: () => void) => { finished: Promise<void> };
-};
 
 const LOADING_CARDS = ["one", "two", "three", "four"];
 
@@ -111,6 +87,7 @@ export function HomePage() {
   const [recents, setRecents] = useState<string[]>(() => getRecentSearches());
   const [searchFocused, setSearchFocused] = useState(false);
   const shouldSettleSearchRef = useRef(false);
+  const { sentinelRef, stuck } = useStickyComposer();
 
   useEffect(() => {
     if (searchParams.get("view") === "saved") {
@@ -160,21 +137,6 @@ export function HomePage() {
     window.scrollTo({ top: 0, behavior: media.matches ? "auto" : "smooth" });
   }, [activeSearchQuery, hasActiveSearch]);
 
-  const applySearchParams = useCallback((params: URLSearchParams) => {
-    const transitionDocument = document as ViewTransitionDocument;
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const isHeroInView = window.scrollY < 640;
-
-    if (!transitionDocument.startViewTransition || prefersReducedMotion || !isHeroInView) {
-      setSearchParams(params);
-      return;
-    }
-
-    transitionDocument.startViewTransition(() => {
-      flushSync(() => setSearchParams(params));
-    });
-  }, [setSearchParams]);
-
   const commitSearch = useCallback((rawQuery: string, options: { settle?: boolean } = {}) => {
     const q = rawQuery.trim();
     const nextParams = new URLSearchParams();
@@ -185,22 +147,17 @@ export function HomePage() {
       setRecents(getRecentSearches());
       shouldSettleSearchRef.current = options.settle ?? true;
       nextParams.set("q", q);
-      applySearchParams(nextParams);
+      setSearchParams(nextParams);
     } else {
       sessionStorage.removeItem("oe_search_query");
       shouldSettleSearchRef.current = false;
-      applySearchParams(nextParams);
+      setSearchParams(nextParams);
     }
-  }, [applySearchParams]);
+  }, [setSearchParams]);
 
   const clearSearch = useCallback(() => {
     commitSearch("", { settle: false });
   }, [commitSearch]);
-
-  const handleInlineSearchCommit = useCallback((q: string) => {
-    addRecentSearch(q);
-    setRecents(getRecentSearches());
-  }, []);
 
   const restoreDiscoveryPosition = useCallback(() => {
     const scrollY = consumeDiscoveryReturn(`${window.location.pathname}${window.location.search}`);
@@ -230,21 +187,19 @@ export function HomePage() {
       >
         <div className="home-hero__wash" aria-hidden="true" />
 
-        {!hasActiveSearch && (
-          <div className="fade-up home-hero__copy">
-            <h1 className="home-hero__title">
-              <span>Find homes with</span>
-              <RotatingHeroTheme />
-              <span className="sr-only">proof you can trust</span>
-            </h1>
-          </div>
-        )}
+        <div className="fade-up home-hero__copy">
+          <h1 className="home-hero__title">
+            <span>Tell us the life you want.</span>
+            <span className="home-hero__support">We'll show homes with receipts.</span>
+          </h1>
+        </div>
       </section>
 
       <div className="home-scroll-shell">
+        <div ref={sentinelRef} className="home-composer-sentinel" aria-hidden="true" />
         <form
           onSubmit={handleSearch}
-          className={`home-composer${hasActiveSearch ? " home-composer--search-active" : " home-composer--landing fade-up fade-up-delay-1"}${searchFocused ? " home-composer--focused" : ""}`}
+          className={`home-composer${hasActiveSearch ? " home-composer--search-active" : " home-composer--landing"}${!hasActiveSearch && stuck ? " home-composer--stuck" : ""}${searchFocused ? " home-composer--focused" : ""}`}
           aria-label="Search homes"
           role="search"
         >
@@ -261,7 +216,7 @@ export function HomePage() {
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
-              aria-label="Describe the property you are looking for"
+              aria-label="Describe the life you want"
               autoComplete="off"
             />
             {hasActiveSearch && query.trim() && (
@@ -284,23 +239,21 @@ export function HomePage() {
           </div>
         </form>
 
-        {!hasActiveSearch && (
-          <div
-            className="home-search-suggestions fade-up fade-up-delay-2"
-            aria-label="Suggested searches"
-          >
-            {SEARCH_SUGGESTIONS.map((suggestion) => (
-              <button
-                key={suggestion.label}
-                type="button"
-                className="home-search-suggestion"
-                onClick={() => commitSearch(suggestion.query)}
-              >
-                {suggestion.label}
-              </button>
-            ))}
-          </div>
-        )}
+        <div
+          className="home-search-suggestions fade-up fade-up-delay-2"
+          aria-label="Suggested searches"
+        >
+          {SEARCH_SUGGESTIONS.map((suggestion) => (
+            <button
+              key={suggestion.label}
+              type="button"
+              className={`home-search-suggestion${hasActiveSearch && activeSearchQuery === suggestion.query ? " is-active" : ""}`}
+              onClick={() => commitSearch(suggestion.query)}
+            >
+              {suggestion.label}
+            </button>
+          ))}
+        </div>
 
         {loadError && (
           <div className={`home-error-banner${hasActiveSearch ? "" : " fade-up fade-up-delay-2"}`}>
@@ -346,16 +299,14 @@ export function HomePage() {
         )}
 
         <div className="home-body" aria-live="polite">
-          {hasActiveSearch ? (
-            <section className="home-inline-results-anchor" aria-label="Homes matching your search">
-              <InlineSearchExperience
-                onSearchCommit={handleInlineSearchCommit}
-                onResultsReady={restoreDiscoveryPosition}
-              />
-            </section>
-          ) : properties.length > 0 ? (
+          {properties.length > 0 || hasActiveSearch ? (
             <>
-              <LandingStoryStage properties={properties} onSearch={commitSearch} />
+              <LandingStoryStage
+                properties={properties}
+                onSearch={commitSearch}
+                searchQuery={activeSearchQuery}
+                onSearchReady={restoreDiscoveryPosition}
+              />
               <AreaTrackerSection
                 properties={properties}
                 areaTracker={areaTracker}
