@@ -7,7 +7,9 @@ use chrono::Utc;
 use crate::assets::{
     AssetPathBuilder, KgViewEdgeRecord, KgViewFactAnnotationRecord, KgViewFactRecord, KgViewRecords,
 };
-use crate::dag_config::{load_fact_registry_index, scoring_direction_from_hint, DagConfigError};
+use crate::dag_config::{
+    load_fact_registry_index, load_serving_eligibility, scoring_direction_from_hint, DagConfigError,
+};
 use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
 use crate::search::schema;
@@ -25,7 +27,7 @@ use super::{
     TrustPolicy,
 };
 
-pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 6;
+pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 7;
 
 #[derive(Clone)]
 pub struct ServingBundleBuilder {
@@ -69,15 +71,13 @@ impl ServingBundleBuilder {
         let search_metadata =
             serving_search_metadata_records(&current_facts, &current_annotations)?;
         let edges = serving_edge_records(&records.edges);
-        let (rera_evidence, excluded_rera_evidence_society_ids) =
-            catalog_scoped_rera_evidence(&entities, rera_evidence);
         self.build_from_serving_records(
             entities,
             facts,
             search_metadata,
             edges,
             rera_evidence,
-            excluded_rera_evidence_society_ids,
+            Vec::new(),
             bundle_version,
             true,
         )
@@ -116,18 +116,13 @@ impl ServingBundleBuilder {
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         rebuild_serving_entity_searchable_text(&mut entities, &facts);
-        let (rera_evidence, mut excluded_rera_evidence_society_ids) =
-            catalog_scoped_rera_evidence(&entities, rera_evidence);
-        excluded_rera_evidence_society_ids.extend(known_excluded_rera_evidence_society_ids);
-        excluded_rera_evidence_society_ids.sort();
-        excluded_rera_evidence_society_ids.dedup();
         self.build_from_serving_records(
             entities,
             facts,
             search_metadata,
             edges,
             rera_evidence,
-            excluded_rera_evidence_society_ids,
+            known_excluded_rera_evidence_society_ids,
             bundle_version,
             false,
         )
@@ -142,7 +137,7 @@ impl ServingBundleBuilder {
         mut search_metadata: Vec<ServingSearchMetadataRecord>,
         mut edges: Vec<ServingEdgeRecord>,
         rera_evidence: Vec<ServingReraEvidenceRecord>,
-        excluded_rera_evidence_society_ids: Vec<String>,
+        mut excluded_rera_evidence_society_ids: Vec<String>,
         bundle_version: impl Into<String>,
         derive_proximity: bool,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
@@ -156,6 +151,27 @@ impl ServingBundleBuilder {
             search_metadata.extend(derived.search_metadata);
             edges.extend(derived.edges);
         }
+        let eligibility = load_serving_eligibility()?;
+        let super::eligibility::EligibleServingRecords {
+            entities,
+            facts,
+            search_metadata,
+            edges,
+            quarantine,
+        } = super::eligibility::classify_and_prune(
+            entities,
+            facts,
+            search_metadata,
+            edges,
+            &bundle_version,
+            &eligibility,
+        )?;
+        let (rera_evidence, newly_excluded_rera_evidence_society_ids) =
+            catalog_scoped_rera_evidence(&entities, rera_evidence);
+        excluded_rera_evidence_society_ids.extend(newly_excluded_rera_evidence_society_ids);
+        excluded_rera_evidence_society_ids.sort();
+        excluded_rera_evidence_society_ids.dedup();
+        validate_serving_records(&entities, &facts, &search_metadata, &edges)?;
         if let Err(err) = write_preference_coverage_report(&entities, &facts, &search_metadata) {
             eprintln!("preference coverage report skipped: {err}");
         }
@@ -225,6 +241,16 @@ impl ServingBundleBuilder {
             Some(rera_evidence.len() as u64),
         ));
 
+        let quarantine_key =
+            AssetPathBuilder::serving_bundle_key(&bundle_version, "quarantine/societies.json");
+        let quarantine_meta = self.lake.put_json(&quarantine_key, &quarantine).await?;
+        artifacts.push(artifact(
+            BundleArtifactKind::QuarantineJson,
+            quarantine_meta,
+            "application/json",
+            Some(quarantine.excluded_society_count),
+        ));
+
         let schema_key = AssetPathBuilder::serving_bundle_key(&bundle_version, "schema.json");
         let schema_descriptor = serving_bundle_schema_descriptor(SERVING_BUNDLE_FORMAT_VERSION);
         let schema_meta = self.lake.put_json(&schema_key, &schema_descriptor).await?;
@@ -266,11 +292,15 @@ impl ServingBundleBuilder {
             rera_evidence_count: rera_evidence.len() as u64,
             excluded_rera_evidence_society_ids,
             edge_count: edges.len() as u64,
+            eligibility_policy_version: quarantine.eligibility_policy_version,
+            quarantined_society_count: quarantine.excluded_society_count,
+            quarantine_reason_counts: quarantine.reason_counts.clone(),
             entity_parquet_key: entity_key.to_string(),
             fact_parquet_key: fact_key.to_string(),
             search_metadata_parquet_key: search_metadata_key.to_string(),
             rera_evidence_parquet_key: Some(rera_evidence_key.to_string()),
             edge_parquet_key: Some(edge_key.to_string()),
+            quarantine_report_key: Some(quarantine_key.to_string()),
             schema_key: schema_key.to_string(),
             trust_policy_key: trust_policy_key.to_string(),
             tantivy_index_prefix: tantivy_prefix,
@@ -282,6 +312,117 @@ impl ServingBundleBuilder {
         self.lake.put_json(&manifest_key, &manifest).await?;
         Ok(manifest)
     }
+}
+
+fn validate_serving_records(
+    entities: &[ServingEntityRecord],
+    facts: &[ServingFactRecord],
+    search_metadata: &[ServingSearchMetadataRecord],
+    edges: &[ServingEdgeRecord],
+) -> Result<(), ServingBundleError> {
+    let mut entity_ids = BTreeSet::new();
+    for entity in entities {
+        if !entity_ids.insert(entity.entity_id.as_str()) {
+            return Err(ServingBundleError::InvalidRecords(format!(
+                "duplicate entity id {}",
+                entity.entity_id
+            )));
+        }
+    }
+
+    let mut society_ids_by_runtime_id = BTreeMap::<String, Vec<&str>>::new();
+    for entity in entities
+        .iter()
+        .filter(|entity| entity.entity_type == "society")
+    {
+        society_ids_by_runtime_id
+            .entry(format!("soc-{}", slug(&entity.name)))
+            .or_default()
+            .push(&entity.entity_id);
+    }
+    if let Some((runtime_id, society_ids)) = society_ids_by_runtime_id
+        .iter()
+        .find(|(_, society_ids)| society_ids.len() > 1)
+    {
+        return Err(ServingBundleError::InvalidRecords(format!(
+            "canonical society identity {runtime_id} is produced by multiple entities: {}",
+            society_ids.join(", ")
+        )));
+    }
+
+    let mut fact_pairs = BTreeSet::new();
+    for fact in facts {
+        if !entity_ids.contains(fact.entity_id.as_str()) {
+            return Err(ServingBundleError::InvalidRecords(format!(
+                "fact {}/{} references a missing entity",
+                fact.entity_id, fact.fact_key
+            )));
+        }
+        fact_pairs.insert((fact.entity_id.as_str(), fact.fact_key.as_str()));
+    }
+
+    let mut metadata_pairs = BTreeSet::new();
+    for metadata in search_metadata {
+        let pair = (metadata.entity_id.as_str(), metadata.fact_key.as_str());
+        if !fact_pairs.contains(&pair) {
+            return Err(ServingBundleError::InvalidRecords(format!(
+                "search metadata {}/{} has no fact row",
+                metadata.entity_id, metadata.fact_key
+            )));
+        }
+        metadata_pairs.insert(pair);
+    }
+    if let Some((entity_id, fact_key)) = fact_pairs.difference(&metadata_pairs).next() {
+        return Err(ServingBundleError::InvalidRecords(format!(
+            "fact {entity_id}/{fact_key} has no search metadata"
+        )));
+    }
+
+    for edge in edges {
+        if !entity_ids.contains(edge.from_entity_id.as_str())
+            || !entity_ids.contains(edge.to_entity_id.as_str())
+        {
+            return Err(ServingBundleError::InvalidRecords(format!(
+                "edge {} -[{}]-> {} has a missing endpoint",
+                edge.from_entity_id, edge.edge_type, edge.to_entity_id
+            )));
+        }
+    }
+    let entity_type_by_id = entities
+        .iter()
+        .map(|entity| (entity.entity_id.as_str(), entity.entity_type.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    let mut society_ids_by_property = BTreeMap::<&str, BTreeSet<&str>>::new();
+    for edge in edges.iter().filter(|edge| edge.edge_type == "in_society") {
+        if entity_type_by_id.get(edge.from_entity_id.as_str()) != Some(&"property")
+            || entity_type_by_id.get(edge.to_entity_id.as_str()) != Some(&"society")
+        {
+            return Err(ServingBundleError::InvalidRecords(format!(
+                "in_society edge {} -> {} does not connect property to society",
+                edge.from_entity_id, edge.to_entity_id
+            )));
+        }
+        society_ids_by_property
+            .entry(&edge.from_entity_id)
+            .or_default()
+            .insert(&edge.to_entity_id);
+    }
+    for property in entities
+        .iter()
+        .filter(|entity| entity.entity_type == "property")
+    {
+        let society_ids = society_ids_by_property
+            .get(property.entity_id.as_str())
+            .map(BTreeSet::len)
+            .unwrap_or_default();
+        if society_ids != 1 {
+            return Err(ServingBundleError::InvalidRecords(format!(
+                "property {} must have exactly one in_society relation, found {society_ids}",
+                property.entity_id
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn rebuild_serving_entity_searchable_text(
@@ -844,6 +985,7 @@ pub enum ServingBundleError {
     Tantivy(TantivyIndexError),
     DagConfig(DagConfigError),
     InvalidIndexPath(PathBuf),
+    InvalidRecords(String),
 }
 
 impl fmt::Display for ServingBundleError {
@@ -862,6 +1004,9 @@ impl fmt::Display for ServingBundleError {
                     "Tantivy index path is outside index dir: {}",
                     path.display()
                 )
+            }
+            Self::InvalidRecords(message) => {
+                write!(f, "serving bundle record validation failed: {message}")
             }
         }
     }
@@ -927,6 +1072,115 @@ mod tests {
             regulatory_coverage: Vec::new(),
             source_index: Vec::new(),
         }
+    }
+
+    #[test]
+    fn duplicate_runtime_society_identity_fails_bundle_build() {
+        let entities = vec![
+            ServingEntityRecord {
+                entity_id: "society:rera-first".to_string(),
+                entity_type: "society".to_string(),
+                name: "Arvind Bel Air".to_string(),
+                root_source: Some("rera".to_string()),
+                searchable_text: String::new(),
+            },
+            ServingEntityRecord {
+                entity_id: "society:rera-second".to_string(),
+                entity_type: "society".to_string(),
+                name: "Arvind Bel Air".to_string(),
+                root_source: Some("rera".to_string()),
+                searchable_text: String::new(),
+            },
+        ];
+
+        let error = validate_serving_records(&entities, &[], &[], &[]).unwrap_err();
+
+        assert!(error.to_string().contains("soc-arvind-bel-air"));
+        assert!(error.to_string().contains("society:rera-first"));
+        assert!(error.to_string().contains("society:rera-second"));
+    }
+
+    #[test]
+    fn fact_without_search_metadata_fails_bundle_build() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "society:one".to_string(),
+            entity_type: "society".to_string(),
+            name: "Society One".to_string(),
+            root_source: Some("rera".to_string()),
+            searchable_text: String::new(),
+        }];
+        let facts = vec![ServingFactRecord {
+            entity_id: "society:one".to_string(),
+            fact_key: "hero_image".to_string(),
+            value_type: "text".to_string(),
+            value_text: Some("/media/hero.webp".to_string()),
+            value: FactValue::Text("/media/hero.webp".to_string()),
+            confidence: 1.0,
+            source_type: "Rera".to_string(),
+            source_url: None,
+            model: None,
+            skill_id: None,
+            learned_at: Utc::now(),
+        }];
+
+        let error = validate_serving_records(&entities, &facts, &[], &[]).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("society:one/hero_image has no search metadata"));
+    }
+
+    #[test]
+    fn repeatable_search_metadata_for_one_fact_pair_is_valid() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "society:one".to_string(),
+            entity_type: "society".to_string(),
+            name: "Society One".to_string(),
+            root_source: Some("rera".to_string()),
+            searchable_text: String::new(),
+        }];
+        let facts = vec![ServingFactRecord {
+            entity_id: "society:one".to_string(),
+            fact_key: "nearby_place".to_string(),
+            value_type: "text".to_string(),
+            value_text: Some("School".to_string()),
+            value: FactValue::Text("School".to_string()),
+            confidence: 1.0,
+            source_type: "Map".to_string(),
+            source_url: None,
+            model: None,
+            skill_id: None,
+            learned_at: Utc::now(),
+        }];
+        let metadata = ServingSearchMetadataRecord {
+            entity_id: "society:one".to_string(),
+            fact_key: "nearby_place".to_string(),
+            display_template: None,
+            answers_preferences: vec!["near school".to_string()],
+            scoring_direction: Some("lower_is_better".to_string()),
+            scoring_weight: Some(1.0),
+            scoring_thresholds: vec![],
+        };
+
+        validate_serving_records(&entities, &facts, &[metadata.clone(), metadata], &[])
+            .expect("repeatable facts may have multiple search metadata rows");
+    }
+
+    #[test]
+    fn property_without_one_canonical_society_relation_fails_bundle_build() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "property:orphan-2bhk".to_string(),
+            entity_type: "property".to_string(),
+            name: "Orphan 2 BHK".to_string(),
+            root_source: Some("listing".to_string()),
+            searchable_text: String::new(),
+        }];
+
+        let error = validate_serving_records(&entities, &[], &[], &[]).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("property property:orphan-2bhk must have exactly one in_society relation"));
     }
 
     #[test]

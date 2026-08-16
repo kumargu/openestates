@@ -734,6 +734,11 @@ impl AssetDagExecutor {
         policy: &AssetRetryPolicy,
     ) -> Result<(), AssetDagExecutorError> {
         if record.asset_id.as_str() == SEARCH_SERVING_BUNDLE_ASSET_ID {
+            super::validate_search_serving_convergence(&self.materializations, record)
+                .await
+                .map_err(|error| {
+                    AssetDagExecutorError::ServingReleaseValidation(error.to_string())
+                })?;
             let report = validate_search_serving_candidate(&self.lake, record)
                 .await
                 .map_err(|error| {

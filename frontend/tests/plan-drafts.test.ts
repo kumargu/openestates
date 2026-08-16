@@ -8,6 +8,7 @@ Object.defineProperty(globalThis, "window", {
     localStorage: {
       getItem: (key: string) => values.get(key) ?? null,
       setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
     },
   },
   configurable: true,
@@ -16,6 +17,7 @@ Object.defineProperty(globalThis, "window", {
 const {
   planDraftStorageKey,
   canPersistPlanDraft,
+  clearPlanDraft,
   readPlanDraft,
   writePlanDraft,
 } = await import("../src/features/home-plan/planDrafts.ts");
@@ -37,14 +39,35 @@ test("Buy vs Rent drafts remain independent per property", () => {
 
 test("invalid stored drafts fail closed", () => {
   values.clear();
+  writePlanDraft("home-1", buildBaselinePlanInputs(20_000_000), 2);
+  const stored = JSON.parse(values.get(planDraftStorageKey("home-1"))!);
+  values.set(planDraftStorageKey("home-1"), JSON.stringify({
+    ...stored,
+    inputs: { monthlyEmiThousands: "not-a-number" },
+  }));
+
+  assert.equal(readPlanDraft("home-1"), null);
+});
+
+test("drafts autosaved by the previous version are dropped", () => {
+  values.clear();
   values.set(planDraftStorageKey("home-1"), JSON.stringify({
     version: 1,
     propertyId: "home-1",
-    inputs: { monthlyEmiThousands: "not-a-number" },
-    extraEmisPerYear: 2,
+    inputs: { ...buildBaselinePlanInputs(20_000_000), monthlyEmiThousands: 90 },
+    extraEmisPerYear: 0,
     updatedAt: Date.now(),
   }));
 
+  assert.equal(readPlanDraft("home-1"), null);
+});
+
+test("reset clears the stored draft so defaults come back", () => {
+  values.clear();
+  writePlanDraft("home-1", { ...buildBaselinePlanInputs(20_000_000), monthlyEmiThousands: 250 }, 3);
+  assert.equal(readPlanDraft("home-1")?.inputs.monthlyEmiThousands, 250);
+
+  clearPlanDraft("home-1");
   assert.equal(readPlanDraft("home-1"), null);
 });
 

@@ -229,7 +229,7 @@ pub fn properties_from_serving_records(
     properties_from_serving_records_with_edges(entities, &[], fact_index, bundle_version)
 }
 
-fn properties_from_serving_records_with_edges(
+pub(crate) fn properties_from_serving_records_with_edges(
     entities: &[ServingEntityRecord],
     edges: &[crate::serving::ServingEdgeRecord],
     fact_index: &ServingFactIndex,

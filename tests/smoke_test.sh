@@ -233,15 +233,10 @@ if [[ -n "$FIRST_ID" ]]; then
     '(.buyer_report.complaints | length >= 2) and ([.buyer_report.complaints[].theme_counts | length] | add > 0) and (.buyer_report.builder_portfolio.projects | length > 1)' \
     "expected scoped complaints, themes, and related catalog projects"
 
-  check "Elysium keeps filed legal and finance declarations" \
-    "${BASE}/api/properties/discovered-elysium-at-brigade-cornerstone-utopia-3bhk/rera" \
-    '([.buyer_report.fact_sections[] | select(.id == "finance") | .facts[].key] | index("rera_land_litigation") != null and index("rera_has_borrowing") != null)' \
-    "expected litigation and borrowing declarations"
-
-  check "Cloud Forest keeps quarterly progress and filing receipts" \
-    "${BASE}/api/properties/discovered-cloud-forest-3bhk/rera" \
-    '([.evidence.series[] | select(.series_type == "quarterly_inventory")] | length > 0) and ([.evidence.entities[] | select(.entity_type == "document")] | length > 0)' \
-    "expected quarterly series and filing documents"
+  check "Incomplete societies stay outside the serving catalog" \
+    "${BASE}/api/properties" \
+    '([.[].id] | index("discovered-elysium-at-brigade-cornerstone-utopia-3bhk") == null) and ([.[].id] | index("discovered-cloud-forest-3bhk") == null)' \
+    "expected size-incomplete Elysium and Cloud Forest cards to remain quarantined"
 
   check "Crimson keeps complaint context and promoted plans" \
     "${BASE}/api/properties/discovered-brigade-lakefront-crimson-3bhk" \

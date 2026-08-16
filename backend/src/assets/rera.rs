@@ -540,20 +540,22 @@ fn canonical_rows(projects: &[ReraProjectSnapshotRecord]) -> CanonicalSocietyRow
             .get(&project_key)
             .cloned()
             .unwrap_or_else(|| CanonicalName::from_project(&project.project_name));
-        let should_group_phase = phase_group_slugs.contains(&canonical_name.slug);
-        let society_id = if should_group_phase {
+        let name_slug = slug(&project.project_name);
+        let should_group_registrations = phase_group_slugs.contains(&canonical_name.slug)
+            || name_counts.get(&name_slug).is_some_and(|count| *count > 1);
+        let society_id = if should_group_registrations {
             format!("society:{}", canonical_name.slug)
         } else {
             project.society_entity_id()
         };
-        let name_slug = slug(&project.project_name);
         mappings.insert(
             project_key.clone(),
             ReraCanonicalMappingRecord {
                 project_key,
                 canonical_entity_id: society_id.clone(),
-                alias_entity_id: (!should_group_phase && name_counts.get(&name_slug) == Some(&1))
-                    .then(|| format!("society:{name_slug}")),
+                alias_entity_id: (!should_group_registrations
+                    && name_counts.get(&name_slug) == Some(&1))
+                .then(|| format!("society:{name_slug}")),
                 project_name: project.project_name.clone(),
                 registration_number: project.registration_number.clone(),
                 ack_number: project.ack_number.clone(),
@@ -1473,6 +1475,28 @@ mod tests {
             .mappings
             .iter()
             .all(|mapping| mapping.canonical_entity_id == "society:sumadhura-edition"));
+        assert!(rows
+            .mappings
+            .iter()
+            .all(|mapping| mapping.alias_entity_id.is_none()));
+    }
+
+    #[test]
+    fn canonical_rows_group_repeated_exact_project_names_under_one_society() {
+        let fetched_at = Utc.with_ymd_and_hms(2026, 8, 1, 10, 0, 0).unwrap();
+        let rows = canonical_rows(&[
+            test_project("ACK-1", "PRM-ARVIND-1", "Arvind Bel Air", fetched_at),
+            test_project("ACK-2", "PRM-ARVIND-2", "Arvind Bel Air", fetched_at),
+        ]);
+
+        assert_eq!(rows.entities.len(), 1);
+        assert_eq!(rows.entities[0].entity_id, "society:arvind-bel-air");
+        assert_eq!(rows.entities[0].name, "Arvind Bel Air");
+        assert_eq!(rows.mappings.len(), 2);
+        assert!(rows
+            .mappings
+            .iter()
+            .all(|mapping| mapping.canonical_entity_id == "society:arvind-bel-air"));
         assert!(rows
             .mappings
             .iter()

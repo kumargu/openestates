@@ -7,13 +7,14 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::assets::{AssetPathBuilder, MaterializationRecord, MaterializationStatus};
+use crate::dag_config::load_serving_eligibility;
 use crate::knowledge::FactValue;
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
 use super::{
     read_edges_parquet, read_entities_parquet, read_facts_parquet, read_search_metadata_parquet,
-    BundleArtifactKind, ParquetReadError, ServingBundleManifest, ServingFactRecord,
-    SEARCH_SERVING_BUNDLE_ASSET_ID,
+    BundleArtifactKind, ParquetReadError, ServingBundleManifest, ServingFactIndex,
+    ServingFactRecord, ServingQuarantineReport, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 
 const PUBLIC_MEDIA_PREFIX: &str = "/societies/";
@@ -34,6 +35,7 @@ pub struct ServingBundleValidationReport {
     pub bundle_version: String,
     pub artifacts_checked: usize,
     pub entity_count: usize,
+    pub property_count: usize,
     pub fact_count: usize,
     pub search_metadata_count: usize,
     pub edge_count: usize,
@@ -150,6 +152,17 @@ pub async fn validate_search_serving_candidate(
     }
     let manifest_key = manifest_key_for_record(record)?;
     let manifest: ServingBundleManifest = lake.get_json(&manifest_key).await?;
+    if manifest.format_version < 7 {
+        issue(
+            &mut issues,
+            "unsupported_serving_bundle_format",
+            format!(
+                "format {} predates build-time eligibility quarantine; rebuild before promotion",
+                manifest.format_version
+            ),
+            Some(manifest_key.to_string()),
+        );
+    }
     if manifest.bundle_version != record.version {
         issue(
             &mut issues,
@@ -223,7 +236,7 @@ pub async fn validate_search_serving_candidate(
             );
         }
     }
-    for required in [
+    let mut required_artifact_kinds = vec![
         BundleArtifactKind::EntitiesParquet,
         BundleArtifactKind::FactsParquet,
         BundleArtifactKind::EdgesParquet,
@@ -231,7 +244,11 @@ pub async fn validate_search_serving_candidate(
         BundleArtifactKind::SchemaJson,
         BundleArtifactKind::TrustPolicyJson,
         BundleArtifactKind::TantivyIndexFile,
-    ] {
+    ];
+    if manifest.format_version >= 7 {
+        required_artifact_kinds.push(BundleArtifactKind::QuarantineJson);
+    }
+    for required in required_artifact_kinds {
         if !artifact_kinds.contains(&format!("{required:?}")) {
             issue(
                 &mut issues,
@@ -250,6 +267,9 @@ pub async fn validate_search_serving_candidate(
     ];
     if let Some(edge_key) = manifest.edge_parquet_key.as_ref() {
         manifest_table_keys.push(edge_key);
+    }
+    if let Some(quarantine_key) = manifest.quarantine_report_key.as_ref() {
+        manifest_table_keys.push(quarantine_key);
     }
     for key in manifest_table_keys {
         if !artifact_keys.contains(key) {
@@ -298,6 +318,17 @@ pub async fn validate_search_serving_candidate(
         Some(key) => read_edges_parquet(&lake.get_bytes(&validated_key(key)?).await?)?,
         None => Vec::new(),
     };
+    if manifest.format_version >= 7 {
+        validate_quarantine_contract(lake, &manifest, &entities, &mut issues).await;
+        validate_clean_bundle_eligibility(
+            &manifest,
+            &entities,
+            &facts,
+            &metadata,
+            &edges,
+            &mut issues,
+        );
+    }
     check_count(
         &mut issues,
         "entity_count_mismatch",
@@ -323,6 +354,17 @@ pub async fn validate_search_serving_candidate(
         edges.len(),
     );
 
+    validate_record_relations(&entities, &facts, &metadata, &edges, &mut issues);
+    let mut fact_index = ServingFactIndex::from_records(facts.clone(), metadata.clone());
+    fact_index.add_society_aliases(&entities);
+    let properties = crate::data_loader::properties_from_serving_records_with_edges(
+        &entities,
+        &edges,
+        &fact_index,
+        &manifest.bundle_version,
+    );
+    validate_property_projection(&properties, &mut issues);
+
     let media_references = collect_media_references(&facts);
     let media_references_checked = media_references.len();
     let mut media_results = stream::iter(media_references.into_values())
@@ -345,6 +387,7 @@ pub async fn validate_search_serving_candidate(
         bundle_version: manifest.bundle_version,
         artifacts_checked: manifest.artifacts.len(),
         entity_count: entities.len(),
+        property_count: properties.len(),
         fact_count: facts.len(),
         search_metadata_count: metadata.len(),
         edge_count: edges.len(),
@@ -352,6 +395,400 @@ pub async fn validate_search_serving_candidate(
         passed: issues.is_empty(),
         issues,
     })
+}
+
+async fn validate_quarantine_contract(
+    lake: &LakeStore,
+    manifest: &ServingBundleManifest,
+    entities: &[super::ServingEntityRecord],
+    issues: &mut Vec<ServingBundleValidationIssue>,
+) {
+    if manifest.eligibility_policy_version == 0 {
+        issue(
+            issues,
+            "missing_eligibility_policy_version",
+            "format 7 serving bundle does not pin an eligibility policy version",
+            None,
+        );
+    }
+    let Some(report_key) = manifest.quarantine_report_key.as_deref() else {
+        issue(
+            issues,
+            "missing_quarantine_report",
+            "format 7 serving bundle has no quarantine report key",
+            None,
+        );
+        return;
+    };
+    let report = match validated_key(report_key) {
+        Ok(key) => match lake.get_json::<ServingQuarantineReport>(&key).await {
+            Ok(report) => report,
+            Err(error) => {
+                issue(
+                    issues,
+                    "invalid_quarantine_report",
+                    error.to_string(),
+                    Some(report_key.to_string()),
+                );
+                return;
+            }
+        },
+        Err(error) => {
+            issue(
+                issues,
+                "invalid_quarantine_report_key",
+                error.to_string(),
+                Some(report_key.to_string()),
+            );
+            return;
+        }
+    };
+
+    if report.source_bundle_version != manifest.bundle_version {
+        issue(
+            issues,
+            "quarantine_bundle_version_mismatch",
+            "quarantine report does not pin the serving bundle version",
+            Some(report.source_bundle_version.clone()),
+        );
+    }
+    if report.eligibility_policy_version != manifest.eligibility_policy_version {
+        issue(
+            issues,
+            "quarantine_policy_version_mismatch",
+            "quarantine report and serving manifest use different eligibility policies",
+            Some(report.eligibility_policy_version.to_string()),
+        );
+    }
+    check_count(
+        issues,
+        "quarantined_society_count_mismatch",
+        manifest.quarantined_society_count,
+        report.societies.len(),
+    );
+    if report.excluded_society_count != manifest.quarantined_society_count {
+        issue(
+            issues,
+            "quarantine_report_count_mismatch",
+            format!(
+                "manifest declares {}, report declares {}",
+                manifest.quarantined_society_count, report.excluded_society_count
+            ),
+            None,
+        );
+    }
+    if report.reason_counts != manifest.quarantine_reason_counts {
+        issue(
+            issues,
+            "quarantine_reason_counts_mismatch",
+            "quarantine report and serving manifest reason summaries differ",
+            None,
+        );
+    }
+
+    let clean_entity_ids = entities
+        .iter()
+        .map(|entity| entity.entity_id.as_str())
+        .collect::<BTreeSet<_>>();
+    for society in &report.societies {
+        for entity_id in society
+            .society_entity_ids
+            .iter()
+            .chain(&society.property_entity_ids)
+        {
+            if clean_entity_ids.contains(entity_id.as_str()) {
+                issue(
+                    issues,
+                    "quarantined_entity_in_clean_bundle",
+                    "quarantined society or property remains in clean serving entities",
+                    Some(entity_id.clone()),
+                );
+            }
+        }
+    }
+}
+
+fn validate_clean_bundle_eligibility(
+    manifest: &ServingBundleManifest,
+    entities: &[super::ServingEntityRecord],
+    facts: &[ServingFactRecord],
+    metadata: &[super::ServingSearchMetadataRecord],
+    edges: &[super::ServingEdgeRecord],
+    issues: &mut Vec<ServingBundleValidationIssue>,
+) {
+    let policy = match load_serving_eligibility() {
+        Ok(policy) => policy,
+        Err(error) => {
+            issue(
+                issues,
+                "invalid_serving_eligibility_policy",
+                error.to_string(),
+                None,
+            );
+            return;
+        }
+    };
+    if policy.version != manifest.eligibility_policy_version {
+        issue(
+            issues,
+            "eligibility_policy_version_mismatch",
+            format!(
+                "runtime policy is version {}, bundle pins version {}",
+                policy.version, manifest.eligibility_policy_version
+            ),
+            None,
+        );
+        return;
+    }
+    let classified = match super::eligibility::classify_and_prune(
+        entities.to_vec(),
+        facts.to_vec(),
+        metadata.to_vec(),
+        edges.to_vec(),
+        &manifest.bundle_version,
+        &policy,
+    ) {
+        Ok(classified) => classified,
+        Err(error) => {
+            issue(
+                issues,
+                "serving_eligibility_evaluation_failed",
+                error.to_string(),
+                None,
+            );
+            return;
+        }
+    };
+    for society in classified.quarantine.societies {
+        issue(
+            issues,
+            "clean_bundle_contains_ineligible_society",
+            format!(
+                "society fails build-time eligibility: {}",
+                society.reason_codes.join(", ")
+            ),
+            Some(society.runtime_society_id),
+        );
+    }
+}
+
+fn validate_record_relations(
+    entities: &[super::ServingEntityRecord],
+    facts: &[ServingFactRecord],
+    metadata: &[super::ServingSearchMetadataRecord],
+    edges: &[super::ServingEdgeRecord],
+    issues: &mut Vec<ServingBundleValidationIssue>,
+) {
+    let mut entity_ids = BTreeSet::new();
+    let mut society_by_runtime_id = BTreeMap::<String, String>::new();
+    for entity in entities {
+        if !entity_ids.insert(entity.entity_id.as_str()) {
+            issue(
+                issues,
+                "duplicate_entity_id",
+                "bundle contains the same entity id more than once",
+                Some(entity.entity_id.clone()),
+            );
+        }
+        if entity.entity_type == "society" {
+            let runtime_id = format!("soc-{}", entity_slug(&entity.name));
+            if let Some(existing) =
+                society_by_runtime_id.insert(runtime_id.clone(), entity.entity_id.clone())
+            {
+                if existing != entity.entity_id {
+                    issue(
+                        issues,
+                        "ambiguous_canonical_society_identity",
+                        format!(
+                            "runtime society id {runtime_id} is produced by both {existing} and {}",
+                            entity.entity_id
+                        ),
+                        Some(runtime_id),
+                    );
+                }
+            }
+        }
+    }
+
+    let mut fact_pairs = BTreeSet::new();
+    for fact in facts {
+        if !entity_ids.contains(fact.entity_id.as_str()) {
+            issue(
+                issues,
+                "fact_missing_entity",
+                "fact row references an entity absent from the bundle",
+                Some(format!("{}/{}", fact.entity_id, fact.fact_key)),
+            );
+        }
+        fact_pairs.insert((fact.entity_id.as_str(), fact.fact_key.as_str()));
+    }
+
+    let mut metadata_pairs = BTreeSet::new();
+    for row in metadata {
+        let pair = (row.entity_id.as_str(), row.fact_key.as_str());
+        if !fact_pairs.contains(&pair) {
+            issue(
+                issues,
+                "search_metadata_missing_fact",
+                "search metadata has no matching fact row",
+                Some(format!("{}/{}", row.entity_id, row.fact_key)),
+            );
+        }
+        metadata_pairs.insert(pair);
+    }
+    for (entity_id, fact_key) in fact_pairs.difference(&metadata_pairs) {
+        issue(
+            issues,
+            "fact_missing_search_metadata",
+            "fact row has no search metadata",
+            Some(format!("{entity_id}/{fact_key}")),
+        );
+    }
+
+    let entity_type_by_id = entities
+        .iter()
+        .map(|entity| (entity.entity_id.as_str(), entity.entity_type.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    let mut society_ids_by_property = BTreeMap::<&str, BTreeSet<&str>>::new();
+    for edge in edges {
+        if !entity_ids.contains(edge.from_entity_id.as_str())
+            || !entity_ids.contains(edge.to_entity_id.as_str())
+        {
+            issue(
+                issues,
+                "edge_missing_endpoint",
+                "edge references an entity absent from the bundle",
+                Some(format!(
+                    "{} -[{}]-> {}",
+                    edge.from_entity_id, edge.edge_type, edge.to_entity_id
+                )),
+            );
+        }
+        if edge.edge_type == "in_society" {
+            if entity_type_by_id.get(edge.from_entity_id.as_str()) != Some(&"property")
+                || entity_type_by_id.get(edge.to_entity_id.as_str()) != Some(&"society")
+            {
+                issue(
+                    issues,
+                    "invalid_in_society_relation",
+                    "in_society edge must connect a property to a society",
+                    Some(format!("{} -> {}", edge.from_entity_id, edge.to_entity_id)),
+                );
+            } else {
+                society_ids_by_property
+                    .entry(&edge.from_entity_id)
+                    .or_default()
+                    .insert(&edge.to_entity_id);
+            }
+        }
+    }
+    for property in entities
+        .iter()
+        .filter(|entity| entity.entity_type == "property")
+    {
+        let society_count = society_ids_by_property
+            .get(property.entity_id.as_str())
+            .map(BTreeSet::len)
+            .unwrap_or_default();
+        if society_count != 1 {
+            issue(
+                issues,
+                "invalid_property_society_cardinality",
+                format!(
+                    "property must have exactly one in_society relation, found {society_count}"
+                ),
+                Some(property.entity_id.clone()),
+            );
+        }
+    }
+}
+
+fn validate_property_projection(
+    properties: &[crate::models::Property],
+    issues: &mut Vec<ServingBundleValidationIssue>,
+) {
+    if properties.is_empty() {
+        issue(
+            issues,
+            "empty_property_projection",
+            "bundle produces no listable property cards",
+            None,
+        );
+        return;
+    }
+
+    let mut property_ids = BTreeSet::new();
+    for property in properties {
+        if !property_ids.insert(property.id.as_str()) {
+            issue(
+                issues,
+                "duplicate_property_projection",
+                "bundle produces the same property id more than once",
+                Some(property.id.clone()),
+            );
+        }
+        if property.hero_image.trim().is_empty() || property.images.is_empty() {
+            issue(
+                issues,
+                "incomplete_property_media",
+                "property card requires a hero image and gallery",
+                Some(property.id.clone()),
+            );
+        }
+        if property.area.trim().is_empty() {
+            issue(
+                issues,
+                "incomplete_property_area",
+                "property card requires an area",
+                Some(property.id.clone()),
+            );
+        }
+        if property.builder_name.trim().is_empty() {
+            issue(
+                issues,
+                "incomplete_property_builder",
+                "property card requires a builder",
+                Some(property.id.clone()),
+            );
+        }
+        let price_is_explicitly_unavailable = property
+            .transparency_tags
+            .iter()
+            .any(|tag| tag.eq_ignore_ascii_case("Price unavailable"));
+        if property.price == 0 && !price_is_explicitly_unavailable {
+            issue(
+                issues,
+                "incomplete_property_price",
+                "property card requires a positive price or an explicit unavailable state",
+                Some(property.id.clone()),
+            );
+        }
+        if property.carpet_area_sqft == 0 {
+            issue(
+                issues,
+                "incomplete_property_size",
+                "property card requires positive size data",
+                Some(property.id.clone()),
+            );
+        }
+    }
+}
+
+fn entity_slug(value: &str) -> String {
+    let mut output = String::new();
+    let mut pending_dash = false;
+    for character in value.trim().to_ascii_lowercase().chars() {
+        if character.is_ascii_alphanumeric() {
+            if pending_dash && !output.is_empty() {
+                output.push('-');
+            }
+            output.push(character);
+            pending_dash = false;
+        } else {
+            pending_dash = true;
+        }
+    }
+    output
 }
 
 pub fn write_frontend_media_manifest(
@@ -643,5 +1080,37 @@ mod tests {
             Some(hash)
         );
         assert!(!references.contains_key("https://example.com/remote.jpg"));
+    }
+
+    #[test]
+    fn repeatable_search_metadata_does_not_fail_release_validation() {
+        let entities = vec![super::super::ServingEntityRecord {
+            entity_id: "society:test".to_string(),
+            entity_type: "society".to_string(),
+            name: "Test Society".to_string(),
+            root_source: Some("rera".to_string()),
+            searchable_text: String::new(),
+        }];
+        let facts = vec![fact(FactValue::Text("School".to_string()))];
+        let metadata = super::super::ServingSearchMetadataRecord {
+            entity_id: "society:test".to_string(),
+            fact_key: "test_media".to_string(),
+            display_template: None,
+            answers_preferences: vec!["near school".to_string()],
+            scoring_direction: None,
+            scoring_weight: None,
+            scoring_thresholds: vec![],
+        };
+        let mut issues = Vec::new();
+
+        validate_record_relations(
+            &entities,
+            &facts,
+            &[metadata.clone(), metadata],
+            &[],
+            &mut issues,
+        );
+
+        assert!(issues.is_empty(), "unexpected issues: {issues:?}");
     }
 }

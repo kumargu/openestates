@@ -19,6 +19,7 @@ import {
   buildBaselinePlanInputs,
   calculateProjection,
   formatCurrency,
+  hasPlannablePrice,
   type ConstructionProfile,
   updatePlanInput,
   type EditablePlanInput,
@@ -33,6 +34,8 @@ import {
 import { buildMonthlyPlanVerdict, defaultPlanFocusYear } from "../features/home-plan/monthlyPlanView.ts";
 import {
   canPersistPlanDraft,
+  clearPlanDraft,
+  type PlanStatus,
   readPlanDraft,
   writePlanDraft,
 } from "../features/home-plan/planDrafts.ts";
@@ -98,7 +101,7 @@ export function HomePlanPage() {
   const [catalog, setCatalog] = useState<PropertyCard[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
   const [propertyData, setPropertyData] = useState<PropertyDetailResponse | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "not_found" | "error">("loading");
+  const [status, setStatus] = useState<PlanStatus>("loading");
   const [inputs, setInputs] = useState<PlanInputs | null>(null);
   const [previewYear, setPreviewYear] = useState<number | null>(null);
   const [pinnedYear, setPinnedYear] = useState<number | null>(null);
@@ -134,16 +137,22 @@ export function HomePlanPage() {
     getProperty(id)
       .then((data) => {
         if (!active) return;
+        setPropertyData(data);
+        setPreviewYear(null);
+        setPinnedYear(null);
+        if (!hasPlannablePrice(data.property.price)) {
+          setInputs(null);
+          setExtraEmisPerYear(0);
+          setStatus("no_price");
+          return;
+        }
         const baseline = buildBaselinePlanInputs(data.property.price, constructionProfileFor(data));
         const draft = readPlanDraft(id);
-        setPropertyData(data);
         setInputs(draft ? {
           ...draft.inputs,
           propertyPriceLakh: baseline.propertyPriceLakh,
           construction: baseline.construction,
         } : baseline);
-        setPreviewYear(null);
-        setPinnedYear(null);
         setExtraEmisPerYear(draft?.extraEmisPerYear ?? 0);
         setStatus("ready");
       })
@@ -154,11 +163,6 @@ export function HomePlanPage() {
       });
     return () => { active = false; };
   }, [id]);
-
-  useEffect(() => {
-    if (!id || !canPersistPlanDraft(id, propertyData?.property.id, status) || !inputs) return;
-    writePlanDraft(id, inputs, extraEmisPerYear);
-  }, [extraEmisPerYear, id, inputs, propertyData?.property.id, status]);
 
   const projection = useMemo(
     () => inputs ? calculateProjection(inputs, extraEmisPerYear) : null,
@@ -230,6 +234,12 @@ export function HomePlanPage() {
         <p>Add another home to your workspace and its rent vs buy plan will be ready here.</p>
         <Link to="/">Explore</Link>
       </section>
+    ) : status === "no_price" ? (
+      <section className="home-plan-empty">
+        <h1>We don’t have a price for this home yet.</h1>
+        <p>Rent vs buy starts from the asking price. Pick another home in your workspace to plan.</p>
+        <Link to="/">Explore</Link>
+      </section>
     ) : (
       <section className="home-plan-empty">
         <h1>We couldn’t open this plan.</h1>
@@ -278,14 +288,23 @@ export function HomePlanPage() {
     projection.loanFreeYear ?? "open",
     Math.round(verdict.advantage),
   ].join(":");
+  // Drafts capture what the buyer changed, so they are written on edit only.
+  const persistEdit = (nextInputs: PlanInputs, nextExtraEmisPerYear: number) => {
+    if (!canPersistPlanDraft(id, propertyData.property.id, status)) return;
+    writePlanDraft(id, nextInputs, nextExtraEmisPerYear);
+  };
+
   const updateInput = (key: EditablePlanInput, value: number) => {
+    const next = updatePlanInput(inputs, key, value);
     setPreviewYear(null);
-    setInputs((current) => current ? updatePlanInput(current, key, value) : current);
+    setInputs(next);
+    persistEdit(next, extraEmisPerYear);
   };
 
   const updateExtraEmisPerYear = (count: number) => {
     setPreviewYear(null);
     setExtraEmisPerYear(count);
+    persistEdit(inputs, count);
   };
 
   const resetInputs = () => {
@@ -293,6 +312,7 @@ export function HomePlanPage() {
     setPreviewYear(null);
     setPinnedYear(null);
     setExtraEmisPerYear(0);
+    clearPlanDraft(id);
   };
 
   return (

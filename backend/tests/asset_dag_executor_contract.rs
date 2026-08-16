@@ -64,7 +64,10 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
 
     let options = AssetDagExecutionOptions::new(run_partition.clone(), now)
         .with_version("2026-07-13T06:00Z")
-        .with_source_inputs(mock_source_inputs(now));
+        .with_source_inputs(mock_source_inputs(now))
+        .with_forced_assets(vec![asset_id(
+            backend::assets::SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+        )]);
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
         .await
@@ -89,7 +92,11 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
-        assert!(report.executed_assets.contains(&asset_id(id)));
+        assert!(
+            report.executed_assets.contains(&asset_id(id)),
+            "expected {id} to execute; executed {:?}",
+            report.executed_assets
+        );
     }
 
     let kg_record = store
@@ -444,7 +451,12 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         .parent_materializations
         .contains(&approach_road_record.materialization_id));
     assert_eq!(kg_record.parent_materializations.len(), 3);
-    assert!(parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await >= 94);
+    let kg_fact_rows =
+        parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await;
+    assert!(
+        kg_fact_rows >= 85,
+        "expected at least 85 KG facts, got {kg_fact_rows}"
+    );
 
     let serving_record = current_record(
         &store,
@@ -452,7 +464,12 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert!(serving_fact_rows(&lake, &serving_record).await >= 94);
+    let serving_rows = serving_fact_rows(&lake, &serving_record).await;
+    assert!(serving_rows > 0);
+    assert!(
+        serving_rows < kg_fact_rows,
+        "the serving bundle should prune facts for incomplete societies"
+    );
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -615,11 +632,11 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     );
     assert_eq!(
         parquet_rows_for_artifact(&lake, &canonical, "entities/part-00000.parquet").await,
-        5
+        4
     );
     assert_eq!(
         parquet_rows_for_artifact(&lake, &canonical, "edges/part-00000.parquet").await,
-        6
+        4
     );
     assert_eq!(
         parquet_rows_for_artifact(&lake, &canonical, "mappings/part-00000.parquet").await,
@@ -634,7 +651,12 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
             canonical.materialization_id.clone()
         ]
     );
-    assert!(parquet_rows_for_artifact(&lake, &legal, "facts/part-00000.parquet").await >= 32);
+    let legal_fact_rows =
+        parquet_rows_for_artifact(&lake, &legal, "facts/part-00000.parquet").await;
+    assert!(
+        legal_fact_rows >= 27,
+        "expected at least 27 RERA facts, got {legal_fact_rows}"
+    );
 
     let kg = current_record(&store, KG_SOCIETY_VIEW_ASSET_ID, &AssetPartition::global()).await;
     assert!(kg
@@ -818,9 +840,10 @@ async fn executor_requires_source_inputs_without_promoting_current_source_pointe
     let lake = LakeStore::local(root.path()).unwrap();
     let store = AssetMaterializationStore::new(lake.clone());
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
-    seed_authoritative_upstreams(&lake, &store, now, &AssetPartition::global()).await;
-
     let run_partition = source_run_partition();
+    seed_current_upstreams_for_partition(&lake, &store, now, &run_partition).await;
+    seed_required_red_flag_upstreams(&lake, &store, now).await;
+
     let options = AssetDagExecutionOptions::new(run_partition.clone(), now)
         .with_source_inputs(AssetSourceInputs::default());
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
@@ -834,7 +857,10 @@ async fn executor_requires_source_inputs_without_promoting_current_source_pointe
         run_step(&report.manifest, SEARCH_SERVING_BUNDLE_ASSET_ID).status,
         AssetRunStepStatus::Succeeded
     );
-    for (id, partition) in [(GOOGLE_PLACES_WEEKLY_ASSET_ID, google_fact_partition())] {
+    for (id, partition) in [(
+        EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+        AssetPartition::new([("source", "external_image")]),
+    )] {
         assert!(store
             .current_record(&asset_id(id), &partition)
             .await
@@ -1296,6 +1322,7 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
     let run_partition = source_run_partition();
     seed_current_upstreams_for_partition(&lake, &store, now, &run_partition).await;
+    seed_required_red_flag_upstreams(&lake, &store, now).await;
 
     let options = AssetDagExecutionOptions::new(run_partition, now)
         .with_source_inputs(AssetSourceInputs::default());
@@ -1310,6 +1337,7 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
             asset_id(BUILDER_RERA_AGGREGATES_ASSET_ID),
             asset_id(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID),
             asset_id(HOME_STATE_SIGNALS_ASSET_ID),
+            asset_id(CURRENT_PROJECT_FACTS_ASSET_ID),
             asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),
         ]
@@ -1539,7 +1567,7 @@ async fn seed_current_upstreams_for_partition(
         &AssetPartition::global(),
         vec![
             canonical.materialization_id.clone(),
-            rera_facts.materialization_id.clone(),
+            google_facts.materialization_id.clone(),
         ],
         now,
         "environment.groundwater_potential_class",
@@ -1582,6 +1610,49 @@ async fn seed_current_upstreams_for_partition(
             metro_facts,
         ),
     ])
+}
+
+async fn seed_required_red_flag_upstreams(
+    lake: &LakeStore,
+    store: &AssetMaterializationStore,
+    now: chrono::DateTime<Utc>,
+) {
+    let canonical = current_record(
+        store,
+        CANONICAL_SOCIETY_NODES_ASSET_ID,
+        &AssetPartition::global(),
+    )
+    .await;
+    for (asset_id, source, fact_key, value) in [
+        (
+            backend::assets::OSM_POWER_LINE_FACTS_ASSET_ID,
+            "openstreetmap_power",
+            "transmission_line_nearby",
+            "No mapped transmission line within the fixture radius",
+        ),
+        (
+            backend::assets::STORMWATER_DRAIN_FACTS_ASSET_ID,
+            "openstreetmap_stormwater",
+            "stormwater_drain_nearby",
+            "No mapped stormwater drain within the fixture radius",
+        ),
+    ] {
+        seed_skill_fact_current(
+            lake,
+            store,
+            asset_id,
+            source,
+            "2026-07-13",
+            &AssetPartition::global(),
+            vec![canonical.materialization_id.clone()],
+            now,
+            fact_key,
+            value,
+            "Computed",
+            &format!("seed-{asset_id}"),
+        )
+        .await;
+    }
 }
 
 async fn current_record(
@@ -1701,6 +1772,13 @@ fn mock_graph() -> KnowledgeGraph {
         SourceType::Reddit,
         &["greenery", "trees"],
     ));
+    society.add_fact(fact(
+        "builder_name",
+        FactValue::Text("Test Builder".to_string()),
+        SourceType::Rera,
+        &["trusted builder"],
+    ));
+    add_serving_eligibility_facts(&mut society);
 
     let mut builder = Node::new("builder:test-builder", NodeType::Builder, "Test Builder");
     builder.add_fact(fact(
@@ -1713,6 +1791,7 @@ fn mock_graph() -> KnowledgeGraph {
     graph.add_node(society);
     let mut rera_alias = Node::new("society:rera-meadows", NodeType::Society, "RERA Meadows");
     rera_alias.root_source = Some(RootSource::Legacy);
+    add_serving_eligibility_facts(&mut rera_alias);
     graph.add_node(rera_alias);
     graph.add_node(builder);
     graph.add_edge(Edge {
@@ -1730,6 +1809,34 @@ fn mock_graph() -> KnowledgeGraph {
         },
     });
     graph
+}
+
+fn add_serving_eligibility_facts(society: &mut Node) {
+    for (key, value) in [
+        ("rera_registered", FactValue::Bool(true)),
+        (
+            "approach_road_condition",
+            FactValue::Text("documented".to_string()),
+        ),
+        ("area", FactValue::Text("Whitefield".to_string())),
+        ("builder_name", FactValue::Text("Test Builder".to_string())),
+        (
+            "listing_3bhk",
+            FactValue::Text(
+                serde_json::json!({"price": 31_000_000.0, "area_sqft": 1_900.0}).to_string(),
+            ),
+        ),
+        (
+            "hero_image",
+            FactValue::Text("https://img.example.com/green-acre.webp".to_string()),
+        ),
+        (
+            "images",
+            FactValue::Tags(vec!["https://img.example.com/green-acre.webp".to_string()]),
+        ),
+    ] {
+        society.add_fact(fact(key, value, SourceType::Rera, &[]));
+    }
 }
 
 fn fact(

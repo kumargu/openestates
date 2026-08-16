@@ -212,7 +212,7 @@ impl KgViewRecords {
         support_annotations: &[SkillFactAnnotationRecord],
     ) -> Result<Self, KgSocietyViewMaterializeError> {
         let mut records = Self::from_graph(graph)?;
-        let canonical_aliases = canonical_society_alias_map(canonical_entities);
+        let canonical_aliases = canonical_society_alias_map(canonical_entities)?;
         records.rewrite_entity_references(&canonical_aliases);
         let shadow_alias_entity_ids = canonical_aliases.keys().cloned().collect();
         records.remove_entities(&shadow_alias_entity_ids)?;
@@ -589,16 +589,26 @@ fn slug(value: &str) -> String {
 
 fn canonical_society_alias_map(
     canonical_entities: &[KgViewEntityRecord],
-) -> HashMap<String, String> {
-    canonical_entities
+) -> Result<HashMap<String, String>, KgSocietyViewMaterializeError> {
+    let mut aliases = HashMap::new();
+    for entity in canonical_entities
         .iter()
         .filter(|entity| entity.entity_type == "society")
-        .filter_map(|entity| {
-            let alias_entity_id = format!("society:{}", slug(&entity.name));
-            (alias_entity_id != entity.entity_id)
-                .then_some((alias_entity_id, entity.entity_id.clone()))
-        })
-        .collect()
+    {
+        let alias_entity_id = format!("society:{}", slug(&entity.name));
+        if let Some(existing) = aliases.insert(alias_entity_id.clone(), entity.entity_id.clone()) {
+            if existing != entity.entity_id {
+                return Err(KgSocietyViewMaterializeError::InvalidCanonicalIdentity(
+                    format!(
+                        "{alias_entity_id} maps to both {existing} and {}",
+                        entity.entity_id
+                    ),
+                ));
+            }
+        }
+    }
+    aliases.retain(|alias, canonical| alias != canonical);
+    Ok(aliases)
 }
 
 fn rewrite_entity_id(entity_id: &mut String, aliases: &HashMap<String, String>) {
@@ -1725,6 +1735,7 @@ pub enum KgSocietyViewMaterializeError {
     Parquet(parquet::errors::ParquetError),
     Read(String),
     Coordinate(super::CurrentProjectFactsError),
+    InvalidCanonicalIdentity(String),
 }
 
 impl fmt::Display for KgSocietyViewMaterializeError {
@@ -1743,6 +1754,12 @@ impl fmt::Display for KgSocietyViewMaterializeError {
             Self::Parquet(err) => write!(f, "KG view Parquet error: {err}"),
             Self::Read(err) => write!(f, "KG view read error: {err}"),
             Self::Coordinate(err) => write!(f, "KG view coordinate resolution error: {err}"),
+            Self::InvalidCanonicalIdentity(message) => {
+                write!(
+                    f,
+                    "KG view canonical society identity is ambiguous: {message}"
+                )
+            }
         }
     }
 }
@@ -1775,6 +1792,44 @@ mod tests {
     use crate::knowledge::fact::{FactSource, SourceType};
     use crate::knowledge::node::{Node, NodeType, RootSource};
     use crate::knowledge::{FactValue, SourcedFact};
+
+    #[test]
+    fn duplicate_canonical_society_names_fail_before_kg_merge() {
+        let learned_at = Utc.with_ymd_and_hms(2026, 8, 16, 7, 0, 0).unwrap();
+        let canonical_entities = [
+            KgViewEntityRecord {
+                entity_id: "society:rera-first".to_string(),
+                entity_type: "society".to_string(),
+                name: "Arvind Bel Air".to_string(),
+                root_source: Some("rera".to_string()),
+                fact_count: 0,
+                created_at: learned_at,
+                updated_at: learned_at,
+            },
+            KgViewEntityRecord {
+                entity_id: "society:rera-second".to_string(),
+                entity_type: "society".to_string(),
+                name: "Arvind Bel Air".to_string(),
+                root_source: Some("rera".to_string()),
+                fact_count: 0,
+                created_at: learned_at,
+                updated_at: learned_at,
+            },
+        ];
+
+        let error = KgViewRecords::from_graph_with_asset_rows(
+            &KnowledgeGraph::new(),
+            &canonical_entities,
+            &[],
+            &[],
+            &[],
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("society:arvind-bel-air"));
+        assert!(error.to_string().contains("society:rera-first"));
+        assert!(error.to_string().contains("society:rera-second"));
+    }
 
     #[test]
     fn canonical_rera_entity_suppresses_shadow_alias_graph_node() {

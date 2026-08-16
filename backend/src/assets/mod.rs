@@ -69,8 +69,8 @@ pub use executor::{
 };
 pub use fan_in::{
     all_current_materialization_records_for_dependency,
-    all_current_partition_dependency_records_for_asset, sort_materialization_records,
-    AssetFanInError,
+    all_current_partition_dependency_records_for_asset, missing_current_dependency_records,
+    sort_materialization_records, AssetFanInError,
 };
 pub use google::{
     canonicalize_google_nearby_places_input, canonicalize_google_places_input,
@@ -112,8 +112,8 @@ pub use project_enrichment::{
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
 };
 pub use promotion::{
-    promote_search_serving_release, validate_search_serving_lineage, ServingReleasePromotion,
-    ServingReleasePromotionError,
+    promote_search_serving_release, validate_search_serving_convergence,
+    validate_search_serving_lineage, ServingReleasePromotion, ServingReleasePromotionError,
 };
 pub use reddit::{
     RedditThreadSnapshotManifest, RedditThreadSnapshotMaterialization,

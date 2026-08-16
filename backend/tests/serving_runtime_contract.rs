@@ -199,6 +199,7 @@ fn mock_graph() -> KnowledgeGraph {
         SourceType::Reddit,
         &["greenery", "trees", "calm layout"],
     ));
+    add_serving_eligibility_facts(&mut green, "/media/green.webp");
 
     let mut dense = Node::new(
         "society:dense-tower-whitefield",
@@ -212,10 +213,33 @@ fn mock_graph() -> KnowledgeGraph {
         SourceType::Reddit,
         &["traffic", "congestion"],
     ));
+    add_serving_eligibility_facts(&mut dense, "/media/dense.webp");
 
     graph.add_node(green);
     graph.add_node(dense);
     graph
+}
+
+fn add_serving_eligibility_facts(node: &mut Node, hero_image: &str) {
+    for (key, value) in [
+        ("rera_registered", FactValue::Bool(true)),
+        (
+            "approach_road_condition",
+            FactValue::Text("documented".to_string()),
+        ),
+        ("area", FactValue::Text("Whitefield".to_string())),
+        ("builder_name", FactValue::Text("Test Builder".to_string())),
+        (
+            "listing_3bhk",
+            FactValue::Text(
+                serde_json::json!({"price": 12_000_000.0, "area_sqft": 1_200.0}).to_string(),
+            ),
+        ),
+        ("hero_image", FactValue::Text(hero_image.to_string())),
+        ("images", FactValue::Tags(vec![hero_image.to_string()])),
+    ] {
+        node.add_fact(fact(key, value, SourceType::Rera, &[]));
+    }
 }
 
 fn fact(
