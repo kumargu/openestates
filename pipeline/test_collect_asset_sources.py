@@ -57,13 +57,157 @@ from pipeline.sources.external_listings import (
 )
 from pipeline.sources.external_images import (
     classify_media_candidate,
+    curate_gallery_records,
     skip_image_optimization,
     write_optimized_preview,
     write_sips_preview,
 )
+from pipeline.skills.fetch_images import ImageCandidate, score_candidate
 
 
 class CollectAssetSourcesTest(unittest.TestCase):
+    def test_image_search_rejects_another_project_from_same_builder(self):
+        candidate = ImageCandidate(
+            url="https://images.example/godrej-ananda-clubhouse.jpg",
+            source_page_url="https://example.test/godrej-ananda",
+            title="Godrej Ananda clubhouse in Bangalore",
+            width=1200,
+            height=800,
+            classification="amenity",
+        )
+
+        self.assertEqual(score_candidate(candidate, "Godrej Air"), 0.0)
+        self.assertTrue(any("society name mismatch" in value for value in candidate.penalties))
+
+    def test_image_search_accepts_exact_project_name_in_image_url(self):
+        candidate = ImageCandidate(
+            url="https://images.example/prestige-waterford/tower.jpg",
+            source_page_url="https://example.test/gallery",
+            title="Project tower",
+            width=1200,
+            height=800,
+            classification="building",
+        )
+
+        self.assertGreater(score_candidate(candidate, "Prestige Waterford"), 30.0)
+
+    def test_image_search_rejects_ambiguous_same_name_in_another_city(self):
+        candidate = ImageCandidate(
+            url="https://images.example/godrej-air.jpg",
+            source_page_url="https://example.test/gurgaon",
+            title="Godrej Air Sector 85 Gurgaon",
+            width=1200,
+            height=800,
+            classification="exterior",
+        )
+
+        self.assertEqual(
+            score_candidate(candidate, "Godrej Air", "Whitefield", "Bengaluru"),
+            0.0,
+        )
+
+    def test_image_search_promotes_real_site_provenance(self):
+        render = ImageCandidate(
+            url="https://images.example/prestige-waterford/elevation.jpg",
+            title="Prestige Waterford Whitefield",
+            width=1200,
+            height=800,
+            classification="exterior",
+        )
+        site_photo = ImageCandidate(
+            url="https://images.example/prestige-waterford/project-photo.jpg",
+            title="Prestige Waterford construction status Whitefield",
+            width=1200,
+            height=800,
+            classification="exterior",
+        )
+
+        self.assertGreater(
+            score_candidate(site_photo, "Prestige Waterford", "Whitefield", "Bengaluru"),
+            score_candidate(render, "Prestige Waterford", "Whitefield", "Bengaluru"),
+        )
+
+    def test_media_curation_is_role_aware_capped_and_stable(self):
+        records = [
+            {
+                "entity_id": "society:example-green",
+                "image_url": "https://img.example/pool.jpg",
+                "candidate_kind": "amenity",
+                "quality_score": 0.95,
+                "relevance_score": 0.9,
+                "rank": 1,
+                "allowed_slots": ["gallery"],
+            },
+            {
+                "entity_id": "society:example-green",
+                "image_url": "https://img.example/tower.jpg",
+                "candidate_kind": "building",
+                "quality_score": 0.9,
+                "relevance_score": 0.9,
+                "rank": 2,
+                "allowed_slots": ["hero", "gallery"],
+            },
+            {
+                "entity_id": "society:example-green",
+                "image_url": "https://img.example/exterior.jpg",
+                "candidate_kind": "exterior",
+                "quality_score": 0.8,
+                "relevance_score": 0.85,
+                "rank": 3,
+                "allowed_slots": ["hero", "gallery"],
+            },
+            {
+                "entity_id": "society:example-green",
+                "image_url": "https://img.example/road.jpg",
+                "candidate_kind": "neighbourhood",
+                "quality_score": 0.7,
+                "relevance_score": 0.8,
+                "rank": 4,
+                "allowed_slots": ["gallery"],
+            },
+            {
+                "entity_id": "society:example-green",
+                "image_url": "https://img.example/floor-plan.jpg",
+                "candidate_kind": "floor_plan",
+                "quality_score": 1.0,
+                "relevance_score": 1.0,
+                "rank": 5,
+                "allowed_slots": ["floor_plan"],
+            },
+        ]
+        policy = {
+            "collection": {
+                "max_promoted_gallery_frames": 3,
+                "hero_kind_order": ["exterior", "tower", "entrance", "building"],
+                "gallery_kind_order": [
+                    "exterior",
+                    "building",
+                    "amenity",
+                    "neighbourhood",
+                ],
+            }
+        }
+
+        first = curate_gallery_records(json.loads(json.dumps(records)), policy)
+        second = curate_gallery_records(json.loads(json.dumps(records)), policy)
+        self.assertEqual(first, second)
+        promoted = sorted(
+            (record for record in first if "gallery_order" in record),
+            key=lambda record: record["gallery_order"],
+        )
+        self.assertEqual(
+            [record["image_url"] for record in promoted],
+            [
+                "https://img.example/exterior.jpg",
+                "https://img.example/tower.jpg",
+                "https://img.example/pool.jpg",
+            ],
+        )
+        floor_plan = next(
+            record for record in first if record["candidate_kind"] == "floor_plan"
+        )
+        self.assertEqual(floor_plan["allowed_slots"], ["floor_plan"])
+
     def test_regulatory_capture_checks_all_lists_and_promotes_only_exact_registration(self):
         registration = "PRM/KA/RERA/1251/446/PR/200811/003528"
         project_orders = """
@@ -2119,7 +2263,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
             elevation["image_url"],
             "https://img.staticmb.com/mbimages/project/example-green-elevation.jpg",
         )
-        self.assertEqual(elevation["image_kind"], "exterior")
+        self.assertEqual(elevation["image_kind"], "building")
         self.assertEqual(elevation["width"], 1200)
         self.assertEqual(elevation["height"], 800)
         self.assertEqual(elevation["storage_policy"], "link_only")
@@ -2159,11 +2303,11 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         records = output["external_images_weekly"]["records"]
         by_kind = {record["candidate_kind"]: record for record in records}
-        self.assertIn("exterior", by_kind)
+        self.assertIn("building", by_kind)
         self.assertIn("amenity", by_kind)
         self.assertIn("floor_plan", by_kind)
         self.assertIn("site_plan", by_kind)
-        self.assertIn("hero", by_kind["exterior"]["allowed_slots"])
+        self.assertIn("hero", by_kind["building"]["allowed_slots"])
         self.assertIn("gallery", by_kind["amenity"]["allowed_slots"])
         self.assertEqual(by_kind["floor_plan"]["allowed_slots"], ["floor_plan"])
         self.assertEqual(by_kind["site_plan"]["allowed_slots"], ["site_plan"])
@@ -2291,7 +2435,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["image_url"], "/_staged_media/societies/prestige-waterford/1.jpg")
 
-    def test_external_image_collection_skips_portals_when_local_gallery_is_complete(self):
+    def test_external_image_collection_keeps_multi_source_candidates_with_local_gallery(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             photo_dir = (
                 Path(temp_dir)
@@ -2332,14 +2476,16 @@ class CollectAssetSourcesTest(unittest.TestCase):
             )
 
         records = output["external_images_weekly"]["records"]
-        self.assertEqual(len(records), 5)
+        self.assertEqual(len(records), 6)
         self.assertEqual(records[0]["source_name"], "LocalSocietyPhotos")
         self.assertTrue(
             all(
                 record["image_url"].startswith("/_staged_media/societies/example-green/")
-                for record in records
+                for record in records[:5]
             )
         )
+        self.assertEqual(records[5]["source_name"], "SquareYards")
+        self.assertNotIn("gallery", records[5]["allowed_slots"])
 
     def test_external_image_collection_can_fill_local_society_photos_from_policy(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2541,6 +2687,30 @@ class CollectAssetSourcesTest(unittest.TestCase):
         )
 
         self.assertEqual(qa["reject_reason"], "watermark:content_sha256")
+        self.assertEqual(qa["allowed_slots"], [])
+
+    def test_media_classifier_rejects_blurry_content_signal(self):
+        qa = classify_media_candidate(
+            image_url="https://img.example.com/example-green.jpg",
+            original_image_url="https://img.example.com/example-green.jpg",
+            alt_text="Example Green exterior",
+            width=1200,
+            height=800,
+            source_name="BuilderOfficial",
+            source_bucket=None,
+            source_page={},
+            policy={
+                "promotion_slots": {
+                    "hero": ["exterior"],
+                    "gallery": ["exterior"],
+                },
+                "reject_kinds": [],
+            },
+            score=90.0,
+            content_reject_reason="blur_or_low_detail",
+        )
+
+        self.assertEqual(qa["reject_reason"], "content:blur_or_low_detail")
         self.assertEqual(qa["allowed_slots"], [])
 
     def test_local_society_photos_use_provenance_for_watermark_rejection(self):

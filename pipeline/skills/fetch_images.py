@@ -55,8 +55,9 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.5",
 }
 
-# How many images to keep per society
-TARGET_IMAGES = 5
+# A healthy property walker should have room to keep good frames while still
+# allowing the downstream curator to return fewer when the candidates are junk.
+TARGET_IMAGES = 18
 # Minimum image size in bytes (skip tiny icons/spacers)
 MIN_IMAGE_BYTES = 10_000
 # Maximum image size in bytes
@@ -89,6 +90,7 @@ NEGATIVE_URL_KEYWORDS = [
     "floorplan", "floor-plan", "floor_plan",
     "sitemap", "site-map", "site_map",
     "brochure", "pdf", "document",
+    "collage", "montage", "contact-sheet", "map-screenshot",
 ]
 
 # Keywords that suggest the image IS a good property photo
@@ -123,21 +125,34 @@ def classify_image(url: str, title: str) -> str:
     """Classify image type from URL and title text."""
     text = f"{url} {title}".lower()
 
-    if any(k in text for k in ["exterior", "elevation", "facade", "aerial", "building", "tower"]):
+    if any(k in text for k in ["floor plan", "floorplan", "floor-plan"]):
+        return "floor_plan"
+    if any(k in text for k in ["master plan", "masterplan", "site plan", "siteplan", "layout plan"]):
+        return "site_plan"
+    if any(k in text for k in ["location map", "route map", "map screenshot"]):
+        return "location_context"
+    if any(k in text for k in ["collage", "montage", "contact sheet"]):
+        return "collage"
+    if any(k in text for k in ["elevation", "facade", "building", "tower", "podium"]):
+        return "building"
+    if any(k in text for k in ["exterior", "aerial", "entrance", "main gate"]):
         return "exterior"
     if any(k in text for k in ["interior", "living", "bedroom", "kitchen", "bathroom", "hall"]):
         return "interior"
     if any(k in text for k in ["amenity", "amenities", "clubhouse", "pool", "gym", "garden", "playground"]):
-        return "amenities"
-    if any(k in text for k in ["master plan", "masterplan", "site plan", "siteplan", "layout plan"]):
-        return "master_plan"
-    if any(k in text for k in ["floor plan", "floorplan", "floor-plan"]):
-        return "floor_plan"
+        return "amenity"
+    if any(k in text for k in ["neighbourhood", "neighborhood", "approach road", "street view", "surroundings"]):
+        return "neighbourhood"
 
     return "unknown"
 
 
-def score_candidate(candidate: ImageCandidate, society_name: str) -> float:
+def score_candidate(
+    candidate: ImageCandidate,
+    society_name: str,
+    area: str = "",
+    city: str = "",
+) -> float:
     """Score an image candidate. Higher = better. Range roughly 0-100."""
     score = 50.0  # baseline
     url_lower = candidate.url.lower()
@@ -168,8 +183,71 @@ def score_candidate(candidate: ImageCandidate, society_name: str) -> float:
             candidate.bonuses.append(f"positive keyword: {kw}")
 
     # ── Society name relevance ──
-    name_parts = society_lower.split()
-    matches = sum(1 for part in name_parts if len(part) > 2 and part in title_lower)
+    # Search engines frequently return another project from the same builder.
+    # Require a strong name match across the result title, image URL, or source
+    # page before allowing the candidate into the download pool.
+    name_parts = set(re.findall(r"[a-z0-9]+", society_lower))
+    name_parts = {part for part in name_parts if len(part) > 2}
+    relevance_text = " ".join((title_lower, url_lower, candidate.source_page_url.lower()))
+    result_parts = set(re.findall(r"[a-z0-9]+", relevance_text))
+    title_parts = set(re.findall(r"[a-z0-9]+", title_lower))
+    matches = len(name_parts & result_parts)
+    required_matches = 1 if len(name_parts) <= 1 else max(2, (2 * len(name_parts) + 2) // 3)
+    title_matches = len(name_parts & title_parts)
+    if name_parts and (matches < required_matches or 0 < title_matches < required_matches):
+        candidate.penalties.append(
+            f"society name mismatch: {matches}/{required_matches} words"
+        )
+        candidate.score = 0.0
+        return candidate.score
+    variant_parts = {"nxt", "phase", "extension"}
+    if (variant_parts & result_parts) - name_parts:
+        candidate.penalties.append("different project variant")
+        candidate.score = 0.0
+        return candidate.score
+    listing_markers = (
+        "resale",
+        "rental",
+        "for rent",
+        "flat for sale",
+        "apartment for sale",
+        "without brokerage",
+    )
+    if any(marker in title_lower for marker in listing_markers):
+        candidate.penalties.append("individual listing photo")
+        candidate.score = 0.0
+        return candidate.score
+    if "slideserve" in relevance_text or title_lower.startswith("ppt "):
+        candidate.penalties.append("presentation image")
+        candidate.score = 0.0
+        return candidate.score
+    location_parts = set(re.findall(r"[a-z0-9]+", "{} {}".format(area, city).lower()))
+    location_parts = {part for part in location_parts if len(part) > 3}
+    if "bengaluru" in location_parts:
+        location_parts.add("bangalore")
+    if "bangalore" in location_parts:
+        location_parts.add("bengaluru")
+    if location_parts and not (location_parts & result_parts):
+        candidate.penalties.append("location mismatch")
+        candidate.score = 0.0
+        return candidate.score
+    real_site_markers = (
+        "actual site",
+        "construction status",
+        "construction update",
+        "site visit",
+        "walkthrough",
+        "project-photo",
+        "project_photo",
+        "possession status",
+    )
+    matched_real_site_marker = next(
+        (marker for marker in real_site_markers if marker in relevance_text),
+        None,
+    )
+    if matched_real_site_marker:
+        score += 20
+        candidate.bonuses.append(f"real-site signal: {matched_real_site_marker}")
     if matches >= 2:
         score += 15
         candidate.bonuses.append(f"name match: {matches} words")
@@ -203,14 +281,14 @@ def score_candidate(candidate: ImageCandidate, society_name: str) -> float:
     # ── Classification bonus ──
     if candidate.classification == "exterior":
         score += 10
-    elif candidate.classification == "amenities":
+    elif candidate.classification in ("building", "amenity"):
         score += 5
     elif candidate.classification == "floor_plan":
         score -= 25
         candidate.penalties.append("floor plan")
-    elif candidate.classification == "master_plan":
+    elif candidate.classification in ("site_plan", "location_context", "collage"):
         score -= 15
-        candidate.penalties.append("master plan")
+        candidate.penalties.append(candidate.classification.replace("_", " "))
 
     # ── File extension ──
     if url_lower.endswith(".svg") or url_lower.endswith(".gif"):
@@ -430,9 +508,11 @@ def _build_queries(name: str, area: str, city: str) -> List[str]:
     """Build search queries for a society."""
     base = f"{name} {area} {city}"
     return [
+        f'"{name}" {area} {city} actual site photo completed construction status walkthrough',
         f"{base} exterior",
-        f"{base} apartment building",
-        f"{name} {city} amenities clubhouse",
+        f"{base} tower elevation building",
+        f"{base} amenities clubhouse pool court",
+        f"{base} entrance approach road neighbourhood",
     ]
 
 
@@ -453,12 +533,19 @@ def fetch_images_for_entity(
 
     Returns metadata dict matching the Day 22 schema.
     """
-    slug = entity_id.replace("society:", "").replace("soc-", "").replace(" ", "_")
+    slug = _entity_slug(entity_id, name)
     root = project_root or PROJECT_ROOT
     photos_dir = root / "data" / "cache" / "media_ingest" / "societies"
     metadata_dir = root / "data" / "cache" / "image_metadata"
     dest_dir = photos_dir / slug
-    existing = sorted(dest_dir.glob("*.*")) if dest_dir.exists() else []
+    meta_file = metadata_dir / f"{slug}.json"
+    existing = sorted(dest_dir.glob("*.*"), key=_photo_sort_key) if dest_dir.exists() else []
+    existing_sources = []
+    if meta_file.exists() and not force:
+        try:
+            existing_sources = json.loads(meta_file.read_text()).get("sources", [])
+        except (OSError, json.JSONDecodeError):
+            existing_sources = []
 
     # Skip if already fetched (unless force)
     if not force and existing:
@@ -478,7 +565,8 @@ def fetch_images_for_entity(
     all_candidates = []  # type: List[ImageCandidate]
     seen_urls = set()
 
-    for query in queries:
+    query_intents = ("exterior", "exterior", "building", "amenity", "neighbourhood")
+    for query, query_intent in zip(queries, query_intents):
         if serpapi_key:
             candidates = search_serpapi(query, serpapi_key)
         else:
@@ -486,10 +574,12 @@ def fetch_images_for_entity(
             time.sleep(1.5)  # rate limit DDG
 
         for c in candidates:
+            if c.classification == "unknown" and query_intent in ("exterior", "building"):
+                c.classification = query_intent
             url_hash = hashlib.sha256(c.url.encode()).hexdigest()
             if url_hash not in seen_urls:
                 seen_urls.add(url_hash)
-                score_candidate(c, name)
+                score_candidate(c, name, area, city)
                 all_candidates.append(c)
 
     # Sort by score, take top candidates
@@ -515,18 +605,18 @@ def fetch_images_for_entity(
     # Download: aim for a good mix
     dest_dir.mkdir(parents=True, exist_ok=True)
     downloaded = [] if force else list(existing)
-    sources = []
+    sources = list(existing_sources)
     types_collected = set()
 
     # First pass: try to get diverse types (exterior first, then amenities, then others)
-    type_priority = ["exterior", "amenities", "unknown", "interior"]
+    type_priority = ["exterior", "building", "amenity", "neighbourhood", "unknown", "interior"]
     for target_type in type_priority:
         if len(downloaded) >= target_images:
             break
         for c in viable:
             if len(downloaded) >= target_images:
                 break
-            if c.url in [s["original_image_url"] for s in sources]:
+            if c.url in [s.get("original_image_url") for s in sources]:
                 continue
             # For first 2 images, prefer exterior; after that, mix
             if len(downloaded) < 2 and c.classification != "exterior" and target_type == "exterior":
@@ -546,6 +636,7 @@ def fetch_images_for_entity(
                     "original_image_url": c.url,
                     "search_engine": c.source,
                     "classification": c.classification,
+                    "title": c.title,
                     "score": c.score,
                     "width": result["width"],
                     "height": result["height"],
@@ -558,7 +649,7 @@ def fetch_images_for_entity(
         for c in viable:
             if len(downloaded) >= target_images:
                 break
-            if c.url in [s["original_image_url"] for s in sources]:
+            if c.url in [s.get("original_image_url") for s in sources]:
                 continue
             idx = len(downloaded) + 1
             dest = dest_dir / f"{idx}.jpg"
@@ -572,6 +663,7 @@ def fetch_images_for_entity(
                     "original_image_url": c.url,
                     "search_engine": c.source,
                     "classification": c.classification,
+                    "title": c.title,
                     "score": c.score,
                     "width": result["width"],
                     "height": result["height"],
@@ -582,7 +674,6 @@ def fetch_images_for_entity(
 
     # Save metadata
     metadata_dir.mkdir(parents=True, exist_ok=True)
-    meta_file = metadata_dir / f"{slug}.json"
     meta_file.write_text(json.dumps(metadata, indent=2))
 
     return metadata
@@ -596,6 +687,7 @@ def _build_metadata(
     sources: List[dict],
 ) -> dict:
     """Build the structured metadata dict."""
+    downloaded = sorted(downloaded, key=_photo_sort_key)
     photos = [f"/_staged_media/societies/{slug}/{p.name}" for p in downloaded]
     hero = photos[0] if photos else ""
     gallery = photos[1:] if len(photos) > 1 else []
@@ -613,6 +705,22 @@ def _build_metadata(
         "selection_confidence": confidence,
         "fetched_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def _photo_sort_key(path: Path) -> tuple:
+    try:
+        return (0, int(path.stem), path.name)
+    except ValueError:
+        return (1, path.stem, path.name)
+
+
+def _entity_slug(entity_id: str, name: str) -> str:
+    """Match the external-image collector's stable society staging slug."""
+    value = entity_id.split(":", 1)[1] if entity_id.startswith("society:") else entity_id
+    value = value.removeprefix("soc-")
+    if value.startswith("rera-") and name:
+        value = name
+    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -652,7 +760,7 @@ def populate_property_images():
     if PHOTOS_DIR.exists():
         for d in PHOTOS_DIR.iterdir():
             if d.is_dir():
-                photos = sorted(d.glob("*.*"))
+                photos = sorted(d.glob("*.*"), key=_photo_sort_key)
                 if photos:
                     slug_to_photos[d.name] = [
                         f"/_staged_media/societies/{d.name}/{p.name}" for p in photos

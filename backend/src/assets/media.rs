@@ -27,10 +27,10 @@ use super::{
 pub const EXTERNAL_IMAGES_WEEKLY_ASSET_ID: &str = "external_images_weekly";
 pub const IMAGE_MEDIA_FACTS_ASSET_ID: &str = "image_media_facts";
 
-const EXTERNAL_IMAGE_FORMAT_VERSION: u32 = 1;
+const EXTERNAL_IMAGE_FORMAT_VERSION: u32 = 2;
 const STAGED_MEDIA_PREFIX: &str = "/_staged_media/";
 const CONTENT_ADDRESSED_MEDIA_PREFIX: &str = "media/images/sha256";
-const MAX_RETAINED_MEDIA_PER_ENTITY: usize = 8;
+const MAX_RETAINED_MEDIA_PER_ENTITY: usize = 48;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LocalMediaInventoryEntry {
@@ -80,6 +80,10 @@ pub struct ExternalImageObservationRecord {
     pub dedupe_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub classification_method: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gallery_order: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub curation_confidence: Option<f64>,
     pub width: Option<u64>,
     pub height: Option<u64>,
     pub rank: Option<u64>,
@@ -95,6 +99,8 @@ pub struct ExternalImagesWeeklyInput {
     pub snapshot_date: String,
     #[serde(default)]
     pub records: Vec<ExternalImageObservationRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_promoted_gallery_frames: Option<u64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_health: Vec<ExternalImageSourceHealthRecord>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -264,12 +270,48 @@ impl MediaAssetMaterializer {
         for (_, unique) in by_entity {
             let mut entity_records = unique.into_values().collect::<Vec<_>>();
             sort_image_rows(&mut entity_records);
+            if let Some(limit) = input.max_promoted_gallery_frames {
+                enforce_promoted_gallery_limit(&mut entity_records, limit as usize);
+            }
             entity_records.truncate(MAX_RETAINED_MEDIA_PER_ENTITY);
             records.extend(entity_records);
         }
         let mut merged = input.clone();
         merged.records = records;
         Ok(merged)
+    }
+}
+
+fn enforce_promoted_gallery_limit(
+    records: &mut [ExternalImageObservationRecord],
+    max_frames: usize,
+) {
+    let mut gallery_indices = records
+        .iter()
+        .enumerate()
+        .filter(|(_, record)| {
+            record.reject_reason.is_none()
+                && record.allowed_slots.iter().any(|slot| slot == "gallery")
+        })
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    gallery_indices.sort_by(|left, right| gallery_row_order(&records[*left], &records[*right]));
+    gallery_indices.truncate(max_frames);
+    let kept_gallery_indices = gallery_indices.iter().copied().collect::<HashSet<_>>();
+    let hero_index = gallery_indices.iter().copied().find(|index| {
+        records[*index]
+            .allowed_slots
+            .iter()
+            .any(|slot| slot == "hero")
+    });
+
+    for (index, record) in records.iter_mut().enumerate() {
+        if !kept_gallery_indices.contains(&index) {
+            record.allowed_slots.retain(|slot| slot != "gallery");
+        }
+        if hero_index != Some(index) {
+            record.allowed_slots.retain(|slot| slot != "hero");
+        }
     }
 }
 
@@ -593,6 +635,8 @@ async fn read_external_image_rows(
         let allowed_slots = optional_string_column(&batch, "allowed_slots");
         let dedupe_key = optional_string_column(&batch, "dedupe_key");
         let classification_method = optional_string_column(&batch, "classification_method");
+        let gallery_order = optional_u64_column(&batch, "gallery_order");
+        let curation_confidence = optional_f64_column(&batch, "curation_confidence");
         let width = u64_column(&batch, "width")?;
         let height = u64_column(&batch, "height")?;
         let rank = u64_column(&batch, "rank")?;
@@ -618,6 +662,8 @@ async fn read_external_image_rows(
                 allowed_slots: parse_allowed_slots(optional_string_opt(allowed_slots, row))?,
                 dedupe_key: optional_string_opt(dedupe_key, row),
                 classification_method: optional_string_opt(classification_method, row),
+                gallery_order: optional_u64_opt(gallery_order, row),
+                curation_confidence: optional_f64_opt(curation_confidence, row),
                 width: optional_u64(width, row),
                 height: optional_u64(height, row),
                 rank: optional_u64(rank, row),
@@ -651,6 +697,8 @@ fn write_external_images_parquet(
         Field::new("allowed_slots", DataType::Utf8, true),
         Field::new("dedupe_key", DataType::Utf8, true),
         Field::new("classification_method", DataType::Utf8, true),
+        Field::new("gallery_order", DataType::UInt64, true),
+        Field::new("curation_confidence", DataType::Float64, true),
         Field::new("width", DataType::UInt64, true),
         Field::new("height", DataType::UInt64, true),
         Field::new("rank", DataType::UInt64, true),
@@ -692,6 +740,8 @@ fn write_external_images_parquet(
                     .iter()
                     .map(|record| record.classification_method.clone()),
             ),
+            optional_u64s(records.iter().map(|record| record.gallery_order)),
+            optional_f64s(records.iter().map(|record| record.curation_confidence)),
             optional_u64s(records.iter().map(|record| record.width)),
             optional_u64s(records.iter().map(|record| record.height)),
             optional_u64s(records.iter().map(|record| record.rank)),
@@ -786,8 +836,18 @@ fn append_image_facts(
             MediaFactSink { facts, annotations },
         )?;
     }
-    let image_urls = slot_rows(rows, "gallery")
-        .into_iter()
+    let mut gallery_rows = slot_rows(rows, "gallery");
+    if let Some(hero) = hero {
+        if let Some(index) = gallery_rows
+            .iter()
+            .position(|row| row.image_url == hero.image_url)
+        {
+            let hero = gallery_rows.remove(index);
+            gallery_rows.insert(0, hero);
+        }
+    }
+    let image_urls = gallery_rows
+        .iter()
         .map(|row| row.image_url.clone())
         .collect::<Vec<_>>();
     if !image_urls.is_empty() {
@@ -800,6 +860,48 @@ fn append_image_facts(
             MediaFactContext {
                 fact_key: "images",
                 display_template: "Project photos: {value}",
+                answers_preferences: &["photos", "gallery", "project images"],
+            },
+            MediaFactSink { facts, annotations },
+        )?;
+        let frames = gallery_rows
+            .iter()
+            .enumerate()
+            .map(|(sort_order, row)| {
+                let confidence = row.curation_confidence.unwrap_or_else(|| {
+                    row.quality_score
+                        .unwrap_or(0.0)
+                        .min(row.relevance_score.unwrap_or(0.0))
+                });
+                let skill =
+                    if row.classification_method.as_deref() == Some("fetch_images_heuristic") {
+                        "fetch_images"
+                    } else {
+                        "external_images"
+                    };
+                serde_json::json!({
+                    "url": row.image_url,
+                    "content_hash": row.content_sha256,
+                    "kind": row.candidate_kind.as_ref().or(row.image_kind.as_ref()),
+                    "confidence": confidence,
+                    "source": {
+                        "url": row.source_page_url,
+                        "source_type": row.source_name,
+                        "skill": skill,
+                    },
+                    "sort_order": sort_order,
+                })
+            })
+            .collect::<Vec<_>>();
+        append_fact(
+            entity_id,
+            FactValue::Text(serde_json::to_string(&frames)?),
+            source_url.clone(),
+            learned_at,
+            run_id,
+            MediaFactContext {
+                fact_key: "media.gallery_frames",
+                display_template: "Curated project gallery: {value}",
                 answers_preferences: &["photos", "gallery", "project images"],
             },
             MediaFactSink { facts, annotations },
@@ -861,6 +963,8 @@ fn append_image_facts(
                 "allowed_slots": row.allowed_slots,
                 "dedupe_key": row.dedupe_key,
                 "classification_method": row.classification_method,
+                "gallery_order": row.gallery_order,
+                "curation_confidence": row.curation_confidence,
                 "width": row.width,
                 "height": row.height,
                 "rank": row.rank,
@@ -958,27 +1062,37 @@ fn slot_rows<'a>(
         .filter(|row| row.reject_reason.is_none())
         .filter(|row| row.allowed_slots.iter().any(|allowed| allowed == slot))
         .collect::<Vec<_>>();
-    approved.sort_by(|left, right| {
-        right
-            .quality_score
-            .unwrap_or(0.0)
-            .partial_cmp(&left.quality_score.unwrap_or(0.0))
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| {
-                right
-                    .relevance_score
-                    .unwrap_or(0.0)
-                    .partial_cmp(&left.relevance_score.unwrap_or(0.0))
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .then_with(|| {
-                left.rank
-                    .unwrap_or(u64::MAX)
-                    .cmp(&right.rank.unwrap_or(u64::MAX))
-            })
-            .then_with(|| left.image_url.cmp(&right.image_url))
-    });
+    approved.sort_by(|left, right| gallery_row_order(left, right));
     approved
+}
+
+fn gallery_row_order(
+    left: &ExternalImageObservationRecord,
+    right: &ExternalImageObservationRecord,
+) -> std::cmp::Ordering {
+    left.gallery_order
+        .unwrap_or(u64::MAX)
+        .cmp(&right.gallery_order.unwrap_or(u64::MAX))
+        .then_with(|| {
+            right
+                .quality_score
+                .unwrap_or(0.0)
+                .partial_cmp(&left.quality_score.unwrap_or(0.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .then_with(|| {
+            right
+                .relevance_score
+                .unwrap_or(0.0)
+                .partial_cmp(&left.relevance_score.unwrap_or(0.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .then_with(|| {
+            left.rank
+                .unwrap_or(u64::MAX)
+                .cmp(&right.rank.unwrap_or(u64::MAX))
+        })
+        .then_with(|| left.image_url.cmp(&right.image_url))
 }
 
 struct MediaFactContext<'a> {
@@ -1131,6 +1245,12 @@ fn optional_f64_column<'a>(batch: &'a RecordBatch, name: &str) -> Option<&'a Flo
         .and_then(|column| column.as_any().downcast_ref::<Float64Array>())
 }
 
+fn optional_u64_column<'a>(batch: &'a RecordBatch, name: &str) -> Option<&'a UInt64Array> {
+    batch
+        .column_by_name(name)
+        .and_then(|column| column.as_any().downcast_ref::<UInt64Array>())
+}
+
 fn required_string(
     column: &StringArray,
     row: usize,
@@ -1152,6 +1272,10 @@ fn optional_string_opt(column: Option<&StringArray>, row: usize) -> Option<Strin
 
 fn optional_u64(column: &UInt64Array, row: usize) -> Option<u64> {
     (!column.is_null(row)).then(|| column.value(row))
+}
+
+fn optional_u64_opt(column: Option<&UInt64Array>, row: usize) -> Option<u64> {
+    column.and_then(|column| optional_u64(column, row))
 }
 
 fn optional_f64(column: &Float64Array, row: usize) -> Option<f64> {
@@ -1276,6 +1400,7 @@ mod tests {
                 Some(1200),
                 Some(800),
             )],
+            max_promoted_gallery_frames: None,
             source_health: Vec::new(),
             media_qa_report: None,
             source_watermarks: Vec::new(),
@@ -1328,6 +1453,7 @@ mod tests {
         let input = ExternalImagesWeeklyInput {
             snapshot_date: "2026-08-07".to_string(),
             records: vec![first, second],
+            max_promoted_gallery_frames: None,
             source_health: Vec::new(),
             media_qa_report: None,
             source_watermarks: Vec::new(),
@@ -1384,6 +1510,7 @@ mod tests {
         let input = ExternalImagesWeeklyInput {
             snapshot_date: "2026-08-07".to_string(),
             records: vec![row],
+            max_promoted_gallery_frames: None,
             source_health: Vec::new(),
             media_qa_report: None,
             source_watermarks: Vec::new(),
@@ -1419,6 +1546,7 @@ mod tests {
                 &ExternalImagesWeeklyInput {
                     snapshot_date: "2026-08-01".to_string(),
                     records: vec![retained],
+                    max_promoted_gallery_frames: None,
                     source_health: Vec::new(),
                     media_qa_report: None,
                     source_watermarks: Vec::new(),
@@ -1463,6 +1591,7 @@ mod tests {
                 &ExternalImagesWeeklyInput {
                     snapshot_date: "2026-08-08".to_string(),
                     records: vec![new_record, replacement],
+                    max_promoted_gallery_frames: None,
                     source_health: Vec::new(),
                     media_qa_report: None,
                     source_watermarks: Vec::new(),
@@ -1522,6 +1651,132 @@ mod tests {
         assert_eq!(
             tags_fact(&facts, "floor_plan_images"),
             vec!["https://img.example.com/floor-plan.webp"]
+        );
+        let frames = text_fact(&facts, "media.gallery_frames")
+            .and_then(|value| serde_json::from_str::<Vec<serde_json::Value>>(&value).ok())
+            .expect("curated gallery frames");
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0]["kind"], "exterior");
+        assert_eq!(frames[0]["sort_order"], 0);
+        assert_eq!(
+            frames[0]["source"]["skill"],
+            serde_json::Value::String("external_images".to_string())
+        );
+        assert!(!frames.iter().any(|frame| frame["kind"] == "floor_plan"));
+    }
+
+    #[test]
+    fn merged_weekly_media_respects_configured_gallery_cap() {
+        let mut carried = test_row(
+            "https://img.example.com/carried.webp",
+            "exterior",
+            vec!["hero", "gallery"],
+            None,
+            Some(0.9),
+            Some(0.9),
+            Some(1200),
+            Some(800),
+        );
+        carried.gallery_order = None;
+        let mut current_hero = carried.clone();
+        current_hero.image_url = "https://img.example.com/current-hero.webp".to_string();
+        current_hero.gallery_order = Some(0);
+        let mut current_gallery = carried.clone();
+        current_gallery.image_url = "https://img.example.com/current-gallery.webp".to_string();
+        current_gallery.gallery_order = Some(1);
+        let mut rows = vec![carried, current_hero, current_gallery];
+
+        enforce_promoted_gallery_limit(&mut rows, 2);
+
+        assert_eq!(
+            rows.iter()
+                .filter(|row| row.allowed_slots.iter().any(|slot| slot == "gallery"))
+                .count(),
+            2
+        );
+        assert_eq!(
+            rows.iter()
+                .filter(|row| row.allowed_slots.iter().any(|slot| slot == "hero"))
+                .count(),
+            1
+        );
+        assert!(rows[1].allowed_slots.iter().any(|slot| slot == "hero"));
+    }
+
+    #[test]
+    fn media_promotion_preserves_declared_gallery_order() {
+        let mut building = test_row(
+            "https://img.example.com/building.webp",
+            "building",
+            vec!["hero", "gallery"],
+            None,
+            Some(0.85),
+            Some(0.88),
+            Some(1200),
+            Some(800),
+        );
+        building.gallery_order = Some(0);
+        building.curation_confidence = Some(0.85);
+        let mut exterior = test_row(
+            "https://img.example.com/exterior.webp",
+            "exterior",
+            vec!["gallery"],
+            None,
+            Some(0.99),
+            Some(0.99),
+            Some(1600),
+            Some(900),
+        );
+        exterior.gallery_order = Some(1);
+        exterior.curation_confidence = Some(0.99);
+
+        let facts = facts_for(&[exterior, building]);
+        assert_eq!(
+            tags_fact(&facts, "images"),
+            vec![
+                "https://img.example.com/building.webp",
+                "https://img.example.com/exterior.webp",
+            ]
+        );
+    }
+
+    #[test]
+    fn media_promotion_places_the_selected_hero_first_in_the_gallery() {
+        let mut leading_gallery = test_row(
+            "https://img.example.com/leading.webp",
+            "exterior",
+            vec!["gallery"],
+            None,
+            Some(0.99),
+            Some(0.99),
+            Some(1600),
+            Some(900),
+        );
+        leading_gallery.gallery_order = Some(0);
+        let mut hero = test_row(
+            "https://img.example.com/hero.webp",
+            "exterior",
+            vec!["hero", "gallery"],
+            None,
+            Some(0.9),
+            Some(0.9),
+            Some(1200),
+            Some(800),
+        );
+        hero.gallery_order = Some(1);
+
+        let facts = facts_for(&[leading_gallery, hero]);
+
+        assert_eq!(
+            tags_fact(&facts, "images"),
+            vec![
+                "https://img.example.com/hero.webp",
+                "https://img.example.com/leading.webp",
+            ]
+        );
+        assert_eq!(
+            text_fact(&facts, "hero_image").as_deref(),
+            Some("https://img.example.com/hero.webp")
         );
     }
 
@@ -1632,6 +1887,8 @@ mod tests {
             allowed_slots: slots.into_iter().map(str::to_string).collect(),
             dedupe_key: Some(format!("url:{image_url}")),
             classification_method: Some("heuristic".to_string()),
+            gallery_order: None,
+            curation_confidence: None,
             width,
             height,
             rank: Some(1),
