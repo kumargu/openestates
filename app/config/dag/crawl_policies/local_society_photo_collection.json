@@ -1,7 +1,7 @@
 {
   "id": "local_society_photo_collection",
   "enabled": true,
-  "target_images": 8,
+  "target_images": 18,
   "source_skill": "fetch_images",
   "storage_path_template": "data/cache/media_ingest/societies/{society_slug}/{index}.{ext}",
   "staged_reference_template": "/_staged_media/societies/{society_slug}/{index}.{ext}",

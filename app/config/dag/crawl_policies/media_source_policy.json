@@ -9,9 +9,29 @@
     "allow_google_images_scraping": false,
     "allow_runtime_vision": false
   },
+  "collection": {
+    "max_candidates_per_entity": 48,
+    "max_optimized_images_per_entity": 24,
+    "max_promoted_gallery_frames": 18,
+    "hero_kind_order": [
+      "exterior",
+      "tower",
+      "entrance",
+      "building"
+    ],
+    "gallery_kind_order": [
+      "building",
+      "amenity",
+      "neighbourhood",
+      "exterior",
+      "tower",
+      "entrance"
+    ]
+  },
   "classification": {
     "hero_min_width": 900,
     "gallery_min_width": 600,
+    "blur_edge_variance_min": 8.0,
     "vision_command_env": "OPENESTATES_MEDIA_VISION_COMMAND",
     "vision_timeout_seconds": 20,
     "ambiguous_kinds": ["unknown", "exterior_or_render"],
@@ -24,8 +44,8 @@
     "rejected_content_sha256": []
   },
   "promotion_slots": {
-    "hero": ["exterior", "tower", "entrance"],
-    "gallery": ["exterior", "tower", "entrance", "amenity"],
+    "hero": ["exterior", "building", "tower", "entrance"],
+    "gallery": ["exterior", "building", "tower", "entrance", "amenity", "neighbourhood"],
     "floor_plan": ["floor_plan"],
     "site_plan": ["site_plan"],
     "location": ["location_context"]
@@ -34,6 +54,7 @@
     "logo",
     "thumbnail",
     "stock_or_marketing",
+    "collage",
     "interior_room",
     "bad_crop",
     "qr",
