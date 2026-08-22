@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Warn on buyer/product vocabulary outside config and tests.
+"""Audit buyer/product vocabulary outside config and tests.
 
-This is intentionally a review aid, not a CI gate. It scans Rust/TypeScript
-sources for search-intent vocabulary that should usually live in app/config/dag.
+The default mode is a review aid. ``--gate`` returns a failing exit code for
+production hardcoding so the same audit can protect CI and merge checks.
 """
 
 from __future__ import annotations
@@ -69,6 +69,12 @@ STRUCTURAL_SEARCH_TERMS = {
     "close to",
 }
 
+STRUCTURAL_FACT_KEYS = {
+    "geo.latitude",
+    "geo.longitude",
+    "place.category",
+}
+
 BLOCKED_SEARCH_CONFIG_ALIASES = {
     "aster",
     "bagalur",
@@ -114,6 +120,11 @@ def main() -> int:
         default="all",
         help="Scan all review-aid sources or only production search runtime.",
     )
+    parser.add_argument(
+        "--gate",
+        action="store_true",
+        help="Exit non-zero when product-semantic or blocked-alias findings exist.",
+    )
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -125,7 +136,9 @@ def main() -> int:
         re.IGNORECASE,
     )
 
+    fact_keys = load_fact_keys(root) - STRUCTURAL_FACT_KEYS
     findings: list[tuple[Path, int, str, str]] = []
+    fact_key_findings: list[tuple[Path, int, str, str]] = []
     for path in sorted(root.rglob("*")):
         if path.suffix not in SOURCE_SUFFIXES or not path.is_file():
             continue
@@ -146,23 +159,38 @@ def main() -> int:
         for line_no, line in enumerate(lines, start=1):
             if line_no in ignored_lines:
                 continue
+            if line.lstrip().startswith("//"):
+                continue
             match = pattern.search(line)
             if match:
                 findings.append((path.relative_to(root), line_no, match.group(0), line.strip()))
+        fact_key_findings.extend(
+            find_fact_key_comparisons(
+                path.relative_to(root),
+                lines,
+                fact_keys,
+                ignored_lines,
+            )
+        )
 
     blocked_config_aliases = find_blocked_search_config_aliases(root)
 
     print("Search hardcoding audit report")
     print("===============================")
-    print("Mode: warning only")
+    print(f"Mode: {'gate' if args.gate else 'warning only'}")
     print(f"Scope: {args.mode}")
     print(f"Config-derived terms: {len(terms)}")
     print(f"Findings: {len(findings)}")
     for rel, line_no, term, line in findings:
         print(f"{rel}:{line_no}: product_semantic? `{term}` :: {line}")
+    print(f"Fact-key comparison findings: {len(fact_key_findings)}")
+    for rel, line_no, fact_key, line in fact_key_findings:
+        print(f"{rel}:{line_no}: hardcoded_fact_key? `{fact_key}` :: {line}")
     print(f"Blocked search-config alias findings: {len(blocked_config_aliases)}")
     for rel, json_path, term, value in blocked_config_aliases:
         print(f"{rel}:{json_path}: blocked_alias? `{term}` :: {value}")
+    if args.gate and (findings or fact_key_findings or blocked_config_aliases):
+        return 1
     return 0
 
 
@@ -172,6 +200,48 @@ def load_product_terms(root: Path) -> set[str]:
     add_search_intent_terms(terms, read_json(dag / "search_intent.json"))
     add_nearby_category_terms(terms, read_json(dag / "nearby_place_categories.json"))
     return {term for term in terms if should_scan_term(term)}
+
+
+def load_fact_keys(root: Path) -> set[str]:
+    data = read_json(root / "app" / "config" / "dag" / "fact_registry.json")
+    keys: set[str] = set()
+    collect_fact_keys(data, keys)
+    return keys
+
+
+def collect_fact_keys(value: object, keys: set[str], parent_key: str = "") -> None:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            collect_fact_keys(item, keys, key)
+    elif isinstance(value, list):
+        for item in value:
+            collect_fact_keys(item, keys, parent_key)
+    elif isinstance(value, str) and parent_key in {"fact_key", "fact_keys"}:
+        keys.add(value)
+
+
+def find_fact_key_comparisons(
+    path: Path,
+    lines: list[str],
+    fact_keys: set[str],
+    ignored_lines: set[int],
+) -> list[tuple[Path, int, str, str]]:
+    findings: list[tuple[Path, int, str, str]] = []
+    for line_no, line in enumerate(lines, start=1):
+        if line_no in ignored_lines or line.lstrip().startswith("//"):
+            continue
+        for fact_key in fact_keys:
+            if not re.search(rf"(['\"])({re.escape(fact_key)})\1", line):
+                continue
+            comparison = (
+                "eq_ignore_ascii_case" in line
+                or "==" in line
+                or "!=" in line
+                or re.search(rf"(['\"]){re.escape(fact_key)}\1\s*=>", line)
+            )
+            if comparison:
+                findings.append((path, line_no, fact_key, line.strip()))
+    return findings
 
 
 def read_json(path: Path) -> object:

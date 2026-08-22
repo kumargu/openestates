@@ -1128,10 +1128,7 @@ fn configured_stemmed_tokens(terms: &[String]) -> HashSet<String> {
 }
 
 fn token_matches(query_token: &str, place_token: &str) -> bool {
-    query_token == place_token
-        || (query_token.len() >= 4
-            && place_token.len() >= 4
-            && (query_token.starts_with(place_token) || place_token.starts_with(query_token)))
+    super::index::token_matches_query(query_token, place_token)
 }
 
 pub(crate) fn serving_fact_text_snippets(fact: &ServingFactRecord) -> Vec<String> {

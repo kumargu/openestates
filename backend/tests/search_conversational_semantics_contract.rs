@@ -40,33 +40,62 @@ struct ControlledQueryBank {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ControlledQueryCase {
     id: String,
     query: String,
+    #[serde(rename = "category")]
+    _category: String,
     expected_semantics: ExpectedSemantics,
     fixture_expectation: FixtureExpectation,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ExpectedSemantics {
-    #[serde(default)]
-    positive_preferences: Vec<String>,
-    #[serde(default)]
-    negative_preferences: Vec<String>,
-    #[serde(default)]
-    ranking_priorities: Vec<String>,
-    #[serde(default)]
-    accepted_tradeoffs: Vec<String>,
+    area: Option<String>,
+    bhk: Option<u32>,
+    budget_max: Option<u64>,
+    society: Option<String>,
+    home_state: Option<String>,
+    exclude_home_state: Option<String>,
+    near: Option<String>,
+    place_family: Option<String>,
+    distance_max_km: Option<f64>,
+    abstain: Option<bool>,
+    unresolved_society: Option<String>,
+    branches: Option<Vec<ExpectedBranch>>,
+    positive_preferences: Option<Vec<String>>,
+    negative_preferences: Option<Vec<String>>,
+    ranking_priorities: Option<Vec<String>>,
+    accepted_tradeoffs: Option<Vec<String>>,
+    missing_optional_evidence: Option<MissingOptionalEvidence>,
     numeric_min: Option<NumericExpectation>,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct NumericExpectation {
     field: String,
     value: f64,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExpectedBranch {
+    area: String,
+    bhk: u32,
+    budget_max: u64,
+}
+
+#[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum MissingOptionalEvidence {
+    IncludeWithoutClaim,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FixtureExpectation {
     result_sets: Option<Vec<Vec<String>>>,
     first_id: Option<String>,
@@ -169,7 +198,7 @@ fn frozen_contextual_alternatives_apply_global_exclusion() {
 
 #[test]
 fn frozen_buyer_language_queries_execute_against_product_model() {
-    let fixture = MockSearchFixture::new();
+    let fixture = MockSearchFixture::with_buyer_candidates();
     let bank: ControlledQueryBank =
         serde_json::from_str(BUYER_LANGUAGE_BANK).expect("buyer-language bank is valid");
 
@@ -345,38 +374,39 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
         );
     }
 
-    for expected_preference in &case.expected_semantics.positive_preferences {
-        assert!(
-            output.positive_preferences.contains(expected_preference),
-            "{} did not compile positive preference {expected_preference:?}; actual={:?}",
-            case.id,
-            output.positive_preferences
-        );
+    let semantics = &case.expected_semantics;
+    if let Some(expected) = &semantics.positive_preferences {
+        for preference in expected {
+            assert!(
+                output.positive_preferences.contains(preference),
+                "{} did not compile positive preference {preference:?}; actual={:?}",
+                case.id,
+                output.positive_preferences
+            );
+        }
     }
-    for expected_preference in &case.expected_semantics.negative_preferences {
-        assert!(
-            output.negative_preferences.contains(expected_preference),
-            "{} did not compile negative preference {expected_preference:?}; actual={:?}",
-            case.id,
-            output.negative_preferences
-        );
-    }
-    for expected_tradeoff in &case.expected_semantics.accepted_tradeoffs {
-        assert!(
-            output.accepted_tradeoffs.contains(expected_tradeoff),
-            "{} did not compile accepted tradeoff {expected_tradeoff:?}; actual={:?}",
-            case.id,
-            output.accepted_tradeoffs
-        );
-    }
-    if !case.expected_semantics.ranking_priorities.is_empty() {
+    if let Some(expected) = &semantics.negative_preferences {
         assert_eq!(
-            output.ranking_priorities, case.expected_semantics.ranking_priorities,
+            &output.negative_preferences, expected,
+            "{} compiled the wrong negative preferences",
+            case.id
+        );
+    }
+    if let Some(expected) = &semantics.accepted_tradeoffs {
+        assert_eq!(
+            &output.accepted_tradeoffs, expected,
+            "{} compiled the wrong accepted tradeoffs",
+            case.id
+        );
+    }
+    if let Some(expected) = &semantics.ranking_priorities {
+        assert_eq!(
+            &output.ranking_priorities, expected,
             "{} compiled the wrong ranking priorities",
             case.id
         );
     }
-    if let Some(expected) = &case.expected_semantics.numeric_min {
+    if let Some(expected) = &semantics.numeric_min {
         assert!(
             output.min_constraints.iter().any(|(field, value)| {
                 field.eq_ignore_ascii_case(&expected.field)
@@ -389,13 +419,161 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
             output.min_constraints
         );
     }
+
+    if let Some(expected) = &semantics.area {
+        assert!(
+            output
+                .areas
+                .iter()
+                .any(|area| area.eq_ignore_ascii_case(expected)),
+            "{} did not resolve area {expected:?}; actual={:?}",
+            case.id,
+            output.areas
+        );
+    }
+    if let Some(expected) = semantics.bhk {
+        assert!(
+            output.bhks.contains(&expected),
+            "{} did not compile {expected} BHK; actual={:?}",
+            case.id,
+            output.bhks
+        );
+    }
+    if let Some(expected) = semantics.budget_max {
+        assert_eq!(
+            output.budget_max,
+            Some(expected),
+            "{} compiled the wrong maximum budget",
+            case.id
+        );
+    }
+    if let Some(expected) = &semantics.society {
+        assert_resolved_entity(case, output, "society", expected);
+    }
+    if let Some(expected) = &semantics.near {
+        assert!(
+            output.resolved_entities.iter().any(|entity| {
+                entity.entity_type.eq_ignore_ascii_case("place")
+                    && (entity.name.eq_ignore_ascii_case(expected)
+                        || entity.matched_text.eq_ignore_ascii_case(expected))
+            }) || output
+                .result_sets
+                .iter()
+                .flatten()
+                .flat_map(|result| &result.proof_labels)
+                .any(|label| label.eq_ignore_ascii_case(expected)),
+            "{} did not resolve named place {expected:?}; observed={output:?}",
+            case.id
+        );
+    }
+    if let Some(expected) = &semantics.place_family {
+        assert_resolved_entity(case, output, "place_family", expected);
+    }
+    if let Some(expected) = &semantics.unresolved_society {
+        assert!(
+            output.warnings.iter().any(|warning| warning
+                .to_ascii_lowercase()
+                .contains(&expected.to_ascii_lowercase())),
+            "{} did not report unresolved society {expected:?}; warnings={:?}",
+            case.id,
+            output.warnings
+        );
+    }
+    if let Some(expected) = &semantics.home_state {
+        assert!(!actual_ids.is_empty(), "{} returned no homes", case.id);
+        assert!(
+            output
+                .result_sets
+                .iter()
+                .flatten()
+                .all(|result| equivalent_home_state(&result.home_state, expected)),
+            "{} returned a home outside state {expected:?}",
+            case.id
+        );
+    }
+    if let Some(excluded) = &semantics.exclude_home_state {
+        assert!(
+            output
+                .result_sets
+                .iter()
+                .flatten()
+                .all(|result| !equivalent_home_state(&result.home_state, excluded)),
+            "{} returned excluded home state {excluded:?}",
+            case.id
+        );
+    }
+    if let Some(distance_km) = semantics.distance_max_km {
+        let distances = output
+            .result_sets
+            .iter()
+            .flatten()
+            .flat_map(|result| result.proof_distances_m.iter().copied())
+            .collect::<Vec<_>>();
+        if !distances.is_empty() {
+            assert!(
+                distances
+                    .iter()
+                    .all(|distance| f64::from(*distance) <= distance_km * 1_000.0),
+                "{} did not enforce {distance_km} km; proof distances={distances:?}",
+                case.id
+            );
+        }
+    }
+    if semantics.abstain == Some(true) {
+        assert!(
+            actual_ids.is_empty(),
+            "{} should abstain but returned {actual_ids:?}",
+            case.id
+        );
+    }
+    if semantics.missing_optional_evidence == Some(MissingOptionalEvidence::IncludeWithoutClaim) {
+        for preference in semantics
+            .positive_preferences
+            .as_deref()
+            .unwrap_or_default()
+        {
+            assert!(
+                output.result_sets.iter().flatten().any(|result| result
+                    .preference_coverage
+                    .iter()
+                    .any(|(actual, status)| actual == preference && status == "no_data")),
+                "{} did not keep a no-data result for optional preference {preference:?}",
+                case.id
+            );
+        }
+    }
+    if let Some(branches) = &semantics.branches {
+        assert_eq!(
+            output.result_sets.len(),
+            branches.len(),
+            "{} compiled the wrong branch count",
+            case.id
+        );
+        for (index, (branch, results)) in branches.iter().zip(&output.result_sets).enumerate() {
+            assert!(!results.is_empty(), "{} branch {index} is empty", case.id);
+            assert!(
+                results.iter().all(|result| {
+                    result.area.eq_ignore_ascii_case(&branch.area)
+                        && result.bhk == branch.bhk
+                        && result.price <= branch.budget_max
+                }),
+                "{} branch {index} violated its area/BHK/budget contract",
+                case.id
+            );
+        }
+    }
     for forbidden_label in &expectation.forbidden_proof_labels {
         assert!(
             output
                 .result_sets
                 .iter()
                 .flatten()
-                .flat_map(|result| &result.proof_labels)
+                .flat_map(|result| {
+                    result
+                        .proof_labels
+                        .iter()
+                        .chain(result.claimed_preferences.iter())
+                })
                 .all(|label| !label.to_ascii_lowercase().contains(forbidden_label)),
             "{} fabricated forbidden proof {forbidden_label:?}",
             case.id
@@ -403,6 +581,31 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
     }
 }
 
+fn assert_resolved_entity(
+    case: &ControlledQueryCase,
+    output: &ObservedSearch,
+    entity_type: &str,
+    expected: &str,
+) {
+    assert!(
+        output.resolved_entities.iter().any(|entity| {
+            entity.entity_type.eq_ignore_ascii_case(entity_type)
+                && (entity.name.eq_ignore_ascii_case(expected)
+                    || entity.matched_text.eq_ignore_ascii_case(expected))
+        }),
+        "{} did not resolve {entity_type} {expected:?}; actual={:?}",
+        case.id,
+        output.resolved_entities
+    );
+}
+
+fn equivalent_home_state(actual: &str, expected: &str) -> bool {
+    actual.eq_ignore_ascii_case(expected)
+        || (expected.eq_ignore_ascii_case("ready_to_move")
+            && actual.eq_ignore_ascii_case("delivered"))
+}
+
+#[derive(Debug)]
 struct ObservedSearch {
     result_sets: Vec<Vec<ObservedResult>>,
     warnings: Vec<String>,
@@ -411,11 +614,30 @@ struct ObservedSearch {
     ranking_priorities: Vec<String>,
     accepted_tradeoffs: Vec<String>,
     min_constraints: Vec<(String, f64)>,
+    areas: Vec<String>,
+    bhks: Vec<u32>,
+    budget_max: Option<u64>,
+    resolved_entities: Vec<ObservedResolvedEntity>,
 }
 
+#[derive(Debug)]
 struct ObservedResult {
     id: String,
+    area: String,
+    bhk: u32,
+    price: u64,
+    home_state: String,
     proof_labels: Vec<String>,
+    proof_distances_m: Vec<u32>,
+    claimed_preferences: Vec<String>,
+    preference_coverage: Vec<(String, String)>,
+}
+
+#[derive(Debug)]
+struct ObservedResolvedEntity {
+    entity_type: String,
+    name: String,
+    matched_text: String,
 }
 
 struct MockSearchFixture {
@@ -425,14 +647,18 @@ struct MockSearchFixture {
 
 impl MockSearchFixture {
     fn new() -> Self {
-        Self::build(false)
+        Self::build(false, false)
+    }
+
+    fn with_buyer_candidates() -> Self {
+        Self::build(false, true)
     }
 
     fn with_decision_candidates() -> Self {
-        Self::build(true)
+        Self::build(true, false)
     }
 
-    fn build(include_decision_candidates: bool) -> Self {
+    fn build(include_decision_candidates: bool, include_distance_decoy: bool) -> Self {
         let mut builder = FixtureBuilder::default();
         builder.add_place("Hoodi Metro", "metro", 12.9900, 77.7150);
         builder.add_place("Manipal Hospital", "hospital", 12.9700, 77.7350);
@@ -549,6 +775,22 @@ impl MockSearchFixture {
             "nearby_metro_stations",
             "Mock Metro Station (0.2 km)",
         );
+        if include_distance_decoy {
+            builder.add_home(HomeSpec::new(
+                "mock-far-metro-2bhk",
+                "Far Metro Homes",
+                "East Bengaluru",
+                2,
+                22_000_000,
+                12.9000,
+                77.7000,
+            ));
+            builder.add_nearby_fact(
+                "Far Metro Homes",
+                "nearby_metro_stations",
+                "Mock Metro Station (12.0 km)",
+            );
+        }
         builder.add_home(
             HomeSpec::new(
                 "mock-quiet-reviewed-3bhk",
@@ -559,7 +801,7 @@ impl MockSearchFixture {
                 12.9790,
                 77.6590,
             )
-            .quality(Some(0.95), Some(4.7)),
+            .quality(Some(0.05), Some(4.7)),
         );
         builder.add_nearby_fact(
             "Quiet Reviewed Homes",
@@ -577,7 +819,7 @@ impl MockSearchFixture {
                     12.9795,
                     77.6595,
                 )
-                .quality(Some(0.99), Some(4.0)),
+                .quality(Some(0.01), Some(4.0)),
             );
             builder.add_nearby_fact(
                 "Quiet Priority Homes",
@@ -594,7 +836,7 @@ impl MockSearchFixture {
                     12.9785,
                     77.6585,
                 )
-                .quality(Some(0.8), Some(4.9)),
+                .quality(Some(0.2), Some(4.9)),
             );
             builder.add_nearby_fact(
                 "Review Priority Homes",
@@ -611,7 +853,7 @@ impl MockSearchFixture {
                     12.9787,
                     77.6587,
                 )
-                .quality(Some(0.8), Some(4.2)),
+                .quality(Some(0.2), Some(4.2)),
             );
             builder.add_nearby_fact(
                 "Value Priority Homes",
@@ -769,6 +1011,14 @@ impl MockSearchFixture {
             .collect();
         let accepted_tradeoffs = output.intent.accepted_tradeoffs.clone();
         let ranking_priorities = output.intent.ranking_priorities.clone();
+        let areas = output
+            .intent
+            .requested_areas()
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let bhks = output.intent.requested_bhks();
+        let budget_max = output.intent.budget_max;
         let min_constraints = output
             .intent
             .hard_constraints
@@ -781,6 +1031,17 @@ impl MockSearchFixture {
             })
             .map(|constraint| (constraint.field.clone(), constraint.value))
             .collect();
+        let resolved_entities = output
+            .diagnostics
+            .resolved
+            .entities
+            .iter()
+            .map(|entity| ObservedResolvedEntity {
+                entity_type: entity.entity_type.clone(),
+                name: entity.name.clone(),
+                matched_text: entity.matched_text.clone(),
+            })
+            .collect();
         ObservedSearch {
             result_sets: output
                 .result_sets
@@ -789,13 +1050,54 @@ impl MockSearchFixture {
                     result_set
                         .results
                         .into_iter()
-                        .map(|result| ObservedResult {
-                            id: result.card.id,
-                            proof_labels: result
-                                .proof_focuses
+                        .map(|result| {
+                            let property = self
+                                .properties
+                                .iter()
+                                .find(|property| property.id == result.card.id)
+                                .expect("result property exists in controlled fixture");
+                            let claimed_preferences = result
+                                .match_explanation
+                                .as_ref()
                                 .into_iter()
-                                .filter_map(|focus| focus.matched_label)
-                                .collect(),
+                                .flat_map(|explanation| &explanation.reasons)
+                                .map(|reason| reason.preference.clone())
+                                .collect();
+                            let preference_coverage = result
+                                .match_explanation
+                                .as_ref()
+                                .into_iter()
+                                .flat_map(|explanation| &explanation.preference_coverage)
+                                .map(|coverage| {
+                                    (coverage.preference.clone(), coverage.status.clone())
+                                })
+                                .collect();
+                            ObservedResult {
+                                id: result.card.id.clone(),
+                                area: property.area.clone(),
+                                bhk: property.bhk,
+                                price: property.price,
+                                home_state: if property
+                                    .possession_status
+                                    .eq_ignore_ascii_case("Ready to Move")
+                                {
+                                    "delivered".to_string()
+                                } else {
+                                    "under_construction".to_string()
+                                },
+                                proof_labels: result
+                                    .proof_focuses
+                                    .iter()
+                                    .filter_map(|focus| focus.matched_label.clone())
+                                    .collect(),
+                                proof_distances_m: result
+                                    .proof_focuses
+                                    .iter()
+                                    .filter_map(|focus| focus.distance_m)
+                                    .collect(),
+                                claimed_preferences,
+                                preference_coverage,
+                            }
                         })
                         .collect()
                 })
@@ -806,6 +1108,10 @@ impl MockSearchFixture {
             ranking_priorities,
             accepted_tradeoffs,
             min_constraints,
+            areas,
+            bhks,
+            budget_max,
+            resolved_entities,
         }
     }
 }
@@ -859,13 +1165,14 @@ impl FixtureBuilder {
             &["ready to move", "under construction"],
             None,
         );
-        if let Some(quiet) = spec.quiet {
-            self.add_search_fact(
+        if let Some(noise_score) = spec.noise_score {
+            self.add_numeric_search_fact(
                 &entity_id,
                 "noise_score",
-                FactValue::Numeric(quiet),
+                noise_score,
                 &["quiet", "quiet surroundings"],
-                Some("HigherIsBetter"),
+                "LowerIsBetter",
+                &[0.3, 0.5],
             );
         }
         if let Some(rating) = spec.rating {
@@ -1004,7 +1311,7 @@ struct HomeSpec {
     latitude: f64,
     longitude: f64,
     state: &'static str,
-    quiet: Option<f64>,
+    noise_score: Option<f64>,
     rating: Option<f64>,
 }
 
@@ -1027,7 +1334,7 @@ impl HomeSpec {
             latitude,
             longitude,
             state: "delivered",
-            quiet: Some(0.5),
+            noise_score: Some(0.5),
             rating: Some(4.0),
         }
     }
@@ -1037,8 +1344,8 @@ impl HomeSpec {
         self
     }
 
-    fn quality(mut self, quiet: Option<f64>, rating: Option<f64>) -> Self {
-        self.quiet = quiet;
+    fn quality(mut self, noise_score: Option<f64>, rating: Option<f64>) -> Self {
+        self.noise_score = noise_score;
         self.rating = rating;
         self
     }
@@ -1077,7 +1384,7 @@ fn property(spec: &HomeSpec, society_id: &str) -> Property {
         builder_quality_score: Some(0.7),
         document_completeness_score: Some(0.8),
         litigation_risk: Some(0.1),
-        noise_score: spec.quiet,
+        noise_score: spec.noise_score,
         sunlight_score: Some(0.7),
         airport_noise_score: Some(0.1),
         waterlogging_risk_score: Some(0.2),

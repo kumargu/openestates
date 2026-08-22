@@ -383,7 +383,7 @@ impl TextSearch {
                                 &mut ranking_priority_scores,
                                 &intent.ranking_priorities,
                                 pref,
-                                evidence.normalized_score,
+                                evidence.ranking_score,
                             );
                             best_fact_key_rank = best_fact_key_rank.min(evidence.fact_key_rank);
                             total_facts_consulted += 1;
@@ -1058,21 +1058,6 @@ fn enrich_card_from_serving_context(
     {
         card.builder_name = builder_name.to_string();
     }
-    let Some(rows) = serving_facts.entity(builder_entity_id) else {
-        return;
-    };
-    let Some(fact) = rows
-        .facts
-        .iter()
-        .find(|fact| fact.fact_key.eq_ignore_ascii_case("builder_delivery_rate"))
-    else {
-        return;
-    };
-    let metadata = rows.search_metadata_for_fact_key(&fact.fact_key).next();
-    card.builder_delivery_display = Some(metadata.map_or_else(
-        || fact_value_display(&fact.value),
-        |metadata| render_serving_fact_display(fact, metadata, &fact.value),
-    ));
 }
 
 fn sanitize_card_display_placeholders(card: &mut crate::models::PropertyCard) {
@@ -1166,6 +1151,7 @@ struct EvidenceMatch {
     fact_key_rank: usize,
     display: String,
     normalized_score: f64,
+    ranking_score: f64,
     score_delta: f64,
     confidence: f32,
     source_type: String,
@@ -1627,6 +1613,7 @@ fn runtime_numeric_constraint_evidence(
             query_unit.unit
         ),
         normalized_score: 1.0,
+        ranking_score: 1.0,
         score_delta: 2.0,
         confidence: 1.0,
         source_type: "ServingBundle".to_string(),
@@ -1674,6 +1661,7 @@ fn serving_numeric_constraint_evidence(
             query_unit.unit
         ),
         normalized_score: 1.0,
+        ranking_score: 1.0,
         score_delta: 2.0,
         confidence: fact.confidence,
         source_type: fact.source_type.clone(),
@@ -1916,13 +1904,14 @@ fn serving_entity_preference_evidence(
             continue;
         }
 
-        let Some((score_delta, scoring_method)) = serving_fact_score(fact, metadata) else {
+        let Some((score_delta, ranking_score, scoring_method)) = serving_fact_score(fact, metadata)
+        else {
             continue;
         };
+        let normalized_score = (score_delta / 2.0).min(1.0);
         if !evidence_is_confident_enough(&fact.source_type, fact.confidence, &scoring_method) {
             continue;
         }
-        let normalized_score = (score_delta / 2.0).min(1.0);
         let fact_key_rank = candidate_fact_key_rank(candidate_fact_keys, &fact.fact_key);
         let ranked = RankedEvidence {
             source_rank: source_rank(&source_priority, &fact.source_type),
@@ -1935,6 +1924,7 @@ fn serving_entity_preference_evidence(
                 fact_key_rank,
                 display: render_serving_fact_display(fact, metadata, &fact.value),
                 normalized_score,
+                ranking_score,
                 score_delta,
                 confidence: fact.confidence,
                 source_type: fact.source_type.clone(),
@@ -1995,6 +1985,7 @@ fn serving_entity_preference_evidence(
                     fact_key_rank: usize::MAX,
                     display: format!("{}: {}", schema.display_label, snippet),
                     normalized_score: 0.7,
+                    ranking_score: 0.7,
                     score_delta: schema.score_delta,
                     confidence: fact.confidence,
                     source_type: fact.source_type.clone(),
@@ -2151,6 +2142,7 @@ fn negative_evidence_from_fact(
             fact_key_rank: candidate_fact_key_rank(candidate_fact_keys, fact_key),
             display,
             normalized_score: 0.0,
+            ranking_score: 0.0,
             score_delta,
             confidence,
             source_type,
@@ -2171,6 +2163,7 @@ fn negative_evidence_from_fact(
                     fact_key_rank: candidate_fact_key_rank(candidate_fact_keys, fact_key),
                     display: format!("{}: {}", risk_label, display_value),
                     normalized_score,
+                    ranking_score: normalized_score,
                     score_delta,
                     confidence,
                     source_type,
@@ -2195,6 +2188,7 @@ fn negative_evidence_from_fact(
         fact_key_rank: candidate_fact_key_rank(candidate_fact_keys, fact_key),
         display: format!("{}: {}", risk_label, display),
         normalized_score,
+        ranking_score: normalized_score,
         score_delta,
         confidence,
         source_type,
@@ -2390,7 +2384,7 @@ fn candidate_fact_key_rank(candidate_fact_keys: &[String], fact_key: &str) -> us
 fn serving_fact_score(
     fact: &ServingFactRecord,
     metadata: &ServingSearchMetadataRecord,
-) -> Option<(f64, String)> {
+) -> Option<(f64, f64, String)> {
     let weight = f64::from(metadata.scoring_weight.unwrap_or(1.0)).clamp(0.0, 2.0);
     if weight <= 0.0 {
         return None;
@@ -2406,6 +2400,7 @@ fn serving_fact_score(
         let score = geo::score_serving_geo_distance(fact, metadata)?;
         return Some((
             score.score_delta,
+            (score.score_delta / 2.0).clamp(0.0, 1.0),
             geo::GEO_DISTANCE_SCORING_METHOD.to_string(),
         ));
     }
@@ -2428,7 +2423,13 @@ fn serving_fact_score(
         } else {
             0.0
         };
-        return (score > 0.0).then(|| (score, "serving-numeric".to_string()));
+        return (score > 0.0).then(|| {
+            (
+                score,
+                normalized_numeric_preference_score(value, false),
+                "serving-numeric".to_string(),
+            )
+        });
     }
 
     if direction == "lowerisbetter" || direction == "lower_is_better" {
@@ -2448,7 +2449,13 @@ fn serving_fact_score(
             let score = (1.0 - value.clamp(0.0, 1.0)) * weight;
             score.max(0.0)
         };
-        return (score > 0.0).then(|| (score, "serving-numeric".to_string()));
+        return (score > 0.0).then(|| {
+            (
+                score,
+                normalized_numeric_preference_score(value, true),
+                "serving-numeric".to_string(),
+            )
+        });
     }
 
     if !metadata_supports_text_match(metadata) {
@@ -2457,7 +2464,25 @@ fn serving_fact_score(
     if !meaningful_fact_value(&fact.value) {
         return None;
     }
-    Some((weight, "serving-fact".to_string()))
+    Some((
+        weight,
+        (weight / 2.0).clamp(0.0, 1.0),
+        "serving-fact".to_string(),
+    ))
+}
+
+fn normalized_numeric_preference_score(value: f64, lower_is_better: bool) -> f64 {
+    if lower_is_better {
+        if (0.0..=1.0).contains(&value) {
+            1.0 - value
+        } else {
+            1.0 / (1.0 + value.max(0.0))
+        }
+    } else if (0.0..=1.0).contains(&value) {
+        value
+    } else {
+        value.max(0.0) / (1.0 + value.max(0.0))
+    }
 }
 
 fn fact_value_numeric(value: &FactValue) -> Option<f64> {
@@ -8181,13 +8206,6 @@ mod tests {
                     "Computed",
                     0.85,
                 ),
-                serving_entity_fact(
-                    "builder:stronger",
-                    "builder_delivery_rate",
-                    FactValue::Numeric(0.9),
-                    "Rera",
-                    0.9,
-                ),
                 serving_fact(
                     "stronger-builder",
                     "rera_registered",
@@ -8245,7 +8263,7 @@ mod tests {
             Some("builder:stronger")
         );
         assert_eq!(results[0].card.builder_name, "Stronger BuildCo");
-        assert!(results[0].card.builder_delivery_display.is_some());
+        assert!(results[0].card.builder_delivery_display.is_none());
     }
 
     #[test]
