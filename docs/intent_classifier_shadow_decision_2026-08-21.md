@@ -18,8 +18,10 @@ phrases owned by more than one label were excluded.
 - Baseline: 27/32 labelled quality checks, with all four test cases passing.
 - Hardcoding audit: two pre-existing comment-only `office` findings in
   `backend/src/search/geo.rs`; no blocked config aliases.
-- Held-out classifier bank:
-  `data/validation/query_bank/search_intent_classifier_v1.json`
+- Held-out classifier bank at the time:
+  `data/validation/query_bank/search_intent_classifier_v1.json` (retired after
+  the classifier was removed; selected human phrases now live in the
+  executable `search_buyer_language_v1.json` bank).
 
 ## Experiment result
 
@@ -85,6 +87,12 @@ Reintroducing a learned compiler would require an independently reviewed query
 bank, a clear improvement over configured deterministic behavior, and a design
 that does not become a competing source of product vocabulary, hard
 constraints, recall, or proof semantics.
+
+The classifier-only bank was subsequently removed because its 48 isolated
+clauses had no observable search-result contract. Useful phrases were curated
+into `data/validation/query_bank/search_buyer_language_v1.json`, where they are
+tested as complete buyer searches against controlled facts. Git history keeps
+the original experiment corpus if the classifier decision is revisited.
 
 ## Verification
 
