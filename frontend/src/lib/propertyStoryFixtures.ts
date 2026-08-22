@@ -149,11 +149,51 @@ export function storyLabDetailFixture(
       href: `/property/${options.propertyId}/rera`,
       availability: "available",
     };
+    detail.decision_check_summary = {
+      tileLabel: "RERA",
+      tone: "positive",
+      registrationNumberCompact: "PRM/KA/.../000123",
+      primaryCount: 2,
+      totalCount: 2,
+      primaryLabels: [
+        {
+          key: "sanction_plan_available",
+          label: "Sanction plan available",
+          severity: "positive",
+          scope: "project",
+          visualId: "layout",
+          valueText: "1",
+          priority: 28,
+          confidence: 1,
+          groupId: "documents",
+          placement: "audit",
+        },
+        {
+          key: "site_plan_available",
+          label: "Site plan available",
+          severity: "positive",
+          scope: "project",
+          visualId: "layout",
+          valueText: "1",
+          priority: 26,
+          confidence: 1,
+          groupId: "documents",
+          placement: "more",
+        },
+      ],
+    };
   } else if (options.rera === "partial") {
     detail.rera_report_ref = {
       registration_ids: [],
       href: `/property/${options.propertyId}/rera`,
       availability: "partial",
+    };
+    detail.decision_check_summary = {
+      tileLabel: "RERA",
+      tone: "neutral",
+      registrationNumberCompact: "PRM/KA/.../000123",
+      primaryCount: 0,
+      totalCount: 0,
     };
   } else {
     detail.rera_report_ref = {
@@ -161,6 +201,7 @@ export function storyLabDetailFixture(
       href: `/property/${options.propertyId}/rera`,
       availability: "unavailable",
     };
+    delete detail.decision_check_summary;
   }
 
   if (options.coverage === "rich") {
@@ -198,6 +239,7 @@ export function storyLabDetailFixture(
       href: `/property/${options.propertyId}/rera`,
       availability: "unavailable",
     };
+    delete detail.decision_check_summary;
   } else if (options.coverage === "partial") {
     detail.similar_properties = detail.similar_properties.slice(0, 1);
   }

@@ -3,11 +3,14 @@ import { Helmet } from "react-helmet-async";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
+import { PropertyReraTeaser } from "../components/property/PropertyReraTeaser.tsx";
+import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
 import {
   PropertySceneCard,
   type StoryPlaybackSpeed,
   type StoryScenePlayback,
 } from "../components/property/PropertySceneCard.tsx";
+import { PropertyShortCompare } from "../components/property/PropertyShortCompare.tsx";
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import {
   nextStoryFrameIndex,
@@ -30,7 +33,13 @@ import "../styles/story-lab.css";
 
 type LabViewport = "desktop" | "tablet" | "mobile";
 type LabMotionTheme = "auto" | StoryMotionTheme;
-type LabDeck = "hero" | "map" | "arrival";
+type LabDeck =
+  | "hero"
+  | "map"
+  | "arrival"
+  | "reviews"
+  | "record"
+  | "compare";
 
 export function PropertyStoryLabPage() {
   const [propertyId, setPropertyId] =
@@ -82,6 +91,10 @@ export function PropertyStoryLabPage() {
       ? story.arrival.frames.length
       : 0;
   const mapAvailable = hasAroundThisHomePlate(detail.map_context ?? null);
+  const reviewsAvailable = story.reviews.state !== "missing";
+  const recordAvailable = story.recordCards.length > 0;
+  const compareAvailable =
+    story.comparisons.length === 3 && Boolean(story.compareHref);
 
   function selectDeck(nextDeck: LabDeck) {
     setDeck(nextDeck);
@@ -299,6 +312,33 @@ export function PropertyStoryLabPage() {
               Arrival
               {story.arrival.frames.length === 0 && <span>omitted</span>}
             </button>
+            <button
+              type="button"
+              className={deck === "reviews" ? "is-active" : ""}
+              aria-pressed={deck === "reviews"}
+              onClick={() => selectDeck("reviews")}
+            >
+              Reviews
+              {!reviewsAvailable && <span>omitted</span>}
+            </button>
+            <button
+              type="button"
+              className={deck === "record" ? "is-active" : ""}
+              aria-pressed={deck === "record"}
+              onClick={() => selectDeck("record")}
+            >
+              RERA
+              {!recordAvailable && <span>omitted</span>}
+            </button>
+            <button
+              type="button"
+              className={deck === "compare" ? "is-active" : ""}
+              aria-pressed={deck === "compare"}
+              onClick={() => selectDeck("compare")}
+            >
+              Compare
+              {!compareAvailable && <span>omitted</span>}
+            </button>
           </nav>
           <div
             className={`story-lab__viewport story-lab__viewport--${viewport}`}
@@ -341,8 +381,26 @@ export function PropertyStoryLabPage() {
                 }}
               />
             )}
+            {deck === "reviews" && reviewsAvailable && (
+              <PropertyReviewsDeck
+                model={story.reviews}
+                reviews={detail.external_reviews}
+              />
+            )}
+            {deck === "record" && recordAvailable && (
+              <PropertyReraTeaser card={story.recordCards[0]} />
+            )}
+            {deck === "compare" && compareAvailable && (
+              <PropertyShortCompare
+                homes={story.comparisons}
+                compareHref={story.compareHref}
+              />
+            )}
             {((deck === "map" && !mapAvailable)
-              || (deck === "arrival" && story.arrival.frames.length === 0)) && (
+              || (deck === "arrival" && story.arrival.frames.length === 0)
+              || (deck === "reviews" && !reviewsAvailable)
+              || (deck === "record" && !recordAvailable)
+              || (deck === "compare" && !compareAvailable)) && (
               <div className="story-lab__omitted">
                 <strong>Deck omitted</strong>
                 <span>This fixture has no usable {deck} evidence.</span>

@@ -1,6 +1,7 @@
 import { initialPropertySceneUrls } from "./propertyScene.ts";
 import { hasAroundThisHomePlate } from "./nearbyPlateProjection.ts";
 import { visibleEvidenceSections } from "./evidence.ts";
+import { workspaceCompareHref } from "./workspaceNav.ts";
 import type {
   PropertyCard,
   PropertyDetailResponse,
@@ -101,16 +102,26 @@ export type StoryRecordCard = {
   id: string;
   label: string;
   href: string;
-  availability: "complete" | "partial";
+  availability: "available" | "partial";
   registrationIds: string[];
+  facts: Array<{
+    key: string;
+    label: string;
+    value?: string;
+  }>;
 };
 
 export type StoryComparison = {
   id: string;
   title: string;
   area: string;
+  bhk?: number;
   price?: number;
   status?: string;
+  societyName?: string;
+  heroImage?: string;
+  googleRating?: number;
+  isCurrent: boolean;
 };
 
 export type StoryDecisionModel = {
@@ -147,6 +158,7 @@ export type PropertyStoryModel = {
   reviews: StoryReviewsModel;
   recordCards: StoryRecordCard[];
   comparisons: StoryComparison[];
+  compareHref?: string;
   decision: StoryDecisionModel;
   coverage: StoryCoverage;
   motionSeed: number;
@@ -157,6 +169,7 @@ export type PropertyStoryModel = {
 export type PropertyStoryProjectionOptions = {
   media?: StoryMediaFrameInput[];
   motionTheme?: StoryMotionTheme;
+  comparisonProperties?: PropertyCard[];
 };
 
 export type StoryMotionDefinition = {
@@ -412,30 +425,116 @@ function projectRecordCards(
 ): StoryRecordCard[] {
   const report = data.rera_report_ref;
   if (report.availability === "unavailable") return [];
+  const summary = data.decision_check_summary;
+  const facts: StoryRecordCard["facts"] = [];
+  const registrationNumber =
+    summary?.registrationNumberCompact?.trim()
+    || summary?.registrationNumber?.trim();
+  if (registrationNumber) {
+    facts.push({
+      key: "registration",
+      label: "Registration",
+      value: registrationNumber,
+    });
+  }
+  const documentLabels = [
+    ...(summary?.groups?.find((group) => group.id === "documents")?.labels ?? []),
+    ...(summary?.primaryLabels ?? []).filter(
+      (label) => label.groupId === "documents",
+    ),
+  ];
+  const usedFactKeys = new Set(facts.map((fact) => fact.key));
+  for (const label of documentLabels) {
+    if (label.groupId !== "documents" || !label.label.trim()) continue;
+    if (usedFactKeys.has(label.key)) continue;
+    usedFactKeys.add(label.key);
+    facts.push({
+      key: label.key,
+      label: label.label.trim(),
+      value: label.valueText?.trim()
+        ? `${label.valueText.trim()} found`
+        : undefined,
+    });
+    if (facts.length >= 3) break;
+  }
   return [{
     id: "rera",
-    label: "RERA report",
+    label: "Registration & filings",
     href: report.href,
-    availability:
-      report.availability === "available" ? "complete" : "partial",
+    availability: report.availability,
     registrationIds: [...report.registration_ids].sort(),
+    facts,
   }];
 }
 
 function projectComparisons(
-  properties: PropertyCard[],
-): StoryComparison[] {
-  return properties.slice(0, 3).map((property) => ({
-    id: property.id,
-    title: property.title,
-    area: property.area,
-    price: hasKnownNumber(property.price) ? property.price : undefined,
-    status:
-      property.home_state_display ||
-      property.project_status_display ||
-      property.possession_status ||
-      undefined,
-  }));
+  data: PropertyDetailResponse,
+  comparisonProperties: PropertyCard[] = [],
+): { homes: StoryComparison[]; href?: string } {
+  const currentSocietyName = data.society?.name.trim() || undefined;
+  const current: StoryComparison = {
+    id: data.property.id,
+    title: currentSocietyName || storyTitle(data),
+    area: data.property.area,
+    bhk: hasKnownNumber(data.property.bhk) ? data.property.bhk : undefined,
+    price: hasKnownNumber(data.property.price) ? data.property.price : undefined,
+    status: compactStatus(data),
+    societyName: currentSocietyName,
+    heroImage: data.property.hero_image || data.property.images?.[0] || undefined,
+    googleRating: hasKnownNumber(data.external_reviews?.google_rating)
+      ? data.external_reviews?.google_rating
+      : undefined,
+    isCurrent: true,
+  };
+  const candidates = [
+    ...comparisonProperties,
+    ...(data.recommendation_branches ?? []).map((branch) => branch.property),
+    ...data.similar_properties,
+  ];
+  const homes: StoryComparison[] = [current];
+  const usedIds = new Set([current.id]);
+  const usedSocieties = new Set([
+    data.entity_refs?.society_entity_id
+      || currentSocietyName?.toLocaleLowerCase()
+      || current.title.toLocaleLowerCase(),
+  ]);
+  for (const property of candidates) {
+    if (usedIds.has(property.id)) continue;
+    const societyKey =
+      property.kg_entity_refs?.society_entity_id
+      || property.society_name.trim().toLocaleLowerCase()
+      || property.title.trim().toLocaleLowerCase();
+    if (usedSocieties.has(societyKey)) continue;
+    usedIds.add(property.id);
+    usedSocieties.add(societyKey);
+    homes.push({
+      id: property.id,
+      title: property.society_name.trim() || property.title,
+      area: property.area,
+      bhk: hasKnownNumber(property.bhk) ? property.bhk : undefined,
+      price: hasKnownNumber(property.price) ? property.price : undefined,
+      status:
+        property.home_state_display
+        || property.project_status_display
+        || property.possession_status
+        || undefined,
+      societyName: property.society_name.trim() || undefined,
+      heroImage: property.hero_image || property.images?.[0] || undefined,
+      googleRating: hasKnownNumber(property.google_rating)
+        ? property.google_rating
+        : undefined,
+      isCurrent: false,
+    });
+    if (homes.length === 3) break;
+  }
+  if (homes.length !== 3) return { homes: [] };
+  return {
+    homes,
+    href: workspaceCompareHref(
+      homes.map((home) => home.id),
+      current.id,
+    ),
+  };
 }
 
 export function selectStoryMotionTheme(input: {
@@ -534,7 +633,8 @@ export function projectPropertyStory(
   const arrival = projectArrival(data);
   const reviews = projectReviews(data);
   const recordCards = projectRecordCards(data);
-  const comparisons = projectComparisons(data.similar_properties);
+  const compare = projectComparisons(data, options.comparisonProperties);
+  const comparisons = compare.homes;
   const map = {
     available: hasAroundThisHomePlate(data.map_context ?? null),
   };
@@ -574,6 +674,7 @@ export function projectPropertyStory(
     reviews,
     recordCards,
     comparisons,
+    compareHref: compare.href,
     decision: {
       canSave: true,
       canNote: true,

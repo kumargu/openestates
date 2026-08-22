@@ -155,11 +155,18 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     };
   }, [location.pathname, location.search, shellMode]);
 
+  const activeView = activeWorkspaceView(location.pathname);
+  const availablePropertyIds = new Set(
+    properties.map((property) => property.id),
+  );
+  const compareFocusIds = queryIds.filter((id) => availablePropertyIds.has(id));
   const storedFocus = window.localStorage.getItem(FOCUS_STORAGE_KEY);
   const workspaceFocusedId = workspaceFocusedHomeId(
     queryFocus,
     storedFocus,
-    homes.map((home) => home.id),
+    activeView === "compare" && compareFocusIds.length > 0
+      ? compareFocusIds
+      : homes.map((home) => home.id),
   );
   const focusedId = shellMode === "property-context"
     ? propertyId ?? ""
@@ -168,8 +175,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   useEffect(() => {
     if (focusedId) window.localStorage.setItem(FOCUS_STORAGE_KEY, focusedId);
   }, [focusedId]);
-
-  const activeView = activeWorkspaceView(location.pathname);
 
   function writeSelection(nextIds: string[], nextFocus?: string) {
     writeShortlistIds(nextIds);

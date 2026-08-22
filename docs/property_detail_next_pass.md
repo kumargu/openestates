@@ -1,6 +1,6 @@
 # Property detail — next pass
 
-**Status:** M0–M2 implemented on `agent/property-detail-next-pass`; M3 next.
+**Status:** M0–M4 implemented on `agent/property-detail-next-pass`; M5 next.
 **Updated:** 2026-08-23
 **Companion:** canvas `property-detail-mocks.canvas.tsx`
 
@@ -18,6 +18,18 @@ Search already presents a journey instead of a dump. Detail should feel the same
 - Mobile story controls need 44 px touch targets even when the visual control remains compact.
 - Story and dossier modes share the projection and component tree. Dossier mode pauses decorative motion instead of creating a second detail page.
 - Preserve existing property subroutes and workspace tools. Only the cinematic property detail and internal Lab bypass workspace sidebar chrome.
+
+## M3–M4 learnings
+
+- Preserve the map as a product surface. Story framing can change its position and surrounding rhythm, but not its filters, proof focus, notes, zoom, metrics, or MapLibre implementation.
+- Arrival projection must select `approach_road` evidence explicitly. Flattening every evidence strip into a film silently turns unrelated media into a buyer claim.
+- Street View remains linked evidence: render the runtime image, keep the source action, and never copy it into owned story assets.
+- Below-fold cinema needs the same pause contract as the hero. Pausing only the timer while CSS motion continues still wastes work offscreen.
+- Google review cards come only from `external_reviews`. Community-pulse prose is not a substitute for a canonical review card.
+- An unresolved review match may stay as a compact source handoff; missing reviews omit the deck.
+- The property-page RERA teaser uses detail-payload registration and document facts. It does not fetch, summarize, or duplicate the dedicated report.
+- Short Compare is the current home plus two distinct peers, or it is omitted. The full Compare link is projected with the same IDs and current-home focus.
+- If one comparison home lacks media, remove the media row from all three cards. A uniform compact comparison is better than large empty image slabs.
 
 ## What is already good
 

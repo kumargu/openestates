@@ -7,9 +7,6 @@ import {
 } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import type {
-  DetailSignal,
-  EvidenceSection,
-  ExternalReviewCard,
   PropertyCard,
   PropertyDetailResponse,
   RecommendationResponse,
@@ -30,14 +27,17 @@ import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
+import { PropertyReraTeaser } from "../components/property/PropertyReraTeaser.tsx";
+import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
+import { PropertyShortCompare } from "../components/property/PropertyShortCompare.tsx";
 import {
   PropertyStoryTopbar,
   type PropertyStoryMode,
 } from "../components/property/PropertyStoryTopbar.tsx";
 import { propertySceneImageAt } from "../lib/propertyScene.ts";
 import { projectPropertyStory } from "../lib/propertyStory.ts";
-import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
+import { formatGoogleRating } from "../lib/reviewFormatting.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
 
@@ -54,89 +54,6 @@ function hasKnownNumber(value: number | null | undefined): value is number {
 
 function comparablePrice(price: number): number {
   return hasKnownNumber(price) ? price : Number.MAX_SAFE_INTEGER;
-}
-
-function truncateCopy(value: string, limit = 220): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= limit) return normalized;
-  const trimmed = normalized.slice(0, limit).replace(/\s+\S*$/, "");
-  return `${trimmed}...`;
-}
-
-function reviewSnippetCopy(value: string): string {
-  return truncateCopy(
-    value
-      .replace(/^Google review feedback reads/i, "Google reviews read")
-      .replace(
-        /,?\s*though recurring themes are still being extracted\.?/i,
-        ".",
-      ),
-  );
-}
-
-function formatGoogleRating(value: number | null | undefined): string | null {
-  if (!hasKnownNumber(value)) return null;
-  return value.toFixed(1);
-}
-
-function formatReviewCount(value: number | null | undefined): string | null {
-  if (!hasKnownNumber(value)) return null;
-  return `${value.toLocaleString("en-IN")} Google ${value === 1 ? "review" : "reviews"}`;
-}
-
-function reviewSpaceCost(review: ExternalReviewCard): number {
-  const words = review.text.trim().split(/\s+/).filter(Boolean).length;
-  if (words <= 32) return 1;
-  if (words <= 70) return 1.8;
-  return 2.4;
-}
-
-function fitReviewCards(
-  reviewCards: ExternalReviewCard[],
-  budget = 22,
-): ExternalReviewCard[] {
-  const selected: ExternalReviewCard[] = [];
-  let used = 0;
-  for (const review of reviewCards) {
-    const cost = reviewSpaceCost(review);
-    if (selected.length >= 8 && used + cost > budget) break;
-    if (selected.length >= 12) break;
-    selected.push(review);
-    used += cost;
-  }
-  return selected;
-}
-
-function detailSignalPills(
-  signals: DetailSignal[] | undefined,
-): DetailSignal[] {
-  return (signals ?? []).filter((signal) => signal.label.trim()).slice(0, 8);
-}
-
-function PropertySignalPills({
-  signals,
-}: {
-  signals: DetailSignal[] | undefined;
-}) {
-  const signalPills = detailSignalPills(signals);
-  if (signalPills.length === 0) return null;
-
-  return (
-    <section
-      className="property-signal-section"
-      aria-label="Positive review themes"
-    >
-      <span className="property-signal-section__label">Positive themes</span>
-      <div className="property-signal-pills">
-        {signalPills.map((signal) => (
-          <span key={signal.key} className="property-signal-pill">
-            <LabelVisualIcon id={signal.icon || signal.key} size={22} />
-            <strong>{signal.label}</strong>
-          </span>
-        ))}
-      </div>
-    </section>
-  );
 }
 
 function cleanAreaToken(value: string): string {
@@ -337,100 +254,6 @@ function microMarketAreas(
     )
     .slice(0, 5)
     .map((item) => item.area);
-}
-
-function reviewEvidenceSections(
-  sections: EvidenceSection[],
-): EvidenceSection[] {
-  return sections.filter(
-    (section) =>
-      ["community", "community_pulse", "resident_reviews", "reviews"].includes(
-        section.kind,
-      ) ||
-      /review|resident|community/i.test(`${section.kind} ${section.title}`),
-  );
-}
-
-function GoogleReviewsSection({
-  data,
-  reviewSections,
-}: {
-  data: PropertyDetailResponse;
-  reviewSections: EvidenceSection[];
-}) {
-  const { society } = data;
-  const reviews = data.external_reviews;
-  const googleUrl = reviews?.google_reviews_url ?? society?.google_reviews_url;
-  const rating = formatGoogleRating(reviews?.google_rating);
-  const reviewCount = formatReviewCount(reviews?.google_review_count);
-  const communityPulse = reviewSections.find(
-    (section) => section.community_pulse,
-  )?.community_pulse;
-  const fallbackCards: ExternalReviewCard[] = [
-    communityPulse?.paragraph,
-    ...(communityPulse?.quotes?.slice(0, 2).map((quote) => quote.text) ?? []),
-  ]
-    .filter((value): value is string => Boolean(value?.trim()))
-    .map((value, index) => ({
-      id: `review-fallback-${index}`,
-      source: "Google",
-      author: "Google reviewer",
-      text: reviewSnippetCopy(value),
-      tone: "neutral" as const,
-    }));
-  const reviewSourceCards = reviews?.reviews?.length
-    ? reviews.reviews
-    : fallbackCards;
-  const reviewCards = fitReviewCards(reviewSourceCards);
-  const reviewButtonLabel = reviewCount
-    ? `Show all ${reviewCount.replace(" Google ", " ")}`
-    : "Show more Google reviews";
-
-  if (!googleUrl && reviewCards.length === 0 && !rating) return null;
-
-  return (
-    <section
-      className="property-google-reviews"
-      aria-labelledby="property-google-reviews-title"
-    >
-      <div className="property-section-line">
-        <h2 id="property-google-reviews-title">
-          {rating ? `★ ${rating}` : "Google reviews"}
-          {reviewCount ? ` · ${reviewCount}` : ""}
-        </h2>
-      </div>
-
-      {reviewCards.length > 0 && (
-        <div className="property-review-grid">
-          {reviewCards.map((review) => (
-            <article key={review.id} className="property-review-card">
-              {(review.rating || review.date_label) && (
-                <p className="property-review-card__meta">
-                  {review.rating && (
-                    <span>{"★".repeat(Math.round(review.rating))}</span>
-                  )}
-                  {review.rating && review.date_label && " · "}
-                  {review.date_label}
-                </p>
-              )}
-              <p>{review.text}</p>
-            </article>
-          ))}
-        </div>
-      )}
-
-      {googleUrl && (
-        <a
-          className="property-review-more"
-          href={googleUrl}
-          target="_blank"
-          rel="noreferrer"
-        >
-          {reviewButtonLabel}
-        </a>
-      )}
-    </section>
-  );
 }
 
 function NearbyHomeCard({
@@ -821,7 +644,6 @@ function PropertyPageBody({
   ]
     .filter(Boolean)
     .join(". ");
-  const detailEvidenceSections = data.evidence?.sections ?? [];
   const aroundThisHomeContext = propertyMapContextFromSurfaceScene(
     aroundThisHomeScene,
     data.map_context,
@@ -856,12 +678,16 @@ function PropertyPageBody({
     currentCard,
     microAreas,
   );
-  const reviewsSections = reviewEvidenceSections(detailEvidenceSections);
   const displayTitle = p.title.trim();
-  const reraReport = data.rera_report_ref.availability === "unavailable"
-    ? undefined
-    : data.rera_report_ref;
-  const story = projectPropertyStory(data);
+  const story = projectPropertyStory(data, {
+    comparisonProperties: recommendationBranches.map(
+      (branch) => branch.property,
+    ),
+  });
+  const comparisonIds = new Set(story.comparisons.map((home) => home.id));
+  const moreNearbyItems = nearbyItems.filter(
+    (item) => !comparisonIds.has(item.property.id),
+  );
 
   function handleAreaSelect(area: string) {
     navigate(`/?q=${encodeURIComponent(area)}`);
@@ -922,31 +748,23 @@ function PropertyPageBody({
           }}
         />
 
-        {reraReport && (
-          <section className="property-popup-row" aria-label="Home details">
-            <Link className="property-popup-action" to={reraReport.href}>
-              <span><strong>RERA report</strong></span>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  aria-hidden="true"
-              >
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </Link>
-          </section>
-        )}
+        <PropertyReviewsDeck
+          model={story.reviews}
+          reviews={data.external_reviews}
+          signals={data.detail_signals}
+        />
 
-        <PropertySignalPills signals={data.detail_signals} />
+        <PropertyReraTeaser card={story.recordCards[0]} />
 
-        <GoogleReviewsSection data={data} reviewSections={reviewsSections} />
+        <PropertyShortCompare
+          homes={story.comparisons}
+          compareHref={story.compareHref}
+        />
 
-        <NearbyHomesRail items={nearbyItems} status={recommendationStatus} />
-
+        <NearbyHomesRail
+          items={moreNearbyItems}
+          status={recommendationStatus}
+        />
         <MicroMarketTracker
           currentArea={p.area}
           properties={marketProperties}

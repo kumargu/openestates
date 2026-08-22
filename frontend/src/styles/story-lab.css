@@ -133,6 +133,7 @@
 
 .story-lab__decks {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
   margin-bottom: 0.65rem;
 }
@@ -198,6 +199,11 @@
   margin: 0;
 }
 
+.story-lab__viewport .property-fact-deck {
+  margin: 0;
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
 .story-lab__omitted {
   display: grid;
   min-height: 12rem;
@@ -223,6 +229,56 @@
 
 .story-lab__viewport--mobile .property-arrival {
   margin-inline: 0;
+}
+
+.story-lab__viewport--mobile .property-fact-deck__intro h2 {
+  font-size: clamp(2.5rem, 14vw, 4rem);
+}
+
+.story-lab__viewport--mobile .property-review-grid {
+  columns: 1;
+}
+
+.story-lab__viewport--mobile .property-rera-teaser__card {
+  grid-template-columns: 1fr;
+}
+
+.story-lab__viewport--mobile .property-rera-teaser__lead {
+  grid-column: 1 / -1;
+  min-height: 8rem;
+  border-right: 0;
+  border-bottom: 1px solid rgba(50, 45, 40, 0.1);
+}
+
+.story-lab__viewport--mobile .property-rera-teaser__facts {
+  flex-direction: column;
+}
+
+.story-lab__viewport--mobile .property-rera-teaser__facts > div {
+  min-height: 4.5rem;
+  border-right: 0;
+  border-bottom: 1px solid rgba(50, 45, 40, 0.08);
+}
+
+.story-lab__viewport--mobile .property-rera-teaser__open {
+  position: absolute;
+  top: 0.8rem;
+  right: 0.8rem;
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+.story-lab__viewport--mobile .property-short-compare__grid {
+  grid-template-columns: 1fr;
+}
+
+.story-lab__viewport--mobile .property-short-compare__media {
+  min-height: 14rem;
+}
+
+.story-lab__viewport--mobile .property-short-compare__handoff {
+  align-items: flex-start;
+  flex-direction: column;
 }
 
 .story-lab__viewport--mobile .property-scene__stage {

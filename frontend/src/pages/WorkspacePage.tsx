@@ -204,10 +204,15 @@ export function WorkspacePage() {
   );
   const shortlistedWorkspaceIds = readShortlistIds()
     .filter((id) => orderedPropertyIds.includes(id));
+  const focusCandidates = mode === "compare"
+    ? activeCompareIds
+    : shortlistedWorkspaceIds.length > 0
+      ? shortlistedWorkspaceIds
+      : orderedPropertyIds;
   const focusedWorkspaceId = workspaceFocusedHomeId(
     searchParams.get("focus"),
     window.localStorage.getItem(FOCUS_STORAGE_KEY),
-    shortlistedWorkspaceIds.length > 0 ? shortlistedWorkspaceIds : orderedPropertyIds,
+    focusCandidates,
   );
   const compareHref = workspaceCompareHref(activeCompareIds, focusedWorkspaceId);
   const buyVsRentHref = workspaceBuyVsRentHref(focusedWorkspaceId);

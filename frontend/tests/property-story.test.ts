@@ -147,6 +147,141 @@ test("arrival projection keeps only bounded approach-road evidence", () => {
   );
 });
 
+test("official record teaser projects only known registration and document facts", () => {
+  const detail = richDetail();
+  detail.rera_report_ref = {
+    registration_ids: ["internal:rera-record"],
+    href: `/property/${detail.property.id}/rera`,
+    availability: "available",
+  };
+  detail.decision_check_summary = {
+    tileLabel: "RERA",
+    tone: "positive",
+    registrationNumberCompact: "PRM/KA/.../004371",
+    primaryCount: 2,
+    totalCount: 2,
+    primaryLabels: [
+      {
+        key: "parking_per_home_available",
+        label: "1 parking/home",
+        severity: "positive",
+        scope: "project",
+        visualId: "visit",
+        valueText: "1",
+        priority: 48,
+        confidence: 1,
+        groupId: "project_facts",
+        placement: "more",
+      },
+    ],
+    groups: [{
+      id: "documents",
+      title: "Documents",
+      labels: [{
+        key: "sanction_plan_available",
+        label: "Sanction plan available",
+        severity: "positive",
+        scope: "project",
+        visualId: "layout",
+        valueText: "1",
+        priority: 28,
+        confidence: 1,
+        groupId: "documents",
+        placement: "audit",
+      }],
+    }],
+  };
+  const card = projectPropertyStory(detail).recordCards[0];
+  assert.equal(card?.availability, "available");
+  assert.deepEqual(card?.facts, [
+    {
+      key: "registration",
+      label: "Registration",
+      value: "PRM/KA/.../004371",
+    },
+    {
+      key: "sanction_plan_available",
+      label: "Sanction plan available",
+      value: "1 found",
+    },
+  ]);
+  assert.equal(
+    card?.facts.some((fact) => fact.label === "1 parking/home"),
+    false,
+  );
+});
+
+test("partial official records and unresolved reviews stay compact without invention", () => {
+  const detail = richDetail();
+  detail.rera_report_ref = {
+    registration_ids: [],
+    href: `/property/${detail.property.id}/rera`,
+    availability: "partial",
+  };
+  delete detail.decision_check_summary;
+  detail.external_reviews = {
+    google_reviews_url: "https://www.google.com/maps",
+  };
+  const story = projectPropertyStory(detail);
+  assert.deepEqual(story.recordCards[0]?.facts, []);
+  assert.equal(story.recordCards[0]?.availability, "partial");
+  assert.equal(story.reviews.state, "unresolved");
+  assert.equal(
+    story.decks.some((deck) => deck.kind === "reviews"),
+    true,
+  );
+});
+
+test("short compare projects current home plus two distinct peers and handoff", () => {
+  const detail = richDetail();
+  const base = detail.similar_properties[0];
+  assert.ok(base);
+  const peerA = {
+    ...base,
+    id: "peer-a",
+    society_name: "Peer A",
+    kg_entity_refs: undefined,
+  };
+  const peerB = {
+    ...base,
+    id: "peer-b",
+    society_name: "Peer B",
+    kg_entity_refs: undefined,
+  };
+  const peerC = {
+    ...base,
+    id: "peer-c",
+    society_name: "Peer C",
+    kg_entity_refs: undefined,
+  };
+  detail.similar_properties = [peerA];
+  const story = projectPropertyStory(detail, {
+    comparisonProperties: [peerB, peerC],
+  });
+  assert.deepEqual(
+    story.comparisons.map((home) => home.id),
+    [detail.property.id, "peer-b", "peer-c"],
+  );
+  assert.deepEqual(
+    story.comparisons.map((home) => home.isCurrent),
+    [true, false, false],
+  );
+  assert.equal(
+    story.compareHref,
+    `/workspace/compare?ids=${encodeURIComponent(
+      `${detail.property.id},peer-b,peer-c`,
+    )}&focus=${encodeURIComponent(detail.property.id)}`,
+  );
+
+  detail.similar_properties = [peerA];
+  const sparseCompare = projectPropertyStory(detail);
+  assert.deepEqual(sparseCompare.comparisons, []);
+  assert.equal(
+    sparseCompare.decks.some((deck) => deck.kind === "compare"),
+    false,
+  );
+});
+
 test("motion selection is stable and cannot change facts or deck order", () => {
   const detail = richDetail();
   const media = storyLabMediaFixture({ count: "many", provenance: "current" });
