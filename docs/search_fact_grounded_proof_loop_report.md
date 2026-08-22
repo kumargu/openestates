@@ -1,8 +1,144 @@
-# Search Fact-Grounded Proof Loop — Clean Serving v7
+# Search Fact-Grounded Proof Loop — Progress Report
 
 Date: 2026-08-22
 
-## Decision
+## Current assessment
+
+`continue_as_search_experiment`
+
+The original search experiment succeeded, then drifted into catalog expansion
+and society-eligibility work. Stop optimizing the number of fully eligible
+societies. The next loop should test whether search can retrieve, constrain,
+rank, and explain whatever valid DAG facts are present, including for societies
+that are incomplete for normal buyer-detail publication.
+
+Buyer production eligibility remains intact. The revised plan uses a separate
+search-experiment bundle admission policy and pointer; it does not globally
+weaken `app/config/dag/serving_eligibility.json`.
+
+## Original goal and where the work drifted
+
+The goal was to prove the full local-search chain against promoted facts:
+
+`Parquet facts -> runtime indexes -> intent and entity resolution -> recall -> hard constraints -> ranking -> proof`
+
+The first Godrej Air loop did exactly that. It classified five failed cases as
+two generic defects, fixed them, and moved the frozen bank from 131/149 to
+149/149 checks without adding project or locality shortcuts.
+
+Later increments remained useful search transfer tests, but admission became
+the dominant activity. Work shifted toward media lookup, RERA receipt
+regeneration, carpet-area completeness, quarantine counts, and production
+catalog releases. Those are catalog-quality concerns, not evidence that search
+itself is improving. Ajmera Nucleus and Mantri Serenity1 are the clearest
+examples: their exclusion was driven by full eligibility inputs rather than a
+failed search-proof test.
+
+## Search implementation audited on this branch
+
+The current branch contains a substantial deterministic search implementation:
+
+- spanned query planning for BHK, budget, area, evidence, named-place relation,
+  and distance clauses;
+- a Boolean constraint AST that preserves grouped alternatives, exclusions,
+  and branch-specific budgets through recall and final eligibility;
+- canonical serving-entity joins for societies, builders, areas, aliases, and
+  property membership;
+- structured, Tantivy, and geo recall with ambiguity-safe society typo
+  resolution and abstention for unresolved hard named entities;
+- fact-backed hard constraints, optional `no_data` preference coverage,
+  required-evidence gates, generic scoring, and proof focuses derived from the
+  same serving facts;
+- buyer-safe branch-preserving `resultSets`, internal evidence-gap logging, and
+  serving-version-keyed caching for both successful and zero-result responses.
+
+The FastText shadow classifier introduced earlier in the branch was removed.
+The current code deliberately uses deterministic query compilation plus
+configured ontology and serving entities; the branch name is stale.
+
+One architectural constraint explains the eligibility drift: incomplete
+societies are removed atomically while the serving bundle is built, before the
+runtime search index sees them. Search's own matching code already behaves in
+the desired fact-grounded way for admitted properties: hard terms require a
+value or matching fact, required preferences require evidence, and missing
+optional facts are marked `no_data` without becoming reasons. The next
+experiment therefore belongs at search-bundle admission, not in looser runtime
+matching.
+
+## Verification status
+
+Recorded final artifacts:
+
+- clean-serving-v7 bank: 149/149 checks;
+- South 40 bank: 57/57 checks;
+- Sarjapur 41 bank: 49/49 checks;
+- South 43 bank: 67/67 checks;
+- 100% recall and proof precision, zero hard-constraint violations, zero
+  unsupported claims, stable ordering, and endpoint p95 between 18.53 and
+  24.81 ms in the final candidate runs.
+
+Fresh audit after the stopped session:
+
+- Python benchmark and collection tests: 90 passed, 1 skipped.
+- Search hardcoding audit: zero blocked search-config alias findings.
+- Rust search-focused suite: 313 passed, 3 failed.
+
+The three Rust failures are not new search misses. They exercise automatic
+budget expansion, while the South 40 work set configured budget multipliers to
+an empty list to keep explicit buyer budgets hard. The behavior and tests now
+disagree. The search-focused direction is to keep implicit expansion disabled,
+update the stale tests, and test any future alternatives as an explicitly
+labeled tradeoff result set.
+
+## What has and has not been proved
+
+Proved so far:
+
+- exact and typo society resolution;
+- hard BHK, budget, area, project-state, rating, and acreage constraints;
+- named metro and hospital proof, including two false-proof sentinels;
+- grouped configuration alternatives and stable public result branches;
+- listing-band budget overlap rather than misleading midpoint filtering;
+- deterministic ordering, proof handles, zero-result behavior, and warm
+  latency on cohorts up to 43 societies and 103 properties.
+
+Not yet proved:
+
+- incomplete societies can participate in supported searches without leaking
+  their missing fields into proof;
+- broad transfer across schools, tech parks, negative risks, water, traffic,
+  noise, builder/RERA evidence, and required-versus-optional preferences;
+- result-to-detail proof lineage through the live property-detail endpoint;
+- cache isolation and rollback across an actual experiment bundle switch;
+- recall and latency on a materially larger cohort;
+- generalized fuzzy/paraphrase behavior beyond the named query banks;
+- correction of the two known durable-data category errors.
+
+## Next steps
+
+1. Add a separate search-experiment admission profile/environment. Preserve
+   canonical identity, lineage, fact validity, and a minimal runtime projection,
+   but do not require unrelated media, carpet area, approach-road, or complete
+   buyer-detail evidence.
+2. Build one immutable candidate containing a deliberate mix of complete and
+   incomplete societies. Do not promote it to the buyer production catalog.
+3. Freeze an incomplete-society query bank before running search. For every
+   case, declare which facts may match, which hard constraints must reject the
+   property, and which facts must never be claimed.
+4. Run the existing frozen banks unchanged against the candidate, then add
+   transfer banks for missing optional evidence, required evidence, negative
+   risks, more named-place families, and generic Boolean/paraphrase cases.
+5. Verify result reasons against the property-detail proof payload using the
+   same fact/entity/source/version handles.
+6. Resolve the three stale budget-relaxation tests, run the full Rust suite,
+   hardcoding audit, benchmark banks, and smoke test.
+7. Promote only the search-experiment pointer if all gates pass. Publish the
+   before/after ordered ids, proof changes, unsupported-claim count, and latency
+   delta. Keep buyer-catalog promotion as a later independent decision.
+
+## Historical execution log
+
+### First-loop decision
 
 `keep`
 

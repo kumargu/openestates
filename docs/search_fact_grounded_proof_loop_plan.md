@@ -8,6 +8,12 @@ promote a new immutable bundle. The loop must distinguish search defects from
 missing data and must never teach the runtime benchmark answers through named
 projects, places, aliases, or fact-key branches.
 
+The object under test is the search system: intent compilation, entity
+resolution, recall, hard-constraint enforcement, ranking, proof selection, and
+detail-proof handoff. Catalog completeness is not the experiment. A society
+does not need every buyer-detail field before its valid facts can participate
+in a search experiment.
+
 The working method is deliberately open-book:
 
 1. inspect the promoted facts first;
@@ -18,6 +24,71 @@ The working method is deliberately open-book:
 6. enrich only genuine data gaps through the DAG;
 7. validate and promote a new bundle;
 8. rerun the identical query set.
+
+## Experiment Boundary
+
+Keep two admission decisions separate:
+
+1. **Search-experiment admission** asks whether an entity and its facts are
+   safe to use while measuring search.
+2. **Buyer-catalog eligibility** asks whether a home is complete enough for
+   normal production result and detail surfaces.
+
+Do not disable buyer-catalog eligibility globally. Build immutable search
+experiment bundles under a separate environment or pointer. They may contain
+societies that lack media, carpet area, approach-road evidence, or another
+unrelated buyer-detail input. They must not silently become the production
+buyer catalog.
+
+A society may enter a search experiment when:
+
+- its canonical identity, aliases, property-to-society edges, and runtime
+  projection are internally consistent;
+- every admitted fact has a typed value, source lineage, and valid search
+  metadata when it is intended to influence search;
+- at least one minimal property configuration can be projected for runtime
+  recall; an explicitly unavailable price is acceptable, but invented values
+  are not;
+- known conflicting or misclassified facts are excluded from positive proof
+  expectations and tracked as data-quality sentinels.
+
+Eligibility is then evaluated per query, not as all-or-nothing society
+completeness:
+
+- BHK, budget, named entity, numeric, exclusion, and explicit distance clauses
+  remain hard. A result with an unknown or non-matching value does not pass.
+- A preference marked `required` must have matching promoted evidence.
+- Missing optional evidence is neutral, is recorded internally as `no_data`,
+  and must not produce a proof reason.
+- Missing facts unrelated to the query must not remove an otherwise valid
+  society from the experiment.
+
+Search-experiment promotion means advancing the dedicated experiment pointer
+after validation. Production catalog promotion remains a separate decision.
+
+## Implementation Under Test
+
+The current branch implements a deterministic local pipeline:
+
+- `QueryPlan` parses spanned BHK, budget, area, relation, distance, and
+  configured evidence clauses.
+- `CompiledQuery` lowers those clauses into a Boolean constraint AST so grouped
+  alternatives and exclusions stay authoritative through recall and ranking.
+- `SearchIndex` joins runtime properties to canonical serving society, builder,
+  and area entities and performs structured constraint recall.
+- `SearchEngine` combines structured, Tantivy, and geo recall; resolves
+  serving aliases and ambiguity-safe society typos; abstains on unresolved hard
+  named-entity clauses; and preserves independent result branches.
+- `TextSearch` enforces the compiled constraints, requires evidence for
+  required preferences, treats missing optional facts as `no_data`, ranks from
+  serving facts, and creates proof focuses from the same evidence.
+- The API exposes buyer-safe `resultSets`, keeps diagnostics and gaps out of
+  buyer copy, records enrichment gaps, and caches both successful and
+  zero-result responses with the serving version in the cache key.
+
+The earlier FastText shadow classifier is not part of the current branch. It
+was removed in favor of deterministic query compilation and configured
+ontology resolution; the branch name is historical.
 
 ## Verified Starting Point
 
@@ -87,7 +158,8 @@ For every proposed fact, record:
 - fact key, typed value, unit, confidence, and observation time;
 - source type, source URL/locator, and input lineage;
 - whether the fact has search metadata;
-- whether it is eligible for buyer display and ranking;
+- whether it is eligible for search ranking and proof in the experiment;
+- whether it separately meets normal buyer-catalog display eligibility;
 - related place/entity id for proximity evidence;
 - expected detail-surface proof handle.
 
@@ -201,11 +273,13 @@ Keep a change only when it improves a declared metric or removes a verified
 architecture defect without quality loss. Otherwise revert it or record it as
 unproven.
 
-## Phase 6 — Build and Promote the Next Bundle
+## Phase 6 — Build and Promote a Search Experiment Bundle
 
-The first expansion candidate may reuse the validated members of the historical
-118-society catalog and add newly enriched societies, but it must be rebuilt
-through current DAG policy and current canonical identities.
+The next candidate should deliberately include both complete and incomplete
+societies with useful facts. It may reuse entities from historical bundles, but
+it must be rebuilt through current DAG policy and current canonical identities.
+Do not spend the loop filling unrelated catalog requirements merely to admit a
+search test case.
 
 For every candidate:
 
@@ -213,20 +287,20 @@ For every candidate:
 2. Materialize a new KG view and search serving bundle; do not mutate the
    current bundle.
 3. Validate artifact hashes, complete lineage, alias consistency, edge
-   integrity, search annotations, and serving eligibility.
-4. Compare society membership with the current bundle. Every disappearance
-   must have a tombstone or a recorded quarantine reason.
-5. Compare quarantine reasons and ensure newly eligible societies have the
-   required price, BHK/configuration, size, area, identity, media, and evidence
-   inputs.
+   integrity, search annotations, and search-experiment admission.
+4. Publish an admission report that distinguishes invalid identity/fact rows
+   from fields that are merely absent and irrelevant to the tested query.
+5. Confirm the candidate includes incomplete societies and that each can be
+   recalled only for constraints and preferences its facts actually support.
 6. Run the frozen query bank and standard contracts against the candidate.
-7. Promote the candidate's complete pinned lineage and then atomically advance
-   the current serving pointer.
+7. Atomically advance only the search-experiment pointer. Do not advance the
+   production buyer-catalog environment as part of this loop.
 8. Reload the API and verify that the reported bundle version matches the
-   promoted version.
+   experiment version.
 
-Promotion is append-only progress: the old bundle remains available for exact
-rollback and before/after comparison.
+Experiment promotion is append-only progress: the old bundle remains available
+for exact rollback and before/after comparison. A later buyer-catalog release
+may independently apply the full eligibility policy.
 
 ## Phase 7 — Rerun Without Moving the Goalposts
 
@@ -245,18 +319,53 @@ record that lineage.
 
 ## Expansion Cadence
 
-Expand in controlled batches rather than attempting all societies at once:
+Expand fact coverage in controlled cohorts rather than optimizing the eligible
+society count:
 
 1. Godrej Air and its Whitefield named-place facts.
-2. Five to ten Whitefield comparison societies.
-3. All eligible Whitefield societies.
-4. The validated historical 118-society cohort rebuilt under current policy.
-5. New societies in small regional batches.
+2. Five to ten transfer societies with a mixture of complete and incomplete
+   buyer-detail projections.
+3. Multiple fact families: configuration, price, state, reviews, named places,
+   numeric project facts, negative risks, and missing optional evidence.
+4. A larger historical cohort for recall, latency, alias, and ordering tests.
+5. New regional cohorts only when they add a search behavior or fact family
+   that is not already covered.
 
 Each batch produces its own immutable bundle, ledger delta, query-bank result,
-and promotion decision. A new society may remain quarantined while its missing
-facts are enriched; catalog growth must not weaken eligibility to inflate the
-count.
+and experiment decision. Society count is a diagnostic, not a success metric.
+
+## Next Verification Matrix
+
+Before further catalog enrichment, extend the frozen proof loop with:
+
+1. **Incomplete-society transfer:** missing media, carpet area, price, or an
+   unrelated evidence family does not block supported searches; the missing
+   field never becomes a claim.
+2. **Per-query hard gates:** unknown price, BHK, numeric value, or named-place
+   distance cannot satisfy the corresponding clause.
+3. **Soft and required evidence:** optional missing evidence remains neutral;
+   configured required evidence filters the result; negative no-data handling
+   does not become a positive claim.
+4. **Fact-family transfer:** named schools, hospitals, metro, tech parks,
+   reviews, project state, acreage, water/noise/traffic risks, and builder/RERA
+   proof work through generic config and serving facts.
+5. **Boolean and language transfer:** grouped OR branches, exclusions, repeated
+   constraints, paraphrases, punctuation, minor typos, and ambiguous names keep
+   the same constraint semantics.
+6. **Proof handoff:** the result reason and detail focus cite the same fact,
+   entity handle, value/distance, source, and serving version.
+7. **Bundle switching:** cache entries do not cross serving versions, including
+   zero-result responses, and rollback restores the prior ordered results.
+8. **Scale:** repeat the bank on a materially larger cohort and record complete
+   candidate counts, recall, ordering stability, and warm p50/p95.
+9. **Data-quality sentinels:** known misclassified facts and absent facts never
+   produce confident proof.
+
+Budget behavior must be settled before the next code change. The current config
+keeps explicit budgets hard by disabling automatic budget expansion, while
+three Rust tests still expect expansion. For this experiment, keep implicit
+budget expansion disabled; if a future buyer experience offers alternatives,
+return them as an explicit tradeoff result set and never as an exact match.
 
 ## First-Loop Definition of Done
 
@@ -268,5 +377,7 @@ count.
 - Expected society recall and proof handles meet the declared top-k targets.
 - Warm p95 search remains within 50 ms and within 10% of baseline.
 - Any enrichment is DAG-produced with source lineage.
-- A new bundle is promoted only if validation and the frozen bank pass.
+- At least one incomplete society proves the per-query admission behavior.
+- A new search experiment bundle is promoted only if validation and the frozen
+  bank pass; buyer production promotion is out of scope.
 - The old bundle remains available for rollback.
