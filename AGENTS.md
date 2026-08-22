@@ -163,6 +163,24 @@ Backend endpoints should serve structured views: ranked results, property detail
 ### Search quality must be measurable
 Every new discovery behavior should be testable with fuzzy/user-like queries and expected evidence. Track recall, ranking reasons, source freshness, and whether useless or stale facts leak into responses.
 
+### Executable product scenarios are the product model
+
+The frozen buyer-query banks and their controlled mock search fixtures are not
+disposable test data. They are the executable model for how buyer intent,
+inventory, evidence, ranking, exclusions, tradeoffs, and proof handoff fit
+together. Preserve `data/validation/query_bank/search_conversational_semantics_v1.json`
+and `backend/tests/search_conversational_semantics_contract.rs` as first-class
+contracts.
+
+- Model a new buyer-facing capability in a controlled scenario before wiring
+  live DAG data or UI behavior.
+- Use mock facts to prove runtime semantics independently from DAG coverage;
+  use a separate live-bundle bank to prove the DAG supplies those facts.
+- Reuse the same scenario vocabulary when adding API and UI journey contracts
+  so search, detail proof, compare, and buyer surfaces do not drift.
+- Do not delete or weaken a scenario to make an implementation pass. Change a
+  frozen expectation only for an explicit product decision, and record why.
+
 When fixing a search example, add regression coverage for the generic intent class, not only the named example. A query like "near Bagmane" may expose the issue, but the test should prove named-place intent, numeric constraints, source-backed preferences, and tie-break ordering continue to work for arbitrary configured dimensions.
 
 Search work must run as a proof loop, not as accumulated code:
