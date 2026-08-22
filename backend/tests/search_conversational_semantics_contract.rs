@@ -21,6 +21,8 @@ const BUYER_LANGUAGE_BANK: &str =
     include_str!("../../data/validation/query_bank/search_buyer_language_v1.json");
 const DECISION_RANKING_BANK: &str =
     include_str!("../../data/validation/query_bank/search_decision_ranking_v1.json");
+const MULTI_OR_BANK: &str =
+    include_str!("../../data/validation/query_bank/search_multi_or_semantics_v1.json");
 static QUERY_BANK: OnceLock<QueryBank> = OnceLock::new();
 
 #[derive(Deserialize)]
@@ -55,6 +57,7 @@ struct ControlledQueryCase {
 struct ExpectedSemantics {
     area: Option<String>,
     bhk: Option<u32>,
+    bhks: Option<Vec<u32>>,
     budget_max: Option<u64>,
     society: Option<String>,
     home_state: Option<String>,
@@ -83,9 +86,10 @@ struct NumericExpectation {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExpectedBranch {
-    area: String,
-    bhk: u32,
-    budget_max: u64,
+    area: Option<String>,
+    society: Option<String>,
+    bhk: Option<u32>,
+    budget_max: Option<u64>,
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -107,6 +111,13 @@ struct FixtureExpectation {
     forbidden_proof_labels: Vec<String>,
     #[serde(default)]
     ordered_prefix: Vec<String>,
+    max_total_results: Option<usize>,
+    non_empty_result_sets: Option<usize>,
+    unique_result_ids: Option<bool>,
+    #[serde(default)]
+    result_set_counts: Vec<usize>,
+    #[serde(default)]
+    result_set_ordered_prefixes: Vec<Vec<String>>,
 }
 
 #[test]
@@ -213,6 +224,18 @@ fn frozen_decision_ranking_queries_execute_against_product_model() {
     let fixture = MockSearchFixture::with_decision_candidates();
     let bank: ControlledQueryBank =
         serde_json::from_str(DECISION_RANKING_BANK).expect("decision-ranking bank is valid");
+
+    for case in bank.cases {
+        let output = fixture.search(&case.query);
+        assert_controlled_expectation(&case, &output);
+    }
+}
+
+#[test]
+fn frozen_multi_or_queries_execute_against_rich_mock_inventory() {
+    let fixture = MockSearchFixture::with_multi_or_candidates();
+    let bank: ControlledQueryBank =
+        serde_json::from_str(MULTI_OR_BANK).expect("multi-OR bank is valid");
 
     for case in bank.cases {
         let output = fixture.search(&case.query);
@@ -373,6 +396,64 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
             output.warnings
         );
     }
+    if let Some(max_results) = expectation.max_total_results {
+        assert!(
+            actual_ids.len() <= max_results,
+            "{} returned {} homes above the global limit {max_results}",
+            case.id,
+            actual_ids.len()
+        );
+    }
+    if let Some(expected_count) = expectation.non_empty_result_sets {
+        assert_eq!(
+            output.result_sets.len(),
+            expected_count,
+            "{} returned the wrong number of non-empty result sets",
+            case.id
+        );
+    }
+    if expectation.unique_result_ids == Some(true) {
+        let mut unique_ids = actual_ids.clone();
+        unique_ids.sort_unstable();
+        unique_ids.dedup();
+        assert_eq!(
+            unique_ids.len(),
+            actual_ids.len(),
+            "{} repeated a home across result sets: {actual_ids:?}",
+            case.id
+        );
+    }
+    if !expectation.result_set_counts.is_empty() {
+        let counts = output.result_sets.iter().map(Vec::len).collect::<Vec<_>>();
+        assert_eq!(
+            counts, expectation.result_set_counts,
+            "{} returned an unfair branch distribution",
+            case.id
+        );
+    }
+    if !expectation.result_set_ordered_prefixes.is_empty() {
+        assert_eq!(
+            output.result_sets.len(),
+            expectation.result_set_ordered_prefixes.len(),
+            "{} returned the wrong number of ordered branches",
+            case.id
+        );
+        for (index, expected_prefix) in expectation.result_set_ordered_prefixes.iter().enumerate() {
+            let actual = output.result_sets[index]
+                .iter()
+                .map(|result| result.id.as_str())
+                .collect::<Vec<_>>();
+            let expected_prefix = expected_prefix
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>();
+            assert!(
+                actual.starts_with(&expected_prefix),
+                "{} branch {index} expected ordered prefix {expected_prefix:?}, got {actual:?}",
+                case.id
+            );
+        }
+    }
 
     let semantics = &case.expected_semantics;
     if let Some(expected) = &semantics.positive_preferences {
@@ -437,6 +518,13 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
             "{} did not compile {expected} BHK; actual={:?}",
             case.id,
             output.bhks
+        );
+    }
+    if let Some(expected) = &semantics.bhks {
+        assert_eq!(
+            &output.bhks, expected,
+            "{} compiled the wrong BHK alternatives",
+            case.id
         );
     }
     if let Some(expected) = semantics.budget_max {
@@ -553,11 +641,20 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
             assert!(!results.is_empty(), "{} branch {index} is empty", case.id);
             assert!(
                 results.iter().all(|result| {
-                    result.area.eq_ignore_ascii_case(&branch.area)
-                        && result.bhk == branch.bhk
-                        && result.price <= branch.budget_max
+                    branch
+                        .area
+                        .as_ref()
+                        .is_none_or(|area| result.area.eq_ignore_ascii_case(area))
+                        && branch
+                            .society
+                            .as_ref()
+                            .is_none_or(|society| result.society.eq_ignore_ascii_case(society))
+                        && branch.bhk.is_none_or(|bhk| result.bhk == bhk)
+                        && branch
+                            .budget_max
+                            .is_none_or(|budget_max| result.price <= budget_max)
                 }),
-                "{} branch {index} violated its area/BHK/budget contract",
+                "{} branch {index} violated its declared scope/BHK/budget contract",
                 case.id
             );
         }
@@ -623,6 +720,7 @@ struct ObservedSearch {
 #[derive(Debug)]
 struct ObservedResult {
     id: String,
+    society: String,
     area: String,
     bhk: u32,
     price: u64,
@@ -645,20 +743,40 @@ struct MockSearchFixture {
     bundle: LoadedServingBundle,
 }
 
+#[derive(Clone, Copy, Default)]
+struct FixtureProfile {
+    decision_candidates: bool,
+    distance_decoy: bool,
+    multi_or_decoys_per_bhk: usize,
+}
+
 impl MockSearchFixture {
     fn new() -> Self {
-        Self::build(false, false)
+        Self::build(FixtureProfile::default())
     }
 
     fn with_buyer_candidates() -> Self {
-        Self::build(false, true)
+        Self::build(FixtureProfile {
+            distance_decoy: true,
+            ..FixtureProfile::default()
+        })
     }
 
     fn with_decision_candidates() -> Self {
-        Self::build(true, false)
+        Self::build(FixtureProfile {
+            decision_candidates: true,
+            ..FixtureProfile::default()
+        })
     }
 
-    fn build(include_decision_candidates: bool, include_distance_decoy: bool) -> Self {
+    fn with_multi_or_candidates() -> Self {
+        Self::build(FixtureProfile {
+            multi_or_decoys_per_bhk: 24,
+            ..FixtureProfile::default()
+        })
+    }
+
+    fn build(profile: FixtureProfile) -> Self {
         let mut builder = FixtureBuilder::default();
         builder.add_place("Hoodi Metro", "metro", 12.9900, 77.7150);
         builder.add_place("Manipal Hospital", "hospital", 12.9700, 77.7350);
@@ -666,6 +784,9 @@ impl MockSearchFixture {
         builder.add_place("Bagmane Tech Park", "tech_park", 12.9800, 77.6600);
         builder.add_place("Gopalan National School", "school", 12.9500, 77.6400);
         builder.add_place("Mock Metro Station", "metro", 12.8500, 77.6000);
+        if profile.multi_or_decoys_per_bhk > 0 {
+            builder.add_area("Hoodi");
+        }
 
         builder.add_home(HomeSpec::new(
             "mock-godrej-air-3bhk",
@@ -676,6 +797,18 @@ impl MockSearchFixture {
             12.9910,
             77.7160,
         ));
+        if profile.multi_or_decoys_per_bhk > 0 {
+            builder.add_home(HomeSpec::new(
+                "mock-godrej-air-2bhk",
+                "Godrej Air",
+                "Hoodi",
+                2,
+                18_500_000,
+                12.9910,
+                77.7160,
+            ));
+            add_multi_or_decoys(&mut builder, profile.multi_or_decoys_per_bhk);
+        }
         builder.add_home(HomeSpec::new(
             "mock-lakeside-orchard-4bhk",
             "Godrej Lakeside Orchard",
@@ -775,7 +908,7 @@ impl MockSearchFixture {
             "nearby_metro_stations",
             "Mock Metro Station (0.2 km)",
         );
-        if include_distance_decoy {
+        if profile.distance_decoy {
             builder.add_home(HomeSpec::new(
                 "mock-far-metro-2bhk",
                 "Far Metro Homes",
@@ -808,7 +941,7 @@ impl MockSearchFixture {
             "nearby_tech_parks",
             "Bagmane Tech Park (0.3 km)",
         );
-        if include_decision_candidates {
+        if profile.decision_candidates {
             builder.add_home(
                 HomeSpec::new(
                     "mock-quiet-priority-3bhk",
@@ -1074,6 +1207,7 @@ impl MockSearchFixture {
                                 .collect();
                             ObservedResult {
                                 id: result.card.id.clone(),
+                                society: result.card.society_name.clone(),
                                 area: property.area.clone(),
                                 bhk: property.bhk,
                                 price: property.price,
@@ -1125,6 +1259,11 @@ struct FixtureBuilder {
 }
 
 impl FixtureBuilder {
+    fn add_area(&mut self, name: &str) {
+        let entity_id = format!("area:{}", slug(name));
+        self.entities.push(entity(&entity_id, "area", name));
+    }
+
     fn add_place(&mut self, name: &str, category: &str, latitude: f64, longitude: f64) {
         let entity_id = format!("place:{}", slug(name));
         self.entities.push(entity(&entity_id, "place", name));
@@ -1138,7 +1277,7 @@ impl FixtureBuilder {
     }
 
     fn add_home(&mut self, spec: HomeSpec) {
-        let society_id = slug(spec.society);
+        let society_id = slug(&spec.society);
         let entity_id = format!("society:{society_id}");
         if !self
             .entities
@@ -1146,7 +1285,7 @@ impl FixtureBuilder {
             .any(|entity| entity.entity_id == entity_id)
         {
             self.entities
-                .push(entity(&entity_id, "society", spec.society));
+                .push(entity(&entity_id, "society", &spec.society));
         }
         self.add_fact(
             &entity_id,
@@ -1161,7 +1300,7 @@ impl FixtureBuilder {
         self.add_search_fact(
             &entity_id,
             "home_state",
-            FactValue::Text(spec.state.to_string()),
+            FactValue::Text(spec.state.clone()),
             &["ready to move", "under construction"],
             None,
         );
@@ -1301,46 +1440,62 @@ impl FixtureBuilder {
     }
 }
 
-#[derive(Clone, Copy)]
+fn add_multi_or_decoys(builder: &mut FixtureBuilder, candidates_per_bhk: usize) {
+    for bhk in [2_u32, 3_u32] {
+        for index in 0..candidates_per_bhk {
+            builder.add_home(HomeSpec::new(
+                format!("mock-or-decoy-{bhk}-{index:02}"),
+                format!("OR Decoy {bhk}-{index:02}"),
+                "Controlled OR District",
+                bhk,
+                if bhk == 2 { 18_000_000 } else { 22_000_000 },
+                12.80 + (index as f64 * 0.0001),
+                77.50 + (f64::from(bhk) * 0.001),
+            ));
+        }
+    }
+}
+
+#[derive(Clone)]
 struct HomeSpec {
-    id: &'static str,
-    society: &'static str,
-    area: &'static str,
+    id: String,
+    society: String,
+    area: String,
     bhk: u32,
     price: u64,
     latitude: f64,
     longitude: f64,
-    state: &'static str,
+    state: String,
     noise_score: Option<f64>,
     rating: Option<f64>,
 }
 
 impl HomeSpec {
     fn new(
-        id: &'static str,
-        society: &'static str,
-        area: &'static str,
+        id: impl Into<String>,
+        society: impl Into<String>,
+        area: impl Into<String>,
         bhk: u32,
         price: u64,
         latitude: f64,
         longitude: f64,
     ) -> Self {
         Self {
-            id,
-            society,
-            area,
+            id: id.into(),
+            society: society.into(),
+            area: area.into(),
             bhk,
             price,
             latitude,
             longitude,
-            state: "delivered",
+            state: "delivered".to_string(),
             noise_score: Some(0.5),
             rating: Some(4.0),
         }
     }
 
     fn under_construction(mut self) -> Self {
-        self.state = "under_construction";
+        self.state = "under_construction".to_string();
         self
     }
 
@@ -1356,7 +1511,7 @@ fn property(spec: &HomeSpec, society_id: &str) -> Property {
         id: spec.id.to_string(),
         title: spec.society.to_string(),
         area: spec.area.to_string(),
-        area_id: slug(spec.area),
+        area_id: slug(&spec.area),
         city: "Bengaluru".to_string(),
         society_id: society_id.to_string(),
         builder_name: "Mock Builder".to_string(),

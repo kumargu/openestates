@@ -4,14 +4,13 @@ Date: 2026-08-23
 
 ## Current assessment
 
-`controlled_search_audited_main_synchronized_pause_runtime_optimization`
+`controlled_search_multi_or_recovery_verified`
 
 The original 10 conversational buyer queries, 18 varied-language queries, and
 3 multi-decision ranking queries now pass against a controlled, fact-backed
-product model. This is the right stopping point for runtime search changes:
-legacy search behavior remains green, the hardcoding audit has no blocked
-findings, and further tuning without a classified live-bundle miss would be
-over-optimization.
+product model. Nine additional multi-OR recovery cases cover shared society,
+area, and named-place scope; branch-specific budgets; mixed named scopes;
+global-limit fairness; stable branch order; and cross-branch deduplication.
 
 The controlled fixtures are now a first-class product specification. They
 should drive future search, DAG, API proof, comparison, and UI journey tests.
@@ -19,15 +18,30 @@ They must not be deleted or weakened to accommodate current data coverage.
 
 Latest verified checkpoint:
 
-- controlled search banks: 31/31 scenarios passed;
-- full Rust suite: 640 library tests and all integration/doc contracts passed;
+- controlled search banks: 40/40 scenarios passed;
+- clean-serving-v7 bank: 149/149 checks passed;
+- full Rust suite: 642 library tests and all integration/doc contracts passed;
+- search unit slice: 327 passed;
 - search efficiency: 11 passed;
-- search quality integrations: 9 passed;
-- isolated API smoke suite: 50/50 passed after merging `origin/main`;
+- isolated API smoke suite: 50/50 passed;
 - frontend production build: passed;
-- overlapping Python collection/media suite: 86 passed, 1 skipped;
 - hardcoding gate: zero vocabulary, fact-key, or blocked-alias findings;
-- latest safety commits: `aeeb00c8` and `798a820e`.
+- live benchmark artifacts: `/tmp/openestates-search-fixed.json` and
+  `/tmp/openestates-search-fixed.md`.
+
+The prior post-merge green statement was stale. A fresh independent review ran
+the preserved live bank and found 148/149 checks: the branch-dispatch path
+split `Godrej Air 2BHK or 3BHK` into one scoped branch and one bare 3BHK branch.
+The same review found numeric normalization reversing order immediately above
+`1.0`, and buyer-visible branch rails bypassing the internal global result
+limit. Those three findings are now fixed and frozen in controlled scenarios.
+
+The result limiter now round-robins across branches, preserves each branch's
+rank order, deduplicates property IDs globally, and returns the identical
+selected subset to diagnostics and buyer output. Numeric normalization is
+strictly monotonic across negative, fractional, boundary, and large values in
+both scoring directions. The regressed live query now returns exactly two
+homes: Godrej Air 2BHK and Godrej Air 3BHK.
 
 The final audit tightened the executable contract without changing its buyer
 decisions. Numeric ranking now preserves exact direction within configured

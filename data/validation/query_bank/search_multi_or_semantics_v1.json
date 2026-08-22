@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-23",
+  "mode": "controlled_product_model",
+  "notes": [
+    "These cases freeze generic multi-OR behavior independently from live DAG coverage.",
+    "A scope named once before configuration alternatives applies to every alternative unless another branch names its own scope.",
+    "Buyer-visible result sets share one configured global limit and never repeat the same home across branches."
+  ],
+  "cases": [
+    {
+      "id": "MULTI-OR-001",
+      "category": "shared_society_dual_configuration",
+      "query": "Godrej Air 2BHK or 3BHK",
+      "expected_semantics": {
+        "society": "Godrej Air",
+        "bhks": [2, 3],
+        "branches": [
+          {"society": "Godrej Air", "bhk": 2},
+          {"society": "Godrej Air", "bhk": 3}
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-godrej-air-2bhk"],
+          ["mock-godrej-air-3bhk"]
+        ],
+        "unique_result_ids": true
+      }
+    },
+    {
+      "id": "MULTI-OR-002",
+      "category": "shared_society_three_configuration_alternatives",
+      "query": "Godrej Air 2BHK or 3BHK or 4BHK",
+      "expected_semantics": {
+        "society": "Godrej Air",
+        "bhks": [2, 3, 4]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-godrej-air-2bhk"],
+          ["mock-godrej-air-3bhk"]
+        ],
+        "excludes": ["mock-lakeside-orchard-4bhk"],
+        "unique_result_ids": true
+      }
+    },
+    {
+      "id": "MULTI-OR-003",
+      "category": "shared_society_branch_specific_budgets",
+      "query": "Godrej Air 2BHK under 2 Cr or 3BHK under 2.4 Cr",
+      "expected_semantics": {
+        "society": "Godrej Air",
+        "bhks": [2, 3],
+        "branches": [
+          {"society": "Godrej Air", "bhk": 2, "budget_max": 20000000},
+          {"society": "Godrej Air", "bhk": 3, "budget_max": 24000000}
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-godrej-air-2bhk"],
+          ["mock-godrej-air-3bhk"]
+        ],
+        "unique_result_ids": true
+      }
+    },
+    {
+      "id": "MULTI-OR-004",
+      "category": "global_limit_across_large_branches",
+      "query": "2BHK or 3BHK",
+      "expected_semantics": {
+        "bhks": [2, 3]
+      },
+      "fixture_expectation": {
+        "max_total_results": 32,
+        "non_empty_result_sets": 2,
+        "unique_result_ids": true,
+        "result_set_counts": [16, 16],
+        "result_set_ordered_prefixes": [
+          ["mock-godrej-air-2bhk", "mock-metro-home-2bhk", "mock-or-decoy-2-00"],
+          ["mock-quiet-reviewed-3bhk", "mock-missing-noise-3bhk", "mock-godrej-air-3bhk"]
+        ]
+      }
+    },
+    {
+      "id": "MULTI-OR-005",
+      "category": "deduplicate_overlapping_branches",
+      "query": "2BHK or homes under 2.4 Cr",
+      "expected_semantics": {
+        "bhk": 2,
+        "budget_max": 24000000
+      },
+      "fixture_expectation": {
+        "max_total_results": 32,
+        "non_empty_result_sets": 2,
+        "unique_result_ids": true
+      }
+    },
+    {
+      "id": "MULTI-OR-006",
+      "category": "shared_prefix_before_later_independent_scope",
+      "query": "Godrej Air 2BHK or 3BHK or Prestige Song of the South 3BHK",
+      "expected_semantics": {
+        "bhks": [2, 3]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-godrej-air-2bhk"],
+          ["mock-godrej-air-3bhk"],
+          ["mock-prestige-song-3bhk"]
+        ],
+        "unique_result_ids": true
+      }
+    },
+    {
+      "id": "MULTI-OR-007",
+      "category": "shared_area_dual_configuration",
+      "query": "Hoodi 2BHK or 3BHK",
+      "expected_semantics": {
+        "area": "Hoodi",
+        "bhks": [2, 3]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-godrej-air-2bhk"],
+          [
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
+          ]
+        ],
+        "unique_result_ids": true
+      }
+    },
+    {
+      "id": "MULTI-OR-008",
+      "category": "shared_named_place_dual_configuration",
+      "query": "Near Hoodi Metro, 2BHK or 3BHK",
+      "expected_semantics": {
+        "bhks": [2, 3]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-godrej-air-2bhk"],
+          [
+            "mock-dual-place-3bhk",
+            "mock-godrej-air-3bhk",
+            "mock-balanced-commute-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-manipal-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
+          ]
+        ],
+        "unique_result_ids": true
+      }
+    },
+    {
+      "id": "MULTI-OR-009",
+      "category": "shared_trailing_named_place_dual_configuration",
+      "query": "2BHK near Hoodi Metro or 3BHK",
+      "expected_semantics": {
+        "bhks": [2, 3]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-godrej-air-2bhk"],
+          [
+            "mock-dual-place-3bhk",
+            "mock-godrej-air-3bhk",
+            "mock-balanced-commute-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-manipal-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
+          ]
+        ],
+        "unique_result_ids": true
+      }
+    }
+  ]
+}

@@ -2472,16 +2472,11 @@ fn serving_fact_score(
 }
 
 fn normalized_numeric_preference_score(value: f64, lower_is_better: bool) -> f64 {
+    let higher_is_better = 0.5 + 0.5 * (value / (1.0 + value.abs()));
     if lower_is_better {
-        if (0.0..=1.0).contains(&value) {
-            1.0 - value
-        } else {
-            1.0 / (1.0 + value.max(0.0))
-        }
-    } else if (0.0..=1.0).contains(&value) {
-        value
+        1.0 - higher_is_better
     } else {
-        value.max(0.0) / (1.0 + value.max(0.0))
+        higher_is_better
     }
 }
 
@@ -3569,6 +3564,20 @@ mod tests {
         ServingSearchMetadataRecord,
     };
     use chrono::{TimeZone, Utc};
+
+    #[test]
+    fn numeric_preference_normalization_is_strictly_monotonic_across_one() {
+        let values = [-100.0, -1.0, 0.0, 0.9, 1.0, 1.1, 100.0];
+        let higher_scores = values.map(|value| normalized_numeric_preference_score(value, false));
+        let lower_scores = values.map(|value| normalized_numeric_preference_score(value, true));
+
+        assert!(higher_scores.windows(2).all(|pair| pair[0] < pair[1]));
+        assert!(lower_scores.windows(2).all(|pair| pair[0] > pair[1]));
+        assert!(higher_scores
+            .iter()
+            .all(|score| (0.0..=1.0).contains(score)));
+        assert!(lower_scores.iter().all(|score| (0.0..=1.0).contains(score)));
+    }
 
     fn search_for_test(
         properties: &[Property],

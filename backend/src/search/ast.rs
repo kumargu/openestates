@@ -1633,6 +1633,31 @@ mod tests {
     }
 
     #[test]
+    fn resolved_society_prefix_applies_to_each_bhk_alternative() {
+        let query = "Godrej Air 2BHK or 3BHK";
+        let plan = crate::search::query_plan::compile_query_plan(query);
+        let name = "Godrej Air";
+        let start = query.find(name).expect("society should be in query");
+        let societies = vec![ResolvedEntityConstraint {
+            entity_id: "society:godrej-air".to_string(),
+            entity_type: "society".to_string(),
+            display_name: name.to_string(),
+            span: SourceSpan {
+                start,
+                end: start + name.len(),
+                raw_text: name.to_string(),
+            },
+            exclusion: false,
+        }];
+        let ast = compile_constraint_expr(query, &plan, &societies);
+
+        assert!(matches_project(&ast, "Godrej Air", 2));
+        assert!(matches_project(&ast, "Godrej Air", 3));
+        assert!(!matches_project(&ast, "Other Society", 2));
+        assert!(!matches_project(&ast, "Other Society", 3));
+    }
+
+    #[test]
     fn resolved_societies_keep_branch_specific_budgets() {
         let query = "Godrej Air 3BHK under ₹2Cr or Prestige Waterford 4BHK under ₹4Cr";
         let plan = crate::search::query_plan::compile_query_plan(query);

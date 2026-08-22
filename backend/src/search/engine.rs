@@ -202,10 +202,85 @@ impl<'a> SearchEngine<'a> {
                     .unwrap_or_else(|| branch.to_string())
             })
             .collect::<Vec<_>>();
+        if self.has_implicit_shared_scope_prefix(&segment_queries) {
+            return None;
+        }
         segment_queries
             .iter()
             .all(|branch| self.branch_has_search_anchor(branch))
             .then_some(segment_queries)
+    }
+
+    fn has_implicit_shared_scope_prefix(&self, branch_queries: &[String]) -> bool {
+        let Some((first, remaining)) = branch_queries.split_first() else {
+            return false;
+        };
+        if !self.has_resolved_branch_scope(first) {
+            return false;
+        }
+        remaining
+            .iter()
+            .any(|branch| self.is_unscoped_structured_alternative(branch))
+    }
+
+    fn is_unscoped_structured_alternative(&self, query: &str) -> bool {
+        if self.has_resolved_branch_scope(query) || self.has_unresolved_named_scope(query) {
+            return false;
+        }
+        let plan = query_plan::compile_query_plan(query);
+        let intent = query_plan::project_search_intent(query, &plan);
+        intent.preferences.is_empty()
+            && intent.positive_preferences.is_empty()
+            && intent.negative_preferences.is_empty()
+            && intent.ranking_priorities.is_empty()
+            && intent.accepted_tradeoffs.is_empty()
+            && intent.hard_constraints.is_empty()
+            && intent.excluded_areas.is_empty()
+            && intent.excluded_societies.is_empty()
+            && intent.excluded_builders.is_empty()
+            && intent.exclude_bhks.is_empty()
+            && intent.unsupported_inventory_types.is_empty()
+    }
+
+    fn has_resolved_branch_scope(&self, query: &str) -> bool {
+        if !self.resolved_scope_entities(query).is_empty() {
+            return true;
+        }
+        let plan = query_plan::compile_query_plan(query);
+        self.serving_bundle
+            .and_then(|bundle| bundle.geo_index.query_with_plan(&plan))
+            .is_some()
+    }
+
+    fn resolved_scope_entities(&self, query: &str) -> Vec<ResolvedSearchEntity> {
+        let plan = query_plan::compile_query_plan(query);
+        let intent = query_plan::project_search_intent(query, &plan);
+        resolve_serving_query_entities(query, &plan, &intent, self.serving_bundle, self.properties)
+            .into_iter()
+            .filter(|entity| {
+                entity.polarity != "exclusion"
+                    && ["area", "society", "builder"]
+                        .iter()
+                        .any(|entity_type| entity.entity_type.eq_ignore_ascii_case(entity_type))
+            })
+            .collect()
+    }
+
+    fn has_unresolved_named_scope(&self, query: &str) -> bool {
+        let plan = query_plan::compile_query_plan(query);
+        let intent = query_plan::project_search_intent(query, &plan);
+        let resolved = resolve_serving_query_entities(
+            query,
+            &plan,
+            &intent,
+            self.serving_bundle,
+            self.properties,
+        );
+        let geo_query = self
+            .serving_bundle
+            .and_then(|bundle| bundle.geo_index.query_with_plan(&plan));
+        unsupported_qualifier_clause(query, &plan).is_some()
+            || unresolved_named_entity_clause(query, &plan, &resolved, geo_query.as_ref()).is_some()
     }
 
     fn branch_has_search_anchor(&self, query: &str) -> bool {
@@ -389,7 +464,7 @@ impl<'a> SearchEngine<'a> {
             .as_ref()
             .and_then(|ids| candidate_property_indexes(ids, self.property_by_id));
 
-        let mut results = timer.measure("ranking", || {
+        let results = timer.measure("ranking", || {
             if unresolved_entity_clause.is_some()
                 || unavailable_required_capability.is_some()
                 || (resolved_geo_constraint
@@ -417,7 +492,6 @@ impl<'a> SearchEngine<'a> {
         let eligible_result_count = results.len();
         let mut evidence_gaps = Vec::new();
         evidence_gaps.extend(unresolved_proximity_gaps(geo_query.as_ref()));
-        results.truncate(schema::ranking_policy().result_limit);
         let result_sets = build_result_sets(
             &compiled_query,
             &results,
@@ -426,6 +500,8 @@ impl<'a> SearchEngine<'a> {
             self.search_index,
             serving_facts,
         );
+        let (result_sets, results) =
+            limit_result_sets(result_sets, schema::ranking_policy().result_limit);
 
         let resolved_entities = timer.measure("entity_resolution", || {
             resolve_query_entities(
@@ -498,8 +574,6 @@ fn combine_branch_outputs(
     let mut intent =
         query_plan::project_search_intent(query, &query_plan::compile_query_plan(query));
     let mut result_sets = Vec::new();
-    let mut results = Vec::new();
-    let mut result_ids = HashSet::new();
     let mut evidence_gaps = Vec::new();
     for (index, output) in outputs.iter().enumerate() {
         merge_branch_intent_resolution(&mut intent, &output.intent);
@@ -518,11 +592,6 @@ fn combine_branch_outputs(
         if branch_results.is_empty() {
             continue;
         }
-        for result in &branch_results {
-            if result_ids.insert(result.card.id.clone()) {
-                results.push(result.clone());
-            }
-        }
         let label = output
             .result_sets
             .first()
@@ -539,7 +608,8 @@ fn combine_branch_outputs(
         .iter()
         .map(|output| output.eligible_result_count)
         .sum();
-    results.truncate(schema::ranking_policy().result_limit);
+    let (result_sets, results) =
+        limit_result_sets(result_sets, schema::ranking_policy().result_limit);
     let diagnostics =
         combine_branch_diagnostics(&outputs, &results, &evidence_gaps, total_duration_ms);
     SearchEngineOutput {
@@ -550,6 +620,55 @@ fn combine_branch_outputs(
         diagnostics,
         evidence_gaps,
     }
+}
+
+fn limit_result_sets(
+    result_sets: Vec<SearchResultSet>,
+    result_limit: usize,
+) -> (Vec<SearchResultSet>, Vec<SearchResultCard>) {
+    if result_limit == 0 || result_sets.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+
+    let mut positions = vec![0usize; result_sets.len()];
+    let mut selected_by_set = vec![Vec::new(); result_sets.len()];
+    let mut selected = Vec::with_capacity(result_limit);
+    let mut selected_ids = HashSet::new();
+
+    while selected.len() < result_limit {
+        let mut made_progress = false;
+        for (set_index, result_set) in result_sets.iter().enumerate() {
+            while let Some(result) = result_set.results.get(positions[set_index]) {
+                positions[set_index] += 1;
+                if !selected_ids.insert(result.card.id.clone()) {
+                    continue;
+                }
+                selected_by_set[set_index].push(result.clone());
+                selected.push(result.clone());
+                made_progress = true;
+                break;
+            }
+            if selected.len() == result_limit {
+                break;
+            }
+        }
+        if !made_progress {
+            break;
+        }
+    }
+
+    let limited_sets = result_sets
+        .into_iter()
+        .zip(selected_by_set)
+        .filter_map(|(mut result_set, results)| {
+            if results.is_empty() {
+                return None;
+            }
+            result_set.results = results;
+            Some(result_set)
+        })
+        .collect();
+    (limited_sets, selected)
 }
 
 fn merge_branch_intent_resolution(intent: &mut SearchIntent, branch: &SearchIntent) {

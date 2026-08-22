@@ -308,6 +308,47 @@ Commits:
 - `798a820e` merges `origin/main` and preserves both search and gallery
   contracts.
 
+### Multi-OR recovery checkpoint — 2026-08-23
+
+A fresh merge review invalidated the preceding green status. The preserved
+clean-serving-v7 bank was 148/149: `Godrej Air 2BHK or 3BHK` returned the
+Godrej 2BHK branch plus an unscoped, catalog-wide 3BHK branch. Two additional
+review findings showed a discontinuity in generic numeric preference scoring
+at `1.0` and a mismatch between the internal 32-result cap and the unbounded
+buyer-visible branch rails.
+
+The recovery keeps the behavior generic:
+
+- a resolved society, area, or builder prefix remains on the combined Boolean
+  AST when later OR alternatives omit their own scope;
+- numeric preference normalization is continuous and strictly monotonic for
+  both configured directions, including negative, fractional, boundary, and
+  large values;
+- one round-robin limiter caps the buyer-visible result sets and the internal
+  flattened result list to the same unique homes, preserving order within each
+  branch without letting the first branch consume the limit.
+
+`data/validation/query_bank/search_multi_or_semantics_v1.json` adds nine frozen
+cases. Its fixture generates 24 decoys for each of two BHK branches and proves
+shared scope across two and three alternatives, branch-specific budgets, a
+later independent named scope, area and leading/trailing named-place scope,
+exact 16/16 global-limit fairness, stable per-branch ordering, and cross-branch
+deduplication. The controlled model now contains 40 buyer searches.
+
+Recovery verification:
+
+- controlled product-model banks: 40/40 scenarios passed;
+- clean-serving-v7 bank: 149/149 checks, with exactly the Godrej Air 2BHK and
+  3BHK homes for the regressed query;
+- full Rust suite: 642 library tests and all integration/doc contracts passed;
+- search unit slice: 327 passed;
+- search efficiency contract: 11 passed;
+- `cargo check`: passed;
+- frontend production build: passed;
+- isolated API smoke suite on port 4102: 50/50 passed;
+- production hardcoding gate: zero vocabulary, fact-key, or blocked-alias
+  findings.
+
 ## Earlier implementation checkpoint — 2026-08-22
 
 Completed and verified:
