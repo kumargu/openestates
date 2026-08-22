@@ -149,6 +149,7 @@ Verification:
 - search/unit regression suite: 321 passed;
 - search efficiency contract: 11 passed;
 - search quality integrations: 9 passed;
+- isolated API smoke suite: 50 passed;
 - production hardcoding audit: zero blocked search-config aliases.
 
 Commits:

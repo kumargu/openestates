@@ -22,6 +22,7 @@ Latest verified checkpoint:
 - full Rust suite: 634 library tests and all integration binaries passed;
 - search efficiency: 11 passed;
 - search quality integrations: 9 passed;
+- isolated API smoke suite: 50 passed;
 - hardcoding audit: zero blocked search-config alias findings;
 - latest safety commits: `f7ae7f89` and `0779365b`.
 
