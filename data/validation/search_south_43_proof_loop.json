@@ -1,0 +1,7 @@
+{
+  "benchmark": "South Bengaluru 43-society fact-grounded proof loop",
+  "version": 1,
+  "required_serving_bundle_version": "south-43-candidate-2026-08-22",
+  "scoreable_modes": ["data_backed"],
+  "case_files": ["query_bank/search_south_43_candidate.json"]
+}

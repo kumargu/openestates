@@ -1,0 +1,20 @@
+{
+  "source_entities": [
+    {
+      "entity_id": "society:mahaveer-ranches",
+      "alias_entity_id": "society:rera-9464b33ae7909dd6",
+      "name": "MAHAVEER RANCHES PHASE I",
+      "area": "Hosa Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171015/000421"
+    },
+    {
+      "entity_id": "society:prestige-song-of-the-south",
+      "alias_entity_id": "society:rera-9e36c8a04a40e472",
+      "name": "PRESTIGE SONG OF THE SOUTH PHASE I",
+      "area": "Begur Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170915/000243"
+    }
+  ]
+}

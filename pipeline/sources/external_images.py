@@ -95,9 +95,17 @@ def records_for_entity(
         source_pages = magicbricks_pages_from_kg(project_root, entity_id, society_name)
     if not source_pages:
         source_pages = configured_source_pages(project_root, input_data, society_name)
-    ensure_local_society_photos(project_root, input_data, entity_id, society_name)
+    alias_entity_id = optional_string(input_data.get("alias_entity_id"))
+    ensure_local_society_photos(
+        project_root, input_data, entity_id, society_name, alias_entity_id
+    )
     records = local_society_photo_records(
-        project_root, entity_id, society_name, observed_at, policy
+        project_root,
+        entity_id,
+        society_name,
+        observed_at,
+        policy,
+        alias_entity_id,
     )
     if len(records) >= local_society_photo_target(project_root):
         return records[:MAX_OPTIMIZED_IMAGES_PER_ENTITY], []
@@ -208,7 +216,11 @@ def records_for_entity(
 
 
 def ensure_local_society_photos(
-    project_root: Path, input_data: Dict[str, Any], entity_id: str, society_name: str
+    project_root: Path,
+    input_data: Dict[str, Any],
+    entity_id: str,
+    society_name: str,
+    alias_entity_id: Optional[str] = None,
 ) -> None:
     policy = load_project_crawl_policy(project_root, "local_society_photo_collection")
     if not policy or not bool(policy.get("enabled", False)):
@@ -217,7 +229,9 @@ def ensure_local_society_photos(
         return
 
     target_images = positive_int(policy.get("target_images"), 5)
-    photo_dir = local_society_photo_dir(project_root, entity_id, society_name)
+    photo_dir = local_society_photo_dir(
+        project_root, entity_id, society_name, alias_entity_id
+    )
     if len(local_society_photo_paths(photo_dir)) >= target_images:
         return
 
@@ -253,13 +267,16 @@ def local_society_photo_records(
     society_name: str,
     observed_at: str,
     policy: Optional[Dict[str, Any]] = None,
+    alias_entity_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Promote previously downloaded high-quality society photos into DAG media.
 
     Collector files are rebuildable staging inputs. The Rust materializer moves
     their bounded delivery copies into immutable content-addressed lake keys.
     """
-    photo_dir = local_society_photo_dir(project_root, entity_id, society_name)
+    photo_dir = local_society_photo_dir(
+        project_root, entity_id, society_name, alias_entity_id
+    )
     if not photo_dir.exists():
         return []
 
@@ -364,7 +381,12 @@ def local_society_photo_paths(photo_dir: Path) -> List[Path]:
     return sorted(paths, key=local_society_photo_sort_key)
 
 
-def local_society_photo_dir(project_root: Path, entity_id: str, society_name: str) -> Path:
+def local_society_photo_dir(
+    project_root: Path,
+    entity_id: str,
+    society_name: str,
+    alias_entity_id: Optional[str] = None,
+) -> Path:
     staged_dir = project_root / "data" / "cache" / "media_ingest" / "societies"
     named_dir = staged_dir / entity_slug(entity_id, society_name)
     if local_society_photo_paths(named_dir):
@@ -374,6 +396,11 @@ def local_society_photo_dir(project_root: Path, entity_id: str, society_name: st
     canonical_dir = staged_dir / canonical_slug
     if canonical_dir != named_dir and local_society_photo_paths(canonical_dir):
         return canonical_dir
+
+    if alias_entity_id:
+        alias_dir = staged_dir / slug(alias_entity_id.split(":", 1)[-1])
+        if local_society_photo_paths(alias_dir):
+            return alias_dir
     return named_dir
 
 

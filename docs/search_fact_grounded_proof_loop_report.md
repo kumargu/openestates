@@ -177,3 +177,48 @@ violations, zero unsupported claims, and stable ordering. The hardcoding audit
 again reported zero blocked search-config aliases. The optional
 `rera_project_plan_frames` asset remained absent because its source payload was
 missing; no plan evidence was invented.
+
+## South Bengaluru 43-society increment
+
+Mahaveer Ranches and Prestige Song of the South were added through scoped DAG
+collection and catalog extension:
+
+- Media identity fix run: `8a97537f-cead-4bb8-9634-2dd5fdfeca11`
+- RERA evidence run: `a18b8ead-284f-4f3c-b6ea-8f490e616068`
+- Scoped serving materialization: `269a4bd0-f2b5-4a1a-b05a-07e133e8593c`
+- Merged serving bundle: `south-43-candidate-2026-08-22`
+- Merged serving materialization: `7dbac2ab-3474-4d81-8b66-6f8251ecdd51`
+- Catalog release: `369df41c-72ba-45b5-bc15-9a3655ca007e`
+- Runtime projection: 43 societies, 103 searchable properties, 14,463 facts,
+  and 14,285 search metadata rows
+- Quarantined societies: 0
+
+The first scoped run showed that validated media existed under historical RERA
+IDs while three phase-grouped canonical IDs could not see it. The collector now
+uses the supplied historical alias only to locate staged media and continues to
+emit every fact under the canonical entity ID. This cleared media eligibility
+without copying media or weakening the policy.
+
+Ajmera Nucleus passed media eligibility but was not promoted because live
+K-RERA detail lookup returned no exact project row, preventing regeneration of
+its authoritative evidence receipt. Mantri Serenity1 remains quarantined for
+`missing_property_size`.
+
+Final proof artifacts:
+
+- Frozen bank: `tmp/search-proof-loop/south-43-candidate/frozen-bank.json` —
+  149/149 checks passed, endpoint p95 20.50 ms
+- South 40 bank: `tmp/search-proof-loop/south-43-candidate/south-bank.json` —
+  57/57 checks passed, endpoint p95 24.03 ms
+- Sarjapur bank: `tmp/search-proof-loop/south-43-candidate/sarjapur-bank.json` —
+  49/49 checks passed, endpoint p95 24.81 ms
+- New South 43 bank:
+  `tmp/search-proof-loop/south-43-candidate/new-south-bank.json` — 67/67
+  checks passed, endpoint p95 22.84 ms
+- Fact ledger: `data/validation/search_fact_ledger_south_43_candidate.json`
+- Query bank: `data/validation/query_bank/search_south_43_candidate.json`
+
+All banks retained 100% recall and proof precision, zero hard-constraint
+violations, zero unsupported claims, and stable ordering. The 43-society
+release was promoted to staging and production with compare-and-swap; the
+41-society release remains the rollback point.
