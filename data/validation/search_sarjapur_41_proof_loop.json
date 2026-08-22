@@ -1,0 +1,7 @@
+{
+  "benchmark": "Sarjapur 41-society fact-grounded proof loop",
+  "version": 1,
+  "required_serving_bundle_version": "sarjapur-41-candidate-2026-08-22",
+  "scoreable_modes": ["data_backed"],
+  "case_files": ["query_bank/search_sarjapur_41_candidate.json"]
+}

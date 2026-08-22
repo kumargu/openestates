@@ -178,18 +178,16 @@ pub async fn search_properties(
             "results".to_string()
         },
     };
-    if response.total_matches > 0 {
-        state
-            .search_cache
-            .put(
-                cache_key,
-                CachedSearchOutput {
-                    response: Arc::new(response.clone()),
-                    log_messages,
-                },
-            )
-            .await;
-    }
+    state
+        .search_cache
+        .put(
+            cache_key,
+            CachedSearchOutput {
+                response: Arc::new(response.clone()),
+                log_messages,
+            },
+        )
+        .await;
 
     Json(response)
 }

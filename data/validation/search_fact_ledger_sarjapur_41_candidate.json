@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-22",
+  "source_bundle": {
+    "version": "sarjapur-41-candidate-2026-08-22",
+    "materialization_id": "464b88a1-cb7c-4e00-ac31-14e4096280b7",
+    "source_run_id": "10e1ce33-593f-48a4-91d2-56fdab7fee83",
+    "catalog_release_id": "86cdcd9a-0733-4875-8f91-e8846c612f32",
+    "entity_count": 721,
+    "fact_count": 13993,
+    "edge_count": 3369,
+    "search_metadata_count": 13834,
+    "eligible_society_count": 41,
+    "searchable_property_count": 97,
+    "quarantined_society_count": 0
+  },
+  "method": [
+    "The immutable candidate entities, facts, and search metadata Parquet were inspected before this ledger and query bank were frozen.",
+    "Only present, annotated facts and runtime projections were used as positive expectations.",
+    "Named society and locality values below are benchmark oracle data only and must not enter production parser, config, or ranking code."
+  ],
+  "societies": [
+    {
+      "canonical_society_id": "society:rera-688242e8e3711955",
+      "runtime_society_id": "soc-godrej-lakeside-orchard",
+      "name": "GODREJ LAKESIDE ORCHARD",
+      "area": "Sarjapur Road",
+      "runtime_property_ids": [
+        "discovered-godrej-lakeside-orchard-2bhk",
+        "discovered-godrej-lakeside-orchard-3bhk",
+        "discovered-godrej-lakeside-orchard-4bhk"
+      ],
+      "facts": [
+        {"fact_key": "available_configurations", "value": "2BHK 3BHK", "confidence": 0.85, "source_type": "Rera", "search_metadata": true},
+        {"fact_key": "home_state", "value": "under_construction", "confidence": 0.9, "source_type": "Computed", "search_metadata": true},
+        {"fact_key": "home_timeline_state", "value": "on_track", "confidence": 0.8, "source_type": "Computed", "search_metadata": true},
+        {"fact_key": "project_land_area_acres", "value": 12.0659, "unit": "acres", "confidence": 0.85, "source_type": "Rera", "search_metadata": true},
+        {"fact_key": "rera_total_land_area_sqm", "value": 48829, "unit": "sqm", "confidence": 0.85, "source_type": "Rera", "search_metadata": true},
+        {"fact_key": "project_unit_count", "value": 698, "confidence": 0.85, "source_type": "Rera", "search_metadata": true},
+        {"fact_key": "google_rating", "value": 3.6, "confidence": 0.85, "source_type": "Google", "search_metadata": true},
+        {"fact_key": "google_review_count", "value": 196, "confidence": 0.85, "source_type": "Google", "search_metadata": true},
+        {"fact_key": "listing_price_range_2bhk", "value": "1.53 Cr-1.70 Cr", "confidence": 0.7, "source_type": "ExternalListing", "search_metadata": true},
+        {"fact_key": "listing_price_range_3bhk", "value": "1.70 Cr-3.50 Cr", "confidence": 0.7, "source_type": "ExternalListing", "search_metadata": true},
+        {"fact_key": "listing_price_range_4bhk", "value": "3.05 Cr", "confidence": 0.7, "source_type": "ExternalListing", "search_metadata": true}
+      ]
+    }
+  ],
+  "known_gaps": [
+    {
+      "classification": "proof_gap",
+      "observation": "The external listing projects a searchable 4BHK, while the official RERA available_configurations fact lists only 2BHK and 3BHK.",
+      "action": "Treat 4BHK as listing-backed inventory only; do not claim it is an official RERA configuration."
+    },
+    {
+      "classification": "data_gap",
+      "observation": "The scoped DAG run had no source payload for rera_project_plan_frames.",
+      "action": "Keep the optional plan-frame output absent; the serving candidate remains valid without inventing plan evidence."
+    },
+    {
+      "classification": "proof_gap",
+      "observation": "Transmission-line proximity facts are present, including 220 kV at 175 m and 400 kV at 435 m, but no buyer query is frozen until the generic constraint and proof behavior is independently verified.",
+      "action": "Do not make a buyer-facing transmission-line benchmark claim in this increment."
+    }
+  ]
+}

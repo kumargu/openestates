@@ -127,3 +127,53 @@ Final proof artifacts:
 The hardcoding audit reported zero blocked search-config aliases. Catalog
 validation passed every required gate; its only warning correctly records four
 collected RERA societies outside this release's catalog scope.
+
+## Sarjapur 41-society increment
+
+Godrej Lakeside Orchard was added through a scoped DAG run and rebased onto the
+promoted South Bengaluru catalog without changing the existing 40 societies:
+
+- DAG run: `10e1ce33-593f-48a4-91d2-56fdab7fee83`
+- Scoped serving materialization: `fa6125a2-d953-48c6-a772-a1e18d256c26`
+- Merged serving bundle: `sarjapur-41-candidate-2026-08-22`
+- Merged serving materialization: `464b88a1-cb7c-4e00-ac31-14e4096280b7`
+- Catalog release: `86cdcd9a-0733-4875-8f91-e8846c612f32`
+- Runtime projection: 41 societies, 97 searchable properties, 13,993 facts,
+  and 13,834 search metadata rows
+- Quarantined societies: 0
+
+Direct Parquet inspection proved 2BHK and 3BHK RERA configurations,
+listing-backed 2/3/4BHK inventory, under-construction and on-track state,
+12.07 acres, 698 homes, and Google 3.6 from 196 reviews. The 4BHK projection
+is deliberately treated as listing-backed only because the official RERA
+configuration fact lists 2BHK and 3BHK.
+
+The first Sarjapur benchmark run exposed two measurement issues rather than a
+ranking defect. Its 3BHK band starts at ₹1.70 Cr, so the `under 1.8cr` query is
+valid even though the result card displays the ₹2.55 Cr midpoint. Separately,
+valid zero-result searches were not cached, making the 13-acre negative control
+repeat the deterministic search path at roughly 74 ms. Search cache entries are
+already serving-version keyed and replay their log messages, so zero-result
+responses now use the same safe cache path as successful responses.
+
+Final proof artifacts:
+
+- Frozen 20-query bank:
+  `tmp/search-proof-loop/sarjapur-41-candidate/final-frozen-bank.json` —
+  149/149 checks passed, endpoint p95 18.53 ms
+- South Bengaluru 8-query bank:
+  `tmp/search-proof-loop/sarjapur-41-candidate/final-south-bank.json` —
+  57/57 checks passed, endpoint p95 20.41 ms
+- Sarjapur 7-query bank:
+  `tmp/search-proof-loop/sarjapur-41-candidate/final-sarjapur-bank.json` —
+  49/49 checks passed, endpoint p95 23.15 ms
+- Fact ledger:
+  `data/validation/search_fact_ledger_sarjapur_41_candidate.json`
+- Query bank:
+  `data/validation/query_bank/search_sarjapur_41_candidate.json`
+
+All three banks retained 100% recall and proof precision, zero hard-constraint
+violations, zero unsupported claims, and stable ordering. The hardcoding audit
+again reported zero blocked search-config aliases. The optional
+`rera_project_plan_frames` asset remained absent because its source payload was
+missing; no plan evidence was invented.
