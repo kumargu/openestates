@@ -19,6 +19,8 @@ const FROZEN_BANK: &str =
     include_str!("../../data/validation/query_bank/search_conversational_semantics_v1.json");
 const BUYER_LANGUAGE_BANK: &str =
     include_str!("../../data/validation/query_bank/search_buyer_language_v1.json");
+const DECISION_RANKING_BANK: &str =
+    include_str!("../../data/validation/query_bank/search_decision_ranking_v1.json");
 static QUERY_BANK: OnceLock<QueryBank> = OnceLock::new();
 
 #[derive(Deserialize)]
@@ -33,24 +35,35 @@ struct QueryCase {
 }
 
 #[derive(Deserialize)]
-struct BuyerLanguageBank {
-    cases: Vec<BuyerLanguageCase>,
+struct ControlledQueryBank {
+    cases: Vec<ControlledQueryCase>,
 }
 
 #[derive(Deserialize)]
-struct BuyerLanguageCase {
+struct ControlledQueryCase {
     id: String,
     query: String,
-    expected_semantics: BuyerLanguageSemantics,
+    expected_semantics: ExpectedSemantics,
     fixture_expectation: FixtureExpectation,
 }
 
 #[derive(Deserialize)]
-struct BuyerLanguageSemantics {
+struct ExpectedSemantics {
     #[serde(default)]
     positive_preferences: Vec<String>,
     #[serde(default)]
     negative_preferences: Vec<String>,
+    #[serde(default)]
+    ranking_priorities: Vec<String>,
+    #[serde(default)]
+    accepted_tradeoffs: Vec<String>,
+    numeric_min: Option<NumericExpectation>,
+}
+
+#[derive(Deserialize)]
+struct NumericExpectation {
+    field: String,
+    value: f64,
 }
 
 #[derive(Deserialize)]
@@ -63,6 +76,8 @@ struct FixtureExpectation {
     excludes: Vec<String>,
     #[serde(default)]
     forbidden_proof_labels: Vec<String>,
+    #[serde(default)]
+    ordered_prefix: Vec<String>,
 }
 
 #[test]
@@ -155,12 +170,24 @@ fn frozen_contextual_alternatives_apply_global_exclusion() {
 #[test]
 fn frozen_buyer_language_queries_execute_against_product_model() {
     let fixture = MockSearchFixture::new();
-    let bank: BuyerLanguageBank =
+    let bank: ControlledQueryBank =
         serde_json::from_str(BUYER_LANGUAGE_BANK).expect("buyer-language bank is valid");
 
     for case in bank.cases {
         let output = fixture.search(&case.query);
-        assert_buyer_language_expectation(&case, &output);
+        assert_controlled_expectation(&case, &output);
+    }
+}
+
+#[test]
+fn frozen_decision_ranking_queries_execute_against_product_model() {
+    let fixture = MockSearchFixture::with_decision_candidates();
+    let bank: ControlledQueryBank =
+        serde_json::from_str(DECISION_RANKING_BANK).expect("decision-ranking bank is valid");
+
+    for case in bank.cases {
+        let output = fixture.search(&case.query);
+        assert_controlled_expectation(&case, &output);
     }
 }
 
@@ -253,7 +280,7 @@ fn assert_proves_places(output: &ObservedSearch, result_id: &str, labels: &[&str
     }
 }
 
-fn assert_buyer_language_expectation(case: &BuyerLanguageCase, output: &ObservedSearch) {
+fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSearch) {
     let expectation = &case.fixture_expectation;
     if let Some(expected_sets) = &expectation.result_sets {
         let actual_sets = output
@@ -303,6 +330,20 @@ fn assert_buyer_language_expectation(case: &BuyerLanguageCase, output: &Observed
             case.id
         );
     }
+    if !expectation.ordered_prefix.is_empty() {
+        let expected_prefix = expectation
+            .ordered_prefix
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual_ids.get(..expected_prefix.len()),
+            Some(expected_prefix.as_slice()),
+            "{} returned unexpected ranking; actual={actual_ids:?}; warnings={:?}",
+            case.id,
+            output.warnings
+        );
+    }
 
     for expected_preference in &case.expected_semantics.positive_preferences {
         assert!(
@@ -318,6 +359,34 @@ fn assert_buyer_language_expectation(case: &BuyerLanguageCase, output: &Observed
             "{} did not compile negative preference {expected_preference:?}; actual={:?}",
             case.id,
             output.negative_preferences
+        );
+    }
+    for expected_tradeoff in &case.expected_semantics.accepted_tradeoffs {
+        assert!(
+            output.accepted_tradeoffs.contains(expected_tradeoff),
+            "{} did not compile accepted tradeoff {expected_tradeoff:?}; actual={:?}",
+            case.id,
+            output.accepted_tradeoffs
+        );
+    }
+    if !case.expected_semantics.ranking_priorities.is_empty() {
+        assert_eq!(
+            output.ranking_priorities, case.expected_semantics.ranking_priorities,
+            "{} compiled the wrong ranking priorities",
+            case.id
+        );
+    }
+    if let Some(expected) = &case.expected_semantics.numeric_min {
+        assert!(
+            output.min_constraints.iter().any(|(field, value)| {
+                field.eq_ignore_ascii_case(&expected.field)
+                    && (*value - expected.value).abs() < f64::EPSILON
+            }),
+            "{} did not compile minimum constraint {} >= {}; actual={:?}",
+            case.id,
+            expected.field,
+            expected.value,
+            output.min_constraints
         );
     }
     for forbidden_label in &expectation.forbidden_proof_labels {
@@ -339,6 +408,9 @@ struct ObservedSearch {
     warnings: Vec<String>,
     positive_preferences: Vec<String>,
     negative_preferences: Vec<String>,
+    ranking_priorities: Vec<String>,
+    accepted_tradeoffs: Vec<String>,
+    min_constraints: Vec<(String, f64)>,
 }
 
 struct ObservedResult {
@@ -353,6 +425,14 @@ struct MockSearchFixture {
 
 impl MockSearchFixture {
     fn new() -> Self {
+        Self::build(false)
+    }
+
+    fn with_decision_candidates() -> Self {
+        Self::build(true)
+    }
+
+    fn build(include_decision_candidates: bool) -> Self {
         let mut builder = FixtureBuilder::default();
         builder.add_place("Hoodi Metro", "metro", 12.9900, 77.7150);
         builder.add_place("Manipal Hospital", "hospital", 12.9700, 77.7350);
@@ -486,6 +566,59 @@ impl MockSearchFixture {
             "nearby_tech_parks",
             "Bagmane Tech Park (0.3 km)",
         );
+        if include_decision_candidates {
+            builder.add_home(
+                HomeSpec::new(
+                    "mock-quiet-priority-3bhk",
+                    "Quiet Priority Homes",
+                    "CV Raman Nagar",
+                    3,
+                    22_000_000,
+                    12.9795,
+                    77.6595,
+                )
+                .quality(Some(0.99), Some(4.0)),
+            );
+            builder.add_nearby_fact(
+                "Quiet Priority Homes",
+                "nearby_tech_parks",
+                "Bagmane Tech Park (0.3 km)",
+            );
+            builder.add_home(
+                HomeSpec::new(
+                    "mock-review-priority-3bhk",
+                    "Review Priority Homes",
+                    "CV Raman Nagar",
+                    3,
+                    20_000_000,
+                    12.9785,
+                    77.6585,
+                )
+                .quality(Some(0.8), Some(4.9)),
+            );
+            builder.add_nearby_fact(
+                "Review Priority Homes",
+                "nearby_tech_parks",
+                "Bagmane Tech Park (0.4 km)",
+            );
+            builder.add_home(
+                HomeSpec::new(
+                    "mock-value-priority-3bhk",
+                    "Value Priority Homes",
+                    "CV Raman Nagar",
+                    3,
+                    19_000_000,
+                    12.9787,
+                    77.6587,
+                )
+                .quality(Some(0.8), Some(4.2)),
+            );
+            builder.add_nearby_fact(
+                "Value Priority Homes",
+                "nearby_tech_parks",
+                "Bagmane Tech Park (0.4 km)",
+            );
+        }
         builder.add_home(
             HomeSpec::new(
                 "mock-missing-noise-3bhk",
@@ -634,6 +767,20 @@ impl MockSearchFixture {
             .iter()
             .map(|preference| preference.raw_text.clone())
             .collect();
+        let accepted_tradeoffs = output.intent.accepted_tradeoffs.clone();
+        let ranking_priorities = output.intent.ranking_priorities.clone();
+        let min_constraints = output
+            .intent
+            .hard_constraints
+            .iter()
+            .filter(|constraint| {
+                matches!(
+                    constraint.operator,
+                    backend::search::intent::ConstraintOperator::Min
+                )
+            })
+            .map(|constraint| (constraint.field.clone(), constraint.value))
+            .collect();
         ObservedSearch {
             result_sets: output
                 .result_sets
@@ -656,6 +803,9 @@ impl MockSearchFixture {
             warnings: output.diagnostics.warnings,
             positive_preferences,
             negative_preferences,
+            ranking_priorities,
+            accepted_tradeoffs,
+            min_constraints,
         }
     }
 }
@@ -719,12 +869,13 @@ impl FixtureBuilder {
             );
         }
         if let Some(rating) = spec.rating {
-            self.add_search_fact(
+            self.add_numeric_search_fact(
                 &entity_id,
                 "google_rating",
-                FactValue::Numeric(rating),
+                rating,
                 &["review quality", "good reviews"],
-                Some("HigherIsBetter"),
+                "HigherIsBetter",
+                &[4.5, 4.0],
             );
         }
         self.properties.push(property(&spec, &society_id));
@@ -762,6 +913,27 @@ impl FixtureBuilder {
             scoring_direction: direction.map(str::to_string),
             scoring_weight: Some(1.0),
             scoring_thresholds: Vec::new(),
+        });
+    }
+
+    fn add_numeric_search_fact(
+        &mut self,
+        entity_id: &str,
+        fact_key: &str,
+        value: f64,
+        preferences: &[&str],
+        direction: &str,
+        thresholds: &[f64],
+    ) {
+        self.add_fact(entity_id, fact_key, FactValue::Numeric(value));
+        self.metadata.push(ServingSearchMetadataRecord {
+            entity_id: entity_id.to_string(),
+            fact_key: fact_key.to_string(),
+            display_template: None,
+            answers_preferences: preferences.iter().map(|value| value.to_string()).collect(),
+            scoring_direction: Some(direction.to_string()),
+            scoring_weight: Some(1.0),
+            scoring_thresholds: thresholds.to_vec(),
         });
     }
 

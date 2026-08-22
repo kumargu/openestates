@@ -257,6 +257,7 @@ impl TextSearch {
                 let mut positive_evidence_score = 0.0;
                 let mut primary_intent_score: f64 = 0.0;
                 let mut best_fact_key_rank = usize::MAX;
+                let mut ranking_priority_scores = vec![None; intent.ranking_priorities.len()];
 
                 for evidence in hard_constraint_matches {
                     best_fact_key_rank = best_fact_key_rank.min(evidence.fact_key_rank);
@@ -378,6 +379,12 @@ impl TextSearch {
                             &candidate_fact_keys,
                             &query_lower,
                         ) {
+                            record_ranking_priority_score(
+                                &mut ranking_priority_scores,
+                                &intent.ranking_priorities,
+                                pref,
+                                evidence.normalized_score,
+                            );
                             best_fact_key_rank = best_fact_key_rank.min(evidence.fact_key_rank);
                             total_facts_consulted += 1;
                             score += evidence.score_delta;
@@ -650,6 +657,7 @@ impl TextSearch {
                 Some(RankedSearchResult {
                     ranking_score: normalized,
                     primary_intent_score,
+                    ranking_priority_scores,
                     best_fact_key_rank,
                     name_prefix_score,
                     residual_text_score,
@@ -690,6 +698,7 @@ struct RankedSearchResult {
     result: SearchResultCard,
     ranking_score: f64,
     primary_intent_score: f64,
+    ranking_priority_scores: Vec<Option<f64>>,
     best_fact_key_rank: usize,
     name_prefix_score: f64,
     residual_text_score: f64,
@@ -707,6 +716,12 @@ fn compare_ranked_results(
     b: &RankedSearchResult,
     tiers: &[BestEffortRankingTier],
 ) -> Ordering {
+    let priority_ordering =
+        compare_ranking_priority_scores(&a.ranking_priority_scores, &b.ranking_priority_scores);
+    if priority_ordering != Ordering::Equal {
+        return priority_ordering;
+    }
+
     for tier in tiers {
         let ordering = match tier {
             BestEffortRankingTier::ExplicitIntent => b
@@ -738,6 +753,36 @@ fn compare_ranked_results(
         .then_with(|| a.best_fact_key_rank.cmp(&b.best_fact_key_rank))
         .then_with(|| descending_f64(a.name_prefix_score, b.name_prefix_score))
         .then_with(|| a.ordinal.cmp(&b.ordinal))
+}
+
+fn record_ranking_priority_score(
+    scores: &mut [Option<f64>],
+    priorities: &[String],
+    preference: &str,
+    score: f64,
+) {
+    let Some(index) = priorities
+        .iter()
+        .position(|priority| priority.eq_ignore_ascii_case(preference))
+    else {
+        return;
+    };
+    scores[index] = Some(scores[index].map_or(score, |current| current.max(score)));
+}
+
+fn compare_ranking_priority_scores(left: &[Option<f64>], right: &[Option<f64>]) -> Ordering {
+    for (left_score, right_score) in left.iter().zip(right) {
+        let ordering = match (left_score, right_score) {
+            (Some(left), Some(right)) => descending_f64(*left, *right),
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => Ordering::Equal,
+        };
+        if ordering != Ordering::Equal {
+            return ordering;
+        }
+    }
+    Ordering::Equal
 }
 
 fn compare_named_place_distance(a: &RankedSearchResult, b: &RankedSearchResult) -> Ordering {

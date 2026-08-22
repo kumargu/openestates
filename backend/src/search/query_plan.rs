@@ -431,6 +431,7 @@ pub(crate) fn project_search_intent(query: &str, plan: &QueryPlan) -> SearchInte
         positive_preferences,
         &negative_preferences,
     );
+    let ranking_priorities = detect_ranking_priorities(&q, plan, &positive_preferences);
     let unsupported_inventory_types = detect_unsupported_inventory_types(&q);
     let buyer_archetype = detect_buyer_archetype(&q, plan);
     let preferences = display_preferences(&positive_preferences, &negative_preferences);
@@ -462,10 +463,50 @@ pub(crate) fn project_search_intent(query: &str, plan: &QueryPlan) -> SearchInte
         preferences,
         positive_preferences,
         negative_preferences,
+        ranking_priorities,
         accepted_tradeoffs,
         unsupported_inventory_types,
         buyer_archetype,
     }
+}
+
+fn detect_ranking_priorities(
+    query_lower: &str,
+    plan: &QueryPlan,
+    positive_preferences: &[PreferenceSignal],
+) -> Vec<String> {
+    let Some(instruction) = first_configured_phrase(
+        &plan.tokens,
+        &search_parser_config()
+            .discourse
+            .ranking_instruction_prefixes,
+        0,
+    ) else {
+        return Vec::new();
+    };
+    let instruction_end = first_configured_phrase(
+        &plan.tokens,
+        &search_parser_config().discourse.ranking_scope_end_markers,
+        instruction.end,
+    )
+    .map_or(usize::MAX, |marker| marker.start);
+
+    let mut ranked = positive_preferences
+        .iter()
+        .filter_map(|preference| {
+            let first_mention = schema::positive_preference_patterns()
+                .iter()
+                .filter(|pattern| pattern.label.eq_ignore_ascii_case(&preference.raw_text))
+                .flat_map(|pattern| pattern.patterns.iter())
+                .flat_map(|pattern| query_pattern_match_ranges(query_lower, pattern, plan))
+                .filter(|(start, _)| *start >= instruction.end && *start < instruction_end)
+                .map(|(start, _)| start)
+                .min()?;
+            Some((first_mention, preference.raw_text.clone()))
+        })
+        .collect::<Vec<_>>();
+    ranked.sort_by_key(|(start, _)| *start);
+    ranked.into_iter().map(|(_, label)| label).collect()
 }
 
 pub(crate) fn unresolved_named_entity_clause(
@@ -621,6 +662,11 @@ pub(crate) fn unresolved_residual_clause(
         .flat_map(|entry| entry.patterns.iter())
         .chain(
             schema::preference_key_overrides()
+                .iter()
+                .flat_map(|entry| entry.patterns.iter()),
+        )
+        .chain(
+            schema::accepted_tradeoffs()
                 .iter()
                 .flat_map(|entry| entry.patterns.iter()),
         )
@@ -1944,6 +1990,50 @@ mod tests {
                 "{query} should compile to {polarity:?} {expected_label}; got {preferences:?}"
             );
         }
+    }
+
+    #[test]
+    fn compiles_only_explicit_post_instruction_ranking_priorities() {
+        let query = "Ready 3BHK near a tech park with good reviews; rank quiet first and resident reviews second";
+        let intent = project_search_intent(query, &compile_query_plan(query));
+
+        assert_eq!(
+            intent.ranking_priorities,
+            vec![
+                "quiet neighborhood".to_string(),
+                "review quality".to_string()
+            ]
+        );
+
+        let gated_query = "Google rating at least 4.2. After that gate, rank only by quiet";
+        let gated_intent = project_search_intent(gated_query, &compile_query_plan(gated_query));
+        assert_eq!(
+            gated_intent.ranking_priorities,
+            vec!["quiet neighborhood".to_string()]
+        );
+    }
+
+    #[test]
+    fn explicit_ranking_after_numeric_gate_preserves_the_gate() {
+        let query = "Only consider ready-to-move 3BHKs near Bagmane Tech Park under ₹2.4 Cr with Google rating at least 4.2. Among those, choose the quieter home even if another has the higher rating.";
+        let intent = project_search_intent(query, &compile_query_plan(query));
+
+        assert!(intent.hard_constraints.iter().any(|constraint| {
+            constraint.field == "google_rating"
+                && constraint.operator == crate::search::intent::ConstraintOperator::Min
+                && (constraint.value - 4.2).abs() < f64::EPSILON
+        }));
+        assert!(intent.positive_preferences.iter().any(|preference| {
+            preference.raw_text == "quiet neighborhood"
+                && preference
+                    .expanded_keys
+                    .iter()
+                    .any(|key| key == "noise_score")
+        }));
+        assert_eq!(
+            intent.ranking_priorities,
+            vec!["quiet neighborhood".to_string()]
+        );
     }
 
     #[test]

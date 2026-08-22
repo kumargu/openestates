@@ -1436,6 +1436,7 @@
           "review strength",
           "resident reviews",
           "strong resident reviews",
+          "strongly reviewed",
           "stronger reviews",
           "residents say",
           "residents speak well",
@@ -1686,6 +1687,8 @@
         "rank": 24,
         "patterns": [
           "quiet",
+          "quietness",
+          "quieter",
           "quieter society",
           "peaceful",
           "calm",

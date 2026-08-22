@@ -1171,12 +1171,15 @@ fn constraint_tokens_with_spans(q: &str) -> Vec<SpannedConstraintToken> {
         while index < mapped.len() && !mapped[index].0.is_whitespace() {
             index += 1;
         }
-        let cleaned = mapped[token_start..index]
+        let mut cleaned = mapped[token_start..index]
             .iter()
             .filter(|(ch, _, _)| {
                 ch.is_ascii_alphanumeric() || *ch == '.' || *ch == '+' || *ch == '%'
             })
             .collect::<Vec<_>>();
+        while cleaned.last().is_some_and(|(ch, _, _)| *ch == '.') {
+            cleaned.pop();
+        }
         let (Some(first), Some(last)) = (cleaned.first(), cleaned.last()) else {
             continue;
         };
@@ -1419,6 +1422,22 @@ mod tests {
         assert!(project
             .iter()
             .any(|constraint| { constraint.field == "open_area_pct" && constraint.value == 70.0 }));
+    }
+
+    #[test]
+    fn sentence_final_decimal_constraint_keeps_its_numeric_value() {
+        let query = "homes under ₹2.4 Cr with rating at least 4.2.";
+        let constraints = detect_hard_constraints(query);
+        let tokens = constraint_tokens(query);
+
+        assert!(
+            constraints.iter().any(|constraint| {
+                constraint.field == "google_rating"
+                    && constraint.operator == ConstraintOperator::Min
+                    && (constraint.value - 4.2).abs() < f64::EPSILON
+            }),
+            "rating constraint should own 4.2 instead of the earlier budget number: tokens={tokens:?}, constraints={constraints:#?}"
+        );
     }
 
     #[test]

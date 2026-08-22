@@ -30,8 +30,8 @@
         "ordered_prefix": [
           "mock-quiet-priority-3bhk",
           "mock-quiet-reviewed-3bhk",
-          "mock-value-priority-3bhk",
-          "mock-review-priority-3bhk"
+          "mock-review-priority-3bhk",
+          "mock-value-priority-3bhk"
         ]
       }
     },
@@ -79,8 +79,8 @@
       "fixture_expectation": {
         "ordered_prefix": [
           "mock-quiet-reviewed-3bhk",
-          "mock-value-priority-3bhk",
-          "mock-review-priority-3bhk"
+          "mock-review-priority-3bhk",
+          "mock-value-priority-3bhk"
         ],
         "excludes": [
           "mock-quiet-priority-3bhk",

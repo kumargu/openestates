@@ -950,6 +950,7 @@ export type SearchIntent = {
   preferences: string[];
   positive_preferences?: PreferenceSignal[];
   negative_preferences?: PreferenceSignal[];
+  ranking_priorities?: string[];
   buyer_archetype?: BuyerArchetype | null;
 };
 

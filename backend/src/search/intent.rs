@@ -51,6 +51,9 @@ pub struct SearchIntent {
     /// Preferences the buyer explicitly wants to avoid.
     #[serde(default)]
     pub negative_preferences: Vec<PreferenceSignal>,
+    /// Explicit buyer ordering for soft preferences, highest priority first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ranking_priorities: Vec<String>,
     /// Risks the buyer says they can accept as a tradeoff, e.g. "bad traffic but great amenities".
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub accepted_tradeoffs: Vec<String>,
@@ -79,6 +82,7 @@ impl Default for SearchIntent {
             preferences: Vec::new(),
             positive_preferences: Vec::new(),
             negative_preferences: Vec::new(),
+            ranking_priorities: Vec::new(),
             accepted_tradeoffs: Vec::new(),
             unsupported_inventory_types: Vec::new(),
             buyer_archetype: None,

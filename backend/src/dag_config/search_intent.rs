@@ -89,6 +89,10 @@ pub struct DiscourseParserConfig {
     #[serde(default)]
     pub branch_ordinals: Vec<String>,
     #[serde(default)]
+    pub ranking_instruction_prefixes: Vec<String>,
+    #[serde(default)]
+    pub ranking_scope_end_markers: Vec<String>,
+    #[serde(default)]
     pub scoped_exclusion_markers: Vec<String>,
 }
 
@@ -311,6 +315,22 @@ fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
     validate_aliases(
         "parser.discourse.branch_ordinals",
         config.discourse.branch_ordinals.iter().map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.ranking_instruction_prefixes",
+        config
+            .discourse
+            .ranking_instruction_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.ranking_scope_end_markers",
+        config
+            .discourse
+            .ranking_scope_end_markers
+            .iter()
+            .map(String::as_str),
     )?;
     validate_aliases(
         "parser.discourse.scoped_exclusion_markers",

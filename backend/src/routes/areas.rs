@@ -406,6 +406,7 @@ mod tests {
                 preferences: Vec::new(),
                 positive_preferences: Vec::new(),
                 negative_preferences: Vec::new(),
+                ranking_priorities: Vec::new(),
                 accepted_tradeoffs: Vec::new(),
                 unsupported_inventory_types: Vec::new(),
                 buyer_archetype: None,
