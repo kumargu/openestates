@@ -133,8 +133,6 @@ pub struct ConstraintRelaxationPolicy {
     pub target_result_count: usize,
     #[serde(default = "default_relax_only_when_no_exact_results")]
     pub only_when_no_exact_results: bool,
-    #[serde(default = "default_constraint_relaxation_order")]
-    pub order: Vec<String>,
     #[serde(default = "default_budget_relaxation_multipliers")]
     pub budget_multipliers: Vec<f64>,
 }
@@ -162,7 +160,6 @@ impl Default for ConstraintRelaxationPolicy {
         Self {
             target_result_count: default_constraint_relaxation_target_result_count(),
             only_when_no_exact_results: default_relax_only_when_no_exact_results(),
-            order: default_constraint_relaxation_order(),
             budget_multipliers: default_budget_relaxation_multipliers(),
         }
     }
@@ -736,20 +733,6 @@ fn validate_constraint_relaxation(
             "constraint relaxation target result count must be greater than zero".to_string(),
         ));
     }
-    let supported_steps = ["budget_tolerance", "budget_cap", "bhk"];
-    let mut seen = BTreeSet::new();
-    for step in &policy.order {
-        if !supported_steps.contains(&step.as_str()) {
-            return Err(DagConfigError::InvalidConfig(format!(
-                "unsupported constraint relaxation step {step}"
-            )));
-        }
-        if !seen.insert(step.as_str()) {
-            return Err(DagConfigError::InvalidConfig(format!(
-                "duplicate constraint relaxation step {step}"
-            )));
-        }
-    }
     if policy
         .budget_multipliers
         .iter()
@@ -796,12 +779,6 @@ fn default_positive_evidence_floor_ratio() -> f64 {
 fn default_no_positive_evidence_score_multiplier() -> f64 {
     0.40
 }
-fn default_constraint_relaxation_order() -> Vec<String> {
-    ["budget_tolerance", "budget_cap"]
-        .into_iter()
-        .map(str::to_string)
-        .collect()
-}
 fn default_constraint_relaxation_target_result_count() -> usize {
     3
 }
@@ -809,7 +786,7 @@ fn default_relax_only_when_no_exact_results() -> bool {
     true
 }
 fn default_budget_relaxation_multipliers() -> Vec<f64> {
-    vec![1.10, 1.25, 1.50]
+    vec![1.10, 1.25]
 }
 fn default_nearby_area_score_penalty() -> f64 {
     -0.35
@@ -907,15 +884,18 @@ mod tests {
         assert_eq!(policy.area_tracker.min_listing_count, 2);
         assert_eq!(policy.search_ranking.ranked_focus_min_match_score, 0.35);
         assert_eq!(
-            policy.search_ranking.constraint_relaxation.order,
-            ["budget_tolerance", "budget_cap"]
-        );
-        assert_eq!(
             policy
                 .search_ranking
                 .constraint_relaxation
                 .target_result_count,
             3
+        );
+        assert_eq!(
+            policy
+                .search_ranking
+                .constraint_relaxation
+                .budget_multipliers,
+            [1.10, 1.25]
         );
         assert_eq!(policy.search_ranking.result_limit, 32);
         assert_eq!(

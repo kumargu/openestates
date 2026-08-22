@@ -1028,6 +1028,8 @@ export type SearchResultItem = PropertyCard & {
   match_explanation?: MatchExplanation;
   proof_focuses?: ProofFocus[];
   confidence_score?: ConfidenceScore;
+  match_tier: "exact" | "supported" | "budget_expanded";
+  tradeoff_label?: string;
 };
 
 export type SearchAreaContext = {
@@ -1075,17 +1077,18 @@ export type SearchResultFocus = {
   more_homes?: SearchResultItem[];
 };
 
+export type SearchResultSet = {
+  branchId: string;
+  label: string;
+  results: SearchResultItem[];
+};
+
 export type SearchResponse = {
   query: string;
-  intent: SearchIntent;
-  results: SearchResultItem[];
-  area_context: SearchAreaContext | null;
-  eligible_results: number;
-  results_returned: number;
-  total_results: number;
-  focus?: SearchResultFocus | null;
-  knowledge_context: KnowledgeContext | null;
-  search_guidance?: SearchGuidance | null;
+  resultSets: SearchResultSet[];
+  totalMatches: number;
+  areaContext?: SearchAreaContext;
+  state: "results" | "no_matches";
 };
 
 export type ReraInfo = {

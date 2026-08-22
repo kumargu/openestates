@@ -87,16 +87,6 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     );
 
     println!("Request-time network AI disabled: search uses only local artifacts");
-    let intent_classifier = match crate::search::FastTextIntentClassifier::load(project_root) {
-        Ok(classifier) => classifier.map(Arc::new),
-        Err(error) => {
-            eprintln!("Intent classifier disabled: {error}");
-            None
-        }
-    };
-    if intent_classifier.is_some() {
-        println!("Loaded local fastText intent classifier in shadow mode");
-    }
     let discovery_config = load_discovery_config();
     let map_overlays = crate::routes::map_overlays::load_city_map_overlays(project_root);
     let knowledge = Arc::new(RwLock::new(graph));
@@ -106,7 +96,6 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     AppState {
         search_runtime: ArcSwap::from_pointee(search_runtime),
         search_cache: SearchResponseCache::from_env(),
-        intent_classifier,
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),
         properties: RwLock::new(properties),

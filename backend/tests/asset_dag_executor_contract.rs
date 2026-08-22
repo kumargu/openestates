@@ -767,7 +767,6 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     let state = Arc::new(AppState {
         search_runtime: ArcSwap::from_pointee(search_runtime),
         search_cache: SearchResponseCache::new(8),
-        intent_classifier: None,
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),
         properties: RwLock::new(properties),
@@ -793,20 +792,13 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     .await
     .0;
     assert_eq!(response.query, query);
-    assert_eq!(response.total_results, 1);
-    assert_eq!(response.intent.bhk, Some(3));
-    assert_eq!(response.intent.area.as_deref(), Some("Whitefield"));
-    let knowledge_context = response
-        .knowledge_context
-        .as_ref()
-        .expect("search endpoint should return knowledge context");
-    assert!(knowledge_context.learning_gaps.is_empty());
-    assert_eq!(knowledge_context.claims.len(), 1);
-    assert!(knowledge_context
-        .claims
-        .iter()
-        .any(|claim| claim.source_type == "Rera" && claim.claim.contains("RERA land area")));
-    let results = response.results;
+    assert_eq!(response.total_matches, 1);
+    assert_eq!(response.state, "results");
+    let results = response
+        .result_sets
+        .into_iter()
+        .flat_map(|set| set.results)
+        .collect::<Vec<_>>();
 
     assert_eq!(
         results

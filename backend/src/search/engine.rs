@@ -14,15 +14,13 @@ use crate::state::SEARCH_ENGINE_VERSION;
 use super::ast::{CompiledQuery, ResolvedEntityConstraint};
 use super::geo;
 use super::index::SearchIndex;
-use super::intent::{SearchIntent, SourceSpan};
-use super::intent_classifier::{FastTextIntentClassifier, IntentClassifierTrace};
-use super::parser;
+use super::intent::SearchIntent;
 use super::query_plan::{self, QueryPlan};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text, slug};
 use super::schema;
 use super::{
-    MatchExplanation, MatchReason, PreferenceCoverage, SearchResultCard, TextSearch,
-    TextSearchRequest,
+    MatchExplanation, MatchReason, PreferenceCoverage, SearchResultCard, SearchResultSet,
+    TextSearch, TextSearchRequest,
 };
 
 const TANTIVY_RECALL_LIMIT: usize = 128;
@@ -38,15 +36,14 @@ pub struct SearchEngine<'a> {
     pub property_by_id: Option<&'a HashMap<String, usize>>,
     pub societies: &'a [Society],
     pub graph: Option<&'a KnowledgeGraph>,
-    pub intent_classifier: Option<&'a FastTextIntentClassifier>,
 }
 
 #[derive(Debug, Clone)]
 pub struct SearchEngineOutput {
     pub intent: SearchIntent,
     pub results: Vec<SearchResultCard>,
+    pub result_sets: Vec<SearchResultSet>,
     pub eligible_result_count: usize,
-    pub named_society_alternatives: Vec<String>,
     pub diagnostics: SearchDiagnostics,
     pub relaxations: Vec<SearchRelaxation>,
     pub evidence_gaps: Vec<SearchEvidenceGap>,
@@ -67,8 +64,6 @@ pub struct SearchDiagnostics {
     pub layer_timings: Vec<SearchLayerTiming>,
     pub runtime: SearchRuntimeDiagnostics,
     pub resolved: SearchResolutionDiagnostics,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub intent_classifier: Option<IntentClassifierTrace>,
     pub recall: SearchRecallDiagnostics,
     pub top_candidate_scores: Vec<CandidateScore>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -154,12 +149,6 @@ pub struct SearchRelaxation {
     pub reason: SearchRelaxationReason,
 }
 
-#[derive(Clone, Copy)]
-enum BudgetRelaxationState {
-    Tolerance(f64),
-    CapRemoved,
-}
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchRelaxationReason {
@@ -193,6 +182,70 @@ struct TantivyRecallResult {
 
 impl<'a> SearchEngine<'a> {
     pub fn search(&self, query: &str) -> SearchEngineOutput {
+        if let Some(branch_queries) = self.independent_or_branch_queries(query) {
+            return self.search_independent_branches(query, &branch_queries);
+        }
+        self.search_single(query)
+    }
+
+    fn search_independent_branches(
+        &self,
+        query: &str,
+        branch_queries: &[String],
+    ) -> SearchEngineOutput {
+        let started_at = Instant::now();
+        let outputs = branch_queries
+            .iter()
+            .map(|branch| self.search_single(branch))
+            .collect::<Vec<_>>();
+        combine_branch_outputs(query, outputs, started_at.elapsed().as_secs_f64() * 1000.0)
+    }
+
+    fn independent_or_branch_queries(&self, query: &str) -> Option<Vec<String>> {
+        let plan = query_plan::compile_query_plan(query);
+        let segments = independent_or_segments(query, &plan)?;
+        let segment_queries = segments
+            .iter()
+            .map(|segment| query[segment.start..segment.end].trim().to_string())
+            .collect::<Vec<_>>();
+        if segment_queries.iter().all(|segment| {
+            !query_plan::compile_query_plan(segment)
+                .slots
+                .bhks
+                .is_empty()
+                && segment_has_explicit_qualifier(segment)
+        }) {
+            return Some(segment_queries);
+        }
+        let parsed_intent = query_plan::project_search_intent(query, &plan);
+        let resolved_entities = resolve_serving_query_entities(
+            query,
+            &plan,
+            &parsed_intent,
+            self.serving_bundle,
+            self.properties,
+        );
+        let entity_constraints = resolved_entity_constraints(query, &resolved_entities);
+        let intent = apply_resolved_constraints(parsed_intent, &resolved_entities);
+        let compiled = CompiledQuery::compile(query, &plan, intent, &entity_constraints);
+        let branches = compiled.constraints.flat_branches();
+        if branches.len() != segments.len() {
+            return None;
+        }
+        branches
+            .iter()
+            .zip(segments.iter())
+            .all(|(branch, segment)| {
+                let segment_query = query[segment.start..segment.end].trim();
+                branch.has_terms()
+                    && branch.has_source_span_within(segment.start, segment.end)
+                    && (branch.source_spans_within(segment.start, segment.end)
+                        || segment_has_explicit_qualifier(segment_query))
+            })
+            .then_some(segment_queries)
+    }
+
+    fn search_single(&self, query: &str) -> SearchEngineOutput {
         let mut timer = SearchTimer::start();
 
         let query_plan = timer.measure("query_plan_compile", || {
@@ -223,31 +276,30 @@ impl<'a> SearchEngine<'a> {
             .map(|entity| entity.name.clone())
             .collect::<Vec<_>>();
         let entity_constraints = resolved_entity_constraints(query, &serving_resolved_entities);
-        let classifier_trace = timer.measure("intent_classifier_shadow", || {
-            self.intent_classifier.map(|classifier| {
-                let resolved_spans = entity_constraints
-                    .iter()
-                    .map(|entity| SourceSpan {
-                        start: entity.span.start,
-                        end: entity.span.end,
-                        raw_text: entity.span.raw_text.clone(),
-                    })
-                    .collect::<Vec<_>>();
-                classifier.classify(query, &query_plan, &resolved_spans)
-            })
-        });
         let compiled_query = timer.measure("intent_constraints", || {
             let intent =
                 apply_resolved_constraints(parsed_intent.clone(), &serving_resolved_entities);
             CompiledQuery::compile(query, &query_plan, intent, &entity_constraints)
         });
         let intent = &compiled_query.intent;
-        let unresolved_entity_clause = unresolved_named_entity_clause(
-            query,
-            &query_plan,
-            &serving_resolved_entities,
-            geo_query.as_ref(),
-        );
+        let unresolved_entity_clause =
+            unsupported_qualifier_clause(query, &query_plan).or_else(|| {
+                unresolved_named_entity_clause(
+                    query,
+                    &query_plan,
+                    &serving_resolved_entities,
+                    geo_query.as_ref(),
+                )
+            });
+        let unavailable_required_capability = self.serving_bundle.and_then(|bundle| {
+            intent
+                .positive_preferences
+                .iter()
+                .chain(intent.negative_preferences.iter())
+                .filter(|preference| preference.required)
+                .find(|preference| !bundle.search_capabilities.supports_preference(preference))
+                .map(|preference| preference.raw_text.clone())
+        });
 
         let mut structured_candidate_ids = timer.measure("structured_recall", || {
             self.search_index.recall_ids(&compiled_query)
@@ -364,6 +416,7 @@ impl<'a> SearchEngine<'a> {
 
         let mut results = timer.measure("ranking", || {
             if unresolved_entity_clause.is_some()
+                || unavailable_required_capability.is_some()
                 || (resolved_geo_constraint
                     && recall_set
                         .ranking_candidate_ids
@@ -389,32 +442,6 @@ impl<'a> SearchEngine<'a> {
         let eligible_result_count = results.len();
         let mut relaxations = Vec::new();
         let mut evidence_gaps = Vec::new();
-        let mut named_society_alternatives = Vec::new();
-        if results.is_empty()
-            && !requested_societies.is_empty()
-            && unresolved_entity_clause.is_none()
-        {
-            let mut alternative_query = compiled_query.clone();
-            alternative_query.constraints.drop_society_includes();
-            let alternative_ids = self.search_index.recall_constraint_ids(&alternative_query);
-            let alternative_indexes =
-                candidate_property_indexes(&alternative_ids, self.property_by_id);
-            results = TextSearch::search(TextSearchRequest {
-                properties: self.properties,
-                search_index: Some(self.search_index),
-                extra_candidate_ids: Some(&alternative_ids),
-                candidate_property_indexes: alternative_indexes,
-                geo_query: geo_query.as_ref(),
-                serving_facts,
-                society_names: self.society_names,
-                societies: self.societies,
-                compiled_query: &alternative_query,
-                graph: ranking_graph,
-            });
-            if !results.is_empty() {
-                named_society_alternatives = requested_societies.clone();
-            }
-        }
         let relaxation_policy = &schema::ranking_policy().constraint_relaxation;
         let relaxation_target = relaxation_policy.target_result_count;
         if results.len() < relaxation_target
@@ -440,6 +467,14 @@ impl<'a> SearchEngine<'a> {
         }
         evidence_gaps.extend(unresolved_proximity_gaps(geo_query.as_ref()));
         results.truncate(schema::ranking_policy().result_limit);
+        let result_sets = build_result_sets(
+            &compiled_query,
+            &results,
+            self.properties,
+            self.property_by_id,
+            self.search_index,
+            serving_facts,
+        );
 
         let resolved_entities = timer.measure("entity_resolution", || {
             resolve_query_entities(
@@ -455,6 +490,9 @@ impl<'a> SearchEngine<'a> {
         if let Some(clause) = unresolved_entity_clause {
             warnings.push(format!("unresolved named entity clause: {clause}"));
         }
+        if let Some(capability) = unavailable_required_capability {
+            warnings.push(format!("unavailable search capability: {capability}"));
+        }
         let mut diagnostics = SearchDiagnostics {
             layer_timings: timer.finish(),
             runtime: SearchRuntimeDiagnostics {
@@ -466,7 +504,6 @@ impl<'a> SearchEngine<'a> {
             resolved: SearchResolutionDiagnostics {
                 entities: resolved_entities,
             },
-            intent_classifier: classifier_trace,
             recall: SearchRecallDiagnostics {
                 structured_total_count: recall_set.structured_total_count,
                 structured_count: recall_set.structured_candidate_ids.len(),
@@ -495,8 +532,8 @@ impl<'a> SearchEngine<'a> {
         SearchEngineOutput {
             intent: intent.clone(),
             results,
+            result_sets,
             eligible_result_count,
-            named_society_alternatives,
             diagnostics,
             relaxations,
             evidence_gaps,
@@ -529,7 +566,7 @@ impl<'a> SearchEngine<'a> {
             let ranking_candidate_indexes = ranking_candidate_ids
                 .as_ref()
                 .and_then(|ids| candidate_property_indexes(ids, property_by_id));
-            let mut results = TextSearch::search(TextSearchRequest {
+            TextSearch::search(TextSearchRequest {
                 properties: self.properties,
                 search_index: Some(self.search_index),
                 extra_candidate_ids: ranking_candidate_ids.as_deref(),
@@ -540,13 +577,7 @@ impl<'a> SearchEngine<'a> {
                 societies: self.societies,
                 compiled_query: relaxed_query,
                 graph: ranking_graph,
-            });
-            if compiled_query.constraints.has_budget_max()
-                && !relaxed_query.constraints.has_budget_max()
-            {
-                results.retain(|result| result.card.price > 0);
-            }
-            results
+            })
         };
 
         let policy = &schema::ranking_policy().constraint_relaxation;
@@ -557,115 +588,34 @@ impl<'a> SearchEngine<'a> {
             .map(|result| result.card.id.clone())
             .collect::<HashSet<_>>();
         let mut applied_relaxations = Vec::new();
-        let mut relaxed_query = compiled_query.clone();
-        let mut budget_relaxation_state = None;
-        let mut bhk_relaxed = false;
-        for step in &policy.order {
-            match step.as_str() {
-                "budget_tolerance" => {
-                    for multiplier in &policy.budget_multipliers {
-                        let mut attempt_query = relaxed_query.clone();
-                        if !attempt_query.constraints.scale_budget_max(*multiplier) {
-                            continue;
-                        }
-                        let results = rank(&attempt_query, None);
-                        let state = BudgetRelaxationState::Tolerance(*multiplier);
-                        let added_relaxations = accumulate_relaxed_results(
-                            &mut accumulated_results,
-                            &mut seen_property_ids,
-                            results,
-                            policy.target_result_count,
-                            &mut |candidate| {
-                                relaxations_for_candidate(
-                                    compiled_query,
-                                    candidate,
-                                    self.properties,
-                                    property_by_id,
-                                    self.search_index,
-                                    serving_facts,
-                                    Some(state),
-                                    bhk_relaxed,
-                                )
-                            },
-                        );
-                        if !added_relaxations.is_empty() {
-                            extend_unique_relaxations(&mut applied_relaxations, &added_relaxations);
-                        }
-                        if accumulated_results.len() >= policy.target_result_count {
-                            return Some((accumulated_results, applied_relaxations));
-                        }
-                    }
-                }
-                "budget_cap" => {
-                    if !relaxed_query.constraints.drop_budget_max() {
-                        continue;
-                    }
-                    budget_relaxation_state = Some(BudgetRelaxationState::CapRemoved);
-                    let results = rank(&relaxed_query, None);
-                    let added_relaxations = accumulate_relaxed_results(
-                        &mut accumulated_results,
-                        &mut seen_property_ids,
-                        results,
-                        policy.target_result_count,
-                        &mut |candidate| {
-                            relaxations_for_candidate(
-                                compiled_query,
-                                candidate,
-                                self.properties,
-                                property_by_id,
-                                self.search_index,
-                                serving_facts,
-                                budget_relaxation_state,
-                                bhk_relaxed,
-                            )
-                        },
-                    );
-                    if !added_relaxations.is_empty() {
-                        extend_unique_relaxations(&mut applied_relaxations, &added_relaxations);
-                    }
-                    if accumulated_results.len() >= policy.target_result_count {
-                        return Some((accumulated_results, applied_relaxations));
-                    }
-                }
-                "bhk" => {
-                    let bhks = compiled_query.constraints.bhk_include_values();
-                    if bhks.is_empty() {
-                        continue;
-                    }
-                    let mut bhk_query = relaxed_query.clone();
-                    bhk_query.constraints.drop_bhk_includes();
-                    for bhk in &bhks {
-                        remove_bhk_preference_signals(&mut bhk_query.intent, *bhk);
-                    }
-                    relaxed_query = bhk_query;
-                    bhk_relaxed = true;
-                    let results = rank(&relaxed_query, None);
-                    let added_relaxations = accumulate_relaxed_results(
-                        &mut accumulated_results,
-                        &mut seen_property_ids,
-                        results,
-                        policy.target_result_count,
-                        &mut |candidate| {
-                            relaxations_for_candidate(
-                                compiled_query,
-                                candidate,
-                                self.properties,
-                                property_by_id,
-                                self.search_index,
-                                serving_facts,
-                                budget_relaxation_state,
-                                bhk_relaxed,
-                            )
-                        },
-                    );
-                    if !added_relaxations.is_empty() {
-                        extend_unique_relaxations(&mut applied_relaxations, &added_relaxations);
-                    }
-                    if accumulated_results.len() >= policy.target_result_count {
-                        return Some((accumulated_results, applied_relaxations));
-                    }
-                }
-                _ => {}
+        for multiplier in &policy.budget_multipliers {
+            let mut attempt_query = compiled_query.clone();
+            if !attempt_query.constraints.scale_budget_max(*multiplier) {
+                continue;
+            }
+            let results = rank(&attempt_query, None);
+            let added_relaxations = accumulate_relaxed_results(
+                &mut accumulated_results,
+                &mut seen_property_ids,
+                results,
+                policy.target_result_count,
+                &mut |candidate| {
+                    relaxations_for_candidate(
+                        compiled_query,
+                        candidate,
+                        self.properties,
+                        property_by_id,
+                        self.search_index,
+                        serving_facts,
+                        *multiplier,
+                    )
+                },
+            );
+            if !added_relaxations.is_empty() {
+                extend_unique_relaxations(&mut applied_relaxations, &added_relaxations);
+            }
+            if accumulated_results.len() >= policy.target_result_count {
+                return Some((accumulated_results, applied_relaxations));
             }
         }
 
@@ -675,6 +625,369 @@ impl<'a> SearchEngine<'a> {
             None
         }
     }
+}
+
+fn independent_or_segments(query: &str, plan: &QueryPlan) -> Option<Vec<query_plan::ByteSpan>> {
+    let separators = plan
+        .tokens
+        .iter()
+        .filter(|token| token.text.eq_ignore_ascii_case("or"))
+        .collect::<Vec<_>>();
+    if separators.is_empty() {
+        return None;
+    }
+    let mut segments = Vec::with_capacity(separators.len() + 1);
+    let mut start = 0;
+    for separator in separators {
+        if query[start..separator.start].trim().is_empty() {
+            return None;
+        }
+        segments.push(query_plan::ByteSpan {
+            start,
+            end: separator.start,
+        });
+        start = separator.end;
+    }
+    if query[start..].trim().is_empty() {
+        return None;
+    }
+    segments.push(query_plan::ByteSpan {
+        start,
+        end: query.len(),
+    });
+    Some(segments)
+}
+
+fn segment_has_explicit_qualifier(query: &str) -> bool {
+    let plan = query_plan::compile_query_plan(query);
+    !plan.slots.budgets.is_empty()
+        || !plan.clauses.is_empty()
+        || !plan.evidence.is_empty()
+        || plan
+            .tokens
+            .iter()
+            .any(|token| matches!(token.text.to_ascii_lowercase().as_str(), "with" | "prefer"))
+}
+
+fn combine_branch_outputs(
+    query: &str,
+    outputs: Vec<SearchEngineOutput>,
+    total_duration_ms: f64,
+) -> SearchEngineOutput {
+    let mut intent =
+        query_plan::project_search_intent(query, &query_plan::compile_query_plan(query));
+    let mut result_sets = Vec::new();
+    let mut results = Vec::new();
+    let mut result_ids = HashSet::new();
+    let mut relaxations = Vec::new();
+    let mut evidence_gaps = Vec::new();
+    for (index, output) in outputs.iter().enumerate() {
+        merge_branch_intent_resolution(&mut intent, &output.intent);
+        extend_unique_relaxations(&mut relaxations, &output.relaxations);
+        for gap in &output.evidence_gaps {
+            if !evidence_gaps.iter().any(|existing: &SearchEvidenceGap| {
+                existing.entity_id == gap.entity_id && existing.missing_fact == gap.missing_fact
+            }) {
+                evidence_gaps.push(gap.clone());
+            }
+        }
+        let branch_results = output
+            .result_sets
+            .iter()
+            .flat_map(|set| set.results.iter().cloned())
+            .collect::<Vec<_>>();
+        if branch_results.is_empty() {
+            continue;
+        }
+        for result in &branch_results {
+            if result_ids.insert(result.card.id.clone()) {
+                results.push(result.clone());
+            }
+        }
+        let label = output
+            .result_sets
+            .first()
+            .map(|set| set.label.clone())
+            .filter(|label| !label.is_empty())
+            .unwrap_or_else(|| format!("Option {}", index + 1));
+        result_sets.push(SearchResultSet {
+            branch_id: format!("branch-{}", index + 1),
+            label,
+            results: branch_results,
+        });
+    }
+    let eligible_result_count = outputs
+        .iter()
+        .map(|output| output.eligible_result_count)
+        .sum();
+    results.truncate(schema::ranking_policy().result_limit);
+    let diagnostics = combine_branch_diagnostics(
+        &outputs,
+        &results,
+        &relaxations,
+        &evidence_gaps,
+        total_duration_ms,
+    );
+    SearchEngineOutput {
+        intent,
+        results,
+        result_sets,
+        eligible_result_count,
+        diagnostics,
+        relaxations,
+        evidence_gaps,
+    }
+}
+
+fn merge_branch_intent_resolution(intent: &mut SearchIntent, branch: &SearchIntent) {
+    for area in branch.requested_areas() {
+        push_unique_string(&mut intent.areas, area);
+    }
+    intent.area = (intent.areas.len() == 1).then(|| intent.areas[0].clone());
+    for bhk in branch.requested_bhks() {
+        if !intent.bhks.contains(&bhk) {
+            intent.bhks.push(bhk);
+        }
+    }
+    intent.bhk = (intent.bhks.len() == 1).then(|| intent.bhks[0]);
+    for area in &branch.excluded_areas {
+        push_unique_string(&mut intent.excluded_areas, area);
+    }
+    for society in &branch.excluded_societies {
+        push_unique_string(&mut intent.excluded_societies, society);
+    }
+    for builder in &branch.excluded_builders {
+        push_unique_string(&mut intent.excluded_builders, builder);
+    }
+}
+
+fn combine_branch_diagnostics(
+    outputs: &[SearchEngineOutput],
+    results: &[SearchResultCard],
+    relaxations: &[SearchRelaxation],
+    evidence_gaps: &[SearchEvidenceGap],
+    total_duration_ms: f64,
+) -> SearchDiagnostics {
+    let mut diagnostics = outputs
+        .first()
+        .map(|output| output.diagnostics.clone())
+        .unwrap_or_else(|| SearchDiagnostics {
+            layer_timings: Vec::new(),
+            runtime: SearchRuntimeDiagnostics {
+                serving_bundle_version: None,
+                search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
+            },
+            resolved: SearchResolutionDiagnostics {
+                entities: Vec::new(),
+            },
+            recall: SearchRecallDiagnostics {
+                structured_total_count: 0,
+                structured_count: 0,
+                tantivy_count: 0,
+                merged_extra_count: 0,
+                structured_sample: Vec::new(),
+                tantivy_sample: Vec::new(),
+                tantivy_entity_sample: Vec::new(),
+            },
+            top_candidate_scores: Vec::new(),
+            relaxations: Vec::new(),
+            evidence_gaps: Vec::new(),
+            warnings: Vec::new(),
+        });
+    diagnostics.layer_timings.clear();
+    diagnostics.resolved.entities.clear();
+    diagnostics.recall.structured_total_count = 0;
+    diagnostics.recall.structured_count = 0;
+    diagnostics.recall.tantivy_count = 0;
+    diagnostics.recall.merged_extra_count = 0;
+    diagnostics.recall.structured_sample.clear();
+    diagnostics.recall.tantivy_sample.clear();
+    diagnostics.recall.tantivy_entity_sample.clear();
+    diagnostics.warnings.clear();
+    for output in outputs {
+        for timing in &output.diagnostics.layer_timings {
+            if timing.layer == "total" {
+                continue;
+            }
+            if let Some(existing) = diagnostics
+                .layer_timings
+                .iter_mut()
+                .find(|existing| existing.layer == timing.layer)
+            {
+                existing.duration_ms += timing.duration_ms;
+            } else {
+                diagnostics.layer_timings.push(timing.clone());
+            }
+        }
+        for entity in &output.diagnostics.resolved.entities {
+            if !diagnostics.resolved.entities.iter().any(|existing| {
+                existing.entity_id == entity.entity_id
+                    && existing.matched_text == entity.matched_text
+                    && existing.polarity == entity.polarity
+            }) {
+                diagnostics.resolved.entities.push(entity.clone());
+            }
+        }
+        diagnostics.recall.structured_total_count +=
+            output.diagnostics.recall.structured_total_count;
+        diagnostics.recall.structured_count += output.diagnostics.recall.structured_count;
+        diagnostics.recall.tantivy_count += output.diagnostics.recall.tantivy_count;
+        diagnostics.recall.merged_extra_count += output.diagnostics.recall.merged_extra_count;
+        for id in &output.diagnostics.recall.structured_sample {
+            push_unique_string(&mut diagnostics.recall.structured_sample, id);
+        }
+        for id in &output.diagnostics.recall.tantivy_sample {
+            push_unique_string(&mut diagnostics.recall.tantivy_sample, id);
+        }
+        for hit in &output.diagnostics.recall.tantivy_entity_sample {
+            if !diagnostics
+                .recall
+                .tantivy_entity_sample
+                .iter()
+                .any(|existing| existing.entity_id == hit.entity_id)
+            {
+                diagnostics.recall.tantivy_entity_sample.push(hit.clone());
+            }
+        }
+        for warning in &output.diagnostics.warnings {
+            push_unique_string(&mut diagnostics.warnings, warning);
+        }
+    }
+    diagnostics.layer_timings.push(SearchLayerTiming {
+        layer: "total".to_string(),
+        duration_ms: total_duration_ms,
+    });
+    diagnostics.top_candidate_scores = candidate_scores(results);
+    diagnostics.relaxations = relaxations.to_vec();
+    diagnostics.evidence_gaps = evidence_gaps.to_vec();
+    diagnostics
+}
+
+fn unsupported_qualifier_clause(query: &str, plan: &QueryPlan) -> Option<String> {
+    for (index, token) in plan.tokens.iter().enumerate() {
+        if !matches!(token.text.to_ascii_lowercase().as_str(), "with" | "prefer") {
+            continue;
+        }
+        let Some(first) = plan.tokens.get(index + 1) else {
+            continue;
+        };
+        let end = plan.tokens[index + 1..]
+            .iter()
+            .find(|candidate| {
+                matches!(
+                    candidate.text.to_ascii_lowercase().as_str(),
+                    "and" | "or" | "but" | "in" | "near" | "under" | "below" | "above"
+                )
+            })
+            .map_or(query.len(), |candidate| candidate.start);
+        if end <= first.start {
+            continue;
+        }
+        let clause = query[first.start..end].trim_matches(|character: char| {
+            character.is_ascii_whitespace() || ",;".contains(character)
+        });
+        if clause.is_empty() {
+            continue;
+        }
+        let intent = crate::search::intent::parse_intent(clause);
+        if intent.positive_preferences.is_empty()
+            && intent.negative_preferences.is_empty()
+            && intent.hard_constraints.is_empty()
+        {
+            return Some(clause.to_string());
+        }
+    }
+    None
+}
+
+fn build_result_sets(
+    compiled_query: &CompiledQuery,
+    results: &[SearchResultCard],
+    properties: &[Property],
+    property_by_id: Option<&HashMap<String, usize>>,
+    search_index: &SearchIndex,
+    serving_facts: Option<&crate::serving::ServingFactIndex>,
+) -> Vec<SearchResultSet> {
+    let branches = compiled_query.constraints.flat_branches();
+    let branch_count = branches.len();
+    branches
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, branch)| {
+            let mut budget_expanded = branch.clone();
+            budget_expanded.scale_budget_max(1.25);
+            let mut branch_results = Vec::new();
+            for result in results {
+                let property = property_by_id
+                    .and_then(|by_id| by_id.get(&result.card.id))
+                    .and_then(|property_index| properties.get(*property_index))
+                    .or_else(|| {
+                        properties
+                            .iter()
+                            .find(|property| property.id == result.card.id)
+                    });
+                let Some(property) = property else {
+                    continue;
+                };
+                let exact = branch.evaluate(&mut |term| {
+                    super::text::property_matches_constraint_term_with_index(
+                        property,
+                        term,
+                        Some(search_index),
+                        serving_facts,
+                    )
+                });
+                let within_expansion = exact
+                    || budget_expanded.evaluate(&mut |term| {
+                        super::text::property_matches_constraint_term_with_index(
+                            property,
+                            term,
+                            Some(search_index),
+                            serving_facts,
+                        )
+                    });
+                if !within_expansion {
+                    continue;
+                }
+                let mut result = result.clone();
+                if exact {
+                    result.match_tier = "exact".to_string();
+                    result.tradeoff_label = None;
+                } else {
+                    result.match_tier = "budget_expanded".to_string();
+                    result.tradeoff_label = branch
+                        .budget_max_value()
+                        .map(|budget| budget_tradeoff_label(result.card.price, budget))
+                        .or_else(|| Some("Outside one requested limit".to_string()));
+                }
+                branch_results.push(result);
+            }
+            if branch_results.is_empty() {
+                return None;
+            }
+            let mut label = branch.buyer_label();
+            if label.is_empty() {
+                label = if branch_count == 1 {
+                    "Matches".to_string()
+                } else {
+                    format!("Option {}", index + 1)
+                };
+            }
+            Some(SearchResultSet {
+                branch_id: format!("branch-{}", index + 1),
+                label,
+                results: branch_results,
+            })
+        })
+        .collect()
+}
+
+fn budget_tradeoff_label(price: u64, budget: u64) -> String {
+    if budget == 0 || price <= budget {
+        return "Within budget".to_string();
+    }
+    let percent = ((price - budget) as f64 / budget as f64 * 100.0).round() as u64;
+    format!("{percent}% over budget")
 }
 
 fn accumulate_relaxed_results(
@@ -707,8 +1020,7 @@ fn relaxations_for_candidate(
     property_by_id: Option<&HashMap<String, usize>>,
     search_index: &SearchIndex,
     serving_facts: Option<&crate::serving::ServingFactIndex>,
-    budget_state: Option<BudgetRelaxationState>,
-    bhk_relaxed: bool,
+    budget_multiplier: f64,
 ) -> Vec<SearchRelaxation> {
     let property = property_by_id
         .and_then(|indexes| indexes.get(&candidate.card.id))
@@ -726,8 +1038,7 @@ fn relaxations_for_candidate(
         property,
         search_index,
         serving_facts,
-        budget_state,
-        bhk_relaxed,
+        budget_multiplier,
     )
 }
 
@@ -736,8 +1047,7 @@ fn relaxations_for_property(
     property: &Property,
     search_index: &SearchIndex,
     serving_facts: Option<&crate::serving::ServingFactIndex>,
-    budget_state: Option<BudgetRelaxationState>,
-    bhk_relaxed: bool,
+    budget_multiplier: f64,
 ) -> Vec<SearchRelaxation> {
     let violations = compiled_query
         .constraints
@@ -756,13 +1066,12 @@ fn relaxations_for_property(
                     term,
                     search_index,
                     serving_facts,
-                    budget_state,
-                    bhk_relaxed,
+                    budget_multiplier,
                 )
             },
         )
         .unwrap_or_default();
-    relaxations_for_violations(&violations, budget_state)
+    relaxations_for_violations(&violations, budget_multiplier)
 }
 
 fn property_matches_relaxed_constraint(
@@ -770,20 +1079,14 @@ fn property_matches_relaxed_constraint(
     term: &super::ast::ConstraintTerm,
     search_index: &SearchIndex,
     serving_facts: Option<&crate::serving::ServingFactIndex>,
-    budget_state: Option<BudgetRelaxationState>,
-    bhk_relaxed: bool,
+    budget_multiplier: f64,
 ) -> bool {
     let mut relaxed = term.clone();
-    match &mut relaxed {
-        super::ast::ConstraintTerm::Bhk { .. } if bhk_relaxed => return true,
-        super::ast::ConstraintTerm::Budget { max, .. } => match (budget_state, max) {
-            (Some(BudgetRelaxationState::Tolerance(multiplier)), Some(bound)) => {
-                bound.value = ((bound.value as f64) * multiplier).round() as u64;
-            }
-            (Some(BudgetRelaxationState::CapRemoved), max) => *max = None,
-            _ => {}
-        },
-        _ => {}
+    if let super::ast::ConstraintTerm::Budget {
+        max: Some(bound), ..
+    } = &mut relaxed
+    {
+        bound.value = ((bound.value as f64) * budget_multiplier).round() as u64;
     }
     super::text::property_matches_constraint_term_with_index(
         property,
@@ -795,35 +1098,18 @@ fn property_matches_relaxed_constraint(
 
 fn relaxations_for_violations(
     violations: &[super::ast::ConstraintTerm],
-    budget_state: Option<BudgetRelaxationState>,
+    budget_multiplier: f64,
 ) -> Vec<SearchRelaxation> {
     let mut relaxations = Vec::new();
-    let bhks = violations
-        .iter()
-        .filter_map(|term| match term {
-            super::ast::ConstraintTerm::Bhk { value, .. } => Some(*value),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    if !bhks.is_empty() {
-        relaxations.push(bhk_relaxation_clause(&bhk_clause_label(&bhks)));
-    }
     for term in violations {
         match term {
             super::ast::ConstraintTerm::Budget { max: Some(max), .. } => {
-                let Some(state) = budget_state else {
-                    continue;
-                };
-                let relaxation = match state {
-                    BudgetRelaxationState::Tolerance(multiplier) => budget_tolerance_relaxation(
-                        max.value,
-                        ((max.value as f64) * multiplier).round() as u64,
-                    ),
-                    BudgetRelaxationState::CapRemoved => budget_cap_relaxation(max.value),
-                };
+                let relaxation = budget_tolerance_relaxation(
+                    max.value,
+                    ((max.value as f64) * budget_multiplier).round() as u64,
+                );
                 extend_unique_relaxations(&mut relaxations, &[relaxation]);
             }
-            super::ast::ConstraintTerm::Bhk { .. } => {}
             _ => {}
         }
     }
@@ -863,52 +1149,6 @@ fn budget_tolerance_relaxation(budget_max: u64, relaxed_budget: u64) -> SearchRe
             "No exact budget match; widened budget tolerance deterministically.",
         ),
     }
-}
-
-fn budget_cap_relaxation(budget_max: u64) -> SearchRelaxation {
-    SearchRelaxation {
-        kind: "budget".to_string(),
-        from: budget_display(budget_max),
-        to: "available market".to_string(),
-        reason: relaxation_reason(
-            "budget_cap_removed",
-            "No result within budget tolerance; removed the budget cap.",
-        ),
-    }
-}
-
-fn bhk_clause_label(bhks: &[u32]) -> String {
-    super::ast::format_bhk_include_label(bhks)
-        .unwrap_or_else(|| "requested configurations".to_string())
-}
-
-fn bhk_relaxation_clause(from: &str) -> SearchRelaxation {
-    SearchRelaxation {
-        kind: "bhk".to_string(),
-        from: from.to_string(),
-        to: "available configurations".to_string(),
-        reason: relaxation_reason(
-            "bhk_removed",
-            "No matching configuration after budget relaxation; widened configuration while preserving area.",
-        ),
-    }
-}
-
-fn remove_bhk_preference_signals(intent: &mut SearchIntent, relaxed_bhk: u32) {
-    let mentions_relaxed_bhk = |value: &str| {
-        parser::parse_query_slots(value)
-            .bhk
-            .is_some_and(|constraint| constraint.value == relaxed_bhk)
-    };
-    intent
-        .preferences
-        .retain(|preference| !mentions_relaxed_bhk(preference));
-    intent
-        .positive_preferences
-        .retain(|preference| !mentions_relaxed_bhk(&preference.raw_text));
-    intent
-        .negative_preferences
-        .retain(|preference| !mentions_relaxed_bhk(&preference.raw_text));
 }
 
 fn annotate_relaxed_results(results: &mut [SearchResultCard], relaxations: &[SearchRelaxation]) {
@@ -1168,19 +1408,49 @@ fn unresolved_named_entity_clause(
                 })
             })
         },
-        |span| {
-            plan.areas
-                .iter()
-                .any(|area| area.span.start >= span.start && area.span.end <= span.end)
-                || resolved_entities.iter().any(|entity| {
-                    exact_entity_match_ranges(&query_lower, &entity.matched_text)
-                        .iter()
-                        .any(|(entity_start, entity_end)| {
-                            *entity_start >= span.start && *entity_end <= span.end
-                        })
-                })
-        },
+        |span| entity_scope_is_fully_resolved(&query_lower, plan, resolved_entities, span),
     )
+}
+
+fn entity_scope_is_fully_resolved(
+    query_lower: &str,
+    plan: &QueryPlan,
+    resolved_entities: &[ResolvedSearchEntity],
+    span: query_plan::ByteSpan,
+) -> bool {
+    let resolved_ranges = plan
+        .areas
+        .iter()
+        .map(|area| (area.span.start, area.span.end))
+        .chain(
+            resolved_entities
+                .iter()
+                .flat_map(|entity| exact_entity_match_ranges(query_lower, &entity.matched_text)),
+        )
+        .collect::<Vec<_>>();
+    let config = search_resolution_config();
+
+    plan.tokens
+        .iter()
+        .filter(|token| token.start >= span.start && token.end <= span.end)
+        .filter(|token| {
+            token
+                .text
+                .chars()
+                .any(|character| character.is_ascii_alphabetic())
+        })
+        .filter(|token| {
+            !config
+                .ignored_entity_names
+                .iter()
+                .chain(config.generic_scope_nouns.iter())
+                .any(|ignored| ignored.eq_ignore_ascii_case(&token.text))
+        })
+        .all(|token| {
+            resolved_ranges
+                .iter()
+                .any(|(start, end)| *start <= token.start && *end >= token.end)
+        })
 }
 
 fn unresolved_proximity_gaps(
@@ -2013,7 +2283,6 @@ mod tests {
             property_by_id: Some(&property_by_id),
             societies: &societies,
             graph: None,
-            intent_classifier: None,
         }
         .run_relaxation_sequence(
             &compiled_query,
@@ -2046,7 +2315,6 @@ mod tests {
             property_by_id: Some(&property_by_id),
             societies: &societies,
             graph: None,
-            intent_classifier: None,
         }
         .search(query)
     }
@@ -2099,6 +2367,7 @@ mod tests {
             expanded_keys: vec!["has_2bhk".to_string()],
             gap_keys: Vec::new(),
             weight: 1.0,
+            required: false,
             missing_evidence_neutral: false,
         });
         let properties = vec![test_property("wrong-bhk-home", "East Bengaluru")];
@@ -2128,22 +2397,22 @@ mod tests {
         .collect::<Vec<_>>();
 
         let matched = run_relaxation_for_test("homes under 10Cr", &intent, &properties);
-        let (results, applied) = matched.expect("three budget bands should fill the target");
+        let (results, applied) = matched.expect("configured budget bands should add results");
 
         assert_eq!(
             results
                 .iter()
                 .map(|result| result.card.id.as_str())
                 .collect::<HashSet<_>>(),
-            HashSet::from(["ten-percent", "twenty-five-percent", "fifty-percent"])
+            HashSet::from(["ten-percent", "twenty-five-percent"])
         );
-        assert_eq!(results.len(), 3);
+        assert_eq!(results.len(), 2);
         assert_eq!(
             applied
                 .iter()
                 .map(|relaxation| relaxation.to.as_str())
                 .collect::<Vec<_>>(),
-            ["11.00Cr", "12.50Cr", "15.00Cr"]
+            ["11.00Cr", "12.50Cr"]
         );
         for result in &results {
             let relaxation_reason_count = result

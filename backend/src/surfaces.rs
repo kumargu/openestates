@@ -2491,6 +2491,7 @@ mod tests {
             rera_evidence_index: crate::serving::ReraEvidenceIndex::default(),
             geo_index,
             spatial_index,
+            search_capabilities: crate::search::SearchCapabilityIndex::default(),
             cache_dir: temp_dir.keep(),
         }
     }

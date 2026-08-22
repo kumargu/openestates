@@ -449,6 +449,8 @@ fn sibling_result_card(
             "Other configuration at {} · {}BHK",
             society_name, property.bhk
         ),
+        match_tier: "supported".to_string(),
+        tradeoff_label: Some("Other configuration".to_string()),
         match_explanation: None,
         proof_focuses: Vec::new(),
         confidence_score: None,
@@ -520,6 +522,8 @@ mod tests {
             match_score: score,
             match_label: label.to_string(),
             match_reason: "matches".to_string(),
+            match_tier: "exact".to_string(),
+            tradeoff_label: None,
             match_explanation: None,
             proof_focuses: Vec::new(),
             confidence_score: None,

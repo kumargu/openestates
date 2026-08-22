@@ -1,0 +1,272 @@
+# Search Fact-Grounded Proof Loop
+
+## Objective
+
+Prove that local search retrieves and explains facts already present in a
+promoted serving bundle, then improve genuine data gaps through the DAG and
+promote a new immutable bundle. The loop must distinguish search defects from
+missing data and must never teach the runtime benchmark answers through named
+projects, places, aliases, or fact-key branches.
+
+The working method is deliberately open-book:
+
+1. inspect the promoted facts first;
+2. write down what the bundle can actually prove;
+3. freeze buyer-like queries and expected proof;
+4. run search without changing the answers;
+5. classify misses;
+6. enrich only genuine data gaps through the DAG;
+7. validate and promote a new bundle;
+8. rerun the identical query set.
+
+## Verified Starting Point
+
+As of 2026-08-22, the current search serving pointer is:
+
+- bundle: `clean-serving-v7-2026-08-16`
+- materialization: `fe16ca1a-a301-4306-ae10-06cc27f792e2`
+- run: `cc973fb5-14f5-4242-9cfe-c52ba7738210`
+- entities: 697
+- facts: 13,310
+- graph edges: 3,353
+- search metadata rows: 12,969
+- quarantined societies: 28
+- current runtime projection: 37 eligible societies and 86 searchable
+  properties
+
+Older immutable `catalog-118-*` bundles exist and several contain 776 entities
+and roughly 15,560 facts. The `118` name describes that catalog generation; it
+must not be treated as the current eligible runtime count. Before using it as
+an expansion input, profile its society membership, identity mappings,
+quarantine status, and lineage directly.
+
+## Non-Negotiable Invariants
+
+- The promoted serving bundle is search truth. Raw captures are lineage inputs,
+  not runtime truth.
+- New or refreshed facts enter search only through:
+  `source -> DAG materialization -> serving bundle -> validation -> promotion`.
+- Every run creates a new immutable bundle version. Never edit a promoted
+  Parquet file or reuse a version name.
+- Promotion moves the current pointer only after validation. A failed candidate
+  leaves the current pointer unchanged.
+- Never add `Godrej Air`, `Hoodi`, `Manipal`, Whitefield societies, or other
+  benchmark entities as parser aliases or runtime branches.
+- Never add expected benchmark facts directly to Rust, parser config, fixtures,
+  or search metadata. Fix the source/DAG path when data is absent.
+- BHK, budget, named-society, numeric, exclusion, and distance constraints stay
+  hard. Missing soft evidence stays additive unless its config explicitly says
+  `required`.
+- Search and property detail must cite the same promoted fact and lineage.
+
+## Phase 0 — Freeze the Baseline
+
+Record before any behavior or data change:
+
+- git commit and dirty diff summary;
+- bundle version, materialization id, and manifest counts;
+- entity-type and society counts;
+- quarantine count and reason distribution;
+- current search contract results;
+- production hardcoding audit result;
+- baseline artifact directory and timestamp.
+
+All before/after runs in one loop use the same code unless the classified miss
+requires a generic runtime fix. If code changes, rerun the old bundle first so
+the data and code effects remain separable.
+
+## Phase 1 — Build the Fact Ledger
+
+Start with one small Whitefield cohort: Godrej Air plus a few nearby societies
+that share useful comparison facts. Query the current bundle's `entities`,
+`facts`, `edges`, and `search_metadata` Parquet directly.
+
+For every proposed fact, record:
+
+- canonical entity id and aliases carried by the bundle;
+- fact key, typed value, unit, confidence, and observation time;
+- source type, source URL/locator, and input lineage;
+- whether the fact has search metadata;
+- whether it is eligible for buyer display and ranking;
+- related place/entity id for proximity evidence;
+- expected detail-surface proof handle.
+
+Initial hypotheses to verify, not assume:
+
+- Godrej Air has searchable 2 BHK and 3 BHK configurations;
+- its promoted land-area fact supports the claimed acreage;
+- a Hoodi Metro place entity and distance fact are linked to the society;
+- the intended Manipal Hospital entity is unambiguous and linked by a distance
+  fact;
+- Whitefield area membership is canonical rather than inferred from text.
+
+Each hypothesis receives one status:
+
+- `proved_and_searchable`
+- `proved_but_unannotated`
+- `proved_below_threshold`
+- `present_under_alias`
+- `present_but_ignored`
+- `absent_from_bundle`
+- `conflicting_or_ambiguous`
+
+Only `proved_and_searchable` facts become positive benchmark expectations.
+Absent or ambiguous facts become explicit data-gap sentinels; search must not
+claim them.
+
+## Phase 2 — Freeze the Query Bank
+
+Write queries after the ledger is complete and before calling `/api/search`.
+Store the query bank with the baseline bundle identity and expected structured
+outcomes.
+
+The first bank should contain 15–25 queries across these classes:
+
+1. Exact society recall: society name and a minor typo.
+2. Configuration constraints: verified 2 BHK, 3 BHK, and an unsupported
+   configuration sentinel.
+3. Numeric constraints: verified land-area or price facts, including one
+   impossible threshold.
+4. Named-place proximity: Hoodi Metro and the exact verified Manipal entity.
+5. Compound intent: society or place + BHK + budget + one soft preference.
+6. OR branches: two verified configurations or two independently resolvable
+   alternatives.
+7. Broad Whitefield discovery: fact-backed comparisons across several
+   societies.
+8. Proof sentinels: facts known to be absent or ambiguous must not produce a
+   confident reason.
+
+Expected outcomes must be structured, not prose snapshots:
+
+- expected or forbidden entity ids;
+- allowed top-k range;
+- exact hard constraints that every returned result must satisfy;
+- expected proof fact keys and matched entity ids;
+- allowed result tier: `exact`, `budget_expanded`, or `supported`;
+- whether zero results is correct;
+- facts that must not be claimed.
+
+## Phase 3 — Measure Search Quality and Efficiency
+
+Run the frozen bank against the pinned baseline and save the full responses.
+Measure:
+
+- recall at 1, 3, and 5;
+- mean reciprocal rank for expected societies;
+- hard-constraint violation count;
+- proof precision: reason key and matched entity agree with the ledger;
+- unsupported-claim count;
+- OR-branch membership and ordering;
+- exact versus budget-expanded tier correctness;
+- candidate count before and after hard filtering;
+- warm request p50 and p95 latency;
+- deterministic ordered-result stability across repeated runs.
+
+The warm local-search target remains p95 at or below 50 ms. A loop must not
+regress latency by more than 10% without a documented reason and follow-up.
+
+## Phase 4 — Classify Every Miss
+
+Every failed expectation gets exactly one dominant class before any fix:
+
+- `data_gap`: the fact/entity is absent from the promoted bundle;
+- `intent_gap`: generic configured language did not compile correctly;
+- `proof_gap`: recall is correct but the reason or detail focus is missing or
+  wrong;
+- `ranking_gap`: the right candidate is eligible but ordered poorly;
+- `embedding_gap`: semantic recall failed while structured resolution is sound;
+- `architecture_gap`: truth is present but a loader/index/API boundary bypasses
+  or loses it.
+
+For every suspected data, recall, or proof gap, inspect Parquet again before
+editing runtime code.
+
+## Phase 5 — Fix One Layer at a Time
+
+- `data_gap`: repair or run the relevant source/DAG asset for a small explicit
+  entity scope. Preserve source receipts and canonical identity.
+- `intent_gap`: adjust generic ontology/config and its compiler consumption;
+  never add a named entity shortcut.
+- `proof_gap`: repair the generic fact-to-proof contract without filtering
+  other detail facts.
+- `ranking_gap`: change one generic scoring/tie-break rule and measure the same
+  bank immediately.
+- `embedding_gap`: change the offline embedding/index path only after structured
+  recall has been ruled out.
+- `architecture_gap`: fix the earliest boundary that drops existing truth:
+  Parquet loader, alias index, spatial index, capability index, scoring, or API
+  mapping.
+
+Keep a change only when it improves a declared metric or removes a verified
+architecture defect without quality loss. Otherwise revert it or record it as
+unproven.
+
+## Phase 6 — Build and Promote the Next Bundle
+
+The first expansion candidate may reuse the validated members of the historical
+118-society catalog and add newly enriched societies, but it must be rebuilt
+through current DAG policy and current canonical identities.
+
+For every candidate:
+
+1. Run the DAG with a unique version and pinned source inputs.
+2. Materialize a new KG view and search serving bundle; do not mutate the
+   current bundle.
+3. Validate artifact hashes, complete lineage, alias consistency, edge
+   integrity, search annotations, and serving eligibility.
+4. Compare society membership with the current bundle. Every disappearance
+   must have a tombstone or a recorded quarantine reason.
+5. Compare quarantine reasons and ensure newly eligible societies have the
+   required price, BHK/configuration, size, area, identity, media, and evidence
+   inputs.
+6. Run the frozen query bank and standard contracts against the candidate.
+7. Promote the candidate's complete pinned lineage and then atomically advance
+   the current serving pointer.
+8. Reload the API and verify that the reported bundle version matches the
+   promoted version.
+
+Promotion is append-only progress: the old bundle remains available for exact
+rollback and before/after comparison.
+
+## Phase 7 — Rerun Without Moving the Goalposts
+
+After promotion, rerun the identical query bank and publish a diff containing:
+
+- ordered result ids per branch;
+- changed proof keys and matched entity ids;
+- hard-constraint and unsupported-claim deltas;
+- recall/MRR and latency deltas;
+- society, property, fact, metadata, and quarantine count deltas;
+- the decision: `keep`, `rollback`, or `needs_data_follow_up`.
+
+Do not rewrite expectations merely because the new result is convenient. Change
+an expectation only when the fact ledger proves that truth itself changed, and
+record that lineage.
+
+## Expansion Cadence
+
+Expand in controlled batches rather than attempting all societies at once:
+
+1. Godrej Air and its Whitefield named-place facts.
+2. Five to ten Whitefield comparison societies.
+3. All eligible Whitefield societies.
+4. The validated historical 118-society cohort rebuilt under current policy.
+5. New societies in small regional batches.
+
+Each batch produces its own immutable bundle, ledger delta, query-bank result,
+and promotion decision. A new society may remain quarantined while its missing
+facts are enriched; catalog growth must not weaken eligibility to inflate the
+count.
+
+## First-Loop Definition of Done
+
+- Godrej Air hypotheses are verified directly from promoted Parquet.
+- A frozen 15–25 query bank covers exact, typo, BHK, numeric, proximity,
+  compound, OR, broad-area, and negative-control cases.
+- Baseline and after artifacts identify the exact bundle and code revision.
+- Zero hard-constraint violations and zero unsupported confident claims.
+- Expected society recall and proof handles meet the declared top-k targets.
+- Warm p95 search remains within 50 ms and within 10% of baseline.
+- Any enrichment is DAG-produced with source lineage.
+- A new bundle is promoted only if validation and the frozen bank pass.
+- The old bundle remains available for rollback.

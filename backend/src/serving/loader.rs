@@ -36,6 +36,7 @@ pub struct LoadedServingBundle {
     pub rera_evidence_index: ReraEvidenceIndex,
     pub geo_index: GeoSearchIndex,
     pub spatial_index: SpatialServingIndex,
+    pub search_capabilities: crate::search::SearchCapabilityIndex,
     pub cache_dir: PathBuf,
 }
 
@@ -126,6 +127,8 @@ impl ServingBundleLoader {
         graph_index.add_entity_aliases(&aliases);
         let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
         let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
+        let search_capabilities =
+            crate::search::SearchCapabilityIndex::from_bundle(&entities, &fact_index);
         Ok(LoadedServingBundle {
             manifest,
             entities,
@@ -137,6 +140,7 @@ impl ServingBundleLoader {
             rera_evidence_index,
             geo_index,
             spatial_index,
+            search_capabilities,
             cache_dir,
         })
     }

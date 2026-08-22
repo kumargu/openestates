@@ -1,12 +1,12 @@
 pub mod analyzer;
 pub mod ast;
+pub mod capabilities;
 pub mod engine;
 pub mod focus;
 pub mod geo;
 pub mod guard;
 pub mod index;
 pub mod intent;
-pub mod intent_classifier;
 pub(crate) mod parser;
 pub(crate) mod query_plan;
 pub mod resolver;
@@ -14,6 +14,7 @@ pub mod schema;
 pub mod text;
 
 pub use ast::{CompiledQuery, ConstraintExpr, ConstraintTerm};
+pub use capabilities::SearchCapabilityIndex;
 pub use engine::{
     CandidateScore, SearchDiagnostics, SearchEngine, SearchEvidenceGap, SearchLayerTiming,
     SearchRecallDiagnostics, SearchRelaxation,
@@ -24,10 +25,6 @@ pub use guard::{
 };
 pub use index::SearchIndex;
 pub use intent::{SearchIntent, SourceSpan};
-pub use intent_classifier::{
-    FastTextIntentClassifier, IntentClassifierDecision, IntentClassifierEvaluationReport,
-    IntentClassifierTrace,
-};
 pub use text::{TextSearch, TextSearchRequest};
 
 use serde::Serialize;
@@ -112,6 +109,9 @@ pub struct SearchResultCard {
     pub match_score: f64,
     pub match_label: String,
     pub match_reason: String,
+    pub match_tier: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tradeoff_label: Option<String>,
     /// Structured match explanation — present when query has preferences.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub match_explanation: Option<MatchExplanation>,
@@ -121,6 +121,14 @@ pub struct SearchResultCard {
     /// Data confidence score — how trustworthy is this result's data?
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence_score: Option<ConfidenceScore>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResultSet {
+    pub branch_id: String,
+    pub label: String,
+    pub results: Vec<SearchResultCard>,
 }
 
 /// Sourced claim — a piece of knowledge with provenance, shown alongside results.
@@ -143,32 +151,15 @@ pub struct KnowledgeContext {
     pub learning_gaps: Vec<String>,
 }
 
-/// The full search response for the upgraded endpoint.
+/// Buyer-safe search response. Internal parsing, diagnostics and enrichment
+/// gaps stay in logs/admin surfaces rather than leaking into product copy.
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchResponse {
     pub query: String,
-    pub intent: SearchIntent,
-    pub results: Vec<SearchResultCard>,
+    pub result_sets: Vec<SearchResultSet>,
+    pub total_matches: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub area_context: Option<AreaProfile>,
-    /// Total properties that passed hard eligibility before response curation.
-    pub eligible_results: usize,
-    /// Number of curated result rows included in this response.
-    pub results_returned: usize,
-    /// Backward-compatible alias for `eligible_results`.
-    pub total_results: usize,
-    /// Journey rails: named-society focus + siblings, or ranked matches + more homes.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub focus: Option<SearchResultFocus>,
-    /// Knowledge graph provenance for the results
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub knowledge_context: Option<KnowledgeContext>,
-    /// Internal search diagnostics used by benchmarks and milestone validation.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub search_diagnostics: Option<SearchDiagnostics>,
-    /// Deterministic relaxations applied after exact constraints produced no results.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub relaxations: Vec<SearchRelaxation>,
-    /// Early guardrail guidance for vague, unsupported, or off-topic queries.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub search_guidance: Option<SearchGuidance>,
+    pub state: String,
 }

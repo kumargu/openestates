@@ -28,7 +28,10 @@ use super::index::{
 };
 use super::intent::{ConstraintOperator, HardConstraint, SearchIntent};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text};
-use super::schema::{self, NumericConstraintSchema, NumericEvidenceSchema, TextEvidenceSchema};
+use super::schema::{
+    self, NumericAggregation, NumericConstraintSchema, NumericEvidenceSchema, NumericFactValueKind,
+    TextEvidenceSchema,
+};
 use super::{
     ConfidenceComponent, ConfidenceScore, MatchExplanation, MatchReason, PreferenceCoverage,
     SearchResultCard,
@@ -148,6 +151,17 @@ impl TextSearch {
                     return None;
                 }
 
+                if !required_preferences_have_evidence(
+                    p,
+                    intent,
+                    search_index,
+                    serving_facts,
+                    society_entity_id.as_ref(),
+                    &query_lower,
+                ) {
+                    return None;
+                }
+
                 let named_place_evidence = geo_query
                     .map(|query| {
                         let mut evidence = serving_facts
@@ -211,6 +225,7 @@ impl TextSearch {
                         });
                 let hard_constraint_matches = match_hard_constraints(
                     &matched_constraints,
+                    p,
                     serving_facts,
                     society_entity_id.as_ref(),
                 )?;
@@ -650,6 +665,8 @@ impl TextSearch {
                         match_score: display_score,
                         match_label,
                         match_reason,
+                        match_tier: "exact".to_string(),
+                        tradeoff_label: None,
                         match_explanation,
                         proof_focuses,
                         confidence_score,
@@ -1504,6 +1521,7 @@ fn scoring_query_terms(query_lower: &str) -> Vec<String> {
 
 fn match_hard_constraints(
     constraints: &[HardConstraint],
+    property: &Property,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
 ) -> Option<Vec<EvidenceMatch>> {
@@ -1515,6 +1533,10 @@ fn match_hard_constraints(
 
     for constraint in constraints {
         let schema = schema::numeric_constraint_schema(&constraint.field)?;
+        if let Some(evidence) = runtime_numeric_constraint_evidence(property, schema, constraint) {
+            matches.push(evidence);
+            continue;
+        }
         let serving_evaluation = serving_facts
             .map(|index| {
                 serving_numeric_constraint_evidence(index, society_entity_id, schema, constraint)
@@ -1527,6 +1549,45 @@ fn match_hard_constraints(
     }
 
     Some(matches)
+}
+
+fn runtime_numeric_constraint_evidence(
+    property: &Property,
+    schema: &NumericConstraintSchema,
+    constraint: &HardConstraint,
+) -> Option<EvidenceMatch> {
+    let runtime_field = schema.runtime_field.as_deref()?;
+    let value = match runtime_field {
+        "carpet_area_sqft" => f64::from(property.carpet_area_sqft),
+        "super_builtup_sqft" => f64::from(property.super_builtup_sqft),
+        _ => return None,
+    };
+    let query_unit = schema
+        .query_units
+        .iter()
+        .find(|unit| unit.unit.eq_ignore_ascii_case(&constraint.unit))?;
+    let threshold = constraint.value * query_unit.to_canonical;
+    let matches = match constraint.operator {
+        ConstraintOperator::Min => value + 0.001 >= threshold,
+        ConstraintOperator::Max => value - 0.001 <= threshold,
+    };
+    matches.then(|| EvidenceMatch {
+        preference: constraint.raw_text.clone(),
+        fact_key: runtime_field.to_string(),
+        fact_key_rank: usize::MAX,
+        display: format!(
+            "{}: {} {}",
+            schema.label,
+            format_measurement(value / query_unit.to_canonical),
+            query_unit.unit
+        ),
+        normalized_score: 1.0,
+        score_delta: 2.0,
+        confidence: 1.0,
+        source_type: "ServingBundle".to_string(),
+        scoring_method: "runtime-field".to_string(),
+        reason: format!("proved constraint: {}", constraint.raw_text),
+    })
 }
 
 fn serving_numeric_constraint_evidence(
@@ -1546,54 +1607,73 @@ fn serving_numeric_constraint_evidence(
         return ConstraintEvaluation::Missing;
     };
     let threshold = constraint.value * query_unit.to_canonical;
+    let Some((fact, canonical_value)) = aggregate_numeric_constraint_fact(rows, schema) else {
+        return ConstraintEvaluation::Missing;
+    };
+    let matched = match constraint.operator {
+        ConstraintOperator::Min => canonical_value + 0.001 >= threshold,
+        ConstraintOperator::Max => canonical_value - 0.001 <= threshold,
+    };
+    if !matched {
+        return ConstraintEvaluation::Failed;
+    }
+    let display_value = canonical_value / query_unit.to_canonical;
+    ConstraintEvaluation::Matched(EvidenceMatch {
+        preference: constraint.raw_text.clone(),
+        fact_key: fact.fact_key.clone(),
+        fact_key_rank: usize::MAX,
+        display: format!(
+            "{}: {} {}",
+            schema.label,
+            format_measurement(display_value),
+            query_unit.unit
+        ),
+        normalized_score: 1.0,
+        score_delta: 2.0,
+        confidence: fact.confidence,
+        source_type: fact.source_type.clone(),
+        scoring_method: schema.scoring_method.clone(),
+        reason: format!("proved constraint: {}", constraint.raw_text),
+    })
+}
 
-    for fact_key in &schema.fact_keys {
-        let Some(fact) = rows.facts.iter().find(|fact| {
-            fact.fact_key.eq_ignore_ascii_case(fact_key)
-                && schema.proof_sources.iter().any(|source| {
+fn aggregate_numeric_constraint_fact<'a>(
+    rows: &'a crate::serving::ServingEntityFactRows,
+    schema: &NumericConstraintSchema,
+) -> Option<(&'a crate::serving::ServingFactRecord, f64)> {
+    let values = schema.fact_keys.iter().flat_map(|fact_key| {
+        rows.facts
+            .iter()
+            .filter(move |fact| fact.fact_key.eq_ignore_ascii_case(fact_key))
+            .filter(|fact| {
+                schema.proof_sources.iter().any(|source| {
                     fact.source_type
                         .eq_ignore_ascii_case(&format!("{source:?}"))
                 })
-        }) else {
-            continue;
-        };
-        let FactValue::Numeric(canonical_value) = fact.value else {
-            continue;
-        };
-        if !canonical_value.is_finite() {
-            continue;
-        }
-        match constraint.operator {
-            ConstraintOperator::Min if canonical_value + 0.001 < threshold => {
-                return ConstraintEvaluation::Failed;
-            }
-            ConstraintOperator::Max if canonical_value - 0.001 > threshold => {
-                return ConstraintEvaluation::Failed;
-            }
-            ConstraintOperator::Min => {}
-            ConstraintOperator::Max => {}
-        }
-        let display_value = canonical_value / query_unit.to_canonical;
-        return ConstraintEvaluation::Matched(EvidenceMatch {
-            preference: constraint.raw_text.clone(),
-            fact_key: fact.fact_key.clone(),
-            fact_key_rank: usize::MAX,
-            display: format!(
-                "{}: {} {}",
-                schema.label,
-                format_measurement(display_value),
-                query_unit.unit
-            ),
-            normalized_score: 1.0,
-            score_delta: 2.0,
-            confidence: fact.confidence,
-            source_type: fact.source_type.clone(),
-            scoring_method: schema.scoring_method.clone(),
-            reason: format!("proved constraint: {}", constraint.raw_text),
-        });
+            })
+            .filter_map(|fact| {
+                numeric_constraint_fact_value(fact, schema).map(|value| (fact, value))
+            })
+    });
+    match schema.aggregation {
+        NumericAggregation::First => values.into_iter().next(),
+        NumericAggregation::Minimum => values.min_by(|left, right| left.1.total_cmp(&right.1)),
+        NumericAggregation::Maximum => values.max_by(|left, right| left.1.total_cmp(&right.1)),
     }
+}
 
-    ConstraintEvaluation::Missing
+fn numeric_constraint_fact_value(
+    fact: &crate::serving::ServingFactRecord,
+    schema: &NumericConstraintSchema,
+) -> Option<f64> {
+    let value = match schema.value_kind {
+        NumericFactValueKind::Numeric => match fact.value {
+            FactValue::Numeric(value) => value,
+            _ => return None,
+        },
+        NumericFactValueKind::DistanceKmInText => geo::serving_fact_distance_km(fact)?,
+    };
+    (value.is_finite() && value >= 0.0).then_some(value)
 }
 
 enum ConstraintEvaluation {
@@ -1640,6 +1720,43 @@ fn serving_preference_evidence(
             )
         })
     })
+}
+
+fn required_preferences_have_evidence(
+    property: &Property,
+    intent: &SearchIntent,
+    search_index: Option<&SearchIndex>,
+    serving_facts: Option<&ServingFactIndex>,
+    society_entity_id: &str,
+    query_lower: &str,
+) -> bool {
+    let Some(serving_facts) = serving_facts else {
+        return !intent
+            .positive_preferences
+            .iter()
+            .any(|preference| preference.required);
+    };
+    let builder_entity_id =
+        search_index.and_then(|index| index.builder_entity_id_for_property(&property.id));
+    let area_entity_id =
+        search_index.and_then(|index| index.area_entity_id_for_property(&property.id));
+
+    intent
+        .positive_preferences
+        .iter()
+        .filter(|preference| preference.required)
+        .all(|preference| {
+            serving_preference_evidence(
+                serving_facts,
+                society_entity_id,
+                builder_entity_id,
+                area_entity_id,
+                &preference.raw_text,
+                &preference.expanded_keys,
+                query_lower,
+            )
+            .is_some()
+        })
 }
 
 fn serving_entity_preference_evidence(
@@ -3008,6 +3125,7 @@ fn property_matches_constraint_term_for_society(
         ),
         ConstraintTerm::Evidence { constraint, .. } => match_hard_constraints(
             std::slice::from_ref(constraint),
+            property,
             serving_facts,
             society_entity_id,
         )

@@ -107,7 +107,6 @@ async fn society_alias_groups_survive_build_parquet_load_and_search() {
             property_by_id: Some(&snapshot.property_by_id),
             societies: &snapshot.societies,
             graph: None,
-            intent_classifier: None,
         }
         .search(query)
     };

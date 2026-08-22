@@ -8,9 +8,8 @@ use crate::knowledge::edge::Relation;
 use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::{KnowledgeGraph, SearchEvent};
 use crate::search::{
-    guard_search_query, intent, named_society_alternatives_guidance, no_results_guidance, schema,
-    KnowledgeContext, SearchEngine, SearchEvidenceGap, SearchResponse, SearchResultCard,
-    SourcedClaim,
+    guard_search_query, intent, schema, KnowledgeContext, SearchEngine, SearchEvidenceGap,
+    SearchResponse, SearchResultCard, SearchResultSet, SourcedClaim,
 };
 use crate::state::{
     AppState, CachedSearchOutput, EnrichmentGapPersistence, SearchCacheKey, SearchLogMessage,
@@ -36,17 +35,10 @@ pub async fn search_properties(
     if query.trim().is_empty() {
         return Json(SearchResponse {
             query,
-            intent: intent::SearchIntent::default(),
-            results: Vec::new(),
+            result_sets: Vec::new(),
+            total_matches: 0,
             area_context: None,
-            eligible_results: 0,
-            results_returned: 0,
-            total_results: 0,
-            focus: None,
-            knowledge_context: None,
-            search_diagnostics: None,
-            relaxations: Vec::new(),
-            search_guidance: None,
+            state: "no_matches".to_string(),
         });
     }
 
@@ -66,17 +58,10 @@ pub async fn search_properties(
 
             return Json(SearchResponse {
                 query,
-                intent: guarded.intent,
-                results: Vec::new(),
+                result_sets: Vec::new(),
+                total_matches: 0,
                 area_context: None,
-                eligible_results: 0,
-                results_returned: 0,
-                total_results: 0,
-                focus: None,
-                knowledge_context: None,
-                search_diagnostics: None,
-                relaxations: Vec::new(),
-                search_guidance: Some(guarded.guidance),
+                state: "no_matches".to_string(),
             });
         }
     }
@@ -102,7 +87,6 @@ pub async fn search_properties(
             property_by_id: Some(&snapshot.property_by_id),
             societies: &snapshot.societies,
             graph: Some(&graph),
-            intent_classifier: state.intent_classifier.as_deref(),
         }
         .search(&query);
 
@@ -119,12 +103,24 @@ pub async fn search_properties(
 
         (engine_output, focus)
     };
-    let eligible_results = engine_output.eligible_result_count;
-    let named_society_alternatives = engine_output.named_society_alternatives;
     let parsed_intent = engine_output.intent;
     let results = engine_output.results;
-    let relaxations = engine_output.relaxations;
+    let mut result_sets = engine_output.result_sets;
     let search_evidence_gaps = engine_output.evidence_gaps;
+
+    if let Some(focus) = focus.filter(|focus| focus.mode == "named_society") {
+        if let Some(first) = result_sets.first_mut() {
+            for sibling in focus.sibling_configs {
+                if !first
+                    .results
+                    .iter()
+                    .any(|result| result.card.id == sibling.card.id)
+                {
+                    first.results.push(sibling);
+                }
+            }
+        }
+    }
 
     // Look up area context if the intent identified an area.
     let area_context = parsed_intent.area.as_ref().and_then(|area_name| {
@@ -140,7 +136,7 @@ pub async fn search_properties(
 
     // --- Extract knowledge context from the graph ---
     let graph = state.knowledge.read().await;
-    let (knowledge_context, graph_nodes_hit, enrichment_gaps, gap_candidate_society_ids) = {
+    let (_knowledge_context, graph_nodes_hit, enrichment_gaps, gap_candidate_society_ids) = {
         let mut matched_society_ids: Vec<String> = Vec::new();
         for result in &results {
             if let Some(society_id) = snapshot
@@ -197,31 +193,19 @@ pub async fn search_properties(
         enqueue_search_log(&state, message);
     }
 
-    let buyer_knowledge_context = KnowledgeContext {
-        claims: knowledge_context.claims,
-        nodes_consulted: knowledge_context.nodes_consulted,
-        learning_gaps: Vec::new(),
-    };
-
-    let search_guidance = named_society_alternatives
-        .first()
-        .map(|society| named_society_alternatives_guidance(society))
-        .or_else(|| (results_returned == 0).then(no_results_guidance));
+    let total_matches = unique_result_count(&result_sets);
     let response = SearchResponse {
         query,
-        intent: parsed_intent,
-        results,
+        result_sets,
+        total_matches,
         area_context,
-        eligible_results,
-        results_returned,
-        total_results: eligible_results,
-        focus,
-        knowledge_context: Some(buyer_knowledge_context),
-        search_diagnostics: None,
-        relaxations,
-        search_guidance,
+        state: if total_matches == 0 {
+            "no_matches".to_string()
+        } else {
+            "results".to_string()
+        },
     };
-    if response.results_returned > 0 {
+    if response.total_matches > 0 {
         state
             .search_cache
             .put(
@@ -235,6 +219,14 @@ pub async fn search_properties(
     }
 
     Json(response)
+}
+
+fn unique_result_count(result_sets: &[SearchResultSet]) -> usize {
+    result_sets
+        .iter()
+        .flat_map(|set| set.results.iter().map(|result| result.card.id.as_str()))
+        .collect::<std::collections::HashSet<_>>()
+        .len()
 }
 
 fn merge_search_evidence_gaps(
@@ -696,6 +688,32 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     #[test]
+    fn buyer_response_exposes_result_sets_without_internal_search_state() {
+        let response = SearchResponse {
+            query: "3bhk whitefield".to_string(),
+            result_sets: Vec::new(),
+            total_matches: 0,
+            area_context: None,
+            state: "no_matches".to_string(),
+        };
+
+        let value = serde_json::to_value(response).expect("search response should serialize");
+        assert_eq!(value["query"], "3bhk whitefield");
+        assert_eq!(value["resultSets"], serde_json::json!([]));
+        assert_eq!(value["totalMatches"], 0);
+        assert_eq!(value["state"], "no_matches");
+        for internal in [
+            "intent",
+            "results",
+            "searchDiagnostics",
+            "knowledgeContext",
+            "relaxations",
+        ] {
+            assert!(value.get(internal).is_none(), "leaked {internal}");
+        }
+    }
+
+    #[test]
     fn search_evidence_gaps_are_persisted_and_available_only_for_debug_context() {
         let mut context = KnowledgeContext {
             claims: Vec::new(),
@@ -756,17 +774,10 @@ mod tests {
         });
         let response = SearchResponse {
             query: "3bhk whitefield".to_string(),
-            intent: intent.clone(),
-            results: Vec::new(),
+            result_sets: Vec::new(),
+            total_matches: 0,
             area_context: None,
-            eligible_results: 2,
-            results_returned: 0,
-            total_results: 2,
-            focus: None,
-            knowledge_context: None,
-            search_diagnostics: None,
-            relaxations: Vec::new(),
-            search_guidance: None,
+            state: "no_matches".to_string(),
         };
         let messages = vec![
             SearchLogMessage::SearchEvent(event),

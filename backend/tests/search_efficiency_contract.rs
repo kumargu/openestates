@@ -8,8 +8,7 @@ use backend::models::Property;
 use backend::search::geo::GeoSearchIndex;
 use backend::search::intent::parse_intent;
 use backend::search::{
-    CompiledQuery, KnowledgeContext, SearchEngine, SearchIndex, SearchResponse, TextSearch,
-    TextSearchRequest,
+    CompiledQuery, SearchEngine, SearchIndex, SearchResponse, TextSearch, TextSearchRequest,
 };
 use backend::serving::{
     normalize_alias, LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest,
@@ -166,7 +165,6 @@ fn named_place_search_uses_spatial_discovery_across_large_corpus() {
         property_by_id: Some(&property_by_id),
         societies: &[],
         graph: None,
-        intent_classifier: None,
     }
     .search("3bhk near Benchmark Tech Park under 2cr");
     let elapsed = started.elapsed();
@@ -253,7 +251,6 @@ fn production_relaxation_sequence_does_not_use_unshipped_area_radius() {
         property_by_id: Some(&property_by_id),
         societies: &[],
         graph: None,
-        intent_classifier: None,
     }
     .search("3BHK in Whitefield under 2Cr");
 
@@ -263,7 +260,7 @@ fn production_relaxation_sequence_does_not_use_unshipped_area_radius() {
 }
 
 #[test]
-fn named_project_miss_returns_explicit_constraint_preserving_alternatives() {
+fn named_project_miss_relaxes_only_budget_and_keeps_the_project() {
     let properties = vec![
         property("godrej-splendour".to_string(), "Whitefield", 3, 17_000_000),
         property(
@@ -306,11 +303,9 @@ fn named_project_miss_returns_explicit_constraint_preserving_alternatives() {
         property_by_id: Some(&property_by_id),
         societies: &[],
         graph: None,
-        intent_classifier: None,
     }
     .search("Godrej Splendour 3BHK under ₹1.4Cr");
 
-    assert_eq!(output.named_society_alternatives, vec!["Godrej Splendour"]);
     assert_eq!(output.eligible_result_count, 0);
     assert_eq!(
         output
@@ -318,8 +313,12 @@ fn named_project_miss_returns_explicit_constraint_preserving_alternatives() {
             .iter()
             .map(|result| result.card.id.as_str())
             .collect::<Vec<_>>(),
-        vec!["budget-alternative"]
+        ["godrej-splendour"]
     );
+    let result = &output.result_sets[0].results[0];
+    assert_eq!(result.card.id, "godrej-splendour");
+    assert_eq!(result.match_tier, "budget_expanded");
+    assert_eq!(result.tradeoff_label.as_deref(), Some("21% over budget"));
 }
 
 #[test]
@@ -397,7 +396,6 @@ fn grouped_named_projects_keep_bhk_and_budget_branches_paired() {
         property_by_id: Some(&property_by_id),
         societies: &[],
         graph: None,
-        intent_classifier: None,
     }
     .search("Godrej Air 3BHK under ₹2Cr or Prestige Waterford 4BHK under ₹4Cr");
 
@@ -410,6 +408,32 @@ fn grouped_named_projects_keep_bhk_and_budget_branches_paired() {
         vec!["godrej-air-3bhk", "prestige-waterford-4bhk"]
     );
     assert_eq!(output.eligible_result_count, 2);
+    assert_eq!(output.result_sets.len(), 2);
+    assert_eq!(
+        output
+            .result_sets
+            .iter()
+            .map(|set| set.branch_id.as_str())
+            .collect::<Vec<_>>(),
+        ["branch-1", "branch-2"]
+    );
+    assert_eq!(
+        output
+            .result_sets
+            .iter()
+            .map(|set| set.results[0].card.id.as_str())
+            .collect::<Vec<_>>(),
+        ["godrej-air-3bhk", "prestige-waterford-4bhk"]
+    );
+    assert!(output.result_sets[0].label.contains("Godrej Air"));
+    assert!(output.result_sets[0].label.contains("3 BHK"));
+    assert!(output.result_sets[1].label.contains("Prestige Waterford"));
+    assert!(output.result_sets[1].label.contains("4 BHK"));
+    assert!(output
+        .result_sets
+        .iter()
+        .flat_map(|set| &set.results)
+        .all(|result| result.match_tier == "exact" && result.tradeoff_label.is_none()));
 }
 
 #[test]
@@ -473,7 +497,6 @@ fn unique_partial_society_name_is_a_hard_constraint() {
         property_by_id: Some(&property_by_id),
         societies: &[],
         graph: None,
-        intent_classifier: None,
     }
     .search("Waterford 4BHK");
 
@@ -484,9 +507,8 @@ fn unique_partial_society_name_is_a_hard_constraint() {
             .map(|result| result.card.id.as_str())
             .collect::<Vec<_>>(),
         vec!["prestige-waterford-4bhk"],
-        "eligible={}, alternatives={:?}, relaxations={:?}, resolved={:?}",
+        "eligible={}, relaxations={:?}, resolved={:?}",
         output.eligible_result_count,
-        output.named_society_alternatives,
         output
             .relaxations
             .iter()
@@ -697,21 +719,10 @@ fn runtime_key(bundle_version: &str) -> RuntimeVersionKey {
 fn empty_response(query: &str) -> SearchResponse {
     SearchResponse {
         query: query.to_string(),
-        intent: parse_intent(query),
-        results: Vec::new(),
+        result_sets: Vec::new(),
+        total_matches: 0,
         area_context: None,
-        eligible_results: 0,
-        results_returned: 0,
-        total_results: 0,
-        focus: None,
-        knowledge_context: Some(KnowledgeContext {
-            claims: Vec::new(),
-            nodes_consulted: 0,
-            learning_gaps: Vec::new(),
-        }),
-        search_diagnostics: None,
-        relaxations: Vec::new(),
-        search_guidance: None,
+        state: "no_matches".to_string(),
     }
 }
 
@@ -792,6 +803,7 @@ fn loaded_bundle_with_aliases(
         rera_evidence_index: ReraEvidenceIndex::default(),
         geo_index,
         spatial_index,
+        search_capabilities: backend::search::SearchCapabilityIndex::default(),
         cache_dir: temp_dir.keep(),
     }
 }

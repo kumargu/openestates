@@ -103,7 +103,6 @@ fn run_search_output(
         property_by_id: Some(property_by_id),
         societies,
         graph: Some(graph),
-        intent_classifier: None,
     }
     .search(query)
 }
@@ -1034,7 +1033,12 @@ fn promoted_bundle_resolves_labelled_named_places() {
             "{query:?} should resolve {expected_place:?}: {:?}",
             output.diagnostics.resolved.entities
         );
-        assert!(!output.results.is_empty(), "{query:?} should recall homes");
+        assert!(
+            !output.results.is_empty(),
+            "{query:?} should recall homes; warnings={:?}, recall={:?}",
+            output.diagnostics.warnings,
+            output.diagnostics.recall
+        );
         let reasons = output
             .results
             .iter()

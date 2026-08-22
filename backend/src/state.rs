@@ -18,7 +18,7 @@ use crate::knowledge::SearchEvent;
 use crate::models::{AreaProfile, Property, Society};
 use crate::recommendations::RecommendationResponse;
 use crate::scoring::scoring_policy;
-use crate::search::{FastTextIntentClassifier, SearchIndex, SearchResponse};
+use crate::search::{SearchIndex, SearchResponse};
 use crate::serving::LoadedServingBundle;
 
 pub const SEARCH_ENGINE_VERSION: &str = "openestates-search-runtime-v2";
@@ -280,7 +280,6 @@ pub struct AppState {
     pub search_runtime: ArcSwap<SearchRuntimeSnapshot>,
     /// Bounded optimization cache for non-debug search responses.
     pub search_cache: SearchResponseCache,
-    pub intent_classifier: Option<Arc<FastTextIntentClassifier>>,
     /// Bounded best-effort side-effect queue for search logging.
     pub search_event_tx: mpsc::Sender<SearchLogMessage>,
     /// Best-effort count of search log side effects dropped because the bounded queue was full.

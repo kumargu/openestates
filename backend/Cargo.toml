@@ -43,7 +43,6 @@ rstar = "0.12"
 geojson = "0.24"
 lru = "0.16"
 winnow = "1.0.4"
-fasttext = "0.8.0"
 
 [dev-dependencies]
 tempfile = "3"

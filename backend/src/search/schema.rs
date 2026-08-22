@@ -212,11 +212,44 @@ pub struct NumericConstraintSchema {
     pub dimension: String,
     pub label: String,
     pub fact_keys: Vec<String>,
+    #[serde(default)]
+    pub runtime_field: Option<String>,
     pub query_units: Vec<QueryUnit>,
+    #[serde(default)]
+    pub qualitative_bounds: Vec<QualitativeNumericBound>,
+    #[serde(default)]
+    pub value_kind: NumericFactValueKind,
+    #[serde(default)]
+    pub aggregation: NumericAggregation,
     #[serde(default)]
     pub zero_is_max: bool,
     pub proof_sources: Vec<SourceType>,
     pub scoring_method: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualitativeNumericBound {
+    pub patterns: Vec<String>,
+    pub operator: ConstraintOperator,
+    pub value: f64,
+    pub unit: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NumericFactValueKind {
+    #[default]
+    Numeric,
+    DistanceKmInText,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NumericAggregation {
+    #[default]
+    First,
+    Minimum,
+    Maximum,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -228,6 +261,8 @@ pub struct PreferencePatternSpec {
     #[serde(default)]
     pub gap_keys: Vec<String>,
     pub weight: f32,
+    #[serde(default)]
+    pub require_evidence: bool,
     #[serde(default)]
     pub missing_evidence_neutral: bool,
 }
@@ -320,6 +355,7 @@ fn merge_preference_patterns(patterns: Vec<PreferencePatternSpec>) -> Vec<Prefer
             }
         }
         existing.weight = existing.weight.max(pattern.weight);
+        existing.require_evidence |= pattern.require_evidence;
         existing.missing_evidence_neutral |= pattern.missing_evidence_neutral;
     }
     merged
@@ -542,11 +578,34 @@ pub(crate) fn detect_hard_constraint_spans(q: &str) -> Vec<HardConstraintSpanMat
 }
 
 fn detect_hard_constraint_token_matches(tokens: &[String]) -> Vec<HardConstraintTokenMatch> {
-    registry()
+    let mut matches = registry()
         .numeric_constraints
         .iter()
-        .flat_map(|schema| detect_numeric_constraint_matches(tokens, schema))
-        .collect()
+        .flat_map(|schema| {
+            detect_numeric_constraint_matches(tokens, schema)
+                .into_iter()
+                .chain(detect_qualitative_constraint_matches(tokens, schema))
+        })
+        .collect::<Vec<_>>();
+    matches.sort_by_key(|matched| {
+        (
+            matched.start,
+            std::cmp::Reverse(matched.end.saturating_sub(matched.start)),
+        )
+    });
+    let mut selected = Vec::<HardConstraintTokenMatch>::new();
+    for matched in matches {
+        if selected.iter().any(|existing| {
+            existing.constraint.field == matched.constraint.field
+                && existing.start < matched.end
+                && matched.start < existing.end
+        }) {
+            continue;
+        }
+        selected.push(matched);
+    }
+    selected.sort_by_key(|matched| (matched.start, matched.end));
+    selected
 }
 
 pub fn schema_preference_signal(
@@ -559,6 +618,7 @@ pub fn schema_preference_signal(
         expanded_keys: pattern.expanded_keys.clone(),
         gap_keys: pattern.gap_keys.clone(),
         weight: pattern.weight,
+        required: pattern.require_evidence,
         missing_evidence_neutral: pattern.missing_evidence_neutral,
     }
 }
@@ -615,6 +675,7 @@ pub fn preference_signal_for_label(label: &str, polarity: Polarity) -> Preferenc
         expanded_keys: Vec::new(),
         gap_keys: Vec::new(),
         weight: 1.0,
+        required: false,
         missing_evidence_neutral: false,
     }
 }
@@ -641,6 +702,7 @@ pub fn preference_signal_for_fact_keys(
         expanded_keys: fact_keys.to_vec(),
         gap_keys: Vec::new(),
         weight: policy.map_or(1.0, |pattern| pattern.weight),
+        required: policy.is_some_and(|pattern| pattern.require_evidence),
         missing_evidence_neutral: policy.is_some_and(|pattern| pattern.missing_evidence_neutral),
     }
 }
@@ -844,6 +906,45 @@ fn detect_numeric_constraint_matches(
             matches.push(candidate);
         }
     }
+    matches
+}
+
+fn detect_qualitative_constraint_matches(
+    tokens: &[String],
+    schema: &NumericConstraintSchema,
+) -> Vec<HardConstraintTokenMatch> {
+    let mut matches = schema
+        .qualitative_bounds
+        .iter()
+        .flat_map(|bound| {
+            bound.patterns.iter().flat_map(move |pattern| {
+                phrase_ranges(tokens, pattern)
+                    .into_iter()
+                    .map(move |(start, end)| HardConstraintTokenMatch {
+                        constraint: HardConstraint {
+                            field: schema.dimension.clone(),
+                            operator: bound.operator.clone(),
+                            value: bound.value,
+                            unit: bound.unit.clone(),
+                            raw_text: tokens[start..end].join(" "),
+                        },
+                        start,
+                        end,
+                    })
+            })
+        })
+        .collect::<Vec<_>>();
+    matches.sort_by_key(|matched| {
+        (
+            matched.start,
+            std::cmp::Reverse(matched.end.saturating_sub(matched.start)),
+        )
+    });
+    matches.dedup_by(|right, left| {
+        left.start == right.start
+            && left.end == right.end
+            && left.constraint.field == right.constraint.field
+    });
     matches
 }
 
@@ -1373,6 +1474,38 @@ mod tests {
         assert!(constraints
             .iter()
             .any(|constraint| constraint.field == "open_area_pct" && constraint.value == 80.0));
+    }
+
+    #[test]
+    fn qualitative_numeric_constraints_are_owned_by_config() {
+        let constraints = detect_hard_constraints(
+            "4BHK with high carpet area and large open space or 3BHK far from lake bed",
+        );
+
+        assert!(constraints.iter().any(|constraint| {
+            constraint.field == "carpet_area"
+                && constraint.operator == ConstraintOperator::Min
+                && constraint.value == 2_000.0
+        }));
+        assert!(constraints.iter().any(|constraint| {
+            constraint.field == "open_area_pct"
+                && constraint.operator == ConstraintOperator::Min
+                && constraint.value == 60.0
+        }));
+        assert!(constraints.iter().any(|constraint| {
+            constraint.field == "lake_distance"
+                && constraint.operator == ConstraintOperator::Min
+                && constraint.value == 0.5
+        }));
+    }
+
+    #[test]
+    fn only_configured_categorical_requirements_demand_evidence() {
+        let ready = preference_signal_for_label("ready to move", Polarity::Positive);
+        let greenery = preference_signal_for_label("greenery", Polarity::Positive);
+
+        assert!(ready.required);
+        assert!(!greenery.required);
     }
 
     #[test]

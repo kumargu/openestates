@@ -302,12 +302,22 @@ pub(crate) fn unresolved_named_entity_clause(
     resolved_entity_in_span: impl Fn(ByteSpan) -> bool,
 ) -> Option<String> {
     let query_lower = query.to_ascii_lowercase();
-    let budget_start = plan.slots.budget_max.as_ref().and_then(|budget| {
-        exact_pattern_match_ranges(&query_lower, &budget.raw_text)
-            .into_iter()
-            .map(|(start, _)| start)
-            .next()
-    });
+    let budget_start = plan
+        .slots
+        .budget_min
+        .iter()
+        .chain(plan.slots.budget_max.iter())
+        .flat_map(|budget| exact_pattern_match_ranges(&query_lower, &budget.raw_text))
+        .map(|(start, _)| start)
+        .min();
+    let budget_operator_start = search_parser_config()
+        .budget
+        .operators
+        .iter()
+        .chain(search_parser_config().budget.min_operators.iter())
+        .flat_map(|operator| exact_pattern_match_ranges(&query_lower, operator))
+        .map(|(start, _)| start)
+        .min();
     let first_relation_start = plan
         .clauses
         .iter()
@@ -319,10 +329,29 @@ pub(crate) fn unresolved_named_entity_clause(
             if first_relation_start.is_some_and(|relation_start| prefix_end > relation_start) {
                 continue;
             }
-            let clause_end = [budget_start, first_relation_start]
-                .into_iter()
-                .flatten()
+            let clause_end = plan
+                .slots
+                .bhks
+                .iter()
+                .map(|slot| slot.start)
+                .chain(plan.slots.budgets.iter().map(|slot| slot.start))
+                .chain(plan.evidence.iter().map(|evidence| evidence.start))
+                .chain(budget_start)
+                .chain(budget_operator_start)
+                .chain(first_relation_start)
                 .filter(|end| *end > prefix_end)
+                .chain(
+                    plan.tokens
+                        .iter()
+                        .filter(|token| token.start > prefix_end)
+                        .filter(|token| {
+                            matches!(
+                                token.text.to_ascii_lowercase().as_str(),
+                                "with" | "prefer" | "but" | "and" | "or"
+                            )
+                        })
+                        .map(|token| token.start),
+                )
                 .min()
                 .unwrap_or(query.len());
             let span = ByteSpan {
@@ -794,6 +823,7 @@ fn merge_or_push_preference(prefs: &mut Vec<PreferenceSignal>, signal: Preferenc
         merge_expanded_keys(existing, &signal.expanded_keys);
         merge_gap_keys(existing, &signal.gap_keys);
         existing.weight = existing.weight.max(signal.weight);
+        existing.required |= signal.required;
         existing.missing_evidence_neutral |= signal.missing_evidence_neutral;
     } else {
         prefs.push(signal);
@@ -977,20 +1007,6 @@ fn query_pattern_match_ranges<'a>(
             },
         )
     })
-}
-
-pub(crate) fn deterministic_preference_spans(query: &str, plan: &QueryPlan) -> Vec<ByteSpan> {
-    let normalized = query.to_ascii_lowercase();
-    let mut spans = schema::positive_preference_patterns()
-        .iter()
-        .chain(schema::negative_preference_patterns())
-        .flat_map(|preference| preference.patterns.iter())
-        .flat_map(|pattern| query_pattern_match_ranges(&normalized, pattern, plan))
-        .map(|(start, end)| ByteSpan { start, end })
-        .collect::<Vec<_>>();
-    spans.sort_by_key(|span| (span.start, span.end));
-    spans.dedup();
-    spans
 }
 
 fn span_is_owned_by_entity(plan: &QueryPlan, span: ByteSpan) -> bool {
@@ -1382,6 +1398,28 @@ mod tests {
     }
 
     #[test]
+    fn named_entity_scope_stops_before_structured_constraints() {
+        for query in [
+            "3bhk with greenery in whitefield above 10 acres",
+            "in whitefield 3bhk under 2 crore",
+        ] {
+            let plan = compile_query_plan(query);
+            let unresolved = unresolved_named_entity_clause(
+                query,
+                &plan,
+                |_| false,
+                |span| {
+                    query[span.start..span.end]
+                        .trim()
+                        .eq_ignore_ascii_case("whitefield")
+                },
+            );
+
+            assert_eq!(unresolved, None, "{query}");
+        }
+    }
+
+    #[test]
     fn alternative_layout_ignores_or_inside_a_single_constraint_clause() {
         let query = "2 or 3 BHK under 2Cr or 4BHK under 4Cr";
         let plan = compile_query_plan(query);
@@ -1444,7 +1482,11 @@ mod tests {
                 "quiet neighborhood",
                 Polarity::Positive,
             ),
-            ("daily gridlock is a deal breaker", "traffic", Polarity::Negative),
+            (
+                "daily gridlock is a deal breaker",
+                "traffic",
+                Polarity::Negative,
+            ),
             (
                 "the place should feel consistently cared for",
                 "maintenance",

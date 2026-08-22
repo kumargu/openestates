@@ -190,11 +190,66 @@ impl ConstraintExpr {
         }
     }
 
+    /// Lower the supported Boolean subset into flat top-level alternatives.
+    /// Nested language is not exposed as a query contract; `And` distributes
+    /// only over the configured `AnyOf` groups produced by our compiler.
+    pub fn flat_branches(&self) -> Vec<Self> {
+        match self {
+            Self::AnyOf { clauses } => clauses.iter().flat_map(Self::flat_branches).collect(),
+            Self::And { clauses } => {
+                clauses
+                    .iter()
+                    .fold(vec![Self::and(Vec::new())], |branches, clause| {
+                        let alternatives = clause.flat_branches();
+                        branches
+                            .into_iter()
+                            .flat_map(|branch| {
+                                alternatives.iter().cloned().map(move |alternative| {
+                                    Self::and(vec![branch.clone(), alternative])
+                                })
+                            })
+                            .collect()
+                    })
+            }
+            Self::Not { .. } | Self::Term { .. } => vec![self.clone()],
+        }
+    }
+
+    pub fn buyer_label(&self) -> String {
+        let mut labels = Vec::new();
+        collect_buyer_labels(self, false, &mut labels);
+        labels.into_iter().take(3).collect::<Vec<_>>().join(" · ")
+    }
+
     pub fn has_terms(&self) -> bool {
         match self {
             Self::And { clauses } | Self::AnyOf { clauses } => clauses.iter().any(Self::has_terms),
             Self::Not { clause } => clause.has_terms(),
             Self::Term { .. } => true,
+        }
+    }
+
+    pub(crate) fn source_spans_within(&self, start: usize, end: usize) -> bool {
+        match self {
+            Self::And { clauses } | Self::AnyOf { clauses } => clauses
+                .iter()
+                .all(|clause| clause.source_spans_within(start, end)),
+            Self::Not { clause } => clause.source_spans_within(start, end),
+            Self::Term { term } => term
+                .source_span()
+                .is_none_or(|span| span.start >= start && span.end <= end),
+        }
+    }
+
+    pub(crate) fn has_source_span_within(&self, start: usize, end: usize) -> bool {
+        match self {
+            Self::And { clauses } | Self::AnyOf { clauses } => clauses
+                .iter()
+                .any(|clause| clause.has_source_span_within(start, end)),
+            Self::Not { clause } => clause.has_source_span_within(start, end),
+            Self::Term { term } => term
+                .source_span()
+                .is_some_and(|span| span.start >= start && span.end <= end),
         }
     }
 
@@ -224,12 +279,12 @@ impl ConstraintExpr {
         has_positive_budget_max(self, false)
     }
 
-    pub fn bhk_include_label(&self) -> Option<String> {
-        format_bhk_include_label(&collect_bhk_values(self, false))
+    pub fn budget_max_value(&self) -> Option<u64> {
+        collect_budget_max(self, false)
     }
 
-    pub(crate) fn bhk_include_values(&self) -> Vec<u32> {
-        collect_bhk_values(self, false)
+    pub fn bhk_include_label(&self) -> Option<String> {
+        format_bhk_include_label(&collect_bhk_values(self, false))
     }
 
     pub fn matched_bhk_include_label(
@@ -283,6 +338,81 @@ impl ConstraintExpr {
 
     fn is_match_none(&self) -> bool {
         matches!(self, Self::AnyOf { clauses } if clauses.is_empty())
+    }
+}
+
+impl ConstraintTerm {
+    fn source_span(&self) -> Option<&SourceSpan> {
+        match self {
+            Self::Bhk { span, .. }
+            | Self::Area { span, .. }
+            | Self::Budget { span, .. }
+            | Self::Evidence { span, .. } => span.as_ref(),
+            Self::Society { span, .. } | Self::Builder { span, .. } => span.as_ref(),
+        }
+    }
+}
+
+fn collect_buyer_labels(expr: &ConstraintExpr, negated: bool, labels: &mut Vec<String>) {
+    match expr {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
+            for clause in clauses {
+                collect_buyer_labels(clause, negated, labels);
+            }
+        }
+        ConstraintExpr::Not { clause } => collect_buyer_labels(clause, !negated, labels),
+        ConstraintExpr::Term { term } => {
+            let label = match term {
+                ConstraintTerm::Bhk { value, .. } => format!("{value} BHK"),
+                ConstraintTerm::Area { value, .. } => value.clone(),
+                ConstraintTerm::Society { display_name, .. }
+                | ConstraintTerm::Builder { display_name, .. } => display_name.clone(),
+                ConstraintTerm::Budget { min, max, .. } => match (min, max) {
+                    (None, Some(max)) => format!("Under {}", format_money(max.value)),
+                    (Some(min), None) => format!("Above {}", format_money(min.value)),
+                    (Some(min), Some(max)) => {
+                        format!("{}–{}", format_money(min.value), format_money(max.value))
+                    }
+                    (None, None) => return,
+                },
+                ConstraintTerm::Evidence { constraint, .. } => constraint.raw_text.clone(),
+            };
+            let label = if negated {
+                format!("Not {label}")
+            } else {
+                label
+            };
+            if !labels
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(&label))
+            {
+                labels.push(label);
+            }
+        }
+    }
+}
+
+fn format_money(value: u64) -> String {
+    if value >= 10_000_000 {
+        format!("₹{:.2}Cr", value as f64 / 10_000_000.0)
+    } else if value >= 100_000 {
+        format!("₹{:.0}L", value as f64 / 100_000.0)
+    } else {
+        format!("₹{value}")
+    }
+}
+
+fn collect_budget_max(expr: &ConstraintExpr, negated: bool) -> Option<u64> {
+    match expr {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => clauses
+            .iter()
+            .filter_map(|clause| collect_budget_max(clause, negated))
+            .max(),
+        ConstraintExpr::Not { clause } => collect_budget_max(clause, !negated),
+        ConstraintExpr::Term {
+            term: ConstraintTerm::Budget { max, .. },
+        } if !negated => max.as_ref().map(|bound| bound.value),
+        ConstraintExpr::Term { .. } => None,
     }
 }
 

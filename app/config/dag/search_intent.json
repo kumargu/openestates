@@ -144,65 +144,6 @@
       }
     ]
   },
-  "classifier": {
-    "_comment": "Shadow-only residual-clause classifier. Labels and seed phrases come from fact_registry.json preference_patterns; this block owns mechanics and calibration only.",
-    "mode": "shadow",
-    "artifact_path": "data/cache/search/intent-classifier/model.bin",
-    "held_out_path": "data/validation/query_bank/search_intent_classifier_v1.json",
-    "minimum_probability": 0.72,
-    "minimum_margin": 0.2,
-    "minimum_training_examples_per_label": 3,
-    "maximum_clauses": 4,
-    "maximum_clause_tokens": 18,
-    "labels": [
-      { "preference": "greenery", "polarity": "positive" },
-      { "preference": "amenity quality", "polarity": "positive" },
-      { "preference": "maintenance", "polarity": "positive" },
-      { "preference": "water supply", "polarity": "positive" },
-      { "preference": "review quality", "polarity": "positive" },
-      { "preference": "approach road", "polarity": "positive" },
-      { "preference": "reliable builder", "polarity": "positive" },
-      { "preference": "quiet neighborhood", "polarity": "positive" },
-      { "preference": "commute", "polarity": "positive" },
-      { "preference": "family friendly", "polarity": "positive" },
-      { "preference": "legal safety", "polarity": "positive" },
-      { "preference": "construction quality", "polarity": "positive" },
-      { "preference": "open space", "polarity": "positive" },
-      { "preference": "ventilation", "polarity": "positive" },
-      { "preference": "waterlogging risk", "polarity": "negative" },
-      { "preference": "traffic", "polarity": "negative" },
-      { "preference": "noise", "polarity": "negative" },
-      { "preference": "legal risk", "polarity": "negative" },
-      { "preference": "delay risk", "polarity": "negative" },
-      { "preference": "approach road", "polarity": "negative" },
-      { "preference": "stp concern", "polarity": "negative" },
-      { "preference": "high tension wires", "polarity": "negative" },
-      { "preference": "water issues", "polarity": "negative" },
-      { "preference": "maintenance", "polarity": "negative" }
-    ],
-    "clause_separators": [
-      "more important than",
-      "only if",
-      "as long as",
-      "but",
-      "while",
-      "and",
-      "also",
-      "plus",
-      ";"
-    ],
-    "training": {
-      "epoch": 50,
-      "learning_rate": 0.5,
-      "dimension": 48,
-      "word_ngrams": 2,
-      "min_character_ngrams": 3,
-      "max_character_ngrams": 6,
-      "bucket": 50000,
-      "thread": 1,
-      "seed": 42
-    }
-  },
   "parser": {
     "bhk": {
       "unit_aliases": [

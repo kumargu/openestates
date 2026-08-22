@@ -138,6 +138,9 @@ pub struct PreferenceSignal {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gap_keys: Vec<String>,
     pub weight: f32,
+    /// A configured categorical requirement or an explicitly mandatory buyer clause.
+    #[serde(default)]
+    pub required: bool,
     #[serde(default)]
     pub missing_evidence_neutral: bool,
 }

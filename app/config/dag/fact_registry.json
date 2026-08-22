@@ -1497,7 +1497,8 @@
           "possession_status",
           "project_status"
         ],
-        "weight": 1.2
+        "weight": 1.2,
+        "require_evidence": true
       },
       {
         "rank": 14,
@@ -1838,7 +1839,8 @@
           "possession_status",
           "project_status"
         ],
-        "weight": 1.2
+        "weight": 1.2,
+        "require_evidence": true
       },
       {
         "rank": 33,
@@ -3005,6 +3007,60 @@
   },
   "numeric_constraints": [
     {
+      "dimension": "carpet_area",
+      "label": "Carpet area",
+      "fact_keys": [],
+      "runtime_field": "carpet_area_sqft",
+      "query_units": [
+        {
+          "unit": "sqft",
+          "aliases": ["sqft", "sq ft", "square feet"],
+          "to_canonical": 1.0
+        }
+      ],
+      "qualitative_bounds": [
+        {
+          "patterns": ["high carpet area", "large carpet area", "large usable area"],
+          "operator": "min",
+          "value": 2000.0,
+          "unit": "sqft"
+        }
+      ],
+      "proof_sources": [],
+      "scoring_method": "serving-property"
+    },
+    {
+      "dimension": "lake_distance",
+      "label": "Nearest observed lake",
+      "fact_keys": ["nearby_lakes"],
+      "query_units": [
+        {
+          "unit": "km",
+          "aliases": ["km", "kms", "kilometer", "kilometers"],
+          "to_canonical": 1.0
+        }
+      ],
+      "qualitative_bounds": [
+        {
+          "patterns": [
+            "far from lake",
+            "far away from lake",
+            "away from lake",
+            "far from lake bed",
+            "far away from lake bed",
+            "far way from lake bed"
+          ],
+          "operator": "min",
+          "value": 0.5,
+          "unit": "km"
+        }
+      ],
+      "value_kind": "distance_km_in_text",
+      "aggregation": "minimum",
+      "proof_sources": ["Google"],
+      "scoring_method": "serving-nearby-distance"
+    },
+    {
       "dimension": "land_area",
       "label": "RERA land area",
       "fact_keys": [
@@ -3043,6 +3099,14 @@
             "percentage"
           ],
           "to_canonical": 1.0
+        }
+      ],
+      "qualitative_bounds": [
+        {
+          "patterns": ["large open space", "high open area", "lots of open space"],
+          "operator": "min",
+          "value": 60.0,
+          "unit": "percent"
         }
       ],
       "proof_sources": [
