@@ -131,6 +131,40 @@
   min-width: 0;
 }
 
+.story-lab__decks {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+}
+
+.story-lab__decks button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #665e57;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.story-lab__decks button.is-active {
+  border-color: #c5bdb5;
+  background: rgba(255, 255, 255, 0.72);
+  color: #26211d;
+}
+
+.story-lab__decks button > span {
+  color: #9b6e59;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+}
+
 .story-lab__viewport {
   width: 100%;
   margin: 0 auto;
@@ -159,9 +193,36 @@
   margin-bottom: 0;
 }
 
+.story-lab__viewport .property-arrival {
+  width: 100%;
+  margin: 0;
+}
+
+.story-lab__omitted {
+  display: grid;
+  min-height: 12rem;
+  place-content: center;
+  gap: 0.3rem;
+  color: #746b64;
+  text-align: center;
+}
+
+.story-lab__omitted strong {
+  color: #29231f;
+  font-size: 1rem;
+}
+
+.story-lab__omitted span {
+  font-size: 0.78rem;
+}
+
 .story-lab__viewport--mobile .property-scene {
   width: 100%;
   margin-left: 0;
+}
+
+.story-lab__viewport--mobile .property-arrival {
+  margin-inline: 0;
 }
 
 .story-lab__viewport--mobile .property-scene__stage {

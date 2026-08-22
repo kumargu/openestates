@@ -1,10 +1,23 @@
 # Property detail — next pass
 
-**Status:** mocks only. Live `/property/:id` is unchanged.
-**Date:** 2026-08-17
+**Status:** M0–M2 implemented on `agent/property-detail-next-pass`; M3 next.
+**Updated:** 2026-08-23
 **Companion:** canvas `property-detail-mocks.canvas.tsx`
 
 Search already presents a journey instead of a dump. Detail should feel the same: one home, a walkable set of photos, then context — not a listings page that throws media and facts at the buyer.
+
+## M0–M2 learnings
+
+- Treat the public property-story reference as the visual contract: full-bleed sequence, compact dark navigation, stationary facts, and no workspace sidebar on the story route.
+- The Story Lab must render the same projection and production component as `/property/:id`. Add a deck to the Lab only when its production component is genuinely auditable there.
+- Projection owns deterministic ordering, sparse compaction, fact deduplication, and buyer-safe formatting. Presentation must not repair or reinterpret data.
+- Unknown image provenance stays unlabelled. Never infer current-site or proposed-render state from a URL.
+- Motion timing has one owner. Autoplay, cross-fade cleanup, CSS animation duration, and speed controls all use the same registry values.
+- Failed media must disappear from both the hero sequence and gallery handoff; an enabled action that opens nothing is a product bug.
+- Sparse media should compact to identity typography rather than reserve a cinematic empty slab.
+- Mobile story controls need 44 px touch targets even when the visual control remains compact.
+- Story and dossier modes share the projection and component tree. Dossier mode pauses decorative motion instead of creating a second detail page.
+- Preserve existing property subroutes and workspace tools. Only the cinematic property detail and internal Lab bypass workspace sidebar chrome.
 
 ## What is already good
 

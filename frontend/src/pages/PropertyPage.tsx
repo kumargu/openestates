@@ -25,14 +25,11 @@ import {
 } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { RailPageControls } from "../components/RailPageControls.tsx";
-import {
-  ApproachRoadTrail,
-  hasApproachRoadTrail,
-} from "../components/evidence/ApproachRoadTrail.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
+import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import {
   PropertyStoryTopbar,
@@ -825,7 +822,6 @@ function PropertyPageBody({
     .filter(Boolean)
     .join(". ");
   const detailEvidenceSections = data.evidence?.sections ?? [];
-  const showApproachTrail = hasApproachRoadTrail(detailEvidenceSections);
   const aroundThisHomeContext = propertyMapContextFromSurfaceScene(
     aroundThisHomeScene,
     data.map_context,
@@ -916,31 +912,32 @@ function PropertyPageBody({
           )}
         </section>
 
-        {(showApproachTrail || reraReport) && (
+        <PropertyArrivalFilm
+          propertyId={p.id}
+          title={story.identity.title}
+          frames={story.arrival.frames}
+          playback={{
+            playing: storyPlaying,
+            onPlayingChange: setStoryPlaying,
+          }}
+        />
+
+        {reraReport && (
           <section className="property-popup-row" aria-label="Home details">
-            {showApproachTrail && (
-              <ApproachRoadTrail
-                propertyId={id}
-                sections={detailEvidenceSections}
-                variant="compact"
-              />
-            )}
-            {reraReport && (
-              <Link className="property-popup-action" to={reraReport.href}>
-                <span><strong>RERA report</strong></span>
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
+            <Link className="property-popup-action" to={reraReport.href}>
+              <span><strong>RERA report</strong></span>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2"
                   aria-hidden="true"
-                >
-                  <path d="m9 18 6-6-6-6" />
-                </svg>
-              </Link>
-            )}
+              >
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </Link>
           </section>
         )}
 

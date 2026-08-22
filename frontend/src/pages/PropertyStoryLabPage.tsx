@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Helmet } from "react-helmet-async";
+import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
+import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
 import {
   PropertySceneCard,
   type StoryPlaybackSpeed,
@@ -12,6 +14,7 @@ import {
   projectPropertyStory,
   type StoryMotionTheme,
 } from "../lib/propertyStory.ts";
+import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import {
   storyLabDetailFixture,
   storyLabMediaFixture,
@@ -27,10 +30,12 @@ import "../styles/story-lab.css";
 
 type LabViewport = "desktop" | "tablet" | "mobile";
 type LabMotionTheme = "auto" | StoryMotionTheme;
+type LabDeck = "hero" | "map" | "arrival";
 
 export function PropertyStoryLabPage() {
   const [propertyId, setPropertyId] =
     useState<StoryLabPropertyFixture>("fixture-prestige-lakeside-3bhk");
+  const [deck, setDeck] = useState<LabDeck>("hero");
   const [viewport, setViewport] = useState<LabViewport>("desktop");
   const [coverage, setCoverage] = useState<StoryLabCoverage>("rich");
   const [imageCount, setImageCount] = useState<StoryLabImageCount>("many");
@@ -71,7 +76,17 @@ export function PropertyStoryLabPage() {
       }),
     [detail, media, theme],
   );
-  const frameCount = story.media.frames.length;
+  const frameCount = deck === "hero"
+    ? story.media.frames.length
+    : deck === "arrival"
+      ? story.arrival.frames.length
+      : 0;
+  const mapAvailable = hasAroundThisHomePlate(detail.map_context ?? null);
+
+  function selectDeck(nextDeck: LabDeck) {
+    setDeck(nextDeck);
+    setActiveIndex(0);
+  }
 
   const actions = (
     <>
@@ -99,7 +114,7 @@ export function PropertyStoryLabPage() {
         <div>
           <span>Internal preview</span>
           <h1>Property Story Lab</h1>
-          <p>Production projection and production hero, isolated for review.</p>
+          <p>Production projection and decks, isolated for review.</p>
         </div>
         <div className="story-lab__status" aria-live="polite">
           <strong>{story.coverage.level}</strong>
@@ -115,7 +130,10 @@ export function PropertyStoryLabPage() {
           <LabSelect
             label="Property fixture"
             value={propertyId}
-            onChange={(value) => setPropertyId(value as StoryLabPropertyFixture)}
+            onChange={(value) => {
+              setPropertyId(value as StoryLabPropertyFixture);
+              setActiveIndex(0);
+            }}
           >
             <option value="fixture-prestige-lakeside-3bhk">
               Prestige Lakeside
@@ -139,7 +157,10 @@ export function PropertyStoryLabPage() {
           <LabSelect
             label="Coverage"
             value={coverage}
-            onChange={(value) => setCoverage(value as StoryLabCoverage)}
+            onChange={(value) => {
+              setCoverage(value as StoryLabCoverage);
+              setActiveIndex(0);
+            }}
           >
             <option value="rich">Rich</option>
             <option value="partial">Partial</option>
@@ -251,23 +272,82 @@ export function PropertyStoryLabPage() {
         </aside>
 
         <section className="story-lab__preview">
+          <nav className="story-lab__decks" aria-label="Story deck">
+            <button
+              type="button"
+              className={deck === "hero" ? "is-active" : ""}
+              aria-pressed={deck === "hero"}
+              onClick={() => selectDeck("hero")}
+            >
+              Hero
+            </button>
+            <button
+              type="button"
+              className={deck === "map" ? "is-active" : ""}
+              aria-pressed={deck === "map"}
+              onClick={() => selectDeck("map")}
+            >
+              Map
+              {!mapAvailable && <span>omitted</span>}
+            </button>
+            <button
+              type="button"
+              className={deck === "arrival" ? "is-active" : ""}
+              aria-pressed={deck === "arrival"}
+              onClick={() => selectDeck("arrival")}
+            >
+              Arrival
+              {story.arrival.frames.length === 0 && <span>omitted</span>}
+            </button>
+          </nav>
           <div
             className={`story-lab__viewport story-lab__viewport--${viewport}`}
           >
-            <PropertySceneCard
-              key={`${propertyId}:${imageCount}:${provenance}`}
-              story={story}
-              actions={actions}
-              playback={{
-                activeIndex,
-                playing,
-                speed,
-                reducedMotion,
-                visibility,
-                onActiveIndexChange: setActiveIndex,
-                onPlayingChange: setPlaying,
-              }}
-            />
+            {deck === "hero" && (
+              <PropertySceneCard
+                key={`${propertyId}:${imageCount}:${provenance}`}
+                story={story}
+                actions={actions}
+                playback={{
+                  activeIndex,
+                  playing,
+                  speed,
+                  reducedMotion,
+                  visibility,
+                  onActiveIndexChange: setActiveIndex,
+                  onPlayingChange: setPlaying,
+                }}
+              />
+            )}
+            {deck === "map" && mapAvailable && detail.map_context && (
+              <AroundThisHomePlate
+                propertyId={story.identity.propertyId}
+                context={detail.map_context}
+              />
+            )}
+            {deck === "arrival" && story.arrival.frames.length > 0 && (
+              <PropertyArrivalFilm
+                propertyId={story.identity.propertyId}
+                title={story.identity.title}
+                frames={story.arrival.frames}
+                playback={{
+                  activeIndex,
+                  playing,
+                  speed,
+                  reducedMotion,
+                  visibility,
+                  onActiveIndexChange: setActiveIndex,
+                  onPlayingChange: setPlaying,
+                }}
+              />
+            )}
+            {((deck === "map" && !mapAvailable)
+              || (deck === "arrival" && story.arrival.frames.length === 0)) && (
+              <div className="story-lab__omitted">
+                <strong>Deck omitted</strong>
+                <span>This fixture has no usable {deck} evidence.</span>
+              </div>
+            )}
           </div>
         </section>
       </div>

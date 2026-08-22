@@ -34,6 +34,78 @@ function cloneDetail(propertyId: StoryLabPropertyFixture): PropertyDetailRespons
   return JSON.parse(JSON.stringify(fixture)) as PropertyDetailResponse;
 }
 
+function addArrivalEvidence(
+  detail: PropertyDetailResponse,
+  frameCount: 1 | 4,
+): void {
+  const fixtureFrames = [
+    {
+      label: "Main road",
+      distance_from_gate_m: 180,
+      image_url: "/story-lab/arrival.webp",
+      heading: 80,
+    },
+    {
+      label: "Turn-in",
+      distance_from_gate_m: 95,
+      image_url: "/story-lab/property-hero.webp",
+      heading: 120,
+    },
+    {
+      label: "Final approach",
+      distance_from_gate_m: 35,
+      image_url: "/story-lab/inside.webp",
+      heading: 160,
+    },
+    {
+      label: "Gate",
+      distance_from_gate_m: 0,
+      image_url: "/story-lab/amenity.webp",
+      heading: 190,
+    },
+  ].slice(0, frameCount).map((frame, index) => ({
+    ...frame,
+    pitch: 0,
+    fov: 82,
+    capture_date: "2026-06",
+    source_url: `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=12.945,77.69&heading=${frame.heading}&frame=${index + 1}`,
+  }));
+  const existingSections = detail.evidence?.sections
+    .filter((section) => section.kind !== "approach_road") ?? [];
+  detail.evidence = {
+    property_id: detail.property.id,
+    entity_refs: detail.evidence?.entity_refs ?? {
+      property_entity_id: `property:${detail.property.id}`,
+      society_entity_id: "society:story-lab",
+      area_entity_id: `area:${detail.property.area.toLocaleLowerCase().replace(/\s+/g, "-")}`,
+    },
+    serving_bundle_version: detail.evidence?.serving_bundle_version,
+    sections: [
+      ...existingSections,
+      {
+        kind: "approach_road",
+        title: "Approach road",
+        summary: "",
+        subtitle: "",
+        priority: 2,
+        source_types: ["Google Street View"],
+        entity_ids: ["society:story-lab"],
+        items: [],
+        missing: [],
+        media: [{
+          kind: "street_view_strip",
+          provider: "Google Street View",
+          title: "Approach road",
+          caption: "",
+          capture_date_label: "Jun 2026",
+          coverage_quality: "strong",
+          frames: fixtureFrames,
+        }],
+      },
+    ],
+  };
+}
+
 export function storyLabDetailFixture(
   options: StoryLabFixtureOptions,
 ): PropertyDetailResponse {
@@ -106,8 +178,16 @@ export function storyLabDetailFixture(
         source_type: "fixture",
       }],
     };
+    addArrivalEvidence(detail, 4);
+  } else if (options.coverage === "partial") {
+    delete detail.map_context;
+    addArrivalEvidence(detail, 1);
   } else {
     delete detail.map_context;
+    if (detail.evidence) {
+      detail.evidence.sections = detail.evidence.sections
+        .filter((section) => section.kind !== "approach_road");
+    }
   }
 
   if (options.coverage === "sparse") {

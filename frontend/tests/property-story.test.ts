@@ -102,6 +102,51 @@ test("media provenance survives projection without inferring unknown images", ()
   );
 });
 
+test("arrival projection keeps only bounded approach-road evidence", () => {
+  const detail = richDetail();
+  const approach = detail.evidence?.sections
+    .find((section) => section.kind === "approach_road");
+  assert.ok(approach?.media?.[0]);
+  const strip = approach.media[0];
+  strip.frames[0].source_url = "javascript:alert(1)";
+  strip.frames.push(
+    ...[5, 6, 7].map((index) => ({
+      ...strip.frames[0],
+      label: `Approach ${index}`,
+      image_url: `/story-lab/approach-${index}.webp`,
+      source_url: `https://www.google.com/maps/frame/${index}`,
+    })),
+  );
+  detail.evidence?.sections.push({
+    ...approach,
+    kind: "building_gallery",
+    media: [{
+      ...strip,
+      frames: [{
+        ...strip.frames[0],
+        label: "Unrelated gallery frame",
+        image_url: "/story-lab/unrelated.webp",
+      }],
+    }],
+  });
+
+  const story = projectPropertyStory(detail);
+  assert.equal(story.arrival.frames.length, 6);
+  assert.equal(story.arrival.frames[0]?.label, "Main road");
+  assert.equal(story.arrival.frames[0]?.distanceFromGateM, 180);
+  assert.equal(story.arrival.frames[0]?.lifecycle, "current");
+  assert.equal(story.arrival.frames[0]?.sourceType, "Google Street View");
+  assert.equal(story.arrival.frames[0]?.sourceUrl, undefined);
+  assert.equal(
+    story.arrival.frames.some((frame) => frame.label === "Unrelated gallery frame"),
+    false,
+  );
+  assert.deepEqual(
+    story.decks.slice(0, 3).map((deck) => deck.kind),
+    ["hero", "map", "arrival"],
+  );
+});
+
 test("motion selection is stable and cannot change facts or deck order", () => {
   const detail = richDetail();
   const media = storyLabMediaFixture({ count: "many", provenance: "current" });

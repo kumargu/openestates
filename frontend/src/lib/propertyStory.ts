@@ -1,5 +1,6 @@
 import { initialPropertySceneUrls } from "./propertyScene.ts";
 import { hasAroundThisHomePlate } from "./nearbyPlateProjection.ts";
+import { visibleEvidenceSections } from "./evidence.ts";
 import type {
   PropertyCard,
   PropertyDetailResponse,
@@ -72,8 +73,21 @@ export type StoryMapModel = {
   available: boolean;
 };
 
+export type StoryArrivalFrame = {
+  id: string;
+  url: string;
+  label: string;
+  distanceFromGateM?: number;
+  heading?: number;
+  sourceType: string;
+  lifecycle: StoryMediaLifecycle;
+  capturedAt?: string;
+  sourceUrl?: string;
+  stripKind: string;
+};
+
 export type StoryArrivalModel = {
-  frames: StoryMediaFrame[];
+  frames: StoryArrivalFrame[];
 };
 
 export type StoryReviewsModel = {
@@ -337,21 +351,36 @@ function projectMedia(
 }
 
 function projectArrival(data: PropertyDetailResponse): StoryArrivalModel {
-  const frames =
-    data.evidence?.sections
-      .flatMap((section) => section.media ?? [])
-      .flatMap((strip) =>
-        strip.frames.map((frame, index) => ({
-          id: `arrival-${stableStoryHash(`${strip.kind}:${frame.image_url}:${index}`)
-            .toString(16)}`,
-          url: frame.image_url,
-          role: "neighbourhood" as const,
-          sourceType: strip.provider,
-          lifecycle: "unknown" as const,
-          capturedAt: frame.capture_date || undefined,
-          sourceUrl: frame.source_url || undefined,
+  const approachSections = visibleEvidenceSections(
+    data.evidence?.sections ?? [],
+  ).filter((section) => section.kind === "approach_road");
+  const frames = approachSections
+    .flatMap((section) => section.media ?? [])
+    .flatMap((strip) =>
+      strip.frames
+        .filter((frame) => Boolean(frame.image_url.trim()))
+        .map((frame, index) => ({
+          id: `arrival-${stableStoryHash(
+            `${strip.kind}:${frame.image_url}:${frame.label}:${index}`,
+          ).toString(16)}`,
+          url: frame.image_url.trim(),
+          label: frame.label.trim(),
+          distanceFromGateM:
+            Number.isFinite(frame.distance_from_gate_m)
+            && frame.distance_from_gate_m >= 0
+              ? frame.distance_from_gate_m
+              : undefined,
+          heading: Number.isFinite(frame.heading) ? frame.heading : undefined,
+          sourceType: strip.provider.trim() || "unknown",
+          lifecycle: strip.kind === "street_view_strip"
+            ? "current" as const
+            : "unknown" as const,
+          capturedAt: frame.capture_date.trim() || undefined,
+          sourceUrl: sourceUrl(frame.source_url),
+          stripKind: strip.kind,
         })),
-      ) ?? [];
+    )
+    .slice(0, 6);
   return { frames };
 }
 
