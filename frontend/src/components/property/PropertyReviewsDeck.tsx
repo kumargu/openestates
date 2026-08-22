@@ -27,6 +27,7 @@ export function PropertyReviewsDeck({ model, reviews, signals }: Props) {
 
   return (
     <section
+      id="resident-voice"
       className="property-fact-deck property-reviews-deck"
       aria-labelledby="property-reviews-deck-title"
     >

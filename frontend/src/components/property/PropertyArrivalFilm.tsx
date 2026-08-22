@@ -210,6 +210,7 @@ export function PropertyArrivalFilm({
 
   return (
     <section
+      id="remote-arrival"
       ref={rootRef}
       className={`property-arrival ${motion.className}${
         isReady ? " is-ready" : ""

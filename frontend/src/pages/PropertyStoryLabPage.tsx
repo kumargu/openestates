@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
+import { PropertyDecisionDeck } from "../components/property/PropertyDecisionDeck.tsx";
 import { PropertyReraTeaser } from "../components/property/PropertyReraTeaser.tsx";
 import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
 import {
@@ -39,7 +40,8 @@ type LabDeck =
   | "arrival"
   | "reviews"
   | "record"
-  | "compare";
+  | "compare"
+  | "decision";
 
 export function PropertyStoryLabPage() {
   const [propertyId, setPropertyId] =
@@ -339,6 +341,14 @@ export function PropertyStoryLabPage() {
               Compare
               {!compareAvailable && <span>omitted</span>}
             </button>
+            <button
+              type="button"
+              className={deck === "decision" ? "is-active" : ""}
+              aria-pressed={deck === "decision"}
+              onClick={() => selectDeck("decision")}
+            >
+              Decision
+            </button>
           </nav>
           <div
             className={`story-lab__viewport story-lab__viewport--${viewport}`}
@@ -394,6 +404,14 @@ export function PropertyStoryLabPage() {
               <PropertyShortCompare
                 homes={story.comparisons}
                 compareHref={story.compareHref}
+              />
+            )}
+            {deck === "decision" && (
+              <PropertyDecisionDeck
+                propertyId={story.identity.propertyId}
+                title={story.identity.title}
+                compareHref={story.compareHref}
+                reraHref={story.recordCards[0]?.href}
               />
             )}
             {((deck === "map" && !mapAvailable)

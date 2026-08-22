@@ -21,6 +21,7 @@ export function PropertyShortCompare({ homes, compareHref }: Props) {
 
   return (
     <section
+      id="short-compare"
       className="property-fact-deck property-short-compare"
       aria-labelledby="property-short-compare-title"
     >

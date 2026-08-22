@@ -281,6 +281,10 @@
   flex-direction: column;
 }
 
+.story-lab__viewport--mobile .property-decision-deck__actions {
+  grid-template-columns: 1fr;
+}
+
 .story-lab__viewport--mobile .property-scene__stage {
   min-height: 690px;
   border-radius: 16px;

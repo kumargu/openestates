@@ -11,6 +11,7 @@ export function PropertyReraTeaser({ card }: Props) {
 
   return (
     <section
+      id="official-record"
       className="property-fact-deck property-rera-teaser"
       aria-labelledby="property-rera-teaser-title"
     >

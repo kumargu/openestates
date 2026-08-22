@@ -27,10 +27,15 @@ import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
+import { PropertyDecisionDeck } from "../components/property/PropertyDecisionDeck.tsx";
 import { PropertyReraTeaser } from "../components/property/PropertyReraTeaser.tsx";
 import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import { PropertyShortCompare } from "../components/property/PropertyShortCompare.tsx";
+import {
+  PropertyStoryRail,
+  type PropertyStoryChapter,
+} from "../components/property/PropertyStoryRail.tsx";
 import {
   PropertyStoryTopbar,
   type PropertyStoryMode,
@@ -688,6 +693,25 @@ function PropertyPageBody({
   const moreNearbyItems = nearbyItems.filter(
     (item) => !comparisonIds.has(item.property.id),
   );
+  const storyChapters: PropertyStoryChapter[] = [
+    { id: "property-cinema", label: "Overview" },
+    ...(showNearbyPlate || story.arrival.frames.length > 0
+      ? [{
+          id: showNearbyPlate ? "around-this-home" : "remote-arrival",
+          label: "Location",
+        }]
+      : []),
+    ...(story.reviews.state !== "missing" || Boolean(data.detail_signals?.length)
+      ? [{ id: "resident-voice", label: "Resident voice" }]
+      : []),
+    ...(story.recordCards.length > 0
+      ? [{ id: "official-record", label: "Official record" }]
+      : []),
+    ...(story.comparisons.length === 3
+      ? [{ id: "short-compare", label: "Compare" }]
+      : []),
+    { id: "decision", label: "Decision" },
+  ];
 
   function handleAreaSelect(area: string) {
     navigate(`/?q=${encodeURIComponent(area)}`);
@@ -720,7 +744,11 @@ function PropertyPageBody({
         }}
         onPlayingChange={setStoryPlaying}
       />
+      {storyMode === "story" && (
+        <PropertyStoryRail chapters={storyChapters} />
+      )}
       <PropertySceneCard
+        sectionId="property-cinema"
         story={story}
         playback={{
           playing: storyPlaying,
@@ -729,7 +757,11 @@ function PropertyPageBody({
       />
 
       <main className="property-clean-flow">
-        <section className="property-map-section" aria-label="Around this home">
+        <section
+          id="around-this-home"
+          className="property-map-section"
+          aria-label="Around this home"
+        >
           {showNearbyPlate && aroundThisHomeContext && (
             <AroundThisHomePlate
               propertyId={id}
@@ -759,6 +791,13 @@ function PropertyPageBody({
         <PropertyShortCompare
           homes={story.comparisons}
           compareHref={story.compareHref}
+        />
+
+        <PropertyDecisionDeck
+          propertyId={p.id}
+          title={story.identity.title}
+          compareHref={story.compareHref}
+          reraHref={story.recordCards[0]?.href}
         />
 
         <NearbyHomesRail

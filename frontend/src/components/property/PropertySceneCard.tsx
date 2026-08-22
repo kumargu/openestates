@@ -23,6 +23,7 @@ type Props = {
   story: PropertyStoryModel;
   actions?: ReactNode;
   playback?: StoryScenePlayback;
+  sectionId?: string;
 };
 
 export type StoryPlaybackSpeed = 0.5 | 1 | 2;
@@ -41,6 +42,7 @@ export function PropertySceneCard({
   story,
   actions,
   playback,
+  sectionId,
 }: Props) {
   const rootRef = useRef<HTMLElement>(null);
   const [internalActive, setInternalActive] = useState(0);
@@ -229,6 +231,7 @@ export function PropertySceneCard({
 
   return (
     <section
+      id={sectionId}
       ref={rootRef}
       className={`property-scene ${motion.className}${
         hasImages ? " property-scene--live" : " property-scene--empty"

@@ -240,6 +240,71 @@
   text-decoration: none;
 }
 
+.property-decision-deck__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.property-decision-deck__action {
+  display: flex;
+  min-height: 4.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 1.1rem;
+  border: 1px solid rgba(50, 45, 40, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.64);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 760;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.property-decision-deck__action:hover {
+  border-color: rgba(50, 45, 40, 0.3);
+}
+
+.property-decision-deck__action > svg {
+  flex: 0 0 auto;
+}
+
+.property-decision-deck__action.notebook-comment-anchor {
+  position: relative;
+  inset: auto;
+  padding: 0;
+}
+
+.property-decision-deck__action .notebook-comment-anchor__button {
+  display: flex;
+  width: 100%;
+  min-height: 4.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 1.1rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.property-decision-deck__action .notebook-comment-anchor__button::after {
+  content: "Add a note";
+}
+
+.property-decision-deck__action .notebook-comment-anchor__popover {
+  top: calc(100% + 0.45rem);
+  right: 0;
+}
+
 @media (max-width: 760px) {
   .property-fact-deck__intro h2 {
     font-size: clamp(2.5rem, 14vw, 4rem);
@@ -285,6 +350,10 @@
   .property-short-compare__handoff {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .property-decision-deck__actions {
+    grid-template-columns: 1fr;
   }
 }
 

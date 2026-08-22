@@ -1,6 +1,6 @@
 # Property detail — next pass
 
-**Status:** M0–M4 implemented on `agent/property-detail-next-pass`; M5 next.
+**Status:** M0–M5 implemented on `agent/property-detail-next-pass`; M6 next.
 **Updated:** 2026-08-23
 **Companion:** canvas `property-detail-mocks.canvas.tsx`
 
@@ -30,6 +30,15 @@ Search already presents a journey instead of a dump. Detail should feel the same
 - The property-page RERA teaser uses detail-payload registration and document facts. It does not fetch, summarize, or duplicate the dedicated report.
 - Short Compare is the current home plus two distinct peers, or it is omitted. The full Compare link is projected with the same IDs and current-home focus.
 - If one comparison home lacks media, remove the media row from all three cards. A uniform compact comparison is better than large empty image slabs.
+
+## M5 learnings
+
+- The reference rail works because it is chapter progress, not a second navigation system: one active label, quiet dots, native buttons, and no content sidebar.
+- Derive chapters only from decks that actually render. Sparse properties should not advertise destinations with no evidence, and a two-chapter page does not need a desktop rail.
+- Chapter targets belong on the production sections themselves. The rail and mobile progress use those stable anchors without changing the URL or rebuilding page content.
+- Mobile progress should stay compact, clear the safe area, and preserve normal document scrolling. Native previous/next buttons provide touch and keyboard behavior without a swipe or scroll-trap abstraction.
+- Story and Full Detail remain one projection and one component tree. The mode switch only changes motion and orientation chrome.
+- Decision actions are a final chapter over existing Save, Notebook, Compare, and RERA contracts. Reuse those contracts rather than introducing story-only state.
 
 ## What is already good
 
