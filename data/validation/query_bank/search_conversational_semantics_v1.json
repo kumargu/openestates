@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-22",
+  "mode": "mock_contract",
+  "notes": [
+    "These exact buyer queries are frozen before implementation changes.",
+    "The contract tests semantic execution against controlled mock entities and facts; live DAG coverage is evaluated separately.",
+    "Entity names in this bank are benchmark instances, not parser aliases or production vocabulary.",
+    "Hard constraints must remain attached to their branch, global exclusions must apply to every branch, and soft preferences must rank without fabricating proof or hiding candidates with missing optional evidence."
+  ],
+  "cases": [
+    {
+      "id": "CONV-SEM-001",
+      "category": "paired_area_bhk_budget_alternatives",
+      "query": "Show me either a 3BHK in Hoodi under ₹2.4 Cr or a 4BHK on Sarjapur Road under ₹3.2 Cr.",
+      "expected_semantics": {
+        "branches": [
+          {"area": "Hoodi", "bhk": 3, "budget_max": 24000000},
+          {"area": "Sarjapur Road", "bhk": 4, "budget_max": 32000000}
+        ]
+      }
+    },
+    {
+      "id": "CONV-SEM-002",
+      "category": "proximity_or_space_with_global_exclusion",
+      "query": "I’ll take a smaller home within 2 km of Bagmane Tech Park, or a larger 4BHK farther away under ₹3 Cr—but not in an under-construction project.",
+      "expected_semantics": {
+        "branches": [
+          {"near": "Bagmane Tech Park", "distance_max_km": 2.0},
+          {"bhk": 4, "budget_max": 30000000}
+        ],
+        "global_exclusions": ["under_construction"],
+        "ranking_preferences": ["smaller_nearby", "larger_farther_away"]
+      }
+    },
+    {
+      "id": "CONV-SEM-003",
+      "category": "required_dual_named_place_proximity",
+      "query": "Find a 3BHK under ₹2.7 Cr that is close to both Hoodi Metro and Manipal Hospital, not merely one of them.",
+      "expected_semantics": {
+        "shared_constraints": {"bhk": 3, "budget_max": 27000000},
+        "required_proximity_all": ["Hoodi Metro", "Manipal Hospital"],
+        "proof_all": ["Hoodi Metro", "Manipal Hospital"]
+      }
+    },
+    {
+      "id": "CONV-SEM-004",
+      "category": "named_school_or_generic_metro_with_shared_budget",
+      "query": "Either give me a home within 2 km of Gopalan National School, or one within 1 km of a metro station; keep both options under ₹2.5 Cr.",
+      "expected_semantics": {
+        "branches": [
+          {"near": "Gopalan National School", "distance_max_km": 2.0},
+          {"place_family": "metro", "distance_max_km": 1.0}
+        ],
+        "shared_constraints": {"budget_max": 25000000}
+      }
+    },
+    {
+      "id": "CONV-SEM-005",
+      "category": "anaphoric_branch_pairing",
+      "query": "Compare Godrej Air under ₹2.6 Cr with Godrej Lakeside Orchard under ₹3.1 Cr, but only show 3BHKs in the first and 4BHKs in the second.",
+      "expected_semantics": {
+        "branches": [
+          {"society": "Godrej Air", "bhk": 3, "budget_max": 26000000},
+          {"society": "Godrej Lakeside Orchard", "bhk": 4, "budget_max": 31000000}
+        ]
+      }
+    },
+    {
+      "id": "CONV-SEM-006",
+      "category": "hard_filters_with_optional_soft_evidence",
+      "query": "I want a ready-to-move 3BHK near a tech park. Prefer a quieter society with stronger reviews, but don’t hide homes just because noise evidence is missing.",
+      "expected_semantics": {
+        "shared_constraints": {"bhk": 3, "home_state": "ready_to_move", "near_place_family": "tech_park"},
+        "ranking_preferences": ["quiet", "review_quality"],
+        "missing_optional_evidence": "include_without_claim"
+      }
+    },
+    {
+      "id": "CONV-SEM-007",
+      "category": "society_alternatives_with_unless_exclusions",
+      "query": "Show me SNN Raj Etternia or Prestige Song of the South, unless the available home is above ₹2.8 Cr or still under construction.",
+      "expected_semantics": {
+        "branches": [
+          {"society": "SNN Raj Etternia"},
+          {"society": "Prestige Song of the South"}
+        ],
+        "global_constraints": {"budget_max": 28000000},
+        "global_exclusions": ["under_construction"]
+      }
+    },
+    {
+      "id": "CONV-SEM-008",
+      "category": "conditional_area_budgets_with_shared_bhk",
+      "query": "If it’s in Electronic City, keep it below ₹1.8 Cr; if it’s on Kanakapura Road, I can stretch to ₹2.4 Cr—but I need a 3BHK either way.",
+      "expected_semantics": {
+        "branches": [
+          {"area": "Electronic City", "bhk": 3, "budget_max": 18000000},
+          {"area": "Kanakapura Road", "bhk": 3, "budget_max": 24000000}
+        ]
+      }
+    },
+    {
+      "id": "CONV-SEM-009",
+      "category": "dual_commute_proof_with_balance_ranking",
+      "query": "My office is near Bagmane Tech Park and my partner works near Manipal Hospital Whitefield. Find homes with measured distance evidence to both, prioritizing the better-balanced commute.",
+      "expected_semantics": {
+        "required_proximity_all": ["Bagmane Tech Park", "Manipal Hospital Whitefield"],
+        "proof_all": ["Bagmane Tech Park", "Manipal Hospital Whitefield"],
+        "ranking_preferences": ["balanced_commute"]
+      }
+    },
+    {
+      "id": "CONV-SEM-010",
+      "category": "contextual_alternatives_with_global_entity_exclusion",
+      "query": "I liked Godrej Air, but show alternatives: either something closer to Hoodi Metro at a similar price, or a larger home under ₹3 Cr elsewhere. Exclude Godrej Air itself.",
+      "expected_semantics": {
+        "reference_society": "Godrej Air",
+        "branches": [
+          {"near": "Hoodi Metro", "ranking_preferences": ["similar_price", "closer"]},
+          {"relative_bhk": "larger", "budget_max": 30000000}
+        ],
+        "global_exclusions": ["Godrej Air"]
+      }
+    }
+  ]
+}
