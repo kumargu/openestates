@@ -310,13 +310,26 @@ pub(crate) fn unresolved_named_entity_clause(
         .flat_map(|budget| exact_pattern_match_ranges(&query_lower, &budget.raw_text))
         .map(|(start, _)| start)
         .min();
-    let budget_operator_start = search_parser_config()
-        .budget
-        .operators
+    let budget_operator_start = plan
+        .slots
+        .budgets
         .iter()
-        .chain(search_parser_config().budget.min_operators.iter())
-        .flat_map(|operator| exact_pattern_match_ranges(&query_lower, operator))
-        .map(|(start, _)| start)
+        .filter_map(|budget| {
+            search_parser_config()
+                .budget
+                .operators
+                .iter()
+                .chain(search_parser_config().budget.min_operators.iter())
+                .flat_map(|operator| exact_pattern_match_ranges(&query_lower, operator))
+                .filter(|(_, end)| {
+                    *end <= budget.start
+                        && query[*end..budget.start]
+                            .chars()
+                            .all(|character| !character.is_ascii_alphanumeric())
+                })
+                .map(|(start, _)| start)
+                .max()
+        })
         .min();
     let first_relation_start = plan
         .clauses
@@ -1402,6 +1415,7 @@ mod tests {
         for query in [
             "3bhk with greenery in whitefield above 10 acres",
             "in whitefield 3bhk under 2 crore",
+            "under construction 3bhk in whitefield under 3.1cr",
         ] {
             let plan = compile_query_plan(query);
             let unresolved = unresolved_named_entity_clause(

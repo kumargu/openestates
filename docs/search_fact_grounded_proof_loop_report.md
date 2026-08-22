@@ -92,3 +92,38 @@ does prove qualifying inventory even though the projected midpoint card is
 The next proof loop should profile five to ten additional Whitefield societies,
 add only fact-supported transfer queries, and run the same frozen bank before
 considering an immutable candidate bundle promotion.
+
+## South Bengaluru 40-society increment
+
+The next immutable candidate added Brigade Komarla Heights, Godrej Eternity,
+and SNN Raj Etternia through scoped RERA collection and catalog extension:
+
+- DAG run: `32230a76-6a44-4462-98f1-7e5e4d9b4d7c`
+- Scoped serving materialization: `24d91f2d-be41-4786-bdbf-aa548bb6c4ea`
+- Merged serving bundle: `south-40-candidate-v2-2026-08-22`
+- Merged serving materialization: `dd88e141-af97-42f7-b97f-4a9512428aea`
+- Catalog release: `6530c7d4-dc46-4b36-93e3-976118871dc1`
+- Runtime projection: 40 societies, 94 searchable properties, 13,691 facts,
+  and 13,350 search metadata rows
+- Quarantined societies: 0
+
+The first regional pass classified two failures as `ranking_gap` and
+`intent_gap`. Disabling configured budget expansion kept hard budgets hard and
+fixed the first. The second came from generic named-entity scoping: in a query
+starting with `under construction`, the resolver treated that first `under` as
+the operator for a later numeric budget and expanded the area scope to
+`Padmanabhanagar under`. Budget operators now bind only when immediately
+adjacent to the parsed numeric budget.
+
+Final proof artifacts:
+
+- Frozen 20-query bank: `tmp/search-proof-loop/south-40-candidate/final-frozen-bank.json`
+  — 149/149 checks passed
+- South Bengaluru 8-query bank: `tmp/search-proof-loop/south-40-candidate/final-regional-bank.json`
+  — 57/57 checks passed
+- Fact ledger: `data/validation/search_fact_ledger_south_40_candidate.json`
+- Query bank: `data/validation/query_bank/search_south_40_candidate.json`
+
+The hardcoding audit reported zero blocked search-config aliases. Catalog
+validation passed every required gate; its only warning correctly records four
+collected RERA societies outside this release's catalog scope.

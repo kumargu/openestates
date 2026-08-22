@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-22",
+  "source_bundle_version": "south-40-candidate-v2-2026-08-22",
+  "fact_ledger": "../search_fact_ledger_south_40_candidate.json",
+  "notes": [
+    "Queries were frozen only after direct candidate Parquet inspection.",
+    "This increment combines named society or area with BHK, budget, delivery state, or numeric land area without adding parser aliases.",
+    "Missing nearby-place facts are treated as a data gap, so this bank deliberately contains no invented proximity oracle."
+  ],
+  "cases": [
+    {"id": "S40-SNN-001", "mode": "data_backed", "category": "exact_society", "query": "SNN Raj Etternia", "expected": {"state": "results", "total_matches": 3, "result_ids_all": ["discovered-snn-raj-etternia-2bhk", "discovered-snn-raj-etternia-3bhk", "discovered-snn-raj-etternia-4bhk"], "result_match_tiers_all": ["exact"]}},
+    {"id": "S40-SNN-002", "mode": "data_backed", "category": "area_bhk_budget_state", "query": "ready to move 3BHK in Haralur Road under 3cr", "expected": {"state": "results", "total_matches": 1, "result_ids_all": ["discovered-snn-raj-etternia-3bhk"], "result_areas_all": ["Haralur Road"], "result_bhks_all": [3], "result_price_max": 30000000, "result_match_tiers_all": ["exact"], "reason_fact_keys_any": ["home_state"]}},
+    {"id": "S40-SNN-003", "mode": "data_backed", "category": "numeric_land_area", "query": "SNN Raj Etternia with at least 15 acres", "expected": {"state": "results", "total_matches": 3, "result_ids_all": ["discovered-snn-raj-etternia-2bhk", "discovered-snn-raj-etternia-3bhk", "discovered-snn-raj-etternia-4bhk"], "reason_fact_keys_any": ["project_land_area_acres", "rera_total_land_area_sqm"]}},
+    {"id": "S40-SNN-004", "mode": "data_backed", "category": "impossible_numeric_threshold", "query": "SNN Raj Etternia with at least 16 acres", "expected": {"state": "no_matches", "total_matches": 0, "zero_results": true}},
+    {"id": "S40-GE-005", "mode": "data_backed", "category": "society_bhk_budget_state", "query": "ready to move Godrej Eternity 2BHK under 1.5cr", "expected": {"state": "results", "total_matches": 1, "result_ids_all": ["discovered-godrej-eternity-2bhk"], "result_bhks_all": [2], "result_price_max": 15000000, "result_match_tiers_all": ["exact"], "reason_fact_keys_any": ["home_state"]}},
+    {"id": "S40-GE-006", "mode": "data_backed", "category": "hard_budget_no_match", "query": "Godrej Eternity 3BHK under 1.7cr", "expected": {"state": "no_matches", "total_matches": 0, "zero_results": true}},
+    {"id": "S40-BKH-007", "mode": "data_backed", "category": "area_bhk_budget_state", "query": "under construction 3BHK in Padmanabhanagar under 3.1cr", "expected": {"state": "results", "total_matches": 1, "result_ids_all": ["discovered-brigade-komarla-heights-3bhk"], "result_areas_all": ["Padmanabhanagar"], "result_bhks_all": [3], "result_price_max": 31000000, "result_match_tiers_all": ["exact"], "reason_fact_keys_any": ["home_state"]}},
+    {"id": "S40-BKH-008", "mode": "data_backed", "category": "numeric_land_area", "query": "Brigade Komarla Heights with at least 4 acres", "expected": {"state": "results", "total_matches": 3, "result_ids_all": ["discovered-brigade-komarla-heights-2bhk", "discovered-brigade-komarla-heights-3bhk", "discovered-brigade-komarla-heights-4bhk"], "reason_fact_keys_any": ["project_land_area_acres", "rera_total_land_area_sqm"]}}
+  ]
+}

@@ -217,14 +217,7 @@ def ensure_local_society_photos(
         return
 
     target_images = positive_int(policy.get("target_images"), 5)
-    photo_dir = (
-        project_root
-        / "data"
-        / "cache"
-        / "media_ingest"
-        / "societies"
-        / entity_slug(entity_id, society_name)
-    )
+    photo_dir = local_society_photo_dir(project_root, entity_id, society_name)
     if len(local_society_photo_paths(photo_dir)) >= target_images:
         return
 
@@ -373,7 +366,15 @@ def local_society_photo_paths(photo_dir: Path) -> List[Path]:
 
 def local_society_photo_dir(project_root: Path, entity_id: str, society_name: str) -> Path:
     staged_dir = project_root / "data" / "cache" / "media_ingest" / "societies"
-    return staged_dir / entity_slug(entity_id, society_name)
+    named_dir = staged_dir / entity_slug(entity_id, society_name)
+    if local_society_photo_paths(named_dir):
+        return named_dir
+
+    canonical_slug = slug(entity_id.split(":", 1)[-1])
+    canonical_dir = staged_dir / canonical_slug
+    if canonical_dir != named_dir and local_society_photo_paths(canonical_dir):
+        return canonical_dir
+    return named_dir
 
 
 def local_society_photo_sort_key(path: Path) -> tuple:

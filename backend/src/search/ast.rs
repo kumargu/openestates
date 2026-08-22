@@ -1460,6 +1460,38 @@ mod tests {
     }
 
     #[test]
+    fn leading_soft_state_keeps_trailing_area_bhk_budget_conjoined() {
+        let raw = "under construction 3BHK in Test Area under 3.1Cr";
+        let plan = crate::search::query_plan::compile_query_plan(raw);
+        let start = raw.find("Test Area").expect("area should be in query");
+        let areas = [ResolvedEntityConstraint {
+            entity_id: "area:test-area".to_string(),
+            entity_type: "area".to_string(),
+            display_name: "Test Area".to_string(),
+            span: SourceSpan {
+                start,
+                end: start + "Test Area".len(),
+                raw_text: "Test Area".to_string(),
+            },
+            exclusion: false,
+        }];
+        let constraints = compile_constraint_expr(raw, &plan, &areas);
+
+        assert!(matches_home_budget(
+            &constraints,
+            "Test Area",
+            3,
+            30_000_000
+        ));
+        assert!(!matches_home_budget(
+            &constraints,
+            "Test Area",
+            3,
+            32_000_000
+        ));
+    }
+
+    #[test]
     fn serving_areas_with_repeated_bhk_keep_complete_grouped_branches() {
         let raw = "Whitefield 3BHK under 2Cr or Bellandur 3BHK under 3Cr";
         let plan = crate::search::query_plan::compile_query_plan(raw);
