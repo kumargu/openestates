@@ -81,10 +81,12 @@ Recorded final artifacts:
 Fresh verification after resuming the stopped session:
 
 - `cargo check`: passed.
-- Full Rust suite: 624 library tests and all integration binaries passed.
-- Search-experiment admission/promotion tests: 3 passed.
+- Full Rust suite: 625 library tests and all integration binaries passed.
+- Search-experiment admission and pointer-isolation tests: 4 passed.
 - Search-efficiency integration contract: 11 passed.
 - Python benchmark and collection tests: 90 passed, 1 skipped.
+- Frontend suite: 145 tests passed; production build passed.
+- Experiment API smoke suite: 50 checks passed.
 - Search hardcoding audit: zero blocked search-config alias findings.
 
 The three stale Rust failures were old automatic-relaxation expectations, not
@@ -123,14 +125,18 @@ Proved so far:
 - grouped configuration alternatives and stable public result branches;
 - listing-band budget overlap rather than misleading midpoint filtering;
 - deterministic ordering, proof handles, zero-result behavior, and warm
-  latency on cohorts up to 43 societies and 103 properties.
+  latency on cohorts up to 45 societies and 107 properties;
+- incomplete societies participate when the query is supported by their facts,
+  while missing media, size, price, and review evidence never become proof;
+- unknown price, unsupported BHK, missing numeric evidence, and impossible
+  acreage thresholds fail closed;
+- experiment bundles remain outside catalog promotion and outside the global
+  current serving pointer.
 
 Not yet proved:
 
-- incomplete societies can participate in supported searches without leaking
-  their missing fields into proof;
 - broad transfer across schools, tech parks, negative risks, water, traffic,
-  noise, builder/RERA evidence, and required-versus-optional preferences;
+  noise, builder/RERA evidence, and configured required preferences;
 - result-to-detail proof lineage through the live property-detail endpoint;
 - cache isolation and rollback across an actual experiment bundle switch;
 - recall and latency on a materially larger cohort;
@@ -139,24 +145,73 @@ Not yet proved:
 
 ## Next steps
 
-1. Build one immutable experiment-profile candidate containing a deliberate
-   mix of complete and
-   incomplete societies. Do not promote it to the buyer production catalog.
-2. Freeze an incomplete-society query bank before running search. For every
-   case, declare which facts may match, which hard constraints must reject the
-   property, and which facts must never be claimed.
-3. Pin the runtime with `OPENESTATES_SERVING_MATERIALIZATION_ID`, run the
-   current frozen banks against the candidate, then add
-   transfer banks for missing optional evidence, required evidence, negative
-   risks, more named-place families, and generic Boolean/paraphrase cases.
-4. Verify result reasons against the property-detail proof payload using the
+1. Verify result reasons against the property-detail proof payload using the
    same fact/entity/source/version handles.
-5. Verify cache isolation and rollback between two explicitly pinned immutable
+2. Verify cache isolation and rollback between two explicitly pinned immutable
    materializations.
-6. Publish the
-   before/after ordered ids, proof changes, unsupported-claim count, and latency
-   delta. Keep buyer-catalog promotion as a later independent decision; do not
-   move its pointer during this experiment.
+3. Add transfer banks for configured required evidence, negative risks, more
+   named-place families, and generic Boolean/paraphrase cases.
+4. Correct the two durable-data category errors through the DAG and rerun their
+   existing false-proof sentinels unchanged.
+5. Repeat the bank on a materially larger cohort and publish ordered-id, proof,
+   unsupported-claim, and latency deltas.
+
+## Incomplete-society experiment — 2026-08-22
+
+Two immutable experiment materializations now prove the admission boundary
+without weakening buyer-catalog eligibility:
+
+- scoped incomplete candidate:
+  `search-experiment-incomplete-south-2026-08-22-v3`, materialization
+  `f48babc6-c468-4c97-96fa-1243f0b57f39`, sourced from KG materialization
+  `bdec566b-1c7d-41ae-a792-3a5065854b75`;
+- mixed candidate:
+  `search-experiment-mixed-south-45-2026-08-22-v1`, materialization
+  `d8fcef1a-f54b-4261-9fb0-583a96c8fee1`, based on the validated South 43
+  release and adding Ajmera Nucleus plus Mantri Serenity1.
+
+The scoped candidate projected 4 societies and 10 properties. Its frozen
+12-case bank passed 76/76 checks with 100% recall and proof precision, zero
+hard-constraint violations, zero unsupported claims, stable ordering, and
+17.41 ms endpoint p95.
+
+The mixed candidate projected 45 societies and 107 properties from 755
+entities, 14,753 facts, 14,551 search metadata rows, and 3,450 edges. The
+combined 57-case suite passed 398/398 checks with recall@1/@3/@5 at 100%, MRR
+1.0, proof precision 100%, zero hard-constraint violations, zero unsupported
+claims, stable ordering, 13.49 ms endpoint p50, and 20.45 ms endpoint p95.
+
+The incomplete cases proved the intended semantics:
+
+- Mantri Serenity1 recalls for exact name, its supported 3BHK, delivered state,
+  and verified 19.59-acre fact despite missing size;
+- Mantri fails an explicit budget because price is unavailable, fails 2BHK
+  because that configuration is unsupported, and fails a 20-acre threshold;
+- Ajmera Nucleus recalls despite missing media, and its 2BHK listing band
+  overlaps a ₹1.5 Cr budget but not ₹1.2 Cr;
+- Ajmera fails an explicit Google-rating constraint because no rating fact is
+  present, while optional `good reviews` remains neutral and emits no rating
+  proof.
+
+The CLI now provides explicit unpromoted materialization and mixed-extension
+commands, validates the resulting bundle, and preserves immutable lineage.
+Experiment materializers reject current-pointer promotion. Production and
+staging catalog pointers remain on release
+`369df41c-72ba-45b5-bc15-9a3655ca007e`, and the global serving pointer remains
+`fe16ca1a-a301-4306-ae10-06cc27f792e2`; the experiment was activated only by
+its immutable materialization id.
+
+Artifacts:
+
+- ledger: `data/validation/search_fact_ledger_incomplete_south_experiment_v1.json`;
+- incomplete bank:
+  `data/validation/query_bank/search_incomplete_south_experiment_v1.json`;
+- scoped suite:
+  `data/validation/search_quality_incomplete_south_experiment_v1.json`;
+- mixed suite:
+  `data/validation/search_quality_mixed_south_experiment_v1.json`;
+- measured outputs: `tmp/search-proof-loop/incomplete-south-experiment-v1/`
+  and `tmp/search-proof-loop/mixed-south-45-experiment-v1/`.
 
 ## Historical execution log
 

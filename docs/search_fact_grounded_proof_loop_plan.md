@@ -137,13 +137,28 @@ Completed and verified:
 Verification at this checkpoint:
 
 - `cargo check`: passed;
-- full Rust suite: passed (624 library tests and all integration binaries);
+- full Rust suite: passed (625 library tests and all integration binaries);
 - Python benchmark/pipeline suite: 90 passed, 1 skipped;
 - production search-hardcoding audit: 0 blocked aliases.
 
-The next unproved boundary is operational, not semantic: build a real immutable
-experiment-profile bundle, pin the runtime to its materialization id, and run a
-frozen incomplete-society proof bank against it.
+The operational boundary is now proved:
+
+- `materialize-search-experiment` builds and validates an immutable,
+  unpromoted experiment bundle from a pinned KG materialization;
+- `extend-serving --search-experiment` adds an explicitly scoped experiment
+  cohort to a validated buyer-catalog baseline without creating a catalog
+  release or moving a pointer;
+- experiment-profile materializers reject all generic current-pointer
+  promotion methods, so activation requires an explicit immutable
+  `OPENESTATES_SERVING_MATERIALIZATION_ID` pin;
+- a four-society incomplete candidate produced 10 runtime properties and
+  passed 76/76 frozen checks at 17.41 ms endpoint p95;
+- a mixed 45-society candidate produced 107 runtime properties and passed all
+  398/398 checks across the old regression banks plus the incomplete-society
+  bank at 20.45 ms endpoint p95.
+
+The next unproved boundary is result-to-detail proof lineage, followed by cache
+isolation and rollback between two pinned materializations.
 
 ## Non-Negotiable Invariants
 
@@ -307,7 +322,7 @@ Keep a change only when it improves a declared metric or removes a verified
 architecture defect without quality loss. Otherwise revert it or record it as
 unproven.
 
-## Phase 6 — Build and Promote a Search Experiment Bundle
+## Phase 6 — Build and Pin a Search Experiment Bundle
 
 The next candidate should deliberately include both complete and incomplete
 societies with useful facts. It may reuse entities from historical bundles, but
@@ -333,8 +348,9 @@ For every candidate:
 8. Reload the API and verify that the reported bundle version matches the
    experiment version.
 
-Experiment promotion is append-only progress: the old bundle remains available
-for exact rollback and before/after comparison. A later buyer-catalog release
+Experiment materialization is append-only progress: the old bundle remains
+available for exact rollback and before/after comparison. Experiment bundles
+stay unpromoted and are selected by immutable id. A later buyer-catalog release
 may independently apply the full eligibility policy.
 
 ## Phase 7 — Rerun Without Moving the Goalposts
@@ -401,6 +417,15 @@ hard, automatic relaxation code and contracts have been removed, and the full
 test suite passes. If a future buyer experience offers alternatives, return
 them only as an explicit tradeoff result set and never as an exact match.
 
+Progress as of 2026-08-22:
+
+- complete: incomplete-society transfer, hard price/BHK/numeric gates, optional
+  missing-evidence neutrality, mixed-cohort regression, and pointer isolation;
+- next: proof handoff and bundle-switch cache/rollback tests;
+- later: required-evidence transfer, more fact families and paraphrases, a
+  materially larger cohort, and durable-data corrections for known category
+  errors.
+
 ## First-Loop Definition of Done
 
 - Godrej Air hypotheses are verified directly from promoted Parquet.
@@ -412,6 +437,6 @@ them only as an explicit tradeoff result set and never as an exact match.
 - Warm p95 search remains within 50 ms and within 10% of baseline.
 - Any enrichment is DAG-produced with source lineage.
 - At least one incomplete society proves the per-query admission behavior.
-- A new search experiment bundle is promoted only if validation and the frozen
-  bank pass; buyer production promotion is out of scope.
+- A new search experiment bundle is retained and pinned only if validation and
+  the frozen bank pass; all pointer promotion is out of scope.
 - The old bundle remains available for rollback.

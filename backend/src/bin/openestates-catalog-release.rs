@@ -3,12 +3,12 @@ use std::fs;
 use std::path::PathBuf;
 
 use backend::assets::{
-    AssetId, AssetMaterializationStore, CatalogEnvironment, CatalogMembership, CatalogRelease,
-    CatalogReleaseId, CatalogReleaseStore, CatalogTombstone, CatalogValidationStatus,
-    DerivedCatalogAssets, MaterializationId, MaterializationRecord, PinnedMaterialization,
-    PromoteCatalogReleaseOptions, SourceWatermark, IMAGE_MEDIA_FACTS_ASSET_ID,
-    RERA_CLAIMS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID,
-    RERA_SOURCE_RECORDS_ASSET_ID,
+    load_kg_view_records, AssetId, AssetMaterializationStore, AssetPartition, CatalogEnvironment,
+    CatalogMembership, CatalogRelease, CatalogReleaseId, CatalogReleaseStore, CatalogTombstone,
+    CatalogValidationStatus, DerivedCatalogAssets, KgSocietyViewMaterialization, KgViewManifest,
+    MaterializationId, MaterializationRecord, PinnedMaterialization, PromoteCatalogReleaseOptions,
+    SourceWatermark, IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, RERA_CLAIMS_ASSET_ID,
+    RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
 };
 use backend::data_loader::properties_from_serving_bundle;
 use backend::lake::{LakeKey, LakeStore, LakeStoreLocation, LAKE_URL_ENV};
@@ -154,7 +154,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
         Command::ExtendServing(options) => {
-            let materialization = extend_catalog_serving(&lake, &store, options).await?;
+            let materialization = extend_serving(&lake, &store, options).await?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "manifest": materialization.manifest,
+                    "record": materialization.record,
+                }))?
+            );
+        }
+        Command::MaterializeSearchExperiment(options) => {
+            let materialization = materialize_search_experiment(&lake, options).await?;
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
@@ -248,6 +258,7 @@ enum Command {
     },
     RebaseRera(RebaseReraOptions),
     ExtendServing(ExtendServingOptions),
+    MaterializeSearchExperiment(MaterializeSearchExperimentOptions),
 }
 
 struct RebaseReraOptions {
@@ -263,6 +274,12 @@ struct ExtendServingOptions {
     candidate_serving_materialization_id: MaterializationId,
     society_ids: Vec<String>,
     excluded_fact_keys: Vec<String>,
+    search_experiment: bool,
+    version: String,
+}
+
+struct MaterializeSearchExperimentOptions {
+    kg_materialization_id: MaterializationId,
     version: String,
 }
 
@@ -347,6 +364,9 @@ fn parse_command(command: &str, args: Vec<String>) -> Result<Command, String> {
         "inspect" => parse_inspect(args),
         "rebase-rera" => parse_rebase_rera(args).map(Command::RebaseRera),
         "extend-serving" => parse_extend_serving(args).map(Command::ExtendServing),
+        "materialize-search-experiment" => {
+            parse_materialize_search_experiment(args).map(Command::MaterializeSearchExperiment)
+        }
         "--help" | "-h" => {
             print_help();
             std::process::exit(0);
@@ -355,12 +375,48 @@ fn parse_command(command: &str, args: Vec<String>) -> Result<Command, String> {
     }
 }
 
+fn parse_materialize_search_experiment(
+    args: Vec<String>,
+) -> Result<MaterializeSearchExperimentOptions, String> {
+    let mut cursor = 0usize;
+    let mut kg_materialization_id = None;
+    let mut version = None;
+    while cursor < args.len() {
+        match args[cursor].as_str() {
+            "--kg" => {
+                cursor += 1;
+                kg_materialization_id = Some(parse_materialization_id(take_value(
+                    &args,
+                    &mut cursor,
+                    "--kg",
+                )?)?);
+            }
+            "--version" => {
+                cursor += 1;
+                version = Some(take_value(&args, &mut cursor, "--version")?);
+            }
+            other => {
+                return Err(format!(
+                    "unknown materialize-search-experiment argument: {other}"
+                ));
+            }
+        }
+    }
+    Ok(MaterializeSearchExperimentOptions {
+        kg_materialization_id: kg_materialization_id
+            .ok_or_else(|| "materialize-search-experiment requires --kg".to_string())?,
+        version: version
+            .ok_or_else(|| "materialize-search-experiment requires --version".to_string())?,
+    })
+}
+
 fn parse_extend_serving(args: Vec<String>) -> Result<ExtendServingOptions, String> {
     let mut cursor = 0usize;
     let mut base_release_id = None;
     let mut candidate_serving_materialization_id = None;
     let mut society_ids = Vec::new();
     let mut excluded_fact_keys = Vec::new();
+    let mut search_experiment = false;
     let mut version = None;
     while cursor < args.len() {
         match args[cursor].as_str() {
@@ -388,6 +444,10 @@ fn parse_extend_serving(args: Vec<String>) -> Result<ExtendServingOptions, Strin
                 cursor += 1;
                 excluded_fact_keys.push(take_value(&args, &mut cursor, "--exclude-fact")?);
             }
+            "--search-experiment" => {
+                search_experiment = true;
+                cursor += 1;
+            }
             "--version" => {
                 cursor += 1;
                 version = Some(take_value(&args, &mut cursor, "--version")?);
@@ -409,6 +469,7 @@ fn parse_extend_serving(args: Vec<String>) -> Result<ExtendServingOptions, Strin
             .ok_or_else(|| "extend-serving requires --candidate-serving".to_string())?,
         society_ids,
         excluded_fact_keys,
+        search_experiment,
         version: version.ok_or_else(|| "extend-serving requires --version".to_string())?,
     })
 }
@@ -773,7 +834,75 @@ fn normalized_catalog_society_id(value: &str) -> String {
     }
 }
 
-async fn extend_catalog_serving(
+async fn materialize_search_experiment(
+    lake: &LakeStore,
+    options: MaterializeSearchExperimentOptions,
+) -> Result<backend::serving::SearchServingBundleMaterialization, Box<dyn std::error::Error>> {
+    let materializations = AssetMaterializationStore::new(lake.clone());
+    let kg_asset =
+        AssetId::new(KG_SOCIETY_VIEW_ASSET_ID).expect("static KG view asset id is valid");
+    let record = materializations
+        .record_by_id_for_asset(&kg_asset, &options.kg_materialization_id)
+        .await?
+        .ok_or_else(|| {
+            format!(
+                "KG view materialization {} was not found",
+                options.kg_materialization_id
+            )
+        })?;
+    let manifest_key = record
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.key.ends_with("manifest.json"))
+        .map(|artifact| artifact.key.clone())
+        .ok_or_else(|| {
+            format!(
+                "KG view materialization {} has no manifest",
+                options.kg_materialization_id
+            )
+        })?;
+    let manifest: KgViewManifest = lake.get_json(&LakeKey::new(manifest_key)?).await?;
+    let records = load_kg_view_records(lake, &manifest).await?;
+    if records.content_hash != manifest.graph_content_hash {
+        return Err(format!(
+            "KG view materialization {} content hash does not match its manifest",
+            options.kg_materialization_id
+        )
+        .into());
+    }
+    let kg_view = KgSocietyViewMaterialization {
+        manifest,
+        record,
+        records,
+    };
+    let materialization = SearchServingBundleMaterializer::for_search_experiment(lake.clone())
+        .materialize_from_kg_view_for_run(
+            &kg_view,
+            options.version,
+            MaterializationId::new(),
+            AssetPartition::global(),
+        )
+        .await?;
+    let report = validate_search_serving_candidate(lake, &materialization.record).await?;
+    if !report.passed {
+        return Err(format!(
+            "search experiment serving materialization {} failed {} validation gate(s): {}",
+            materialization.record.materialization_id,
+            report.issues.len(),
+            report
+                .issues
+                .iter()
+                .take(5)
+                .map(|issue| issue.message.as_str())
+                .collect::<Vec<_>>()
+                .join("; ")
+        )
+        .into());
+    }
+    Ok(materialization)
+}
+
+async fn extend_serving(
     lake: &LakeStore,
     catalog_store: &CatalogReleaseStore,
     options: ExtendServingOptions,
@@ -819,7 +948,12 @@ async fn extend_catalog_serving(
         .filter(|entity| entity.entity_type == "society")
         .map(|entity| entity.entity_id.clone())
         .collect::<BTreeSet<_>>();
-    if candidate_societies != requested_societies {
+    let candidate_scope_matches = if options.search_experiment {
+        requested_societies.is_subset(&candidate_societies)
+    } else {
+        candidate_societies == requested_societies
+    };
+    if !candidate_scope_matches {
         return Err(format!(
             "candidate serving societies do not match requested additions; candidate={}, requested={}",
             candidate_societies.into_iter().collect::<Vec<_>>().join(", "),
@@ -827,6 +961,11 @@ async fn extend_catalog_serving(
         )
         .into());
     }
+
+    let candidate_edges = match candidate_manifest.edge_parquet_key.as_ref() {
+        Some(key) => read_edges_parquet(&lake.get_bytes(&LakeKey::new(key.clone())?).await?)?,
+        None => Vec::new(),
+    };
 
     let base_entity_ids = entities
         .iter()
@@ -838,9 +977,39 @@ async fn extend_catalog_serving(
     {
         return Err(format!("society {existing} already exists in the base serving bundle").into());
     }
+    let experiment_entity_scope = if options.search_experiment {
+        let mut subjects = requested_societies.clone();
+        for edge in &candidate_edges {
+            if edge.edge_type == "in_society" {
+                if requested_societies.contains(&edge.from_entity_id) {
+                    subjects.insert(edge.to_entity_id.clone());
+                }
+                if requested_societies.contains(&edge.to_entity_id) {
+                    subjects.insert(edge.from_entity_id.clone());
+                }
+            }
+        }
+        let direct_subjects = subjects.clone();
+        for edge in &candidate_edges {
+            if direct_subjects.contains(&edge.from_entity_id) {
+                subjects.insert(edge.to_entity_id.clone());
+            }
+            if direct_subjects.contains(&edge.to_entity_id) {
+                subjects.insert(edge.from_entity_id.clone());
+            }
+        }
+        Some(subjects)
+    } else {
+        None
+    };
     let added_entity_ids = candidate_entities
         .iter()
-        .filter(|entity| !base_entity_ids.contains(&entity.entity_id))
+        .filter(|entity| {
+            !base_entity_ids.contains(&entity.entity_id)
+                && experiment_entity_scope
+                    .as_ref()
+                    .is_none_or(|scope| scope.contains(&entity.entity_id))
+        })
         .map(|entity| entity.entity_id.clone())
         .collect::<BTreeSet<_>>();
     entities.extend(
@@ -899,10 +1068,6 @@ async fn extend_catalog_serving(
         Some(key) => read_edges_parquet(&lake.get_bytes(&LakeKey::new(key.clone())?).await?)?,
         None => Vec::new(),
     };
-    let candidate_edges = match candidate_manifest.edge_parquet_key.as_ref() {
-        Some(key) => read_edges_parquet(&lake.get_bytes(&LakeKey::new(key.clone())?).await?)?,
-        None => Vec::new(),
-    };
     let mut edge_keys = edges
         .iter()
         .map(|edge| {
@@ -936,29 +1101,31 @@ async fn extend_catalog_serving(
         }
         None => Vec::new(),
     };
-    let candidate_evidence_key = candidate_manifest
-        .rera_evidence_parquet_key
-        .as_ref()
-        .ok_or("candidate serving bundle has no RERA evidence table")?;
-    let candidate_evidence = read_rera_evidence_parquet(
-        &lake
-            .get_bytes(&LakeKey::new(candidate_evidence_key.clone())?)
-            .await?,
-    )?;
-    let candidate_evidence_societies = candidate_evidence
-        .iter()
-        .map(|record| record.society_id.clone())
-        .collect::<BTreeSet<_>>();
-    if !requested_societies.is_subset(&candidate_evidence_societies) {
-        return Err(
-            "candidate serving bundle is missing RERA evidence for an added society".into(),
+    if !options.search_experiment {
+        let candidate_evidence_key = candidate_manifest
+            .rera_evidence_parquet_key
+            .as_ref()
+            .ok_or("candidate serving bundle has no RERA evidence table")?;
+        let candidate_evidence = read_rera_evidence_parquet(
+            &lake
+                .get_bytes(&LakeKey::new(candidate_evidence_key.clone())?)
+                .await?,
+        )?;
+        let candidate_evidence_societies = candidate_evidence
+            .iter()
+            .map(|record| record.society_id.clone())
+            .collect::<BTreeSet<_>>();
+        if !requested_societies.is_subset(&candidate_evidence_societies) {
+            return Err(
+                "candidate serving bundle is missing RERA evidence for an added society".into(),
+            );
+        }
+        evidence.extend(
+            candidate_evidence
+                .into_iter()
+                .filter(|record| requested_societies.contains(&record.society_id)),
         );
     }
-    evidence.extend(
-        candidate_evidence
-            .into_iter()
-            .filter(|record| requested_societies.contains(&record.society_id)),
-    );
 
     let included_societies = entities
         .iter()
@@ -974,7 +1141,12 @@ async fn extend_catalog_serving(
     excluded_rera_evidence_society_ids.sort();
     excluded_rera_evidence_society_ids.dedup();
 
-    SearchServingBundleMaterializer::new(lake.clone())
+    let materializer = if options.search_experiment {
+        SearchServingBundleMaterializer::for_search_experiment(lake.clone())
+    } else {
+        SearchServingBundleMaterializer::new(lake.clone())
+    };
+    let materialization = materializer
         .materialize_child_from_serving_records_with_rera_for_run(
             entities,
             facts,
@@ -1004,8 +1176,26 @@ async fn extend_catalog_serving(
             vec![base_release.derived_assets.kg_materialization_id],
             MaterializationId::new(),
         )
-        .await
-        .map_err(Into::into)
+        .await?;
+    if options.search_experiment {
+        let report = validate_search_serving_candidate(lake, &materialization.record).await?;
+        if !report.passed {
+            return Err(format!(
+                "mixed search experiment {} failed {} validation gate(s): {}",
+                materialization.record.materialization_id,
+                report.issues.len(),
+                report
+                    .issues
+                    .iter()
+                    .take(5)
+                    .map(|issue| issue.message.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            )
+            .into());
+        }
+    }
+    Ok(materialization)
 }
 
 async fn rebase_rera_serving(
@@ -1434,7 +1624,8 @@ fn print_help() {
     );
     println!("  cargo run --bin openestates-catalog-release -- rollback --release <uuid> --env <dev|staging|production>");
     println!("  cargo run --bin openestates-catalog-release -- rebase-rera --base-release <uuid> --evidence-serving <uuid> --version <version>");
-    println!("  cargo run --bin openestates-catalog-release -- extend-serving --base-release <uuid> --candidate-serving <uuid> --society <canonical-id> --version <version>");
+    println!("  cargo run --bin openestates-catalog-release -- extend-serving --base-release <uuid> --candidate-serving <uuid> --society <canonical-id> [--search-experiment] --version <version>");
+    println!("  cargo run --bin openestates-catalog-release -- materialize-search-experiment --kg <uuid> --version <version>");
     println!();
     println!("Options:");
     println!("  --project-root <path>       Project root used for local lake resolution");
@@ -1448,6 +1639,8 @@ fn print_help() {
     );
     println!("  --plans-only                Replace only RERA plan-frame facts during the rebase");
     println!("  --candidate-serving <uuid>  Scoped serving candidate used to extend a catalog");
+    println!("  --search-experiment         Build an unpromoted experiment-profile extension");
+    println!("  --kg <uuid>                 Immutable KG view used for a search-experiment bundle");
     println!("  --society <canonical-id>    Society expected in the scoped candidate; repeatable");
     println!(
         "  --exclude-fact <fact-key>   Remove a superseded fact and search metadata; repeatable"
@@ -1471,6 +1664,58 @@ mod tests {
         ServingEdgeRecord, ServingEntityRecord, ServingFactRecord, ServingSearchMetadataRecord,
     };
     use chrono::Utc;
+
+    #[test]
+    fn search_experiment_command_requires_an_immutable_kg_and_version() {
+        let kg_id = "c43d9ce7-55ee-42ee-995d-3c90806f4994";
+        let command = parse_command(
+            "materialize-search-experiment",
+            vec![
+                "--kg".to_string(),
+                kg_id.to_string(),
+                "--version".to_string(),
+                "search-experiment-test".to_string(),
+            ],
+        )
+        .expect("experiment command should parse");
+
+        let Command::MaterializeSearchExperiment(options) = command else {
+            panic!("expected search experiment command");
+        };
+        assert_eq!(options.kg_materialization_id.to_string(), kg_id);
+        assert_eq!(options.version, "search-experiment-test");
+        assert!(parse_command(
+            "materialize-search-experiment",
+            vec!["--version".to_string(), "missing-kg".to_string()]
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn extend_serving_parses_unpromoted_search_experiment_mode() {
+        let command = parse_command(
+            "extend-serving",
+            vec![
+                "--base-release".to_string(),
+                "369df41c-72ba-45b5-bc15-9a3655ca007e".to_string(),
+                "--candidate-serving".to_string(),
+                "f48babc6-c468-4c97-96fa-1243f0b57f39".to_string(),
+                "--society".to_string(),
+                "society:ajmera-nucleus".to_string(),
+                "--search-experiment".to_string(),
+                "--version".to_string(),
+                "mixed-experiment".to_string(),
+            ],
+        )
+        .expect("experiment extension should parse");
+
+        let Command::ExtendServing(options) = command else {
+            panic!("expected serving extension command");
+        };
+        assert!(options.search_experiment);
+        assert_eq!(options.society_ids, ["society:ajmera-nucleus"]);
+        assert_eq!(options.version, "mixed-experiment");
+    }
 
     fn fact(entity_id: &str, fact_key: &str, source_type: &str, value: &str) -> ServingFactRecord {
         ServingFactRecord {

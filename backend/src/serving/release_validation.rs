@@ -399,7 +399,7 @@ pub async fn validate_search_serving_candidate(
         &fact_index,
         &manifest.bundle_version,
     );
-    validate_property_projection(&properties, &mut issues);
+    validate_property_projection(&properties, manifest.admission_profile, &mut issues);
 
     let media_references = collect_media_references(&facts);
     let media_references_checked = media_references.len();
@@ -754,6 +754,7 @@ fn validate_record_relations(
 
 fn validate_property_projection(
     properties: &[crate::models::Property],
+    admission_profile: ServingAdmissionProfile,
     issues: &mut Vec<ServingBundleValidationIssue>,
 ) {
     if properties.is_empty() {
@@ -776,27 +777,11 @@ fn validate_property_projection(
                 Some(property.id.clone()),
             );
         }
-        if property.hero_image.trim().is_empty() || property.images.is_empty() {
-            issue(
-                issues,
-                "incomplete_property_media",
-                "property card requires a hero image and gallery",
-                Some(property.id.clone()),
-            );
-        }
         if property.area.trim().is_empty() {
             issue(
                 issues,
                 "incomplete_property_area",
                 "property card requires an area",
-                Some(property.id.clone()),
-            );
-        }
-        if property.builder_name.trim().is_empty() {
-            issue(
-                issues,
-                "incomplete_property_builder",
-                "property card requires a builder",
                 Some(property.id.clone()),
             );
         }
@@ -812,13 +797,31 @@ fn validate_property_projection(
                 Some(property.id.clone()),
             );
         }
-        if property.carpet_area_sqft == 0 {
-            issue(
-                issues,
-                "incomplete_property_size",
-                "property card requires positive size data",
-                Some(property.id.clone()),
-            );
+        if admission_profile == ServingAdmissionProfile::BuyerCatalog {
+            if property.hero_image.trim().is_empty() || property.images.is_empty() {
+                issue(
+                    issues,
+                    "incomplete_property_media",
+                    "property card requires a hero image and gallery",
+                    Some(property.id.clone()),
+                );
+            }
+            if property.builder_name.trim().is_empty() {
+                issue(
+                    issues,
+                    "incomplete_property_builder",
+                    "property card requires a builder",
+                    Some(property.id.clone()),
+                );
+            }
+            if property.carpet_area_sqft == 0 {
+                issue(
+                    issues,
+                    "incomplete_property_size",
+                    "property card requires positive size data",
+                    Some(property.id.clone()),
+                );
+            }
         }
     }
 }
