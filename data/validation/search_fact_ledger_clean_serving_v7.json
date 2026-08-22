@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-22",
+  "source_bundle": {
+    "version": "clean-serving-v7-2026-08-16",
+    "materialization_id": "fe16ca1a-a301-4306-ae10-06cc27f792e2",
+    "run_id": "cc973fb5-14f5-4242-9cfe-c52ba7738210",
+    "entity_count": 697,
+    "fact_count": 13310,
+    "edge_count": 3353,
+    "search_metadata_count": 12969,
+    "eligible_society_count": 37,
+    "searchable_property_count": 86,
+    "quarantined_society_count": 28
+  },
+  "method": [
+    "Facts were read from the promoted serving bundle with openestates-profile-serving-bundle before the query bank was executed.",
+    "Runtime property projections were checked only to map promoted society facts to buyer-visible property ids and display prices.",
+    "Historical query banks supplied buyer-language classes only; their old expected answers were not copied.",
+    "Named entities in this ledger are test oracle data and must never be copied into production parser, config, or ranking code."
+  ],
+  "societies": [
+    {
+      "runtime_society_id": "society:godrej-air",
+      "canonical_identity_status": "present_under_alias",
+      "name": "Godrej Air",
+      "area": "Whitefield",
+      "runtime_properties": [
+        {
+          "id": "discovered-godrej-air-2bhk",
+          "bhk": 2,
+          "price": 22000000,
+          "price_min": 21000000,
+          "price_max": 23500000
+        },
+        {
+          "id": "discovered-godrej-air-3bhk",
+          "bhk": 3,
+          "price": 31750000,
+          "price_min": 28000000,
+          "price_max": 35000000
+        }
+      ],
+      "facts": [
+        {"fact_key": "available_configurations", "value": ["1BHK", "2BHK", "2.5BHK", "3BHK"], "confidence": 1.0, "source_type": "Rera", "status": "proved_and_searchable"},
+        {"fact_key": "has_2bhk", "value": true, "confidence": 1.0, "source_type": "Rera", "status": "proved_and_searchable"},
+        {"fact_key": "has_3bhk", "value": true, "confidence": 1.0, "source_type": "Rera", "status": "proved_and_searchable"},
+        {"fact_key": "project_land_area_acres", "value": 5.3, "unit": "acres", "confidence": 1.0, "source_type": "Rera", "status": "proved_and_searchable"},
+        {"fact_key": "rera_total_land_area_sqm", "value": 21448.0, "unit": "sqm", "confidence": 1.0, "source_type": "Rera", "status": "proved_but_unannotated"},
+        {"fact_key": "listing_price_range_2bhk", "value": "2.10 Cr-2.35 Cr", "confidence": 0.7, "source_type": "ExternalListing", "status": "proved_and_searchable"},
+        {"fact_key": "listing_price_range_3bhk", "value": "2.80 Cr-3.50 Cr", "confidence": 0.7, "source_type": "ExternalListing", "status": "proved_and_searchable"},
+        {"fact_key": "home_state", "value": "delivered", "confidence": 0.9, "source_type": "Computed", "status": "proved_and_searchable"},
+        {"fact_key": "google_rating", "value": 4.2, "confidence": 0.85, "source_type": "Google", "status": "proved_and_searchable"},
+        {"fact_key": "google_review_count", "value": 839, "confidence": 0.85, "source_type": "Google", "status": "proved_and_searchable"},
+        {"fact_key": "area", "value": "Whitefield", "confidence": 0.95, "source_type": "SourceEntitySeed", "status": "proved_and_searchable"}
+      ],
+      "proximity_facts": [
+        {
+          "fact_key": "nearby_metro_stations",
+          "matched_entity_id": "place:google:chijcyddpjarrjsrknxrc3lzvnk",
+          "name": "Hoodi",
+          "distance_m": 100,
+          "confidence": 0.82,
+          "source_type": "Google",
+          "status": "proved_and_searchable"
+        },
+        {
+          "fact_key": "nearby_hospitals",
+          "matched_entity_id": "place:google:chijocj7bfwrrjsrzhab8omuynq",
+          "name": "Manipal Hospital Whitefield",
+          "distance_m": 1800,
+          "confidence": 0.82,
+          "source_type": "Google",
+          "status": "proved_and_searchable"
+        },
+        {
+          "fact_key": "nearby_hospitals",
+          "name": "Cult Neo Gym Hoodi | Gym in Hoodi, Bengaluru",
+          "distance_m": 400,
+          "confidence": 0.82,
+          "source_type": "Computed",
+          "status": "conflicting_or_ambiguous",
+          "issue": "A gym is materialized as a hospital. Search must not present hospital proof from this row."
+        },
+        {
+          "fact_key": "nearby_metro_stations",
+          "name": "Sri Sathya Sai Hospital",
+          "distance_m": 1800,
+          "confidence": 0.82,
+          "source_type": "Computed",
+          "status": "conflicting_or_ambiguous",
+          "issue": "A hospital is materialized as a metro station. Search must not present metro proof from this row."
+        }
+      ]
+    }
+  ],
+  "whitefield_runtime_projection": [
+    {"society": "Brigade Lakefront - Crimson", "properties": [{"id": "discovered-brigade-lakefront-crimson-2bhk", "bhk": 2, "price": 17000000}, {"id": "discovered-brigade-lakefront-crimson-3bhk", "bhk": 3, "price": 32250000}, {"id": "discovered-brigade-lakefront-crimson-4bhk", "bhk": 4, "price": 53000000}]},
+    {"society": "Godrej Splendour", "properties": [{"id": "discovered-godrej-splendour-1bhk", "bhk": 1, "price": 7300000}, {"id": "discovered-godrej-splendour-2bhk", "bhk": 2, "price": 12000000}, {"id": "discovered-godrej-splendour-3bhk", "bhk": 3, "price": 17200000}]},
+    {"society": "SUMADHURA CAPITOL RESIDENCES", "properties": [{"id": "discovered-sumadhura-capitol-residences-3bhk", "bhk": 3, "price": 28600000}, {"id": "discovered-sumadhura-capitol-residences-4bhk", "bhk": 4, "price": 34900000}]},
+    {"society": "Vaswani Starlight", "properties": [{"id": "discovered-vaswani-starlight-3bhk", "bhk": 3, "price": 30700000}, {"id": "discovered-vaswani-starlight-4bhk", "bhk": 4, "price": 36000000}]}
+  ],
+  "known_issues": [
+    {
+      "classification": "architecture_gap",
+      "observation": "The profiler reports society:godrej-air as entity_type unknown even though runtime alias lookup and facts work.",
+      "action": "Do not change identity machinery unless a frozen public outcome fails because of it."
+    },
+    {
+      "classification": "data_gap",
+      "observation": "Computed nearby rows contain cross-category place types for a gym and hospital.",
+      "action": "Use safety sentinels to determine whether the defect is buyer-visible before changing the DAG materializer."
+    }
+  ]
+}

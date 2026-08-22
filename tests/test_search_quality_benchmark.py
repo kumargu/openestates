@@ -3,6 +3,8 @@ import unittest
 from pipeline.benchmark_search_quality import (
     case_result,
     evaluate_case,
+    flattened_results,
+    public_quality_summary,
     serving_bundle_requirement_error,
 )
 
@@ -35,6 +37,139 @@ def search_diagnostics() -> dict:
 
 
 class SearchQualityBenchmarkTests(unittest.TestCase):
+    def test_public_result_sets_are_flattened_with_branch_provenance(self) -> None:
+        response = {
+            "resultSets": [
+                {
+                    "branchId": "branch-1",
+                    "label": "2 BHK",
+                    "results": [{"id": "property:two", "bhk": 2}],
+                },
+                {
+                    "branchId": "branch-2",
+                    "label": "3 BHK",
+                    "results": [{"id": "property:three", "bhk": 3}],
+                },
+            ]
+        }
+
+        results = flattened_results(response)
+
+        self.assertEqual([result["id"] for result in results], ["property:two", "property:three"])
+        self.assertEqual(results[1]["_benchmark_branch_id"], "branch-2")
+        self.assertEqual(results[1]["_benchmark_branch_label"], "3 BHK")
+
+    def test_public_contract_checks_hard_constraints_tiers_and_proof(self) -> None:
+        case = {
+            "id": "PUBLIC-CONTRACT",
+            "query": "Godrej Air 3BHK near Hoodi Metro",
+            "expected": {
+                "state": "results",
+                "total_matches": 1,
+                "branch_labels": ["Godrej Air"],
+                "branch_result_ids": [["discovered-godrej-air-3bhk"]],
+                "result_ids_all": ["discovered-godrej-air-3bhk"],
+                "forbidden_result_ids": ["discovered-godrej-air-2bhk"],
+                "ordered_result_ids_prefix": ["discovered-godrej-air-3bhk"],
+                "result_bhks_all": [3],
+                "result_price_max": 35_000_000,
+                "result_match_tiers_all": ["exact"],
+                "proof_focus_matches_all": [
+                    {
+                        "fact_key": "nearby_metro_stations",
+                        "entity_id": "place:hoodi",
+                        "distance_m": 100,
+                    }
+                ],
+            },
+        }
+        response = {
+            "query": case["query"],
+            "resultSets": [
+                {
+                    "branchId": "branch-1",
+                    "label": "Godrej Air",
+                    "results": [
+                        {
+                            "id": "discovered-godrej-air-3bhk",
+                            "bhk": 3,
+                            "price": 31_750_000,
+                            "match_tier": "exact",
+                            "match_explanation": {"reasons": []},
+                            "proof_focuses": [
+                                {
+                                    "factKey": "nearby_metro_stations",
+                                    "entityId": "place:hoodi",
+                                    "distanceM": 100,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "totalMatches": 1,
+            "state": "results",
+            "_request_duration_ms": 2.0,
+        }
+
+        checks = evaluate_case(case, response)
+
+        self.assertTrue(all(check["passed"] for check in checks), checks)
+
+    def test_zero_result_sentinel_uses_public_state(self) -> None:
+        case = {
+            "id": "ZERO",
+            "query": "Godrej Air 4BHK",
+            "expected": {"state": "no_matches", "total_matches": 0, "zero_results": True},
+        }
+        response = {
+            "query": case["query"],
+            "resultSets": [],
+            "totalMatches": 0,
+            "state": "no_matches",
+            "_request_duration_ms": 1.0,
+        }
+
+        checks = evaluate_case(case, response)
+
+        self.assertTrue(all(check["passed"] for check in checks), checks)
+
+    def test_repeated_public_results_must_keep_the_same_order(self) -> None:
+        case = {"id": "STABLE", "query": "3BHK in Whitefield", "expected": {}}
+        response = {
+            "resultSets": [],
+            "_request_duration_ms": 1.0,
+            "_ordered_result_ids_runs": [["one", "two"], ["two", "one"]],
+        }
+
+        checks = evaluate_case(case, response)
+
+        self.assertIn(
+            ("stability", "ordered_result_ids"),
+            {(check["layer"], check["check"]) for check in checks if not check["passed"]},
+        )
+
+    def test_public_quality_summary_reports_recall_constraints_and_proof(self) -> None:
+        results = [
+            {
+                "expected": {"result_ids_all": ["wanted"]},
+                "ordered_result_ids": ["other", "wanted"],
+                "checks": [
+                    {"layer": "hard_constraint", "check": "result_bhks_all", "passed": True},
+                    {"layer": "proof", "check": "proof_focus_any", "passed": True},
+                    {"layer": "stability", "check": "ordered_result_ids", "passed": True},
+                ],
+            }
+        ]
+
+        summary = public_quality_summary(results)
+
+        self.assertEqual(summary["recall_at_1_pct"], 0.0)
+        self.assertEqual(summary["recall_at_3_pct"], 100.0)
+        self.assertEqual(summary["mean_reciprocal_rank"], 0.5)
+        self.assertEqual(summary["hard_constraint_violation_count"], 0)
+        self.assertEqual(summary["proof_precision_pct"], 100.0)
+
     def test_required_serving_bundle_must_match_live_runtime(self) -> None:
         self.assertIsNone(serving_bundle_requirement_error("bundle-v1", "bundle-v1"))
         self.assertIn(

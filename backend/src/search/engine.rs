@@ -1612,7 +1612,120 @@ fn resolve_serving_query_entities_from_records_with_alias_index(
         }
     }
 
+    for fuzzy in fuzzy_society_name_matches(query, plan, entities_source, &entities) {
+        entities.push(fuzzy);
+    }
+
     entities
+}
+
+fn fuzzy_society_name_matches(
+    query: &str,
+    plan: &QueryPlan,
+    entities_source: &[ServingEntityRecord],
+    exact_matches: &[ResolvedSearchEntity],
+) -> Vec<ResolvedSearchEntity> {
+    let resolution_config = search_resolution_config();
+    let mut candidates_by_span =
+        std::collections::BTreeMap::<(usize, usize), Vec<(usize, &ServingEntityRecord)>>::new();
+
+    for entity in entities_source.iter().filter(|entity| {
+        entity.entity_type.eq_ignore_ascii_case("society")
+            && is_resolvable_entity_name(&entity.name, resolution_config)
+    }) {
+        let name_tokens = entity_name_tokens(&entity.name);
+        if name_tokens.len() < 2 || name_tokens.len() > plan.tokens.len() {
+            continue;
+        }
+        let normalized_name = name_tokens.join(" ");
+        let max_distance = if normalized_name.len() >= 8 { 2 } else { 1 };
+
+        for window in plan.tokens.windows(name_tokens.len()) {
+            let start = window[0].start;
+            let end = window[window.len() - 1].end;
+            if exact_matches.iter().any(|exact| {
+                exact.entity_id == entity.entity_id
+                    && exact_entity_match_ranges(&query.to_ascii_lowercase(), &exact.matched_text)
+                        .iter()
+                        .any(|range| range.0 <= start && range.1 >= end)
+            }) {
+                continue;
+            }
+            let query_tokens = window
+                .iter()
+                .map(|token| token.text.to_ascii_lowercase())
+                .collect::<Vec<_>>();
+            if !query_tokens
+                .iter()
+                .zip(&name_tokens)
+                .any(|(query_token, name_token)| query_token == name_token)
+            {
+                continue;
+            }
+            let normalized_query = query_tokens.join(" ");
+            if normalized_query == normalized_name
+                || normalized_query
+                    .chars()
+                    .filter(|character| !character.is_whitespace())
+                    .count()
+                    < resolution_config.min_partial_entity_name_chars
+            {
+                continue;
+            }
+            let distance = super::index::levenshtein_distance(&normalized_query, &normalized_name);
+            if distance == 0 || distance > max_distance {
+                continue;
+            }
+            candidates_by_span
+                .entry((start, end))
+                .or_default()
+                .push((distance, entity));
+        }
+    }
+
+    let query_lower = query.to_ascii_lowercase();
+    let mut resolved = Vec::new();
+    for ((start, end), mut candidates) in candidates_by_span {
+        candidates.sort_by(|left, right| {
+            left.0
+                .cmp(&right.0)
+                .then_with(|| left.1.entity_id.cmp(&right.1.entity_id))
+        });
+        let Some((best_distance, best)) = candidates.first().copied() else {
+            continue;
+        };
+        let best_ids = candidates
+            .iter()
+            .filter(|(distance, _)| *distance == best_distance)
+            .map(|(_, entity)| entity.entity_id.as_str())
+            .collect::<HashSet<_>>();
+        if best_ids.len() != 1 {
+            continue;
+        }
+        resolved.push(ResolvedSearchEntity {
+            entity_id: best.entity_id.clone(),
+            entity_type: best.entity_type.clone(),
+            name: best.name.clone(),
+            match_kind: "serving_entity_name_typo".to_string(),
+            match_source: "serving_entity".to_string(),
+            matched_text: query[start..end].to_string(),
+            polarity: if match_has_exclusion_prefix(&query_lower, start) {
+                "exclusion".to_string()
+            } else {
+                "positive".to_string()
+            },
+        });
+    }
+    resolved
+}
+
+fn entity_name_tokens(name: &str) -> Vec<String> {
+    name.split(|character: char| !character.is_alphanumeric())
+        .filter_map(|token| {
+            let token = token.trim().to_ascii_lowercase();
+            (!token.is_empty()).then_some(token)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -2662,6 +2775,49 @@ mod tests {
         assert_eq!(resolved[0].name, "Prestige Waterford");
         assert_eq!(resolved[0].matched_text, "Waterford");
         assert_eq!(resolved[0].match_kind, "serving_entity_materialized_alias");
+    }
+
+    #[test]
+    fn minor_multi_token_society_typo_resolves_to_serving_entity() {
+        let intent = empty_intent();
+        let entities = vec![
+            serving_entity("society:godrej-air", "society", "Godrej Air"),
+            serving_entity("society:godrej-splendour", "society", "Godrej Splendour"),
+        ];
+        let plan = query_plan::compile_query_plan("Godrej Ari 3BHK");
+
+        let resolved = resolve_serving_query_entities_from_records_with_alias_index(
+            "Godrej Ari 3BHK",
+            &plan,
+            &intent,
+            &entities,
+            &ServingEntityAliasIndex::default(),
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].entity_id, "society:godrej-air");
+        assert_eq!(resolved[0].matched_text, "Godrej Ari");
+        assert_eq!(resolved[0].match_kind, "serving_entity_name_typo");
+    }
+
+    #[test]
+    fn ambiguous_multi_token_society_typo_does_not_hard_anchor() {
+        let intent = empty_intent();
+        let entities = vec![
+            serving_entity("society:alpha-one", "society", "Alpha One"),
+            serving_entity("society:alpha-owe", "society", "Alpha Owe"),
+        ];
+        let plan = query_plan::compile_query_plan("Alpha Oze 3BHK");
+
+        let resolved = resolve_serving_query_entities_from_records_with_alias_index(
+            "Alpha Oze 3BHK",
+            &plan,
+            &intent,
+            &entities,
+            &ServingEntityAliasIndex::default(),
+        );
+
+        assert!(resolved.is_empty());
     }
 
     #[test]

@@ -76,10 +76,10 @@ pub async fn search_properties(
     }
 
     let serving_facts = Some(&snapshot.bundle.fact_index);
-    let (engine_output, focus) = {
+    let engine_output = {
         let graph = state.knowledge.read().await;
 
-        let engine_output = SearchEngine {
+        SearchEngine {
             properties: &snapshot.properties,
             search_index: &snapshot.search_index,
             serving_bundle: Some(snapshot.bundle.as_ref()),
@@ -88,39 +88,12 @@ pub async fn search_properties(
             societies: &snapshot.societies,
             graph: Some(&graph),
         }
-        .search(&query);
-
-        let focus = crate::search::build_search_result_focus(crate::search::FocusBuildInputs {
-            query: &query,
-            intent: &engine_output.intent,
-            results: &engine_output.results,
-            properties: &snapshot.properties,
-            society_names: &snapshot.society_names,
-            societies: &snapshot.societies,
-            serving_facts,
-            graph: Some(&graph),
-        });
-
-        (engine_output, focus)
+        .search(&query)
     };
     let parsed_intent = engine_output.intent;
     let results = engine_output.results;
-    let mut result_sets = engine_output.result_sets;
+    let result_sets = engine_output.result_sets;
     let search_evidence_gaps = engine_output.evidence_gaps;
-
-    if let Some(focus) = focus.filter(|focus| focus.mode == "named_society") {
-        if let Some(first) = result_sets.first_mut() {
-            for sibling in focus.sibling_configs {
-                if !first
-                    .results
-                    .iter()
-                    .any(|result| result.card.id == sibling.card.id)
-                {
-                    first.results.push(sibling);
-                }
-            }
-        }
-    }
 
     // Look up area context if the intent identified an area.
     let area_context = parsed_intent.area.as_ref().and_then(|area_name| {

@@ -631,7 +631,7 @@ pub fn text_field_matches_term(field_lower: &str, term: &str) -> bool {
     false
 }
 
-fn levenshtein_distance(left: &str, right: &str) -> usize {
+pub(crate) fn levenshtein_distance(left: &str, right: &str) -> usize {
     if left == right {
         return 0;
     }

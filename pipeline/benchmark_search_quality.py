@@ -102,7 +102,13 @@ def main() -> None:
     results = []
     for case in cases:
         print(f"[{case['id']}] {first_line(case['query'])}")
-        response = call_search(args.base_url, case["query"], args.timeout_seconds)
+        for _ in range(args.warmup_runs):
+            call_search(args.base_url, case["query"], args.timeout_seconds)
+        responses = [
+            call_search(args.base_url, case["query"], args.timeout_seconds)
+            for _ in range(args.repeat_runs)
+        ]
+        response = next((item for item in responses if item is not None), None)
         if response is None:
             checks = [
                 check(
@@ -115,9 +121,18 @@ def main() -> None:
             results.append(case_result(case, None, checks))
             continue
 
+        successful_responses = [item for item in responses if item is not None]
+        response["_request_durations_ms"] = [
+            item["_request_duration_ms"] for item in successful_responses
+        ]
+        response["_ordered_result_ids_runs"] = [
+            [result.get("id") for result in flattened_results(item)]
+            for item in successful_responses
+        ]
+
         checks = evaluate_case(case, response)
         passed = sum(1 for item in checks if item["passed"])
-        print(f"  checks={passed}/{len(checks)} results={len(response.get('results') or [])}")
+        print(f"  checks={passed}/{len(checks)} results={len(flattened_results(response))}")
         results.append(case_result(case, response, checks))
 
     scoreable_modes = spec.get("scoreable_modes") or inferred_scoreable_modes(cases)
@@ -189,8 +204,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", default="tmp/search_quality_benchmark_v1.json")
     parser.add_argument("--markdown-output")
     parser.add_argument("--timeout-seconds", type=int, default=15)
+    parser.add_argument(
+        "--warmup-runs",
+        type=non_negative_int,
+        default=0,
+        help="discard this many requests per case before measurement",
+    )
+    parser.add_argument(
+        "--repeat-runs",
+        type=positive_int,
+        default=1,
+        help="measure this many requests per case and verify ordered-result stability",
+    )
     parser.add_argument("--max-endpoint-p95-ms", type=float)
     return parser.parse_args()
+
+
+def non_negative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be at least 0")
+    return parsed
+
+
+def positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return parsed
 
 
 def call_search(base_url: str, query: str, timeout_seconds: int) -> Optional[Dict[str, Any]]:
@@ -389,7 +430,76 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
             )
         )
 
-    results = response.get("results") or []
+    result_sets = public_result_sets(response)
+    results = flattened_results(response)
+    orderings = response.get("_ordered_result_ids_runs") or []
+    if len(orderings) > 1:
+        checks.append(
+            check(
+                "stability",
+                "ordered_result_ids",
+                all(ordering == orderings[0] for ordering in orderings[1:]),
+                f"ordered result ids changed across repeats: {orderings}",
+            )
+        )
+    if "state" in expected:
+        got_state = normalize_token(response.get("state"))
+        wanted_state = normalize_token(expected["state"])
+        checks.append(
+            check(
+                "result_count",
+                "state",
+                got_state == wanted_state,
+                f"expected state {wanted_state!r}, got {got_state!r}",
+            )
+        )
+    if "total_matches" in expected:
+        got_total = response.get("totalMatches", response.get("total_matches", len(results)))
+        checks.append(
+            check(
+                "result_count",
+                "total_matches",
+                got_total == expected["total_matches"],
+                f"expected {expected['total_matches']} total matches, got {got_total}",
+            )
+        )
+    if expected.get("zero_results") is True:
+        checks.append(
+            check(
+                "result_count",
+                "zero_results",
+                not results,
+                f"expected zero results, got {len(results)}",
+            )
+        )
+    if "branch_labels" in expected:
+        got_labels = [str(result_set.get("label", "")) for result_set in result_sets]
+        wanted_labels = [str(label) for label in expected["branch_labels"]]
+        checks.append(
+            check(
+                "branching",
+                "branch_labels",
+                got_labels == wanted_labels,
+                f"expected branch labels {wanted_labels}, got {got_labels}",
+            )
+        )
+    if "branch_result_ids" in expected:
+        got_branch_ids = [
+            [str(result.get("id", "")) for result in result_set.get("results") or []]
+            for result_set in result_sets
+        ]
+        wanted_branch_ids = [
+            [str(result_id) for result_id in branch]
+            for branch in expected["branch_result_ids"]
+        ]
+        checks.append(
+            check(
+                "branching",
+                "branch_result_ids",
+                got_branch_ids == wanted_branch_ids,
+                f"expected branch result ids {wanted_branch_ids}, got {got_branch_ids}",
+            )
+        )
     if "min_results" in expected:
         checks.append(
             check(
@@ -439,6 +549,91 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
                 "result_ids_any",
                 bool(result_ids.intersection(wanted_ids)),
                 f"expected one of {sorted(wanted_ids)} in top 10, got {sorted(result_ids)}",
+            )
+        )
+    if "result_ids_all" in expected:
+        result_ids = {str(result.get("id", "")) for result in results}
+        wanted_ids = {str(value) for value in expected["result_ids_all"]}
+        missing_ids = sorted(wanted_ids - result_ids)
+        checks.append(
+            check(
+                "recall",
+                "result_ids_all",
+                not missing_ids,
+                f"missing expected result ids {missing_ids}; got {sorted(result_ids)}",
+            )
+        )
+    if "forbidden_result_ids" in expected:
+        result_ids = {str(result.get("id", "")) for result in results}
+        forbidden_ids = {str(value) for value in expected["forbidden_result_ids"]}
+        leaked_ids = sorted(result_ids.intersection(forbidden_ids))
+        checks.append(
+            check(
+                "safety",
+                "forbidden_result_ids",
+                not leaked_ids,
+                f"forbidden result ids leaked: {leaked_ids}",
+            )
+        )
+    if "ordered_result_ids_prefix" in expected:
+        got_ids = [str(result.get("id", "")) for result in results]
+        wanted_ids = [str(value) for value in expected["ordered_result_ids_prefix"]]
+        checks.append(
+            check(
+                "ranking",
+                "ordered_result_ids_prefix",
+                got_ids[: len(wanted_ids)] == wanted_ids,
+                f"expected ordered prefix {wanted_ids}, got {got_ids[:len(wanted_ids)]}",
+            )
+        )
+    if "result_bhks_all" in expected:
+        allowed_bhks = {int(value) for value in expected["result_bhks_all"]}
+        unexpected = sorted(
+            {
+                result.get("bhk")
+                for result in results
+                if result.get("bhk") not in allowed_bhks
+            },
+            key=lambda value: str(value),
+        )
+        checks.append(
+            check(
+                "hard_constraint",
+                "result_bhks_all",
+                not unexpected,
+                f"expected only BHK values {sorted(allowed_bhks)}, got unexpected {unexpected}",
+            )
+        )
+    if "result_price_max" in expected:
+        over_budget = [
+            {"id": result.get("id"), "price": result.get("price")}
+            for result in results
+            if not isinstance(result.get("price"), (int, float))
+            or result["price"] > expected["result_price_max"]
+        ]
+        checks.append(
+            check(
+                "hard_constraint",
+                "result_price_max",
+                not over_budget,
+                f"results above {expected['result_price_max']}: {over_budget}",
+            )
+        )
+    if "result_match_tiers_all" in expected:
+        allowed_tiers = {normalize_token(value) for value in expected["result_match_tiers_all"]}
+        unexpected_tiers = sorted(
+            {
+                normalize_token(result.get("match_tier") or result.get("matchTier"))
+                for result in results
+            }
+            - allowed_tiers
+        )
+        checks.append(
+            check(
+                "ranking",
+                "result_match_tiers_all",
+                not unexpected_tiers,
+                f"expected tiers {sorted(allowed_tiers)}, got unexpected {unexpected_tiers}",
             )
         )
     if "result_areas_all" in expected:
@@ -701,15 +896,18 @@ def case_result(
         result.update({"num_results": 0, "intent": None, "top_results": [], "learning_gaps": []})
         return result
 
-    results = response.get("results") or []
+    results = flattened_results(response)
     result.update(
         {
             "num_results": len(results),
+            "result_sets": result_set_summaries(response),
+            "ordered_result_ids": [result.get("id") for result in results],
             "intent": response.get("intent") or {},
             "top_results": result_summaries(results[:5]),
             "learning_gaps": learning_gaps(response),
             "search_diagnostics": search_diagnostics(response),
             "request_duration_ms": response.get("_request_duration_ms"),
+            "request_durations_ms": response.get("_request_durations_ms") or [],
         }
     )
     return result
@@ -724,6 +922,10 @@ def result_summaries(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "id": result.get("id"),
                 "title": result.get("title"),
                 "area": result.get("area"),
+                "branch_id": result.get("_benchmark_branch_id"),
+                "branch_label": result.get("_benchmark_branch_label"),
+                "match_tier": result.get("match_tier") or result.get("matchTier"),
+                "tradeoff_label": result.get("tradeoff_label") or result.get("tradeoffLabel"),
                 "match_score": result.get("match_score") or result.get("matchScore"),
                 "reason_keys": [
                     reason.get("fact_key") for reason in (explanation.get("reasons") or [])
@@ -737,6 +939,53 @@ def result_summaries(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             }
         )
     return summaries
+
+
+def public_result_sets(response: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return buyer-visible result sets, with a legacy flat-response adapter."""
+    result_sets = response.get("resultSets") or response.get("result_sets") or []
+    if isinstance(result_sets, list):
+        normalized = [item for item in result_sets if isinstance(item, dict)]
+        if normalized:
+            return normalized
+
+    legacy_results = response.get("results") or []
+    if not isinstance(legacy_results, list) or not legacy_results:
+        return []
+    return [{"branchId": "legacy", "label": "Results", "results": legacy_results}]
+
+
+def flattened_results(response: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Flatten public result sets while retaining branch provenance for checks."""
+    flattened: List[Dict[str, Any]] = []
+    for branch_rank, result_set in enumerate(public_result_sets(response)):
+        branch_id = result_set.get("branchId") or result_set.get("branch_id")
+        branch_label = result_set.get("label")
+        for result_rank, raw_result in enumerate(result_set.get("results") or []):
+            if not isinstance(raw_result, dict):
+                continue
+            result = dict(raw_result)
+            result["_benchmark_branch_id"] = branch_id
+            result["_benchmark_branch_label"] = branch_label
+            result["_benchmark_branch_rank"] = branch_rank
+            result["_benchmark_result_rank"] = result_rank
+            flattened.append(result)
+    return flattened
+
+
+def result_set_summaries(response: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "branch_id": result_set.get("branchId") or result_set.get("branch_id"),
+            "label": result_set.get("label"),
+            "result_ids": [
+                result.get("id")
+                for result in result_set.get("results") or []
+                if isinstance(result, dict)
+            ],
+        }
+        for result_set in public_result_sets(response)
+    ]
 
 
 def summarize(results: List[Dict[str, Any]], scoreable_modes: Iterable[str]) -> Dict[str, Any]:
@@ -788,9 +1037,85 @@ def summarize(results: List[Dict[str, Any]], scoreable_modes: Iterable[str]) -> 
         "failure_buckets": dict(failure_buckets),
         "data_gap_cases": failure_buckets.get("data_gap", 0),
         "latency": latency_summary(results),
+        "quality": public_quality_summary(scoreable_results),
     }
     summary["proof_loop_decision"] = proof_loop_decision(summary, results)
     return summary
+
+
+def public_quality_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    ranked_oracles: List[Tuple[List[str], List[str]]] = []
+    for result in results:
+        expected = result.get("expected") or {}
+        wanted = expected.get("top_result_ids_any") or expected.get("result_ids_all") or []
+        if wanted:
+            ranked_oracles.append(
+                (
+                    [str(result_id) for result_id in wanted],
+                    [str(result_id) for result_id in result.get("ordered_result_ids") or []],
+                )
+            )
+
+    recall = {}
+    for limit in (1, 3, 5):
+        hits = sum(
+            1
+            for wanted, ordered in ranked_oracles
+            if set(wanted).intersection(ordered[:limit])
+        )
+        recall[f"recall_at_{limit}_pct"] = (
+            round(100 * hits / len(ranked_oracles), 1) if ranked_oracles else 0.0
+        )
+
+    reciprocal_ranks = []
+    for wanted, ordered in ranked_oracles:
+        wanted_set = set(wanted)
+        rank = next(
+            (index for index, result_id in enumerate(ordered, start=1) if result_id in wanted_set),
+            None,
+        )
+        reciprocal_ranks.append(0.0 if rank is None else 1.0 / rank)
+
+    checks = [check for result in results for check in result.get("checks") or []]
+    proof_checks = [check for check in checks if check.get("layer") == "proof"]
+    unsupported_claim_checks = [
+        check
+        for check in checks
+        if check.get("layer") == "safety"
+        and ("reason" in str(check.get("check")) or "proof_focus" in str(check.get("check")))
+    ]
+    return {
+        "oracle_case_count": len(ranked_oracles),
+        **recall,
+        "mean_reciprocal_rank": round(
+            sum(reciprocal_ranks) / len(reciprocal_ranks), 4
+        )
+        if reciprocal_ranks
+        else 0.0,
+        "hard_constraint_violation_count": sum(
+            1
+            for check in checks
+            if not check.get("passed")
+            and (
+                check.get("layer") == "hard_constraint"
+                or check.get("check") == "forbidden_result_ids"
+            )
+        ),
+        "proof_precision_pct": round(
+            100 * sum(1 for check in proof_checks if check.get("passed")) / len(proof_checks),
+            1,
+        )
+        if proof_checks
+        else 0.0,
+        "unsupported_claim_count": sum(
+            1 for check in unsupported_claim_checks if not check.get("passed")
+        ),
+        "ordering_stability_failure_count": sum(
+            1
+            for check in checks
+            if check.get("layer") == "stability" and not check.get("passed")
+        ),
+    }
 
 
 def markdown_report(output: Dict[str, Any]) -> str:
@@ -876,6 +1201,23 @@ def markdown_report(output: Dict[str, Any]) -> str:
         )
         for layer, values in sorted((latency.get("by_layer") or {}).items()):
             lines.append(f"| {layer} | {values.get('p50_ms')} | {values.get('p95_ms')} |")
+
+    quality = summary.get("quality") or {}
+    if quality:
+        lines.extend(
+            [
+                "",
+                "### Public Outcome Quality",
+                "",
+                f"- Recall @1 / @3 / @5: {quality.get('recall_at_1_pct')}% / "
+                f"{quality.get('recall_at_3_pct')}% / {quality.get('recall_at_5_pct')}%",
+                f"- Mean reciprocal rank: {quality.get('mean_reciprocal_rank')}",
+                f"- Hard-constraint violations: {quality.get('hard_constraint_violation_count')}",
+                f"- Proof precision: {quality.get('proof_precision_pct')}%",
+                f"- Unsupported claims: {quality.get('unsupported_claim_count')}",
+                f"- Ordering stability failures: {quality.get('ordering_stability_failure_count')}",
+            ]
+        )
 
     lines.extend(["", "## Failed Cases", ""])
     failed = [result for result in output["results"] if result["status"] != "PASS"]
@@ -1260,9 +1602,17 @@ def latency_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     endpoint_totals: List[float] = []
     by_layer: Dict[str, List[float]] = defaultdict(list)
     for result in results:
-        request_duration_ms = result.get("request_duration_ms")
-        if isinstance(request_duration_ms, (int, float)):
-            endpoint_totals.append(float(request_duration_ms))
+        request_durations_ms = result.get("request_durations_ms") or []
+        if request_durations_ms:
+            endpoint_totals.extend(
+                float(duration)
+                for duration in request_durations_ms
+                if isinstance(duration, (int, float))
+            )
+        else:
+            request_duration_ms = result.get("request_duration_ms")
+            if isinstance(request_duration_ms, (int, float)):
+                endpoint_totals.append(float(request_duration_ms))
         diagnostics = result.get("search_diagnostics") or {}
         timings = diagnostics.get("layerTimings") or diagnostics.get("layer_timings") or []
         for item in timings:
