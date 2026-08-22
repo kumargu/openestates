@@ -308,6 +308,36 @@ test("motion selection is stable and cannot change facts or deck order", () => {
   }
 });
 
+test("production gallery projection deterministically demonstrates distinct themes", () => {
+  const propertyIds = [
+    "fixture-prestige-lakeside-3bhk",
+    "fixture-sobha-royal-pavilion-4bhk",
+    "fixture-vaswani-starlight-3bhk",
+  ] as const;
+  const themes = propertyIds.map((propertyId) => {
+    const detail = storyLabDetailFixture({
+      propertyId,
+      coverage: "rich",
+      lifecycle: "ready",
+      reviews: "present",
+      rera: "complete",
+    });
+    detail.property.hero_image = `/media/${propertyId}/hero.webp`;
+    detail.property.images = Array.from(
+      { length: 6 },
+      (_, index) => `/media/${propertyId}/gallery-${index + 1}.webp`,
+    );
+    return projectPropertyStory(detail).motionTheme;
+  });
+
+  assert.deepEqual(themes, [
+    "slow-push",
+    "architectural-drift",
+    "editorial-cut",
+  ]);
+  assert.equal(new Set(themes).size, propertyIds.length);
+});
+
 test("single-image and reduced-motion scenes never auto-advance", () => {
   const singleFrame = storyLabMediaFixture({
     count: "single",

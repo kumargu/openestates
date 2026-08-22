@@ -331,7 +331,7 @@ export function PropertyArrivalFilm({
               </button>
             ))}
           </div>
-          {frames.length > 1 && (
+          {frames.length > 1 && !reducedMotion && (
             <button
               type="button"
               className="property-arrival__play"

@@ -553,10 +553,30 @@ export function selectStoryMotionTheme(input: {
   const architecturalCount = input.frames.filter((frame) =>
     ["building", "exterior"].includes(frame.role)
   ).length;
-  if (proposedCount > input.frames.length / 2 || architecturalCount >= 2) {
+  if (proposedCount > input.frames.length / 2) {
     return "architectural-drift";
   }
-  if (input.frames.length >= 5) return "editorial-cut";
+  if (input.frames.length >= 5) {
+    const galleryVariants: StoryMotionTheme[] = [
+      "editorial-cut",
+      "quiet-pan",
+      "slow-push",
+      "architectural-drift",
+    ];
+    return galleryVariants[input.motionSeed % galleryVariants.length]
+      ?? "editorial-cut";
+  }
+  if (architecturalCount >= 2) {
+    const architecturalVariants: StoryMotionTheme[] = [
+      "architectural-drift",
+      "quiet-pan",
+      "slow-push",
+      "editorial-cut",
+    ];
+    return architecturalVariants[
+      input.motionSeed % architecturalVariants.length
+    ] ?? "architectural-drift";
+  }
 
   const variants: StoryMotionTheme[] = ["quiet-pan", "slow-push"];
   return variants[input.motionSeed % variants.length] ?? "quiet-pan";

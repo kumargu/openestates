@@ -3,6 +3,15 @@
 .property-scene {
   --story-motion-duration: 7.6s;
   --story-transition-duration: 1.2s;
+  --story-stage-glow: rgba(200, 130, 96, 0.22);
+  --story-stage-start: #332a24;
+  --story-stage-end: #16120f;
+  --story-wash: linear-gradient(rgba(20, 16, 13, 0.04), rgba(20, 16, 13, 0.04));
+  --story-vignette-top: rgba(8, 7, 6, 0.42);
+  --story-vignette-bottom: rgba(9, 7, 6, 0.88);
+  --story-vignette-side: rgba(9, 7, 6, 0.42);
+  --story-grain-opacity: 0.08;
+  --story-title-shadow: 0 4px 32px rgba(0, 0, 0, 0.28);
   position: relative;
   container-name: property-scene;
   container-type: inline-size;
@@ -12,6 +21,53 @@
   color: #fffaf5;
 }
 
+.property-scene.story-motion--quiet-pan {
+  --story-stage-glow: rgba(220, 153, 102, 0.24);
+  --story-stage-start: #3a2a21;
+  --story-stage-end: #17120f;
+  --story-wash: linear-gradient(120deg, rgba(104, 57, 29, 0.18), rgba(164, 102, 57, 0.05));
+  --story-vignette-top: rgba(15, 10, 7, 0.4);
+  --story-vignette-bottom: rgba(14, 9, 6, 0.9);
+  --story-vignette-side: rgba(29, 17, 10, 0.46);
+  --story-grain-opacity: 0.06;
+}
+
+.property-scene.story-motion--architectural-drift {
+  --story-stage-glow: rgba(130, 158, 157, 0.2);
+  --story-stage-start: #293637;
+  --story-stage-end: #111718;
+  --story-wash: linear-gradient(125deg, rgba(19, 43, 48, 0.21), rgba(63, 78, 74, 0.04));
+  --story-vignette-top: rgba(7, 13, 14, 0.44);
+  --story-vignette-bottom: rgba(7, 12, 13, 0.9);
+  --story-vignette-side: rgba(8, 20, 22, 0.48);
+  --story-grain-opacity: 0.04;
+  --story-title-shadow: 0 4px 34px rgba(0, 9, 10, 0.34);
+}
+
+.property-scene.story-motion--slow-push {
+  --story-stage-glow: rgba(178, 111, 82, 0.2);
+  --story-stage-start: #33251f;
+  --story-stage-end: #140f0d;
+  --story-wash: linear-gradient(115deg, rgba(56, 28, 20, 0.24), transparent 68%);
+  --story-vignette-top: rgba(12, 8, 7, 0.46);
+  --story-vignette-bottom: rgba(12, 7, 6, 0.92);
+  --story-vignette-side: rgba(17, 9, 7, 0.5);
+  --story-grain-opacity: 0.035;
+  --story-title-shadow: 0 5px 38px rgba(0, 0, 0, 0.36);
+}
+
+.property-scene.story-motion--editorial-cut {
+  --story-stage-glow: rgba(201, 197, 184, 0.14);
+  --story-stage-start: #302f2c;
+  --story-stage-end: #131311;
+  --story-wash: linear-gradient(135deg, rgba(17, 17, 15, 0.03), rgba(8, 8, 7, 0.11));
+  --story-vignette-top: rgba(5, 5, 5, 0.48);
+  --story-vignette-bottom: rgba(5, 5, 5, 0.92);
+  --story-vignette-side: rgba(5, 5, 5, 0.52);
+  --story-grain-opacity: 0.1;
+  --story-title-shadow: 0 3px 24px rgba(0, 0, 0, 0.4);
+}
+
 .property-scene__stage {
   position: relative;
   isolation: isolate;
@@ -19,8 +75,8 @@
   overflow: hidden;
   border-radius: 18px;
   background:
-    radial-gradient(circle at 18% 12%, rgba(200, 130, 96, 0.22), transparent 34%),
-    linear-gradient(145deg, #332a24, #16120f);
+    radial-gradient(circle at 18% 12%, var(--story-stage-glow), transparent 34%),
+    linear-gradient(145deg, var(--story-stage-start), var(--story-stage-end));
   box-shadow: 0 24px 70px rgba(45, 31, 23, 0.16);
 }
 
@@ -143,14 +199,15 @@
 .property-scene__vignette {
   z-index: 2;
   background:
-    linear-gradient(180deg, rgba(8, 7, 6, 0.42), transparent 30%),
-    linear-gradient(0deg, rgba(9, 7, 6, 0.88), transparent 58%),
-    linear-gradient(90deg, rgba(9, 7, 6, 0.42), transparent 58%);
+    var(--story-wash),
+    linear-gradient(180deg, var(--story-vignette-top), transparent 30%),
+    linear-gradient(0deg, var(--story-vignette-bottom), transparent 58%),
+    linear-gradient(90deg, var(--story-vignette-side), transparent 58%);
 }
 
 .property-scene__grain {
   z-index: 3;
-  opacity: 0.08;
+  opacity: var(--story-grain-opacity);
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.68'/%3E%3C/svg%3E");
   mix-blend-mode: soft-light;
 }
@@ -286,7 +343,7 @@
   letter-spacing: -0.045em;
   line-height: 0.92;
   text-wrap: balance;
-  text-shadow: 0 4px 32px rgba(0, 0, 0, 0.28);
+  text-shadow: var(--story-title-shadow);
 }
 
 .property-scene__facts {
@@ -888,5 +945,11 @@
 
   .property-story-page > .property-clean-flow {
     padding-top: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .property-story-topbar__play {
+    display: none;
   }
 }

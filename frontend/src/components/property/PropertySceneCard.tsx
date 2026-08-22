@@ -357,14 +357,16 @@ export function PropertySceneCard({
                 >
                   ←
                 </button>
-                <button
-                  type="button"
-                  aria-label={playing ? "Pause images" : "Play images"}
-                  aria-pressed={!playing}
-                  onClick={() => writePlaying(!playing)}
-                >
-                  {playing ? "Pause" : "Play"}
-                </button>
+                {!reducedMotion && (
+                  <button
+                    type="button"
+                    aria-label={playing ? "Pause images" : "Play images"}
+                    aria-pressed={!playing}
+                    onClick={() => writePlaying(!playing)}
+                  >
+                    {playing ? "Pause" : "Play"}
+                  </button>
+                )}
                 <button
                   type="button"
                   aria-label="Next image"

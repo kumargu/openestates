@@ -1,6 +1,6 @@
 # Property detail — next pass
 
-**Status:** M0–M5 implemented on `agent/property-detail-next-pass`; M6 next.
+**Status:** M0–M6 implemented on `agent/property-detail-next-pass`; M7 next.
 **Updated:** 2026-08-23
 **Companion:** canvas `property-detail-mocks.canvas.tsx`
 
@@ -39,6 +39,15 @@ Search already presents a journey instead of a dump. Detail should feel the same
 - Mobile progress should stay compact, clear the safe area, and preserve normal document scrolling. Native previous/next buttons provide touch and keyboard behavior without a swipe or scroll-trap abstraction.
 - Story and Full Detail remain one projection and one component tree. The mode switch only changes motion and orientation chrome.
 - Decision actions are a final chapter over existing Save, Notebook, Compare, and RERA contracts. Reuse those contracts rather than introducing story-only state.
+
+## M6 learnings
+
+- Theme variation must be reachable through normal property media, not only role-rich Story Lab inputs. Production 5–7 frame galleries use the same stable four-theme pool.
+- Media profile narrows or orders the candidate themes; the property ID hash only breaks the tie. Proposed-majority stories stay on architectural drift, single-image stories stay still, and reduced motion stays reduced.
+- Atmosphere belongs in CSS tokens on the existing motion classes. Vignette tone, stage fallback, grain, and title shadow may vary; facts, controls, deck order, and component structure may not.
+- Theme tints must remain restrained and contrast-led. Warm, mineral, deep, and editorial treatments should be related expressions of one product, not per-property art direction.
+- Reduced motion should not offer a play control that cannot play. Keep previous/next and gallery access, remove misleading autoplay controls, and render a complete still frame.
+- Test the production projection path explicitly. A fixture test that injects richer roles can prove determinism while still missing a production integration gap.
 
 ## What is already good
 
