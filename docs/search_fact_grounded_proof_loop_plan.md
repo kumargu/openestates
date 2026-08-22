@@ -157,11 +157,62 @@ Commits:
 - `d807947b` adds the executable product model and preservation rule;
 - `fcd03cf4` makes the frozen model executable.
 
-Next boundary: do not add more runtime interpretation machinery yet. Freeze a
-separate live-DAG transfer bank using the same semantic classes, inspect the
-promoted Parquet first, and classify each miss as data, intent, proof, ranking,
-embedding, or architecture. The controlled fixture must remain unchanged when
-live data is absent; repair the DAG/materializer or record the gap.
+### Varied buyer-language checkpoint
+
+The controlled model now also executes the 18 cases in
+`data/validation/query_bank/search_buyer_language_v1.json`. Together with the
+original bank, 28 frozen buyer searches cover simple constraints,
+conversational preferences, society and place typos, compact/broken grammar,
+equivalent budget wording, branch alternatives, missing optional evidence,
+hard abstention, and false-proof sentinels.
+
+Query-bank consolidation stayed deliberately narrow:
+
+- immutable live-bundle banks remain separate because they record specific
+  DAG materializations and data expectations;
+- the obsolete `search_intent_classifier_v1.json` bank was removed after the
+  FastText shadow path had already been deleted;
+- useful human phrases from that classifier experiment now appear inside full
+  buyer searches with observable intent, results, exclusions, and proof
+  expectations in `search_buyer_language_v1.json`;
+- Git history remains the archive for the retired classifier-only corpus.
+
+The new bank exposed two classified `intent_gap` defects:
+
+- `rate it well` was absent from the configured review-quality vocabulary;
+- the unresolved-entity guard selected the shorter nested `more than`
+  operator inside `costing no more than`, contaminating the area span.
+
+Both fixes are generic. Review language and maximum-budget forms live in DAG
+config, while the parser now chooses the closest-ending, longest overlapping
+operator. No named project, locality, place, or fact-key branch was added.
+
+Verification:
+
+- controlled product-model banks: 28/28 queries passed;
+- `cargo check`: passed;
+- full Rust suite: 634 library tests and all integration binaries passed;
+- search efficiency contract: 11 passed;
+- search quality integrations: 9 passed;
+- production hardcoding audit: zero blocked search-config aliases.
+
+Commits:
+
+- `f7ae7f89` freezes and consolidates the varied buyer-language bank;
+- `0779365b` makes all 18 new cases executable and fixes their two generic
+  intent gaps.
+
+Long-term fixture note: the controlled entities, homes, places, facts, and
+missing-evidence sentinels should eventually move from embedded Rust setup into
+a versioned generic product-scenario document consumed by search, DAG, API,
+detail, compare, and UI journey contracts. That migration is structural work,
+not a reason to mix controlled scenarios with live Parquet banks, and it is
+deferred so this pass remains focused on search quality.
+
+Next boundary: pause runtime search changes. When work resumes, select a small
+subset of these 28 semantic classes for a separate live-DAG transfer bank,
+inspect promoted Parquet first, and classify each miss before changing code or
+data. Do not expand society count or catalog eligibility as part of that loop.
 
 ## Earlier implementation checkpoint — 2026-08-22
 

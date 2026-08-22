@@ -4,13 +4,13 @@ Date: 2026-08-22
 
 ## Current assessment
 
-`controlled_model_complete_pause_runtime_optimization`
+`buyer_language_model_complete_pause_runtime_optimization`
 
-The 10 frozen conversational buyer queries now pass against a controlled,
-fact-backed product model. This is the right stopping point for runtime search
-changes: legacy search behavior remains green, the hardcoding audit is clean,
-and further tuning without a classified live-bundle miss would be
-over-optimization.
+The original 10 conversational buyer queries and 18 additional varied-language
+queries now pass against a controlled, fact-backed product model. This is the
+right stopping point for runtime search changes: legacy search behavior remains
+green, the hardcoding audit is clean, and further tuning without a classified
+live-bundle miss would be over-optimization.
 
 The controlled fixtures are now a first-class product specification. They
 should drive future search, DAG, API proof, comparison, and UI journey tests.
@@ -18,12 +18,18 @@ They must not be deleted or weakened to accommodate current data coverage.
 
 Latest verified checkpoint:
 
-- query semantics bank: 10/10 scenarios passed;
-- search/unit suite: 321 passed;
+- controlled search banks: 28/28 scenarios passed;
+- full Rust suite: 634 library tests and all integration binaries passed;
 - search efficiency: 11 passed;
 - search quality integrations: 9 passed;
 - hardcoding audit: zero blocked search-config alias findings;
-- safety commits: `86c09aa0`, `d807947b`, and `fcd03cf4`.
+- latest safety commits: `f7ae7f89` and `0779365b`.
+
+The stale classifier-only bank was replaced by
+`search_buyer_language_v1.json`. Historical live-bundle banks were preserved;
+they describe pinned data runs and should not be merged into the controlled
+product model. Selected classifier-era phrases now have complete search
+context and executable result/proof expectations instead of isolated labels.
 
 What changed generically:
 
@@ -34,12 +40,19 @@ What changed generically:
   ordinary risk preferences hard;
 - generic nearby-family and multi-anchor proof behavior;
 - controlled nearby facts for metro, hospital, and tech-park proof.
+- config-owned `rate it well` review language;
+- longest-overlap ownership for equivalent maximum-budget wording such as
+  `costing no more than`.
 
-Next work is deliberately separate: build a live-DAG transfer bank for these
-same semantic classes, inspect the promoted Parquet before changing code, and
-fix data/materialization gaps through the DAG. Do not expand society
-eligibility or add more parser/search machinery unless that bank exposes a
-classified miss.
+The controlled fixture remains the product-model seed. A later structural pass
+may externalize its entities, homes, places, facts, and evidence gaps into a
+versioned generic scenario document reusable by DAG, API, compare, and UI
+contracts. That work is noted but intentionally deferred.
+
+Next work is deliberately separate: choose a small live-DAG transfer subset,
+inspect promoted Parquet before changing code, and fix data/materialization
+gaps through the DAG. Do not expand society eligibility or add more
+parser/search machinery unless that bank exposes a classified miss.
 
 ## Earlier assessment
 
