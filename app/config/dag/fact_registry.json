@@ -7177,6 +7177,31 @@
       }
     },
     {
+      "fact_key": "media.gallery_frames",
+      "bucket": "project_proof",
+      "label": "curated property gallery",
+      "lens": "proof",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "property photos",
+        "project exterior",
+        "building and amenity photos"
+      ],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "ExternalImage"
+      ],
+      "display_template": "Curated project gallery available",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.5
+      }
+    },
+    {
       "fact_key": "site_plan_asset_count",
       "bucket": "project_proof",
       "label": "inspectable site plan",

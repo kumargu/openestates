@@ -393,7 +393,8 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     );
     assert_eq!(
         parquet_rows_for_artifact(&lake, &image_facts, "facts/part-00000.parquet").await,
-        4
+        5,
+        "slot facts plus the curated gallery frame fact are materialized"
     );
 
     let kg_record =
@@ -2133,6 +2134,8 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                         .to_string(),
                 ),
                 classification_method: Some("heuristic".to_string()),
+                gallery_order: None,
+                curation_confidence: None,
                 width: Some(1200),
                 height: Some(800),
                 rank: Some(1),
@@ -2142,6 +2145,7 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                 content_sha256: None,
                 observed_at: now + Duration::minutes(2),
             }],
+            max_promoted_gallery_frames: None,
             source_health: Vec::new(),
             media_qa_report: None,
             source_watermarks: Vec::new(),
