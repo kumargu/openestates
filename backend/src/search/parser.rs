@@ -378,8 +378,13 @@ fn nearest_budget_bound(
                 .iter()
                 .rposition(|token| token.eq_ignore_ascii_case("but"))
                 .map_or(0, |index| index + 1);
-            if search_resolution_config()
+            let immediate_exclusion = search_resolution_config()
                 .exclusion_prefixes
+                .iter()
+                .any(|phrase| phrase_matches_suffix(prefix, phrase));
+            let scoped_exclusion = search_parser_config()
+                .discourse
+                .scoped_exclusion_markers
                 .iter()
                 .any(|phrase| {
                     let phrase_tokens = query_tokens(phrase);
@@ -392,8 +397,8 @@ fn nearest_budget_bound(
                                     .zip(&phrase_tokens)
                                     .all(|(left, right)| left.eq_ignore_ascii_case(right))
                             })
-                })
-            {
+                });
+            if immediate_exclusion || scoped_exclusion {
                 return Some(BudgetBound::Max);
             }
         }

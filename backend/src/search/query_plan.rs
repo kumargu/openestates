@@ -1189,12 +1189,31 @@ fn merge_or_push_preference(prefs: &mut Vec<PreferenceSignal>, signal: Preferenc
 }
 
 fn negated_positive_preference_signal(pattern: &schema::PreferencePatternSpec) -> PreferenceSignal {
-    let mut signal = schema::schema_preference_signal(pattern, Polarity::Negative);
-    // An explicit negation is an exclusion, not a request to softly prefer an
-    // adjacent concern. Keep the exact configured dimension and require proof
-    // that the excluded value is absent.
-    signal.required = true;
-    signal
+    if pattern.require_evidence {
+        schema::schema_preference_signal(pattern, Polarity::Negative)
+    } else if let Some(negative_pattern) = matching_negative_pattern_for_positive(pattern) {
+        schema::schema_preference_signal(negative_pattern, Polarity::Negative)
+    } else {
+        schema::schema_preference_signal(pattern, Polarity::Negative)
+    }
+}
+
+fn matching_negative_pattern_for_positive(
+    pattern: &schema::PreferencePatternSpec,
+) -> Option<&'static schema::PreferencePatternSpec> {
+    let positive_signal = schema::schema_preference_signal(pattern, Polarity::Positive);
+    schema::negative_preference_patterns()
+        .iter()
+        .find(|negative| negative.label.eq_ignore_ascii_case(&pattern.label))
+        .or_else(|| {
+            schema::negative_preference_patterns()
+                .iter()
+                .find(|negative| {
+                    let negative_signal =
+                        schema::schema_preference_signal(negative, Polarity::Negative);
+                    preferences_conflict(&positive_signal, &negative_signal)
+                })
+        })
 }
 
 fn remove_positive_preferences_conflicting_with_negatives(
@@ -1391,7 +1410,20 @@ fn match_has_negated_prefix(q: &str, start: usize) -> bool {
     let scope_start = q[..start]
         .char_indices()
         .rev()
-        .find(|(_, character)| matches!(character, '.' | '?' | '!' | ';'))
+        .find(|(index, character)| {
+            if !matches!(character, '.' | '?' | '!' | ';') {
+                return false;
+            }
+            !(*character == '.'
+                && q[..*index]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|previous| previous.is_ascii_digit())
+                && q[*index + character.len_utf8()..]
+                    .chars()
+                    .next()
+                    .is_some_and(|next| next.is_ascii_digit()))
+        })
         .map_or(0, |(index, character)| index + character.len_utf8());
     let scoped_prefix = &q[scope_start..start];
     let contrast_start = exact_pattern_match_ranges(scoped_prefix, "but")
@@ -1399,8 +1431,9 @@ fn match_has_negated_prefix(q: &str, start: usize) -> bool {
         .map(|(start, _)| start)
         .max()
         .unwrap_or(0);
-    search_resolution_config()
-        .exclusion_prefixes
+    search_parser_config()
+        .discourse
+        .scoped_exclusion_markers
         .iter()
         .flat_map(|phrase| exact_pattern_match_ranges(scoped_prefix, phrase))
         .any(|(exclusion_start, _)| exclusion_start >= contrast_start)
@@ -1925,6 +1958,41 @@ mod tests {
                 "Compare Godrej Air under ₹2.6 Cr 3BHK".to_string(),
                 "Godrej Lakeside Orchard under ₹3.1 Cr 4BHK".to_string(),
             ])
+        );
+    }
+
+    #[test]
+    fn unless_scope_inverts_budget_and_lifecycle_preference() {
+        let query = "Show me SNN Raj Etternia unless the available home is above ₹2.8 Cr or still under construction.";
+        let plan = compile_query_plan(query);
+        let intent = project_search_intent(query, &plan);
+        let lifecycle_start = query
+            .to_ascii_lowercase()
+            .find("under construction")
+            .unwrap();
+
+        assert_eq!(intent.budget_min, None);
+        assert_eq!(intent.budget_max, Some(28_000_000));
+        assert_eq!(
+            search_parser_config().discourse.scoped_exclusion_markers,
+            vec!["unless"]
+        );
+        assert!(!exact_pattern_match_ranges(
+            &query.to_ascii_lowercase()[..lifecycle_start],
+            "unless"
+        )
+        .is_empty());
+        assert!(match_has_negated_prefix(
+            &query.to_ascii_lowercase(),
+            lifecycle_start
+        ));
+        assert!(
+            intent
+                .negative_preferences
+                .iter()
+                .any(|preference| preference.raw_text == "under construction"),
+            "negative preferences: {:?}",
+            intent.negative_preferences
         );
     }
 }

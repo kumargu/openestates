@@ -88,6 +88,8 @@ pub struct DiscourseParserConfig {
     pub paired_branch_joiners: Vec<String>,
     #[serde(default)]
     pub branch_ordinals: Vec<String>,
+    #[serde(default)]
+    pub scoped_exclusion_markers: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -309,6 +311,14 @@ fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
     validate_aliases(
         "parser.discourse.branch_ordinals",
         config.discourse.branch_ordinals.iter().map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.scoped_exclusion_markers",
+        config
+            .discourse
+            .scoped_exclusion_markers
+            .iter()
+            .map(String::as_str),
     )?;
     Ok(())
 }

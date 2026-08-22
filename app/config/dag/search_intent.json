@@ -333,6 +333,7 @@
       "conjunctive_relation_markers": ["both"],
       "paired_branch_joiners": ["with"],
       "branch_ordinals": ["first", "second"],
+      "scoped_exclusion_markers": ["unless"],
       "shared_suffix_markers": [
         "but not",
         "but only",

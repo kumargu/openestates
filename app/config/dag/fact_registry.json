@@ -1552,7 +1552,8 @@
           "home_timeline_state",
           "project_status"
         ],
-        "weight": 1.0
+        "weight": 1.0,
+        "require_evidence": true
       },
       {
         "rank": 17,

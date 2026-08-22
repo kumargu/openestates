@@ -118,6 +118,53 @@ quarantine status, and lineage directly.
 
 ## Implementation Checkpoint — 2026-08-22
 
+### Controlled conversational model checkpoint
+
+The first next-phase milestone is complete. The 10 frozen buyer queries in
+`data/validation/query_bank/search_conversational_semantics_v1.json` now run
+against the controlled product model in
+`backend/tests/search_conversational_semantics_contract.rs`.
+
+The fixture is a durable executable specification, not temporary test data. It
+models inventory, canonical places, lifecycle state, nearby facts, optional
+evidence, ranking, exclusions, result branches, and proof handoff. New buyer
+capabilities should be added to this controlled model before DAG, API, or UI
+wiring, then proved separately against a live immutable bundle.
+
+The frozen scenarios now prove:
+
+- independent society, area, BHK, and budget alternatives;
+- shared constraints and exclusions across alternatives;
+- ordinal references such as `first` and `second` in comparisons;
+- `unless` as a scoped budget/lifecycle exclusion;
+- named and generic place proximity, including conjunctive `both` proof;
+- required lifecycle evidence without turning unrelated negative preferences
+  into hard filters;
+- optional missing evidence remains eligible and produces no false claim;
+- balanced dual-commute ranking and search-to-detail proof labels.
+
+Verification:
+
+- controlled conversational contract: 10/10 queries passed;
+- search/unit regression suite: 321 passed;
+- search efficiency contract: 11 passed;
+- search quality integrations: 9 passed;
+- production hardcoding audit: zero blocked search-config aliases.
+
+Commits:
+
+- `86c09aa0` freezes the conversational query semantics;
+- `d807947b` adds the executable product model and preservation rule;
+- `fcd03cf4` makes the frozen model executable.
+
+Next boundary: do not add more runtime interpretation machinery yet. Freeze a
+separate live-DAG transfer bank using the same semantic classes, inspect the
+promoted Parquet first, and classify each miss as data, intent, proof, ranking,
+embedding, or architecture. The controlled fixture must remain unchanged when
+live data is absent; repair the DAG/materializer or record the gap.
+
+## Earlier implementation checkpoint — 2026-08-22
+
 Completed and verified:
 
 - added explicit `buyer_catalog` and `search_experiment` serving-admission
@@ -189,8 +236,10 @@ again until one of those tests exposes a classified search or data gap.
   leaves the current pointer unchanged.
 - Never add `Godrej Air`, `Hoodi`, `Manipal`, Whitefield societies, or other
   benchmark entities as parser aliases or runtime branches.
-- Never add expected benchmark facts directly to Rust, parser config, fixtures,
-  or search metadata. Fix the source/DAG path when data is absent.
+- Never add expected live-bundle benchmark facts directly to Rust, parser
+  config, or search metadata. Controlled product-model fixtures may contain
+  explicit mock facts, but they must remain clearly isolated from live-bundle
+  banks. Fix the source/DAG path when a live fact is absent.
 - BHK, budget, named-society, numeric, exclusion, and distance constraints stay
   hard. Missing soft evidence stays additive unless its config explicitly says
   `required`.

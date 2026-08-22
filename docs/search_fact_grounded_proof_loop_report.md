@@ -4,6 +4,45 @@ Date: 2026-08-22
 
 ## Current assessment
 
+`controlled_model_complete_pause_runtime_optimization`
+
+The 10 frozen conversational buyer queries now pass against a controlled,
+fact-backed product model. This is the right stopping point for runtime search
+changes: legacy search behavior remains green, the hardcoding audit is clean,
+and further tuning without a classified live-bundle miss would be
+over-optimization.
+
+The controlled fixtures are now a first-class product specification. They
+should drive future search, DAG, API proof, comparison, and UI journey tests.
+They must not be deleted or weakened to accommodate current data coverage.
+
+Latest verified checkpoint:
+
+- query semantics bank: 10/10 scenarios passed;
+- search/unit suite: 321 passed;
+- search efficiency: 11 passed;
+- search quality integrations: 9 passed;
+- hardcoding audit: zero blocked search-config alias findings;
+- safety commits: `86c09aa0`, `d807947b`, and `fcd03cf4`.
+
+What changed generically:
+
+- config-owned discourse structure for alternatives, conditionals, shared
+  suffixes, ordinal comparisons, conjunction, and scoped `unless` exclusions;
+- a single spanned tokenizer with sentence and em-dash boundaries;
+- required negative lifecycle evidence that fails closed without making
+  ordinary risk preferences hard;
+- generic nearby-family and multi-anchor proof behavior;
+- controlled nearby facts for metro, hospital, and tech-park proof.
+
+Next work is deliberately separate: build a live-DAG transfer bank for these
+same semantic classes, inspect the promoted Parquet before changing code, and
+fix data/materialization gaps through the DAG. Do not expand society
+eligibility or add more parser/search machinery unless that bank exposes a
+classified miss.
+
+## Earlier assessment
+
 `continue_as_search_experiment`
 
 The original search experiment succeeded, then drifted into catalog expansion

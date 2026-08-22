@@ -139,7 +139,11 @@ fn assert_branch_ids(output: ObservedSearch, expected: &[&[&str]]) {
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    assert_eq!(actual, expected, "warnings: {:?}", output.warnings);
+    assert_eq!(
+        actual, expected,
+        "warnings: {:?}; negative_preferences={:?}",
+        output.warnings, output.negative_preferences
+    );
 }
 
 fn result_ids(output: &ObservedSearch) -> Vec<&str> {
