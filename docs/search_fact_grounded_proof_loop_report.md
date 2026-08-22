@@ -46,7 +46,8 @@ The current branch contains a substantial deterministic search implementation:
 - canonical serving-entity joins for societies, builders, areas, aliases, and
   property membership;
 - structured, Tantivy, and geo recall with ambiguity-safe society typo
-  resolution and abstention for unresolved hard named entities;
+  resolution and abstention for unresolved hard named entities or compact
+  unexplained project-like prefixes;
 - fact-backed hard constraints, optional `no_data` preference coverage,
   required-evidence gates, generic scoring, and proof focuses derived from the
   same serving facts;
@@ -78,16 +79,19 @@ Recorded final artifacts:
   unsupported claims, stable ordering, and endpoint p95 between 18.53 and
   24.81 ms in the final candidate runs.
 
-Fresh verification after resuming the stopped session:
+Fresh verification after resuming the stopped session and completing the
+bundle-switch guardrail:
 
 - `cargo check`: passed.
-- Full Rust suite: 625 library tests and all integration binaries passed.
+- Full Rust suite: 629 library tests and all integration binaries passed.
 - Search-experiment admission and pointer-isolation tests: 4 passed.
 - Search-efficiency integration contract: 11 passed.
 - Python benchmark and collection tests: 91 passed, 1 skipped.
 - Frontend suite: 145 tests passed; production build passed.
-- Experiment API smoke suite: 50 checks passed.
 - Search hardcoding audit: zero blocked search-config alias findings.
+- South 43 guardrail bank: 82/82 checks, 24.21 ms endpoint p95.
+- Mixed 45-society bank: 408/408 checks, 21.15 ms endpoint p95.
+- Experiment API smoke suite after the guardrail: 50/50 checks passed.
 
 The three stale Rust failures were old automatic-relaxation expectations, not
 search misses. Automatic BHK/budget relaxation and its dormant policy/API/test
@@ -134,27 +138,27 @@ Proved so far:
   current serving pointer;
 - named-place search proof survives into the property surface with the same
   fact, entity, distance, source receipt, and serving version.
+- absent project-like names fail closed instead of degrading into a broad
+  BHK/budget query, while the same name resolves when its serving entity is
+  present;
+- successful and zero-result cache entries are isolated by serving version,
+  and the prior bundle preserves its ordered outcomes after rollback.
 
 Not yet proved:
 
 - broad transfer across schools, tech parks, negative risks, water, traffic,
   noise, builder/RERA evidence, and configured required preferences;
-- cache isolation and rollback across an actual experiment bundle switch;
 - recall and latency on a materially larger cohort;
 - generalized fuzzy/paraphrase behavior beyond the named query banks;
 - correction of the two known durable-data category errors.
 
 ## Next steps
 
-1. Verify result reasons against the property-detail proof payload using the
-   same fact/entity/source/version handles.
-2. Verify cache isolation and rollback between two explicitly pinned immutable
-   materializations.
-3. Add transfer banks for configured required evidence, negative risks, more
+1. Add transfer banks for configured required evidence, negative risks, more
    named-place families, and generic Boolean/paraphrase cases.
-4. Correct the two durable-data category errors through the DAG and rerun their
+2. Correct the two durable-data category errors through the DAG and rerun their
    existing false-proof sentinels unchanged.
-5. Repeat the bank on a materially larger cohort and publish ordered-id, proof,
+3. Repeat the bank on a materially larger cohort and publish ordered-id, proof,
    unsupported-claim, and latency deltas.
 
 ## Incomplete-society experiment — 2026-08-22
@@ -227,6 +231,45 @@ feature, Google receipt lineage, and mixed-bundle version. The case passed
   `data/validation/search_quality_proof_handoff_mixed_v1.json`;
 - measured output:
   `tmp/search-proof-loop/mixed-south-45-experiment-v1/proof-handoff.json`.
+
+## Absent-project and bundle-isolation checkpoint — 2026-08-22
+
+A bundle comparison exposed a generic intent gap. South 43 does not contain
+Ajmera Nucleus, but `Ajmera Nucleus 2BHK under 1.5cr` discarded the unresolved
+name and returned 14 unrelated homes as exact matches. Synthetic unknown names
+behaved the same way. The mixed bundle resolved Ajmera correctly, proving this
+was runtime interpretation rather than missing mixed-bundle data.
+
+The fix is generic: query planning removes spans already owned by structured
+constraints, configured preferences, and resolved serving entities, then
+abstains only for a compact unexplained project-like name. It does not add an
+Ajmera alias or project-specific branch. Generic `home`/`homes` vocabulary
+prevents descriptive community queries from being misclassified.
+
+Frozen results:
+
+- South 43 v2: 13 cases, 82/82 checks, 24.21 ms endpoint p95;
+- mixed experiment v2: 59 cases, 408/408 checks, 21.15 ms endpoint p95;
+- absent Ajmera: zero results on South 43;
+- present Ajmera: exactly `discovered-ajmera-nucleus-2bhk` on mixed;
+- `Foo Bar Residency` and `Unknown Heights`: zero results on both;
+- plain `2BHK under 1.5cr`: the original 14 South 43 results retain their
+  order; mixed adds only the admitted Ajmera result;
+- configured optional preferences still return candidates and do not become
+  false project names.
+
+The cache contract now directly proves that an identical zero-result response
+stored under one serving version cannot be read under another, and that reload
+clearing removes it. Both experiment runtimes remained explicitly pinned; no
+catalog or global serving pointer moved.
+
+Artifacts:
+
+- common unknown-name bank:
+  `data/validation/query_bank/search_unknown_project_guardrail_v1.json`;
+- South 43 absent-Ajmera bank:
+  `data/validation/query_bank/search_absent_ajmera_south_43_v1.json`;
+- measured outputs: `tmp/search-proof-loop/bundle-switch-v1/`.
 
 ## Historical execution log
 

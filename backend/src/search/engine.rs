@@ -1007,6 +1007,11 @@ fn unresolved_named_entity_clause(
         },
         |span| entity_scope_is_fully_resolved(&query_lower, plan, resolved_entities, span),
     )
+    .or_else(|| {
+        query_plan::unresolved_residual_clause(query, plan, |span| {
+            entity_scope_is_fully_resolved(&query_lower, plan, resolved_entities, span)
+        })
+    })
 }
 
 fn entity_scope_is_fully_resolved(
@@ -2660,6 +2665,36 @@ mod tests {
     }
 
     #[test]
+    fn unresolved_direct_project_name_abstains_instead_of_becoming_free_text() {
+        for query in [
+            "Ajmera Nucleus 2BHK under 1.5cr",
+            "Foo Bar Residency 2BHK under 1.5cr",
+            "Unknown Heights",
+        ] {
+            assert!(
+                test_unresolved_named_entity_clause(query, &[], None).is_some(),
+                "expected unresolved residual clause for {query}"
+            );
+        }
+    }
+
+    #[test]
+    fn configured_preferences_do_not_become_unresolved_project_names() {
+        for query in [
+            "quiet family 2BHK under 1.5cr",
+            "good reviews 2BHK under 1.5cr",
+            "ready to move 2BHK under 1.5cr",
+            "low traffic 2BHK under 1.5cr",
+        ] {
+            assert_eq!(
+                test_unresolved_named_entity_clause(query, &[], None),
+                None,
+                "configured preference was treated as an entity in {query}"
+            );
+        }
+    }
+
+    #[test]
     fn resolved_named_area_clause_does_not_abstain() {
         let resolved = vec![ResolvedSearchEntity {
             entity_id: "area:whitefield".to_string(),
@@ -2673,6 +2708,28 @@ mod tests {
 
         assert_eq!(
             test_unresolved_named_entity_clause("3BHK in Whitefield under 2cr", &resolved, None),
+            None
+        );
+    }
+
+    #[test]
+    fn resolved_project_prefix_before_numeric_evidence_does_not_abstain() {
+        let resolved = vec![ResolvedSearchEntity {
+            entity_id: "society:godrej-air".to_string(),
+            entity_type: "society".to_string(),
+            name: "Godrej Air".to_string(),
+            match_kind: "serving_entity_name".to_string(),
+            match_source: "serving_entity".to_string(),
+            matched_text: "Godrej Air".to_string(),
+            polarity: "positive".to_string(),
+        }];
+
+        assert_eq!(
+            test_unresolved_named_entity_clause(
+                "Godrej Air with at least 5 acres",
+                &resolved,
+                None,
+            ),
             None
         );
     }

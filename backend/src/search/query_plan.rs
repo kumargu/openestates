@@ -1,4 +1,6 @@
-use crate::dag_config::{area_alias_entries, search_parser_config, search_resolution_config};
+use crate::dag_config::{
+    area_alias_entries, search_guardrail_config, search_parser_config, search_resolution_config,
+};
 
 use super::intent::{BuyerArchetype, Polarity, PreferenceSignal, SearchIntent, SourceSpan};
 use super::parser::{self, SlotPolarity};
@@ -387,6 +389,152 @@ pub(crate) fn unresolved_named_entity_clause(
     }
 
     None
+}
+
+pub(crate) fn unresolved_residual_clause(
+    query: &str,
+    plan: &QueryPlan,
+    resolved_entity_in_span: impl Fn(ByteSpan) -> bool,
+) -> Option<String> {
+    // This fallback protects direct, unqualified project names that appear
+    // before the first inventory or location constraint. Later residual prose
+    // belongs to ordinary preference/evidence parsing and is not, by itself,
+    // evidence of an unresolved entity name.
+    let direct_name_prefix_end = plan
+        .areas
+        .iter()
+        .map(|area| area.span.start)
+        .chain(plan.slots.bhks.iter().map(|slot| slot.start))
+        .chain(plan.slots.budgets.iter().map(|slot| slot.start))
+        .min()
+        .unwrap_or(query.len());
+    let mut claimed_ranges = plan
+        .areas
+        .iter()
+        .map(|area| area.span)
+        .chain(plan.slots.bhks.iter().map(|slot| ByteSpan {
+            start: slot.start,
+            end: slot.end,
+        }))
+        .chain(plan.slots.budgets.iter().map(|slot| ByteSpan {
+            start: slot.start,
+            end: slot.end,
+        }))
+        .chain(plan.evidence.iter().map(|evidence| ByteSpan {
+            start: evidence.start,
+            end: evidence.end,
+        }))
+        .chain(plan.clauses.iter().map(|clause| ByteSpan {
+            start: clause.relation_span.start,
+            end: clause.target_span.end,
+        }))
+        .collect::<Vec<_>>();
+    let query_lower = query.to_ascii_lowercase();
+    for pattern in schema::positive_preference_patterns()
+        .iter()
+        .chain(schema::negative_preference_patterns())
+        .flat_map(|entry| entry.patterns.iter())
+        .chain(
+            schema::preference_key_overrides()
+                .iter()
+                .flat_map(|entry| entry.patterns.iter()),
+        )
+    {
+        claimed_ranges.extend(
+            exact_pattern_match_ranges(&query_lower, pattern)
+                .into_iter()
+                .map(|(start, end)| ByteSpan { start, end }),
+        );
+    }
+
+    let ignored_tokens = residual_ignored_tokens();
+    let mut residual = Vec::new();
+    for token in plan
+        .tokens
+        .iter()
+        .filter(|token| token.start < direct_name_prefix_end)
+    {
+        let span = ByteSpan {
+            start: token.start,
+            end: token.end,
+        };
+        let unexplained = token
+            .text
+            .chars()
+            .any(|character| character.is_ascii_alphabetic())
+            && !ignored_tokens
+                .iter()
+                .any(|ignored| ignored.eq_ignore_ascii_case(&token.text))
+            && !claimed_ranges
+                .iter()
+                .any(|claimed| claimed.start <= token.start && claimed.end >= token.end)
+            && !resolved_entity_in_span(span);
+        if unexplained {
+            residual.push(token);
+        } else if !residual.is_empty() {
+            break;
+        }
+    }
+    if residual.len() < 2 {
+        return None;
+    }
+    let residual_span = ByteSpan {
+        start: residual[0].start,
+        end: residual[residual.len() - 1].end,
+    };
+    if resolved_entity_in_span(residual_span) {
+        return None;
+    }
+    Some(
+        query[residual_span.start..residual_span.end]
+            .trim()
+            .to_string(),
+    )
+}
+
+fn residual_ignored_tokens() -> Vec<String> {
+    let resolution = search_resolution_config();
+    let parser = search_parser_config();
+    let guardrails = search_guardrail_config();
+    let mut ignored = resolution
+        .ignored_entity_names
+        .iter()
+        .chain(resolution.generic_scope_nouns.iter())
+        .flat_map(|value| parser::query_tokens(value))
+        .collect::<Vec<_>>();
+    for value in parser
+        .bhk
+        .unit_aliases
+        .iter()
+        .chain(parser.bhk.alternative_joiners.iter())
+        .chain(parser.budget.operators.iter())
+        .chain(parser.budget.min_operators.iter())
+        .chain(parser.budget.range_connectors.iter())
+        .chain(parser.distance.operators.iter())
+        .chain(parser.relations.clause_joiners.iter())
+        .chain(parser.relations.aliases.iter().map(|alias| &alias.alias))
+        .chain(
+            parser
+                .budget
+                .units
+                .iter()
+                .chain(parser.distance.units.iter())
+                .flat_map(|unit| unit.aliases.iter()),
+        )
+        .chain(
+            guardrails
+                .home_intent_detection
+                .term_groups
+                .iter()
+                .flat_map(|group| group.terms.iter().chain(group.substrings.iter())),
+        )
+        .chain(guardrails.home_intent_detection.weak_anchor_terms.iter())
+    {
+        for token in parser::query_tokens(value) {
+            push_unique_ci(&mut ignored, &token);
+        }
+    }
+    ignored
 }
 
 fn relation_clauses(

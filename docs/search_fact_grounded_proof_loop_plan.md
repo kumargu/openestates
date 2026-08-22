@@ -81,7 +81,9 @@ The current branch implements a deterministic local pipeline:
   and area entities and performs structured constraint recall.
 - `SearchEngine` combines structured, Tantivy, and geo recall; resolves
   serving aliases and ambiguity-safe society typos; abstains on unresolved hard
-  named-entity clauses; and preserves independent result branches.
+  named-entity clauses and compact unexplained project-like prefixes; and
+  preserves independent result branches. Generic configured preference and
+  evidence prose remains searchable rather than being mistaken for a project.
 - `TextSearch` enforces the compiled constraints, requires evidence for
   required preferences, treats missing optional facts as `no_data`, ranks from
   serving facts, and creates proof focuses from the same evidence.
@@ -163,8 +165,17 @@ checks that the fact, entity, distance, feature, receipt lineage, and immutable
 serving version agree. The Hoodi Metro case passed all 13/13 checks at 12.76 ms
 endpoint p95.
 
-The next unproved boundary is cache isolation and rollback between two pinned
-materializations.
+Bundle isolation is now proved for the current experiment pair. The same
+Ajmera query returns zero against South 43, where the entity is absent, and one
+exact result against the mixed bundle, where it is present. Synthetic unknown
+project names abstain on both bundles. Search cache keys include the immutable
+serving version, zero-result entries cannot cross versions, reload clears the
+cache, and the South 43 ordered broad-query results remain unchanged when the
+mixed bundle is removed.
+
+The next useful boundary is transfer across configured required evidence,
+negative risks, and more named-place families. Do not expand society count
+again until one of those tests exposes a classified search or data gap.
 
 ## Non-Negotiable Invariants
 
@@ -428,8 +439,10 @@ Progress as of 2026-08-22:
 - complete: incomplete-society transfer, hard price/BHK/numeric gates, optional
   missing-evidence neutrality, mixed-cohort regression, and pointer isolation;
 - complete: named-place result-to-detail proof handoff;
-- next: bundle-switch cache/rollback tests;
-- later: required-evidence transfer, more fact families and paraphrases, a
+- complete: bundle-version cache isolation, South 43 rollback stability, and
+  generic abstention for project-like names absent from the active bundle;
+- next: required-evidence transfer, more fact families and paraphrases;
+- later: a
   materially larger cohort, and durable-data corrections for known category
   errors.
 
