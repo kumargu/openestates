@@ -4,13 +4,14 @@ Date: 2026-08-22
 
 ## Current assessment
 
-`buyer_language_model_complete_pause_runtime_optimization`
+`multi_decision_model_complete_pause_runtime_optimization`
 
-The original 10 conversational buyer queries and 18 additional varied-language
-queries now pass against a controlled, fact-backed product model. This is the
-right stopping point for runtime search changes: legacy search behavior remains
-green, the hardcoding audit is clean, and further tuning without a classified
-live-bundle miss would be over-optimization.
+The original 10 conversational buyer queries, 18 varied-language queries, and
+3 multi-decision ranking queries now pass against a controlled, fact-backed
+product model. This is the right stopping point for runtime search changes:
+legacy search behavior remains green, the hardcoding audit has no blocked
+findings, and further tuning without a classified live-bundle miss would be
+over-optimization.
 
 The controlled fixtures are now a first-class product specification. They
 should drive future search, DAG, API proof, comparison, and UI journey tests.
@@ -18,13 +19,14 @@ They must not be deleted or weakened to accommodate current data coverage.
 
 Latest verified checkpoint:
 
-- controlled search banks: 28/28 scenarios passed;
-- full Rust suite: 634 library tests and all integration binaries passed;
+- controlled search banks: 31/31 scenarios passed;
+- full Rust suite: 637 library tests and all integration binaries passed;
 - search efficiency: 11 passed;
 - search quality integrations: 9 passed;
 - isolated API smoke suite: 50 passed;
-- hardcoding audit: zero blocked search-config alias findings;
-- latest safety commits: `f7ae7f89` and `0779365b`.
+- frontend production build: passed;
+- hardcoding audit: zero blocked alias findings and no new production finding;
+- latest safety commits: `3197eda5` and `40dc461d`.
 
 The stale classifier-only bank was replaced by
 `search_buyer_language_v1.json`. Historical live-bundle banks were preserved;
@@ -44,6 +46,13 @@ What changed generically:
 - config-owned `rate it well` review language;
 - longest-overlap ownership for equivalent maximum-budget wording such as
   `costing no more than`.
+- config-owned ranking instructions and scope boundaries that compile an
+  ordered preference list without branching on any preference or fact key;
+- lexicographic comparison of the same fact-backed preference scores already
+  used by normal ranking, with missing evidence ranked behind present proof;
+- sentence-final decimal constraint tokenization and configured natural forms
+  such as `quietness` and `quieter`;
+- decision-only fixture candidates isolated from the original 28 scenarios.
 
 The controlled fixture remains the product-model seed. A later structural pass
 may externalize its entities, homes, places, facts, and evidence gaps into a

@@ -210,8 +210,51 @@ detail, compare, and UI journey contracts. That migration is structural work,
 not a reason to mix controlled scenarios with live Parquet banks, and it is
 deferred so this pass remains focused on search quality.
 
+### Multi-decision ranking checkpoint — 2026-08-23
+
+Three additional frozen cases in
+`data/validation/query_bank/search_decision_ranking_v1.json` extend the
+controlled product model to 31 buyer searches. They add only decision classes
+that were absent from the first two banks:
+
+- explicit lexicographic preference order, such as quietness first and
+  resident reviews second;
+- an accepted negative tradeoff with compensating positive strengths;
+- a hard numeric evidence gate followed by a separate soft ranking decision.
+
+The runtime implementation remains generic. Ranking instruction and scope
+phrases are config-owned, detected preferences become an ordered list on the
+intent contract, and the existing fact evidence scores are compared in that
+order before ordinary ranking tiers. Missing evidence never receives a
+priority score. No preference label, fact key, project, locality, or place is
+branched on in production code.
+
+The frozen cases exposed two generic intent defects: sentence-final decimal
+constraints retained punctuation (`4.2.`), and the configured quietness
+vocabulary did not include the natural forms `quietness` and `quieter`. The
+tokenizer now removes terminal sentence punctuation without damaging decimal
+values, and the vocabulary lives in the fact registry. Decision-only mock
+candidates are isolated from the original fixture so expanding a new scenario
+cannot silently change the 28 older expectations.
+
+Verification:
+
+- controlled product-model banks: 31/31 queries passed;
+- full Rust suite: 637 library tests and all integration binaries passed;
+- search efficiency contract: 11 passed;
+- search quality integrations: 9 passed;
+- isolated API smoke suite on port 4017: 50 passed;
+- frontend production build: passed;
+- production hardcoding audit: zero blocked aliases; two existing comment-only
+  `office` warnings in `geo.rs`, with no new production finding.
+
+Commits:
+
+- `3197eda5` freezes the three multi-decision buyer queries;
+- `40dc461d` implements and verifies generic ordered preference ranking.
+
 Next boundary: pause runtime search changes. When work resumes, select a small
-subset of these 28 semantic classes for a separate live-DAG transfer bank,
+subset of these 31 semantic classes for a separate live-DAG transfer bank,
 inspect promoted Parquet first, and classify each miss before changing code or
 data. Do not expand society count or catalog eligibility as part of that loop.
 
