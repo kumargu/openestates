@@ -1,10 +1,10 @@
 # Search Fact-Grounded Proof Loop — Progress Report
 
-Date: 2026-08-22
+Date: 2026-08-23
 
 ## Current assessment
 
-`multi_decision_model_complete_pause_runtime_optimization`
+`controlled_search_audited_main_synchronized_pause_runtime_optimization`
 
 The original 10 conversational buyer queries, 18 varied-language queries, and
 3 multi-decision ranking queries now pass against a controlled, fact-backed
@@ -20,13 +20,25 @@ They must not be deleted or weakened to accommodate current data coverage.
 Latest verified checkpoint:
 
 - controlled search banks: 31/31 scenarios passed;
-- full Rust suite: 637 library tests and all integration binaries passed;
+- full Rust suite: 640 library tests and all integration/doc contracts passed;
 - search efficiency: 11 passed;
 - search quality integrations: 9 passed;
-- isolated API smoke suite: 50 passed;
+- isolated API smoke suite: 50/50 passed after merging `origin/main`;
 - frontend production build: passed;
-- hardcoding audit: zero blocked alias findings and no new production finding;
-- latest safety commits: `3197eda5` and `40dc461d`.
+- overlapping Python collection/media suite: 86 passed, 1 skipped;
+- hardcoding gate: zero vocabulary, fact-key, or blocked-alias findings;
+- latest safety commits: `aeeb00c8` and `798a820e`.
+
+The final audit tightened the executable contract without changing its buyer
+decisions. Numeric ranking now preserves exact direction within configured
+threshold buckets, named-place typos reuse the existing edit-distance matcher,
+and search no longer projects `builder_delivery_rate` through a fact-key branch.
+The hardcoding audit is now a tested failing gate for production product-fact
+comparisons.
+
+The branch is synchronized with `origin/main` at `f245e7fc`. The merge keeps
+main's expanded gallery curation together with alias-aware local media lookup;
+the full post-merge backend and API suites pass. No remote branch was pushed.
 
 The stale classifier-only bank was replaced by
 `search_buyer_language_v1.json`. Historical live-bundle banks were preserved;

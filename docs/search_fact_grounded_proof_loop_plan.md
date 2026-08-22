@@ -258,6 +258,56 @@ subset of these 31 semantic classes for a separate live-DAG transfer bank,
 inspect promoted Parquet first, and classify each miss before changing code or
 data. Do not expand society count or catalog eligibility as part of that loop.
 
+### Frozen-contract audit and main synchronization — 2026-08-23
+
+The follow-up audit is complete. Every expectation in the three controlled
+query banks is now typed and asserted only when the scenario declares it. The
+fixture models production noise semantics as `LowerIsBetter`, includes a far
+metro decoy for distance enforcement, and checks hard constraints, abstention,
+optional missing evidence, proof labels, and result branches directly.
+
+The audit exposed two generic runtime defects and one product-specific
+projection:
+
+- ordered ranking previously compared threshold-bucket scores, so two numeric
+  facts inside one bucket could tie instead of preserving exact configured
+  direction;
+- named-place resolution used a weaker prefix matcher than society/entity
+  resolution, allowing `Hodi Metro` to degrade into a generic metro request;
+- search-card enrichment singled out `builder_delivery_rate` even though
+  builder evidence already ranks through generic serving metadata.
+
+The retained fixes separate display confidence from exact ranking score, reuse
+the existing edit-distance token matcher for named places, and remove the
+fact-key-specific card projection. The hardcoding audit now has a tested
+`--gate` mode that rejects production comparisons against configured product
+fact keys while allowing structural and config-driven comparisons.
+
+Branch synchronization is also complete. `origin/main` at `f245e7fc` was
+merged locally without moving or pushing a shared branch. The only content
+conflict was in external image collection: the merge preserves main's
+18-frame gallery curation and this branch's alias-aware media directory lookup.
+Branch-only Rust fixtures were updated for the expanded media contract and the
+new `media.gallery_frames` materialization.
+
+Final verification after the merge:
+
+- controlled product-model banks: 31/31 queries passed;
+- `cargo check`: passed;
+- full Rust suite: 640 library tests and all integration/doc contracts passed;
+- overlapping Python collection/media suite: 86 passed, 1 skipped;
+- frontend production build: passed;
+- production hardcoding gate: zero vocabulary, fact-key, or blocked-alias
+  findings;
+- isolated API smoke suite: 50/50 passed.
+
+Commits:
+
+- `aeeb00c8` closes the frozen-contract, scoring, typo-resolution, and audit
+  gaps;
+- `798a820e` merges `origin/main` and preserves both search and gallery
+  contracts.
+
 ## Earlier implementation checkpoint — 2026-08-22
 
 Completed and verified:
