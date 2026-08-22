@@ -767,6 +767,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     let state = Arc::new(AppState {
         search_runtime: ArcSwap::from_pointee(search_runtime),
         search_cache: SearchResponseCache::new(8),
+        intent_classifier: None,
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),
         properties: RwLock::new(properties),
@@ -1888,6 +1889,8 @@ fn search_property(id: &str, society_id: &str, society_name: &str) -> Property {
         listing_type: "Resale".to_string(),
         bhk: 3,
         price: 18_000_000,
+        price_min: None,
+        price_max: None,
         price_per_sqft: 12_000,
         carpet_area_sqft: 1_200,
         super_builtup_sqft: 1_500,

@@ -3,12 +3,14 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use backend::assets::KgSocietyViewMaterializer;
 use backend::data_loader::runtime_snapshot_from_serving_bundle;
+use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
     FactSource, FactValue, ScoringDirection, ScoringHint, SourceType, SourcedFact,
 };
 use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::LakeStore;
+use backend::search::SearchEngine;
 use backend::serving::{SearchServingBundleMaterializer, ServingBundleLoader};
 use backend::state::{SearchCacheKey, SearchResponseCache};
 use chrono::Utc;
@@ -58,6 +60,87 @@ async fn current_serving_bundle_loads_hydrates_and_recalls_entities() {
         repeated_hits, hits,
         "repeated queries should be stable through the reusable Tantivy reader"
     );
+}
+
+#[tokio::test]
+async fn society_alias_groups_survive_build_parquet_load_and_search() {
+    let lake_root = tempdir().unwrap();
+    let cache_root = tempdir().unwrap();
+    let lake = LakeStore::local(lake_root.path()).unwrap();
+    let graph = alias_search_graph();
+
+    let kg_materialization = KgSocietyViewMaterializer::new(lake.clone())
+        .materialize_and_promote(&graph, "alias-e2e", Vec::new(), Vec::new())
+        .await
+        .unwrap();
+    SearchServingBundleMaterializer::new(lake.clone())
+        .materialize_and_promote_from_kg_view(&kg_materialization, "alias-e2e")
+        .await
+        .unwrap();
+    let loaded = Arc::new(
+        ServingBundleLoader::new(lake, cache_root.path())
+            .load_current_search_bundle()
+            .await
+            .unwrap()
+            .unwrap(),
+    );
+
+    assert_eq!(
+        loaded
+            .entity_alias_index
+            .get("Folium")
+            .expect("Folium phase-family alias")
+            .members
+            .len(),
+        4
+    );
+    assert!(loaded.entity_alias_index.get("Waterford").is_some());
+    assert!(loaded.entity_alias_index.get("Central").is_none());
+
+    let snapshot = runtime_snapshot_from_serving_bundle(loaded);
+    let search = |query| {
+        SearchEngine {
+            properties: &snapshot.properties,
+            search_index: &snapshot.search_index,
+            serving_bundle: Some(&snapshot.bundle),
+            society_names: &snapshot.society_names,
+            property_by_id: Some(&snapshot.property_by_id),
+            societies: &snapshot.societies,
+            graph: None,
+            intent_classifier: None,
+        }
+        .search(query)
+    };
+
+    let waterford = search("Waterford 4BHK");
+    assert_eq!(waterford.results.len(), 1);
+    assert_eq!(waterford.results[0].card.society_name, "Prestige Waterford");
+
+    let folium = search("Folium 3BHK");
+    assert_eq!(folium.eligible_result_count, 4);
+    assert_eq!(
+        folium
+            .results
+            .iter()
+            .map(|result| result.card.society_name.as_str())
+            .collect::<std::collections::BTreeSet<_>>(),
+        [
+            "FOLIUM BY SUMADHURA PHASE-I",
+            "FOLIUM BY SUMADHURA PHASE-II",
+            "FOLIUM BY SUMADHURA PHASE-III",
+            "FOLIUM BY SUMADHURA PHASE-IV",
+        ]
+        .into_iter()
+        .collect()
+    );
+
+    let central = search("3BHK central Bangalore");
+    assert!(central
+        .diagnostics
+        .resolved
+        .entities
+        .iter()
+        .all(|entity| entity.entity_id != "society:century-central"));
 }
 
 #[tokio::test]
@@ -220,7 +303,87 @@ fn mock_graph() -> KnowledgeGraph {
     graph
 }
 
+fn alias_search_graph() -> KnowledgeGraph {
+    let mut graph = KnowledgeGraph::new();
+    let societies = [
+        (
+            "society:prestige-waterford",
+            "Prestige Waterford",
+            "builder:prestige",
+            4,
+        ),
+        (
+            "society:folium-i",
+            "FOLIUM BY SUMADHURA PHASE-I",
+            "builder:sumadhura",
+            3,
+        ),
+        (
+            "society:folium-ii",
+            "FOLIUM BY SUMADHURA PHASE-II",
+            "builder:sumadhura",
+            3,
+        ),
+        (
+            "society:folium-iii",
+            "FOLIUM BY SUMADHURA PHASE-III",
+            "builder:sumadhura",
+            3,
+        ),
+        (
+            "society:folium-iv",
+            "FOLIUM BY SUMADHURA PHASE-IV",
+            "builder:sumadhura",
+            3,
+        ),
+        (
+            "society:century-central",
+            "Century Central",
+            "builder:century",
+            3,
+        ),
+    ];
+    for (index, (society_id, name, builder_id, bhk)) in societies.iter().enumerate() {
+        let mut society = Node::new(*society_id, NodeType::Society, *name);
+        society.root_source = Some(RootSource::Rera);
+        add_serving_eligibility_facts_for_bhk(
+            &mut society,
+            &format!("/media/alias-{index}.webp"),
+            *bhk,
+        );
+        graph.add_node(society);
+        graph.add_edge(Edge {
+            from: (*society_id).to_string(),
+            to: (*builder_id).to_string(),
+            relation: Relation::BuiltBy,
+            weight: 1.0,
+            metadata: Default::default(),
+            source: FactSource {
+                source_type: SourceType::Rera,
+                url: None,
+                model: None,
+                skill_id: None,
+                triggered_by: None,
+            },
+        });
+    }
+    for (id, name) in [
+        ("builder:prestige", "Prestige Estates"),
+        ("builder:sumadhura", "Sumadhura Infracon"),
+        ("builder:century", "Century Real Estate"),
+    ] {
+        let mut builder = Node::new(id, NodeType::Builder, name);
+        builder.root_source = Some(RootSource::Rera);
+        graph.add_node(builder);
+    }
+    graph
+}
+
 fn add_serving_eligibility_facts(node: &mut Node, hero_image: &str) {
+    add_serving_eligibility_facts_for_bhk(node, hero_image, 3);
+}
+
+fn add_serving_eligibility_facts_for_bhk(node: &mut Node, hero_image: &str, bhk: u32) {
     for (key, value) in [
         ("rera_registered", FactValue::Bool(true)),
         (
@@ -230,7 +393,11 @@ fn add_serving_eligibility_facts(node: &mut Node, hero_image: &str) {
         ("area", FactValue::Text("Whitefield".to_string())),
         ("builder_name", FactValue::Text("Test Builder".to_string())),
         (
-            "listing_3bhk",
+            if bhk == 4 {
+                "listing_4bhk"
+            } else {
+                "listing_3bhk"
+            },
             FactValue::Text(
                 serde_json::json!({"price": 12_000_000.0, "area_sqft": 1_200.0}).to_string(),
             ),

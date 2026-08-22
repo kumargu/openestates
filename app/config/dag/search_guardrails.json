@@ -214,6 +214,12 @@
         "Family home near metro",
         "Legal-safe apartment under 1.5Cr"
       ]
+    },
+    "named_society_alternatives": {
+      "mode": "named_society_alternatives",
+      "title": "No matching {society} listing found; showing alternatives.",
+      "message": "These homes keep your remaining constraints.",
+      "suggestions": []
     }
   }
 }

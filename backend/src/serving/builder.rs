@@ -15,19 +15,19 @@ use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
 use crate::search::schema;
 
 use super::parquet::{
-    write_edges_parquet, write_entities_parquet, write_facts_parquet, write_rera_evidence_parquet,
-    write_search_metadata_parquet, ParquetWriteError,
+    write_edges_parquet, write_entities_parquet, write_entity_aliases_parquet, write_facts_parquet,
+    write_rera_evidence_parquet, write_search_metadata_parquet, ParquetWriteError,
 };
 use super::proximity::derive_proximity_records;
 use super::tantivy_index::{TantivyIndexError, TantivyRecallIndex};
 use super::{
-    unique_society_aliases, BundleArtifact, BundleArtifactKind, ServingBundleManifest,
-    ServingBundleSchema, ServingColumnSchema, ServingEdgeRecord, ServingEntityRecord,
-    ServingFactRecord, ServingReraEvidenceRecord, ServingSearchMetadataRecord, ServingTableSchema,
-    TrustPolicy,
+    materialize_society_aliases, unique_society_aliases, BundleArtifact, BundleArtifactKind,
+    ServingBundleManifest, ServingBundleSchema, ServingColumnSchema, ServingEdgeRecord,
+    ServingEntityRecord, ServingFactRecord, ServingReraEvidenceRecord, ServingSearchMetadataRecord,
+    ServingTableSchema, TrustPolicy,
 };
 
-pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 7;
+pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 8;
 
 #[derive(Clone)]
 pub struct ServingBundleBuilder {
@@ -172,6 +172,8 @@ impl ServingBundleBuilder {
         excluded_rera_evidence_society_ids.sort();
         excluded_rera_evidence_society_ids.dedup();
         validate_serving_records(&entities, &facts, &search_metadata, &edges)?;
+        let entity_aliases = materialize_society_aliases(&entities, &edges)
+            .map_err(|err| ServingBundleError::InvalidRecords(err.to_string()))?;
         if let Err(err) = write_preference_coverage_report(&entities, &facts, &search_metadata) {
             eprintln!("preference coverage report skipped: {err}");
         }
@@ -185,6 +187,22 @@ impl ServingBundleBuilder {
             entity_meta,
             "application/vnd.apache.parquet",
             Some(entities.len() as u64),
+        ));
+
+        let entity_alias_key = AssetPathBuilder::serving_bundle_key(
+            &bundle_version,
+            "entity_aliases/part-00000.parquet",
+        );
+        let entity_alias_bytes = write_entity_aliases_parquet(&entity_aliases)?;
+        let entity_alias_meta = self
+            .lake
+            .put_bytes(&entity_alias_key, entity_alias_bytes)
+            .await?;
+        artifacts.push(artifact(
+            BundleArtifactKind::EntityAliasesParquet,
+            entity_alias_meta,
+            "application/vnd.apache.parquet",
+            Some(entity_aliases.len() as u64),
         ));
 
         let fact_key =
@@ -287,6 +305,7 @@ impl ServingBundleBuilder {
             format_version: SERVING_BUNDLE_FORMAT_VERSION,
             created_at: Utc::now(),
             entity_count: entities.len() as u64,
+            entity_alias_count: entity_aliases.len() as u64,
             fact_count: facts.len() as u64,
             search_metadata_count: search_metadata.len() as u64,
             rera_evidence_count: rera_evidence.len() as u64,
@@ -296,6 +315,7 @@ impl ServingBundleBuilder {
             quarantined_society_count: quarantine.excluded_society_count,
             quarantine_reason_counts: quarantine.reason_counts.clone(),
             entity_parquet_key: entity_key.to_string(),
+            entity_alias_parquet_key: Some(entity_alias_key.to_string()),
             fact_parquet_key: fact_key.to_string(),
             search_metadata_parquet_key: search_metadata_key.to_string(),
             rera_evidence_parquet_key: Some(rera_evidence_key.to_string()),
@@ -515,6 +535,18 @@ pub fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSch
                     required_column("name", "utf8"),
                     optional_column("root_source", "utf8"),
                     required_column("searchable_text", "utf8"),
+                ],
+            },
+            ServingTableSchema {
+                name: "entity_aliases".to_string(),
+                path: "entity_aliases/part-00000.parquet".to_string(),
+                columns: vec![
+                    required_column("alias", "utf8"),
+                    required_column("normalized_alias", "utf8"),
+                    required_column("entity_id", "utf8"),
+                    required_column("entity_type", "utf8"),
+                    required_column("entity_name", "utf8"),
+                    required_column("source", "utf8"),
                 ],
             },
             ServingTableSchema {

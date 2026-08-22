@@ -116,13 +116,17 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/manifest.json").unwrap();
     let manifest_body = lake.get_text(&manifest_key).await.unwrap();
     let manifest_json: serde_json::Value = serde_json::from_str(&manifest_body).unwrap();
-    assert_eq!(manifest_json["format_version"], 7);
+    assert_eq!(manifest_json["format_version"], 8);
+    assert!(manifest_json["entity_alias_parquet_key"]
+        .as_str()
+        .is_some_and(|key| key.ends_with("entity_aliases/part-00000.parquet")));
 
     let schema_key =
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/schema.json").unwrap();
     let schema_body = lake.get_text(&schema_key).await.unwrap();
     let schema_json: serde_json::Value = serde_json::from_str(&schema_body).unwrap();
     assert_eq!(schema_json["storage_format"], "parquet+tantivy");
+    assert!(schema_body.contains("\"entity_aliases\""));
     assert!(schema_body.contains("\"value_number\""));
     assert!(schema_body.contains("\"answers_preferences\""));
     assert!(!schema_body.contains("value_json"));

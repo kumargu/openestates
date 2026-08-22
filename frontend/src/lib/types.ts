@@ -20,6 +20,8 @@ export type PropertyCard = {
   title: string;
   area: string;
   price: number;
+  price_min?: number;
+  price_max?: number;
   price_per_sqft: number;
   bhk: number;
   sqft: number;
@@ -184,6 +186,8 @@ export type PropertyDetailResponse = {
     listing_type: string;
     bhk: number;
     price: number;
+    price_min?: number;
+    price_max?: number;
     price_per_sqft: number;
     carpet_area_sqft: number;
     super_builtup_sqft: number;
@@ -924,9 +928,23 @@ export type UpcomingLaunchCard = {
   sponsored: boolean;
 };
 
+export type SearchSourceSpan = {
+  start: number;
+  end: number;
+  raw_text?: string;
+};
+
 export type SearchIntent = {
   area: string | null;
+  excluded_areas?: string[];
+  excluded_societies?: string[];
+  excluded_builders?: string[];
+  areas?: string[];
   bhk: number | null;
+  bhks?: number[];
+  exclude_bhks?: number[];
+  bhk_spans?: SearchSourceSpan[];
+  budget_min?: number | null;
   budget_max: number | null;
   hard_constraints?: HardConstraint[];
   preferences: string[];
@@ -937,7 +955,7 @@ export type SearchIntent = {
 
 export type HardConstraint = {
   field: string;
-  operator: "min";
+  operator: "min" | "max";
   value: number;
   unit: string;
   raw_text: string;
@@ -1062,6 +1080,8 @@ export type SearchResponse = {
   intent: SearchIntent;
   results: SearchResultItem[];
   area_context: SearchAreaContext | null;
+  eligible_results: number;
+  results_returned: number;
   total_results: number;
   focus?: SearchResultFocus | null;
   knowledge_context: KnowledgeContext | null;

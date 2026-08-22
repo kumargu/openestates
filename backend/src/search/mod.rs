@@ -1,25 +1,34 @@
 pub mod analyzer;
+pub mod ast;
 pub mod engine;
 pub mod focus;
 pub mod geo;
 pub mod guard;
 pub mod index;
 pub mod intent;
+pub mod intent_classifier;
 pub(crate) mod parser;
 pub(crate) mod query_plan;
 pub mod resolver;
 pub mod schema;
 pub mod text;
 
+pub use ast::{CompiledQuery, ConstraintExpr, ConstraintTerm};
 pub use engine::{
     CandidateScore, SearchDiagnostics, SearchEngine, SearchEvidenceGap, SearchLayerTiming,
     SearchRecallDiagnostics, SearchRelaxation,
 };
 pub use focus::{build_search_result_focus, FocusBuildInputs, SearchResultFocus};
-pub use guard::{guard_search_query, no_results_guidance, SearchGuidance};
+pub use guard::{
+    guard_search_query, named_society_alternatives_guidance, no_results_guidance, SearchGuidance,
+};
 pub use index::SearchIndex;
-pub use intent::SearchIntent;
-pub use text::TextSearch;
+pub use intent::{SearchIntent, SourceSpan};
+pub use intent_classifier::{
+    FastTextIntentClassifier, IntentClassifierDecision, IntentClassifierEvaluationReport,
+    IntentClassifierTrace,
+};
+pub use text::{TextSearch, TextSearchRequest};
 
 use serde::Serialize;
 
@@ -141,6 +150,11 @@ pub struct SearchResponse {
     pub intent: SearchIntent,
     pub results: Vec<SearchResultCard>,
     pub area_context: Option<AreaProfile>,
+    /// Total properties that passed hard eligibility before response curation.
+    pub eligible_results: usize,
+    /// Number of curated result rows included in this response.
+    pub results_returned: usize,
+    /// Backward-compatible alias for `eligible_results`.
     pub total_results: usize,
     /// Journey rails: named-society focus + siblings, or ranked matches + more homes.
     #[serde(skip_serializing_if = "Option::is_none")]

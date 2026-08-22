@@ -13,6 +13,8 @@ pub struct SearchIntentFile {
     pub area_aliases: AreaAliasConfig,
     #[serde(default)]
     pub resolution: SearchResolutionConfig,
+    #[serde(default)]
+    pub classifier: IntentClassifierConfig,
     pub parser: SearchParserConfig,
 }
 
@@ -40,6 +42,10 @@ pub struct SearchResolutionConfig {
     #[serde(default)]
     pub resolvable_entity_types: Vec<String>,
     #[serde(default)]
+    pub min_partial_entity_name_chars: usize,
+    #[serde(default)]
+    pub mechanical_alias_blocked_tokens: Vec<String>,
+    #[serde(default)]
     pub named_entity_scope_prefixes: Vec<String>,
     #[serde(default)]
     pub generic_scope_nouns: Vec<String>,
@@ -57,6 +63,138 @@ pub struct SearchPlaceFamilyAlias {
     pub aliases: Vec<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum IntentClassifierMode {
+    #[default]
+    Disabled,
+    Shadow,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct IntentClassifierConfig {
+    #[serde(default)]
+    pub mode: IntentClassifierMode,
+    #[serde(default)]
+    pub artifact_path: String,
+    #[serde(default)]
+    pub held_out_path: String,
+    #[serde(default)]
+    pub minimum_probability: f32,
+    #[serde(default)]
+    pub minimum_margin: f32,
+    #[serde(default)]
+    pub minimum_training_examples_per_label: usize,
+    #[serde(default)]
+    pub maximum_clauses: usize,
+    #[serde(default)]
+    pub maximum_clause_tokens: usize,
+    #[serde(default)]
+    pub labels: Vec<IntentClassifierLabelConfig>,
+    #[serde(default)]
+    pub clause_separators: Vec<String>,
+    #[serde(default)]
+    pub training: IntentClassifierTrainingConfig,
+}
+
+impl Default for IntentClassifierConfig {
+    fn default() -> Self {
+        Self {
+            mode: IntentClassifierMode::Disabled,
+            artifact_path: String::new(),
+            held_out_path: String::new(),
+            minimum_probability: 0.72,
+            minimum_margin: 0.2,
+            minimum_training_examples_per_label: 3,
+            maximum_clauses: 4,
+            maximum_clause_tokens: 18,
+            labels: Vec::new(),
+            clause_separators: Vec::new(),
+            training: IntentClassifierTrainingConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct IntentClassifierLabelConfig {
+    pub preference: String,
+    pub polarity: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct IntentClassifierTrainingConfig {
+    #[serde(default = "default_classifier_epoch")]
+    pub epoch: i32,
+    #[serde(default = "default_classifier_learning_rate")]
+    pub learning_rate: f64,
+    #[serde(default = "default_classifier_dimension")]
+    pub dimension: i32,
+    #[serde(default = "default_classifier_word_ngrams")]
+    pub word_ngrams: i32,
+    #[serde(default = "default_classifier_min_character_ngrams")]
+    pub min_character_ngrams: i32,
+    #[serde(default = "default_classifier_max_character_ngrams")]
+    pub max_character_ngrams: i32,
+    #[serde(default = "default_classifier_bucket")]
+    pub bucket: i32,
+    #[serde(default = "default_classifier_thread")]
+    pub thread: i32,
+    #[serde(default = "default_classifier_seed")]
+    pub seed: i32,
+}
+
+impl Default for IntentClassifierTrainingConfig {
+    fn default() -> Self {
+        Self {
+            epoch: default_classifier_epoch(),
+            learning_rate: default_classifier_learning_rate(),
+            dimension: default_classifier_dimension(),
+            word_ngrams: default_classifier_word_ngrams(),
+            min_character_ngrams: default_classifier_min_character_ngrams(),
+            max_character_ngrams: default_classifier_max_character_ngrams(),
+            bucket: default_classifier_bucket(),
+            thread: default_classifier_thread(),
+            seed: default_classifier_seed(),
+        }
+    }
+}
+
+const fn default_classifier_epoch() -> i32 {
+    50
+}
+
+const fn default_classifier_learning_rate() -> f64 {
+    0.5
+}
+
+const fn default_classifier_dimension() -> i32 {
+    48
+}
+
+const fn default_classifier_word_ngrams() -> i32 {
+    2
+}
+
+const fn default_classifier_min_character_ngrams() -> i32 {
+    3
+}
+
+const fn default_classifier_max_character_ngrams() -> i32 {
+    6
+}
+
+const fn default_classifier_bucket() -> i32 {
+    50_000
+}
+
+const fn default_classifier_thread() -> i32 {
+    1
+}
+
+const fn default_classifier_seed() -> i32 {
+    42
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct SearchParserConfig {
     pub bhk: BhkParserConfig,
@@ -71,6 +209,10 @@ pub struct BhkParserConfig {
     pub number_words: Vec<NumberWord>,
     pub min: u32,
     pub max: u32,
+    #[serde(default)]
+    pub alternative_joiners: Vec<String>,
+    #[serde(default)]
+    pub exclusion_gap_tokens: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -82,6 +224,10 @@ pub struct NumberWord {
 #[derive(Debug, Clone, Deserialize)]
 pub struct UnitValueParserConfig {
     pub operators: Vec<String>,
+    #[serde(default)]
+    pub min_operators: Vec<String>,
+    #[serde(default)]
+    pub range_connectors: Vec<String>,
     pub units: Vec<UnitAliasConfig>,
 }
 
@@ -151,6 +297,15 @@ pub fn search_parser_config() -> &'static SearchParserConfig {
     })
 }
 
+pub fn intent_classifier_config() -> &'static IntentClassifierConfig {
+    static CONFIG: OnceLock<IntentClassifierConfig> = OnceLock::new();
+    CONFIG.get_or_init(|| {
+        load_search_intent()
+            .map(|file| file.classifier)
+            .expect("search_intent.json classifier config must load and validate")
+    })
+}
+
 fn validate_search_intent_file(file: &SearchIntentFile) -> Result<(), DagConfigError> {
     validate_aliases(
         "resolution.named_entity_scope_prefixes",
@@ -160,7 +315,61 @@ fn validate_search_intent_file(file: &SearchIntentFile) -> Result<(), DagConfigE
             .map(String::as_str),
     )
     .map_err(DagConfigError::InvalidConfig)?;
+    validate_classifier_config(&file.classifier).map_err(DagConfigError::InvalidConfig)?;
     validate_parser_config(&file.parser).map_err(DagConfigError::InvalidConfig)
+}
+
+fn validate_classifier_config(config: &IntentClassifierConfig) -> Result<(), String> {
+    if config.mode != IntentClassifierMode::Disabled {
+        if config.artifact_path.trim().is_empty() {
+            return Err("classifier.artifact_path must not be empty when enabled".to_string());
+        }
+        if config.held_out_path.trim().is_empty() {
+            return Err("classifier.held_out_path must not be empty when enabled".to_string());
+        }
+    }
+    if !(0.0..=1.0).contains(&config.minimum_probability)
+        || !(0.0..=1.0).contains(&config.minimum_margin)
+    {
+        return Err("classifier probability and margin must be within 0..=1".to_string());
+    }
+    if config.maximum_clauses == 0 || config.maximum_clause_tokens == 0 {
+        return Err("classifier clause limits must be positive".to_string());
+    }
+    let mut label_ids = HashSet::new();
+    for label in &config.labels {
+        let preference = label.preference.trim();
+        let polarity = label.polarity.trim().to_ascii_lowercase();
+        if preference.is_empty() || !matches!(polarity.as_str(), "positive" | "negative") {
+            return Err(
+                "classifier labels require a preference and positive/negative polarity".to_string(),
+            );
+        }
+        if !label_ids.insert((preference.to_ascii_lowercase(), polarity)) {
+            return Err(format!(
+                "classifier label is duplicated: {} {}",
+                label.polarity, label.preference
+            ));
+        }
+    }
+    if config.mode != IntentClassifierMode::Disabled && config.labels.is_empty() {
+        return Err("classifier.labels must not be empty when enabled".to_string());
+    }
+    if config.training.epoch <= 0
+        || config.training.dimension <= 0
+        || config.training.word_ngrams <= 0
+        || config.training.min_character_ngrams < 0
+        || config.training.max_character_ngrams < config.training.min_character_ngrams
+        || config.training.bucket <= 0
+        || config.training.thread <= 0
+        || config.training.learning_rate <= 0.0
+    {
+        return Err("classifier training settings must be positive and ordered".to_string());
+    }
+    validate_aliases(
+        "classifier.clause_separators",
+        config.clause_separators.iter().map(String::as_str),
+    )
 }
 
 fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
@@ -192,6 +401,12 @@ fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
             .iter()
             .map(|entry| entry.word.as_str()),
     )?;
+    if !config.bhk.alternative_joiners.is_empty() {
+        validate_aliases(
+            "parser.bhk.alternative_joiners",
+            config.bhk.alternative_joiners.iter().map(String::as_str),
+        )?;
+    }
     validate_unit_value_config("parser.budget", &config.budget, true)?;
     validate_unit_value_config("parser.distance", &config.distance, true)?;
     if config.relations.aliases.is_empty() {
@@ -229,6 +444,18 @@ fn validate_unit_value_config(
     }
     if config.units.is_empty() {
         return Err(format!("{label}.units must not be empty"));
+    }
+    if !config.min_operators.is_empty() {
+        validate_aliases(
+            &format!("{label}.min_operators"),
+            config.min_operators.iter().map(String::as_str),
+        )?;
+    }
+    if !config.range_connectors.is_empty() {
+        validate_aliases(
+            &format!("{label}.range_connectors"),
+            config.range_connectors.iter().map(String::as_str),
+        )?;
     }
     for unit in &config.units {
         if unit.unit.trim().is_empty() {
@@ -393,6 +620,9 @@ mod tests {
             .entries
             .iter()
             .any(|entry| entry.canonical == "Whitefield"));
+        assert_eq!(file.classifier.mode, IntentClassifierMode::Shadow);
+        assert!(!file.classifier.labels.is_empty());
+        assert!(file.classifier.minimum_probability >= 0.72);
     }
 
     #[test]

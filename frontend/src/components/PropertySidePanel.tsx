@@ -15,13 +15,7 @@ import { ProjectStatusTag } from "./ProjectStatusTag.tsx";
 import { DataFreshnessBadge } from "./DataFreshnessBadge.tsx";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
 import { isRedundantHomeState } from "../lib/property-signals.ts";
-
-function formatPrice(price: number): string {
-  if (!hasKnownNumber(price)) return "Price unavailable";
-  if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
-  if (price >= 100_000) return `\u20B9${(price / 100_000).toFixed(1)} L`;
-  return `\u20B9${price.toLocaleString("en-IN")}`;
-}
+import { formatListingPrice } from "../lib/listing-price.ts";
 
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -199,7 +193,7 @@ export function PropertySidePanel({ propertyId, card, onClose }: Props) {
           </div>
 
           <div className="side-panel-price-row">
-            <span className="side-panel-price">{formatPrice(card.price)}</span>
+            <span className="side-panel-price">{formatListingPrice(card)}</span>
             {hasKnownNumber(card.price_per_sqft) && (
               <span className="side-panel-ppsqft">
                 {card.price_per_sqft.toLocaleString("en-IN")} /sqft

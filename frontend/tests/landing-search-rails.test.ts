@@ -324,6 +324,39 @@ test("a home appears in the first rail it qualifies for", () => {
   assert.deepEqual(quietRail?.results.map((item) => item.id), ["quiet-only"]);
 });
 
+test("budget leftover rails keep homes whose listing band overlaps", () => {
+  const primary = result({ id: "primary", bhk: 3, society_name: "Primary" });
+  const overlap = result({
+    id: "overlap",
+    bhk: 3,
+    price: 32_250_000,
+    price_min: 30_000_000,
+    price_max: 48_000_000,
+    society_name: "Lakefront",
+  });
+  const tooHigh = result({
+    id: "too-high",
+    bhk: 3,
+    price: 50_000_000,
+    price_min: 49_000_000,
+    price_max: 55_000_000,
+    society_name: "Premium",
+  });
+
+  const rails = composeLandingSearchRails(response({
+    intent: { budget_max: 31_000_000 },
+    focus: {
+      mode: "ranked_matches",
+      focus_results: [primary],
+      more_homes: [overlap, tooHigh],
+    },
+    results: [primary, overlap, tooHigh],
+  }));
+
+  const budgetRail = rails.find((rail) => rail.id === "budget");
+  assert.deepEqual(budgetRail?.results.map((item) => item.id), ["overlap"]);
+});
+
 test("formatBudgetInr keeps buyer-facing crore labels short", () => {
   assert.equal(formatBudgetInr(25_000_000), "₹2.5Cr");
   assert.equal(formatBudgetInr(30_000_000), "₹3Cr");

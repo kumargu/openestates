@@ -48,13 +48,7 @@ import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
 import { isRedundantHomeState } from "../lib/property-signals.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
-
-function formatPrice(price: number): string {
-  if (!hasKnownNumber(price)) return "Price unavailable";
-  if (price >= 10_000_000) return `₹${(price / 10_000_000).toFixed(1)} Cr`;
-  if (price >= 100_000) return `₹${(price / 100_000).toFixed(1)} L`;
-  return `₹${price.toLocaleString("en-IN")}`;
-}
+import { formatListingPrice } from "../lib/listing-price.ts";
 
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -191,6 +185,8 @@ function propertyToCard(data: PropertyDetailResponse): PropertyCard {
     title: p.title,
     area: p.area,
     price: p.price,
+    price_min: p.price_min,
+    price_max: p.price_max,
     price_per_sqft: p.price_per_sqft,
     bhk: p.bhk,
     sqft: p.super_builtup_sqft || p.carpet_area_sqft || 0,
@@ -616,7 +612,7 @@ function NearbyHomeCard({
         <strong>{title}</strong>
         <span>{note}</span>
         <em>
-          {formatPrice(property.price)}
+          {formatListingPrice(property)}
           {formatGoogleRating(property.google_rating)
             ? ` · ★ ${formatGoogleRating(property.google_rating)}`
             : ""}
@@ -962,7 +958,7 @@ function PropertyPageBody({
     `${p.bhk} BHK`,
     sizeLabel,
     `in ${society?.name ? society.name + ", " : ""}${p.area}`,
-    hasKnownNumber(p.price) ? formatPrice(p.price) : null,
+    hasKnownNumber(p.price) ? formatListingPrice(p) : null,
     pricePerSqftLabel,
     `${p.area}, ${p.city}`,
   ]
@@ -1075,7 +1071,7 @@ function PropertyPageBody({
 
       <div className="property-clean-facts" aria-label="Home summary">
         <div className="property-clean-meta">
-          <span>{formatPrice(p.price)}</span>
+          <span>{formatListingPrice(p)}</span>
           <span>{p.bhk} BHK</span>
           {sizeLabel && <span>{sizeLabel}</span>}
           {compactStatusRead && <span>{compactStatusRead}</span>}

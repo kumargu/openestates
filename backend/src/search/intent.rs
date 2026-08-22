@@ -2,6 +2,15 @@ use serde::{Deserialize, Serialize};
 
 use super::query_plan;
 
+/// Byte span in the original buyer query, preserved for safe query editing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceSpan {
+    pub start: usize,
+    pub end: usize,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub raw_text: String,
+}
+
 /// Parsed intent from a natural-language search query.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchIntent {
@@ -9,7 +18,27 @@ pub struct SearchIntent {
     /// Broad regions explicitly rejected by the buyer, e.g. "not South Bengaluru".
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub excluded_areas: Vec<String>,
+    /// Named societies/projects explicitly rejected by the buyer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_societies: Vec<String>,
+    /// Named builders explicitly rejected by the buyer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_builders: Vec<String>,
+    /// Positive area alternatives. A home matches if it is in any of these areas.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub areas: Vec<String>,
     pub bhk: Option<u32>,
+    /// Positive BHK alternatives. A home matches if its BHK is in this set.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bhks: Vec<u32>,
+    /// BHK values the buyer explicitly rejected, e.g. "not 4 BHK".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exclude_bhks: Vec<u32>,
+    /// Source spans for BHK clauses used by buyer-facing query relaxation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bhk_spans: Vec<SourceSpan>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_min: Option<u64>,
     pub budget_max: Option<u64>,
     /// Evidence-backed constraints that must be proven by structured/local facts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -30,6 +59,51 @@ pub struct SearchIntent {
     pub unsupported_inventory_types: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub buyer_archetype: Option<BuyerArchetype>,
+}
+
+impl Default for SearchIntent {
+    fn default() -> Self {
+        Self {
+            area: None,
+            excluded_areas: Vec::new(),
+            excluded_societies: Vec::new(),
+            excluded_builders: Vec::new(),
+            areas: Vec::new(),
+            bhk: None,
+            bhks: Vec::new(),
+            exclude_bhks: Vec::new(),
+            bhk_spans: Vec::new(),
+            budget_min: None,
+            budget_max: None,
+            hard_constraints: Vec::new(),
+            preferences: Vec::new(),
+            positive_preferences: Vec::new(),
+            negative_preferences: Vec::new(),
+            accepted_tradeoffs: Vec::new(),
+            unsupported_inventory_types: Vec::new(),
+            buyer_archetype: None,
+        }
+    }
+}
+
+impl SearchIntent {
+    /// Areas the buyer will accept. Falls back to the single `area` slot.
+    pub fn requested_areas(&self) -> Vec<&str> {
+        if !self.areas.is_empty() {
+            self.areas.iter().map(String::as_str).collect()
+        } else {
+            self.area.as_deref().into_iter().collect()
+        }
+    }
+
+    /// BHK values the buyer will accept. Falls back to the single `bhk` slot.
+    pub fn requested_bhks(&self) -> Vec<u32> {
+        if !self.bhks.is_empty() {
+            self.bhks.clone()
+        } else {
+            self.bhk.into_iter().collect()
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -93,7 +167,68 @@ mod tests {
     fn test_parse_bhk() {
         let intent = parse_intent("3bhk in east bangalore");
         assert_eq!(intent.bhk, Some(3));
+        assert_eq!(intent.bhks, vec![3]);
         assert_eq!(intent.area.as_deref(), Some("East Bengaluru"));
+        assert_eq!(intent.areas, vec!["East Bengaluru".to_string()]);
+    }
+
+    #[test]
+    fn bhk_alternatives_are_kept_as_a_set() {
+        let intent = parse_intent("2 or 3 BHK in East Bengaluru");
+        assert_eq!(intent.bhk, None);
+        assert_eq!(intent.bhks, vec![2, 3]);
+        assert_eq!(intent.area.as_deref(), Some("East Bengaluru"));
+    }
+
+    #[test]
+    fn excluded_bhk_is_kept_off_the_include_set() {
+        let intent = parse_intent("2 or 3 BHK, not 4 BHK");
+        assert_eq!(intent.bhks, vec![2, 3]);
+        assert_eq!(intent.exclude_bhks, vec![4]);
+        assert_eq!(intent.bhk, None);
+        assert_eq!(intent.bhk_spans.len(), 3);
+        assert!(
+            intent
+                .preferences
+                .iter()
+                .all(|preference| { !preference.contains("bhk configuration") }),
+            "parsed BHK clauses should not also score as configuration preferences: {:?}",
+            intent.preferences
+        );
+    }
+
+    #[test]
+    fn parsed_bhk_is_not_also_a_configuration_preference() {
+        let intent = parse_intent("2 or 3 BHK in Whitefield");
+        assert_eq!(intent.bhks, vec![2, 3]);
+        assert!(
+            !intent
+                .preferences
+                .iter()
+                .any(|preference| preference.contains("bhk configuration")),
+            "got {:?}",
+            intent.preferences
+        );
+        let single = parse_intent("3BHK Whitefield under 2Cr");
+        assert_eq!(single.bhk, Some(3));
+        assert!(
+            !single
+                .preferences
+                .iter()
+                .any(|preference| preference.contains("bhk configuration")),
+            "got {:?}",
+            single.preferences
+        );
+    }
+
+    #[test]
+    fn area_alternatives_are_kept_as_a_set() {
+        let intent = parse_intent("3BHK in East Bengaluru or South Bengaluru");
+        assert_eq!(intent.bhk, Some(3));
+        assert_eq!(intent.area, None);
+        assert_eq!(intent.areas.len(), 2);
+        assert!(intent.areas.iter().any(|area| area == "East Bengaluru"));
+        assert!(intent.areas.iter().any(|area| area == "South Bengaluru"));
     }
 
     #[test]
@@ -269,8 +404,27 @@ mod tests {
     #[test]
     fn test_parse_budget() {
         let intent = parse_intent("under 1.5cr in south bangalore");
+        assert_eq!(intent.budget_min, None);
         assert_eq!(intent.budget_max, Some(15_000_000));
         assert_eq!(intent.area.as_deref(), Some("South Bengaluru"));
+    }
+
+    #[test]
+    fn parses_budget_minimum_without_collapsing_to_max() {
+        let intent = parse_intent("Budget above 1.5Cr");
+        assert_eq!(intent.budget_min, Some(15_000_000));
+        assert_eq!(intent.budget_max, None);
+    }
+
+    #[test]
+    fn parses_budget_ranges() {
+        let dash = parse_intent("1.5–2Cr budget");
+        assert_eq!(dash.budget_min, Some(15_000_000));
+        assert_eq!(dash.budget_max, Some(20_000_000));
+
+        let between = parse_intent("Between 1.8Cr and 2.2Cr");
+        assert_eq!(between.budget_min, Some(18_000_000));
+        assert_eq!(between.budget_max, Some(22_000_000));
     }
 
     #[test]
@@ -287,6 +441,7 @@ mod tests {
     fn test_parse_budget_lakhs() {
         let intent = parse_intent("3 bhk below 80l");
         assert_eq!(intent.bhk, Some(3));
+        assert_eq!(intent.budget_min, None);
         assert_eq!(intent.budget_max, Some(8_000_000));
     }
 

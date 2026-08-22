@@ -1,7 +1,8 @@
 use crate::dag_config::{area_alias_entries, search_parser_config, search_resolution_config};
 
-use super::intent::{BuyerArchetype, Polarity, PreferenceSignal, SearchIntent};
-use super::{parser, schema};
+use super::intent::{BuyerArchetype, Polarity, PreferenceSignal, SearchIntent, SourceSpan};
+use super::parser::{self, SlotPolarity};
+use super::schema;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct QueryPlan {
@@ -9,7 +10,13 @@ pub(crate) struct QueryPlan {
     pub tokens: Vec<QueryToken>,
     pub areas: Vec<AreaMention>,
     pub clauses: Vec<QueryRelationClause>,
+    pub evidence: Vec<schema::HardConstraintSpanMatch>,
     pub owned_spans: Vec<OwnedSpan>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AlternativeClauseLayout {
+    pub segments: Vec<ByteSpan>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,6 +73,7 @@ pub(crate) struct OwnedSpan {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SpanOwner {
     Area,
+    Bhk,
 }
 
 pub(crate) fn compile_query_plan(query: &str) -> QueryPlan {
@@ -73,6 +81,7 @@ pub(crate) fn compile_query_plan(query: &str) -> QueryPlan {
     let tokens = query_tokens_with_spans(query);
     let areas = detect_area_mentions(query);
     let clauses = relation_clauses(query, &tokens, &slots);
+    let evidence = schema::detect_hard_constraint_spans(query);
     let mut owned_spans = Vec::new();
     for area in &areas {
         owned_spans.push(OwnedSpan {
@@ -80,13 +89,111 @@ pub(crate) fn compile_query_plan(query: &str) -> QueryPlan {
             owner: SpanOwner::Area,
         });
     }
+    for slot in &slots.bhks {
+        if slot.end > slot.start {
+            owned_spans.push(OwnedSpan {
+                span: ByteSpan {
+                    start: slot.start,
+                    end: slot.end,
+                },
+                owner: SpanOwner::Bhk,
+            });
+        }
+    }
     QueryPlan {
         slots,
         tokens,
         areas,
         clauses,
+        evidence,
         owned_spans,
     }
+}
+
+impl QueryPlan {
+    pub(crate) fn alternative_clause_layout(
+        &self,
+        owner_spans: &[SourceSpan],
+        branch_span_groups: &[Vec<SourceSpan>],
+    ) -> Option<AlternativeClauseLayout> {
+        let branch_spans = branch_span_groups.iter().flatten().collect::<Vec<_>>();
+        let candidates = self
+            .tokens
+            .iter()
+            .filter(|token| token.text.eq_ignore_ascii_case("or"))
+            .filter(|token| {
+                !owner_spans
+                    .iter()
+                    .any(|span| span.start < token.start && span.end > token.end)
+            })
+            .filter(|token| {
+                branch_spans.iter().any(|span| span.end <= token.start)
+                    && branch_spans.iter().any(|span| span.start >= token.end)
+            })
+            .collect::<Vec<_>>();
+        let mut separators = Vec::new();
+        let mut segment_start = 0;
+        for (candidate_index, candidate) in candidates.iter().enumerate() {
+            let segment_has_constraint = branch_spans
+                .iter()
+                .any(|span| span.start >= segment_start && span.end <= candidate.start);
+            let previous_token = self
+                .tokens
+                .iter()
+                .rev()
+                .find(|token| token.end <= candidate.start);
+            let next_token = self
+                .tokens
+                .iter()
+                .find(|token| token.start >= candidate.end);
+            let adjacent_tokens_are_unowned =
+                previous_token
+                    .zip(next_token)
+                    .is_some_and(|(previous, next)| {
+                        !token_is_owned(previous, owner_spans) && !token_is_owned(next, owner_spans)
+                    });
+            let right_end = candidates
+                .get(candidate_index + 1)
+                .map_or(usize::MAX, |next| next.start);
+            let has_common_hard_family = branch_span_groups.iter().any(|spans| {
+                spans
+                    .iter()
+                    .any(|span| span.start >= segment_start && span.end <= candidate.start)
+                    && spans
+                        .iter()
+                        .any(|span| span.start >= candidate.end && span.end <= right_end)
+            });
+            if segment_has_constraint && (!adjacent_tokens_are_unowned || has_common_hard_family) {
+                segment_start = candidate.end;
+                separators.push(*candidate);
+            }
+        }
+        if separators.is_empty() {
+            return None;
+        }
+
+        let mut starts = vec![0];
+        starts.extend(separators.iter().map(|separator| separator.end));
+        let mut ends = separators
+            .iter()
+            .map(|separator| separator.start)
+            .collect::<Vec<_>>();
+        ends.push(usize::MAX);
+
+        Some(AlternativeClauseLayout {
+            segments: starts
+                .into_iter()
+                .zip(ends)
+                .map(|(start, end)| ByteSpan { start, end })
+                .collect(),
+        })
+    }
+}
+
+fn token_is_owned(token: &QueryToken, owner_spans: &[SourceSpan]) -> bool {
+    owner_spans
+        .iter()
+        .any(|span| span.start <= token.start && span.end >= token.end)
 }
 
 pub(crate) fn project_search_intent(query: &str, plan: &QueryPlan) -> SearchIntent {
@@ -100,19 +207,43 @@ pub(crate) fn project_search_intent(query: &str, plan: &QueryPlan) -> SearchInte
             push_unique_ci(&mut areas, &area.canonical);
             areas
         });
-    let area = plan
+    let areas = plan
         .areas
         .iter()
         .filter(|area| area.polarity == MentionPolarity::Positive)
-        .max_by(|left, right| {
-            (left.span.end - left.span.start)
-                .cmp(&(right.span.end - right.span.start))
-                .then_with(|| right.span.start.cmp(&left.span.start))
-        })
-        .map(|area| area.canonical.clone());
-    let bhk = plan.slots.bhk.as_ref().map(|slot| slot.value);
+        .fold(Vec::new(), |mut areas, area| {
+            push_unique_ci(&mut areas, &area.canonical);
+            areas
+        });
+    let area = if areas.len() == 1 {
+        areas.first().cloned()
+    } else {
+        None
+    };
+    let bhks = plan.slots.bhks.iter().fold(Vec::new(), |mut values, slot| {
+        if slot.polarity == SlotPolarity::Include && !values.contains(&slot.value) {
+            values.push(slot.value);
+        }
+        values
+    });
+    let exclude_bhks = plan.slots.bhks.iter().fold(Vec::new(), |mut values, slot| {
+        if slot.polarity == SlotPolarity::Exclude && !values.contains(&slot.value) {
+            values.push(slot.value);
+        }
+        values
+    });
+    let bhk = if bhks.len() == 1 {
+        bhks.first().copied()
+    } else {
+        None
+    };
+    let budget_min = plan.slots.budget_min.as_ref().map(|slot| slot.value);
     let budget_max = plan.slots.budget_max.as_ref().map(|slot| slot.value);
-    let hard_constraints = schema::detect_hard_constraints(&q);
+    let hard_constraints = plan
+        .evidence
+        .iter()
+        .map(|matched| matched.constraint.clone())
+        .collect();
     let positive_preferences = detect_positive_preferences(&q, plan, bhk);
     let accepted_tradeoffs = detect_accepted_tradeoffs(&q);
     let negative_preferences = detect_negative_preferences(&q, plan, bhk)
@@ -130,11 +261,29 @@ pub(crate) fn project_search_intent(query: &str, plan: &QueryPlan) -> SearchInte
     let unsupported_inventory_types = detect_unsupported_inventory_types(&q);
     let buyer_archetype = detect_buyer_archetype(&q, plan);
     let preferences = display_preferences(&positive_preferences, &negative_preferences);
+    let bhk_spans = plan
+        .slots
+        .bhks
+        .iter()
+        .filter(|slot| slot.end > slot.start)
+        .map(|slot| SourceSpan {
+            start: slot.start,
+            end: slot.end,
+            raw_text: slot.raw_text.clone(),
+        })
+        .collect();
 
     SearchIntent {
         area,
         excluded_areas,
+        excluded_societies: Vec::new(),
+        excluded_builders: Vec::new(),
+        areas,
         bhk,
+        bhks,
+        exclude_bhks,
+        bhk_spans,
+        budget_min,
         budget_max,
         hard_constraints,
         preferences,
@@ -571,18 +720,53 @@ fn apply_bhk_fact_key_derivations(bhk: Option<u32>, signal: &mut PreferenceSigna
 }
 
 fn apply_preference_key_overrides(q: &str, plan: &QueryPlan, signal: &mut PreferenceSignal) {
+    let mut matching_overrides = Vec::new();
     for override_rule in schema::preference_key_overrides() {
         if !override_rule
             .preference
             .eq_ignore_ascii_case(&signal.raw_text)
-            || !query_contains_any_pattern(q, &override_rule.patterns, plan)
         {
             continue;
         }
 
-        signal.expanded_keys = override_rule.expanded_keys.clone();
-        signal.gap_keys = override_rule.gap_keys.clone();
-        return;
+        let ranges = override_rule
+            .patterns
+            .iter()
+            .flat_map(|pattern| query_pattern_match_ranges(q, pattern, plan))
+            .collect::<Vec<_>>();
+        if ranges.is_empty() {
+            continue;
+        }
+        matching_overrides.push((override_rule, ranges));
+    }
+
+    let selected = matching_overrides
+        .iter()
+        .enumerate()
+        .filter(|(index, (_, ranges))| {
+            ranges.iter().any(|candidate| {
+                !matching_overrides
+                    .iter()
+                    .enumerate()
+                    .any(|(other_index, (_, other_ranges))| {
+                        other_index != *index
+                            && other_ranges.iter().any(|other| {
+                                other.0 <= candidate.0
+                                    && other.1 >= candidate.1
+                                    && (other.1 - other.0) > (candidate.1 - candidate.0)
+                            })
+                    })
+            })
+        })
+        .map(|(_, (override_rule, _))| *override_rule)
+        .collect::<Vec<_>>();
+    if !selected.is_empty() {
+        signal.expanded_keys.clear();
+        signal.gap_keys.clear();
+        for override_rule in selected {
+            merge_expanded_keys(signal, &override_rule.expanded_keys);
+            merge_gap_keys(signal, &override_rule.gap_keys);
+        }
     }
 }
 
@@ -664,13 +848,18 @@ fn preferences_conflict(positive: &PreferenceSignal, negative: &PreferenceSignal
         return true;
     }
 
-    positive.expanded_keys.iter().any(|positive_key| {
-        is_specific_conflict_key(positive_key)
-            && negative
-                .expanded_keys
-                .iter()
-                .any(|negative_key| positive_key.eq_ignore_ascii_case(negative_key))
-    })
+    let positive_specific_keys = positive
+        .expanded_keys
+        .iter()
+        .filter(|key| is_specific_conflict_key(key))
+        .collect::<Vec<_>>();
+    !positive_specific_keys.is_empty()
+        && positive_specific_keys.iter().all(|positive_key| {
+            negative.expanded_keys.iter().any(|negative_key| {
+                is_specific_conflict_key(negative_key)
+                    && positive_key.eq_ignore_ascii_case(negative_key)
+            })
+        })
 }
 
 fn is_specific_conflict_key(key: &str) -> bool {
@@ -788,6 +977,20 @@ fn query_pattern_match_ranges<'a>(
             },
         )
     })
+}
+
+pub(crate) fn deterministic_preference_spans(query: &str, plan: &QueryPlan) -> Vec<ByteSpan> {
+    let normalized = query.to_ascii_lowercase();
+    let mut spans = schema::positive_preference_patterns()
+        .iter()
+        .chain(schema::negative_preference_patterns())
+        .flat_map(|preference| preference.patterns.iter())
+        .flat_map(|pattern| query_pattern_match_ranges(&normalized, pattern, plan))
+        .map(|(start, end)| ByteSpan { start, end })
+        .collect::<Vec<_>>();
+    spans.sort_by_key(|span| (span.start, span.end));
+    spans.dedup();
+    spans
 }
 
 fn span_is_owned_by_entity(plan: &QueryPlan, span: ByteSpan) -> bool {
@@ -1051,6 +1254,19 @@ mod tests {
     }
 
     #[test]
+    fn projects_multiple_positive_areas_as_any_of() {
+        let intent = project_search_intent(
+            "3BHK in East Bengaluru or South Bengaluru",
+            &compile_query_plan("3BHK in East Bengaluru or South Bengaluru"),
+        );
+        assert_eq!(intent.bhk, Some(3));
+        assert_eq!(intent.area, None);
+        assert_eq!(intent.areas.len(), 2);
+        assert!(intent.areas.iter().any(|area| area == "East Bengaluru"));
+        assert!(intent.areas.iter().any(|area| area == "South Bengaluru"));
+    }
+
+    #[test]
     fn compiles_relation_clauses_with_distance_binding_and_place_roles() {
         let query = "3BHK near Whitefield close to kids school and near my wife's office in Marathahalli under 4 crore";
         let plan = compile_query_plan(query);
@@ -1148,5 +1364,144 @@ mod tests {
             .preferences
             .iter()
             .any(|preference| preference.eq_ignore_ascii_case("east facing")));
+    }
+
+    #[test]
+    fn owned_bhk_spans_do_not_become_configuration_preferences() {
+        let query = "2 or 3 BHK in Whitefield";
+        let plan = compile_query_plan(query);
+        assert!(plan
+            .owned_spans
+            .iter()
+            .any(|owned| owned.owner == SpanOwner::Bhk));
+        let intent = project_search_intent(query, &plan);
+        assert!(intent.preferences.iter().all(|preference| {
+            !preference.eq_ignore_ascii_case("2bhk configuration")
+                && !preference.eq_ignore_ascii_case("3bhk configuration")
+        }));
+    }
+
+    #[test]
+    fn alternative_layout_ignores_or_inside_a_single_constraint_clause() {
+        let query = "2 or 3 BHK under 2Cr or 4BHK under 4Cr";
+        let plan = compile_query_plan(query);
+        let occupied_spans = plan
+            .slots
+            .bhks
+            .iter()
+            .map(|slot| SourceSpan {
+                start: slot.start,
+                end: slot.end,
+                raw_text: slot.raw_text.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        let layout = plan
+            .alternative_clause_layout(&occupied_spans, &[occupied_spans.clone()])
+            .expect("the cross-clause or should remain");
+
+        assert_eq!(layout.segments.len(), 2);
+        assert_eq!(
+            &query[layout.segments[0].start..layout.segments[0].end],
+            "2 or 3 BHK under 2Cr "
+        );
+        assert_eq!(query[layout.segments[1].start..].trim(), "4BHK under 4Cr");
+    }
+
+    #[test]
+    fn alternative_layout_abstains_without_a_top_level_or() {
+        let plan = compile_query_plan("3BHK under 2Cr in East Bengaluru");
+
+        assert!(plan.alternative_clause_layout(&[], &[]).is_none());
+    }
+
+    #[test]
+    fn most_specific_preference_override_wins_for_overlapping_phrases() {
+        let query = "3BHK near Bagmane Tech Park";
+        let plan = compile_query_plan(query);
+        let intent = project_search_intent(query, &plan);
+        let social_infrastructure = intent
+            .positive_preferences
+            .iter()
+            .find(|preference| preference.raw_text == "social infrastructure")
+            .expect("tech park should create a social infrastructure preference");
+
+        assert!(social_infrastructure
+            .expanded_keys
+            .iter()
+            .any(|key| key == "nearby_tech_parks"));
+        assert!(!social_infrastructure
+            .expanded_keys
+            .iter()
+            .any(|key| key == "nearby_public_parks"));
+    }
+
+    #[test]
+    fn compiles_realistic_buyer_paraphrases_from_configured_families() {
+        let cases = [
+            (
+                "I want to sleep without horns outside",
+                "quiet neighborhood",
+                Polarity::Positive,
+            ),
+            ("daily gridlock is a deal breaker", "traffic", Polarity::Negative),
+            (
+                "the place should feel consistently cared for",
+                "maintenance",
+                Polarity::Positive,
+            ),
+            (
+                "show places residents consistently speak well of",
+                "review quality",
+                Polarity::Positive,
+            ),
+            (
+                "I do not want to lose hours travelling every day",
+                "commute",
+                Polarity::Positive,
+            ),
+            (
+                "I care about how solidly the homes are built",
+                "construction quality",
+                Polarity::Positive,
+            ),
+            (
+                "I dislike towers packed tightly together",
+                "density risk",
+                Polarity::Negative,
+            ),
+            (
+                "rooms should not feel stuffy",
+                "ventilation",
+                Polarity::Positive,
+            ),
+            (
+                "avoid places where monsoons leave standing water",
+                "waterlogging risk",
+                Polarity::Negative,
+            ),
+            (
+                "I cannot wait through an uncertain handover",
+                "delay risk",
+                Polarity::Negative,
+            ),
+        ];
+
+        for (query, expected_label, polarity) in cases {
+            let plan = compile_query_plan(query);
+            let intent = project_search_intent(query, &plan);
+            let preferences = if polarity == Polarity::Positive {
+                &intent.positive_preferences
+            } else {
+                &intent.negative_preferences
+            };
+
+            assert!(
+                preferences
+                    .iter()
+                    .any(|preference| preference.raw_text == expected_label),
+                "{query} should compile to {polarity:?} {expected_label}; got {preferences:?}"
+            );
+        }
     }
 }

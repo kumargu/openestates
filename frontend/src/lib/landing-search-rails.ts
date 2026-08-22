@@ -1,4 +1,5 @@
 import { societyKey } from "./property-filters.ts";
+import { listingSatisfiesBudget } from "./listing-price.ts";
 import type {
   SearchIntent,
   SearchResponse,
@@ -390,12 +391,18 @@ function queryClauses(
 ): QueryClause[] {
   const clauses: QueryClause[] = [];
 
-  if (typeof intent.budget_max === "number" && intent.budget_max > 0) {
-    const budget = intent.budget_max;
+  if (
+    (typeof intent.budget_min === "number" && intent.budget_min > 0) ||
+    (typeof intent.budget_max === "number" && intent.budget_max > 0)
+  ) {
+    const min = intent.budget_min;
+    const max = intent.budget_max;
     clauses.push({
       id: "budget",
-      label: `Under ${formatBudgetInr(budget)}`,
-      matches: (result) => result.price > 0 && result.price <= budget,
+      label: budgetClauseLabel(min, max),
+      matches: (result) =>
+        result.price > 0 &&
+        listingSatisfiesBudget(result, min, max),
       requiresSplit: false,
     });
   }
@@ -411,22 +418,25 @@ function queryClauses(
     });
   }
 
-  if (typeof intent.bhk === "number" && intent.bhk > 0) {
-    const bhk = intent.bhk;
+  const bhks = requestedBhks(intent);
+  if (bhks.length > 0) {
     clauses.push({
-      id: `bhk-${bhk}`,
-      label: `${bhk} BHK`,
-      matches: (result) => result.bhk === bhk,
+      id: `bhk-${bhks.join("-")}`,
+      label:
+        bhks.length === 1
+          ? `${bhks[0]} BHK`
+          : `${bhks.join(" or ")} BHK`,
+      matches: (result) => bhks.includes(result.bhk),
       requiresSplit: true,
     });
   }
 
-  const area = intent.area?.trim() ?? "";
-  if (!options.skipArea && area) {
+  const areas = requestedAreas(intent);
+  if (!options.skipArea && areas.length > 0) {
     clauses.push({
       id: "area",
-      label: area,
-      matches: (result) => areaOverlaps(result.area, area),
+      label: areas.length === 1 ? areas[0] : areas.join(" or "),
+      matches: (result) => areas.some((area) => areaOverlaps(result.area, area)),
       requiresSplit: true,
     });
   }
@@ -521,6 +531,21 @@ function uniqueTexts(values: string[]): string[] {
   return out;
 }
 
+function requestedBhks(intent: SearchIntent): number[] {
+  if (intent.bhks && intent.bhks.length > 0) {
+    return intent.bhks.filter((value) => value > 0);
+  }
+  return typeof intent.bhk === "number" && intent.bhk > 0 ? [intent.bhk] : [];
+}
+
+function requestedAreas(intent: SearchIntent): string[] {
+  if (intent.areas && intent.areas.length > 0) {
+    return intent.areas.map((area) => area.trim()).filter(Boolean);
+  }
+  const area = intent.area?.trim() ?? "";
+  return area ? [area] : [];
+}
+
 function areaOverlaps(left: string, right: string): boolean {
   const a = left.trim().toLowerCase();
   const b = right.trim().toLowerCase();
@@ -552,6 +577,22 @@ function compactRailLabel(value: string): string {
 
 function slugify(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "clause";
+}
+
+function budgetClauseLabel(
+  min: number | null | undefined,
+  max: number | null | undefined,
+): string {
+  if (typeof min === "number" && min > 0 && typeof max === "number" && max > 0) {
+    return `${formatBudgetInr(min)}–${formatBudgetInr(max)}`;
+  }
+  if (typeof min === "number" && min > 0) {
+    return `From ${formatBudgetInr(min)}`;
+  }
+  if (typeof max === "number" && max > 0) {
+    return `Under ${formatBudgetInr(max)}`;
+  }
+  return "Budget";
 }
 
 export function formatBudgetInr(value: number): string {

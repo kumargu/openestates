@@ -8,11 +8,15 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
 use backend::knowledge;
 use backend::models::{Property, Society};
 use backend::search::intent::parse_intent;
-use backend::search::{SearchIndex, TextSearch};
+use backend::search::{SearchEngine, SearchIndex};
+use backend::serving::LoadedServingBundle;
+
+const MIN_LABELLED_QUERY_PASSES: usize = 27;
 
 /// Load the promoted serving bundle and derive request-path data for testing.
 fn load_test_data() -> (
@@ -21,6 +25,8 @@ fn load_test_data() -> (
     knowledge::KnowledgeGraph,
     HashMap<String, String>,
     SearchIndex,
+    HashMap<String, usize>,
+    Arc<LoadedServingBundle>,
 ) {
     let project_root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -37,9 +43,23 @@ fn load_test_data() -> (
         .map(|s| (s.id.clone(), s.name.clone()))
         .collect();
 
-    let search_index = SearchIndex::build(&properties);
+    let search_index =
+        SearchIndex::build_with_serving_graph(&properties, &bundle.entities, &bundle.edges);
+    let property_by_id = properties
+        .iter()
+        .enumerate()
+        .map(|(index, property)| (property.id.clone(), index))
+        .collect();
 
-    (properties, societies, graph, society_names, search_index)
+    (
+        properties,
+        societies,
+        graph,
+        society_names,
+        search_index,
+        property_by_id,
+        bundle,
+    )
 }
 
 fn run_search(
@@ -49,17 +69,43 @@ fn run_search(
     search_index: &SearchIndex,
     query: &str,
     graph: &knowledge::KnowledgeGraph,
+    property_by_id: &HashMap<String, usize>,
+    serving_bundle: &Arc<LoadedServingBundle>,
 ) -> Vec<backend::search::SearchResultCard> {
-    let intent = parse_intent(query);
-    TextSearch::search_with_index_and_intent(
+    run_search_output(
         properties,
-        Some(search_index),
         society_names,
         societies,
+        search_index,
         query,
-        &intent,
-        Some(graph),
+        graph,
+        property_by_id,
+        serving_bundle,
     )
+    .results
+}
+
+fn run_search_output(
+    properties: &[Property],
+    society_names: &HashMap<String, String>,
+    societies: &[Society],
+    search_index: &SearchIndex,
+    query: &str,
+    graph: &knowledge::KnowledgeGraph,
+    property_by_id: &HashMap<String, usize>,
+    serving_bundle: &Arc<LoadedServingBundle>,
+) -> backend::search::engine::SearchEngineOutput {
+    SearchEngine {
+        properties,
+        search_index,
+        serving_bundle: Some(serving_bundle.as_ref()),
+        society_names,
+        property_by_id: Some(property_by_id),
+        societies,
+        graph: Some(graph),
+        intent_classifier: None,
+    }
+    .search(query)
 }
 
 /// A test query with expected behavior.
@@ -533,7 +579,8 @@ fn test_structured_intent_parsing_without_named_locality_aliases() {
 
 #[test]
 fn test_search_result_quality() {
-    let (properties, societies, graph, society_names, search_index) = load_test_data();
+    let (properties, societies, graph, society_names, search_index, property_by_id, serving_bundle) =
+        load_test_data();
 
     println!();
     println!("================================================================================");
@@ -561,6 +608,8 @@ fn test_search_result_quality() {
             &search_index,
             qt.query,
             &graph,
+            &property_by_id,
+            &serving_bundle,
         );
 
         let mut issues: Vec<String> = Vec::new();
@@ -591,7 +640,7 @@ fn test_search_result_quality() {
                     || r.card.title.to_lowercase().contains(expected_soc)
                     || r.card.builder_name.to_lowercase().contains(expected_soc)
             });
-            if !found && !results.is_empty() {
+            if !found {
                 issues.push(format!(
                     "expected '{}' in results, not found in {} results",
                     expected_soc,
@@ -717,6 +766,8 @@ fn test_search_result_quality() {
             &search_index,
             qt.query,
             &graph,
+            &property_by_id,
+            &serving_bundle,
         );
         total_results += results.len();
         for r in &results {
@@ -741,6 +792,12 @@ fn test_search_result_quality() {
     println!("================================================================================");
     println!();
 
+    assert!(
+        total_pass >= MIN_LABELLED_QUERY_PASSES,
+        "labelled search quality regressed: {total_pass}/{} passed, floor is {MIN_LABELLED_QUERY_PASSES}",
+        total_pass + total_fail
+    );
+
     // Hard-fail only if queries that should have results return 0
     let critical_failures: Vec<_> = quality_issues
         .iter()
@@ -759,7 +816,8 @@ fn test_search_result_quality() {
 
 #[test]
 fn test_ranking_sanity() {
-    let (properties, societies, graph, society_names, search_index) = load_test_data();
+    let (properties, societies, graph, society_names, search_index, property_by_id, serving_bundle) =
+        load_test_data();
 
     println!();
     println!("================================================================================");
@@ -776,6 +834,8 @@ fn test_ranking_sanity() {
             &search_index,
             "3bhk whitefield",
             &graph,
+            &property_by_id,
+            &serving_bundle,
         );
         let results_pref = run_search(
             &properties,
@@ -784,6 +844,8 @@ fn test_ranking_sanity() {
             &search_index,
             "3bhk whitefield ready to move good society",
             &graph,
+            &property_by_id,
+            &serving_bundle,
         );
 
         println!("  Ranking shift test: basic vs preference query");
@@ -822,15 +884,20 @@ fn test_ranking_sanity() {
             &search_index,
             "3bhk whitefield",
             &graph,
+            &property_by_id,
+            &serving_bundle,
         );
-        let results_budget = run_search(
+        let budget_output = run_search_output(
             &properties,
             &society_names,
             &societies,
             &search_index,
             "3bhk whitefield under 1cr",
             &graph,
+            &property_by_id,
+            &serving_bundle,
         );
+        let results_budget = &budget_output.results;
 
         println!();
         println!("  Budget filtering test:");
@@ -842,12 +909,16 @@ fn test_ranking_sanity() {
             "Budget filter should not produce MORE results"
         );
 
-        for r in &results_budget {
+        for r in results_budget
+            .iter()
+            .take(budget_output.eligible_result_count)
+        {
+            let lowest_asking_price = r.card.price_min.unwrap_or(r.card.price);
             assert!(
-                r.card.price <= 10_000_000,
-                "Property {} has price {} which exceeds 1cr budget",
+                lowest_asking_price <= 10_000_000,
+                "Property {} has asking range starting at {} which exceeds 1cr budget",
                 r.card.title,
-                r.card.price
+                lowest_asking_price
             );
         }
         println!("    PASS: Budget constraint correctly filters");
@@ -862,6 +933,8 @@ fn test_ranking_sanity() {
             &search_index,
             "3bhk whitefield",
             &graph,
+            &property_by_id,
+            &serving_bundle,
         );
         let with_confidence = results
             .iter()
@@ -887,29 +960,99 @@ fn test_ranking_sanity() {
         }
     }
 
-    // Test 4: Results sorted by match_score descending
+    // Test 4: Tiered ranking remains deterministic. The configured ranking is
+    // lexicographic, so aggregate match_score is not itself the sort key.
     {
-        let results = run_search(
+        let first = run_search(
             &properties,
             &society_names,
             &societies,
             &search_index,
             "3bhk whitefield ready to move",
             &graph,
+            &property_by_id,
+            &serving_bundle,
         );
-        let sorted = results
-            .windows(2)
-            .all(|w| w[0].match_score >= w[1].match_score);
+        let second = run_search(
+            &properties,
+            &society_names,
+            &societies,
+            &search_index,
+            "3bhk whitefield ready to move",
+            &graph,
+            &property_by_id,
+            &serving_bundle,
+        );
+        let first_ids = first
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>();
+        let second_ids = second
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>();
         println!();
-        if sorted {
-            println!("  PASS: Results correctly sorted by match_score descending");
-        } else {
-            println!("  FAIL: Results NOT sorted by match_score descending");
-        }
-        assert!(sorted, "Results must be sorted by match_score descending");
+        assert_eq!(
+            first_ids, second_ids,
+            "tiered ranking must be deterministic"
+        );
+        println!("  PASS: Tiered ranking is deterministic");
     }
 
     println!();
     println!("================================================================================");
     println!();
+}
+
+#[test]
+fn promoted_bundle_resolves_labelled_named_places() {
+    let (properties, societies, graph, society_names, search_index, property_by_id, serving_bundle) =
+        load_test_data();
+
+    for (query, expected_place) in [
+        ("3bhk near Bagmane Tech Park", "Bagmane Tech Park"),
+        ("3bhk near Kadugodi Metro", "Kadugodi"),
+    ] {
+        let output = run_search_output(
+            &properties,
+            &society_names,
+            &societies,
+            &search_index,
+            query,
+            &graph,
+            &property_by_id,
+            &serving_bundle,
+        );
+        assert!(
+            output.diagnostics.resolved.entities.iter().any(|entity| {
+                entity.entity_type == "place"
+                    && entity
+                        .name
+                        .to_ascii_lowercase()
+                        .contains(&expected_place.to_ascii_lowercase())
+            }),
+            "{query:?} should resolve {expected_place:?}: {:?}",
+            output.diagnostics.resolved.entities
+        );
+        assert!(!output.results.is_empty(), "{query:?} should recall homes");
+        let reasons = output
+            .results
+            .iter()
+            .flat_map(|result| {
+                result
+                    .match_explanation
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|explanation| explanation.reasons.iter())
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            reasons.iter().any(|reason| {
+                (reason.scoring_method == "serving-haversine"
+                    || reason.scoring_method == "serving-named-place")
+                    && reason.display.contains(expected_place)
+            }),
+            "{query:?} should carry typed proximity proof: {reasons:?}"
+        );
+    }
 }

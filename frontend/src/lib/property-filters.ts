@@ -38,7 +38,7 @@ export function filterListableSearchResponse(
     ...response,
     results,
     focus,
-    total_results: results.length,
+    results_returned: results.length,
   };
 }
 

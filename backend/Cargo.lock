@@ -426,6 +426,7 @@ dependencies = [
  "chrono",
  "daggy",
  "datafusion",
+ "fasttext",
  "futures-util",
  "geojson",
  "lru",
@@ -1573,6 +1574,16 @@ name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
+
+[[package]]
+name = "fasttext"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06f5a898458ded5e9e7223d9e5e926b4454edcd04e55208806b5c2c62871922a"
+dependencies = [
+ "rayon",
+ "thiserror",
+]
 
 [[package]]
 name = "find-msvc-tools"

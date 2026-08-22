@@ -1,0 +1,246 @@
+{
+  "version": 1,
+  "description": "Human-written residual buyer clauses. These phrases are held out from fact_registry preference-pattern training seeds.",
+  "cases": [
+    {
+      "text": "I want room to breathe between the towers",
+      "expected_preference": "greenery",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "somewhere surrounded by mature trees",
+      "expected_preference": "greenery",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "shared facilities should actually be usable",
+      "expected_preference": "amenity quality",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "a decent pool and community spaces matter",
+      "expected_preference": "amenity quality",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "the place should feel consistently cared for",
+      "expected_preference": "maintenance",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "common spaces must not look neglected",
+      "expected_preference": "maintenance",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "I value dependable everyday upkeep",
+      "expected_preference": "maintenance",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "the taps should work through the summer",
+      "expected_preference": "water supply",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "I need a dependable source of water",
+      "expected_preference": "water supply",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "people living there should genuinely rate it well",
+      "expected_preference": "review quality",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "show places residents consistently speak well of",
+      "expected_preference": "review quality",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "the last mile drive should be comfortable",
+      "expected_preference": "approach road",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "cars should reach the gate without struggling",
+      "expected_preference": "approach road",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "the promoter should have a dependable delivery history",
+      "expected_preference": "reliable builder",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "I prefer someone known for finishing what they start",
+      "expected_preference": "reliable builder",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "I want to sleep without horns outside",
+      "expected_preference": "quiet neighborhood",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "evenings should feel restful rather than chaotic",
+      "expected_preference": "quiet neighborhood",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "weekday travel to work should be painless",
+      "expected_preference": "commute",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "I do not want to lose hours travelling every day",
+      "expected_preference": "commute",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "it needs to work for my parents and young child",
+      "expected_preference": "family friendly",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "a sensible place to raise children",
+      "expected_preference": "family friendly",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "the paperwork must be unquestionably clean",
+      "expected_preference": "legal safety",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "I only want homes with a clear approval trail",
+      "expected_preference": "legal safety",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "I care about how solidly the homes are built",
+      "expected_preference": "construction quality",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "the finishing and workmanship should hold up",
+      "expected_preference": "construction quality",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "I dislike towers packed tightly together",
+      "expected_preference": "open space",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "children need generous shared outdoor room",
+      "expected_preference": "open space",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "rooms should not feel stuffy",
+      "expected_preference": "ventilation",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "fresh air should move naturally through the home",
+      "expected_preference": "ventilation",
+      "expected_polarity": "positive"
+    },
+    {
+      "text": "the access must remain usable after heavy rain",
+      "expected_preference": "waterlogging risk",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "avoid places where monsoons leave standing water",
+      "expected_preference": "waterlogging risk",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "daily gridlock is a deal breaker",
+      "expected_preference": "traffic",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "I cannot handle roads jammed every evening",
+      "expected_preference": "traffic",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "constant honking outside would be unacceptable",
+      "expected_preference": "noise",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "avoid homes beside loud late night activity",
+      "expected_preference": "noise",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "I will not touch anything with disputed ownership",
+      "expected_preference": "legal risk",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "stay away from homes with questionable papers",
+      "expected_preference": "legal risk",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "I cannot wait through an uncertain handover",
+      "expected_preference": "delay risk",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "avoid builders that keep moving the completion date",
+      "expected_preference": "delay risk",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "a cramped broken road to the entrance is a no",
+      "expected_preference": "approach road",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "do not show isolated projects with difficult last mile access",
+      "expected_preference": "approach road",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "I do not want treatment plant odour near my tower",
+      "expected_preference": "stp concern",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "sewage odour around the complex is unacceptable",
+      "expected_preference": "stp concern",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "keep overhead transmission cables away from the property",
+      "expected_preference": "high tension wires",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "I refuse to depend on private tankers every summer",
+      "expected_preference": "water issues",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "frequent dry taps would rule a place out",
+      "expected_preference": "water issues",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "avoid communities where basic upkeep is neglected",
+      "expected_preference": "maintenance",
+      "expected_polarity": "negative"
+    },
+    {
+      "text": "poorly managed common spaces are a deal breaker",
+      "expected_preference": "maintenance",
+      "expected_polarity": "negative"
+    }
+  ]
+}

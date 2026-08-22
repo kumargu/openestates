@@ -14,7 +14,13 @@ import type {
   SearchResultItem,
 } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
-import { searchResultReasonLabels, type MatchResult } from "../lib/search.ts";
+import { primaryProofFocus } from "../lib/proof-focus.ts";
+import {
+  queryWithoutBhkClause,
+  searchResultsAnnouncement,
+  searchResultReasonLabels,
+  type MatchResult,
+} from "../lib/search.ts";
 import { PageState } from "../components/PageState.tsx";
 import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
 import { addRecentSearch } from "../lib/recent-searches.ts";
@@ -360,7 +366,8 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
   const { byId: evidenceById } = useEvidenceBatch(propertyIds, propertyIds.length > 0);
 
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.area_context : null;
-  const totalCount = useBackendResults ? searchResponse.total_results : hasQuery ? 0 : filtered.length;
+  const totalCount = useBackendResults ? searchResponse.eligible_results : hasQuery ? 0 : filtered.length;
+  const returnedCount = useBackendResults ? searchResponse.results_returned : filtered.length;
   const intent = useBackendResults ? searchResponse.intent : null;
   const searchGuidance = useBackendResults ? searchResponse.search_guidance : null;
   const containerClass = "inline-results-shell";
@@ -409,9 +416,10 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
       property={result}
       onQuickView={setPanelPropertyId}
       matchLabels={hasQuery ? searchResultReasonLabels(result) : []}
-      proofFocus={result.proof_focuses?.find((focus) => focus.surfaceId === "around_this_home")}
+      proofFocus={primaryProofFocus(result, query)}
     />
   );
+  const bhkSpans = intent?.bhk_spans ?? [];
 
   return (
     <div className={containerClass}>
@@ -427,12 +435,21 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
       {/* Accessible live region — announces result count to screen readers */}
       <div aria-live="polite" className="sr-only">
         {query
-          ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} found for "${query}".`
+          ? searchResultsAnnouncement(
+            query,
+            totalCount,
+            returnedCount,
+            searchGuidance?.mode,
+          )
           : `Showing ${totalCount} ${totalCount === 1 ? "property" : "properties"}.`}
       </div>
 
       {/* Area context bar — shown when backend search returns area info */}
       {areaContext && <AreaContextBar ctx={areaContext} />}
+
+      {matchResults.length > 0 && searchGuidance?.mode === "named_society_alternatives" && (
+        <p className="search-alternatives-note">{searchGuidance.title}</p>
+      )}
 
       {matchResults.length === 0 && query && !waitingForSearchResults && (
         <div className="empty-state">
@@ -449,9 +466,9 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
                 Just {intent.area}
               </button>
             )}
-            {!searchGuidance && intent?.bhk && (
+            {!searchGuidance && bhkSpans.length > 0 && (intent?.bhks?.length || intent?.bhk) && (
               <button className="empty-state-chip" onClick={() => {
-                const without = query.replace(/\d+\s*bhk/i, "").trim();
+                const without = queryWithoutBhkClause(query, bhkSpans);
                 if (without) setQueryPreservingView(without);
               }}>
                 Without BHK filter

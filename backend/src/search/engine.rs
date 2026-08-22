@@ -3,23 +3,27 @@ use std::time::Instant;
 
 use serde::Serialize;
 
-use crate::dag_config::search_resolution_config;
+use crate::dag_config::{area_alias_entries, search_resolution_config};
 use crate::knowledge::KnowledgeGraph;
 use crate::models::{Property, Society};
-use crate::routes::enrichment::society_node_id;
 use crate::serving::{
-    LoadedServingBundle, ServingEntityRecord, SpatialPoint, SpatialServingIndex, TantivyRecallHit,
+    LoadedServingBundle, ServingEntityAliasIndex, ServingEntityRecord, TantivyRecallHit,
 };
 use crate::state::SEARCH_ENGINE_VERSION;
 
+use super::ast::{CompiledQuery, ResolvedEntityConstraint};
 use super::geo;
 use super::index::SearchIndex;
-use super::intent::SearchIntent;
+use super::intent::{SearchIntent, SourceSpan};
+use super::intent_classifier::{FastTextIntentClassifier, IntentClassifierTrace};
 use super::parser;
 use super::query_plan::{self, QueryPlan};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text, slug};
 use super::schema;
-use super::{MatchExplanation, MatchReason, PreferenceCoverage, SearchResultCard, TextSearch};
+use super::{
+    MatchExplanation, MatchReason, PreferenceCoverage, SearchResultCard, TextSearch,
+    TextSearchRequest,
+};
 
 const TANTIVY_RECALL_LIMIT: usize = 128;
 const UNSTRUCTURED_LOCAL_CANDIDATE_LIMIT: usize = 16;
@@ -34,12 +38,15 @@ pub struct SearchEngine<'a> {
     pub property_by_id: Option<&'a HashMap<String, usize>>,
     pub societies: &'a [Society],
     pub graph: Option<&'a KnowledgeGraph>,
+    pub intent_classifier: Option<&'a FastTextIntentClassifier>,
 }
 
 #[derive(Debug, Clone)]
 pub struct SearchEngineOutput {
     pub intent: SearchIntent,
     pub results: Vec<SearchResultCard>,
+    pub eligible_result_count: usize,
+    pub named_society_alternatives: Vec<String>,
     pub diagnostics: SearchDiagnostics,
     pub relaxations: Vec<SearchRelaxation>,
     pub evidence_gaps: Vec<SearchEvidenceGap>,
@@ -60,6 +67,8 @@ pub struct SearchDiagnostics {
     pub layer_timings: Vec<SearchLayerTiming>,
     pub runtime: SearchRuntimeDiagnostics,
     pub resolved: SearchResolutionDiagnostics,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub intent_classifier: Option<IntentClassifierTrace>,
     pub recall: SearchRecallDiagnostics,
     pub top_candidate_scores: Vec<CandidateScore>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -143,12 +152,12 @@ pub struct SearchRelaxation {
     pub from: String,
     pub to: String,
     pub reason: SearchRelaxationReason,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub area_anchor: Option<SearchRelaxationAreaAnchor>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub radius_km: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub candidate_distance_km: Option<f64>,
+}
+
+#[derive(Clone, Copy)]
+enum BudgetRelaxationState {
+    Tolerance(f64),
+    CapRemoved,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -156,15 +165,6 @@ pub struct SearchRelaxation {
 pub struct SearchRelaxationReason {
     pub code: String,
     pub message: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchRelaxationAreaAnchor {
-    pub entity_id: String,
-    pub name: String,
-    pub latitude: f64,
-    pub longitude: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -202,21 +202,46 @@ impl<'a> SearchEngine<'a> {
             query_plan::project_search_intent(query, &query_plan)
         });
 
-        let geo_query = timer.measure("geo_resolve", || {
+        let mut geo_query = timer.measure("geo_resolve", || {
             self.serving_bundle
                 .and_then(|bundle| bundle.geo_index.query_with_plan(&query_plan))
         });
         let serving_resolved_entities = timer.measure("serving_entity_resolution", || {
             resolve_serving_query_entities(
                 query,
+                &query_plan,
                 &parsed_intent,
                 self.serving_bundle,
                 self.properties,
             )
         });
-        let intent = timer.measure("intent_constraints", || {
-            apply_resolved_constraints(parsed_intent.clone(), &serving_resolved_entities)
+        let requested_societies = serving_resolved_entities
+            .iter()
+            .filter(|entity| {
+                entity.polarity != "exclusion" && entity.entity_type.eq_ignore_ascii_case("society")
+            })
+            .map(|entity| entity.name.clone())
+            .collect::<Vec<_>>();
+        let entity_constraints = resolved_entity_constraints(query, &serving_resolved_entities);
+        let classifier_trace = timer.measure("intent_classifier_shadow", || {
+            self.intent_classifier.map(|classifier| {
+                let resolved_spans = entity_constraints
+                    .iter()
+                    .map(|entity| SourceSpan {
+                        start: entity.span.start,
+                        end: entity.span.end,
+                        raw_text: entity.span.raw_text.clone(),
+                    })
+                    .collect::<Vec<_>>();
+                classifier.classify(query, &query_plan, &resolved_spans)
+            })
         });
+        let compiled_query = timer.measure("intent_constraints", || {
+            let intent =
+                apply_resolved_constraints(parsed_intent.clone(), &serving_resolved_entities);
+            CompiledQuery::compile(query, &query_plan, intent, &entity_constraints)
+        });
+        let intent = &compiled_query.intent;
         let unresolved_entity_clause = unresolved_named_entity_clause(
             query,
             &query_plan,
@@ -225,14 +250,21 @@ impl<'a> SearchEngine<'a> {
         );
 
         let mut structured_candidate_ids = timer.measure("structured_recall", || {
-            self.search_index.recall_ids(query, &intent)
+            self.search_index.recall_ids(&compiled_query)
         });
         let structured_total_count = structured_candidate_ids.len();
-        if !has_filter_intent(&intent)
+        if !has_filter_intent(&compiled_query)
             && structured_candidate_ids.len() > UNSTRUCTURED_LOCAL_CANDIDATE_LIMIT
         {
             structured_candidate_ids.truncate(UNSTRUCTURED_LOCAL_CANDIDATE_LIMIT);
         }
+        let eligible_property_ids =
+            (has_filter_intent(&compiled_query) || !requested_societies.is_empty()).then(|| {
+                self.search_index
+                    .recall_constraint_ids(&compiled_query)
+                    .into_iter()
+                    .collect::<HashSet<_>>()
+            });
 
         let tantivy_recall = timer.measure("tantivy_recall", || {
             tantivy_candidate_ids(self.serving_bundle, query, self.search_index)
@@ -241,15 +273,29 @@ impl<'a> SearchEngine<'a> {
         let geo_candidate_ids = timer.measure("geo_recall", || {
             let coordinate_candidates = geo_query
                 .as_ref()
-                .map(|query| query.candidate_property_ids(self.properties))
+                .zip(self.serving_bundle)
+                .map(|(query, bundle)| {
+                    query
+                        .spatial_candidate_society_ids(
+                            &bundle.spatial_index,
+                            self.search_index,
+                            eligible_property_ids.as_ref(),
+                        )
+                        .into_iter()
+                        .flat_map(|entity_id| {
+                            self.search_index.property_ids_for_entity_id(&entity_id)
+                        })
+                        .collect()
+                })
                 .unwrap_or_default();
             let serving_fact_candidates = geo_query
                 .as_ref()
                 .and_then(|query| {
                     self.serving_bundle.map(|bundle| {
                         query.serving_fact_candidate_property_ids(
-                            self.properties,
+                            self.search_index,
                             &bundle.fact_index,
+                            eligible_property_ids.as_ref(),
                         )
                     })
                 })
@@ -260,11 +306,19 @@ impl<'a> SearchEngine<'a> {
             )
             .unwrap_or_default()
         });
+        if let Some(query) = geo_query.as_mut() {
+            query.restrict_evidence_to_properties(
+                self.properties,
+                self.search_index,
+                &geo_candidate_ids,
+            );
+        }
 
         let explicit_geo_distance_limit = geo_query
             .as_ref()
             .is_some_and(|query| query.has_distance_limit());
-        let extra_candidate_ids = if explicit_geo_distance_limit {
+        let resolved_geo_constraint = geo_query.as_ref().is_some_and(|query| !query.is_empty());
+        let extra_candidate_ids = if resolved_geo_constraint {
             optional_non_empty(geo_candidate_ids.clone())
         } else {
             merge_candidate_ids(
@@ -272,11 +326,18 @@ impl<'a> SearchEngine<'a> {
                 geo_candidate_ids.clone(),
             )
         };
-        let ranking_candidate_ids = if explicit_geo_distance_limit {
-            Some(intersect_candidate_ids(
-                optional_non_empty(structured_candidate_ids.clone()),
-                &geo_candidate_ids,
-            ))
+        let ranking_candidate_ids = if resolved_geo_constraint {
+            Some(
+                geo_candidate_ids
+                    .iter()
+                    .filter(|property_id| {
+                        eligible_property_ids
+                            .as_ref()
+                            .is_none_or(|eligible| eligible.contains(*property_id))
+                    })
+                    .cloned()
+                    .collect(),
+            )
         } else {
             merge_candidate_ids(
                 optional_non_empty(structured_candidate_ids.clone()),
@@ -303,7 +364,7 @@ impl<'a> SearchEngine<'a> {
 
         let mut results = timer.measure("ranking", || {
             if unresolved_entity_clause.is_some()
-                || (explicit_geo_distance_limit
+                || (resolved_geo_constraint
                     && recall_set
                         .ranking_candidate_ids
                         .as_ref()
@@ -311,56 +372,79 @@ impl<'a> SearchEngine<'a> {
             {
                 Vec::new()
             } else {
-                TextSearch::search_with_candidate_property_indexes_serving_facts_and_intent(
-                    self.properties,
-                    None,
-                    recall_set.ranking_candidate_ids.as_deref(),
-                    ranking_candidate_indexes.clone(),
-                    geo_query.as_ref(),
+                TextSearch::search(TextSearchRequest {
+                    properties: self.properties,
+                    search_index: Some(self.search_index),
+                    extra_candidate_ids: recall_set.ranking_candidate_ids.as_deref(),
+                    candidate_property_indexes: ranking_candidate_indexes.clone(),
+                    geo_query: geo_query.as_ref(),
                     serving_facts,
-                    self.society_names,
-                    self.societies,
-                    query,
-                    &intent,
-                    ranking_graph,
-                )
+                    society_names: self.society_names,
+                    societies: self.societies,
+                    compiled_query: &compiled_query,
+                    graph: ranking_graph,
+                })
             }
         });
+        let eligible_result_count = results.len();
         let mut relaxations = Vec::new();
         let mut evidence_gaps = Vec::new();
-        let relaxation_target = schema::ranking_policy()
-            .constraint_relaxation
-            .target_result_count;
+        let mut named_society_alternatives = Vec::new();
+        if results.is_empty()
+            && !requested_societies.is_empty()
+            && unresolved_entity_clause.is_none()
+        {
+            let mut alternative_query = compiled_query.clone();
+            alternative_query.constraints.drop_society_includes();
+            let alternative_ids = self.search_index.recall_constraint_ids(&alternative_query);
+            let alternative_indexes =
+                candidate_property_indexes(&alternative_ids, self.property_by_id);
+            results = TextSearch::search(TextSearchRequest {
+                properties: self.properties,
+                search_index: Some(self.search_index),
+                extra_candidate_ids: Some(&alternative_ids),
+                candidate_property_indexes: alternative_indexes,
+                geo_query: geo_query.as_ref(),
+                serving_facts,
+                society_names: self.society_names,
+                societies: self.societies,
+                compiled_query: &alternative_query,
+                graph: ranking_graph,
+            });
+            if !results.is_empty() {
+                named_society_alternatives = requested_societies.clone();
+            }
+        }
+        let relaxation_policy = &schema::ranking_policy().constraint_relaxation;
+        let relaxation_target = relaxation_policy.target_result_count;
         if results.len() < relaxation_target
+            && (!relaxation_policy.only_when_no_exact_results || results.is_empty())
             && !explicit_geo_distance_limit
             && unresolved_entity_clause.is_none()
         {
             let relaxation_value = timer.measure_value("constraint_relaxation", || {
-                self.relaxed_results(
-                    query,
-                    &intent,
+                self.run_relaxation_sequence(
+                    &compiled_query,
                     recall_set.merged_extra_candidate_ids.as_deref(),
                     self.property_by_id,
                     geo_query.as_ref(),
                     serving_facts,
                     ranking_graph,
-                    &serving_resolved_entities,
                     results.clone(),
                 )
             });
-            let (relaxed_match, relaxation_gaps) = relaxation_value.value;
-            evidence_gaps = relaxation_gaps;
-            if let Some((relaxed_results, applied)) = relaxed_match {
+            if let Some((relaxed_results, applied)) = relaxation_value.value {
                 relaxations = applied;
                 results = relaxed_results;
             }
         }
         evidence_gaps.extend(unresolved_proximity_gaps(geo_query.as_ref()));
+        results.truncate(schema::ranking_policy().result_limit);
 
         let resolved_entities = timer.measure("entity_resolution", || {
             resolve_query_entities(
                 query,
-                &intent,
+                intent,
                 &serving_resolved_entities,
                 &results,
                 geo_query.as_ref(),
@@ -382,6 +466,7 @@ impl<'a> SearchEngine<'a> {
             resolved: SearchResolutionDiagnostics {
                 entities: resolved_entities,
             },
+            intent_classifier: classifier_trace,
             recall: SearchRecallDiagnostics {
                 structured_total_count: recall_set.structured_total_count,
                 structured_count: recall_set.structured_candidate_ids.len(),
@@ -408,88 +493,57 @@ impl<'a> SearchEngine<'a> {
         });
 
         SearchEngineOutput {
-            intent,
+            intent: intent.clone(),
             results,
+            eligible_result_count,
+            named_society_alternatives,
             diagnostics,
             relaxations,
             evidence_gaps,
         }
     }
 
-    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-    fn relaxed_results(
-        &self,
-        query: &str,
-        intent: &SearchIntent,
-        extra_candidate_ids: Option<&[String]>,
-        property_by_id: Option<&HashMap<String, usize>>,
-        geo_query: Option<&geo::GeoSearchQuery<'_>>,
-        serving_facts: Option<&crate::serving::ServingFactIndex>,
-        ranking_graph: Option<&KnowledgeGraph>,
-        resolved_entities: &[ResolvedSearchEntity],
-        initial_results: Vec<SearchResultCard>,
-    ) -> (
-        Option<(Vec<SearchResultCard>, Vec<SearchRelaxation>)>,
-        Vec<SearchEvidenceGap>,
-    ) {
-        self.run_relaxation_sequence(
-            query,
-            intent,
-            extra_candidate_ids,
-            property_by_id,
-            geo_query,
-            serving_facts,
-            ranking_graph,
-            resolved_entities,
-            initial_results,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    #[allow(clippy::too_many_arguments)]
     fn run_relaxation_sequence(
         &self,
-        query: &str,
-        intent: &SearchIntent,
+        compiled_query: &CompiledQuery,
         extra_candidate_ids: Option<&[String]>,
         property_by_id: Option<&HashMap<String, usize>>,
         geo_query: Option<&geo::GeoSearchQuery<'_>>,
         serving_facts: Option<&crate::serving::ServingFactIndex>,
         ranking_graph: Option<&KnowledgeGraph>,
-        resolved_entities: &[ResolvedSearchEntity],
         initial_results: Vec<SearchResultCard>,
-    ) -> (
-        Option<(Vec<SearchResultCard>, Vec<SearchRelaxation>)>,
-        Vec<SearchEvidenceGap>,
-    ) {
+    ) -> Option<(Vec<SearchResultCard>, Vec<SearchRelaxation>)> {
+        let intent = &compiled_query.intent;
         if !intent.unsupported_inventory_types.is_empty() {
-            return (None, Vec::new());
+            return None;
         }
 
-        let rank = |relaxed_intent: &SearchIntent, candidate_ids: Option<Vec<String>>| {
+        let rank = |relaxed_query: &CompiledQuery, candidate_ids: Option<Vec<String>>| {
             let ranking_candidate_ids = candidate_ids.or_else(|| {
                 merge_candidate_ids(
-                    optional_non_empty(self.search_index.recall_ids(query, relaxed_intent)),
+                    optional_non_empty(self.search_index.recall_ids(relaxed_query)),
                     extra_candidate_ids.unwrap_or_default().to_vec(),
                 )
             });
             let ranking_candidate_indexes = ranking_candidate_ids
                 .as_ref()
                 .and_then(|ids| candidate_property_indexes(ids, property_by_id));
-            let mut results =
-                TextSearch::search_with_candidate_property_indexes_serving_facts_and_intent(
-                    self.properties,
-                    None,
-                    ranking_candidate_ids.as_deref(),
-                    ranking_candidate_indexes,
-                    geo_query,
-                    serving_facts,
-                    self.society_names,
-                    self.societies,
-                    query,
-                    relaxed_intent,
-                    ranking_graph,
-                );
-            if intent.budget_max.is_some() && relaxed_intent.budget_max.is_none() {
+            let mut results = TextSearch::search(TextSearchRequest {
+                properties: self.properties,
+                search_index: Some(self.search_index),
+                extra_candidate_ids: ranking_candidate_ids.as_deref(),
+                candidate_property_indexes: ranking_candidate_indexes,
+                geo_query,
+                serving_facts,
+                society_names: self.society_names,
+                societies: self.societies,
+                compiled_query: relaxed_query,
+                graph: ranking_graph,
+            });
+            if compiled_query.constraints.has_budget_max()
+                && !relaxed_query.constraints.has_budget_max()
+            {
                 results.retain(|result| result.card.price > 0);
             }
             results
@@ -503,144 +557,112 @@ impl<'a> SearchEngine<'a> {
             .map(|result| result.card.id.clone())
             .collect::<HashSet<_>>();
         let mut applied_relaxations = Vec::new();
-        let mut relaxed_intent = intent.clone();
-        let mut cumulative = Vec::new();
-        let mut evidence_gaps = Vec::new();
+        let mut relaxed_query = compiled_query.clone();
+        let mut budget_relaxation_state = None;
+        let mut bhk_relaxed = false;
         for step in &policy.order {
             match step.as_str() {
                 "budget_tolerance" => {
-                    let Some(budget_max) = relaxed_intent.budget_max else {
-                        continue;
-                    };
                     for multiplier in &policy.budget_multipliers {
-                        let relaxed_budget = ((budget_max as f64) * multiplier).round() as u64;
-                        let mut attempt_intent = relaxed_intent.clone();
-                        attempt_intent.budget_max = Some(relaxed_budget);
-                        let applied = vec![budget_tolerance_relaxation(budget_max, relaxed_budget)];
-                        let results = rank(&attempt_intent, None);
-                        if accumulate_relaxed_results(
+                        let mut attempt_query = relaxed_query.clone();
+                        if !attempt_query.constraints.scale_budget_max(*multiplier) {
+                            continue;
+                        }
+                        let results = rank(&attempt_query, None);
+                        let state = BudgetRelaxationState::Tolerance(*multiplier);
+                        let added_relaxations = accumulate_relaxed_results(
                             &mut accumulated_results,
                             &mut seen_property_ids,
                             results,
-                            &applied,
                             policy.target_result_count,
-                        ) > 0
-                        {
-                            extend_unique_relaxations(&mut applied_relaxations, &applied);
+                            &mut |candidate| {
+                                relaxations_for_candidate(
+                                    compiled_query,
+                                    candidate,
+                                    self.properties,
+                                    property_by_id,
+                                    self.search_index,
+                                    serving_facts,
+                                    Some(state),
+                                    bhk_relaxed,
+                                )
+                            },
+                        );
+                        if !added_relaxations.is_empty() {
+                            extend_unique_relaxations(&mut applied_relaxations, &added_relaxations);
                         }
                         if accumulated_results.len() >= policy.target_result_count {
-                            return (
-                                Some((accumulated_results, applied_relaxations)),
-                                evidence_gaps,
-                            );
+                            return Some((accumulated_results, applied_relaxations));
                         }
                     }
                 }
                 "budget_cap" => {
-                    let Some(budget_max) = relaxed_intent.budget_max else {
+                    if !relaxed_query.constraints.drop_budget_max() {
                         continue;
-                    };
-                    relaxed_intent.budget_max = None;
-                    cumulative.push(budget_cap_relaxation(budget_max));
-                    let results = rank(&relaxed_intent, None);
-                    if accumulate_relaxed_results(
+                    }
+                    budget_relaxation_state = Some(BudgetRelaxationState::CapRemoved);
+                    let results = rank(&relaxed_query, None);
+                    let added_relaxations = accumulate_relaxed_results(
                         &mut accumulated_results,
                         &mut seen_property_ids,
                         results,
-                        &cumulative,
                         policy.target_result_count,
-                    ) > 0
-                    {
-                        extend_unique_relaxations(&mut applied_relaxations, &cumulative);
+                        &mut |candidate| {
+                            relaxations_for_candidate(
+                                compiled_query,
+                                candidate,
+                                self.properties,
+                                property_by_id,
+                                self.search_index,
+                                serving_facts,
+                                budget_relaxation_state,
+                                bhk_relaxed,
+                            )
+                        },
+                    );
+                    if !added_relaxations.is_empty() {
+                        extend_unique_relaxations(&mut applied_relaxations, &added_relaxations);
                     }
                     if accumulated_results.len() >= policy.target_result_count {
-                        return (
-                            Some((accumulated_results, applied_relaxations)),
-                            evidence_gaps,
-                        );
+                        return Some((accumulated_results, applied_relaxations));
                     }
                 }
                 "bhk" => {
-                    let Some(bhk) = relaxed_intent.bhk else {
+                    let bhks = compiled_query.constraints.bhk_include_values();
+                    if bhks.is_empty() {
                         continue;
-                    };
-                    relaxed_intent.bhk = None;
-                    remove_bhk_preference_signals(&mut relaxed_intent, bhk);
-                    cumulative.push(bhk_relaxation(bhk));
-                    let results = rank(&relaxed_intent, None);
-                    if accumulate_relaxed_results(
+                    }
+                    let mut bhk_query = relaxed_query.clone();
+                    bhk_query.constraints.drop_bhk_includes();
+                    for bhk in &bhks {
+                        remove_bhk_preference_signals(&mut bhk_query.intent, *bhk);
+                    }
+                    relaxed_query = bhk_query;
+                    bhk_relaxed = true;
+                    let results = rank(&relaxed_query, None);
+                    let added_relaxations = accumulate_relaxed_results(
                         &mut accumulated_results,
                         &mut seen_property_ids,
                         results,
-                        &cumulative,
                         policy.target_result_count,
-                    ) > 0
-                    {
-                        extend_unique_relaxations(&mut applied_relaxations, &cumulative);
+                        &mut |candidate| {
+                            relaxations_for_candidate(
+                                compiled_query,
+                                candidate,
+                                self.properties,
+                                property_by_id,
+                                self.search_index,
+                                serving_facts,
+                                budget_relaxation_state,
+                                bhk_relaxed,
+                            )
+                        },
+                    );
+                    if !added_relaxations.is_empty() {
+                        extend_unique_relaxations(&mut applied_relaxations, &added_relaxations);
                     }
                     if accumulated_results.len() >= policy.target_result_count {
-                        return (
-                            Some((accumulated_results, applied_relaxations)),
-                            evidence_gaps,
-                        );
-                    }
-                }
-                "area_radius" => {
-                    let Some(area_name) = relaxed_intent.area.as_deref() else {
-                        continue;
-                    };
-                    let Some((anchor, anchor_name)) = area_relaxation_anchor(
-                        area_name,
-                        resolved_entities,
-                        self.serving_bundle.map(|bundle| &bundle.spatial_index),
-                        &mut evidence_gaps,
-                    ) else {
-                        break;
-                    };
-                    let mut radius_intent = relaxed_intent.clone();
-                    radius_intent.area = None;
-                    for radius_km in &policy.area_radii_km {
-                        let (candidate_ids, distances) = area_radius_candidate_ids(
-                            self.properties,
-                            self.society_names,
-                            self.serving_bundle.map(|bundle| &bundle.spatial_index),
-                            anchor,
-                            *radius_km,
-                        );
-                        if candidate_ids.is_empty() {
-                            continue;
-                        }
-                        let results = rank(&radius_intent, Some(candidate_ids));
-                        if results.is_empty() {
-                            continue;
-                        }
-                        let mut added = 0;
-                        for mut result in results {
-                            if accumulated_results.len() >= policy.target_result_count {
-                                break;
-                            }
-                            if !seen_property_ids.insert(result.card.id.clone()) {
-                                continue;
-                            }
-                            let mut applied = cumulative.clone();
-                            applied.push(area_radius_relaxation(
-                                area_name,
-                                anchor,
-                                &anchor_name,
-                                *radius_km,
-                                distances.get(&result.card.id).copied(),
-                            ));
-                            annotate_relaxed_results(std::slice::from_mut(&mut result), &applied);
-                            extend_unique_relaxations(&mut applied_relaxations, &applied);
-                            accumulated_results.push(result);
-                            added += 1;
-                        }
-                        if added > 0 && accumulated_results.len() >= policy.target_result_count {
-                            return (
-                                Some((accumulated_results, applied_relaxations)),
-                                evidence_gaps,
-                            );
-                        }
+                        return Some((accumulated_results, applied_relaxations));
                     }
                 }
                 _ => {}
@@ -648,12 +670,9 @@ impl<'a> SearchEngine<'a> {
         }
 
         if accumulated_results.len() > initial_result_count {
-            (
-                Some((accumulated_results, applied_relaxations)),
-                evidence_gaps,
-            )
+            Some((accumulated_results, applied_relaxations))
         } else {
-            (None, evidence_gaps)
+            None
         }
     }
 }
@@ -662,10 +681,10 @@ fn accumulate_relaxed_results(
     accumulated: &mut Vec<SearchResultCard>,
     seen_property_ids: &mut HashSet<String>,
     candidates: Vec<SearchResultCard>,
-    relaxations: &[SearchRelaxation],
     target_result_count: usize,
-) -> usize {
-    let mut added = 0;
+    relaxations_for_candidate: &mut impl FnMut(&SearchResultCard) -> Vec<SearchRelaxation>,
+) -> Vec<SearchRelaxation> {
+    let mut applied_relaxations = Vec::new();
     for mut candidate in candidates {
         if accumulated.len() >= target_result_count {
             break;
@@ -673,11 +692,142 @@ fn accumulate_relaxed_results(
         if !seen_property_ids.insert(candidate.card.id.clone()) {
             continue;
         }
-        annotate_relaxed_results(std::slice::from_mut(&mut candidate), relaxations);
+        let relaxations = relaxations_for_candidate(&candidate);
+        annotate_relaxed_results(std::slice::from_mut(&mut candidate), &relaxations);
+        extend_unique_relaxations(&mut applied_relaxations, &relaxations);
         accumulated.push(candidate);
-        added += 1;
     }
-    added
+    applied_relaxations
+}
+
+fn relaxations_for_candidate(
+    compiled_query: &CompiledQuery,
+    candidate: &SearchResultCard,
+    properties: &[Property],
+    property_by_id: Option<&HashMap<String, usize>>,
+    search_index: &SearchIndex,
+    serving_facts: Option<&crate::serving::ServingFactIndex>,
+    budget_state: Option<BudgetRelaxationState>,
+    bhk_relaxed: bool,
+) -> Vec<SearchRelaxation> {
+    let property = property_by_id
+        .and_then(|indexes| indexes.get(&candidate.card.id))
+        .and_then(|index| properties.get(*index))
+        .or_else(|| {
+            properties
+                .iter()
+                .find(|property| property.id == candidate.card.id)
+        });
+    let Some(property) = property else {
+        return Vec::new();
+    };
+    relaxations_for_property(
+        compiled_query,
+        property,
+        search_index,
+        serving_facts,
+        budget_state,
+        bhk_relaxed,
+    )
+}
+
+fn relaxations_for_property(
+    compiled_query: &CompiledQuery,
+    property: &Property,
+    search_index: &SearchIndex,
+    serving_facts: Option<&crate::serving::ServingFactIndex>,
+    budget_state: Option<BudgetRelaxationState>,
+    bhk_relaxed: bool,
+) -> Vec<SearchRelaxation> {
+    let violations = compiled_query
+        .constraints
+        .relaxed_branch_violations(
+            &mut |term| {
+                super::text::property_matches_constraint_term_with_index(
+                    property,
+                    term,
+                    Some(search_index),
+                    serving_facts,
+                )
+            },
+            &mut |term| {
+                property_matches_relaxed_constraint(
+                    property,
+                    term,
+                    search_index,
+                    serving_facts,
+                    budget_state,
+                    bhk_relaxed,
+                )
+            },
+        )
+        .unwrap_or_default();
+    relaxations_for_violations(&violations, budget_state)
+}
+
+fn property_matches_relaxed_constraint(
+    property: &Property,
+    term: &super::ast::ConstraintTerm,
+    search_index: &SearchIndex,
+    serving_facts: Option<&crate::serving::ServingFactIndex>,
+    budget_state: Option<BudgetRelaxationState>,
+    bhk_relaxed: bool,
+) -> bool {
+    let mut relaxed = term.clone();
+    match &mut relaxed {
+        super::ast::ConstraintTerm::Bhk { .. } if bhk_relaxed => return true,
+        super::ast::ConstraintTerm::Budget { max, .. } => match (budget_state, max) {
+            (Some(BudgetRelaxationState::Tolerance(multiplier)), Some(bound)) => {
+                bound.value = ((bound.value as f64) * multiplier).round() as u64;
+            }
+            (Some(BudgetRelaxationState::CapRemoved), max) => *max = None,
+            _ => {}
+        },
+        _ => {}
+    }
+    super::text::property_matches_constraint_term_with_index(
+        property,
+        &relaxed,
+        Some(search_index),
+        serving_facts,
+    )
+}
+
+fn relaxations_for_violations(
+    violations: &[super::ast::ConstraintTerm],
+    budget_state: Option<BudgetRelaxationState>,
+) -> Vec<SearchRelaxation> {
+    let mut relaxations = Vec::new();
+    let bhks = violations
+        .iter()
+        .filter_map(|term| match term {
+            super::ast::ConstraintTerm::Bhk { value, .. } => Some(*value),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if !bhks.is_empty() {
+        relaxations.push(bhk_relaxation_clause(&bhk_clause_label(&bhks)));
+    }
+    for term in violations {
+        match term {
+            super::ast::ConstraintTerm::Budget { max: Some(max), .. } => {
+                let Some(state) = budget_state else {
+                    continue;
+                };
+                let relaxation = match state {
+                    BudgetRelaxationState::Tolerance(multiplier) => budget_tolerance_relaxation(
+                        max.value,
+                        ((max.value as f64) * multiplier).round() as u64,
+                    ),
+                    BudgetRelaxationState::CapRemoved => budget_cap_relaxation(max.value),
+                };
+                extend_unique_relaxations(&mut relaxations, &[relaxation]);
+            }
+            super::ast::ConstraintTerm::Bhk { .. } => {}
+            _ => {}
+        }
+    }
+    relaxations
 }
 
 fn extend_unique_relaxations(
@@ -689,7 +839,6 @@ fn extend_unique_relaxations(
             existing.reason.code == relaxation.reason.code
                 && existing.from == relaxation.from
                 && existing.to == relaxation.to
-                && existing.radius_km == relaxation.radius_km
         });
         if !duplicate {
             accumulated.push(relaxation.clone());
@@ -713,9 +862,6 @@ fn budget_tolerance_relaxation(budget_max: u64, relaxed_budget: u64) -> SearchRe
             "budget_tolerance",
             "No exact budget match; widened budget tolerance deterministically.",
         ),
-        area_anchor: None,
-        radius_km: None,
-        candidate_distance_km: None,
     }
 }
 
@@ -728,123 +874,24 @@ fn budget_cap_relaxation(budget_max: u64) -> SearchRelaxation {
             "budget_cap_removed",
             "No result within budget tolerance; removed the budget cap.",
         ),
-        area_anchor: None,
-        radius_km: None,
-        candidate_distance_km: None,
     }
 }
 
-fn bhk_relaxation(bhk: u32) -> SearchRelaxation {
+fn bhk_clause_label(bhks: &[u32]) -> String {
+    super::ast::format_bhk_include_label(bhks)
+        .unwrap_or_else(|| "requested configurations".to_string())
+}
+
+fn bhk_relaxation_clause(from: &str) -> SearchRelaxation {
     SearchRelaxation {
         kind: "bhk".to_string(),
-        from: format!("{bhk} BHK"),
+        from: from.to_string(),
         to: "available configurations".to_string(),
         reason: relaxation_reason(
             "bhk_removed",
             "No matching configuration after budget relaxation; widened configuration while preserving area.",
         ),
-        area_anchor: None,
-        radius_km: None,
-        candidate_distance_km: None,
     }
-}
-
-fn area_radius_relaxation(
-    area_name: &str,
-    anchor: &SpatialPoint,
-    anchor_name: &str,
-    radius_km: f64,
-    candidate_distance_km: Option<f64>,
-) -> SearchRelaxation {
-    SearchRelaxation {
-        kind: "area".to_string(),
-        from: area_name.to_string(),
-        to: format!("within {radius_km:.0} km"),
-        reason: relaxation_reason(
-            "area_radius_expanded",
-            "No exact-area candidate remained after earlier relaxations; expanded around the resolved area anchor.",
-        ),
-        area_anchor: Some(SearchRelaxationAreaAnchor {
-            entity_id: anchor.entity_id.clone(),
-            name: anchor_name.to_string(),
-            latitude: anchor.latitude,
-            longitude: anchor.longitude,
-        }),
-        radius_km: Some(radius_km),
-        candidate_distance_km,
-    }
-}
-
-fn area_relaxation_anchor<'a>(
-    area_name: &str,
-    resolved_entities: &[ResolvedSearchEntity],
-    spatial_index: Option<&'a SpatialServingIndex>,
-    evidence_gaps: &mut Vec<SearchEvidenceGap>,
-) -> Option<(&'a SpatialPoint, String)> {
-    let resolved_area = resolved_entities.iter().find(|entity| {
-        entity.entity_type.eq_ignore_ascii_case("area")
-            && entity.polarity == "positive"
-            && entity.name.eq_ignore_ascii_case(area_name)
-    });
-    let entity_id = resolved_area
-        .map(|entity| entity.entity_id.clone())
-        .unwrap_or_else(|| format!("area:{}", slug(area_name)));
-    let area_label = resolved_area
-        .map(|entity| entity.name.clone())
-        .unwrap_or_else(|| area_name.to_string());
-    let anchor = spatial_index.and_then(|index| index.point_for_entity(&entity_id));
-    if let Some(anchor) = anchor {
-        return Some((anchor, area_label));
-    }
-
-    for missing_fact in ["geo.latitude", "geo.longitude"] {
-        evidence_gaps.push(SearchEvidenceGap {
-            entity_id: entity_id.clone(),
-            missing_fact: missing_fact.to_string(),
-            reason: format!(
-                "Area radius relaxation requested for {area_label}, but the promoted serving bundle has no resolved area coordinates"
-            ),
-        });
-    }
-    None
-}
-
-fn area_radius_candidate_ids(
-    properties: &[Property],
-    society_names: &HashMap<String, String>,
-    spatial_index: Option<&SpatialServingIndex>,
-    anchor: &SpatialPoint,
-    radius_km: f64,
-) -> (Vec<String>, HashMap<String, f64>) {
-    let Some(spatial_index) = spatial_index else {
-        return (Vec::new(), HashMap::new());
-    };
-    let nearby_societies = spatial_index
-        .points_within_radius(anchor.latitude, anchor.longitude, radius_km)
-        .into_iter()
-        .filter(|(point, _)| point.entity_type.eq_ignore_ascii_case("society"))
-        .collect::<Vec<_>>();
-    let mut ids = Vec::new();
-    let mut distances = HashMap::new();
-    for property in properties.iter().filter(|property| property.is_listable()) {
-        let society_name = society_names
-            .get(&property.society_id)
-            .map(String::as_str)
-            .unwrap_or_default();
-        let Some((_, distance_km)) = nearby_societies.iter().find(|(point, _)| {
-            point.name.eq_ignore_ascii_case(society_name)
-                || point
-                    .entity_id
-                    .eq_ignore_ascii_case(&society_node_id(&property.society_id))
-        }) else {
-            continue;
-        };
-        if !ids.iter().any(|id| id == &property.id) {
-            ids.push(property.id.clone());
-        }
-        distances.insert(property.id.clone(), *distance_km);
-    }
-    (ids, distances)
 }
 
 fn remove_bhk_preference_signals(intent: &mut SearchIntent, relaxed_bhk: u32) {
@@ -931,32 +978,98 @@ fn budget_display(value: u64) -> String {
     }
 }
 
+fn resolved_entity_constraints(
+    query: &str,
+    resolved_entities: &[ResolvedSearchEntity],
+) -> Vec<ResolvedEntityConstraint> {
+    let query_lower = query.to_ascii_lowercase();
+    let mut constraints = Vec::new();
+    for entity in resolved_entities.iter().filter(|entity| {
+        ["area", "society", "builder"]
+            .iter()
+            .any(|entity_type| entity.entity_type.eq_ignore_ascii_case(entity_type))
+    }) {
+        let exclusion = entity.polarity == "exclusion";
+        for (start, end) in resolved_occurrence_ranges(&query_lower, entity) {
+            let constraint = ResolvedEntityConstraint {
+                entity_id: entity.entity_id.clone(),
+                entity_type: entity.entity_type.clone(),
+                display_name: entity.name.clone(),
+                span: crate::search::intent::SourceSpan {
+                    start,
+                    end,
+                    raw_text: query[start..end].to_string(),
+                },
+                exclusion,
+            };
+            if !constraints.contains(&constraint) {
+                constraints.push(constraint);
+            }
+        }
+    }
+    constraints
+}
+
+fn resolved_occurrence_ranges(
+    query_lower: &str,
+    entity: &ResolvedSearchEntity,
+) -> Vec<(usize, usize)> {
+    let exclusion = entity.polarity == "exclusion";
+    exact_entity_match_ranges(query_lower, &entity.matched_text)
+        .into_iter()
+        .filter(|(start, _)| match_has_exclusion_prefix(query_lower, *start) == exclusion)
+        .collect()
+}
+
 fn apply_resolved_constraints(
     mut intent: SearchIntent,
     resolved_entities: &[ResolvedSearchEntity],
 ) -> SearchIntent {
+    if let Some(area) = intent.area.clone() {
+        push_unique_string(&mut intent.areas, &area);
+    }
     for entity in resolved_entities {
-        if !entity.entity_type.eq_ignore_ascii_case("area") {
+        let entity_type = entity.entity_type.to_ascii_lowercase();
+        if entity.polarity == "exclusion" {
+            match entity_type.as_str() {
+                "area" => {
+                    push_unique_string(&mut intent.excluded_areas, &entity.name);
+                }
+                "society" => {
+                    push_unique_string(&mut intent.excluded_societies, &entity.name);
+                }
+                "builder" => {
+                    push_unique_string(&mut intent.excluded_builders, &entity.name);
+                }
+                _ => {}
+            }
             continue;
         }
-        if entity.polarity == "exclusion" {
-            push_unique_string(&mut intent.excluded_areas, &entity.name);
-            if intent
-                .area
-                .as_deref()
-                .is_some_and(|area| area.eq_ignore_ascii_case(&entity.name))
-            {
-                intent.area = None;
-            }
-        } else if intent.area.is_none() {
-            intent.area = Some(entity.name.clone());
+        if entity_type == "area" {
+            push_unique_string(&mut intent.areas, &entity.name);
         }
     }
+    sync_positive_areas(&mut intent);
     intent
+}
+
+fn sync_positive_areas(intent: &mut SearchIntent) {
+    intent.areas.retain(|area| {
+        !intent
+            .excluded_areas
+            .iter()
+            .any(|excluded| excluded.eq_ignore_ascii_case(area))
+    });
+    match intent.areas.as_slice() {
+        [] => intent.area = None,
+        [only] => intent.area = Some(only.clone()),
+        _ => intent.area = None,
+    }
 }
 
 fn resolve_serving_query_entities(
     query: &str,
+    plan: &QueryPlan,
     intent: &SearchIntent,
     serving_bundle: Option<&LoadedServingBundle>,
     properties: &[Property],
@@ -965,11 +1078,16 @@ fn resolve_serving_query_entities(
     let Some(bundle) = serving_bundle else {
         return entities;
     };
-    for entity in resolve_serving_query_entities_from_records(query, intent, &bundle.entities) {
-        push_resolved(&mut entities, entity);
-    }
+    entities.extend(
+        resolve_serving_query_entities_from_records_with_alias_index(
+            query,
+            plan,
+            intent,
+            &bundle.entities,
+            &bundle.entity_alias_index,
+        ),
+    );
     remove_entities_only_mentioned_inside_longer_match(query, &mut entities);
-    entities.truncate(DIAGNOSTIC_ID_LIMIT);
     entities
 }
 
@@ -980,7 +1098,7 @@ fn remove_entities_only_mentioned_inside_longer_match(
     let query_lower = query.to_ascii_lowercase();
     let entity_ranges = entities
         .iter()
-        .map(|entity| exact_entity_match_ranges(&query_lower, &entity.name))
+        .map(|entity| exact_entity_match_ranges(&query_lower, &entity.matched_text))
         .collect::<Vec<_>>();
     let keep = entities
         .iter()
@@ -991,7 +1109,7 @@ fn remove_entities_only_mentioned_inside_longer_match(
                 .any(|candidate_range| {
                     !entities.iter().enumerate().any(|(other_index, other)| {
                         other_index != candidate_index
-                            && other.name.len() > candidate.name.len()
+                            && other.matched_text.len() > candidate.matched_text.len()
                             && entity_ranges[other_index].iter().any(|other_range| {
                                 other_range.0 <= candidate_range.0
                                     && other_range.1 >= candidate_range.1
@@ -1051,13 +1169,16 @@ fn unresolved_named_entity_clause(
             })
         },
         |span| {
-            resolved_entities.iter().any(|entity| {
-                exact_entity_match_ranges(&query_lower, &entity.name)
-                    .iter()
-                    .any(|(entity_start, entity_end)| {
-                        *entity_start >= span.start && *entity_end <= span.end
-                    })
-            })
+            plan.areas
+                .iter()
+                .any(|area| area.span.start >= span.start && area.span.end <= span.end)
+                || resolved_entities.iter().any(|entity| {
+                    exact_entity_match_ranges(&query_lower, &entity.matched_text)
+                        .iter()
+                        .any(|(entity_start, entity_end)| {
+                            *entity_start >= span.start && *entity_end <= span.end
+                        })
+                })
         },
     )
 }
@@ -1117,31 +1238,27 @@ fn resolve_runtime_area_query_entities(
             {
                 continue;
             }
-            push_resolved(
-                &mut entities,
-                ResolvedSearchEntity {
-                    entity_id: format!("area:{}", slug(area)),
-                    entity_type: "area".to_string(),
-                    name: area.to_string(),
-                    match_kind: "runtime_area_name".to_string(),
-                    match_source: "serving_entity".to_string(),
-                    matched_text: query[start..end].to_string(),
-                    polarity: polarity.to_string(),
-                },
-            );
-            if entities.len() >= DIAGNOSTIC_ID_LIMIT {
-                return entities;
-            }
+            entities.push(ResolvedSearchEntity {
+                entity_id: format!("area:{}", slug(area)),
+                entity_type: "area".to_string(),
+                name: area.to_string(),
+                match_kind: "runtime_area_name".to_string(),
+                match_source: "serving_entity".to_string(),
+                matched_text: query[start..end].to_string(),
+                polarity: polarity.to_string(),
+            });
         }
     }
 
     entities
 }
 
-fn resolve_serving_query_entities_from_records(
+fn resolve_serving_query_entities_from_records_with_alias_index(
     query: &str,
+    plan: &QueryPlan,
     intent: &SearchIntent,
     entities_source: &[ServingEntityRecord],
+    alias_index: &ServingEntityAliasIndex,
 ) -> Vec<ResolvedSearchEntity> {
     let resolution_config = search_resolution_config();
     let query_lower = query.to_ascii_lowercase();
@@ -1167,25 +1284,81 @@ fn resolve_serving_query_entities_from_records(
             {
                 continue;
             }
-            push_resolved(
-                &mut entities,
-                ResolvedSearchEntity {
-                    entity_id: entity.entity_id.clone(),
-                    entity_type: entity.entity_type.clone(),
-                    name: entity.name.clone(),
-                    match_kind: "serving_entity_name".to_string(),
-                    match_source: "serving_entity".to_string(),
+            entities.push(ResolvedSearchEntity {
+                entity_id: entity.entity_id.clone(),
+                entity_type: entity.entity_type.clone(),
+                name: entity.name.clone(),
+                match_kind: "serving_entity_name".to_string(),
+                match_source: "serving_entity".to_string(),
+                matched_text: query[start..end].to_string(),
+                polarity: polarity.to_string(),
+            });
+        }
+    }
+
+    let exact_spans = entities
+        .iter()
+        .flat_map(|entity| exact_entity_match_ranges(&query_lower, &entity.matched_text))
+        .collect::<Vec<_>>();
+    for token_start in 0..plan.tokens.len() {
+        let mut alias = String::new();
+        for token_end in token_start
+            ..plan
+                .tokens
+                .len()
+                .min(token_start + alias_index.max_token_count())
+        {
+            if !alias.is_empty() {
+                alias.push(' ');
+            }
+            alias.push_str(&plan.tokens[token_end].text);
+            let Some(group) = alias_index.get(&alias) else {
+                continue;
+            };
+            let start = plan.tokens[token_start].start;
+            let end = plan.tokens[token_end].end;
+            if exact_spans
+                .iter()
+                .any(|(exact_start, exact_end)| *exact_start <= start && *exact_end >= end)
+            {
+                continue;
+            }
+            let polarity = if match_has_exclusion_prefix(&query_lower, start) {
+                "exclusion"
+            } else {
+                "positive"
+            };
+            for record in &group.members {
+                entities.push(ResolvedSearchEntity {
+                    entity_id: record.entity_id.clone(),
+                    entity_type: record.entity_type.clone(),
+                    name: record.entity_name.clone(),
+                    match_kind: "serving_entity_materialized_alias".to_string(),
+                    match_source: "serving_alias_index".to_string(),
                     matched_text: query[start..end].to_string(),
                     polarity: polarity.to_string(),
-                },
-            );
-            if entities.len() >= DIAGNOSTIC_ID_LIMIT {
-                return entities;
+                });
             }
         }
     }
 
     entities
+}
+
+#[cfg(test)]
+fn resolve_serving_query_entities_from_records(
+    query: &str,
+    intent: &SearchIntent,
+    entities_source: &[ServingEntityRecord],
+) -> Vec<ResolvedSearchEntity> {
+    let plan = query_plan::compile_query_plan(query);
+    resolve_serving_query_entities_from_records_with_alias_index(
+        query,
+        &plan,
+        intent,
+        entities_source,
+        &ServingEntityAliasIndex::default(),
+    )
 }
 
 fn is_serving_resolvable_entity_type(entity_type: &str) -> bool {
@@ -1304,7 +1477,8 @@ fn resolve_query_entities(
         }
     }
 
-    if let Some(area) = intent.area.as_deref() {
+    for area in intent.requested_areas() {
+        let matched_text = matched_area_query_text(&query_lower, area);
         push_resolved(
             &mut entities,
             ResolvedSearchEntity {
@@ -1313,12 +1487,13 @@ fn resolve_query_entities(
                 name: area.to_string(),
                 match_kind: "area_alias".to_string(),
                 match_source: "parser_broad_region".to_string(),
-                matched_text: area.to_string(),
+                matched_text,
                 polarity: "positive".to_string(),
             },
         );
     }
     for area in &intent.excluded_areas {
+        let matched_text = matched_area_query_text(&query_lower, area);
         push_resolved(
             &mut entities,
             ResolvedSearchEntity {
@@ -1327,7 +1502,7 @@ fn resolve_query_entities(
                 name: area.to_string(),
                 match_kind: "area_alias".to_string(),
                 match_source: "parser_broad_region".to_string(),
-                matched_text: area.to_string(),
+                matched_text,
                 polarity: "exclusion".to_string(),
             },
         );
@@ -1425,6 +1600,19 @@ fn resolve_query_entities(
     entities
 }
 
+fn matched_area_query_text(query_lower: &str, canonical: &str) -> String {
+    if query_contains_lower_text(query_lower, canonical) {
+        return canonical.to_string();
+    }
+    area_alias_entries()
+        .iter()
+        .filter(|entry| entry.canonical.eq_ignore_ascii_case(canonical))
+        .flat_map(|entry| entry.aliases.iter())
+        .find(|alias| query_contains_lower_text(query_lower, alias))
+        .cloned()
+        .unwrap_or_else(|| canonical.to_string())
+}
+
 fn push_resolved(entities: &mut Vec<ResolvedSearchEntity>, entity: ResolvedSearchEntity) {
     if entities.iter().any(|existing| {
         existing.entity_id == entity.entity_id && existing.polarity == entity.polarity
@@ -1471,12 +1659,8 @@ impl SearchTimer {
     }
 }
 
-fn has_filter_intent(intent: &SearchIntent) -> bool {
-    !intent.hard_constraints.is_empty()
-        || !intent.excluded_areas.is_empty()
-        || intent.area.is_some()
-        || intent.bhk.is_some()
-        || intent.budget_max.is_some()
+fn has_filter_intent(query: &CompiledQuery) -> bool {
+    query.constraints.has_terms()
 }
 
 fn tantivy_candidate_ids(
@@ -1516,21 +1700,22 @@ fn tantivy_candidate_ids(
 
 fn merge_candidate_ids(mut left: Option<Vec<String>>, right: Vec<String>) -> Option<Vec<String>> {
     let ids = left.get_or_insert_with(Vec::new);
+    let mut seen = ids.iter().cloned().collect::<HashSet<_>>();
     for id in right {
-        if !ids.iter().any(|existing| existing == &id) {
+        if seen.insert(id.clone()) {
             ids.push(id);
         }
     }
     left.filter(|ids| !ids.is_empty())
 }
 
+#[cfg(test)]
 fn intersect_candidate_ids(left: Option<Vec<String>>, right: &[String]) -> Vec<String> {
     let Some(left) = left else {
         return right.to_vec();
     };
-    left.into_iter()
-        .filter(|id| right.iter().any(|candidate| candidate == id))
-        .collect()
+    let right = right.iter().collect::<HashSet<_>>();
+    left.into_iter().filter(|id| right.contains(id)).collect()
 }
 
 fn candidate_property_indexes(
@@ -1539,11 +1724,12 @@ fn candidate_property_indexes(
 ) -> Option<Vec<usize>> {
     let property_by_id = property_by_id?;
     let mut indexes = Vec::new();
+    let mut seen = HashSet::new();
     for id in candidate_ids {
         let Some(index) = property_by_id.get(id).copied() else {
             continue;
         };
-        if !indexes.contains(&index) {
+        if seen.insert(index) {
             indexes.push(index);
         }
     }
@@ -1608,20 +1794,60 @@ fn candidate_scores(results: &[SearchResultCard]) -> Vec<CandidateScore> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use chrono::{TimeZone, Utc};
 
     use crate::dag_config::SearchResolutionConfig;
     use crate::knowledge::FactValue;
     use crate::search::intent::{Polarity, PreferenceSignal, SearchIntent};
-    use crate::serving::{ServingEntityRecord, ServingFactIndex, ServingFactRecord};
+    use crate::serving::{
+        materialize_society_aliases, normalize_alias, ServingEdgeRecord, ServingEntityAliasIndex,
+        ServingEntityAliasRecord, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
+    };
 
     use super::*;
+
+    #[test]
+    fn candidate_vector_operations_stay_bounded_at_ten_thousand_ids() {
+        let left = (0..10_000)
+            .map(|index| format!("property-{index}"))
+            .collect::<Vec<_>>();
+        let right = (5_000..15_000)
+            .map(|index| format!("property-{index}"))
+            .collect::<Vec<_>>();
+        let positions = (0..15_000)
+            .map(|index| (format!("property-{index}"), index))
+            .collect::<HashMap<_, _>>();
+
+        let started = Instant::now();
+        let merged = merge_candidate_ids(Some(left), right.clone()).expect("merged candidates");
+        let intersection = intersect_candidate_ids(Some(merged.clone()), &right);
+        let indexes =
+            candidate_property_indexes(&merged, Some(&positions)).expect("candidate indexes");
+        let elapsed = started.elapsed();
+
+        assert_eq!(merged.len(), 15_000);
+        assert_eq!(intersection.len(), 10_000);
+        assert_eq!(indexes.len(), 15_000);
+        assert!(
+            elapsed < Duration::from_millis(250),
+            "hash-indexed candidate operations took {elapsed:?}"
+        );
+    }
 
     fn intent_without_soft_signals() -> SearchIntent {
         SearchIntent {
             area: Some("Whitefield".to_string()),
             excluded_areas: Vec::new(),
+            excluded_societies: Vec::new(),
+            excluded_builders: Vec::new(),
+            areas: Vec::new(),
             bhk: Some(3),
+            bhks: Vec::new(),
+            exclude_bhks: Vec::new(),
+            bhk_spans: Vec::new(),
+            budget_min: None,
             budget_max: Some(25_000_000),
             hard_constraints: Vec::new(),
             preferences: Vec::new(),
@@ -1637,7 +1863,14 @@ mod tests {
         SearchIntent {
             area: None,
             excluded_areas: Vec::new(),
+            excluded_societies: Vec::new(),
+            excluded_builders: Vec::new(),
+            areas: Vec::new(),
             bhk: None,
+            bhks: Vec::new(),
+            exclude_bhks: Vec::new(),
+            bhk_spans: Vec::new(),
+            budget_min: None,
             budget_max: None,
             hard_constraints: Vec::new(),
             preferences: Vec::new(),
@@ -1659,6 +1892,38 @@ mod tests {
         }
     }
 
+    fn society_alias_index(aliases: &[(&str, &str, &str)]) -> ServingEntityAliasIndex {
+        ServingEntityAliasIndex::from_records(
+            aliases
+                .iter()
+                .map(|(alias, entity_id, entity_name)| ServingEntityAliasRecord {
+                    alias: (*alias).to_string(),
+                    normalized_alias: normalize_alias(alias),
+                    entity_id: (*entity_id).to_string(),
+                    entity_type: "society".to_string(),
+                    entity_name: (*entity_name).to_string(),
+                    source: if entity_name.to_ascii_lowercase().contains(" by ") {
+                        "builder_byline"
+                    } else {
+                        "test"
+                    }
+                    .to_string(),
+                })
+                .collect(),
+        )
+        .unwrap()
+    }
+
+    fn built_by_edge(society_id: &str, builder_id: &str) -> ServingEdgeRecord {
+        ServingEdgeRecord {
+            from_entity_id: society_id.to_string(),
+            edge_type: "built_by".to_string(),
+            to_entity_id: builder_id.to_string(),
+            confidence: 1.0,
+            source_type: "Rera".to_string(),
+        }
+    }
+
     fn test_property(id: &str, area: &str) -> Property {
         Property {
             id: id.to_string(),
@@ -1672,6 +1937,8 @@ mod tests {
             listing_type: "Resale".to_string(),
             bhk: 3,
             price: 10_000_000,
+            price_min: None,
+            price_max: None,
             price_per_sqft: 10_000,
             carpet_area_sqft: 1_000,
             super_builtup_sqft: 1_200,
@@ -1725,10 +1992,8 @@ mod tests {
         query: &str,
         intent: &SearchIntent,
         properties: &[Property],
-    ) -> (
-        Option<(Vec<SearchResultCard>, Vec<SearchRelaxation>)>,
-        Vec<SearchEvidenceGap>,
-    ) {
+    ) -> Option<(Vec<SearchResultCard>, Vec<SearchRelaxation>)> {
+        let compiled_query = CompiledQuery::from_text_with_intent(query, intent.clone());
         let search_index = SearchIndex::build(properties);
         let society_names = properties
             .iter()
@@ -1748,16 +2013,15 @@ mod tests {
             property_by_id: Some(&property_by_id),
             societies: &societies,
             graph: None,
+            intent_classifier: None,
         }
         .run_relaxation_sequence(
-            query,
-            intent,
+            &compiled_query,
             None,
             Some(&property_by_id),
             None,
             None,
             None,
-            &[],
             Vec::new(),
         )
     }
@@ -1782,8 +2046,25 @@ mod tests {
             property_by_id: Some(&property_by_id),
             societies: &societies,
             graph: None,
+            intent_classifier: None,
         }
         .search(query)
+    }
+
+    #[test]
+    fn response_cap_is_applied_after_all_eligible_properties_are_ranked() {
+        let properties = (0..48)
+            .map(|index| test_property(&format!("eligible-{index:02}"), "Whitefield"))
+            .collect::<Vec<_>>();
+
+        let output = run_search_for_test("3bhk in Whitefield under 2cr", &properties);
+
+        assert_eq!(output.eligible_result_count, 48);
+        assert_eq!(output.results.len(), 32);
+        assert!(output
+            .results
+            .iter()
+            .all(|result| result.card.bhk == 3 && result.card.price <= 20_000_000));
     }
 
     #[test]
@@ -1792,6 +2073,8 @@ mod tests {
             min_resolvable_entity_name_chars: 3,
             ignored_entity_names: vec!["a".to_string(), "in".to_string()],
             resolvable_entity_types: Vec::new(),
+            min_partial_entity_name_chars: 0,
+            mechanical_alias_blocked_tokens: Vec::new(),
             named_entity_scope_prefixes: Vec::new(),
             generic_scope_nouns: Vec::new(),
             exclusion_prefixes: Vec::new(),
@@ -1818,13 +2101,11 @@ mod tests {
             weight: 1.0,
             missing_evidence_neutral: false,
         });
-        let properties = vec![test_property("exact-area-home", "Whitefield")];
+        let properties = vec![test_property("wrong-bhk-home", "East Bengaluru")];
 
-        let (matched, gaps) = run_relaxation_for_test("Whitefield", &intent, &properties);
+        let matched =
+            run_relaxation_for_test("2BHK in East Bengaluru under 50L", &intent, &properties);
         assert!(matched.is_none());
-        assert!(gaps
-            .iter()
-            .all(|gap| ["geo.latitude", "geo.longitude"].contains(&gap.missing_fact.as_str())));
     }
 
     #[test]
@@ -1846,7 +2127,7 @@ mod tests {
         })
         .collect::<Vec<_>>();
 
-        let (matched, gaps) = run_relaxation_for_test("homes", &intent, &properties);
+        let matched = run_relaxation_for_test("homes under 10Cr", &intent, &properties);
         let (results, applied) = matched.expect("three budget bands should fill the target");
 
         assert_eq!(
@@ -1875,11 +2156,51 @@ mod tests {
                 .count();
             assert_eq!(relaxation_reason_count, 1);
         }
-        assert!(gaps.is_empty());
     }
 
     #[test]
-    fn exact_results_are_kept_while_relaxation_fills_the_target() {
+    fn grouped_budget_relaxation_records_the_matching_branch() {
+        let properties = [
+            ("three-bed", 3, 21_000_000),
+            ("four-bed-one", 4, 41_000_000),
+            ("four-bed-two", 4, 42_000_000),
+        ]
+        .into_iter()
+        .map(|(id, bhk, price)| {
+            let mut property = test_property(id, "Whitefield");
+            property.bhk = bhk;
+            property.price = price;
+            property
+        })
+        .collect::<Vec<_>>();
+
+        let output = run_search_for_test("3BHK under 2Cr or 4BHK under 4Cr", &properties);
+
+        assert_eq!(output.eligible_result_count, 0);
+        assert_eq!(output.results.len(), 3);
+        let three_bed = output
+            .results
+            .iter()
+            .find(|result| result.card.id == "three-bed")
+            .expect("3BHK branch should relax");
+        assert!(three_bed.match_reason.contains("budget 2.00Cr -> 2.20Cr"));
+        assert!(!three_bed.match_reason.contains("4.00Cr"));
+        for result in output.results.iter().filter(|result| result.card.bhk == 4) {
+            assert!(result.match_reason.contains("budget 4.00Cr -> 4.40Cr"));
+            assert!(!result.match_reason.contains("2.00Cr"));
+        }
+        assert_eq!(
+            output
+                .relaxations
+                .iter()
+                .map(|relaxation| (relaxation.from.as_str(), relaxation.to.as_str()))
+                .collect::<HashSet<_>>(),
+            HashSet::from([("2.00Cr", "2.20Cr"), ("4.00Cr", "4.40Cr")])
+        );
+    }
+
+    #[test]
+    fn exact_results_do_not_mix_with_relaxed_budget_matches() {
         let properties = [
             ("strict", 100_000_000),
             ("relaxed-one", 105_000_000),
@@ -1896,7 +2217,7 @@ mod tests {
 
         let output = run_search_for_test("3 BHK homes under 10 crore", &properties);
 
-        assert_eq!(output.results.len(), 3);
+        assert_eq!(output.results.len(), 1);
         assert_eq!(output.results[0].card.id, "strict");
         assert!(output.results[0]
             .match_explanation
@@ -1905,15 +2226,53 @@ mod tests {
                 .reasons
                 .iter()
                 .all(|reason| reason.fact_key != "search.constraint_relaxation")));
-        assert!(output
+        assert!(output.relaxations.is_empty());
+    }
+
+    #[test]
+    fn shared_area_suffix_keeps_grouped_bhk_budget_pairs() {
+        let mut east_three = test_property("east-three", "East Bengaluru");
+        east_three.bhk = 3;
+        east_three.price = 19_000_000;
+        let mut east_four = test_property("east-four", "East Bengaluru");
+        east_four.bhk = 4;
+        east_four.price = 39_000_000;
+        let mut crossed = test_property("crossed", "East Bengaluru");
+        crossed.bhk = 3;
+        crossed.price = 39_000_000;
+        let mut wrong_area = test_property("wrong-area", "South Bengaluru");
+        wrong_area.bhk = 4;
+        wrong_area.price = 39_000_000;
+
+        let output = run_search_for_test(
+            "3BHK under 2Cr or 4BHK under 4Cr in East Bangalore",
+            &[east_three, east_four, crossed, wrong_area],
+        );
+        let ids = output
             .results
             .iter()
-            .skip(1)
-            .all(|result| result.match_reason.contains("Relaxed budget")));
-        assert!(!output
-            .results
-            .iter()
-            .any(|result| result.card.id == "beyond-target"));
+            .map(|result| result.card.id.as_str())
+            .collect::<HashSet<_>>();
+
+        assert_eq!(
+            ids,
+            HashSet::from(["east-three", "east-four"]),
+            "diagnostics={:#?}",
+            output.diagnostics
+        );
+    }
+
+    #[test]
+    fn relaxed_results_are_not_reported_as_originally_eligible() {
+        let mut property = test_property("relaxed-only", "Whitefield");
+        property.price = 105_000_000;
+
+        let output = run_search_for_test("3 BHK homes under 10 crore", &[property]);
+
+        assert_eq!(output.eligible_result_count, 0);
+        assert_eq!(output.results.len(), 1);
+        assert_eq!(output.results[0].card.id, "relaxed-only");
+        assert!(!output.relaxations.is_empty());
     }
 
     #[test]
@@ -1925,107 +2284,9 @@ mod tests {
         let mut property = test_property("unknown-price", "Whitefield");
         property.price = 0;
 
-        let (matched, gaps) = run_relaxation_for_test("homes", &intent, &[property]);
+        let matched = run_relaxation_for_test("homes", &intent, &[property]);
 
         assert!(matched.is_none());
-        assert!(gaps.is_empty());
-    }
-
-    #[test]
-    fn missing_area_coordinates_abstain_and_emit_coordinate_gaps() {
-        let mut intent = empty_intent();
-        intent.area = Some("Whitefield".to_string());
-        let properties = vec![test_property("distant-home", "Indiranagar")];
-
-        let (matched, gaps) = run_relaxation_for_test("Whitefield", &intent, &properties);
-
-        assert!(matched.is_none());
-        assert_eq!(
-            gaps.iter()
-                .map(|gap| gap.missing_fact.as_str())
-                .collect::<Vec<_>>(),
-            vec!["geo.latitude", "geo.longitude"]
-        );
-        assert!(gaps.iter().all(|gap| gap.entity_id == "area:whitefield"));
-    }
-
-    #[test]
-    fn area_radius_candidates_follow_policy_radii_and_exclude_distant_societies() {
-        let entities = vec![
-            serving_entity("area:anchor", "area", "Anchor"),
-            serving_entity("society:near", "society", "Near"),
-            serving_entity("society:mid", "society", "Mid"),
-            serving_entity("society:wide", "society", "Wide"),
-            serving_entity("society:distant", "society", "Distant"),
-        ];
-        let coordinates = [
-            ("area:anchor", 12.98),
-            ("society:near", 12.99),
-            ("society:mid", 13.01),
-            ("society:wide", 13.06),
-            ("society:distant", 13.10),
-        ];
-        let facts = coordinates
-            .into_iter()
-            .flat_map(|(entity_id, latitude)| {
-                [
-                    coordinate_fact(entity_id, "geo.latitude", latitude),
-                    coordinate_fact(entity_id, "geo.longitude", 77.75),
-                ]
-            })
-            .collect::<Vec<_>>();
-        let fact_index = ServingFactIndex::from_records(facts, Vec::new());
-        let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
-        let anchor = spatial_index
-            .point_for_entity("area:anchor")
-            .expect("area anchor should be indexed");
-        let properties = ["near", "mid", "wide", "distant"]
-            .into_iter()
-            .map(|id| {
-                let mut property = test_property(id, "Elsewhere");
-                property.society_id = id.to_string();
-                property
-            })
-            .collect::<Vec<_>>();
-        let society_names = HashMap::new();
-
-        let ids_by_radius = schema::ranking_policy()
-            .constraint_relaxation
-            .area_radii_km
-            .iter()
-            .map(|radius| {
-                area_radius_candidate_ids(
-                    &properties,
-                    &society_names,
-                    Some(&spatial_index),
-                    anchor,
-                    *radius,
-                )
-                .0
-            })
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            schema::ranking_policy().constraint_relaxation.area_radii_km,
-            vec![2.0, 5.0, 10.0]
-        );
-        assert_eq!(ids_by_radius[0], vec!["near"]);
-        assert_eq!(ids_by_radius[1], vec!["near", "mid"]);
-        assert_eq!(ids_by_radius[2], vec!["near", "mid", "wide"]);
-        assert!(ids_by_radius
-            .iter()
-            .all(|ids| !ids.iter().any(|id| id == "distant")));
-
-        let relaxation = area_radius_relaxation("Anchor", anchor, "Anchor", 2.0, Some(1.1));
-        assert_eq!(relaxation.radius_km, Some(2.0));
-        assert_eq!(relaxation.candidate_distance_km, Some(1.1));
-        assert_eq!(
-            relaxation
-                .area_anchor
-                .as_ref()
-                .map(|area| area.entity_id.as_str()),
-            Some("area:anchor")
-        );
     }
 
     #[test]
@@ -2048,6 +2309,29 @@ mod tests {
         assert_eq!(resolved[0].entity_id, "area:whitefield");
         assert_eq!(resolved[0].match_source, "serving_entity");
         assert_eq!(resolved[0].polarity, "positive");
+        assert_eq!(effective.areas, vec!["Whitefield".to_string()]);
+    }
+
+    #[test]
+    fn serving_area_resolution_keeps_all_positive_area_alternatives() {
+        let intent = empty_intent();
+        let entities = vec![
+            serving_entity("area:whitefield", "area", "Whitefield"),
+            serving_entity("area:sarjapur", "area", "Sarjapur"),
+        ];
+
+        let resolved = resolve_serving_query_entities_from_records(
+            "Whitefield or Sarjapur under 2.2Cr",
+            &intent,
+            &entities,
+        );
+        let effective = apply_resolved_constraints(intent, &resolved);
+
+        assert_eq!(effective.area, None);
+        assert_eq!(effective.areas.len(), 2);
+        assert!(effective.areas.iter().any(|area| area == "Whitefield"));
+        assert!(effective.areas.iter().any(|area| area == "Sarjapur"));
+        assert_eq!(resolved.len(), 2);
     }
 
     #[test]
@@ -2072,6 +2356,381 @@ mod tests {
             vec!["Electronic City".to_string()]
         );
         assert_eq!(resolved[0].polarity, "exclusion");
+    }
+
+    #[test]
+    fn unique_society_name_part_resolves_to_canonical_serving_entity() {
+        let intent = empty_intent();
+        let entities = vec![
+            serving_entity(
+                "society:prestige-waterford",
+                "society",
+                "Prestige Waterford",
+            ),
+            serving_entity(
+                "society:prestige-lakeside",
+                "society",
+                "Prestige Lakeside Habitat",
+            ),
+        ];
+        let aliases = society_alias_index(&[(
+            "Waterford",
+            "society:prestige-waterford",
+            "Prestige Waterford",
+        )]);
+        let plan = query_plan::compile_query_plan("Waterford 4BHK");
+
+        let resolved = resolve_serving_query_entities_from_records_with_alias_index(
+            "Waterford 4BHK",
+            &plan,
+            &intent,
+            &entities,
+            &aliases,
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].entity_id, "society:prestige-waterford");
+        assert_eq!(resolved[0].name, "Prestige Waterford");
+        assert_eq!(resolved[0].matched_text, "Waterford");
+        assert_eq!(resolved[0].match_kind, "serving_entity_materialized_alias");
+    }
+
+    #[test]
+    fn phase_family_alias_resolves_all_materialized_members() {
+        let intent = empty_intent();
+        let entities = ["I", "II", "III", "IV"]
+            .iter()
+            .map(|phase| {
+                serving_entity(
+                    &format!("society:folium-{}", phase.to_ascii_lowercase()),
+                    "society",
+                    &format!("FOLIUM BY SUMADHURA PHASE-{phase}"),
+                )
+            })
+            .collect::<Vec<_>>();
+        let aliases = society_alias_index(&[
+            ("Folium", "society:folium-i", "FOLIUM BY SUMADHURA PHASE-I"),
+            (
+                "Folium",
+                "society:folium-ii",
+                "FOLIUM BY SUMADHURA PHASE-II",
+            ),
+            (
+                "Folium",
+                "society:folium-iii",
+                "FOLIUM BY SUMADHURA PHASE-III",
+            ),
+            (
+                "Folium",
+                "society:folium-iv",
+                "FOLIUM BY SUMADHURA PHASE-IV",
+            ),
+        ]);
+        let plan = query_plan::compile_query_plan("Folium 3BHK");
+
+        let resolved = resolve_serving_query_entities_from_records_with_alias_index(
+            "Folium 3BHK",
+            &plan,
+            &intent,
+            &entities,
+            &aliases,
+        );
+
+        assert_eq!(resolved.len(), 4);
+        assert!(resolved
+            .iter()
+            .all(|entity| entity.matched_text == "Folium"));
+    }
+
+    #[test]
+    fn materialized_alias_resolution_preserves_each_query_occurrence() {
+        let query = "Waterford 3BHK or Waterford 4BHK";
+        let plan = query_plan::compile_query_plan(query);
+        let aliases = society_alias_index(&[(
+            "Waterford",
+            "society:prestige-waterford",
+            "Prestige Waterford",
+        )]);
+
+        let resolved = resolve_serving_query_entities_from_records_with_alias_index(
+            query,
+            &plan,
+            &empty_intent(),
+            &[],
+            &aliases,
+        );
+
+        assert_eq!(resolved.len(), 2);
+        assert!(resolved
+            .iter()
+            .all(|entity| entity.entity_id == "society:prestige-waterford"));
+    }
+
+    #[test]
+    fn semantic_entity_resolution_is_not_limited_by_diagnostic_sample_size() {
+        let entities = (0..25)
+            .map(|index| {
+                serving_entity(
+                    &format!("society:project-{index}"),
+                    "society",
+                    &format!("Project {index}"),
+                )
+            })
+            .collect::<Vec<_>>();
+        let query = (0..25)
+            .map(|index| format!("Project {index}"))
+            .collect::<Vec<_>>()
+            .join(" or ");
+
+        let resolved =
+            resolve_serving_query_entities_from_records(&query, &empty_intent(), &entities);
+
+        assert_eq!(resolved.len(), 25);
+    }
+
+    #[test]
+    fn incidental_canonical_tokens_do_not_hard_anchor() {
+        let entities = vec![
+            serving_entity(
+                "society:sumadhura-capital-residency",
+                "society",
+                "Sumadhura Capital Residency",
+            ),
+            serving_entity(
+                "society:sumadhura-sunshine",
+                "society",
+                "Sumadhura Sunshine",
+            ),
+            serving_entity("builder:sumadhura", "builder", "Sumadhura Infracon"),
+        ];
+        let aliases = ServingEntityAliasIndex::from_records(
+            materialize_society_aliases(
+                &entities,
+                &[
+                    built_by_edge("society:sumadhura-capital-residency", "builder:sumadhura"),
+                    built_by_edge("society:sumadhura-sunshine", "builder:sumadhura"),
+                ],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        let bhk_plan = query_plan::compile_query_plan("3BHK capital appreciation");
+        let bhk_intent = query_plan::project_search_intent("3BHK capital appreciation", &bhk_plan);
+        let bhk_query = resolve_serving_query_entities_from_records_with_alias_index(
+            "3BHK capital appreciation",
+            &bhk_plan,
+            &bhk_intent,
+            &entities,
+            &aliases,
+        );
+        let home_plan = query_plan::compile_query_plan("family home capital appreciation");
+        let home_intent =
+            query_plan::project_search_intent("family home capital appreciation", &home_plan);
+        let home_query = resolve_serving_query_entities_from_records_with_alias_index(
+            "family home capital appreciation",
+            &home_plan,
+            &home_intent,
+            &entities,
+            &aliases,
+        );
+
+        assert!(bhk_query.is_empty());
+        assert!(home_query.is_empty());
+    }
+
+    #[test]
+    fn distinctive_society_alias_supports_exclusion() {
+        let intent = empty_intent();
+        let entities = vec![
+            serving_entity(
+                "society:prestige-waterford",
+                "society",
+                "Prestige Waterford",
+            ),
+            serving_entity(
+                "society:prestige-lakeside",
+                "society",
+                "Prestige Lakeside Habitat",
+            ),
+        ];
+        let aliases = society_alias_index(&[(
+            "Waterford",
+            "society:prestige-waterford",
+            "Prestige Waterford",
+        )]);
+        let plan = query_plan::compile_query_plan("avoid Waterford");
+
+        let resolved = resolve_serving_query_entities_from_records_with_alias_index(
+            "avoid Waterford",
+            &plan,
+            &intent,
+            &entities,
+            &aliases,
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].entity_id, "society:prestige-waterford");
+        assert_eq!(resolved[0].polarity, "exclusion");
+    }
+
+    #[test]
+    fn ambiguous_society_name_part_does_not_hard_anchor() {
+        let intent = empty_intent();
+        let entities = vec![
+            serving_entity(
+                "society:prestige-waterford",
+                "society",
+                "Prestige Waterford",
+            ),
+            serving_entity(
+                "society:prestige-lakeside",
+                "society",
+                "Prestige Lakeside Habitat",
+            ),
+        ];
+
+        let resolved =
+            resolve_serving_query_entities_from_records("Prestige 4BHK", &intent, &entities);
+
+        assert!(resolved.is_empty());
+    }
+
+    #[test]
+    fn central_area_language_does_not_hard_anchor_society() {
+        let intent = empty_intent();
+        let entities = vec![
+            serving_entity("society:century-central", "society", "Century Central"),
+            serving_entity("builder:century", "builder", "Century Real Estate"),
+        ];
+        let aliases = ServingEntityAliasIndex::from_records(
+            materialize_society_aliases(
+                &entities,
+                &[built_by_edge("society:century-central", "builder:century")],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let plan = query_plan::compile_query_plan("3BHK central Bangalore");
+
+        let resolved = resolve_serving_query_entities_from_records_with_alias_index(
+            "3BHK central Bangalore",
+            &plan,
+            &intent,
+            &entities,
+            &aliases,
+        );
+
+        assert!(aliases.get("Central").is_none());
+        assert!(resolved
+            .iter()
+            .all(|entity| entity.entity_id != "society:century-central"));
+    }
+
+    #[test]
+    fn request_path_does_not_synthesize_aliases_from_entities() {
+        let intent = empty_intent();
+        let entities = (0..5_000)
+            .map(|index| {
+                let brand = index / 2;
+                let alias = if index % 2 == 0 {
+                    "Waterford".to_string()
+                } else {
+                    format!("Other {brand}")
+                };
+                serving_entity(
+                    &format!("society:brand-{index}"),
+                    "society",
+                    &format!("Brand{brand} {alias}"),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let aliases = ServingEntityAliasIndex::default();
+        let plan = query_plan::compile_query_plan("Waterford 4BHK");
+        let resolved = resolve_serving_query_entities_from_records_with_alias_index(
+            "Waterford 4BHK",
+            &plan,
+            &intent,
+            &entities,
+            &aliases,
+        );
+
+        assert!(resolved.is_empty());
+    }
+
+    #[test]
+    fn serving_society_exclusion_is_applied_to_intent() {
+        let intent = empty_intent();
+        let entities = vec![
+            serving_entity(
+                "society:prestige-waterford",
+                "society",
+                "Prestige Waterford",
+            ),
+            serving_entity("society:prestige-elysian", "society", "Prestige Elysian"),
+        ];
+
+        let resolved = resolve_serving_query_entities_from_records(
+            "3BHK under 4Cr, avoid Prestige Waterford",
+            &intent,
+            &entities,
+        );
+        let effective = apply_resolved_constraints(intent, &resolved);
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].entity_id, "society:prestige-waterford");
+        assert_eq!(resolved[0].polarity, "exclusion");
+        assert_eq!(
+            effective.excluded_societies,
+            vec!["Prestige Waterford".to_string()]
+        );
+        assert!(effective.excluded_areas.is_empty());
+        assert!(effective.excluded_builders.is_empty());
+    }
+
+    #[test]
+    fn serving_builder_exclusion_is_applied_to_intent() {
+        let intent = empty_intent();
+        let entities = vec![serving_entity("builder:prestige", "builder", "Prestige")];
+
+        let resolved = resolve_serving_query_entities_from_records(
+            "3BHK under 4Cr, avoid Prestige",
+            &intent,
+            &entities,
+        );
+        let effective = apply_resolved_constraints(intent, &resolved);
+
+        assert_eq!(resolved[0].polarity, "exclusion");
+        assert_eq!(effective.excluded_builders, vec!["Prestige".to_string()]);
+        assert!(effective.excluded_societies.is_empty());
+    }
+
+    #[test]
+    fn serving_builder_resolution_compiles_as_a_positive_filter() {
+        let query = "Prestige under 2Cr";
+        let entities = vec![serving_entity("builder:prestige", "builder", "Prestige")];
+        let plan = query_plan::compile_query_plan(query);
+        let intent = query_plan::project_search_intent(query, &plan);
+        let resolved = resolve_serving_query_entities_from_records(query, &intent, &entities);
+        let entities = resolved_entity_constraints(query, &resolved);
+        let compiled = CompiledQuery::compile(query, &plan, intent, &entities);
+        let matches = |builder: &str, price: u64| {
+            compiled.constraints.evaluate(&mut |term| match term {
+                crate::search::ast::ConstraintTerm::Builder { display_name, .. } => {
+                    display_name.eq_ignore_ascii_case(builder)
+                }
+                crate::search::ast::ConstraintTerm::Budget { min, max, .. } => {
+                    min.as_ref().is_none_or(|bound| price >= bound.value)
+                        && max.as_ref().is_none_or(|bound| price <= bound.value)
+                }
+                _ => true,
+            })
+        };
+
+        assert!(matches("Prestige", 19_000_000));
+        assert!(!matches("Other Builder", 19_000_000));
+        assert!(!matches("Prestige", 21_000_000));
     }
 
     #[test]

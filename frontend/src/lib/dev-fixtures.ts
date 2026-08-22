@@ -416,6 +416,8 @@ function searchFixtureProperties(query: string): SearchResponse {
     },
     results,
     area_context: areaContext,
+    eligible_results: results.length,
+    results_returned: results.length,
     total_results: results.length,
     knowledge_context: {
       claims: areaContext

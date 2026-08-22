@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
@@ -34,6 +35,8 @@ struct FactRegistrySearchFile {
     #[serde(default)]
     pub numeric_evidence: Vec<NumericEvidenceSchema>,
     #[serde(default)]
+    pub facts: Vec<FactSearchSemantics>,
+    #[serde(default)]
     pub excluded_search_fact_keys: Vec<String>,
 }
 
@@ -64,7 +67,18 @@ pub struct SearchSchemaConfig {
     #[serde(default)]
     pub numeric_evidence: Vec<NumericEvidenceSchema>,
     #[serde(default)]
+    fact_search_semantics: HashMap<String, FactSearchSemantics>,
+    #[serde(default)]
     pub excluded_search_fact_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FactSearchSemantics {
+    pub fact_key: String,
+    #[serde(default)]
+    pub polarity: String,
+    #[serde(default)]
+    pub answers_preferences: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -270,6 +284,11 @@ fn load_search_schema_config() -> SearchSchemaConfig {
         negative_preference_patterns: merge_preference_patterns(file.preference_patterns.negative),
         text_evidence: file.text_evidence,
         numeric_evidence: file.numeric_evidence,
+        fact_search_semantics: file
+            .facts
+            .into_iter()
+            .map(|fact| (fact.fact_key.clone(), fact))
+            .collect(),
         excluded_search_fact_keys: file.excluded_search_fact_keys,
     }
 }
@@ -323,6 +342,19 @@ pub fn ranking_policy() -> &'static crate::scoring::SearchRankingPolicy {
 
 pub fn query_stopwords() -> &'static [String] {
     &runtime_policy().query_stopwords
+}
+
+pub fn fact_answers_preferences(fact_key: &str, polarity: &Polarity) -> &'static [String] {
+    let expected = match polarity {
+        Polarity::Positive => "positive",
+        Polarity::Negative => "concern",
+    };
+    registry()
+        .fact_search_semantics
+        .get(fact_key)
+        .filter(|fact| fact.polarity.eq_ignore_ascii_case(expected))
+        .map(|fact| fact.answers_preferences.as_slice())
+        .unwrap_or_default()
 }
 
 pub fn scoring_stopwords() -> &'static [String] {
@@ -469,16 +501,52 @@ pub fn source_priority_for_preference(preference: &str) -> Vec<String> {
 }
 
 pub fn detect_hard_constraints(q: &str) -> Vec<HardConstraint> {
-    let tokens = constraint_tokens(q);
-    let mut constraints = Vec::new();
+    detect_hard_constraint_spans(q)
+        .into_iter()
+        .map(|matched| matched.constraint)
+        .collect()
+}
 
-    for schema in &registry().numeric_constraints {
-        if let Some(constraint) = detect_numeric_constraint(&tokens, schema) {
-            constraints.push(constraint);
-        }
-    }
+#[derive(Debug, Clone)]
+struct HardConstraintTokenMatch {
+    pub constraint: HardConstraint,
+    pub start: usize,
+    pub end: usize,
+}
 
-    constraints
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct HardConstraintSpanMatch {
+    pub constraint: HardConstraint,
+    pub start: usize,
+    pub end: usize,
+}
+
+pub(crate) fn detect_hard_constraint_spans(q: &str) -> Vec<HardConstraintSpanMatch> {
+    let spanned_tokens = constraint_tokens_with_spans(q);
+    let tokens = spanned_tokens
+        .iter()
+        .map(|token| token.text.clone())
+        .collect::<Vec<_>>();
+    detect_hard_constraint_token_matches(&tokens)
+        .into_iter()
+        .filter_map(|matched| {
+            let start = spanned_tokens.get(matched.start)?.start;
+            let end = spanned_tokens.get(matched.end.checked_sub(1)?)?.end;
+            Some(HardConstraintSpanMatch {
+                constraint: matched.constraint,
+                start,
+                end,
+            })
+        })
+        .collect()
+}
+
+fn detect_hard_constraint_token_matches(tokens: &[String]) -> Vec<HardConstraintTokenMatch> {
+    registry()
+        .numeric_constraints
+        .iter()
+        .flat_map(|schema| detect_numeric_constraint_matches(tokens, schema))
+        .collect()
 }
 
 pub fn schema_preference_signal(
@@ -704,16 +772,17 @@ const MAX_CONSTRAINT_OPERATOR_PHRASES: &[&str] = &[
 ];
 const CONSTRAINT_SYNTAX_FILLERS: &[&str] = &["of", "is", "should", "be", "must"];
 
-fn detect_numeric_constraint(
+fn detect_numeric_constraint_matches(
     tokens: &[String],
     schema: &NumericConstraintSchema,
-) -> Option<HardConstraint> {
-    let mut best: Option<(usize, usize, HardConstraint)> = None;
+) -> Vec<HardConstraintTokenMatch> {
+    let mut matches = Vec::new();
     for number_start in 0..tokens.len() {
         let Some((value, number_len, has_plus)) = parse_number_phrase(tokens, number_start) else {
             continue;
         };
         let number_end = number_start + number_len;
+        let mut best: Option<(usize, usize, HardConstraintTokenMatch)> = None;
         for unit in &schema.query_units {
             let Some((distance, alias_start, alias_end)) =
                 nearest_unit_alias(tokens, number_start, number_end, &unit.aliases)
@@ -723,7 +792,7 @@ fn detect_numeric_constraint(
             if distance > CONSTRAINT_ALIAS_WINDOW {
                 continue;
             }
-            let operator = detect_constraint_operator(
+            let operator_match = detect_constraint_operator(
                 tokens,
                 number_start,
                 number_end,
@@ -731,8 +800,14 @@ fn detect_numeric_constraint(
                 alias_end,
                 has_plus,
             )
-            .or_else(|| (value == 0.0 && schema.zero_is_max).then_some(ConstraintOperator::Max));
-            let Some(operator) = operator else {
+            .or_else(|| {
+                (value == 0.0 && schema.zero_is_max).then_some((
+                    ConstraintOperator::Max,
+                    number_start,
+                    number_end,
+                ))
+            });
+            let Some((operator, operator_start, operator_end)) = operator_match else {
                 continue;
             };
             let label = match operator {
@@ -747,9 +822,17 @@ fn detect_numeric_constraint(
                 unit: unit.unit.clone(),
                 raw_text,
             };
-            let span_start = number_start.min(alias_start);
-            let span_end = number_end.max(alias_end);
-            let candidate = (distance, span_end - span_start, constraint);
+            let span_start = number_start.min(alias_start).min(operator_start);
+            let span_end = number_end.max(alias_end).max(operator_end);
+            let candidate = (
+                distance,
+                span_end - span_start,
+                HardConstraintTokenMatch {
+                    constraint,
+                    start: span_start,
+                    end: span_end,
+                },
+            );
             if best
                 .as_ref()
                 .is_none_or(|current| (candidate.0, candidate.1) < (current.0, current.1))
@@ -757,8 +840,11 @@ fn detect_numeric_constraint(
                 best = Some(candidate);
             }
         }
+        if let Some((_, _, candidate)) = best {
+            matches.push(candidate);
+        }
     }
-    best.map(|(_, _, constraint)| constraint)
+    matches
 }
 
 fn nearest_unit_alias(
@@ -804,6 +890,16 @@ fn unit_alias_is_bound_to_number(
     } else {
         return true;
     };
+    if bridge.iter().any(|token| token.eq_ignore_ascii_case("or")) {
+        let bridge_phrase = bridge.join(" ");
+        let is_operator_phrase = MIN_CONSTRAINT_OPERATOR_PHRASES
+            .iter()
+            .chain(MAX_CONSTRAINT_OPERATOR_PHRASES)
+            .any(|phrase| phrase.eq_ignore_ascii_case(&bridge_phrase));
+        if !is_operator_phrase {
+            return false;
+        }
+    }
     bridge.iter().all(|token| is_constraint_syntax(token))
 }
 
@@ -832,15 +928,15 @@ fn detect_constraint_operator(
     alias_start: usize,
     alias_end: usize,
     has_plus: bool,
-) -> Option<ConstraintOperator> {
+) -> Option<(ConstraintOperator, usize, usize)> {
     if has_plus {
-        return Some(ConstraintOperator::Min);
+        return Some((ConstraintOperator::Min, number_start, number_end));
     }
     let expression_start = number_start.min(alias_start);
     let expression_end = number_end.max(alias_end);
     let window_start = expression_start.saturating_sub(CONSTRAINT_ALIAS_WINDOW);
     let window_end = (expression_end + CONSTRAINT_ALIAS_WINDOW).min(tokens.len());
-    let mut best: Option<(usize, usize, ConstraintOperator)> = None;
+    let mut best: Option<(usize, usize, ConstraintOperator, usize, usize)> = None;
 
     for (operator, phrases) in [
         (ConstraintOperator::Min, MIN_CONSTRAINT_OPERATOR_PHRASES),
@@ -868,13 +964,19 @@ fn detect_constraint_operator(
                 if best.as_ref().is_none_or(|current| {
                     candidate.0 < current.0 || (candidate.0 == current.0 && candidate.1 > current.1)
                 }) {
-                    best = Some((candidate.0, candidate.1, operator.clone()));
+                    best = Some((
+                        candidate.0,
+                        candidate.1,
+                        operator.clone(),
+                        operator_start,
+                        operator_end,
+                    ));
                 }
             }
         }
     }
 
-    best.map(|(_, _, operator)| operator)
+    best.map(|(_, _, operator, start, end)| (operator, start, end))
 }
 
 fn constraint_expression_is_bound(
@@ -907,27 +1009,95 @@ fn is_constraint_syntax(token: &str) -> bool {
             .any(|syntax| token.eq_ignore_ascii_case(syntax))
 }
 
+#[derive(Debug, Clone)]
+struct SpannedConstraintToken {
+    text: String,
+    start: usize,
+    end: usize,
+}
+
 fn constraint_tokens(q: &str) -> Vec<String> {
-    q.replace(">=", " at least ")
-        .replace("<=", " at most ")
-        .replace('>', " above ")
-        .replace('<', " below ")
-        .replace('%', " percent ")
-        .replace('-', " ")
-        .replace(',', "")
-        .split_whitespace()
-        .filter_map(|token| {
-            let cleaned: String = token
-                .chars()
-                .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '.' || *ch == '+' || *ch == '%')
-                .collect();
-            if cleaned.is_empty() {
-                None
-            } else {
-                Some(cleaned)
-            }
-        })
+    constraint_tokens_with_spans(q)
+        .into_iter()
+        .map(|token| token.text)
         .collect()
+}
+
+fn constraint_tokens_with_spans(q: &str) -> Vec<SpannedConstraintToken> {
+    let mut mapped = Vec::<(char, usize, usize)>::new();
+    let mut chars = q.char_indices().peekable();
+    while let Some((start, ch)) = chars.next() {
+        let end = start + ch.len_utf8();
+        let next = chars.peek().copied();
+        match (ch, next.map(|(_, next)| next)) {
+            ('>', Some('=')) => {
+                let (next_start, next_ch) = chars.next().expect("peeked character should exist");
+                push_mapped_replacement(
+                    &mut mapped,
+                    " at least ",
+                    start,
+                    next_start + next_ch.len_utf8(),
+                );
+            }
+            ('<', Some('=')) => {
+                let (next_start, next_ch) = chars.next().expect("peeked character should exist");
+                push_mapped_replacement(
+                    &mut mapped,
+                    " at most ",
+                    start,
+                    next_start + next_ch.len_utf8(),
+                );
+            }
+            ('>', _) => push_mapped_replacement(&mut mapped, " above ", start, end),
+            ('<', _) => push_mapped_replacement(&mut mapped, " below ", start, end),
+            ('%', _) => push_mapped_replacement(&mut mapped, " percent ", start, end),
+            ('-', _) => mapped.push((' ', start, end)),
+            (',', _) => {}
+            _ => mapped.push((ch, start, end)),
+        }
+    }
+
+    let mut tokens = Vec::new();
+    let mut index = 0;
+    while index < mapped.len() {
+        while index < mapped.len() && mapped[index].0.is_whitespace() {
+            index += 1;
+        }
+        if index >= mapped.len() {
+            break;
+        }
+        let token_start = index;
+        while index < mapped.len() && !mapped[index].0.is_whitespace() {
+            index += 1;
+        }
+        let cleaned = mapped[token_start..index]
+            .iter()
+            .filter(|(ch, _, _)| {
+                ch.is_ascii_alphanumeric() || *ch == '.' || *ch == '+' || *ch == '%'
+            })
+            .collect::<Vec<_>>();
+        let (Some(first), Some(last)) = (cleaned.first(), cleaned.last()) else {
+            continue;
+        };
+        tokens.push(SpannedConstraintToken {
+            text: cleaned
+                .iter()
+                .map(|(ch, _, _)| ch.to_ascii_lowercase())
+                .collect(),
+            start: first.1,
+            end: last.2,
+        });
+    }
+    tokens
+}
+
+fn push_mapped_replacement(
+    mapped: &mut Vec<(char, usize, usize)>,
+    replacement: &str,
+    start: usize,
+    end: usize,
+) {
+    mapped.extend(replacement.chars().map(|ch| (ch, start, end)));
 }
 
 fn parse_number_token(token: &str) -> Option<(f64, bool)> {
@@ -1112,6 +1282,18 @@ mod tests {
     }
 
     #[test]
+    fn detects_repeated_constraints_for_the_same_dimension() {
+        let constraints = detect_hard_constraints("3BHK above 10 acres or 4BHK above 5 acres");
+        let acreage = constraints
+            .iter()
+            .filter(|constraint| constraint.field == "land_area")
+            .map(|constraint| constraint.value)
+            .collect::<Vec<_>>();
+
+        assert_eq!(acreage, vec![10.0, 5.0]);
+    }
+
+    #[test]
     fn detects_configured_rating_review_and_number_word_constraints() {
         let constraints = detect_hard_constraints(
             "ready homes with Google rating >= 4.2 and at least one hundred reviews",
@@ -1178,6 +1360,19 @@ mod tests {
         assert_eq!(explicit[0].field, "land_area");
         assert_eq!(explicit[0].operator, ConstraintOperator::Min);
         assert_eq!(explicit[0].value, 4.0);
+    }
+
+    #[test]
+    fn numeric_constraints_do_not_bind_across_or_branches() {
+        let constraints = detect_hard_constraints("3BHK with 10+ acres or at least 80% open space");
+
+        assert_eq!(constraints.len(), 2);
+        assert!(constraints
+            .iter()
+            .any(|constraint| constraint.field == "land_area" && constraint.value == 10.0));
+        assert!(constraints
+            .iter()
+            .any(|constraint| constraint.field == "open_area_pct" && constraint.value == 80.0));
     }
 
     #[test]

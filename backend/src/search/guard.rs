@@ -23,6 +23,15 @@ pub fn no_results_guidance() -> SearchGuidance {
     guidance_from_template(&search_guardrail_config().guidance.no_results, None)
 }
 
+pub fn named_society_alternatives_guidance(society: &str) -> SearchGuidance {
+    let template = &search_guardrail_config()
+        .guidance
+        .named_society_alternatives;
+    let mut guidance = guidance_from_template(template, None);
+    guidance.title = guidance.title.replace("{society}", society);
+    guidance
+}
+
 pub fn guard_search_query(query: &str) -> Option<GuardedSearch> {
     let config = search_guardrail_config();
     let normalized = normalize_query(query);
@@ -152,13 +161,13 @@ fn structured_home_intent_score(intent: &SearchIntent) -> i32 {
         .home_intent_detection
         .structured_signal_scores;
     let mut score = 0;
-    if intent.area.is_some() {
+    if !intent.requested_areas().is_empty() {
         score += scores.area;
     }
-    if intent.bhk.is_some() {
+    if !intent.requested_bhks().is_empty() {
         score += scores.bhk;
     }
-    if intent.budget_max.is_some() {
+    if intent.budget_min.is_some() || intent.budget_max.is_some() {
         score += scores.budget_max;
     }
     if !intent.excluded_areas.is_empty() {
@@ -218,8 +227,9 @@ fn has_strong_lexical_home_anchor(query: &str) -> bool {
 }
 
 fn has_structured_anchor(intent: &SearchIntent) -> bool {
-    intent.area.is_some()
-        || intent.bhk.is_some()
+    !intent.requested_areas().is_empty()
+        || !intent.requested_bhks().is_empty()
+        || intent.budget_min.is_some()
         || intent.budget_max.is_some()
         || !intent.excluded_areas.is_empty()
         || !intent.hard_constraints.is_empty()
