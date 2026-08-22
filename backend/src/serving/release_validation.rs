@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::assets::{AssetPathBuilder, MaterializationRecord, MaterializationStatus};
-use crate::dag_config::load_serving_eligibility;
+use crate::dag_config::{
+    load_search_experiment_eligibility, load_serving_eligibility, ServingAdmissionProfile,
+};
 use crate::knowledge::FactValue;
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
@@ -495,6 +497,14 @@ async fn validate_quarantine_contract(
             Some(report.eligibility_policy_version.to_string()),
         );
     }
+    if report.admission_profile != manifest.admission_profile {
+        issue(
+            issues,
+            "quarantine_admission_profile_mismatch",
+            "quarantine report and serving manifest use different admission profiles",
+            Some(format!("{:?}", report.admission_profile)),
+        );
+    }
     check_count(
         issues,
         "quarantined_society_count_mismatch",
@@ -551,7 +561,11 @@ fn validate_clean_bundle_eligibility(
     edges: &[super::ServingEdgeRecord],
     issues: &mut Vec<ServingBundleValidationIssue>,
 ) {
-    let policy = match load_serving_eligibility() {
+    let loaded_policy = match manifest.admission_profile {
+        ServingAdmissionProfile::BuyerCatalog => load_serving_eligibility(),
+        ServingAdmissionProfile::SearchExperiment => load_search_experiment_eligibility(),
+    };
+    let policy = match loaded_policy {
         Ok(policy) => policy,
         Err(error) => {
             issue(

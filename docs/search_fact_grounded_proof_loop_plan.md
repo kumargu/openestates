@@ -63,8 +63,11 @@ completeness:
 - Missing facts unrelated to the query must not remove an otherwise valid
   society from the experiment.
 
-Search-experiment promotion means advancing the dedicated experiment pointer
-after validation. Production catalog promotion remains a separate decision.
+Search-experiment activation means starting the runtime with the candidate's
+immutable materialization id through
+`OPENESTATES_SERVING_MATERIALIZATION_ID`. It does not move the production
+catalog/current pointer. Production catalog promotion remains a separate
+decision.
 
 ## Implementation Under Test
 
@@ -110,6 +113,37 @@ and roughly 15,560 facts. The `118` name describes that catalog generation; it
 must not be treated as the current eligible runtime count. Before using it as
 an expansion input, profile its society membership, identity mappings,
 quarantine status, and lineage directly.
+
+## Implementation Checkpoint — 2026-08-22
+
+Completed and verified:
+
+- added explicit `buyer_catalog` and `search_experiment` serving-admission
+  profiles;
+- added `app/config/dag/search_experiment_eligibility.json`, requiring only a
+  projected property, area, and BHK/configuration for experiment admission;
+- stamped manifests and quarantine reports with their admission profile;
+- made normal serving builders default to `buyer_catalog` and added explicit
+  experiment builder/materializer constructors;
+- made buyer-catalog promotion reject search-experiment bundles;
+- proved in unit/runtime tests that missing media, size, and builder fields do
+  not block an experiment property, while unknown price still fails a hard
+  budget;
+- removed automatic BHK/budget relaxation from engine, AST, scoring policy,
+  benchmark contract, smoke contract, and frontend response types;
+- updated the fact-first bank to version 2 so the two former relaxation cases
+  are explicit hard-constraint abstentions.
+
+Verification at this checkpoint:
+
+- `cargo check`: passed;
+- full Rust suite: passed (624 library tests and all integration binaries);
+- Python benchmark/pipeline suite: 90 passed, 1 skipped;
+- production search-hardcoding audit: 0 blocked aliases.
+
+The next unproved boundary is operational, not semantic: build a real immutable
+experiment-profile bundle, pin the runtime to its materialization id, and run a
+frozen incomplete-society proof bank against it.
 
 ## Non-Negotiable Invariants
 
@@ -214,7 +248,7 @@ Expected outcomes must be structured, not prose snapshots:
 - allowed top-k range;
 - exact hard constraints that every returned result must satisfy;
 - expected proof fact keys and matched entity ids;
-- allowed result tier: `exact`, `budget_expanded`, or `supported`;
+- allowed result tier: `exact` or `supported`;
 - whether zero results is correct;
 - facts that must not be claimed.
 
@@ -229,7 +263,7 @@ Measure:
 - proof precision: reason key and matched entity agree with the ledger;
 - unsupported-claim count;
 - OR-branch membership and ordering;
-- exact versus budget-expanded tier correctness;
+- exact versus explicitly supported-result tier correctness;
 - candidate count before and after hard filtering;
 - warm request p50 and p95 latency;
 - deterministic ordered-result stability across repeated runs.
@@ -293,8 +327,9 @@ For every candidate:
 5. Confirm the candidate includes incomplete societies and that each can be
    recalled only for constraints and preferences its facts actually support.
 6. Run the frozen query bank and standard contracts against the candidate.
-7. Atomically advance only the search-experiment pointer. Do not advance the
-   production buyer-catalog environment as part of this loop.
+7. Pin the test runtime to the immutable materialization id with
+   `OPENESTATES_SERVING_MATERIALIZATION_ID`. Do not advance the production
+   buyer-catalog environment as part of this loop.
 8. Reload the API and verify that the reported bundle version matches the
    experiment version.
 
@@ -361,11 +396,10 @@ Before further catalog enrichment, extend the frozen proof loop with:
 9. **Data-quality sentinels:** known misclassified facts and absent facts never
    produce confident proof.
 
-Budget behavior must be settled before the next code change. The current config
-keeps explicit budgets hard by disabling automatic budget expansion, while
-three Rust tests still expect expansion. For this experiment, keep implicit
-budget expansion disabled; if a future buyer experience offers alternatives,
-return them as an explicit tradeoff result set and never as an exact match.
+Budget behavior is settled for this experiment: explicit budgets and BHKs are
+hard, automatic relaxation code and contracts have been removed, and the full
+test suite passes. If a future buyer experience offers alternatives, return
+them only as an explicit tradeoff result set and never as an exact match.
 
 ## First-Loop Definition of Done
 

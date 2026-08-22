@@ -99,9 +99,10 @@ pub use search_intent::{
     SearchPlaceFamilyAlias, SearchResolutionConfig, UnitAliasConfig, UnitValueParserConfig,
 };
 pub use serving_eligibility::{
-    load_serving_eligibility, load_serving_eligibility_from_path, serving_eligibility_path,
-    EligibilityValuePredicate, ProjectedPropertyRequirement, ServingEligibilityFile,
-    SocietyEvidenceRequirement,
+    load_search_experiment_eligibility, load_serving_eligibility,
+    load_serving_eligibility_from_path, search_experiment_eligibility_path,
+    serving_eligibility_path, EligibilityValuePredicate, ProjectedPropertyRequirement,
+    ServingAdmissionProfile, ServingEligibilityFile, SocietyEvidenceRequirement,
 };
 pub use ui_surfaces::{
     load_ui_surfaces, load_ui_surfaces_from_path, ui_surfaces_config, ui_surfaces_path,

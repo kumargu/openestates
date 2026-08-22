@@ -12,9 +12,10 @@ societies. The next loop should test whether search can retrieve, constrain,
 rank, and explain whatever valid DAG facts are present, including for societies
 that are incomplete for normal buyer-detail publication.
 
-Buyer production eligibility remains intact. The revised plan uses a separate
-search-experiment bundle admission policy and pointer; it does not globally
-weaken `app/config/dag/serving_eligibility.json`.
+Buyer production eligibility remains intact. The revised implementation uses a
+separate search-experiment bundle admission policy and an explicit immutable
+materialization pin; it does not globally weaken
+`app/config/dag/serving_eligibility.json` or move the production pointer.
 
 ## Original goal and where the work drifted
 
@@ -77,18 +78,40 @@ Recorded final artifacts:
   unsupported claims, stable ordering, and endpoint p95 between 18.53 and
   24.81 ms in the final candidate runs.
 
-Fresh audit after the stopped session:
+Fresh verification after resuming the stopped session:
 
+- `cargo check`: passed.
+- Full Rust suite: 624 library tests and all integration binaries passed.
+- Search-experiment admission/promotion tests: 3 passed.
+- Search-efficiency integration contract: 11 passed.
 - Python benchmark and collection tests: 90 passed, 1 skipped.
 - Search hardcoding audit: zero blocked search-config alias findings.
-- Rust search-focused suite: 313 passed, 3 failed.
 
-The three Rust failures are not new search misses. They exercise automatic
-budget expansion, while the South 40 work set configured budget multipliers to
-an empty list to keep explicit buyer budgets hard. The behavior and tests now
-disagree. The search-focused direction is to keep implicit expansion disabled,
-update the stale tests, and test any future alternatives as an explicitly
-labeled tradeoff result set.
+The three stale Rust failures were old automatic-relaxation expectations, not
+search misses. Automatic BHK/budget relaxation and its dormant policy/API/test
+surface have now been removed. Explicit budgets and BHKs remain hard; any
+future alternatives must be a separately labeled tradeoff result set.
+
+## Resumed-session implementation checkpoint
+
+Implemented:
+
+- `ServingAdmissionProfile::{BuyerCatalog, SearchExperiment}`;
+- a minimal experiment policy requiring projected property, area, and
+  configuration, without buyer-only media, size, builder, RERA, or road gates;
+- admission-profile markers in serving manifests and quarantine reports;
+- explicit experiment constructors on the serving builder/materializer;
+- profile-aware validation and a buyer-catalog gate that rejects experiment
+  bundles;
+- runtime coverage proving an incomplete property matches only supported
+  BHK/budget/review facts and that unknown price fails a hard budget;
+- end-to-end deletion of implicit relaxation from Rust, config, benchmark,
+  smoke test, frontend type, and stale tests.
+
+The fact-first query bank is now version 2. Its two former relaxation cases are
+recorded as hard-constraint abstentions. This is an intentional contract
+revision, not a data-oracle adjustment: the underlying bundle facts did not
+change.
 
 ## What has and has not been proved
 
@@ -116,25 +139,24 @@ Not yet proved:
 
 ## Next steps
 
-1. Add a separate search-experiment admission profile/environment. Preserve
-   canonical identity, lineage, fact validity, and a minimal runtime projection,
-   but do not require unrelated media, carpet area, approach-road, or complete
-   buyer-detail evidence.
-2. Build one immutable candidate containing a deliberate mix of complete and
+1. Build one immutable experiment-profile candidate containing a deliberate
+   mix of complete and
    incomplete societies. Do not promote it to the buyer production catalog.
-3. Freeze an incomplete-society query bank before running search. For every
+2. Freeze an incomplete-society query bank before running search. For every
    case, declare which facts may match, which hard constraints must reject the
    property, and which facts must never be claimed.
-4. Run the existing frozen banks unchanged against the candidate, then add
+3. Pin the runtime with `OPENESTATES_SERVING_MATERIALIZATION_ID`, run the
+   current frozen banks against the candidate, then add
    transfer banks for missing optional evidence, required evidence, negative
    risks, more named-place families, and generic Boolean/paraphrase cases.
-5. Verify result reasons against the property-detail proof payload using the
+4. Verify result reasons against the property-detail proof payload using the
    same fact/entity/source/version handles.
-6. Resolve the three stale budget-relaxation tests, run the full Rust suite,
-   hardcoding audit, benchmark banks, and smoke test.
-7. Promote only the search-experiment pointer if all gates pass. Publish the
+5. Verify cache isolation and rollback between two explicitly pinned immutable
+   materializations.
+6. Publish the
    before/after ordered ids, proof changes, unsupported-claim count, and latency
-   delta. Keep buyer-catalog promotion as a later independent decision.
+   delta. Keep buyer-catalog promotion as a later independent decision; do not
+   move its pointer during this experiment.
 
 ## Historical execution log
 

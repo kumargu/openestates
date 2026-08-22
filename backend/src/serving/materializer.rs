@@ -5,6 +5,7 @@ use crate::assets::{
     KgSocietyViewMaterialization, KgViewRecords, MaterializationId, MaterializationRecord,
     SourceWatermark, KG_SOCIETY_VIEW_ASSET_ID,
 };
+use crate::dag_config::ServingAdmissionProfile;
 use crate::knowledge::KnowledgeGraph;
 use crate::lake::{LakeError, LakeStore};
 
@@ -18,6 +19,7 @@ use super::{
 pub struct SearchServingBundleMaterializer {
     lake: LakeStore,
     materializations: AssetMaterializationStore,
+    admission_profile: ServingAdmissionProfile,
 }
 
 #[derive(Debug, Clone)]
@@ -32,6 +34,25 @@ impl SearchServingBundleMaterializer {
         Self {
             lake,
             materializations,
+            admission_profile: ServingAdmissionProfile::BuyerCatalog,
+        }
+    }
+
+    pub fn for_search_experiment(lake: LakeStore) -> Self {
+        let materializations = AssetMaterializationStore::new(lake.clone());
+        Self {
+            lake,
+            materializations,
+            admission_profile: ServingAdmissionProfile::SearchExperiment,
+        }
+    }
+
+    fn bundle_builder(&self) -> ServingBundleBuilder {
+        match self.admission_profile {
+            ServingAdmissionProfile::BuyerCatalog => ServingBundleBuilder::new(self.lake.clone()),
+            ServingAdmissionProfile::SearchExperiment => {
+                ServingBundleBuilder::for_search_experiment(self.lake.clone())
+            }
         }
     }
 
@@ -113,7 +134,8 @@ impl SearchServingBundleMaterializer {
     ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
         let mut parent_materializations = vec![kg_view.record.materialization_id.clone()];
         parent_materializations.extend(rera_parent_materializations);
-        let manifest = ServingBundleBuilder::new(self.lake.clone())
+        let manifest = self
+            .bundle_builder()
             .build_from_kg_view_records_with_rera(&kg_view.records, rera_evidence, bundle_version)
             .await?;
         self.write_unpromoted_record(
@@ -238,7 +260,8 @@ impl SearchServingBundleMaterializer {
         parent_materializations: Vec<MaterializationId>,
         run_id: MaterializationId,
     ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
-        let manifest = ServingBundleBuilder::new(self.lake.clone())
+        let manifest = self
+            .bundle_builder()
             .build_child_from_serving_records_with_rera(
                 entities,
                 facts,
@@ -268,7 +291,8 @@ impl SearchServingBundleMaterializer {
         run_id: MaterializationId,
         partition: AssetPartition,
     ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
-        let manifest = ServingBundleBuilder::new(self.lake.clone())
+        let manifest = self
+            .bundle_builder()
             .build_from_kg_view_records(records, bundle_version)
             .await?;
         self.write_unpromoted_record(

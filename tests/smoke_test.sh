@@ -401,8 +401,8 @@ check "Search result sets carry stable branch identities" \
 
 check "Search result tiers use the public contract" \
   "${BASE}/api/search?q=3BHK%20Whitefield%20under%202Cr" \
-  '[.resultSets[].results[]] | all(.match_tier == "exact" or .match_tier == "supported" or .match_tier == "budget_expanded")' \
-  "expected exact, supported, or budget_expanded tiers"
+  '[.resultSets[].results[]] | all(.match_tier == "exact" or .match_tier == "supported")' \
+  "expected exact or supported tiers"
 
 check "Search response omits internal execution state" \
   "${BASE}/api/search?q=3BHK%20Whitefield%20under%202Cr" \

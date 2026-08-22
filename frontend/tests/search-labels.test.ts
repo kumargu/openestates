@@ -7,7 +7,7 @@ import {
   splitLabelParts,
 } from "../src/lib/search.ts";
 
-test("result announcements distinguish named alternatives from relaxed matches", () => {
+test("result announcements distinguish named alternatives from broader matches", () => {
   assert.equal(
     searchResultsAnnouncement(
       "Godrej Splendour under 1.4Cr",

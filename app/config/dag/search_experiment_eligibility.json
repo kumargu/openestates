@@ -1,0 +1,19 @@
+{
+  "admission_profile": "search_experiment",
+  "version": 1,
+  "minimum_projected_properties": 1,
+  "missing_projection_reason_code": "missing_property_projection",
+  "property_requirements": [
+    {
+      "reason_code": "missing_property_area",
+      "predicate": "any_non_empty",
+      "fields": ["area"]
+    },
+    {
+      "reason_code": "missing_property_configuration",
+      "predicate": "any_positive",
+      "fields": ["bhk"]
+    }
+  ],
+  "society_requirements": []
+}

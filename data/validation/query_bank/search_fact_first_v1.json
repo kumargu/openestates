@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "generated_at": "2026-08-02",
   "source_bundle_version": "bangalore-catalog-60-coherent-2026-08-01-run-4f169729-4564-4f33-b552-0d8dc6c562a0",
   "source_bundle_path": "data/lake/serving/search_bundle/version=bangalore-catalog-60-coherent-2026-08-01-run-4f169729-4564-4f33-b552-0d8dc6c562a0",
@@ -7,7 +7,8 @@
     "Entity names and expected IDs come from the pinned serving Parquet and are allowed only in this test fixture.",
     "Production parser/config/code must not copy locality, society, or landmark names from this file.",
     "Proximity expectations require a direct nearby_* fact and matching near_place edge; graph reachability is not enough.",
-    "Abstention cases test missing evidence and must never be converted into invented proof."
+    "Abstention cases test missing evidence and must never be converted into invented proof.",
+    "Version 2 retires implicit BHK and budget relaxation: explicit hard constraints now abstain when no exact candidate exists."
   ],
   "cases": [
     {
@@ -598,15 +599,13 @@
     {
       "id": "FF-A-001",
       "mode": "abstention",
-      "category": "area_preserving_relaxation",
+      "category": "hard_constraint_abstention",
       "query": "2BHK in Whitefield near metro under 1.5cr",
       "expected": {
         "area": "Whitefield",
         "bhk": 2,
         "budget_max": 15000000,
-        "top_result_ids_any": ["discovered-prestige-waterford-1bhk"],
-        "result_areas_all": ["Whitefield"],
-        "relaxation_kinds_any": ["bhk"],
+        "max_results": 0,
         "forbidden_reason_fact_keys": ["nearby_metro_stations"],
         "forbidden_proof_focus_fact_keys": ["nearby_metro_stations"]
       }
@@ -614,15 +613,13 @@
     {
       "id": "FF-A-002",
       "mode": "abstention",
-      "category": "area_preserving_relaxation",
+      "category": "hard_constraint_abstention",
       "query": "3BHK in Whitefield under 2cr",
       "expected": {
         "area": "Whitefield",
         "bhk": 3,
         "budget_max": 20000000,
-        "top_result_ids_any": ["discovered-prestige-waterford-3bhk"],
-        "result_areas_all": ["Whitefield"],
-        "relaxation_kinds_any": ["budget"]
+        "max_results": 0
       }
     },
     {

@@ -86,8 +86,8 @@ pub(crate) struct ResolvedEntityConstraint {
 
 /// Authoritative internal buyer query.
 ///
-/// `intent` is a derived API/ranking summary. Hard eligibility and relaxation
-/// always evaluate and transform `constraints`.
+/// `intent` is a derived API/ranking summary. Hard eligibility always evaluates
+/// `constraints`.
 #[derive(Debug, Clone)]
 pub struct CompiledQuery {
     pub raw: String,
@@ -267,20 +267,8 @@ impl ConstraintExpr {
         });
     }
 
-    pub fn scale_budget_max(&mut self, multiplier: f64) -> bool {
-        scale_positive_budget_max(self, false, multiplier)
-    }
-
-    pub fn drop_budget_max(&mut self) -> bool {
-        drop_positive_budget_max(self, false)
-    }
-
     pub fn has_budget_max(&self) -> bool {
         has_positive_budget_max(self, false)
-    }
-
-    pub fn budget_max_value(&self) -> Option<u64> {
-        collect_budget_max(self, false)
     }
 
     pub fn bhk_include_label(&self) -> Option<String> {
@@ -310,14 +298,6 @@ impl ConstraintExpr {
         let mut constraints = Vec::new();
         collect_matching_evidence_constraints(self, term_matches, &mut constraints);
         constraints
-    }
-
-    pub fn relaxed_branch_violations(
-        &self,
-        original_matches: &mut impl FnMut(&ConstraintTerm) -> bool,
-        relaxed_matches: &mut impl FnMut(&ConstraintTerm) -> bool,
-    ) -> Option<Vec<ConstraintTerm>> {
-        relaxed_branch_violations(self, original_matches, relaxed_matches)
     }
 
     fn match_all() -> Self {
@@ -399,20 +379,6 @@ fn format_money(value: u64) -> String {
         format!("₹{:.0}L", value as f64 / 100_000.0)
     } else {
         format!("₹{value}")
-    }
-}
-
-fn collect_budget_max(expr: &ConstraintExpr, negated: bool) -> Option<u64> {
-    match expr {
-        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => clauses
-            .iter()
-            .filter_map(|clause| collect_budget_max(clause, negated))
-            .max(),
-        ConstraintExpr::Not { clause } => collect_budget_max(clause, !negated),
-        ConstraintExpr::Term {
-            term: ConstraintTerm::Budget { max, .. },
-        } if !negated => max.as_ref().map(|bound| bound.value),
-        ConstraintExpr::Term { .. } => None,
     }
 }
 
@@ -984,29 +950,6 @@ fn remove_positive_terms(
     }
 }
 
-fn drop_positive_budget_max(expr: &mut ConstraintExpr, negated: bool) -> bool {
-    match expr {
-        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
-            let mut updated = false;
-            for clause in clauses {
-                updated |= drop_positive_budget_max(clause, negated);
-            }
-            updated
-        }
-        ConstraintExpr::Not { clause } => drop_positive_budget_max(clause, !negated),
-        ConstraintExpr::Term {
-            term: ConstraintTerm::Budget { min, max, .. },
-        } if !negated && max.is_some() => {
-            *max = None;
-            if min.is_none() {
-                *expr = ConstraintExpr::match_all();
-            }
-            true
-        }
-        ConstraintExpr::Term { .. } => false,
-    }
-}
-
 fn has_positive_budget_max(expr: &ConstraintExpr, negated: bool) -> bool {
     match expr {
         ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => clauses
@@ -1016,27 +959,6 @@ fn has_positive_budget_max(expr: &ConstraintExpr, negated: bool) -> bool {
         ConstraintExpr::Term {
             term: ConstraintTerm::Budget { max, .. },
         } => !negated && max.is_some(),
-        ConstraintExpr::Term { .. } => false,
-    }
-}
-
-fn scale_positive_budget_max(expr: &mut ConstraintExpr, negated: bool, multiplier: f64) -> bool {
-    match expr {
-        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
-            clauses.iter_mut().fold(false, |updated, clause| {
-                scale_positive_budget_max(clause, negated, multiplier) || updated
-            })
-        }
-        ConstraintExpr::Not { clause } => scale_positive_budget_max(clause, !negated, multiplier),
-        ConstraintExpr::Term {
-            term: ConstraintTerm::Budget { max, .. },
-        } if !negated => {
-            let Some(bound) = max.as_mut() else {
-                return false;
-            };
-            bound.value = ((bound.value as f64) * multiplier).round() as u64;
-            true
-        }
         ConstraintExpr::Term { .. } => false,
     }
 }
@@ -1151,53 +1073,6 @@ fn matched_budget_bounds(
             max.as_ref().map(|bound| bound.value),
         )),
         ConstraintExpr::Term { .. } => None,
-    }
-}
-
-fn relaxed_branch_violations(
-    expr: &ConstraintExpr,
-    original_matches: &mut impl FnMut(&ConstraintTerm) -> bool,
-    relaxed_matches: &mut impl FnMut(&ConstraintTerm) -> bool,
-) -> Option<Vec<ConstraintTerm>> {
-    match expr {
-        ConstraintExpr::And { clauses } => {
-            let mut violations = Vec::new();
-            for clause in clauses {
-                violations.extend(relaxed_branch_violations(
-                    clause,
-                    original_matches,
-                    relaxed_matches,
-                )?);
-            }
-            Some(violations)
-        }
-        ConstraintExpr::AnyOf { clauses } => {
-            let mut best = None::<Vec<ConstraintTerm>>;
-            for clause in clauses {
-                let Some(candidate) =
-                    relaxed_branch_violations(clause, original_matches, relaxed_matches)
-                else {
-                    continue;
-                };
-                if best
-                    .as_ref()
-                    .is_none_or(|current| candidate.len() < current.len())
-                {
-                    best = Some(candidate);
-                }
-            }
-            best
-        }
-        ConstraintExpr::Not { clause } => (!clause.evaluate(original_matches)).then(Vec::new),
-        ConstraintExpr::Term { term } => {
-            if original_matches(term) {
-                Some(Vec::new())
-            } else if relaxed_matches(term) {
-                Some(vec![term.clone()])
-            } else {
-                None
-            }
-        }
     }
 }
 
@@ -1831,21 +1706,6 @@ mod tests {
             41_000_000
         ));
         assert!(!matches_project_budget(&ast, "Godrej Air", 4, 19_000_000));
-
-        let mut relaxed = ast.clone();
-        assert!(relaxed.scale_budget_max(1.1));
-        assert!(matches_project_budget(
-            &relaxed,
-            "Godrej Air",
-            3,
-            21_000_000
-        ));
-        assert!(matches_project_budget(
-            &relaxed,
-            "Prestige Waterford",
-            4,
-            41_000_000
-        ));
     }
 
     #[test]

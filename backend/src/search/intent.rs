@@ -34,7 +34,7 @@ pub struct SearchIntent {
     /// BHK values the buyer explicitly rejected, e.g. "not 4 BHK".
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exclude_bhks: Vec<u32>,
-    /// Source spans for BHK clauses used by buyer-facing query relaxation.
+    /// Source spans for BHK clauses used by query-aware presentation.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub bhk_spans: Vec<SourceSpan>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

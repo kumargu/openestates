@@ -8,7 +8,8 @@ use crate::assets::{
     AssetPathBuilder, KgViewEdgeRecord, KgViewFactAnnotationRecord, KgViewFactRecord, KgViewRecords,
 };
 use crate::dag_config::{
-    load_fact_registry_index, load_serving_eligibility, scoring_direction_from_hint, DagConfigError,
+    load_fact_registry_index, load_search_experiment_eligibility, load_serving_eligibility,
+    scoring_direction_from_hint, DagConfigError, ServingAdmissionProfile,
 };
 use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
@@ -32,11 +33,22 @@ pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 8;
 #[derive(Clone)]
 pub struct ServingBundleBuilder {
     lake: LakeStore,
+    admission_profile: ServingAdmissionProfile,
 }
 
 impl ServingBundleBuilder {
     pub fn new(lake: LakeStore) -> Self {
-        Self { lake }
+        Self {
+            lake,
+            admission_profile: ServingAdmissionProfile::BuyerCatalog,
+        }
+    }
+
+    pub fn for_search_experiment(lake: LakeStore) -> Self {
+        Self {
+            lake,
+            admission_profile: ServingAdmissionProfile::SearchExperiment,
+        }
     }
 
     pub async fn build_from_graph(
@@ -151,7 +163,10 @@ impl ServingBundleBuilder {
             search_metadata.extend(derived.search_metadata);
             edges.extend(derived.edges);
         }
-        let eligibility = load_serving_eligibility()?;
+        let eligibility = match self.admission_profile {
+            ServingAdmissionProfile::BuyerCatalog => load_serving_eligibility()?,
+            ServingAdmissionProfile::SearchExperiment => load_search_experiment_eligibility()?,
+        };
         let super::eligibility::EligibleServingRecords {
             entities,
             facts,
@@ -311,6 +326,7 @@ impl ServingBundleBuilder {
             rera_evidence_count: rera_evidence.len() as u64,
             excluded_rera_evidence_society_ids,
             edge_count: edges.len() as u64,
+            admission_profile: quarantine.admission_profile,
             eligibility_policy_version: quarantine.eligibility_policy_version,
             quarantined_society_count: quarantine.excluded_society_count,
             quarantine_reason_counts: quarantine.reason_counts.clone(),

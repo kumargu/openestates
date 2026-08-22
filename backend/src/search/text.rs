@@ -4249,6 +4249,130 @@ mod tests {
     }
 
     #[test]
+    fn incomplete_experiment_properties_match_only_supported_query_facts() {
+        let mut supported = local_property(
+            "incomplete-supported",
+            "Whitefield",
+            "incomplete-supported",
+            3,
+            18_000_000,
+            8,
+            0.2,
+        );
+        supported.carpet_area_sqft = 0;
+        supported.builder_name.clear();
+        supported.hero_image.clear();
+        supported.images.clear();
+
+        let mut unknown_price = supported.clone();
+        unknown_price.id = "incomplete-unknown-price".to_string();
+        unknown_price.society_id = "incomplete-unknown-price".to_string();
+        unknown_price.price = 0;
+        unknown_price.price_min = None;
+        unknown_price.price_max = None;
+        unknown_price
+            .transparency_tags
+            .push("Price unavailable".to_string());
+
+        let properties = vec![supported, unknown_price];
+        let society_names = local_society_names(&properties);
+        let entities = vec![
+            serving_entity(
+                "society:incomplete-supported",
+                "society",
+                "Incomplete Supported",
+            ),
+            serving_entity(
+                "society:incomplete-unknown-price",
+                "society",
+                "Incomplete Unknown Price",
+            ),
+        ];
+        let edges = vec![
+            ServingEdgeRecord {
+                from_entity_id: "property:incomplete-supported".to_string(),
+                to_entity_id: "society:incomplete-supported".to_string(),
+                edge_type: "in_society".to_string(),
+                confidence: 1.0,
+                source_type: "unit-test".to_string(),
+            },
+            ServingEdgeRecord {
+                from_entity_id: "property:incomplete-unknown-price".to_string(),
+                to_entity_id: "society:incomplete-unknown-price".to_string(),
+                edge_type: "in_society".to_string(),
+                confidence: 1.0,
+                source_type: "unit-test".to_string(),
+            },
+        ];
+        let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "incomplete-supported",
+                    "google_rating",
+                    FactValue::Numeric(4.5),
+                    "Google",
+                    0.9,
+                ),
+                serving_fact(
+                    "incomplete-unknown-price",
+                    "google_rating",
+                    FactValue::Numeric(4.6),
+                    "Google",
+                    0.9,
+                ),
+            ],
+            vec![
+                serving_metadata(
+                    "incomplete-supported",
+                    "google_rating",
+                    vec!["good reviews"],
+                    "HigherIsBetter",
+                    1.0,
+                    vec![4.2, 4.0],
+                ),
+                serving_metadata(
+                    "incomplete-unknown-price",
+                    "google_rating",
+                    vec!["good reviews"],
+                    "HigherIsBetter",
+                    1.0,
+                    vec![4.2, 4.0],
+                ),
+            ],
+        );
+        let compiled_query = CompiledQuery::from_text("3BHK under 2Cr with good reviews");
+
+        let results = TextSearch::search(TextSearchRequest {
+            properties: &properties,
+            search_index: Some(&index),
+            extra_candidate_ids: None,
+            candidate_property_indexes: None,
+            geo_query: None,
+            serving_facts: Some(&serving_facts),
+            society_names: &society_names,
+            societies: &[],
+            compiled_query: &compiled_query,
+            graph: None,
+        });
+
+        assert_eq!(
+            results
+                .iter()
+                .map(|result| result.card.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["incomplete-supported"]
+        );
+        assert!(results[0]
+            .match_explanation
+            .as_ref()
+            .is_some_and(|explanation| explanation
+                .reasons
+                .iter()
+                .any(|reason| reason.fact_key == "google_rating")));
+    }
+
+    #[test]
     fn natural_grouped_query_explains_only_the_matching_branch() {
         let properties = vec![
             local_property(

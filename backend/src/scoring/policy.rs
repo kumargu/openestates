@@ -128,16 +128,6 @@ pub struct ScoringPolicyFile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConstraintRelaxationPolicy {
-    #[serde(default = "default_constraint_relaxation_target_result_count")]
-    pub target_result_count: usize,
-    #[serde(default = "default_relax_only_when_no_exact_results")]
-    pub only_when_no_exact_results: bool,
-    #[serde(default = "default_budget_relaxation_multipliers")]
-    pub budget_multipliers: Vec<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AreaTrackerPolicy {
     pub min_listing_count: usize,
     pub ready_possession_statuses: Vec<String>,
@@ -153,16 +143,6 @@ pub struct AreaTrackerDemandPolicy {
     pub evidence_gap_cap: f32,
     pub listing_count_normalizer: f32,
     pub listing_count_cap: f32,
-}
-
-impl Default for ConstraintRelaxationPolicy {
-    fn default() -> Self {
-        Self {
-            target_result_count: default_constraint_relaxation_target_result_count(),
-            only_when_no_exact_results: default_relax_only_when_no_exact_results(),
-            budget_multipliers: default_budget_relaxation_multipliers(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -181,8 +161,6 @@ pub struct SearchRankingPolicy {
     pub positive_evidence_floor_ratio: f64,
     #[serde(default = "default_no_positive_evidence_score_multiplier")]
     pub no_positive_evidence_score_multiplier: f64,
-    #[serde(default)]
-    pub constraint_relaxation: ConstraintRelaxationPolicy,
     #[serde(default = "default_nearby_area_score_penalty")]
     pub nearby_area_score_penalty: f64,
     #[serde(default = "default_graph_area_score_penalty")]
@@ -253,7 +231,6 @@ impl Default for SearchRankingPolicy {
             broad_local_recall_min_extra: default_broad_local_recall_min_extra(),
             positive_evidence_floor_ratio: default_positive_evidence_floor_ratio(),
             no_positive_evidence_score_multiplier: default_no_positive_evidence_score_multiplier(),
-            constraint_relaxation: ConstraintRelaxationPolicy::default(),
             nearby_area_score_penalty: default_nearby_area_score_penalty(),
             graph_area_score_penalty: default_graph_area_score_penalty(),
             geo_distance_fact_keys: Vec::new(),
@@ -615,7 +592,6 @@ fn text_safety_score(text: &str) -> f64 {
 
 fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
     validate_area_tracker(&policy.area_tracker)?;
-    validate_constraint_relaxation(&policy.search_ranking.constraint_relaxation)?;
     if !policy
         .search_ranking
         .ranked_focus_min_match_score
@@ -725,27 +701,6 @@ fn validate_area_tracker(policy: &AreaTrackerPolicy) -> Result<(), DagConfigErro
     Ok(())
 }
 
-fn validate_constraint_relaxation(
-    policy: &ConstraintRelaxationPolicy,
-) -> Result<(), DagConfigError> {
-    if policy.target_result_count == 0 {
-        return Err(DagConfigError::InvalidConfig(
-            "constraint relaxation target result count must be greater than zero".to_string(),
-        ));
-    }
-    if policy
-        .budget_multipliers
-        .iter()
-        .any(|multiplier| !multiplier.is_finite() || *multiplier <= 1.0)
-    {
-        return Err(DagConfigError::InvalidConfig(
-            "constraint relaxation budget multipliers must be finite and greater than 1"
-                .to_string(),
-        ));
-    }
-    Ok(())
-}
-
 fn default_true() -> bool {
     true
 }
@@ -778,15 +733,6 @@ fn default_positive_evidence_floor_ratio() -> f64 {
 }
 fn default_no_positive_evidence_score_multiplier() -> f64 {
     0.40
-}
-fn default_constraint_relaxation_target_result_count() -> usize {
-    3
-}
-fn default_relax_only_when_no_exact_results() -> bool {
-    true
-}
-fn default_budget_relaxation_multipliers() -> Vec<f64> {
-    vec![1.10, 1.25]
 }
 fn default_nearby_area_score_penalty() -> f64 {
     -0.35
@@ -883,20 +829,6 @@ mod tests {
         assert!(policy.missing_data.never_zero_fill);
         assert_eq!(policy.area_tracker.min_listing_count, 2);
         assert_eq!(policy.search_ranking.ranked_focus_min_match_score, 0.35);
-        assert_eq!(
-            policy
-                .search_ranking
-                .constraint_relaxation
-                .target_result_count,
-            3
-        );
-        assert_eq!(
-            policy
-                .search_ranking
-                .constraint_relaxation
-                .budget_multipliers,
-            [1.10, 1.25]
-        );
         assert_eq!(policy.search_ranking.result_limit, 32);
         assert_eq!(
             policy.search_ranking.best_effort_ranking_tiers,

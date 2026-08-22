@@ -27,11 +27,6 @@
     "broad_local_recall_min_extra": 64,
     "positive_evidence_floor_ratio": 0.6,
     "no_positive_evidence_score_multiplier": 0.4,
-    "constraint_relaxation": {
-      "target_result_count": 3,
-      "only_when_no_exact_results": true,
-      "budget_multipliers": []
-    },
     "nearby_area_score_penalty": -0.35,
     "graph_area_score_penalty": -0.25,
     "geo_distance_fact_keys": [

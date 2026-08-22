@@ -18,10 +18,7 @@ use super::intent::SearchIntent;
 use super::query_plan::{self, QueryPlan};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text, slug};
 use super::schema;
-use super::{
-    MatchExplanation, MatchReason, PreferenceCoverage, SearchResultCard, SearchResultSet,
-    TextSearch, TextSearchRequest,
-};
+use super::{SearchResultCard, SearchResultSet, TextSearch, TextSearchRequest};
 
 const TANTIVY_RECALL_LIMIT: usize = 128;
 const UNSTRUCTURED_LOCAL_CANDIDATE_LIMIT: usize = 16;
@@ -45,7 +42,6 @@ pub struct SearchEngineOutput {
     pub result_sets: Vec<SearchResultSet>,
     pub eligible_result_count: usize,
     pub diagnostics: SearchDiagnostics,
-    pub relaxations: Vec<SearchRelaxation>,
     pub evidence_gaps: Vec<SearchEvidenceGap>,
 }
 
@@ -66,8 +62,6 @@ pub struct SearchDiagnostics {
     pub resolved: SearchResolutionDiagnostics,
     pub recall: SearchRecallDiagnostics,
     pub top_candidate_scores: Vec<CandidateScore>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub relaxations: Vec<SearchRelaxation>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub evidence_gaps: Vec<SearchEvidenceGap>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -138,22 +132,6 @@ pub struct CandidateScore {
     pub final_score: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence_score: Option<f64>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchRelaxation {
-    pub kind: String,
-    pub from: String,
-    pub to: String,
-    pub reason: SearchRelaxationReason,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchRelaxationReason {
-    pub code: String,
-    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -366,9 +344,6 @@ impl<'a> SearchEngine<'a> {
             );
         }
 
-        let explicit_geo_distance_limit = geo_query
-            .as_ref()
-            .is_some_and(|query| query.has_distance_limit());
         let resolved_geo_constraint = geo_query.as_ref().is_some_and(|query| !query.is_empty());
         let extra_candidate_ids = if resolved_geo_constraint {
             optional_non_empty(geo_candidate_ids.clone())
@@ -440,31 +415,7 @@ impl<'a> SearchEngine<'a> {
             }
         });
         let eligible_result_count = results.len();
-        let mut relaxations = Vec::new();
         let mut evidence_gaps = Vec::new();
-        let relaxation_policy = &schema::ranking_policy().constraint_relaxation;
-        let relaxation_target = relaxation_policy.target_result_count;
-        if results.len() < relaxation_target
-            && (!relaxation_policy.only_when_no_exact_results || results.is_empty())
-            && !explicit_geo_distance_limit
-            && unresolved_entity_clause.is_none()
-        {
-            let relaxation_value = timer.measure_value("constraint_relaxation", || {
-                self.run_relaxation_sequence(
-                    &compiled_query,
-                    recall_set.merged_extra_candidate_ids.as_deref(),
-                    self.property_by_id,
-                    geo_query.as_ref(),
-                    serving_facts,
-                    ranking_graph,
-                    results.clone(),
-                )
-            });
-            if let Some((relaxed_results, applied)) = relaxation_value.value {
-                relaxations = applied;
-                results = relaxed_results;
-            }
-        }
         evidence_gaps.extend(unresolved_proximity_gaps(geo_query.as_ref()));
         results.truncate(schema::ranking_policy().result_limit);
         let result_sets = build_result_sets(
@@ -520,7 +471,6 @@ impl<'a> SearchEngine<'a> {
                     .collect(),
             },
             top_candidate_scores: candidate_scores(&results),
-            relaxations: relaxations.clone(),
             evidence_gaps: evidence_gaps.clone(),
             warnings,
         };
@@ -535,94 +485,7 @@ impl<'a> SearchEngine<'a> {
             result_sets,
             eligible_result_count,
             diagnostics,
-            relaxations,
             evidence_gaps,
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn run_relaxation_sequence(
-        &self,
-        compiled_query: &CompiledQuery,
-        extra_candidate_ids: Option<&[String]>,
-        property_by_id: Option<&HashMap<String, usize>>,
-        geo_query: Option<&geo::GeoSearchQuery<'_>>,
-        serving_facts: Option<&crate::serving::ServingFactIndex>,
-        ranking_graph: Option<&KnowledgeGraph>,
-        initial_results: Vec<SearchResultCard>,
-    ) -> Option<(Vec<SearchResultCard>, Vec<SearchRelaxation>)> {
-        let intent = &compiled_query.intent;
-        if !intent.unsupported_inventory_types.is_empty() {
-            return None;
-        }
-
-        let rank = |relaxed_query: &CompiledQuery, candidate_ids: Option<Vec<String>>| {
-            let ranking_candidate_ids = candidate_ids.or_else(|| {
-                merge_candidate_ids(
-                    optional_non_empty(self.search_index.recall_ids(relaxed_query)),
-                    extra_candidate_ids.unwrap_or_default().to_vec(),
-                )
-            });
-            let ranking_candidate_indexes = ranking_candidate_ids
-                .as_ref()
-                .and_then(|ids| candidate_property_indexes(ids, property_by_id));
-            TextSearch::search(TextSearchRequest {
-                properties: self.properties,
-                search_index: Some(self.search_index),
-                extra_candidate_ids: ranking_candidate_ids.as_deref(),
-                candidate_property_indexes: ranking_candidate_indexes,
-                geo_query,
-                serving_facts,
-                society_names: self.society_names,
-                societies: self.societies,
-                compiled_query: relaxed_query,
-                graph: ranking_graph,
-            })
-        };
-
-        let policy = &schema::ranking_policy().constraint_relaxation;
-        let initial_result_count = initial_results.len();
-        let mut accumulated_results = initial_results;
-        let mut seen_property_ids = accumulated_results
-            .iter()
-            .map(|result| result.card.id.clone())
-            .collect::<HashSet<_>>();
-        let mut applied_relaxations = Vec::new();
-        for multiplier in &policy.budget_multipliers {
-            let mut attempt_query = compiled_query.clone();
-            if !attempt_query.constraints.scale_budget_max(*multiplier) {
-                continue;
-            }
-            let results = rank(&attempt_query, None);
-            let added_relaxations = accumulate_relaxed_results(
-                &mut accumulated_results,
-                &mut seen_property_ids,
-                results,
-                policy.target_result_count,
-                &mut |candidate| {
-                    relaxations_for_candidate(
-                        compiled_query,
-                        candidate,
-                        self.properties,
-                        property_by_id,
-                        self.search_index,
-                        serving_facts,
-                        *multiplier,
-                    )
-                },
-            );
-            if !added_relaxations.is_empty() {
-                extend_unique_relaxations(&mut applied_relaxations, &added_relaxations);
-            }
-            if accumulated_results.len() >= policy.target_result_count {
-                return Some((accumulated_results, applied_relaxations));
-            }
-        }
-
-        if accumulated_results.len() > initial_result_count {
-            Some((accumulated_results, applied_relaxations))
-        } else {
-            None
         }
     }
 }
@@ -679,11 +542,9 @@ fn combine_branch_outputs(
     let mut result_sets = Vec::new();
     let mut results = Vec::new();
     let mut result_ids = HashSet::new();
-    let mut relaxations = Vec::new();
     let mut evidence_gaps = Vec::new();
     for (index, output) in outputs.iter().enumerate() {
         merge_branch_intent_resolution(&mut intent, &output.intent);
-        extend_unique_relaxations(&mut relaxations, &output.relaxations);
         for gap in &output.evidence_gaps {
             if !evidence_gaps.iter().any(|existing: &SearchEvidenceGap| {
                 existing.entity_id == gap.entity_id && existing.missing_fact == gap.missing_fact
@@ -721,20 +582,14 @@ fn combine_branch_outputs(
         .map(|output| output.eligible_result_count)
         .sum();
     results.truncate(schema::ranking_policy().result_limit);
-    let diagnostics = combine_branch_diagnostics(
-        &outputs,
-        &results,
-        &relaxations,
-        &evidence_gaps,
-        total_duration_ms,
-    );
+    let diagnostics =
+        combine_branch_diagnostics(&outputs, &results, &evidence_gaps, total_duration_ms);
     SearchEngineOutput {
         intent,
         results,
         result_sets,
         eligible_result_count,
         diagnostics,
-        relaxations,
         evidence_gaps,
     }
 }
@@ -764,7 +619,6 @@ fn merge_branch_intent_resolution(intent: &mut SearchIntent, branch: &SearchInte
 fn combine_branch_diagnostics(
     outputs: &[SearchEngineOutput],
     results: &[SearchResultCard],
-    relaxations: &[SearchRelaxation],
     evidence_gaps: &[SearchEvidenceGap],
     total_duration_ms: f64,
 ) -> SearchDiagnostics {
@@ -790,7 +644,6 @@ fn combine_branch_diagnostics(
                 tantivy_entity_sample: Vec::new(),
             },
             top_candidate_scores: Vec::new(),
-            relaxations: Vec::new(),
             evidence_gaps: Vec::new(),
             warnings: Vec::new(),
         });
@@ -858,7 +711,6 @@ fn combine_branch_diagnostics(
         duration_ms: total_duration_ms,
     });
     diagnostics.top_candidate_scores = candidate_scores(results);
-    diagnostics.relaxations = relaxations.to_vec();
     diagnostics.evidence_gaps = evidence_gaps.to_vec();
     diagnostics
 }
@@ -914,8 +766,6 @@ fn build_result_sets(
         .into_iter()
         .enumerate()
         .filter_map(|(index, branch)| {
-            let mut budget_expanded = branch.clone();
-            budget_expanded.scale_budget_max(1.25);
             let mut branch_results = Vec::new();
             for result in results {
                 let property = property_by_id
@@ -937,29 +787,12 @@ fn build_result_sets(
                         serving_facts,
                     )
                 });
-                let within_expansion = exact
-                    || budget_expanded.evaluate(&mut |term| {
-                        super::text::property_matches_constraint_term_with_index(
-                            property,
-                            term,
-                            Some(search_index),
-                            serving_facts,
-                        )
-                    });
-                if !within_expansion {
+                if !exact {
                     continue;
                 }
                 let mut result = result.clone();
-                if exact {
-                    result.match_tier = "exact".to_string();
-                    result.tradeoff_label = None;
-                } else {
-                    result.match_tier = "budget_expanded".to_string();
-                    result.tradeoff_label = branch
-                        .budget_max_value()
-                        .map(|budget| budget_tradeoff_label(result.card.price, budget))
-                        .or_else(|| Some("Outside one requested limit".to_string()));
-                }
+                result.match_tier = "exact".to_string();
+                result.tradeoff_label = None;
                 branch_results.push(result);
             }
             if branch_results.is_empty() {
@@ -980,242 +813,6 @@ fn build_result_sets(
             })
         })
         .collect()
-}
-
-fn budget_tradeoff_label(price: u64, budget: u64) -> String {
-    if budget == 0 || price <= budget {
-        return "Within budget".to_string();
-    }
-    let percent = ((price - budget) as f64 / budget as f64 * 100.0).round() as u64;
-    format!("{percent}% over budget")
-}
-
-fn accumulate_relaxed_results(
-    accumulated: &mut Vec<SearchResultCard>,
-    seen_property_ids: &mut HashSet<String>,
-    candidates: Vec<SearchResultCard>,
-    target_result_count: usize,
-    relaxations_for_candidate: &mut impl FnMut(&SearchResultCard) -> Vec<SearchRelaxation>,
-) -> Vec<SearchRelaxation> {
-    let mut applied_relaxations = Vec::new();
-    for mut candidate in candidates {
-        if accumulated.len() >= target_result_count {
-            break;
-        }
-        if !seen_property_ids.insert(candidate.card.id.clone()) {
-            continue;
-        }
-        let relaxations = relaxations_for_candidate(&candidate);
-        annotate_relaxed_results(std::slice::from_mut(&mut candidate), &relaxations);
-        extend_unique_relaxations(&mut applied_relaxations, &relaxations);
-        accumulated.push(candidate);
-    }
-    applied_relaxations
-}
-
-fn relaxations_for_candidate(
-    compiled_query: &CompiledQuery,
-    candidate: &SearchResultCard,
-    properties: &[Property],
-    property_by_id: Option<&HashMap<String, usize>>,
-    search_index: &SearchIndex,
-    serving_facts: Option<&crate::serving::ServingFactIndex>,
-    budget_multiplier: f64,
-) -> Vec<SearchRelaxation> {
-    let property = property_by_id
-        .and_then(|indexes| indexes.get(&candidate.card.id))
-        .and_then(|index| properties.get(*index))
-        .or_else(|| {
-            properties
-                .iter()
-                .find(|property| property.id == candidate.card.id)
-        });
-    let Some(property) = property else {
-        return Vec::new();
-    };
-    relaxations_for_property(
-        compiled_query,
-        property,
-        search_index,
-        serving_facts,
-        budget_multiplier,
-    )
-}
-
-fn relaxations_for_property(
-    compiled_query: &CompiledQuery,
-    property: &Property,
-    search_index: &SearchIndex,
-    serving_facts: Option<&crate::serving::ServingFactIndex>,
-    budget_multiplier: f64,
-) -> Vec<SearchRelaxation> {
-    let violations = compiled_query
-        .constraints
-        .relaxed_branch_violations(
-            &mut |term| {
-                super::text::property_matches_constraint_term_with_index(
-                    property,
-                    term,
-                    Some(search_index),
-                    serving_facts,
-                )
-            },
-            &mut |term| {
-                property_matches_relaxed_constraint(
-                    property,
-                    term,
-                    search_index,
-                    serving_facts,
-                    budget_multiplier,
-                )
-            },
-        )
-        .unwrap_or_default();
-    relaxations_for_violations(&violations, budget_multiplier)
-}
-
-fn property_matches_relaxed_constraint(
-    property: &Property,
-    term: &super::ast::ConstraintTerm,
-    search_index: &SearchIndex,
-    serving_facts: Option<&crate::serving::ServingFactIndex>,
-    budget_multiplier: f64,
-) -> bool {
-    let mut relaxed = term.clone();
-    if let super::ast::ConstraintTerm::Budget {
-        max: Some(bound), ..
-    } = &mut relaxed
-    {
-        bound.value = ((bound.value as f64) * budget_multiplier).round() as u64;
-    }
-    super::text::property_matches_constraint_term_with_index(
-        property,
-        &relaxed,
-        Some(search_index),
-        serving_facts,
-    )
-}
-
-fn relaxations_for_violations(
-    violations: &[super::ast::ConstraintTerm],
-    budget_multiplier: f64,
-) -> Vec<SearchRelaxation> {
-    let mut relaxations = Vec::new();
-    for term in violations {
-        match term {
-            super::ast::ConstraintTerm::Budget { max: Some(max), .. } => {
-                let relaxation = budget_tolerance_relaxation(
-                    max.value,
-                    ((max.value as f64) * budget_multiplier).round() as u64,
-                );
-                extend_unique_relaxations(&mut relaxations, &[relaxation]);
-            }
-            _ => {}
-        }
-    }
-    relaxations
-}
-
-fn extend_unique_relaxations(
-    accumulated: &mut Vec<SearchRelaxation>,
-    relaxations: &[SearchRelaxation],
-) {
-    for relaxation in relaxations {
-        let duplicate = accumulated.iter().any(|existing| {
-            existing.reason.code == relaxation.reason.code
-                && existing.from == relaxation.from
-                && existing.to == relaxation.to
-        });
-        if !duplicate {
-            accumulated.push(relaxation.clone());
-        }
-    }
-}
-
-fn relaxation_reason(code: &str, message: &str) -> SearchRelaxationReason {
-    SearchRelaxationReason {
-        code: code.to_string(),
-        message: message.to_string(),
-    }
-}
-
-fn budget_tolerance_relaxation(budget_max: u64, relaxed_budget: u64) -> SearchRelaxation {
-    SearchRelaxation {
-        kind: "budget".to_string(),
-        from: budget_display(budget_max),
-        to: budget_display(relaxed_budget),
-        reason: relaxation_reason(
-            "budget_tolerance",
-            "No exact budget match; widened budget tolerance deterministically.",
-        ),
-    }
-}
-
-fn annotate_relaxed_results(results: &mut [SearchResultCard], relaxations: &[SearchRelaxation]) {
-    if relaxations.is_empty() {
-        return;
-    }
-    let summary = relaxation_summary(relaxations);
-    for result in results {
-        if result.match_reason.trim().is_empty() {
-            result.match_reason = summary.clone();
-        } else if !result.match_reason.contains(&summary) {
-            result.match_reason = format!("{}; {}", result.match_reason, summary);
-        }
-        let explanation = result
-            .match_explanation
-            .get_or_insert_with(|| MatchExplanation {
-                reasons: Vec::new(),
-                preference_coverage: Vec::new(),
-                graph_driven_pct: 0.0,
-                total_facts_consulted: 0,
-            });
-        for relaxation in relaxations {
-            let preference = format!("relaxed {}", relaxation.kind);
-            explanation.reasons.push(MatchReason {
-                preference: preference.clone(),
-                fact_key: "search.constraint_relaxation".to_string(),
-                display: format!(
-                    "{}: {} -> {} ({})",
-                    relaxation.kind, relaxation.from, relaxation.to, relaxation.reason.code
-                ),
-                score: 0.0,
-                confidence: 1.0,
-                source_type: "Computed".to_string(),
-                scoring_method: "constraint-relaxation".to_string(),
-            });
-            explanation.preference_coverage.push(PreferenceCoverage {
-                preference,
-                status: "relaxed".to_string(),
-                fact_key: Some("search.constraint_relaxation".to_string()),
-            });
-        }
-    }
-}
-
-fn relaxation_summary(relaxations: &[SearchRelaxation]) -> String {
-    let labels = relaxations
-        .iter()
-        .map(|relaxation| {
-            format!(
-                "{} {} -> {}",
-                relaxation.kind, relaxation.from, relaxation.to
-            )
-        })
-        .collect::<Vec<_>>();
-    format!("Relaxed {}", labels.join(", "))
-}
-
-fn budget_display(value: u64) -> String {
-    if value >= 10_000_000 {
-        let cr = value as f64 / 10_000_000.0;
-        format!("{cr:.2}Cr")
-    } else if value >= 100_000 {
-        let lakh = value as f64 / 100_000.0;
-        format!("{lakh:.0}L")
-    } else {
-        value.to_string()
-    }
 }
 
 fn resolved_entity_constraints(
@@ -2183,7 +1780,7 @@ mod tests {
 
     use crate::dag_config::SearchResolutionConfig;
     use crate::knowledge::FactValue;
-    use crate::search::intent::{Polarity, PreferenceSignal, SearchIntent};
+    use crate::search::intent::SearchIntent;
     use crate::serving::{
         materialize_society_aliases, normalize_alias, ServingEdgeRecord, ServingEntityAliasIndex,
         ServingEntityAliasRecord, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
@@ -2217,29 +1814,6 @@ mod tests {
             elapsed < Duration::from_millis(250),
             "hash-indexed candidate operations took {elapsed:?}"
         );
-    }
-
-    fn intent_without_soft_signals() -> SearchIntent {
-        SearchIntent {
-            area: Some("Whitefield".to_string()),
-            excluded_areas: Vec::new(),
-            excluded_societies: Vec::new(),
-            excluded_builders: Vec::new(),
-            areas: Vec::new(),
-            bhk: Some(3),
-            bhks: Vec::new(),
-            exclude_bhks: Vec::new(),
-            bhk_spans: Vec::new(),
-            budget_min: None,
-            budget_max: Some(25_000_000),
-            hard_constraints: Vec::new(),
-            preferences: Vec::new(),
-            positive_preferences: Vec::new(),
-            negative_preferences: Vec::new(),
-            accepted_tradeoffs: Vec::new(),
-            unsupported_inventory_types: Vec::new(),
-            buyer_archetype: None,
-        }
     }
 
     fn empty_intent() -> SearchIntent {
@@ -2371,43 +1945,6 @@ mod tests {
         }
     }
 
-    fn run_relaxation_for_test(
-        query: &str,
-        intent: &SearchIntent,
-        properties: &[Property],
-    ) -> Option<(Vec<SearchResultCard>, Vec<SearchRelaxation>)> {
-        let compiled_query = CompiledQuery::from_text_with_intent(query, intent.clone());
-        let search_index = SearchIndex::build(properties);
-        let society_names = properties
-            .iter()
-            .map(|property| (property.society_id.clone(), property.society_id.clone()))
-            .collect::<HashMap<_, _>>();
-        let property_by_id = properties
-            .iter()
-            .enumerate()
-            .map(|(index, property)| (property.id.clone(), index))
-            .collect::<HashMap<_, _>>();
-        let societies = Vec::new();
-        SearchEngine {
-            properties,
-            search_index: &search_index,
-            serving_bundle: None,
-            society_names: &society_names,
-            property_by_id: Some(&property_by_id),
-            societies: &societies,
-            graph: None,
-        }
-        .run_relaxation_sequence(
-            &compiled_query,
-            None,
-            Some(&property_by_id),
-            None,
-            None,
-            None,
-            Vec::new(),
-        )
-    }
-
     fn run_search_for_test(query: &str, properties: &[Property]) -> SearchEngineOutput {
         let search_index = SearchIndex::build(properties);
         let society_names = properties
@@ -2470,78 +2007,7 @@ mod tests {
     }
 
     #[test]
-    fn active_relaxation_policy_does_not_weaken_bhk() {
-        let mut intent = intent_without_soft_signals();
-        intent.bhk = Some(2);
-        intent.budget_max = Some(5_000_000);
-        intent.positive_preferences.push(PreferenceSignal {
-            raw_text: "2bhk configuration".to_string(),
-            polarity: Polarity::Positive,
-            expanded_keys: vec!["has_2bhk".to_string()],
-            gap_keys: Vec::new(),
-            weight: 1.0,
-            required: false,
-            missing_evidence_neutral: false,
-        });
-        let properties = vec![test_property("wrong-bhk-home", "East Bengaluru")];
-
-        let matched =
-            run_relaxation_for_test("2BHK in East Bengaluru under 50L", &intent, &properties);
-        assert!(matched.is_none());
-    }
-
-    #[test]
-    fn budget_relaxation_accumulates_unique_results_across_bands() {
-        let mut intent = intent_without_soft_signals();
-        intent.area = None;
-        intent.bhk = None;
-        intent.budget_max = Some(100_000_000);
-        let properties = [
-            ("ten-percent", 105_000_000),
-            ("twenty-five-percent", 120_000_000),
-            ("fifty-percent", 140_000_000),
-        ]
-        .into_iter()
-        .map(|(id, price)| {
-            let mut property = test_property(id, "Whitefield");
-            property.price = price;
-            property
-        })
-        .collect::<Vec<_>>();
-
-        let matched = run_relaxation_for_test("homes under 10Cr", &intent, &properties);
-        let (results, applied) = matched.expect("configured budget bands should add results");
-
-        assert_eq!(
-            results
-                .iter()
-                .map(|result| result.card.id.as_str())
-                .collect::<HashSet<_>>(),
-            HashSet::from(["ten-percent", "twenty-five-percent"])
-        );
-        assert_eq!(results.len(), 2);
-        assert_eq!(
-            applied
-                .iter()
-                .map(|relaxation| relaxation.to.as_str())
-                .collect::<Vec<_>>(),
-            ["11.00Cr", "12.50Cr"]
-        );
-        for result in &results {
-            let relaxation_reason_count = result
-                .match_explanation
-                .as_ref()
-                .expect("relaxed result should explain its relaxation")
-                .reasons
-                .iter()
-                .filter(|reason| reason.fact_key == "search.constraint_relaxation")
-                .count();
-            assert_eq!(relaxation_reason_count, 1);
-        }
-    }
-
-    #[test]
-    fn grouped_budget_relaxation_records_the_matching_branch() {
+    fn grouped_budgets_remain_hard_across_branches() {
         let properties = [
             ("three-bed", 3, 21_000_000),
             ("four-bed-one", 4, 41_000_000),
@@ -2559,34 +2025,16 @@ mod tests {
         let output = run_search_for_test("3BHK under 2Cr or 4BHK under 4Cr", &properties);
 
         assert_eq!(output.eligible_result_count, 0);
-        assert_eq!(output.results.len(), 3);
-        let three_bed = output
-            .results
-            .iter()
-            .find(|result| result.card.id == "three-bed")
-            .expect("3BHK branch should relax");
-        assert!(three_bed.match_reason.contains("budget 2.00Cr -> 2.20Cr"));
-        assert!(!three_bed.match_reason.contains("4.00Cr"));
-        for result in output.results.iter().filter(|result| result.card.bhk == 4) {
-            assert!(result.match_reason.contains("budget 4.00Cr -> 4.40Cr"));
-            assert!(!result.match_reason.contains("2.00Cr"));
-        }
-        assert_eq!(
-            output
-                .relaxations
-                .iter()
-                .map(|relaxation| (relaxation.from.as_str(), relaxation.to.as_str()))
-                .collect::<HashSet<_>>(),
-            HashSet::from([("2.00Cr", "2.20Cr"), ("4.00Cr", "4.40Cr")])
-        );
+        assert!(output.results.is_empty());
+        assert!(output.result_sets.is_empty());
     }
 
     #[test]
-    fn exact_results_do_not_mix_with_relaxed_budget_matches() {
+    fn hard_budget_returns_only_exact_matches() {
         let properties = [
             ("strict", 100_000_000),
-            ("relaxed-one", 105_000_000),
-            ("relaxed-two", 120_000_000),
+            ("over-budget-one", 105_000_000),
+            ("over-budget-two", 120_000_000),
             ("beyond-target", 140_000_000),
         ]
         .into_iter()
@@ -2601,14 +2049,6 @@ mod tests {
 
         assert_eq!(output.results.len(), 1);
         assert_eq!(output.results[0].card.id, "strict");
-        assert!(output.results[0]
-            .match_explanation
-            .as_ref()
-            .is_none_or(|explanation| explanation
-                .reasons
-                .iter()
-                .all(|reason| reason.fact_key != "search.constraint_relaxation")));
-        assert!(output.relaxations.is_empty());
     }
 
     #[test]
@@ -2645,30 +2085,14 @@ mod tests {
     }
 
     #[test]
-    fn relaxed_results_are_not_reported_as_originally_eligible() {
-        let mut property = test_property("relaxed-only", "Whitefield");
+    fn over_budget_home_is_not_returned() {
+        let mut property = test_property("over-budget-only", "Whitefield");
         property.price = 105_000_000;
 
         let output = run_search_for_test("3 BHK homes under 10 crore", &[property]);
 
         assert_eq!(output.eligible_result_count, 0);
-        assert_eq!(output.results.len(), 1);
-        assert_eq!(output.results[0].card.id, "relaxed-only");
-        assert!(!output.relaxations.is_empty());
-    }
-
-    #[test]
-    fn removing_budget_cap_does_not_admit_unknown_prices() {
-        let mut intent = intent_without_soft_signals();
-        intent.area = None;
-        intent.bhk = None;
-        intent.budget_max = Some(100_000_000);
-        let mut property = test_property("unknown-price", "Whitefield");
-        property.price = 0;
-
-        let matched = run_relaxation_for_test("homes", &intent, &[property]);
-
-        assert!(matched.is_none());
+        assert!(output.results.is_empty());
     }
 
     #[test]

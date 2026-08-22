@@ -797,17 +797,6 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
                 f"forbidden proof focus keys leaked: {leaked_focus_keys}",
             )
         )
-    if "relaxation_kinds_any" in expected:
-        got_kinds = {normalize_token(item.get("kind")) for item in search_relaxations(response)}
-        wanted_kinds = {normalize_token(kind) for kind in expected["relaxation_kinds_any"]}
-        checks.append(
-            check(
-                "relaxation",
-                "relaxation_kinds_any",
-                bool(got_kinds.intersection(wanted_kinds)),
-                f"expected one relaxation from {sorted(wanted_kinds)}, got {sorted(got_kinds)}",
-            )
-        )
     if "search_guidance_mode" in expected:
         guidance = search_guidance(response)
         got_mode = normalize_token(guidance.get("mode"))
@@ -1383,14 +1372,6 @@ def intent_evidence_keys(intent: Dict[str, Any]) -> set[str]:
 def search_diagnostics(response: Dict[str, Any]) -> Dict[str, Any]:
     diagnostics = response.get("search_diagnostics") or response.get("searchDiagnostics") or {}
     return diagnostics if isinstance(diagnostics, dict) else {}
-
-
-def search_relaxations(response: Dict[str, Any]) -> List[Dict[str, Any]]:
-    relaxations = response.get("relaxations") or []
-    if not relaxations:
-        diagnostics = search_diagnostics(response)
-        relaxations = diagnostics.get("relaxations") or []
-    return [item for item in relaxations if isinstance(item, dict)]
 
 
 def search_guidance(response: Dict[str, Any]) -> Dict[str, Any]:

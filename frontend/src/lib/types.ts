@@ -1028,7 +1028,7 @@ export type SearchResultItem = PropertyCard & {
   match_explanation?: MatchExplanation;
   proof_focuses?: ProofFocus[];
   confidence_score?: ConfidenceScore;
-  match_tier: "exact" | "supported" | "budget_expanded";
+  match_tier: "exact" | "supported";
   tradeoff_label?: string;
 };
 

@@ -235,6 +235,8 @@ pub struct BundleArtifact {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServingQuarantineReport {
     pub format_version: u32,
+    #[serde(default)]
+    pub admission_profile: crate::dag_config::ServingAdmissionProfile,
     pub eligibility_policy_version: u32,
     pub source_bundle_version: String,
     pub excluded_society_count: u64,
@@ -335,6 +337,8 @@ pub struct ServingBundleManifest {
     pub excluded_rera_evidence_society_ids: Vec<String>,
     #[serde(default)]
     pub edge_count: u64,
+    #[serde(default)]
+    pub admission_profile: crate::dag_config::ServingAdmissionProfile,
     #[serde(default)]
     pub eligibility_policy_version: u32,
     #[serde(default)]

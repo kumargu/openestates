@@ -189,7 +189,7 @@ fn named_place_search_uses_spatial_discovery_across_large_corpus() {
 }
 
 #[test]
-fn production_relaxation_sequence_does_not_use_unshipped_area_radius() {
+fn named_area_does_not_expand_to_nearby_areas() {
     let properties = vec![property(
         "nearby-whitefield-home".to_string(),
         "Brookefield",
@@ -256,11 +256,10 @@ fn production_relaxation_sequence_does_not_use_unshipped_area_radius() {
 
     assert_eq!(output.eligible_result_count, 0);
     assert!(output.results.is_empty());
-    assert!(output.relaxations.is_empty());
 }
 
 #[test]
-fn named_project_miss_relaxes_only_budget_and_keeps_the_project() {
+fn named_project_miss_does_not_relax_the_hard_budget() {
     let properties = vec![
         property("godrej-splendour".to_string(), "Whitefield", 3, 17_000_000),
         property(
@@ -307,18 +306,8 @@ fn named_project_miss_relaxes_only_budget_and_keeps_the_project() {
     .search("Godrej Splendour 3BHK under ₹1.4Cr");
 
     assert_eq!(output.eligible_result_count, 0);
-    assert_eq!(
-        output
-            .results
-            .iter()
-            .map(|result| result.card.id.as_str())
-            .collect::<Vec<_>>(),
-        ["godrej-splendour"]
-    );
-    let result = &output.result_sets[0].results[0];
-    assert_eq!(result.card.id, "godrej-splendour");
-    assert_eq!(result.match_tier, "budget_expanded");
-    assert_eq!(result.tradeoff_label.as_deref(), Some("21% over budget"));
+    assert!(output.results.is_empty());
+    assert!(output.result_sets.is_empty());
 }
 
 #[test]
@@ -507,13 +496,8 @@ fn unique_partial_society_name_is_a_hard_constraint() {
             .map(|result| result.card.id.as_str())
             .collect::<Vec<_>>(),
         vec!["prestige-waterford-4bhk"],
-        "eligible={}, relaxations={:?}, resolved={:?}",
+        "eligible={}, resolved={:?}",
         output.eligible_result_count,
-        output
-            .relaxations
-            .iter()
-            .map(|relaxation| relaxation.kind.as_str())
-            .collect::<Vec<_>>(),
         output.diagnostics.resolved.entities,
     );
     assert_eq!(output.eligible_result_count, 1);
@@ -779,6 +763,7 @@ fn loaded_bundle_with_aliases(
             rera_evidence_count: 0,
             excluded_rera_evidence_society_ids: Vec::new(),
             edge_count: 0,
+            admission_profile: backend::dag_config::ServingAdmissionProfile::BuyerCatalog,
             eligibility_policy_version: 0,
             quarantined_society_count: 0,
             quarantine_reason_counts: Default::default(),

@@ -17,7 +17,7 @@ pub use ast::{CompiledQuery, ConstraintExpr, ConstraintTerm};
 pub use capabilities::SearchCapabilityIndex;
 pub use engine::{
     CandidateScore, SearchDiagnostics, SearchEngine, SearchEvidenceGap, SearchLayerTiming,
-    SearchRecallDiagnostics, SearchRelaxation,
+    SearchRecallDiagnostics,
 };
 pub use focus::{build_search_result_focus, FocusBuildInputs, SearchResultFocus};
 pub use guard::{

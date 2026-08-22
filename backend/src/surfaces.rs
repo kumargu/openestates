@@ -2467,6 +2467,7 @@ mod tests {
                 rera_evidence_count: 0,
                 excluded_rera_evidence_society_ids: Vec::new(),
                 edge_count: 0,
+                admission_profile: crate::dag_config::ServingAdmissionProfile::BuyerCatalog,
                 eligibility_policy_version: 0,
                 quarantined_society_count: 0,
                 quarantine_reason_counts: Default::default(),
