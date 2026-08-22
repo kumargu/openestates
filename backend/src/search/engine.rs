@@ -160,7 +160,15 @@ struct TantivyRecallResult {
 
 impl<'a> SearchEngine<'a> {
     pub fn search(&self, query: &str) -> SearchEngineOutput {
-        if let Some(branch_queries) = self.independent_or_branch_queries(query) {
+        if let Some(branch_queries) = query_plan::paired_ordinal_branch_queries(query) {
+            if branch_queries
+                .iter()
+                .all(|branch| self.branch_has_search_anchor(branch))
+            {
+                return self.search_independent_branches(query, &branch_queries);
+            }
+        }
+        if let Some(branch_queries) = self.discourse_branch_queries(query) {
             return self.search_independent_branches(query, &branch_queries);
         }
         self.search_single(query)
@@ -179,48 +187,40 @@ impl<'a> SearchEngine<'a> {
         combine_branch_outputs(query, outputs, started_at.elapsed().as_secs_f64() * 1000.0)
     }
 
-    fn independent_or_branch_queries(&self, query: &str) -> Option<Vec<String>> {
-        let plan = query_plan::compile_query_plan(query);
-        let segments = independent_or_segments(query, &plan)?;
-        let segment_queries = segments
+    fn discourse_branch_queries(&self, query: &str) -> Option<Vec<String>> {
+        let layout = query_plan::discourse_branch_layout(query)?;
+        let shared_suffix = layout
+            .shared_suffix
+            .map(|suffix| query[suffix.start..suffix.end].trim());
+        let segment_queries = layout
+            .segments
             .iter()
-            .map(|segment| query[segment.start..segment.end].trim().to_string())
-            .collect::<Vec<_>>();
-        if segment_queries.iter().all(|segment| {
-            !query_plan::compile_query_plan(segment)
-                .slots
-                .bhks
-                .is_empty()
-                && segment_has_explicit_qualifier(segment)
-        }) {
-            return Some(segment_queries);
-        }
-        let parsed_intent = query_plan::project_search_intent(query, &plan);
-        let resolved_entities = resolve_serving_query_entities(
-            query,
-            &plan,
-            &parsed_intent,
-            self.serving_bundle,
-            self.properties,
-        );
-        let entity_constraints = resolved_entity_constraints(query, &resolved_entities);
-        let intent = apply_resolved_constraints(parsed_intent, &resolved_entities);
-        let compiled = CompiledQuery::compile(query, &plan, intent, &entity_constraints);
-        let branches = compiled.constraints.flat_branches();
-        if branches.len() != segments.len() {
-            return None;
-        }
-        branches
-            .iter()
-            .zip(segments.iter())
-            .all(|(branch, segment)| {
-                let segment_query = query[segment.start..segment.end].trim();
-                branch.has_terms()
-                    && branch.has_source_span_within(segment.start, segment.end)
-                    && (branch.source_spans_within(segment.start, segment.end)
-                        || segment_has_explicit_qualifier(segment_query))
+            .map(|segment| {
+                let branch = query[segment.start..segment.end].trim();
+                shared_suffix
+                    .map(|shared| format!("{branch} {shared}"))
+                    .unwrap_or_else(|| branch.to_string())
             })
+            .collect::<Vec<_>>();
+        segment_queries
+            .iter()
+            .all(|branch| self.branch_has_search_anchor(branch))
             .then_some(segment_queries)
+    }
+
+    fn branch_has_search_anchor(&self, query: &str) -> bool {
+        let plan = query_plan::compile_query_plan(query);
+        if !plan.slots.bhks.is_empty()
+            || !plan.slots.budgets.is_empty()
+            || !plan.areas.is_empty()
+            || !plan.clauses.is_empty()
+            || !plan.evidence.is_empty()
+        {
+            return true;
+        }
+        let intent = query_plan::project_search_intent(query, &plan);
+        !resolve_serving_query_entities(query, &plan, &intent, self.serving_bundle, self.properties)
+            .is_empty()
     }
 
     fn search_single(&self, query: &str) -> SearchEngineOutput {
@@ -488,48 +488,6 @@ impl<'a> SearchEngine<'a> {
             evidence_gaps,
         }
     }
-}
-
-fn independent_or_segments(query: &str, plan: &QueryPlan) -> Option<Vec<query_plan::ByteSpan>> {
-    let separators = plan
-        .tokens
-        .iter()
-        .filter(|token| token.text.eq_ignore_ascii_case("or"))
-        .collect::<Vec<_>>();
-    if separators.is_empty() {
-        return None;
-    }
-    let mut segments = Vec::with_capacity(separators.len() + 1);
-    let mut start = 0;
-    for separator in separators {
-        if query[start..separator.start].trim().is_empty() {
-            return None;
-        }
-        segments.push(query_plan::ByteSpan {
-            start,
-            end: separator.start,
-        });
-        start = separator.end;
-    }
-    if query[start..].trim().is_empty() {
-        return None;
-    }
-    segments.push(query_plan::ByteSpan {
-        start,
-        end: query.len(),
-    });
-    Some(segments)
-}
-
-fn segment_has_explicit_qualifier(query: &str) -> bool {
-    let plan = query_plan::compile_query_plan(query);
-    !plan.slots.budgets.is_empty()
-        || !plan.clauses.is_empty()
-        || !plan.evidence.is_empty()
-        || plan
-            .tokens
-            .iter()
-            .any(|token| matches!(token.text.to_ascii_lowercase().as_str(), "with" | "prefer"))
 }
 
 fn combine_branch_outputs(
@@ -1995,13 +1953,7 @@ mod tests {
         let config = SearchResolutionConfig {
             min_resolvable_entity_name_chars: 3,
             ignored_entity_names: vec!["a".to_string(), "in".to_string()],
-            resolvable_entity_types: Vec::new(),
-            min_partial_entity_name_chars: 0,
-            mechanical_alias_blocked_tokens: Vec::new(),
-            named_entity_scope_prefixes: Vec::new(),
-            generic_scope_nouns: Vec::new(),
-            exclusion_prefixes: Vec::new(),
-            place_families: Vec::new(),
+            ..SearchResolutionConfig::default()
         };
 
         assert!(!is_resolvable_entity_name("a", &config));

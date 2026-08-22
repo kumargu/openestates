@@ -342,7 +342,7 @@ fn nearest_budget_bound(
     value_index: usize,
     config: &UnitValueParserConfig,
 ) -> Option<BudgetBound> {
-    let start = value_index.saturating_sub(4);
+    let start = 0;
     let window = &tokens[start..value_index];
     let min_match = config
         .min_operators
@@ -374,10 +374,25 @@ fn nearest_budget_bound(
                 .checked_sub(operator_len)
                 .map(|end| &window[..end])
                 .unwrap_or(window);
+            let last_contrast = prefix
+                .iter()
+                .rposition(|token| token.eq_ignore_ascii_case("but"))
+                .map_or(0, |index| index + 1);
             if search_resolution_config()
                 .exclusion_prefixes
                 .iter()
-                .any(|phrase| phrase_matches_suffix(prefix, phrase))
+                .any(|phrase| {
+                    let phrase_tokens = query_tokens(phrase);
+                    !phrase_tokens.is_empty()
+                        && prefix[last_contrast..]
+                            .windows(phrase_tokens.len())
+                            .any(|window| {
+                                window
+                                    .iter()
+                                    .zip(&phrase_tokens)
+                                    .all(|(left, right)| left.eq_ignore_ascii_case(right))
+                            })
+                })
             {
                 return Some(BudgetBound::Max);
             }
@@ -764,14 +779,33 @@ fn parse_relations(
         index += token_count;
     }
     for relation_index in 0..relations.len() {
+        let has_next_relation = relations.get(relation_index + 1).is_some();
         let next_relation_start = relations
             .get(relation_index + 1)
             .map_or(tokens.len(), |next| next.start_token);
+        let repeated_relation_boundary = has_next_relation
+            .then(|| {
+                tokens[relations[relation_index].target_start_token..next_relation_start]
+                    .iter()
+                    .enumerate()
+                    .rev()
+                    .find(|(_, token)| {
+                        config
+                            .clause_joiners
+                            .iter()
+                            .any(|joiner| joiner.eq_ignore_ascii_case(token))
+                    })
+                    .map(|(offset, _)| relations[relation_index].target_start_token + offset)
+            })
+            .flatten();
         relations[relation_index].target_end_token = first_relation_target_boundary_index(
             tokens,
             relations[relation_index].target_start_token,
             next_relation_start,
         )
+        .into_iter()
+        .chain(repeated_relation_boundary)
+        .min()
         .unwrap_or(next_relation_start);
     }
     if let Some(distance_limit) = distance_limit {
@@ -903,11 +937,31 @@ fn first_relation_target_boundary_index(
             .map(String::as_str),
     );
     let contrast_boundary = first_phrase_index(tokens, start, end, ["but"].into_iter());
+    let shared_suffix_boundary = first_phrase_index(
+        tokens,
+        start,
+        end,
+        search_parser_config()
+            .discourse
+            .shared_suffix_markers
+            .iter()
+            .map(String::as_str),
+    );
+    let sentence_boundary = tokens[start.min(tokens.len())..end.min(tokens.len())]
+        .iter()
+        .position(|token| matches!(token.as_str(), "." | "?" | "!"))
+        .map(|offset| start.min(tokens.len()) + offset);
 
-    [budget_boundary, exclusion_boundary, contrast_boundary]
-        .into_iter()
-        .flatten()
-        .min()
+    [
+        budget_boundary,
+        exclusion_boundary,
+        contrast_boundary,
+        shared_suffix_boundary,
+        sentence_boundary,
+    ]
+    .into_iter()
+    .flatten()
+    .min()
 }
 
 fn first_phrase_index<'a>(
@@ -1128,10 +1182,29 @@ pub(crate) fn query_tokens_spanned(query: &str) -> Vec<SpannedToken> {
     let mut tokens = Vec::new();
     let mut token_start: Option<usize> = None;
     for (index, ch) in query.char_indices() {
-        if ch.is_ascii_whitespace() || ch == ',' {
+        let sentence_boundary = matches!(ch, '.' | '?' | '!')
+            && !(ch == '.'
+                && query[..index]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|previous| previous.is_ascii_digit())
+                && query[index + ch.len_utf8()..]
+                    .chars()
+                    .next()
+                    .is_some_and(|next| next.is_ascii_digit()));
+        if ch.is_ascii_whitespace() || matches!(ch, ',' | ';') {
             if let Some(start) = token_start.take() {
                 push_spanned_token(query, start, index, &mut tokens);
             }
+        } else if sentence_boundary {
+            if let Some(start) = token_start.take() {
+                push_spanned_token(query, start, index, &mut tokens);
+            }
+            tokens.push(SpannedToken {
+                text: ch.to_string(),
+                start: index,
+                end: index + ch.len_utf8(),
+            });
         } else if ch == '–' || ch == '—' {
             if let Some(start) = token_start.take() {
                 push_spanned_token(query, start, index, &mut tokens);

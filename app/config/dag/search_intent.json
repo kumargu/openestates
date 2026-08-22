@@ -74,6 +74,33 @@
   "resolution": {
     "min_resolvable_entity_name_chars": 3,
     "ignored_entity_names": ["a", "an", "the", "in", "near", "for", "with"],
+    "residual_ignored_terms": [
+      "show me",
+      "give me",
+      "find me",
+      "i want",
+      "i'll take",
+      "i’ll take",
+      "i liked",
+      "if",
+      "it's",
+      "it’s",
+      "it",
+      "on",
+      "my",
+      "is",
+      "something",
+      "option",
+      "options",
+      "available home",
+      "compare",
+      "prefer",
+      "prioritizing",
+      "keep it",
+      "i can stretch",
+      "can stretch",
+      "either way"
+    ],
     "resolvable_entity_types": ["area", "place", "society", "builder"],
     "min_partial_entity_name_chars": 5,
     "mechanical_alias_blocked_tokens": [
@@ -109,7 +136,8 @@
       "away from",
       "outside",
       "not in",
-      "not"
+      "not",
+      "unless"
     ],
     "place_families": [
       {
@@ -148,6 +176,7 @@
     "bhk": {
       "unit_aliases": [
         "bhk",
+        "bhks",
         "bedroom",
         "bedrooms"
       ],
@@ -292,8 +321,26 @@
           "requires_distance_limit": true
         },
         {
-          "alias": "close to"
+          "alias": "close to",
+          "default_distance_limit_km": 2.0
         }
+      ]
+    },
+    "discourse": {
+      "branch_joiners": ["or"],
+      "alternative_prefixes": ["either"],
+      "conditional_branch_starters": ["if"],
+      "conjunctive_relation_markers": ["both"],
+      "paired_branch_joiners": ["with"],
+      "branch_ordinals": ["first", "second"],
+      "shared_suffix_markers": [
+        "but not",
+        "but only",
+        "unless",
+        "keep both",
+        "but i need",
+        "prefer",
+        "exclude"
       ]
     }
   },

@@ -22,6 +22,12 @@ pub(crate) struct AlternativeClauseLayout {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DiscourseBranchLayout {
+    pub segments: Vec<ByteSpan>,
+    pub shared_suffix: Option<ByteSpan>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct QueryToken {
     pub text: String,
     pub start: usize,
@@ -192,6 +198,171 @@ impl QueryPlan {
     }
 }
 
+pub(crate) fn discourse_branch_layout(query: &str) -> Option<DiscourseBranchLayout> {
+    let tokens = query_tokens_with_spans(query);
+    let config = &search_parser_config().discourse;
+    let shared_start = first_configured_phrase(&tokens, &config.shared_suffix_markers, 0)
+        .map(|span| span.start)
+        .unwrap_or(query.len());
+    let core_tokens = tokens
+        .iter()
+        .filter(|token| token.start < shared_start)
+        .cloned()
+        .collect::<Vec<_>>();
+    let conditional_starts =
+        configured_phrase_spans(&core_tokens, &config.conditional_branch_starters, 0);
+    let segments = if conditional_starts.len() >= 2 {
+        conditional_starts
+            .iter()
+            .enumerate()
+            .map(|(index, start)| ByteSpan {
+                start: start.start,
+                end: conditional_starts
+                    .get(index + 1)
+                    .map_or(shared_start, |next| next.start),
+            })
+            .collect::<Vec<_>>()
+    } else {
+        let separators = configured_phrase_spans(&core_tokens, &config.branch_joiners, 0);
+        if separators.is_empty() {
+            return None;
+        }
+        let first_start = first_configured_phrase(&core_tokens, &config.alternative_prefixes, 0)
+            .filter(|prefix| prefix.start < separators[0].start)
+            .map_or(0, |prefix| prefix.end);
+        let mut starts = vec![first_start];
+        starts.extend(separators.iter().map(|separator| separator.end));
+        let mut ends = separators
+            .iter()
+            .map(|separator| separator.start)
+            .collect::<Vec<_>>();
+        ends.push(shared_start);
+        starts
+            .into_iter()
+            .zip(ends)
+            .map(|(start, end)| ByteSpan { start, end })
+            .collect::<Vec<_>>()
+    };
+    let segments = segments
+        .into_iter()
+        .filter(|segment| {
+            segment.start < segment.end && !query[segment.start..segment.end].trim().is_empty()
+        })
+        .collect::<Vec<_>>();
+    if segments.len() < 2 {
+        return None;
+    }
+    Some(DiscourseBranchLayout {
+        segments,
+        shared_suffix: (shared_start < query.len()).then_some(ByteSpan {
+            start: shared_start,
+            end: query.len(),
+        }),
+    })
+}
+
+pub(crate) fn paired_ordinal_branch_queries(query: &str) -> Option<Vec<String>> {
+    let tokens = query_tokens_with_spans(query);
+    let config = &search_parser_config().discourse;
+    if config.branch_ordinals.len() < 2 {
+        return None;
+    }
+    let shared_suffix = first_configured_phrase(&tokens, &config.shared_suffix_markers, 0)?;
+    let core_tokens = tokens
+        .iter()
+        .filter(|token| token.start < shared_suffix.start)
+        .cloned()
+        .collect::<Vec<_>>();
+    let joiners = configured_phrase_spans(&core_tokens, &config.paired_branch_joiners, 0);
+    if joiners.len() != 1 {
+        return None;
+    }
+    let ordinal_spans = config
+        .branch_ordinals
+        .iter()
+        .map(|ordinal| {
+            first_configured_phrase(&tokens, std::slice::from_ref(ordinal), shared_suffix.end)
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let plan = compile_query_plan(query);
+    let branch_bhks = ordinal_spans
+        .iter()
+        .map(|ordinal| {
+            plan.slots
+                .bhks
+                .iter()
+                .filter(|slot| slot.start >= shared_suffix.start && slot.end <= ordinal.start)
+                .max_by_key(|slot| slot.end)
+                .map(|slot| slot.value)
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let spans = [
+        ByteSpan {
+            start: 0,
+            end: joiners[0].start,
+        },
+        ByteSpan {
+            start: joiners[0].end,
+            end: shared_suffix.start,
+        },
+    ];
+    Some(
+        spans
+            .into_iter()
+            .zip(branch_bhks)
+            .map(|(span, bhk)| {
+                let branch = query[span.start..span.end].trim_matches(|character: char| {
+                    character.is_whitespace() || ",;".contains(character)
+                });
+                format!("{branch} {bhk}BHK")
+            })
+            .collect(),
+    )
+}
+
+fn first_configured_phrase(
+    tokens: &[QueryToken],
+    phrases: &[String],
+    start: usize,
+) -> Option<ByteSpan> {
+    configured_phrase_spans(tokens, phrases, start)
+        .into_iter()
+        .min_by_key(|span| span.start)
+}
+
+fn configured_phrase_spans(
+    tokens: &[QueryToken],
+    phrases: &[String],
+    start: usize,
+) -> Vec<ByteSpan> {
+    let mut spans = Vec::new();
+    for phrase in phrases {
+        let phrase_tokens = parser::query_tokens(phrase);
+        if phrase_tokens.is_empty() {
+            continue;
+        }
+        for window in tokens.windows(phrase_tokens.len()) {
+            if window[0].start < start
+                || !window
+                    .iter()
+                    .zip(&phrase_tokens)
+                    .all(|(token, phrase)| token.text.eq_ignore_ascii_case(phrase))
+            {
+                continue;
+            }
+            let span = ByteSpan {
+                start: window[0].start,
+                end: window[window.len() - 1].end,
+            };
+            if !spans.contains(&span) {
+                spans.push(span);
+            }
+        }
+    }
+    spans.sort_by_key(|span| span.start);
+    spans
+}
+
 fn token_is_owned(token: &QueryToken, owner_spans: &[SourceSpan]) -> bool {
     owner_spans
         .iter()
@@ -340,11 +511,14 @@ pub(crate) fn unresolved_named_entity_clause(
         .min();
 
     for prefix in &search_resolution_config().named_entity_scope_prefixes {
-        for (_, prefix_end) in scope_prefix_match_ranges(&query_lower, prefix) {
+        for (prefix_start, prefix_end) in scope_prefix_match_ranges(&query_lower, prefix) {
+            if match_has_exclusion_prefix(&query_lower, prefix_start) {
+                continue;
+            }
             if first_relation_start.is_some_and(|relation_start| prefix_end > relation_start) {
                 continue;
             }
-            let clause_end = plan
+            let structured_clause_end = plan
                 .slots
                 .bhks
                 .iter()
@@ -369,6 +543,12 @@ pub(crate) fn unresolved_named_entity_clause(
                 )
                 .min()
                 .unwrap_or(query.len());
+            let punctuation_end = query[prefix_end..structured_clause_end]
+                .char_indices()
+                .find(|(_, character)| matches!(character, ',' | ';'))
+                .map(|(offset, _)| prefix_end + offset);
+            let clause_end =
+                punctuation_end.map_or(structured_clause_end, |end| end.min(structured_clause_end));
             let span = ByteSpan {
                 start: prefix_end,
                 end: clause_end,
@@ -406,6 +586,7 @@ pub(crate) fn unresolved_residual_clause(
         .map(|area| area.span.start)
         .chain(plan.slots.bhks.iter().map(|slot| slot.start))
         .chain(plan.slots.budgets.iter().map(|slot| slot.start))
+        .chain(plan.clauses.iter().map(|clause| clause.relation_span.start))
         .min()
         .unwrap_or(query.len());
     let mut claimed_ranges = plan
@@ -499,6 +680,7 @@ fn residual_ignored_tokens() -> Vec<String> {
     let mut ignored = resolution
         .ignored_entity_names
         .iter()
+        .chain(resolution.residual_ignored_terms.iter())
         .chain(resolution.generic_scope_nouns.iter())
         .flat_map(|value| parser::query_tokens(value))
         .collect::<Vec<_>>();
@@ -512,6 +694,7 @@ fn residual_ignored_tokens() -> Vec<String> {
         .chain(parser.budget.range_connectors.iter())
         .chain(parser.distance.operators.iter())
         .chain(parser.relations.clause_joiners.iter())
+        .chain(parser.discourse.shared_suffix_markers.iter())
         .chain(parser.relations.aliases.iter().map(|alias| &alias.alias))
         .chain(
             parser
@@ -546,7 +729,7 @@ fn relation_clauses(
         .iter()
         .map(|token| token.text.clone())
         .collect::<Vec<_>>();
-    slots
+    let mut clauses = slots
         .relations
         .iter()
         .enumerate()
@@ -557,20 +740,20 @@ fn relation_clauses(
                 relation.target_start_token,
                 relation.target_end_token,
             )?;
+            let relation_config = search_parser_config()
+                .relations
+                .aliases
+                .iter()
+                .find(|alias| alias.alias.eq_ignore_ascii_case(&relation.alias));
             let distance_limit_km =
                 distance_limit_for_relation(tokens, relation.end_token, relation.target_end_token)
                     .or_else(|| {
                         trailing_distance_limit_after_target(tokens, relation.target_end_token)
                     })
-                    .or_else(|| trailing_distance_limit(query, slots, full_target_span));
-            let requires_distance = search_parser_config()
-                .relations
-                .aliases
-                .iter()
-                .any(|alias| {
-                    alias.alias.eq_ignore_ascii_case(&relation.alias)
-                        && alias.requires_distance_limit
-                });
+                    .or_else(|| trailing_distance_limit(query, slots, full_target_span))
+                    .or_else(|| relation_config.and_then(|alias| alias.default_distance_limit_km));
+            let requires_distance =
+                relation_config.is_some_and(|alias| alias.requires_distance_limit);
             let requirement = if requires_distance || distance_limit_km.is_some() {
                 RelationRequirement::Hard
             } else {
@@ -615,7 +798,21 @@ fn relation_clauses(
             Some(clauses)
         })
         .flatten()
-        .collect()
+        .collect::<Vec<_>>();
+    if clauses.len() >= 2
+        && search_parser_config()
+            .discourse
+            .conjunctive_relation_markers
+            .iter()
+            .any(|marker| {
+                !exact_pattern_match_ranges(&query.to_ascii_lowercase(), marker).is_empty()
+            })
+    {
+        for clause in &mut clauses {
+            clause.requirement = RelationRequirement::Hard;
+        }
+    }
+    clauses
 }
 
 fn relation_target_segments(
@@ -992,29 +1189,12 @@ fn merge_or_push_preference(prefs: &mut Vec<PreferenceSignal>, signal: Preferenc
 }
 
 fn negated_positive_preference_signal(pattern: &schema::PreferencePatternSpec) -> PreferenceSignal {
-    if let Some(negative_pattern) = matching_negative_pattern_for_positive(pattern) {
-        schema::schema_preference_signal(negative_pattern, Polarity::Negative)
-    } else {
-        schema::schema_preference_signal(pattern, Polarity::Negative)
-    }
-}
-
-fn matching_negative_pattern_for_positive(
-    pattern: &schema::PreferencePatternSpec,
-) -> Option<&'static schema::PreferencePatternSpec> {
-    let positive_signal = schema::schema_preference_signal(pattern, Polarity::Positive);
-    schema::negative_preference_patterns()
-        .iter()
-        .find(|negative| negative.label.eq_ignore_ascii_case(&pattern.label))
-        .or_else(|| {
-            schema::negative_preference_patterns()
-                .iter()
-                .find(|negative| {
-                    let negative_signal =
-                        schema::schema_preference_signal(negative, Polarity::Negative);
-                    preferences_conflict(&positive_signal, &negative_signal)
-                })
-        })
+    let mut signal = schema::schema_preference_signal(pattern, Polarity::Negative);
+    // An explicit negation is an exclusion, not a request to softly prefer an
+    // adjacent concern. Keep the exact configured dimension and require proof
+    // that the excluded value is absent.
+    signal.required = true;
+    signal
 }
 
 fn remove_positive_preferences_conflicting_with_negatives(
@@ -1177,11 +1357,53 @@ fn span_is_owned_by_entity(plan: &QueryPlan, span: ByteSpan) -> bool {
 }
 
 fn match_has_negated_prefix(q: &str, start: usize) -> bool {
-    let prefix = q[..start].trim_end_matches(|ch: char| ch.is_ascii_whitespace() || ch == ',');
-    search_resolution_config()
+    let mut prefix = q[..start].trim_end_matches(|ch: char| ch.is_ascii_whitespace() || ch == ',');
+    loop {
+        let Some(last_token) = prefix
+            .split(|character: char| !character.is_ascii_alphanumeric())
+            .filter(|token| !token.is_empty())
+            .next_back()
+        else {
+            break;
+        };
+        if !search_parser_config()
+            .bhk
+            .exclusion_gap_tokens
+            .iter()
+            .any(|gap| gap.eq_ignore_ascii_case(last_token))
+        {
+            break;
+        }
+        let Some(token_start) = prefix.rfind(last_token) else {
+            break;
+        };
+        prefix = prefix[..token_start]
+            .trim_end_matches(|character: char| !character.is_ascii_alphanumeric());
+    }
+    if search_resolution_config()
         .exclusion_prefixes
         .iter()
         .any(|phrase| prefix_ends_with_phrase(prefix, phrase))
+    {
+        return true;
+    }
+
+    let scope_start = q[..start]
+        .char_indices()
+        .rev()
+        .find(|(_, character)| matches!(character, '.' | '?' | '!' | ';'))
+        .map_or(0, |(index, character)| index + character.len_utf8());
+    let scoped_prefix = &q[scope_start..start];
+    let contrast_start = exact_pattern_match_ranges(scoped_prefix, "but")
+        .into_iter()
+        .map(|(start, _)| start)
+        .max()
+        .unwrap_or(0);
+    search_resolution_config()
+        .exclusion_prefixes
+        .iter()
+        .flat_map(|phrase| exact_pattern_match_ranges(scoped_prefix, phrase))
+        .any(|(exclusion_start, _)| exclusion_start >= contrast_start)
 }
 
 fn match_has_exclusion_prefix(query_lower: &str, start: usize) -> bool {
@@ -1354,58 +1576,14 @@ fn push_unique_ci(values: &mut Vec<String>, value: &str) {
 }
 
 fn query_tokens_with_spans(query: &str) -> Vec<QueryToken> {
-    let mut tokens = Vec::new();
-    let mut token_start: Option<usize> = None;
-    for (index, ch) in query.char_indices() {
-        if ch.is_ascii_whitespace() || ch == ',' {
-            if let Some(start) = token_start.take() {
-                push_query_token(query, start, index, &mut tokens);
-            }
-        } else if token_start.is_none() {
-            token_start = Some(index);
-        }
-    }
-    if let Some(start) = token_start {
-        push_query_token(query, start, query.len(), &mut tokens);
-    }
-    tokens
-}
-
-fn push_query_token(query: &str, raw_start: usize, raw_end: usize, tokens: &mut Vec<QueryToken>) {
-    let raw = &query[raw_start..raw_end];
-    let leading_trim = raw
-        .char_indices()
-        .find(|(_, ch)| ch.is_ascii_alphanumeric() || *ch == '.' || *ch == '-' || *ch == '+')
-        .map(|(index, _)| index)
-        .unwrap_or(raw.len());
-    let trailing_trim = raw
-        .char_indices()
-        .rev()
-        .find(|(_, ch)| ch.is_ascii_alphanumeric() || *ch == '.' || *ch == '-' || *ch == '+')
-        .map(|(index, ch)| index + ch.len_utf8())
-        .unwrap_or(leading_trim);
-    if leading_trim >= trailing_trim {
-        return;
-    }
-    let start = raw_start + leading_trim;
-    let mut end = raw_start + trailing_trim;
-    while start < end && query[end - 1..end].chars().all(|ch| ch == '+') {
-        end -= 1;
-    }
-    while start < end
-        && !query[end - 1..end]
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric())
-    {
-        end -= 1;
-    }
-    if start >= end {
-        return;
-    }
-    let text = query[start..end].to_ascii_lowercase();
-    if !text.is_empty() {
-        tokens.push(QueryToken { text, start, end });
-    }
+    parser::query_tokens_spanned(query)
+        .into_iter()
+        .map(|token| QueryToken {
+            text: token.text,
+            start: token.start,
+            end: token.end,
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -1707,5 +1885,46 @@ mod tests {
                 "{query} should compile to {polarity:?} {expected_label}; got {preferences:?}"
             );
         }
+    }
+
+    #[test]
+    fn preference_sentence_does_not_extend_named_place_relation() {
+        let query = "I want a ready-to-move 3BHK near a tech park. Prefer a quieter society with stronger reviews, but don’t hide homes just because noise evidence is missing.";
+        let plan = compile_query_plan(query);
+
+        assert_eq!(
+            plan.clauses
+                .iter()
+                .map(|clause| clause.target_text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a tech park"]
+        );
+    }
+
+    #[test]
+    fn repeated_named_place_relations_do_not_emit_bridge_prose() {
+        let query = "My office is near Bagmane Tech Park and my partner works near Manipal Hospital Whitefield. Find homes with measured distance evidence to both, prioritizing the better-balanced commute.";
+        let plan = compile_query_plan(query);
+
+        assert_eq!(
+            plan.clauses
+                .iter()
+                .map(|clause| clause.target_text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["bagmane tech park", "manipal hospital whitefield"]
+        );
+    }
+
+    #[test]
+    fn pairs_ordinal_constraints_with_comparison_branches() {
+        let query = "Compare Godrej Air under ₹2.6 Cr with Godrej Lakeside Orchard under ₹3.1 Cr, but only show 3BHKs in the first and 4BHKs in the second.";
+
+        assert_eq!(
+            paired_ordinal_branch_queries(query),
+            Some(vec![
+                "Compare Godrej Air under ₹2.6 Cr 3BHK".to_string(),
+                "Godrej Lakeside Orchard under ₹3.1 Cr 4BHK".to_string(),
+            ])
+        );
     }
 }

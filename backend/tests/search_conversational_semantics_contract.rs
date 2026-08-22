@@ -15,9 +15,8 @@ use chrono::{TimeZone, Utc};
 use serde::Deserialize;
 use tempfile::tempdir;
 
-const FROZEN_BANK: &str = include_str!(
-    "../../data/validation/query_bank/search_conversational_semantics_v1.json"
-);
+const FROZEN_BANK: &str =
+    include_str!("../../data/validation/query_bank/search_conversational_semantics_v1.json");
 static QUERY_BANK: OnceLock<QueryBank> = OnceLock::new();
 
 #[derive(Deserialize)]
@@ -38,30 +37,25 @@ fn frozen_branch_queries_execute_against_mock_inventory() {
     assert_branch_ids(
         fixture.search(query("CONV-SEM-001")),
         &[
-            &["mock-godrej-air-3bhk"],
+            &[
+                "mock-godrej-air-3bhk",
+                "mock-hoodi-only-3bhk",
+                "mock-hoodi-alternative-3bhk",
+            ],
             &["mock-lakeside-orchard-4bhk"],
         ],
     );
     assert_branch_ids(
         fixture.search(query("CONV-SEM-004")),
-        &[
-            &["mock-school-home-3bhk"],
-            &["mock-metro-home-2bhk"],
-        ],
+        &[&["mock-school-home-3bhk"], &["mock-metro-home-2bhk"]],
     );
     assert_branch_ids(
         fixture.search(query("CONV-SEM-005")),
-        &[
-            &["mock-godrej-air-3bhk"],
-            &["mock-lakeside-orchard-4bhk"],
-        ],
+        &[&["mock-godrej-air-3bhk"], &["mock-lakeside-orchard-4bhk"]],
     );
     assert_branch_ids(
         fixture.search(query("CONV-SEM-007")),
-        &[
-            &["mock-snn-etternia-3bhk"],
-            &["mock-prestige-song-3bhk"],
-        ],
+        &[&["mock-snn-etternia-3bhk"], &["mock-prestige-song-3bhk"]],
     );
     assert_branch_ids(
         fixture.search(query("CONV-SEM-008")),
@@ -171,12 +165,22 @@ fn assert_contains_ids(output: &ObservedSearch, expected: &[&str]) {
 fn assert_excludes_ids(output: &ObservedSearch, forbidden: &[&str]) {
     let actual = result_ids(output);
     for id in forbidden {
-        assert!(!actual.contains(id), "unexpected {id}; actual={actual:?}");
+        assert!(
+            !actual.contains(id),
+            "unexpected {id}; actual={actual:?}; negative_preferences={:?}",
+            output.negative_preferences
+        );
     }
 }
 
 fn assert_first_id(output: &ObservedSearch, expected: &str) {
-    assert_eq!(result_ids(output).first().copied(), Some(expected));
+    let actual = result_ids(output);
+    assert_eq!(
+        actual.first().copied(),
+        Some(expected),
+        "actual={actual:?}; warnings={:?}",
+        output.warnings
+    );
 }
 
 fn assert_proves_places(output: &ObservedSearch, result_id: &str, labels: &[&str]) {
@@ -201,6 +205,7 @@ fn assert_proves_places(output: &ObservedSearch, result_id: &str, labels: &[&str
 struct ObservedSearch {
     result_sets: Vec<Vec<ObservedResult>>,
     warnings: Vec<String>,
+    negative_preferences: Vec<String>,
 }
 
 struct ObservedResult {
@@ -218,12 +223,7 @@ impl MockSearchFixture {
         let mut builder = FixtureBuilder::default();
         builder.add_place("Hoodi Metro", "metro", 12.9900, 77.7150);
         builder.add_place("Manipal Hospital", "hospital", 12.9700, 77.7350);
-        builder.add_place(
-            "Manipal Hospital Whitefield",
-            "hospital",
-            12.9690,
-            77.7340,
-        );
+        builder.add_place("Manipal Hospital Whitefield", "hospital", 12.9690, 77.7340);
         builder.add_place("Bagmane Tech Park", "tech_park", 12.9800, 77.6600);
         builder.add_place("Gopalan National School", "school", 12.9500, 77.6400);
         builder.add_place("Mock Metro Station", "metro", 12.8500, 77.6000);
@@ -285,6 +285,16 @@ impl MockSearchFixture {
             12.9800,
             77.7250,
         ));
+        builder.add_nearby_fact(
+            "Dual Place Homes",
+            "nearby_metro_stations",
+            "Hoodi Metro (1.6 km)",
+        );
+        builder.add_nearby_fact(
+            "Dual Place Homes",
+            "nearby_hospitals",
+            "Manipal Hospital (1.6 km)",
+        );
         builder.add_home(HomeSpec::new(
             "mock-hoodi-only-3bhk",
             "Hoodi Only Homes",
@@ -321,6 +331,11 @@ impl MockSearchFixture {
             12.8510,
             77.6010,
         ));
+        builder.add_nearby_fact(
+            "Metro Walk Homes",
+            "nearby_metro_stations",
+            "Mock Metro Station (0.2 km)",
+        );
         builder.add_home(
             HomeSpec::new(
                 "mock-quiet-reviewed-3bhk",
@@ -333,6 +348,11 @@ impl MockSearchFixture {
             )
             .quality(Some(0.95), Some(4.7)),
         );
+        builder.add_nearby_fact(
+            "Quiet Reviewed Homes",
+            "nearby_tech_parks",
+            "Bagmane Tech Park (0.3 km)",
+        );
         builder.add_home(
             HomeSpec::new(
                 "mock-missing-noise-3bhk",
@@ -344,6 +364,11 @@ impl MockSearchFixture {
                 77.6580,
             )
             .quality(None, Some(4.2)),
+        );
+        builder.add_nearby_fact(
+            "Unmeasured Quiet Homes",
+            "nearby_tech_parks",
+            "Bagmane Tech Park (0.4 km)",
         );
         builder.add_home(HomeSpec::new(
             "mock-snn-etternia-3bhk",
@@ -390,6 +415,16 @@ impl MockSearchFixture {
             12.9750,
             77.7000,
         ));
+        builder.add_nearby_fact(
+            "Balanced Commute Homes",
+            "nearby_tech_parks",
+            "Bagmane Tech Park (4.4 km)",
+        );
+        builder.add_nearby_fact(
+            "Balanced Commute Homes",
+            "nearby_hospitals",
+            "Manipal Hospital Whitefield (4.0 km)",
+        );
         builder.add_home(HomeSpec::new(
             "mock-unbalanced-commute-3bhk",
             "Unbalanced Commute Homes",
@@ -422,7 +457,8 @@ impl MockSearchFixture {
     }
 
     fn search(&self, query: &str) -> ObservedSearch {
-        let index = SearchIndex::build_with_serving_entities(&self.properties, &self.bundle.entities);
+        let index =
+            SearchIndex::build_with_serving_entities(&self.properties, &self.bundle.entities);
         let society_names = self
             .properties
             .iter()
@@ -444,6 +480,12 @@ impl MockSearchFixture {
             graph: None,
         }
         .search(query);
+        let negative_preferences = output
+            .intent
+            .negative_preferences
+            .iter()
+            .map(|preference| preference.raw_text.clone())
+            .collect();
         ObservedSearch {
             result_sets: output
                 .result_sets
@@ -464,6 +506,7 @@ impl MockSearchFixture {
                 })
                 .collect(),
             warnings: output.diagnostics.warnings,
+            negative_preferences,
         }
     }
 }
@@ -492,11 +535,19 @@ impl FixtureBuilder {
     fn add_home(&mut self, spec: HomeSpec) {
         let society_id = slug(spec.society);
         let entity_id = format!("society:{society_id}");
-        if !self.entities.iter().any(|entity| entity.entity_id == entity_id) {
+        if !self
+            .entities
+            .iter()
+            .any(|entity| entity.entity_id == entity_id)
+        {
             self.entities
                 .push(entity(&entity_id, "society", spec.society));
         }
-        self.add_fact(&entity_id, "geo.latitude", FactValue::Numeric(spec.latitude));
+        self.add_fact(
+            &entity_id,
+            "geo.latitude",
+            FactValue::Numeric(spec.latitude),
+        );
         self.add_fact(
             &entity_id,
             "geo.longitude",
@@ -530,6 +581,17 @@ impl FixtureBuilder {
         self.properties.push(property(&spec, &society_id));
     }
 
+    fn add_nearby_fact(&mut self, society: &str, fact_key: &str, value: &str) {
+        let entity_id = format!("society:{}", slug(society));
+        self.add_search_fact(
+            &entity_id,
+            fact_key,
+            FactValue::Text(value.to_string()),
+            &["nearby"],
+            Some("TextMatch"),
+        );
+    }
+
     fn add_fact(&mut self, entity_id: &str, fact_key: &str, value: FactValue) {
         self.facts.push(serving_fact(entity_id, fact_key, value));
     }
@@ -558,13 +620,9 @@ impl FixtureBuilder {
         let fact_index = ServingFactIndex::from_records(self.facts.clone(), self.metadata);
         let entity_alias_index = ServingEntityAliasIndex::default();
         let temp_dir = tempdir().expect("temporary Tantivy directory");
-        let recall_index = TantivyRecallIndex::build_in_dir(
-            temp_dir.path(),
-            &self.entities,
-            &self.facts,
-            &[],
-        )
-        .expect("mock recall index");
+        let recall_index =
+            TantivyRecallIndex::build_in_dir(temp_dir.path(), &self.entities, &self.facts, &[])
+                .expect("mock recall index");
         let geo_index = GeoSearchIndex::from_serving_bundle(&self.entities, &fact_index);
         let spatial_index = SpatialServingIndex::from_serving_bundle(&self.entities, &fact_index);
         let search_capabilities = SearchCapabilityIndex::from_bundle(&self.entities, &fact_index);
@@ -742,7 +800,7 @@ fn serving_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFac
         value_text: None,
         value,
         confidence: 1.0,
-        source_type: "Mock".to_string(),
+        source_type: "Google".to_string(),
         source_url: None,
         model: None,
         skill_id: Some("search_conversational_semantics_contract".to_string()),

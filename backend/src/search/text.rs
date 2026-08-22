@@ -1741,7 +1741,7 @@ fn required_preferences_have_evidence(
     let area_entity_id =
         search_index.and_then(|index| index.area_entity_id_for_property(&property.id));
 
-    intent
+    let required_positive_preferences_match = intent
         .positive_preferences
         .iter()
         .filter(|preference| preference.required)
@@ -1756,7 +1756,72 @@ fn required_preferences_have_evidence(
                 query_lower,
             )
             .is_some()
-        })
+        });
+    required_positive_preferences_match
+        && intent
+            .negative_preferences
+            .iter()
+            .filter(|preference| preference.required)
+            .all(|preference| {
+                required_negative_preference_is_satisfied(
+                    serving_facts,
+                    society_entity_id,
+                    builder_entity_id,
+                    area_entity_id,
+                    preference,
+                )
+            })
+}
+
+fn required_negative_preference_is_satisfied(
+    serving_facts: &ServingFactIndex,
+    society_entity_id: &str,
+    builder_entity_id: Option<&str>,
+    area_entity_id: Option<&str>,
+    preference: &crate::search::intent::PreferenceSignal,
+) -> bool {
+    if schema::lifecycle_compatibility_rule(&preference.raw_text).is_some() {
+        let mut found_compatible_value = false;
+        let mut found_incompatible_value = false;
+        for entity_id in std::iter::once(Some(society_entity_id))
+            .chain([builder_entity_id, area_entity_id])
+            .flatten()
+        {
+            let Some(rows) = serving_facts.entity(entity_id) else {
+                continue;
+            };
+            for fact in &rows.facts {
+                if fact.confidence < schema::ranking_policy().min_support_evidence_confidence
+                    || !preference
+                        .expanded_keys
+                        .iter()
+                        .any(|key| key.eq_ignore_ascii_case(&fact.fact_key))
+                {
+                    continue;
+                }
+                if lifecycle_preference_value_compatible(
+                    &preference.raw_text,
+                    &fact.fact_key,
+                    &fact.value,
+                ) {
+                    found_compatible_value = true;
+                } else {
+                    found_incompatible_value = true;
+                }
+            }
+        }
+        return !found_compatible_value && found_incompatible_value;
+    }
+
+    serving_negative_preference_evidence(
+        serving_facts,
+        society_entity_id,
+        builder_entity_id,
+        area_entity_id,
+        &preference.raw_text,
+        &preference.expanded_keys,
+    )
+    .is_some_and(|evidence| evidence.score_delta >= 0.0)
 }
 
 fn serving_entity_preference_evidence(

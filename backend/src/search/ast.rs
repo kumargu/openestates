@@ -229,30 +229,6 @@ impl ConstraintExpr {
         }
     }
 
-    pub(crate) fn source_spans_within(&self, start: usize, end: usize) -> bool {
-        match self {
-            Self::And { clauses } | Self::AnyOf { clauses } => clauses
-                .iter()
-                .all(|clause| clause.source_spans_within(start, end)),
-            Self::Not { clause } => clause.source_spans_within(start, end),
-            Self::Term { term } => term
-                .source_span()
-                .is_none_or(|span| span.start >= start && span.end <= end),
-        }
-    }
-
-    pub(crate) fn has_source_span_within(&self, start: usize, end: usize) -> bool {
-        match self {
-            Self::And { clauses } | Self::AnyOf { clauses } => clauses
-                .iter()
-                .any(|clause| clause.has_source_span_within(start, end)),
-            Self::Not { clause } => clause.has_source_span_within(start, end),
-            Self::Term { term } => term
-                .source_span()
-                .is_some_and(|span| span.start >= start && span.end <= end),
-        }
-    }
-
     pub fn drop_bhk_includes(&mut self) {
         let expr = std::mem::replace(self, Self::match_all());
         *self = remove_positive_terms(expr, false, &|term| {
@@ -318,18 +294,6 @@ impl ConstraintExpr {
 
     fn is_match_none(&self) -> bool {
         matches!(self, Self::AnyOf { clauses } if clauses.is_empty())
-    }
-}
-
-impl ConstraintTerm {
-    fn source_span(&self) -> Option<&SourceSpan> {
-        match self {
-            Self::Bhk { span, .. }
-            | Self::Area { span, .. }
-            | Self::Budget { span, .. }
-            | Self::Evidence { span, .. } => span.as_ref(),
-            Self::Society { span, .. } | Self::Builder { span, .. } => span.as_ref(),
-        }
     }
 }
 

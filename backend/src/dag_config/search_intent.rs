@@ -38,6 +38,8 @@ pub struct SearchResolutionConfig {
     #[serde(default)]
     pub ignored_entity_names: Vec<String>,
     #[serde(default)]
+    pub residual_ignored_terms: Vec<String>,
+    #[serde(default)]
     pub resolvable_entity_types: Vec<String>,
     #[serde(default)]
     pub min_partial_entity_name_chars: usize,
@@ -67,6 +69,25 @@ pub struct SearchParserConfig {
     pub budget: UnitValueParserConfig,
     pub distance: UnitValueParserConfig,
     pub relations: RelationParserConfig,
+    pub discourse: DiscourseParserConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct DiscourseParserConfig {
+    #[serde(default)]
+    pub branch_joiners: Vec<String>,
+    #[serde(default)]
+    pub alternative_prefixes: Vec<String>,
+    #[serde(default)]
+    pub conditional_branch_starters: Vec<String>,
+    #[serde(default)]
+    pub shared_suffix_markers: Vec<String>,
+    #[serde(default)]
+    pub conjunctive_relation_markers: Vec<String>,
+    #[serde(default)]
+    pub paired_branch_joiners: Vec<String>,
+    #[serde(default)]
+    pub branch_ordinals: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -119,6 +140,8 @@ pub struct RelationAliasConfig {
     pub alias: String,
     #[serde(default)]
     pub requires_distance_limit: bool,
+    #[serde(default)]
+    pub default_distance_limit_km: Option<f64>,
 }
 
 pub fn search_intent_path() -> std::path::PathBuf {
@@ -183,6 +206,15 @@ fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
         "parser.bhk.unit_aliases",
         config.bhk.unit_aliases.iter().map(String::as_str),
     )?;
+    if config.relations.aliases.iter().any(|entry| {
+        entry
+            .default_distance_limit_km
+            .is_some_and(|distance| !distance.is_finite() || distance <= 0.0)
+    }) {
+        return Err(
+            "parser.relations default_distance_limit_km must be positive and finite".to_string(),
+        );
+    }
     if config.bhk.unit_aliases.is_empty() {
         return Err("parser.bhk.unit_aliases must not be empty".to_string());
     }
@@ -229,6 +261,54 @@ fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
     validate_aliases(
         "parser.relations.clause_joiners",
         config.relations.clause_joiners.iter().map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.branch_joiners",
+        config.discourse.branch_joiners.iter().map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.alternative_prefixes",
+        config
+            .discourse
+            .alternative_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.conditional_branch_starters",
+        config
+            .discourse
+            .conditional_branch_starters
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.shared_suffix_markers",
+        config
+            .discourse
+            .shared_suffix_markers
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.conjunctive_relation_markers",
+        config
+            .discourse
+            .conjunctive_relation_markers
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.paired_branch_joiners",
+        config
+            .discourse
+            .paired_branch_joiners
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.branch_ordinals",
+        config.discourse.branch_ordinals.iter().map(String::as_str),
     )?;
     Ok(())
 }
