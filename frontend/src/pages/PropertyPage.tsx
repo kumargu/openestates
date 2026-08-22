@@ -30,22 +30,17 @@ import {
   hasApproachRoadTrail,
 } from "../components/evidence/ApproachRoadTrail.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
-import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
-import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
-import {
-  derivePriceBands,
-  formatSqftCompact,
-} from "../components/AreaPriceBands.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
-import { PropertyPhotoWalker } from "../components/property/PropertyPhotoWalker.tsx";
+import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import {
-  photoIndexFromMosaicSlot,
-  propertySceneImageAt,
-} from "../lib/propertyScene.ts";
+  PropertyStoryTopbar,
+  type PropertyStoryMode,
+} from "../components/property/PropertyStoryTopbar.tsx";
+import { propertySceneImageAt } from "../lib/propertyScene.ts";
+import { projectPropertyStory } from "../lib/propertyStory.ts";
 import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
-import { isRedundantHomeState } from "../lib/property-signals.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
 
@@ -62,15 +57,6 @@ function hasKnownNumber(value: number | null | undefined): value is number {
 
 function comparablePrice(price: number): number {
   return hasKnownNumber(price) ? price : Number.MAX_SAFE_INTEGER;
-}
-
-function compactLifecycleLabel(value: string): string {
-  const normalized = value
-    .replace(/^home state:\s*/i, "")
-    .replace(/_/g, " ")
-    .trim();
-  if (!normalized) return value;
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
 function truncateCopy(value: string, limit = 220): string {
@@ -94,11 +80,6 @@ function reviewSnippetCopy(value: string): string {
 function formatGoogleRating(value: number | null | undefined): string | null {
   if (!hasKnownNumber(value)) return null;
   return value.toFixed(1);
-}
-
-function ratingTone(value: number | null | undefined): "good" | "weak" | null {
-  if (!hasKnownNumber(value)) return null;
-  return value >= 4 ? "good" : "weak";
 }
 
 function formatReviewCount(value: number | null | undefined): string | null {
@@ -314,37 +295,6 @@ function nearbyRailItems(
   return [...scopedPrimaryItems, ...fillers].slice(0, 8);
 }
 
-function InlinePriceRangeSignal({
-  area,
-  pricePerSqft,
-  properties,
-}: {
-  area: string;
-  pricePerSqft: number;
-  properties: PropertyCard[];
-}) {
-  if (!hasKnownNumber(pricePerSqft)) return null;
-  const band = derivePriceBands(properties, [area])[0];
-  if (!band) return null;
-
-  const typicalLow = band.p25;
-  const typicalHigh = band.p75;
-  const areaName = area.split(",")[0];
-
-  return (
-    <p
-      className="property-price-range"
-      aria-label={`${formatSqftCompact(pricePerSqft)} per sqft against ${areaName} range ${formatSqftCompact(typicalLow)} to ${formatSqftCompact(typicalHigh)}`}
-    >
-      <span>{formatSqftCompact(pricePerSqft)}/sqft</span>
-      <span>
-        {areaName} range {formatSqftCompact(typicalLow)}-
-        {formatSqftCompact(typicalHigh)}/sqft
-      </span>
-    </p>
-  );
-}
-
 function microMarketAreas(
   currentArea: string,
   currentPricePerSqft: number,
@@ -401,102 +351,6 @@ function reviewEvidenceSections(
         section.kind,
       ) ||
       /review|resident|community/i.test(`${section.kind} ${section.title}`),
-  );
-}
-
-function PropertyPhotoMosaic({
-  title,
-  societyName,
-  heroImage,
-  images,
-}: {
-  title: string;
-  societyName?: string;
-  heroImage?: string | null;
-  images?: string[];
-}) {
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const [readyLeadImage, setReadyLeadImage] = useState<string | null>(null);
-  const {
-    images: sceneImages,
-    loading,
-    hasImages,
-  } = usePropertySceneImages({
-    heroImage,
-    images,
-  });
-  const leadImage = propertySceneImageAt(sceneImages, 0, heroImage);
-  const leadImageReady = Boolean(leadImage && readyLeadImage === leadImage);
-  const mosaicImages = sceneImages.slice(1, 5);
-  const total = sceneImages.length || (heroImage ? 1 : 0);
-
-  function openFrom(slot: "lead" | "all" | { tile: number }) {
-    if (!hasImages) return;
-    setOpenIndex(photoIndexFromMosaicSlot(slot));
-  }
-
-  return (
-    <section className="property-photo-mosaic" aria-label="Property photos">
-      {leadImage ? (
-        <button
-          type="button"
-          className={`property-photo-mosaic__lead${leadImageReady ? " is-ready" : ""}`}
-          onClick={() => openFrom("lead")}
-        >
-          <ImageWithFallback
-            src={leadImage}
-            alt={title}
-            loading="eager"
-            decoding="auto"
-            fetchPriority="high"
-            onReady={() => setReadyLeadImage(leadImage)}
-          />
-        </button>
-      ) : (
-        <div className="property-photo-mosaic__lead">
-          <div className="property-photo-mosaic__empty">
-            <span>{loading ? "Loading photos" : "Photos unavailable"}</span>
-            <strong>{societyName || title}</strong>
-          </div>
-        </div>
-      )}
-      <div className="property-photo-mosaic__grid">
-        {mosaicImages.map((src, index) => (
-          <button
-            key={src}
-            type="button"
-            onClick={() => openFrom({ tile: index })}
-          >
-            <ImageWithFallback
-              src={src}
-              alt={`${title}, photo ${index + 2} of ${total}`}
-              loading="lazy"
-              fetchPriority="low"
-            />
-          </button>
-        ))}
-      </div>
-      {hasImages && (
-        <button
-          type="button"
-          className="property-photo-mosaic__all"
-          onClick={() => openFrom("all")}
-        >
-          Show all photos
-          <span>{total}</span>
-        </button>
-      )}
-
-      {openIndex !== null && hasImages && (
-        <PropertyPhotoWalker
-          title={title}
-          images={sceneImages}
-          index={openIndex}
-          onIndexChange={setOpenIndex}
-          onClose={() => setOpenIndex(null)}
-        />
-      )}
-    </section>
   );
 }
 
@@ -779,6 +633,8 @@ function PropertyPageBody({
   focusParam: string | null;
 }) {
   const navigate = useNavigate();
+  const [storyMode, setStoryMode] = useState<PropertyStoryMode>("story");
+  const [storyPlaying, setStoryPlaying] = useState(true);
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
   const [recommendations, setRecommendations] =
     useState<RecommendationResponse | null>(null);
@@ -975,18 +831,6 @@ function PropertyPageBody({
     data.map_context,
   );
   const showNearbyPlate = hasAroundThisHomePlate(aroundThisHomeContext);
-  const showHomeStateChip = Boolean(
-    data.home_state_display &&
-    !isRedundantHomeState(
-      data.home_state_display,
-      data.project_status_display,
-      p.possession_status,
-    ),
-  );
-  const lifecycleTag =
-    showHomeStateChip && data.home_state_display
-      ? compactLifecycleLabel(data.home_state_display)
-      : null;
   const recommendationBranches =
     recommendations?.items ?? data.recommendation_branches ?? [];
   const recommendationItems = rankedRecommendationItems(
@@ -1016,28 +860,21 @@ function PropertyPageBody({
     currentCard,
     microAreas,
   );
-  const googleRating = formatGoogleRating(data.external_reviews?.google_rating);
-  const googleRatingTone = ratingTone(data.external_reviews?.google_rating);
-  const compactStatusRead = (
-    lifecycleTag ||
-    data.home_state_display ||
-    data.project_status_display ||
-    p.possession_status
-  )
-    ?.split("·")[0]
-    ?.trim();
   const reviewsSections = reviewEvidenceSections(detailEvidenceSections);
   const displayTitle = p.title.trim();
   const reraReport = data.rera_report_ref.availability === "unavailable"
     ? undefined
     : data.rera_report_ref;
+  const story = projectPropertyStory(data);
 
   function handleAreaSelect(area: string) {
     navigate(`/?q=${encodeURIComponent(area)}`);
   }
 
   return (
-    <div className="page-container-wide property-decision-page">
+    <div
+      className={`property-decision-page property-story-page property-story-page--${storyMode}`}
+    >
       <Helmet>
         <title>{pageTitle}</title>
         <meta name="description" content={pageDescription} />
@@ -1050,55 +887,23 @@ function PropertyPageBody({
           {JSON.stringify(buildPropertyJsonLd(p))}
         </script>
       </Helmet>
-      <section className="property-clean-head">
-        <div className="property-clean-head__copy">
-          <p>
-            {p.area}, {p.city}
-          </p>
-          <h1>{displayTitle}</h1>
-        </div>
-        <div className="property-clean-actions" aria-label="Property actions">
-          <SaveHeartButton
-            propertyId={p.id}
-            className="property-action-link property-action-save"
-            label="Save"
-          />
-          <NotebookCommentAnchor
-            propertyId={p.id}
-            labels={[]}
-            detail={displayTitle}
-            source="Property detail"
-            className="property-action-note"
-          />
-        </div>
-      </section>
-
-      <div className="property-clean-facts" aria-label="Home summary">
-        <div className="property-clean-meta">
-          <span>{formatPrice(p.price)}</span>
-          <span>{p.bhk} BHK</span>
-          {sizeLabel && <span>{sizeLabel}</span>}
-          {compactStatusRead && <span>{compactStatusRead}</span>}
-          {googleRating && (
-            <span
-              className={`property-rating-pill property-rating-pill--${googleRatingTone ?? "good"}`}
-            >
-              <span aria-hidden="true">★</span> {googleRating} Google
-            </span>
-          )}
-        </div>
-        <InlinePriceRangeSignal
-          area={p.area}
-          pricePerSqft={p.price_per_sqft}
-          properties={marketProperties}
-        />
-      </div>
-
-      <PropertyPhotoMosaic
+      <PropertyStoryTopbar
+        propertyId={p.id}
         title={displayTitle}
-        societyName={society?.name}
-        heroImage={p.hero_image}
-        images={p.images}
+        mode={storyMode}
+        playing={storyPlaying}
+        onModeChange={(mode) => {
+          setStoryMode(mode);
+          setStoryPlaying(mode === "story");
+        }}
+        onPlayingChange={setStoryPlaying}
+      />
+      <PropertySceneCard
+        story={story}
+        playback={{
+          playing: storyPlaying,
+          onPlayingChange: setStoryPlaying,
+        }}
       />
 
       <main className="property-clean-flow">

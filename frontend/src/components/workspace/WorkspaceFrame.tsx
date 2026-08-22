@@ -242,7 +242,11 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
 
   const reducedBeforeDecision = shellMode === "workspace" && homes.length === 0 && queryIds.length === 0;
   const sidebarCollapsed = collapsed || reducedBeforeDecision;
-  const showSidebar = shouldShowWorkspaceSidebar(shellMode, homes.length);
+  const isInternalRoute = location.pathname.startsWith("/_internal/")
+    || location.pathname.startsWith("/dev/");
+  const showSidebar = !isInternalRoute
+    && activeView !== "home"
+    && shouldShowWorkspaceSidebar(shellMode, homes.length);
   const sidebarMode = shellMode === "property-context"
     ? "property-context"
     : shellMode === "workspace"

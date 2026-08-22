@@ -1,0 +1,301 @@
+import { useMemo, useState, type ReactNode } from "react";
+import { Helmet } from "react-helmet-async";
+import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
+import {
+  PropertySceneCard,
+  type StoryPlaybackSpeed,
+  type StoryScenePlayback,
+} from "../components/property/PropertySceneCard.tsx";
+import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
+import {
+  nextStoryFrameIndex,
+  projectPropertyStory,
+  type StoryMotionTheme,
+} from "../lib/propertyStory.ts";
+import {
+  storyLabDetailFixture,
+  storyLabMediaFixture,
+  type StoryLabCoverage,
+  type StoryLabImageCount,
+  type StoryLabLifecycle,
+  type StoryLabPropertyFixture,
+  type StoryLabProvenance,
+  type StoryLabReraState,
+  type StoryLabReviewState,
+} from "../lib/propertyStoryFixtures.ts";
+import "../styles/story-lab.css";
+
+type LabViewport = "desktop" | "tablet" | "mobile";
+type LabMotionTheme = "auto" | StoryMotionTheme;
+
+export function PropertyStoryLabPage() {
+  const [propertyId, setPropertyId] =
+    useState<StoryLabPropertyFixture>("fixture-prestige-lakeside-3bhk");
+  const [viewport, setViewport] = useState<LabViewport>("desktop");
+  const [coverage, setCoverage] = useState<StoryLabCoverage>("rich");
+  const [imageCount, setImageCount] = useState<StoryLabImageCount>("many");
+  const [lifecycle, setLifecycle] =
+    useState<StoryLabLifecycle>("under-construction");
+  const [provenance, setProvenance] =
+    useState<StoryLabProvenance>("mixed");
+  const [reviews, setReviews] = useState<StoryLabReviewState>("present");
+  const [rera, setRera] = useState<StoryLabReraState>("complete");
+  const [theme, setTheme] = useState<LabMotionTheme>("auto");
+  const [playing, setPlaying] = useState(true);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [speed, setSpeed] = useState<StoryPlaybackSpeed>(1);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [visibility, setVisibility] =
+    useState<StoryScenePlayback["visibility"]>("visible");
+
+  const detail = useMemo(
+    () =>
+      storyLabDetailFixture({
+        propertyId,
+        coverage,
+        lifecycle,
+        reviews,
+        rera,
+      }),
+    [coverage, lifecycle, propertyId, rera, reviews],
+  );
+  const media = useMemo(
+    () => storyLabMediaFixture({ count: imageCount, provenance }),
+    [imageCount, provenance],
+  );
+  const story = useMemo(
+    () =>
+      projectPropertyStory(detail, {
+        media,
+        motionTheme: theme === "auto" ? undefined : theme,
+      }),
+    [detail, media, theme],
+  );
+  const frameCount = story.media.frames.length;
+
+  const actions = (
+    <>
+      <SaveHeartButton
+        propertyId={story.identity.propertyId}
+        className="property-action-link property-action-save"
+        label="Save"
+      />
+      <NotebookCommentAnchor
+        propertyId={story.identity.propertyId}
+        labels={[]}
+        detail={story.identity.title}
+        source="Property Story Lab"
+      />
+    </>
+  );
+
+  return (
+    <div className="story-lab">
+      <Helmet>
+        <title>Property Story Lab — OpenEstates</title>
+      </Helmet>
+
+      <header className="story-lab__header">
+        <div>
+          <span>Internal preview</span>
+          <h1>Property Story Lab</h1>
+          <p>Production projection and production hero, isolated for review.</p>
+        </div>
+        <div className="story-lab__status" aria-live="polite">
+          <strong>{story.coverage.level}</strong>
+          <span>
+            {story.coverage.availableDecks}/{story.coverage.totalDecks} decks
+          </span>
+          <span>{story.motionTheme}</span>
+        </div>
+      </header>
+
+      <div className="story-lab__workspace">
+        <aside className="story-lab__controls" aria-label="Story Lab controls">
+          <LabSelect
+            label="Property fixture"
+            value={propertyId}
+            onChange={(value) => setPropertyId(value as StoryLabPropertyFixture)}
+          >
+            <option value="fixture-prestige-lakeside-3bhk">
+              Prestige Lakeside
+            </option>
+            <option value="fixture-sobha-royal-pavilion-4bhk">
+              Sobha Royal Pavilion
+            </option>
+            <option value="fixture-vaswani-starlight-3bhk">
+              Vaswani Starlight
+            </option>
+          </LabSelect>
+          <LabSelect
+            label="Viewport"
+            value={viewport}
+            onChange={(value) => setViewport(value as LabViewport)}
+          >
+            <option value="desktop">Desktop</option>
+            <option value="tablet">Tablet</option>
+            <option value="mobile">Mobile</option>
+          </LabSelect>
+          <LabSelect
+            label="Coverage"
+            value={coverage}
+            onChange={(value) => setCoverage(value as StoryLabCoverage)}
+          >
+            <option value="rich">Rich</option>
+            <option value="partial">Partial</option>
+            <option value="sparse">Sparse</option>
+          </LabSelect>
+          <LabSelect
+            label="Images"
+            value={imageCount}
+            onChange={(value) => setImageCount(value as StoryLabImageCount)}
+          >
+            <option value="many">Many</option>
+            <option value="single">One</option>
+            <option value="none">None</option>
+          </LabSelect>
+          <LabSelect
+            label="Lifecycle"
+            value={lifecycle}
+            onChange={(value) => setLifecycle(value as StoryLabLifecycle)}
+          >
+            <option value="ready">Ready</option>
+            <option value="under-construction">Under construction</option>
+          </LabSelect>
+          <LabSelect
+            label="Provenance"
+            value={provenance}
+            onChange={(value) => setProvenance(value as StoryLabProvenance)}
+          >
+            <option value="mixed">Current + render</option>
+            <option value="current">Current</option>
+            <option value="render">Render</option>
+          </LabSelect>
+          <LabSelect
+            label="Reviews"
+            value={reviews}
+            onChange={(value) => setReviews(value as StoryLabReviewState)}
+          >
+            <option value="present">Present</option>
+            <option value="unresolved">Unresolved</option>
+            <option value="empty">Empty</option>
+          </LabSelect>
+          <LabSelect
+            label="RERA"
+            value={rera}
+            onChange={(value) => setRera(value as StoryLabReraState)}
+          >
+            <option value="complete">Complete</option>
+            <option value="partial">Partial</option>
+            <option value="missing">Missing</option>
+          </LabSelect>
+          <LabSelect
+            label="Motion theme"
+            value={theme}
+            onChange={(value) => setTheme(value as LabMotionTheme)}
+          >
+            <option value="auto">Auto</option>
+            <option value="quiet-pan">Quiet pan</option>
+            <option value="architectural-drift">Architectural drift</option>
+            <option value="slow-push">Slow push</option>
+            <option value="editorial-cut">Editorial cut</option>
+            <option value="still">Still</option>
+          </LabSelect>
+          <LabSelect
+            label="Speed"
+            value={String(speed)}
+            onChange={(value) => setSpeed(Number(value) as StoryPlaybackSpeed)}
+          >
+            <option value="0.5">0.5×</option>
+            <option value="1">1×</option>
+            <option value="2">2×</option>
+          </LabSelect>
+          <LabSelect
+            label="Visibility"
+            value={visibility ?? "auto"}
+            onChange={(value) =>
+              setVisibility(value as StoryScenePlayback["visibility"])
+            }
+          >
+            <option value="visible">Visible</option>
+            <option value="hidden">Document hidden</option>
+            <option value="offscreen">Offscreen</option>
+            <option value="auto">Browser state</option>
+          </LabSelect>
+
+          <label className="story-lab__check">
+            <input
+              type="checkbox"
+              checked={reducedMotion}
+              onChange={(event) => setReducedMotion(event.target.checked)}
+            />
+            Reduced motion
+          </label>
+
+          <div className="story-lab__transport">
+            <button type="button" onClick={() => setPlaying(!playing)}>
+              {playing ? "Pause" : "Play"}
+            </button>
+            <button
+              type="button"
+              disabled={frameCount <= 1}
+              onClick={() =>
+                setActiveIndex(
+                  nextStoryFrameIndex(activeIndex, frameCount),
+                )
+              }
+            >
+              Step
+            </button>
+          </div>
+        </aside>
+
+        <section className="story-lab__preview">
+          <div
+            className={`story-lab__viewport story-lab__viewport--${viewport}`}
+          >
+            <PropertySceneCard
+              key={`${propertyId}:${imageCount}:${provenance}`}
+              story={story}
+              actions={actions}
+              playback={{
+                activeIndex,
+                playing,
+                speed,
+                reducedMotion,
+                visibility,
+                onActiveIndexChange: setActiveIndex,
+                onPlayingChange: setPlaying,
+              }}
+            />
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function LabSelect({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <label className="story-lab__field">
+      <span>{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+

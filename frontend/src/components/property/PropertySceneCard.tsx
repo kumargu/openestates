@@ -1,138 +1,407 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
-import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
-import { sceneLabelForIndex } from "../../lib/propertyScene.ts";
-
-type SceneChip = { label: string; value: string };
+import {
+  nextStoryFrameIndex,
+  selectStoryMotionTheme,
+  shouldAutoAdvanceStory,
+  STORY_MOTION_REGISTRY,
+  type PropertyStoryModel,
+  type StoryMediaFrame,
+  type StoryMotionTheme,
+} from "../../lib/propertyStory.ts";
+import { PropertyPhotoWalker } from "./PropertyPhotoWalker.tsx";
 
 type Props = {
-  title: string;
-  societyName?: string;
-  heroImage?: string | null;
-  images?: string[];
-  chips: SceneChip[];
+  story: PropertyStoryModel;
+  actions?: ReactNode;
+  playback?: StoryScenePlayback;
 };
 
-const KEN_BURNS = [
-  "property-scene__layer--pan-right",
-  "property-scene__layer--pan-left",
-  "property-scene__layer--zoom-in",
-  "property-scene__layer--zoom-out",
-  "property-scene__layer--drift-up",
-];
+export type StoryPlaybackSpeed = 0.5 | 1 | 2;
+
+export type StoryScenePlayback = {
+  activeIndex?: number;
+  playing?: boolean;
+  speed?: StoryPlaybackSpeed;
+  reducedMotion?: boolean;
+  visibility?: "auto" | "visible" | "hidden" | "offscreen";
+  onActiveIndexChange?: (index: number) => void;
+  onPlayingChange?: (playing: boolean) => void;
+};
 
 export function PropertySceneCard({
-  title,
-  societyName,
-  heroImage,
-  images,
-  chips,
+  story,
+  actions,
+  playback,
 }: Props) {
-  const { images: sceneImages, loading, hasImages } = usePropertySceneImages({
-    heroImage,
-    images,
+  const rootRef = useRef<HTMLElement>(null);
+  const [internalActive, setInternalActive] = useState(0);
+  const [internalPlaying, setInternalPlaying] = useState(true);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [isIntersecting, setIsIntersecting] = useState(true);
+  const [documentVisible, setDocumentVisible] = useState(
+    () => document.visibilityState !== "hidden",
+  );
+  const [failedFrameIds, setFailedFrameIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [readyFrameIds, setReadyFrameIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [previousFrame, setPreviousFrame] =
+    useState<StoryMediaFrame | null>(null);
+  const [walkerIndex, setWalkerIndex] = useState<number | null>(null);
+
+  const frames = useMemo(
+    () =>
+      story.media.frames.filter((frame) => !failedFrameIds.has(frame.id)),
+    [failedFrameIds, story.media.frames],
+  );
+  const usableGalleryUrls = useMemo(() => {
+    const failedUrls = new Set(
+      story.media.frames
+        .filter((frame) => failedFrameIds.has(frame.id))
+        .map((frame) => frame.url),
+    );
+    return story.media.galleryUrls.filter((url) => !failedUrls.has(url));
+  }, [failedFrameIds, story.media.frames, story.media.galleryUrls]);
+  const active = playback?.activeIndex ?? internalActive;
+  const safeActive =
+    frames.length > 0 ? Math.max(0, Math.floor(active)) % frames.length : 0;
+  const activeFrame = frames[safeActive];
+  const nextFrame = frames[nextStoryFrameIndex(safeActive, frames.length)];
+  const playing = playback?.playing ?? internalPlaying;
+  const speed = playback?.speed ?? 1;
+  const reducedMotion =
+    playback?.reducedMotion ?? prefersReducedMotion;
+  const viewportVisible = playback?.visibility === "visible"
+    ? true
+    : playback?.visibility === "offscreen"
+      ? false
+      : isIntersecting;
+  const pageVisible = playback?.visibility === "visible"
+    ? true
+    : playback?.visibility === "hidden"
+      ? false
+      : documentVisible;
+  const motionTheme: StoryMotionTheme = selectStoryMotionTheme({
+    frames,
+    motionSeed: story.motionSeed,
+    explicitTheme: story.motionTheme,
+    reducedMotion,
   });
+  const motion = STORY_MOTION_REGISTRY[motionTheme];
+  const motionDurationMs = motion.durationMs > 0
+    ? Math.max(1_000, motion.durationMs / speed)
+    : 0;
+  const transitionMs = motion.transitionMs > 0
+    ? Math.max(120, motion.transitionMs / speed)
+    : 0;
+  const motionStyle = {
+    "--story-motion-duration": `${motionDurationMs}ms`,
+    "--story-transition-duration": `${transitionMs}ms`,
+  } as CSSProperties;
+  const hasImages = frames.length > 0;
+  const isReady = Boolean(
+    activeFrame && readyFrameIds.has(activeFrame.id),
+  );
 
-  const [active, setActive] = useState(0);
-  const [reducedMotion, setReducedMotion] = useState(false);
-  const safeActive = sceneImages.length > 0 ? active % sceneImages.length : 0;
+  const writeActive = useCallback(
+    (index: number) => {
+      if (playback?.activeIndex === undefined) setInternalActive(index);
+      playback?.onActiveIndexChange?.(index);
+    },
+    [playback],
+  );
 
-  useEffect(() => {
-    if (reducedMotion || sceneImages.length <= 1) return undefined;
-    const timer = window.setInterval(() => {
-      setActive((index) => (index + 1) % sceneImages.length);
-    }, 6800);
-    return () => window.clearInterval(timer);
-  }, [reducedMotion, sceneImages.length]);
+  const writePlaying = useCallback(
+    (next: boolean) => {
+      if (playback?.playing === undefined) setInternalPlaying(next);
+      playback?.onPlayingChange?.(next);
+    },
+    [playback],
+  );
+
+  const selectFrame = useCallback(
+    (index: number) => {
+      if (activeFrame) setPreviousFrame(activeFrame);
+      const total = frames.length;
+      writeActive(total > 0 ? ((index % total) + total) % total : 0);
+    },
+    [activeFrame, frames.length, writeActive],
+  );
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReducedMotion(mq.matches);
+    const update = () => setPrefersReducedMotion(mq.matches);
     update();
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  const sceneLabel = useMemo(() => sceneLabelForIndex(safeActive), [safeActive]);
-  const motionClass = KEN_BURNS[safeActive % KEN_BURNS.length];
-  // Keep mosaic slots stable so auto-rotate only moves the living hero stage.
-  const mosaicImages = sceneImages
-    .map((src, index) => ({ src, index }))
-    .filter(({ index }) => index > 0)
-    .slice(0, 4);
+  useEffect(() => {
+    const sync = () => setDocumentVisible(document.visibilityState !== "hidden");
+    document.addEventListener("visibilitychange", sync);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || typeof IntersectionObserver === "undefined") return undefined;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsIntersecting(Boolean(entry?.isIntersecting)),
+      { threshold: 0.2 },
+    );
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!previousFrame) return undefined;
+    const timer = window.setTimeout(
+      () => setPreviousFrame(null),
+      transitionMs,
+    );
+    return () => window.clearTimeout(timer);
+  }, [previousFrame, transitionMs]);
+
+  useEffect(() => {
+    if (
+      !shouldAutoAdvanceStory({
+        playing,
+        frameCount: frames.length,
+        reducedMotion,
+        isVisible: viewportVisible,
+        documentVisible: pageVisible,
+      })
+    ) {
+      return undefined;
+    }
+    const timer = window.setTimeout(
+      () => selectFrame(nextStoryFrameIndex(safeActive, frames.length)),
+      motionDurationMs,
+    );
+    return () => window.clearTimeout(timer);
+  }, [
+    frames.length,
+    motionDurationMs,
+    pageVisible,
+    playing,
+    reducedMotion,
+    safeActive,
+    selectFrame,
+    viewportVisible,
+  ]);
+
+  function markReady(frameId: string) {
+    setReadyFrameIds((current) => {
+      if (current.has(frameId)) return current;
+      const next = new Set(current);
+      next.add(frameId);
+      return next;
+    });
+  }
+
+  function markFailed(frameId: string) {
+    setFailedFrameIds((current) => {
+      if (current.has(frameId)) return current;
+      const next = new Set(current);
+      next.add(frameId);
+      return next;
+    });
+  }
+
+  function openGallery() {
+    if (usableGalleryUrls.length === 0) return;
+    const index = activeFrame
+      ? usableGalleryUrls.indexOf(activeFrame.url)
+      : 0;
+    setWalkerIndex(index >= 0 ? index : 0);
+  }
 
   return (
-    <div className={`property-scene ${hasImages ? "property-scene--live" : "property-scene--empty"}${mosaicImages.length > 0 ? " property-scene--mosaic" : ""}`}>
-      <div className="property-scene__stage" aria-hidden={!hasImages}>
-        {hasImages ? (
-          sceneImages.map((src, index) => (
-            <div
-              key={src}
-              className={`property-scene__layer ${motionClass} ${index === safeActive ? "is-active" : ""}`}
-            >
-              <ImageWithFallback
-                src={src}
-                alt={`${title} — ${sceneLabelForIndex(index)}`}
-                className="property-scene__image"
-                loading={index === 0 ? "eager" : "lazy"}
-                fetchPriority={index === 0 ? "high" : "low"}
-              />
-            </div>
-          ))
-        ) : (
-          <div className="property-scene__placeholder">
-            <span className="property-scene__placeholder-kicker">Project photos</span>
-            <strong>{societyName || title}</strong>
-            <p>{loading ? "Loading photos…" : "Photos unavailable"}</p>
+    <section
+      ref={rootRef}
+      className={`property-scene ${motion.className}${
+        hasImages ? " property-scene--live" : " property-scene--empty"
+      }${isReady ? " is-ready" : ""}`}
+      data-motion-theme={motionTheme}
+      style={motionStyle}
+      aria-labelledby="property-scene-title"
+    >
+      <div className="property-scene__stage">
+        {previousFrame && previousFrame.id !== activeFrame?.id && (
+          <div
+            key={`previous-${previousFrame.id}`}
+            className={`property-scene__layer is-previous ${focalPointClass(previousFrame)}`}
+          >
+            <ImageWithFallback
+              src={previousFrame.url}
+              alt=""
+              className="property-scene__image"
+              loading="eager"
+              fetchPriority="low"
+            />
           </div>
         )}
+        {activeFrame ? (
+          <div
+            key={activeFrame.id}
+            className={`property-scene__layer is-active ${focalPointClass(activeFrame)}`}
+          >
+            <ImageWithFallback
+              src={activeFrame.url}
+              alt={`${story.identity.title}, view ${safeActive + 1}`}
+              className="property-scene__image"
+              loading="eager"
+              decoding="auto"
+              fetchPriority={safeActive === 0 ? "high" : "auto"}
+              onReady={() => markReady(activeFrame.id)}
+              onError={() => markFailed(activeFrame.id)}
+            />
+          </div>
+        ) : (
+          <div
+            className="property-scene__placeholder"
+            role="img"
+            aria-label="Photos unavailable"
+          />
+        )}
 
-        <div className="property-scene__vignette" />
-        <div className="property-scene__grain" />
-        <div className="property-scene__glass">
-          <div className="property-scene__glass-top">
-            <span className="property-scene__scene-label">{hasImages ? sceneLabel : "Preview"}</span>
-            {hasImages && sceneImages.length > 1 && (
-              <span className="property-scene__scene-count">
-                {safeActive + 1} / {sceneImages.length}
-              </span>
+        {nextFrame && nextFrame.id !== activeFrame?.id && (
+          <img
+            className="property-scene__preload"
+            src={nextFrame.url}
+            alt=""
+            aria-hidden="true"
+            loading="eager"
+            fetchPriority="low"
+          />
+        )}
+
+        <div className="property-scene__loading" aria-hidden="true" />
+        <div className="property-scene__vignette" aria-hidden="true" />
+        <div className="property-scene__grain" aria-hidden="true" />
+
+        <div className="property-scene__topline">
+          <div className="property-scene__provenance">
+            <span className="property-scene__chapter-count">
+              Property story · {story.decks.length} chapters
+            </span>
+            {activeFrame?.lifecycle === "current" && (
+              <span>Current image</span>
+            )}
+            {activeFrame?.lifecycle === "proposed" && (
+              <span>Proposed render</span>
+            )}
+            {activeFrame?.sourceUrl && (
+              <a
+                href={activeFrame.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Source
+              </a>
             )}
           </div>
-          <div className="property-scene__chips">
-            {chips.map((chip) => (
-              <span key={chip.label} className="property-scene__chip">
-                <em>{chip.label}</em> {chip.value}
-              </span>
+          {actions && (
+            <div className="property-scene__actions" aria-label="Property actions">
+              {actions}
+            </div>
+          )}
+        </div>
+
+        <div className="property-scene__identity">
+          <p>{story.identity.location}</p>
+          <h1 id="property-scene-title">{story.identity.title}</h1>
+          <div className="property-scene__facts" aria-label="Home summary">
+            {story.identity.facts.map((fact) => (
+              <span key={fact.key}>{fact.value}</span>
             ))}
+          </div>
+        </div>
+
+        <div className="property-scene__controls">
+          <div className="property-scene__sequence" aria-label="Property views">
+            {frames.map((frame, index) => (
+              <button
+                key={frame.id}
+                type="button"
+                className={index === safeActive ? "is-active" : ""}
+                aria-label={`Show view ${index + 1}`}
+                aria-pressed={index === safeActive}
+                onClick={() => selectFrame(index)}
+              >
+                {String(index + 1).padStart(2, "0")}
+              </button>
+            ))}
+          </div>
+          <div className="property-scene__transport">
+            {frames.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Previous image"
+                  onClick={() => selectFrame(safeActive - 1)}
+                >
+                  ←
+                </button>
+                <button
+                  type="button"
+                  aria-label={playing ? "Pause images" : "Play images"}
+                  aria-pressed={!playing}
+                  onClick={() => writePlaying(!playing)}
+                >
+                  {playing ? "Pause" : "Play"}
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next image"
+                  onClick={() => selectFrame(safeActive + 1)}
+                >
+                  →
+                </button>
+              </>
+            )}
+            {usableGalleryUrls.length > 0 && (
+              <button
+                type="button"
+                className="property-scene__gallery"
+                onClick={openGallery}
+              >
+                All photos
+                <span>{usableGalleryUrls.length}</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {mosaicImages.length > 0 && (
-        <div className="property-scene__mosaic" role="tablist" aria-label="Property scenes">
-          {mosaicImages.map(({ src, index }, position) => (
-            <button
-              key={src}
-              type="button"
-              role="tab"
-              aria-selected={index === safeActive}
-              className={`property-scene__mosaic-frame${index === safeActive ? " is-active" : ""}`}
-              onClick={() => setActive(index)}
-            >
-              <ImageWithFallback
-                src={src}
-                alt={`${title} — ${sceneLabelForIndex(index)}`}
-                loading="lazy"
-                fetchPriority="low"
-              />
-              <span>{sceneLabelForIndex(index)}</span>
-              {position === mosaicImages.length - 1 && sceneImages.length > 5 && (
-                <b>{sceneImages.length} photos</b>
-              )}
-            </button>
-          ))}
-        </div>
+      {walkerIndex !== null && usableGalleryUrls.length > 0 && (
+        <PropertyPhotoWalker
+          title={story.identity.title}
+          images={usableGalleryUrls}
+          index={walkerIndex}
+          onIndexChange={setWalkerIndex}
+          onClose={() => setWalkerIndex(null)}
+        />
       )}
-    </div>
+    </section>
   );
+}
+
+function focalPointClass(frame: StoryMediaFrame): string {
+  const x = frame.focalPoint?.x ?? 0.5;
+  const y = frame.focalPoint?.y ?? 0.5;
+  const horizontal = x < 0.34 ? "left" : x > 0.66 ? "right" : "center";
+  const vertical = y < 0.34 ? "top" : y > 0.66 ? "bottom" : "middle";
+  return `story-focal--${horizontal} story-focal--${vertical}`;
 }

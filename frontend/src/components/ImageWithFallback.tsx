@@ -8,6 +8,7 @@ export function ImageWithFallback({
   decoding = "async",
   fetchPriority,
   onReady,
+  onError,
 }: {
   src: string | null;
   alt: string;
@@ -16,6 +17,7 @@ export function ImageWithFallback({
   decoding?: "async" | "auto" | "sync";
   fetchPriority?: "high" | "low" | "auto";
   onReady?: () => void;
+  onError?: () => void;
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
@@ -61,7 +63,10 @@ export function ImageWithFallback({
       decoding={decoding}
       fetchPriority={fetchPriority}
       onLoad={handleLoad}
-      onError={() => setFailedSrc(src)}
+      onError={() => {
+        setFailedSrc(src);
+        onError?.();
+      }}
     />
   );
 }
