@@ -12,7 +12,7 @@ pub struct SourceSpan {
 }
 
 /// Parsed intent from a natural-language search query.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SearchIntent {
     pub area: Option<String>,
     /// Broad regions explicitly rejected by the buyer, e.g. "not South Bengaluru".
@@ -62,32 +62,6 @@ pub struct SearchIntent {
     pub unsupported_inventory_types: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub buyer_archetype: Option<BuyerArchetype>,
-}
-
-impl Default for SearchIntent {
-    fn default() -> Self {
-        Self {
-            area: None,
-            excluded_areas: Vec::new(),
-            excluded_societies: Vec::new(),
-            excluded_builders: Vec::new(),
-            areas: Vec::new(),
-            bhk: None,
-            bhks: Vec::new(),
-            exclude_bhks: Vec::new(),
-            bhk_spans: Vec::new(),
-            budget_min: None,
-            budget_max: None,
-            hard_constraints: Vec::new(),
-            preferences: Vec::new(),
-            positive_preferences: Vec::new(),
-            negative_preferences: Vec::new(),
-            ranking_priorities: Vec::new(),
-            accepted_tradeoffs: Vec::new(),
-            unsupported_inventory_types: Vec::new(),
-            buyer_archetype: None,
-        }
-    }
 }
 
 impl SearchIntent {

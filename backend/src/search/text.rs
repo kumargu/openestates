@@ -284,7 +284,8 @@ impl TextSearch {
                             matched_value: Some(&evidence.display),
                             requested_constraint: Some(&evidence.preference),
                             entity_id: None,
-                            distance_m: None,
+                            distance_m: geo::extract_first_distance_km(&evidence.display)
+                                .and_then(distance_m),
                             reason: &evidence.reason,
                         },
                     );
@@ -410,7 +411,8 @@ impl TextSearch {
                                     matched_value: Some(&evidence.display),
                                     requested_constraint: Some(pref),
                                     entity_id: None,
-                                    distance_m: None,
+                                    distance_m: geo::extract_first_distance_km(&evidence.display)
+                                        .and_then(distance_m),
                                     reason: &evidence.reason,
                                 },
                             );
@@ -3322,6 +3324,7 @@ fn budget_display_label(value: u64) -> String {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_match_reason(
     query: &CompiledQuery,
     property: &Property,
@@ -8011,7 +8014,7 @@ mod tests {
         let mut compiled = CompiledQuery::from_text_with_intent(query, intent);
         compiled.constraints = crate::search::ast::ConstraintExpr::and(vec![
             compiled.constraints,
-            crate::search::ast::ConstraintExpr::not(crate::search::ast::ConstraintExpr::term(
+            crate::search::ast::ConstraintExpr::negated(crate::search::ast::ConstraintExpr::term(
                 ConstraintTerm::Area {
                     entity_id: None,
                     value: "Electronic City".to_string(),
@@ -8080,7 +8083,7 @@ mod tests {
         let mut compiled = CompiledQuery::from_text_with_intent(query, intent);
         compiled.constraints = crate::search::ast::ConstraintExpr::and(vec![
             compiled.constraints,
-            crate::search::ast::ConstraintExpr::not(crate::search::ast::ConstraintExpr::term(
+            crate::search::ast::ConstraintExpr::negated(crate::search::ast::ConstraintExpr::term(
                 ConstraintTerm::Society {
                     entity_id: "society:prestige-waterford".to_string(),
                     display_name: "Prestige Waterford".to_string(),

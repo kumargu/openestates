@@ -80,7 +80,7 @@ impl SearchIndex {
                 .entry(canonical_id.clone())
                 .or_default();
             for property_id in &property_ids {
-                push_unique(canonical_property_ids, &property_id);
+                push_unique(canonical_property_ids, property_id);
             }
             for property_id in property_ids {
                 index
@@ -347,14 +347,17 @@ impl SearchIndex {
                 .price_by_id
                 .iter()
                 .filter_map(|(id, price)| {
-                    listing_satisfies_budget(
+                    if listing_satisfies_budget(
                         *price,
                         self.price_min_by_id.get(id).copied(),
                         self.price_max_by_id.get(id).copied(),
                         min.as_ref().map(|bound| bound.value),
                         max.as_ref().map(|bound| bound.value),
-                    )
-                    .then(|| id.clone())
+                    ) {
+                        Some(id.clone())
+                    } else {
+                        None
+                    }
                 })
                 .collect(),
             ConstraintTerm::Evidence { .. } => self.all_ids.iter().cloned().collect(),
@@ -1043,7 +1046,7 @@ mod tests {
                 }),
                 span: None,
             }),
-            ConstraintExpr::not(ConstraintExpr::term(ConstraintTerm::Society {
+            ConstraintExpr::negated(ConstraintExpr::term(ConstraintTerm::Society {
                 entity_id: "society:prestige-waterford".to_string(),
                 display_name: "Prestige Waterford".to_string(),
                 span: None,

@@ -4,13 +4,12 @@ Date: 2026-08-23
 
 ## Current assessment
 
-`controlled_search_multi_or_recovery_verified`
+`controlled_search_regional_consolidation_verified`
 
-The original 10 conversational buyer queries, 18 varied-language queries, and
-3 multi-decision ranking queries now pass against a controlled, fact-backed
-product model. Nine additional multi-OR recovery cases cover shared society,
-area, and named-place scope; branch-specific budgets; mixed named scopes;
-global-limit fairness; stable branch order; and cross-branch deduplication.
+One controlled bank now holds the original 10 conversational buyer queries, 18
+varied-language queries, 3 multi-decision ranking queries, 9 multi-OR recovery
+cases, and 10 regional-mix cases. Its reusable fixture profiles keep scenario
+inventory isolated while sharing one typed expectation contract.
 
 The controlled fixtures are now a first-class product specification. They
 should drive future search, DAG, API proof, comparison, and UI journey tests.
@@ -18,16 +17,18 @@ They must not be deleted or weakened to accommodate current data coverage.
 
 Latest verified checkpoint:
 
-- controlled search banks: 40/40 scenarios passed;
+- consolidated controlled search bank: 50/50 scenarios passed;
 - clean-serving-v7 bank: 149/149 checks passed;
 - full Rust suite: 642 library tests and all integration/doc contracts passed;
 - search unit slice: 327 passed;
 - search efficiency: 11 passed;
 - isolated API smoke suite: 50/50 passed;
 - frontend production build: passed;
+- CI clippy and all-target/all-feature clippy: passed;
 - hardcoding gate: zero vocabulary, fact-key, or blocked-alias findings;
-- live benchmark artifacts: `/tmp/openestates-search-fixed.json` and
-  `/tmp/openestates-search-fixed.md`.
+- live benchmark artifacts:
+  `/tmp/openestates-search-regional-consolidation.json` and
+  `/tmp/openestates-search-regional-consolidation.md`.
 
 The prior post-merge green statement was stale. A fresh independent review ran
 the preserved live bank and found 148/149 checks: the branch-dispatch path
@@ -54,11 +55,33 @@ The branch is synchronized with `origin/main` at `f245e7fc`. The merge keeps
 main's expanded gallery curation together with alias-aware local media lookup;
 the full post-merge backend and API suites pass. No remote branch was pushed.
 
-The stale classifier-only bank was replaced by
-`search_buyer_language_v1.json`. Historical live-bundle banks were preserved;
-they describe pinned data runs and should not be merged into the controlled
-product model. Selected classifier-era phrases now have complete search
-context and executable result/proof expectations instead of isolated labels.
+The stale classifier-only bank and four fragmented controlled banks were
+replaced by `search_product_scenarios_v1.json`. Historical live-bundle banks
+were preserved; they describe pinned data runs and should not be merged into
+the controlled product model. Selected classifier-era phrases now have
+complete search context and executable result/proof expectations instead of
+isolated labels.
+
+The regional profile adds three price tiers or configurations per region and
+three coordinate-backed metro anchors. Its first diagnostic run found that
+`2BHK or 3BHK near Nagawara Metro under 1.8 Cr` leaked unrelated 2BHKs from
+other regions even though the named North Bengaluru homes were present. The
+case now asserts exact branch membership plus metro proof for both BHKs. The
+generic branch dispatcher recognizes a trailing resolved geo scope shared by
+preceding bare-BHK alternatives and lets the combined Boolean plan apply it to
+every branch. The rerun returns only the North Bengaluru 2BHK and 3BHK, both
+with `Nagawara Metro` proof.
+
+The independent review also found that result-level area, BHK, budget, and
+distance assertions were weaker than their typed intent checks. They now
+validate every returned home, with branch-aware exceptions only where the bank
+declares independent alternatives. That stricter gate exposed a generic
+place-family `proof_gap`: a bounded metro result was correctly filtered but its
+parsed serving-fact distance was not copied to proof focus. Generic hard and
+positive fact evidence now carries parsed distance into the proof contract.
+The production hardcoding audit and its failure-mode unit tests are now CI
+steps, and all clippy findings blocking the existing backend CI command are
+closed.
 
 What changed generically:
 

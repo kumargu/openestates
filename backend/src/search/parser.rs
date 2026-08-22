@@ -654,7 +654,7 @@ fn parse_bhk_alternative_token(
 
 fn split_bhk_alternative_numbers(token: &str, config: &BhkParserConfig) -> Option<Vec<u32>> {
     let parts = token
-        .split(|ch| ch == '/' || ch == '-' || ch == '–')
+        .split(['/', '-', '–'])
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>();
     if parts.len() < 2 {

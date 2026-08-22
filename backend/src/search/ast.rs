@@ -162,7 +162,7 @@ impl ConstraintExpr {
         }
     }
 
-    pub fn not(clause: Self) -> Self {
+    pub fn negated(clause: Self) -> Self {
         if clause.is_match_all() {
             Self::match_none()
         } else if clause.is_match_none() {
@@ -433,7 +433,7 @@ fn compile_constraint_expr(
             if group.is_empty() {
                 continue;
             }
-            clauses.push(ConstraintExpr::not(ConstraintExpr::any_of(
+            clauses.push(ConstraintExpr::negated(ConstraintExpr::any_of(
                 group.iter().map(|term| term.expr.clone()).collect(),
             )));
         }
@@ -834,7 +834,7 @@ fn compile_constraint_plan(
                     branch_terms.iter().map(|term| term.expr.clone()).collect(),
                 );
                 branch_groups.push(if active_groups[group_index].negated {
-                    ConstraintExpr::not(expr)
+                    ConstraintExpr::negated(expr)
                 } else {
                     expr
                 });
@@ -859,7 +859,7 @@ fn compile_constraint_plan(
                     .collect(),
             );
             if active_groups[index].negated {
-                ConstraintExpr::not(expr)
+                ConstraintExpr::negated(expr)
             } else {
                 expr
             }
@@ -905,7 +905,7 @@ fn remove_positive_terms(
                 .collect(),
         ),
         ConstraintExpr::Not { clause } => {
-            ConstraintExpr::not(remove_positive_terms(*clause, !negated, should_remove))
+            ConstraintExpr::negated(remove_positive_terms(*clause, !negated, should_remove))
         }
         ConstraintExpr::Term { term } if !negated && should_remove(&term) => {
             ConstraintExpr::match_all()

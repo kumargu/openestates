@@ -326,8 +326,8 @@ pub fn normalize_alias(value: &str) -> String {
         .join(" ")
 }
 
-fn aliases_from_builder_relation<'a>(
-    society_name: &'a str,
+fn aliases_from_builder_relation(
+    society_name: &str,
     builder_brand: &str,
 ) -> Vec<(String, &'static str)> {
     let words = word_spans(society_name);

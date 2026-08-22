@@ -202,7 +202,9 @@ impl<'a> SearchEngine<'a> {
                     .unwrap_or_else(|| branch.to_string())
             })
             .collect::<Vec<_>>();
-        if self.has_implicit_shared_scope_prefix(&segment_queries) {
+        if self.has_implicit_shared_scope_prefix(&segment_queries)
+            || self.has_implicit_shared_geo_suffix(&segment_queries)
+        {
             return None;
         }
         segment_queries
@@ -221,6 +223,34 @@ impl<'a> SearchEngine<'a> {
         remaining
             .iter()
             .any(|branch| self.is_unscoped_structured_alternative(branch))
+    }
+
+    fn has_implicit_shared_geo_suffix(&self, branch_queries: &[String]) -> bool {
+        let Some((last, preceding)) = branch_queries.split_last() else {
+            return false;
+        };
+        !preceding.is_empty()
+            && self.has_resolved_geo_scope(last)
+            && preceding
+                .iter()
+                .all(|branch| self.is_bare_bhk_alternative(branch))
+    }
+
+    fn has_resolved_geo_scope(&self, query: &str) -> bool {
+        let plan = query_plan::compile_query_plan(query);
+        self.serving_bundle
+            .and_then(|bundle| bundle.geo_index.query_with_plan(&plan))
+            .is_some()
+    }
+
+    fn is_bare_bhk_alternative(&self, query: &str) -> bool {
+        let plan = query_plan::compile_query_plan(query);
+        !plan.slots.bhks.is_empty()
+            && plan.slots.budgets.is_empty()
+            && plan.areas.is_empty()
+            && plan.clauses.is_empty()
+            && plan.evidence.is_empty()
+            && self.is_unscoped_structured_alternative(query)
     }
 
     fn is_unscoped_structured_alternative(&self, query: &str) -> bool {

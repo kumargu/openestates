@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::collections::{HashMap, HashSet};
 
 use backend::graph::GraphIndex;
 use backend::knowledge::FactValue;
@@ -15,29 +14,16 @@ use chrono::{TimeZone, Utc};
 use serde::Deserialize;
 use tempfile::tempdir;
 
-const FROZEN_BANK: &str =
-    include_str!("../../data/validation/query_bank/search_conversational_semantics_v1.json");
-const BUYER_LANGUAGE_BANK: &str =
-    include_str!("../../data/validation/query_bank/search_buyer_language_v1.json");
-const DECISION_RANKING_BANK: &str =
-    include_str!("../../data/validation/query_bank/search_decision_ranking_v1.json");
-const MULTI_OR_BANK: &str =
-    include_str!("../../data/validation/query_bank/search_multi_or_semantics_v1.json");
-static QUERY_BANK: OnceLock<QueryBank> = OnceLock::new();
+const PRODUCT_SCENARIOS_BANK: &str =
+    include_str!("../../data/validation/query_bank/search_product_scenarios_v1.json");
 
 #[derive(Deserialize)]
-struct QueryBank {
-    cases: Vec<QueryCase>,
-}
-
-#[derive(Deserialize)]
-struct QueryCase {
-    id: String,
-    query: String,
-}
-
-#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ControlledQueryBank {
+    version: u32,
+    generated_at: String,
+    mode: String,
+    notes: Vec<String>,
     cases: Vec<ControlledQueryCase>,
 }
 
@@ -48,8 +34,19 @@ struct ControlledQueryCase {
     query: String,
     #[serde(rename = "category")]
     _category: String,
+    fixture: FixtureKind,
     expected_semantics: ExpectedSemantics,
     fixture_expectation: FixtureExpectation,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Hash, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum FixtureKind {
+    Core,
+    BuyerLanguage,
+    DecisionRanking,
+    MultiOr,
+    Regional,
 }
 
 #[derive(Deserialize)]
@@ -118,158 +115,71 @@ struct FixtureExpectation {
     result_set_counts: Vec<usize>,
     #[serde(default)]
     result_set_ordered_prefixes: Vec<Vec<String>>,
+    #[serde(default)]
+    required_proof_labels: HashMap<String, Vec<String>>,
 }
 
 #[test]
-fn frozen_branch_queries_execute_against_mock_inventory() {
-    let fixture = MockSearchFixture::new();
-
-    assert_branch_ids(
-        fixture.search(query("CONV-SEM-001")),
-        &[
-            &[
-                "mock-godrej-air-3bhk",
-                "mock-hoodi-only-3bhk",
-                "mock-hoodi-alternative-3bhk",
-            ],
-            &["mock-lakeside-orchard-4bhk"],
-        ],
+fn frozen_product_scenarios_execute_against_controlled_inventory() {
+    let bank: ControlledQueryBank = serde_json::from_str(PRODUCT_SCENARIOS_BANK)
+        .expect("controlled product-scenario bank is valid");
+    assert_eq!(bank.version, 1, "unsupported controlled bank version");
+    assert_eq!(bank.mode, "controlled_product_scenarios");
+    assert!(
+        !bank.generated_at.trim().is_empty(),
+        "bank date is required"
     );
-    assert_branch_ids(
-        fixture.search(query("CONV-SEM-004")),
-        &[&["mock-school-home-3bhk"], &["mock-metro-home-2bhk"]],
+    assert!(
+        !bank.notes.is_empty(),
+        "bank purpose must remain documented"
     );
-    assert_branch_ids(
-        fixture.search(query("CONV-SEM-005")),
-        &[&["mock-godrej-air-3bhk"], &["mock-lakeside-orchard-4bhk"]],
-    );
-    assert_branch_ids(
-        fixture.search(query("CONV-SEM-007")),
-        &[&["mock-snn-etternia-3bhk"], &["mock-prestige-song-3bhk"]],
-    );
-    assert_branch_ids(
-        fixture.search(query("CONV-SEM-008")),
-        &[
-            &["mock-electronic-city-3bhk"],
-            &["mock-kanakapura-road-3bhk"],
-        ],
-    );
-}
+    assert_eq!(bank.cases.len(), 50, "controlled bank size changed");
 
-#[test]
-fn frozen_proximity_and_preference_queries_execute_against_mock_facts() {
-    let fixture = MockSearchFixture::new();
-
-    let proximity_or_space = fixture.search(query("CONV-SEM-002"));
-    assert_contains_ids(
-        &proximity_or_space,
-        &["mock-bagmane-small-3bhk", "mock-far-delivered-4bhk"],
-    );
-    assert_excludes_ids(
-        &proximity_or_space,
-        &["mock-bagmane-under-construction-3bhk"],
-    );
-
-    let dual_place = fixture.search(query("CONV-SEM-003"));
-    assert_contains_ids(&dual_place, &["mock-dual-place-3bhk"]);
-    assert_excludes_ids(
-        &dual_place,
-        &["mock-hoodi-only-3bhk", "mock-manipal-only-3bhk"],
-    );
-    assert_proves_places(
-        &dual_place,
-        "mock-dual-place-3bhk",
-        &["Hoodi Metro", "Manipal Hospital"],
-    );
-
-    let soft_evidence = fixture.search(query("CONV-SEM-006"));
-    assert_first_id(&soft_evidence, "mock-quiet-reviewed-3bhk");
-    assert_contains_ids(&soft_evidence, &["mock-missing-noise-3bhk"]);
-
-    let balanced_commute = fixture.search(query("CONV-SEM-009"));
-    assert_first_id(&balanced_commute, "mock-balanced-commute-3bhk");
-    assert_proves_places(
-        &balanced_commute,
-        "mock-balanced-commute-3bhk",
-        &["Bagmane Tech Park", "Manipal Hospital Whitefield"],
-    );
-}
-
-#[test]
-fn frozen_contextual_alternatives_apply_global_exclusion() {
-    let fixture = MockSearchFixture::new();
-    let output = fixture.search(query("CONV-SEM-010"));
-
-    assert_excludes_ids(&output, &["mock-godrej-air-3bhk"]);
-    assert_contains_ids(
-        &output,
-        &["mock-hoodi-alternative-3bhk", "mock-larger-elsewhere-4bhk"],
-    );
-}
-
-#[test]
-fn frozen_buyer_language_queries_execute_against_product_model() {
-    let fixture = MockSearchFixture::with_buyer_candidates();
-    let bank: ControlledQueryBank =
-        serde_json::from_str(BUYER_LANGUAGE_BANK).expect("buyer-language bank is valid");
-
-    for case in bank.cases {
-        let output = fixture.search(&case.query);
-        assert_controlled_expectation(&case, &output);
-    }
-}
-
-#[test]
-fn frozen_decision_ranking_queries_execute_against_product_model() {
-    let fixture = MockSearchFixture::with_decision_candidates();
-    let bank: ControlledQueryBank =
-        serde_json::from_str(DECISION_RANKING_BANK).expect("decision-ranking bank is valid");
-
-    for case in bank.cases {
-        let output = fixture.search(&case.query);
-        assert_controlled_expectation(&case, &output);
-    }
-}
-
-#[test]
-fn frozen_multi_or_queries_execute_against_rich_mock_inventory() {
-    let fixture = MockSearchFixture::with_multi_or_candidates();
-    let bank: ControlledQueryBank =
-        serde_json::from_str(MULTI_OR_BANK).expect("multi-OR bank is valid");
-
-    for case in bank.cases {
-        let output = fixture.search(&case.query);
-        assert_controlled_expectation(&case, &output);
-    }
-}
-
-fn query(id: &str) -> &'static str {
-    QUERY_BANK
-        .get_or_init(|| serde_json::from_str(FROZEN_BANK).expect("frozen query bank is valid"))
+    let unique_ids = bank
         .cases
         .iter()
-        .find(|case| case.id == id)
-        .unwrap_or_else(|| panic!("missing frozen query {id}"))
-        .query
-        .as_str()
-}
+        .map(|case| case.id.as_str())
+        .collect::<HashSet<_>>();
+    assert_eq!(unique_ids.len(), bank.cases.len(), "duplicate scenario IDs");
 
-fn assert_branch_ids(output: ObservedSearch, expected: &[&[&str]]) {
-    let actual = output
-        .result_sets
+    let represented_fixtures = bank
+        .cases
         .iter()
-        .map(|result_set| {
-            result_set
-                .iter()
-                .map(|result| result.id.as_str())
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
+        .map(|case| case.fixture)
+        .collect::<HashSet<_>>();
     assert_eq!(
-        actual, expected,
-        "warnings: {:?}; negative_preferences={:?}",
-        output.warnings, output.negative_preferences
+        represented_fixtures,
+        HashSet::from([
+            FixtureKind::Core,
+            FixtureKind::BuyerLanguage,
+            FixtureKind::DecisionRanking,
+            FixtureKind::MultiOr,
+            FixtureKind::Regional,
+        ]),
+        "every controlled fixture profile must remain represented"
     );
+
+    let fixtures = represented_fixtures
+        .into_iter()
+        .map(|kind| (kind, MockSearchFixture::for_kind(kind)))
+        .collect::<HashMap<_, _>>();
+    for case in &bank.cases {
+        let output = fixtures[&case.fixture].search(&case.query);
+        if std::env::var_os("OPENESTATES_TRACE_SEARCH_SCENARIOS").is_some() {
+            let observed = output
+                .result_sets
+                .iter()
+                .map(|result_set| {
+                    result_set
+                        .iter()
+                        .map(|result| (result.id.as_str(), result.proof_labels.as_slice()))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            eprintln!("{} | {} | {observed:?}", case.id, case.query);
+        }
+        assert_controlled_expectation(case, &output);
+    }
 }
 
 fn result_ids(output: &ObservedSearch) -> Vec<&str> {
@@ -279,57 +189,6 @@ fn result_ids(output: &ObservedSearch) -> Vec<&str> {
         .flatten()
         .map(|result| result.id.as_str())
         .collect()
-}
-
-fn assert_contains_ids(output: &ObservedSearch, expected: &[&str]) {
-    let actual = result_ids(output);
-    for id in expected {
-        assert!(
-            actual.contains(id),
-            "missing {id}; actual={actual:?}; warnings={:?}",
-            output.warnings
-        );
-    }
-}
-
-fn assert_excludes_ids(output: &ObservedSearch, forbidden: &[&str]) {
-    let actual = result_ids(output);
-    for id in forbidden {
-        assert!(
-            !actual.contains(id),
-            "unexpected {id}; actual={actual:?}; negative_preferences={:?}",
-            output.negative_preferences
-        );
-    }
-}
-
-fn assert_first_id(output: &ObservedSearch, expected: &str) {
-    let actual = result_ids(output);
-    assert_eq!(
-        actual.first().copied(),
-        Some(expected),
-        "actual={actual:?}; warnings={:?}",
-        output.warnings
-    );
-}
-
-fn assert_proves_places(output: &ObservedSearch, result_id: &str, labels: &[&str]) {
-    let result = output
-        .result_sets
-        .iter()
-        .flatten()
-        .find(|result| result.id == result_id)
-        .unwrap_or_else(|| panic!("missing result {result_id}"));
-    for label in labels {
-        assert!(
-            result
-                .proof_labels
-                .iter()
-                .any(|matched| matched.contains(label)),
-            "{result_id} does not prove {label}: {:?}",
-            result.proof_labels
-        );
-    }
 }
 
 fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSearch) {
@@ -511,6 +370,17 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
             case.id,
             output.areas
         );
+        if semantics.branches.is_none() {
+            assert!(
+                output
+                    .result_sets
+                    .iter()
+                    .flatten()
+                    .all(|result| result.area.eq_ignore_ascii_case(expected)),
+                "{} returned a home outside area {expected:?}; actual={actual_ids:?}",
+                case.id
+            );
+        }
     }
     if let Some(expected) = semantics.bhk {
         assert!(
@@ -519,6 +389,17 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
             case.id,
             output.bhks
         );
+        if semantics.branches.is_none() {
+            assert!(
+                output
+                    .result_sets
+                    .iter()
+                    .flatten()
+                    .all(|result| result.bhk == expected),
+                "{} returned a home outside {expected} BHK; actual={actual_ids:?}",
+                case.id
+            );
+        }
     }
     if let Some(expected) = &semantics.bhks {
         assert_eq!(
@@ -526,6 +407,17 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
             "{} compiled the wrong BHK alternatives",
             case.id
         );
+        if semantics.branches.is_none() {
+            assert!(
+                output
+                    .result_sets
+                    .iter()
+                    .flatten()
+                    .all(|result| expected.contains(&result.bhk)),
+                "{} returned an unrequested BHK; actual={actual_ids:?}",
+                case.id
+            );
+        }
     }
     if let Some(expected) = semantics.budget_max {
         assert_eq!(
@@ -534,6 +426,17 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
             "{} compiled the wrong maximum budget",
             case.id
         );
+        if semantics.branches.is_none() {
+            assert!(
+                output
+                    .result_sets
+                    .iter()
+                    .flatten()
+                    .all(|result| result.price <= expected),
+                "{} returned a home above budget {expected}; actual={actual_ids:?}",
+                case.id
+            );
+        }
     }
     if let Some(expected) = &semantics.society {
         assert_resolved_entity(case, output, "society", expected);
@@ -591,19 +494,22 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
         );
     }
     if let Some(distance_km) = semantics.distance_max_km {
-        let distances = output
-            .result_sets
-            .iter()
-            .flatten()
-            .flat_map(|result| result.proof_distances_m.iter().copied())
-            .collect::<Vec<_>>();
-        if !distances.is_empty() {
+        for result in output.result_sets.iter().flatten() {
             assert!(
-                distances
+                !result.proof_distances_m.is_empty(),
+                "{} result {} has no distance receipt for the {distance_km} km constraint",
+                case.id,
+                result.id
+            );
+            assert!(
+                result
+                    .proof_distances_m
                     .iter()
                     .all(|distance| f64::from(*distance) <= distance_km * 1_000.0),
-                "{} did not enforce {distance_km} km; proof distances={distances:?}",
-                case.id
+                "{} result {} did not enforce {distance_km} km; proof distances={:?}",
+                case.id,
+                result.id,
+                result.proof_distances_m
             );
         }
     }
@@ -656,6 +562,25 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
                 }),
                 "{} branch {index} violated its declared scope/BHK/budget contract",
                 case.id
+            );
+        }
+    }
+    for (result_id, required_labels) in &expectation.required_proof_labels {
+        let result = output
+            .result_sets
+            .iter()
+            .flatten()
+            .find(|result| &result.id == result_id)
+            .unwrap_or_else(|| panic!("{} is missing proof-bearing result {result_id}", case.id));
+        for required_label in required_labels {
+            assert!(
+                result
+                    .proof_labels
+                    .iter()
+                    .any(|actual| actual.contains(required_label)),
+                "{} result {result_id} does not prove {required_label:?}; actual={:?}",
+                case.id,
+                result.proof_labels
             );
         }
     }
@@ -748,32 +673,31 @@ struct FixtureProfile {
     decision_candidates: bool,
     distance_decoy: bool,
     multi_or_decoys_per_bhk: usize,
+    regional_inventory: bool,
 }
 
 impl MockSearchFixture {
-    fn new() -> Self {
-        Self::build(FixtureProfile::default())
-    }
-
-    fn with_buyer_candidates() -> Self {
-        Self::build(FixtureProfile {
-            distance_decoy: true,
-            ..FixtureProfile::default()
-        })
-    }
-
-    fn with_decision_candidates() -> Self {
-        Self::build(FixtureProfile {
-            decision_candidates: true,
-            ..FixtureProfile::default()
-        })
-    }
-
-    fn with_multi_or_candidates() -> Self {
-        Self::build(FixtureProfile {
-            multi_or_decoys_per_bhk: 24,
-            ..FixtureProfile::default()
-        })
+    fn for_kind(kind: FixtureKind) -> Self {
+        let profile = match kind {
+            FixtureKind::Core => FixtureProfile::default(),
+            FixtureKind::BuyerLanguage => FixtureProfile {
+                distance_decoy: true,
+                ..FixtureProfile::default()
+            },
+            FixtureKind::DecisionRanking => FixtureProfile {
+                decision_candidates: true,
+                ..FixtureProfile::default()
+            },
+            FixtureKind::MultiOr => FixtureProfile {
+                multi_or_decoys_per_bhk: 24,
+                ..FixtureProfile::default()
+            },
+            FixtureKind::Regional => FixtureProfile {
+                regional_inventory: true,
+                ..FixtureProfile::default()
+            },
+        };
+        Self::build(profile)
     }
 
     fn build(profile: FixtureProfile) -> Self {
@@ -784,6 +708,9 @@ impl MockSearchFixture {
         builder.add_place("Bagmane Tech Park", "tech_park", 12.9800, 77.6600);
         builder.add_place("Gopalan National School", "school", 12.9500, 77.6400);
         builder.add_place("Mock Metro Station", "metro", 12.8500, 77.6000);
+        if profile.regional_inventory {
+            add_regional_inventory(&mut builder);
+        }
         if profile.multi_or_decoys_per_bhk > 0 {
             builder.add_area("Hoodi");
         }
@@ -1438,6 +1365,162 @@ impl FixtureBuilder {
             bundle,
         }
     }
+}
+
+fn add_regional_inventory(builder: &mut FixtureBuilder) {
+    for area in ["Whitefield", "Sarjapur Road", "North Bengaluru"] {
+        builder.add_area(area);
+    }
+    builder.add_place("Kadugodi Tree Park Metro", "metro", 12.9958, 77.7574);
+    builder.add_place("Iblur Metro", "metro", 12.9182, 77.6713);
+    builder.add_place("Nagawara Metro", "metro", 13.0448, 77.6215);
+
+    builder.add_home(
+        HomeSpec::new(
+            "mock-whitefield-value-2bhk",
+            "Whitefield Value Homes",
+            "Whitefield",
+            2,
+            14_500_000,
+            12.9964,
+            77.7579,
+        )
+        .quality(Some(0.35), Some(4.2)),
+    );
+    builder.add_nearby_fact(
+        "Whitefield Value Homes",
+        "nearby_metro_stations",
+        "Kadugodi Tree Park Metro (0.1 km)",
+    );
+    builder.add_home(
+        HomeSpec::new(
+            "mock-whitefield-family-3bhk",
+            "Whitefield Family Homes",
+            "Whitefield",
+            3,
+            21_000_000,
+            12.9948,
+            77.7552,
+        )
+        .quality(Some(0.25), Some(4.5)),
+    );
+    builder.add_nearby_fact(
+        "Whitefield Family Homes",
+        "nearby_metro_stations",
+        "Kadugodi Tree Park Metro (0.3 km)",
+    );
+    builder.add_home(
+        HomeSpec::new(
+            "mock-whitefield-premium-3bhk",
+            "Whitefield Premium Homes",
+            "Whitefield",
+            3,
+            28_000_000,
+            12.9918,
+            77.7520,
+        )
+        .quality(Some(0.12), Some(4.7)),
+    );
+
+    builder.add_home(
+        HomeSpec::new(
+            "mock-sarjapur-value-2bhk",
+            "Sarjapur Value Homes",
+            "Sarjapur Road",
+            2,
+            12_800_000,
+            12.9196,
+            77.6730,
+        )
+        .quality(Some(0.4), Some(4.1)),
+    );
+    builder.add_nearby_fact(
+        "Sarjapur Value Homes",
+        "nearby_metro_stations",
+        "Iblur Metro (0.3 km)",
+    );
+    builder.add_home(
+        HomeSpec::new(
+            "mock-sarjapur-family-3bhk",
+            "Sarjapur Family Homes",
+            "Sarjapur Road",
+            3,
+            18_500_000,
+            12.9172,
+            77.6692,
+        )
+        .quality(Some(0.28), Some(4.6)),
+    );
+    builder.add_nearby_fact(
+        "Sarjapur Family Homes",
+        "nearby_metro_stations",
+        "Iblur Metro (0.3 km)",
+    );
+    builder.add_home(
+        HomeSpec::new(
+            "mock-sarjapur-premium-4bhk",
+            "Sarjapur Premium Homes",
+            "Sarjapur Road",
+            4,
+            31_000_000,
+            12.9150,
+            77.6660,
+        )
+        .quality(Some(0.15), Some(4.4))
+        .under_construction(),
+    );
+
+    builder.add_home(
+        HomeSpec::new(
+            "mock-north-value-2bhk",
+            "North Bengaluru Value Homes",
+            "North Bengaluru",
+            2,
+            11_000_000,
+            13.0454,
+            77.6222,
+        )
+        .quality(Some(0.4), Some(4.0)),
+    );
+    builder.add_nearby_fact(
+        "North Bengaluru Value Homes",
+        "nearby_metro_stations",
+        "Nagawara Metro (0.1 km)",
+    );
+    builder.add_home(
+        HomeSpec::new(
+            "mock-north-family-3bhk",
+            "North Bengaluru Family Homes",
+            "North Bengaluru",
+            3,
+            16_500_000,
+            13.0436,
+            77.6204,
+        )
+        .quality(Some(0.3), Some(4.6)),
+    );
+    builder.add_nearby_fact(
+        "North Bengaluru Family Homes",
+        "nearby_metro_stations",
+        "Nagawara Metro (0.2 km)",
+    );
+    builder.add_home(
+        HomeSpec::new(
+            "mock-north-premium-3bhk",
+            "North Bengaluru Premium Homes",
+            "North Bengaluru",
+            3,
+            24_000_000,
+            13.0410,
+            77.6170,
+        )
+        .quality(Some(0.1), Some(4.1)),
+    );
+    builder.add_nearby_fact(
+        "North Bengaluru Premium Homes",
+        "nearby_metro_stations",
+        "Nagawara Metro (0.6 km)",
+    );
 }
 
 fn add_multi_or_decoys(builder: &mut FixtureBuilder, candidates_per_bhk: usize) {

@@ -1427,14 +1427,10 @@ fn span_is_owned_by_entity(plan: &QueryPlan, span: ByteSpan) -> bool {
 
 fn match_has_negated_prefix(q: &str, start: usize) -> bool {
     let mut prefix = q[..start].trim_end_matches(|ch: char| ch.is_ascii_whitespace() || ch == ',');
-    loop {
-        let Some(last_token) = prefix
-            .split(|character: char| !character.is_ascii_alphanumeric())
-            .filter(|token| !token.is_empty())
-            .next_back()
-        else {
-            break;
-        };
+    while let Some(last_token) = prefix
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .rfind(|token| !token.is_empty())
+    {
         if !search_parser_config()
             .bhk
             .exclusion_gap_tokens
@@ -1880,7 +1876,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         let layout = plan
-            .alternative_clause_layout(&occupied_spans, &[occupied_spans.clone()])
+            .alternative_clause_layout(&occupied_spans, std::slice::from_ref(&occupied_spans))
             .expect("the cross-clause or should remain");
 
         assert_eq!(layout.segments.len(), 2);

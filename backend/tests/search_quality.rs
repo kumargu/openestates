@@ -6,6 +6,8 @@
 //! that real customers would type, and evaluate whether the search system
 //! returns sensible, well-ranked, well-explained results.
 
+#![allow(clippy::too_many_arguments, clippy::type_complexity)]
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;

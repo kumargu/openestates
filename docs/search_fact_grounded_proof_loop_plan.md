@@ -120,9 +120,9 @@ quarantine status, and lineage directly.
 
 ### Controlled conversational model checkpoint
 
-The first next-phase milestone is complete. The 10 frozen buyer queries in
-`data/validation/query_bank/search_conversational_semantics_v1.json` now run
-against the controlled product model in
+The first next-phase milestone is complete. The 10 frozen `core` buyer queries
+in `data/validation/query_bank/search_product_scenarios_v1.json` now run against
+the controlled product model in
 `backend/tests/search_conversational_semantics_contract.rs`.
 
 The fixture is a durable executable specification, not temporary test data. It
@@ -160,9 +160,9 @@ Commits:
 
 ### Varied buyer-language checkpoint
 
-The controlled model now also executes the 18 cases in
-`data/validation/query_bank/search_buyer_language_v1.json`. Together with the
-original bank, 28 frozen buyer searches cover simple constraints,
+The controlled model now also executes the 18 `buyer_language` cases in
+`data/validation/query_bank/search_product_scenarios_v1.json`. Together with
+the original cases, 28 frozen buyer searches cover simple constraints,
 conversational preferences, society and place typos, compact/broken grammar,
 equivalent budget wording, branch alternatives, missing optional evidence,
 hard abstention, and false-proof sentinels.
@@ -175,7 +175,7 @@ Query-bank consolidation stayed deliberately narrow:
   FastText shadow path had already been deleted;
 - useful human phrases from that classifier experiment now appear inside full
   buyer searches with observable intent, results, exclusions, and proof
-  expectations in `search_buyer_language_v1.json`;
+  expectations in the consolidated product-scenario bank;
 - Git history remains the archive for the retired classifier-only corpus.
 
 The new bank exposed two classified `intent_gap` defects:
@@ -212,10 +212,10 @@ deferred so this pass remains focused on search quality.
 
 ### Multi-decision ranking checkpoint — 2026-08-23
 
-Three additional frozen cases in
-`data/validation/query_bank/search_decision_ranking_v1.json` extend the
+Three additional `decision_ranking` cases in
+`data/validation/query_bank/search_product_scenarios_v1.json` extend the
 controlled product model to 31 buyer searches. They add only decision classes
-that were absent from the first two banks:
+that were absent from the first two profiles:
 
 - explicit lexicographic preference order, such as quietness first and
   resident reviews second;
@@ -328,7 +328,8 @@ The recovery keeps the behavior generic:
   flattened result list to the same unique homes, preserving order within each
   branch without letting the first branch consume the limit.
 
-`data/validation/query_bank/search_multi_or_semantics_v1.json` adds nine frozen
+The `multi_or` profile in
+`data/validation/query_bank/search_product_scenarios_v1.json` adds nine frozen
 cases. Its fixture generates 24 decoys for each of two BHK branches and proves
 shared scope across two and three alternatives, branch-specific budgets, a
 later independent named scope, area and leading/trailing named-place scope,
@@ -348,6 +349,40 @@ Recovery verification:
 - isolated API smoke suite on port 4102: 50/50 passed;
 - production hardcoding gate: zero vocabulary, fact-key, or blocked-alias
   findings.
+
+### Regional controlled-bank consolidation — 2026-08-23
+
+The four controlled banks were consolidated into the single typed
+`search_product_scenarios_v1.json` contract. Its 50 cases select one of five
+fixture profiles, so richer inventory does not silently change older scenario
+expectations. Immutable live-bundle and materialization banks remain separate.
+
+The new `regional` profile adds nine homes across Whitefield, Sarjapur Road,
+and North Bengaluru. It varies BHK, price, lifecycle state, noise evidence,
+resident ratings, and proximity to Kadugodi Tree Park, Iblur, and Nagawara
+Metro. Ten new cases cover regional budgets, named-place proof, a three-region
+OR, shared named-place scope across BHK alternatives, hard-budget abstention,
+and lexicographic quality ranking.
+
+The first green run hid an `intent_gap`: `2BHK or 3BHK near Nagawara Metro`
+returned unrelated 2BHKs because the trailing geo scope applied only to the
+last branch. The expectation now requires exact branch sets and Nagawara proof
+on both homes. Branch dispatch generically keeps a trailing resolved geo scope
+on the combined Boolean query when preceding alternatives are bare BHKs; fully
+specified or independently scoped branches remain independent. Tightening the
+distance assertion then exposed a `proof_gap`: generic place-family distance
+filters did not copy the parsed serving-fact distance into proof focus. The
+generic fact-backed proof path now does so.
+
+Verification:
+
+- consolidated controlled bank: 50/50 scenarios passed;
+- regional result inspection: 10/10 returned the intended homes, abstention,
+  ordering, and named-metro receipts;
+- clean-serving-v7 live bank: 149/149 checks passed;
+- full backend and API smoke suites: passed;
+- CI clippy and stricter all-target/all-feature clippy: passed;
+- production hardcoding gate: zero production findings and wired into CI.
 
 ## Earlier implementation checkpoint — 2026-08-22
 

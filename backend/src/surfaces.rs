@@ -1505,7 +1505,7 @@ mod tests {
 
         assert_eq!(
             linked_entity_id_for_fact(
-                &rows,
+                rows,
                 &rows.facts[0],
                 0,
                 &["stormwater_drain_place_entity".to_string()],
@@ -1551,7 +1551,7 @@ mod tests {
 
         assert_eq!(
             linked_entity_id_for_fact(
-                &rows,
+                rows,
                 &rows.facts[2],
                 2,
                 &["stormwater_drain_place_entity".to_string()],

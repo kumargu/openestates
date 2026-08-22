@@ -1861,6 +1861,7 @@ mod tests {
             .unwrap_or_default()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn test_row(
         image_url: &str,
         kind: &str,
