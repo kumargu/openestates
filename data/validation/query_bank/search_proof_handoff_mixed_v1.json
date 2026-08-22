@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-22",
+  "source_bundle_version": "search-experiment-mixed-south-45-2026-08-22-v1",
+  "notes": [
+    "This bank verifies that a search proof focus survives into the configured property-detail surface.",
+    "The detail scene must preserve the search fact and entity handles, attach a matching feature and receipt, and report the same immutable serving version."
+  ],
+  "cases": [
+    {
+      "id": "PROOF-HANDOFF-001",
+      "mode": "data_backed",
+      "category": "named_metro_detail_lineage",
+      "query": "Godrej Air 3BHK near Hoodi Metro",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": ["discovered-godrej-air-3bhk"],
+        "result_bhks_all": [3],
+        "reason_fact_keys_any": ["nearby_metro_stations"],
+        "proof_focus_matches_all": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "metro",
+            "fact_key": "nearby_metro_stations",
+            "entity_id": "place:google:chijcyddpjarrjsrknxrc3lzvnk",
+            "distance_m": 100
+          }
+        ],
+        "proof_handoff_matches_all": [
+          {
+            "result_id": "discovered-godrej-air-3bhk",
+            "surface_id": "around_this_home",
+            "layer_id": "metro",
+            "fact_key": "nearby_metro_stations",
+            "entity_id": "place:google:chijcyddpjarrjsrknxrc3lzvnk",
+            "distance_m": 100,
+            "source_type": "Google",
+            "serving_bundle_version": "search-experiment-mixed-south-45-2026-08-22-v1"
+          }
+        ]
+      }
+    }
+  ]
+}

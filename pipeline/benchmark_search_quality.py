@@ -129,6 +129,10 @@ def main() -> None:
             [result.get("id") for result in flattened_results(item)]
             for item in successful_responses
         ]
+        if (case.get("expected") or {}).get("proof_handoff_matches_all"):
+            response["_proof_handoffs"] = collect_proof_handoffs(
+                args.base_url, response, args.timeout_seconds
+            )
 
         checks = evaluate_case(case, response)
         passed = sum(1 for item in checks if item["passed"])
@@ -255,6 +259,45 @@ def call_health(base_url: str, timeout_seconds: int) -> Optional[Dict[str, Any]]
     except (urllib.error.URLError, json.JSONDecodeError) as err:
         print(f"  ERROR: health check failed: {err}", file=sys.stderr)
         return None
+
+
+def collect_proof_handoffs(
+    base_url: str, response: Dict[str, Any], timeout_seconds: int
+) -> List[Dict[str, Any]]:
+    handoffs: List[Dict[str, Any]] = []
+    for result in flattened_results(response)[:3]:
+        property_id = result.get("id")
+        if not isinstance(property_id, str) or not property_id:
+            continue
+        for focus in result.get("proof_focuses") or result.get("proofFocuses") or []:
+            if not isinstance(focus, dict):
+                continue
+            surface_id = field_value(focus, "surface_id")
+            if not isinstance(surface_id, str) or not surface_id:
+                continue
+            handoff = {
+                "result_id": property_id,
+                "search_focus": focus,
+                "scene": None,
+            }
+            try:
+                property_path = urllib.parse.quote(property_id, safe="")
+                surface_path = urllib.parse.quote(surface_id, safe="")
+                focus_query = urllib.parse.urlencode(
+                    {"focus": json.dumps(focus, separators=(",", ":"))}
+                )
+                url = (
+                    f"{base_url}/api/properties/{property_path}/surfaces/"
+                    f"{surface_path}?{focus_query}"
+                )
+                with urllib.request.urlopen(url, timeout=timeout_seconds) as surface_response:
+                    scene = json.loads(surface_response.read())
+                    if isinstance(scene, dict):
+                        handoff["scene"] = scene
+            except (urllib.error.URLError, json.JSONDecodeError) as err:
+                handoff["error"] = str(err)
+            handoffs.append(handoff)
+    return handoffs
 
 
 def load_cases(spec: Dict[str, Any], spec_dir: Path) -> Tuple[List[Dict[str, Any]], List[str]]:
@@ -780,6 +823,13 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
                 f"missing proof focus matches {missing_focuses}; top result got {top_result_focuses}",
             )
         )
+    if "proof_handoff_matches_all" in expected:
+        checks.extend(
+            evaluate_proof_handoffs(
+                expected["proof_handoff_matches_all"],
+                response.get("_proof_handoffs") or [],
+            )
+        )
     if "forbidden_proof_focus_fact_keys" in expected:
         forbidden_focus_keys = {
             normalize_fact_key(key) for key in expected["forbidden_proof_focus_fact_keys"]
@@ -895,6 +945,9 @@ def case_result(
             "top_results": result_summaries(results[:5]),
             "learning_gaps": learning_gaps(response),
             "search_diagnostics": search_diagnostics(response),
+            "proof_handoffs": proof_handoff_summaries(
+                response.get("_proof_handoffs") or []
+            ),
             "request_duration_ms": response.get("_request_duration_ms"),
             "request_durations_ms": response.get("_request_durations_ms") or [],
         }
@@ -925,6 +978,201 @@ def result_summaries(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "proof_focuses": result.get("proof_focuses")
                 or result.get("proofFocuses")
                 or [],
+            }
+        )
+    return summaries
+
+
+def evaluate_proof_handoffs(
+    requirements: List[Dict[str, Any]], handoffs: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    checks: List[Dict[str, Any]] = []
+    for index, requirement in enumerate(requirements, start=1):
+        handoff = matching_proof_handoff(requirement, handoffs)
+        checks.append(
+            check(
+                "proof_handoff",
+                f"search_focus_{index}",
+                handoff is not None,
+                f"expected handoff for {requirement}, got {proof_handoff_summaries(handoffs)}",
+            )
+        )
+        if handoff is None:
+            continue
+        checks.extend(proof_handoff_detail_checks(index, requirement, handoff))
+    return checks
+
+
+def matching_proof_handoff(
+    requirement: Dict[str, Any], handoffs: List[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    focus_fields = {
+        "surface_id",
+        "layer_id",
+        "fact_key",
+        "entity_id",
+        "matched_label",
+        "matched_value",
+        "requested_constraint",
+        "distance_m",
+        "reason",
+    }
+    result_id = requirement.get("result_id")
+    focus_requirement = {
+        key: value for key, value in requirement.items() if key in focus_fields
+    }
+    return next(
+        (
+            item
+            for item in handoffs
+            if (result_id is None or item.get("result_id") == result_id)
+            and isinstance(item.get("search_focus"), dict)
+            and record_matches(item["search_focus"], focus_requirement)
+        ),
+        None,
+    )
+
+
+def proof_handoff_detail_checks(
+    index: int, requirement: Dict[str, Any], handoff: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    search_focus = handoff["search_focus"]
+    scene = handoff.get("scene")
+    scene_focus = field_value(scene, "proof_focus") if isinstance(scene, dict) else None
+    mismatches = proof_focus_mismatches(search_focus, scene_focus)
+    checks = [
+        check(
+            "proof_handoff",
+            f"focus_preserved_{index}",
+            not mismatches,
+            f"detail focus changed fields {mismatches}; scene={scene_focus}",
+        )
+    ]
+    if not isinstance(scene, dict) or not isinstance(scene_focus, dict):
+        return checks
+    checks.append(feature_receipt_link_check(index, scene, scene_focus))
+    checks.append(
+        receipt_lineage_check(index, requirement, search_focus, scene, scene_focus)
+    )
+    expected_version = requirement.get("serving_bundle_version")
+    actual_version = field_value(scene, "serving_bundle_version")
+    checks.append(
+        check(
+            "proof_handoff",
+            f"serving_version_{index}",
+            expected_version is None or actual_version == expected_version,
+            f"expected serving version {expected_version!r}, got {actual_version!r}",
+        )
+    )
+    return checks
+
+
+def proof_focus_mismatches(
+    search_focus: Dict[str, Any], scene_focus: Any
+) -> List[str]:
+    if not isinstance(scene_focus, dict):
+        return ["proof_focus"]
+    fields = (
+        "surface_id",
+        "layer_id",
+        "fact_key",
+        "entity_id",
+        "matched_label",
+        "matched_value",
+        "requested_constraint",
+        "distance_m",
+        "reason",
+    )
+    return [
+        field
+        for field in fields
+        if field_value(search_focus, field) is not None
+        and field_value(scene_focus, field) != field_value(search_focus, field)
+    ]
+
+
+def feature_receipt_link_check(
+    index: int, scene: Dict[str, Any], scene_focus: Dict[str, Any]
+) -> Dict[str, Any]:
+    feature_id = field_value(scene_focus, "feature_id")
+    receipt_id = field_value(scene_focus, "receipt_id")
+    feature = next(
+        (
+            item
+            for item in scene.get("features") or []
+            if isinstance(item, dict) and field_value(item, "id") == feature_id
+        ),
+        None,
+    )
+    receipt_ids = (
+        field_value(feature, "receipt_ids") if isinstance(feature, dict) else []
+    )
+    passed = (
+        isinstance(feature, dict)
+        and field_value(feature, "entity_id") == field_value(scene_focus, "entity_id")
+        and field_value(feature, "layer_id") == field_value(scene_focus, "layer_id")
+        and receipt_id in (receipt_ids or [])
+    )
+    return check(
+        "proof_handoff",
+        f"feature_receipt_link_{index}",
+        passed,
+        f"focused feature={feature_id!r}, receipt={receipt_id!r}, matched={passed}",
+    )
+
+
+def receipt_lineage_check(
+    index: int,
+    requirement: Dict[str, Any],
+    search_focus: Dict[str, Any],
+    scene: Dict[str, Any],
+    scene_focus: Dict[str, Any],
+) -> Dict[str, Any]:
+    receipt_id = field_value(scene_focus, "receipt_id")
+    receipt = next(
+        (
+            item
+            for item in scene.get("receipts") or []
+            if isinstance(item, dict) and field_value(item, "id") == receipt_id
+        ),
+        None,
+    )
+    passed = (
+        isinstance(receipt, dict)
+        and field_value(receipt, "fact_key") == field_value(search_focus, "fact_key")
+        and bool(field_value(receipt, "source_type"))
+        and bool(field_value(receipt, "source_url"))
+        and bool(field_value(receipt, "learned_at"))
+    )
+    expected_source = requirement.get("source_type")
+    if expected_source is not None and isinstance(receipt, dict):
+        passed = passed and equal_text(field_value(receipt, "source_type"), expected_source)
+    actual_source = (
+        field_value(receipt, "source_type") if isinstance(receipt, dict) else None
+    )
+    return check(
+        "proof_handoff",
+        f"receipt_lineage_{index}",
+        passed,
+        f"focused receipt={receipt_id!r}, source={actual_source!r}, matched={passed}",
+    )
+
+
+def proof_handoff_summaries(handoffs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    summaries: List[Dict[str, Any]] = []
+    for handoff in handoffs:
+        scene = handoff.get("scene")
+        summaries.append(
+            {
+                "result_id": handoff.get("result_id"),
+                "search_focus": handoff.get("search_focus"),
+                "detail_focus": field_value(scene, "proof_focus")
+                if isinstance(scene, dict)
+                else None,
+                "serving_bundle_version": field_value(scene, "serving_bundle_version")
+                if isinstance(scene, dict)
+                else None,
+                "error": handoff.get("error"),
             }
         )
     return summaries

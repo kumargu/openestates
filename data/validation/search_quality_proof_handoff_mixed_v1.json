@@ -1,0 +1,8 @@
+{
+  "benchmark": "mixed_south_search_proof_handoff",
+  "version": 1,
+  "description": "Live result-to-detail proof lineage over the immutable mixed South search experiment.",
+  "required_serving_bundle_version": "search-experiment-mixed-south-45-2026-08-22-v1",
+  "scoreable_modes": ["data_backed"],
+  "case_files": ["query_bank/search_proof_handoff_mixed_v1.json"]
+}

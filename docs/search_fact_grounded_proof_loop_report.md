@@ -84,7 +84,7 @@ Fresh verification after resuming the stopped session:
 - Full Rust suite: 625 library tests and all integration binaries passed.
 - Search-experiment admission and pointer-isolation tests: 4 passed.
 - Search-efficiency integration contract: 11 passed.
-- Python benchmark and collection tests: 90 passed, 1 skipped.
+- Python benchmark and collection tests: 91 passed, 1 skipped.
 - Frontend suite: 145 tests passed; production build passed.
 - Experiment API smoke suite: 50 checks passed.
 - Search hardcoding audit: zero blocked search-config alias findings.
@@ -131,13 +131,14 @@ Proved so far:
 - unknown price, unsupported BHK, missing numeric evidence, and impossible
   acreage thresholds fail closed;
 - experiment bundles remain outside catalog promotion and outside the global
-  current serving pointer.
+  current serving pointer;
+- named-place search proof survives into the property surface with the same
+  fact, entity, distance, source receipt, and serving version.
 
 Not yet proved:
 
 - broad transfer across schools, tech parks, negative risks, water, traffic,
   noise, builder/RERA evidence, and configured required preferences;
-- result-to-detail proof lineage through the live property-detail endpoint;
 - cache isolation and rollback across an actual experiment bundle switch;
 - recall and latency on a materially larger cohort;
 - generalized fuzzy/paraphrase behavior beyond the named query banks;
@@ -212,6 +213,20 @@ Artifacts:
   `data/validation/search_quality_mixed_south_experiment_v1.json`;
 - measured outputs: `tmp/search-proof-loop/incomplete-south-experiment-v1/`
   and `tmp/search-proof-loop/mixed-south-45-experiment-v1/`.
+
+The follow-up proof-handoff bank runs through the same benchmark entry point.
+For `Godrej Air 3BHK near Hoodi Metro`, it retrieved the search focus, called
+the configured `around_this_home` detail surface with that focus, and verified
+the Hoodi place entity, `nearby_metro_stations` fact, 100 m distance, focused
+feature, Google receipt lineage, and mixed-bundle version. The case passed
+13/13 checks with 12.76 ms endpoint p50 and p95.
+
+- handoff bank:
+  `data/validation/query_bank/search_proof_handoff_mixed_v1.json`;
+- handoff suite:
+  `data/validation/search_quality_proof_handoff_mixed_v1.json`;
+- measured output:
+  `tmp/search-proof-loop/mixed-south-45-experiment-v1/proof-handoff.json`.
 
 ## Historical execution log
 

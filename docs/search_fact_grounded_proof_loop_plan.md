@@ -157,8 +157,14 @@ The operational boundary is now proved:
   398/398 checks across the old regression banks plus the incomplete-society
   bank at 20.45 ms endpoint p95.
 
-The next unproved boundary is result-to-detail proof lineage, followed by cache
-isolation and rollback between two pinned materializations.
+Result-to-detail proof lineage is also proved for the named-place path. The
+benchmark now follows a search focus into the configured detail surface and
+checks that the fact, entity, distance, feature, receipt lineage, and immutable
+serving version agree. The Hoodi Metro case passed all 13/13 checks at 12.76 ms
+endpoint p95.
+
+The next unproved boundary is cache isolation and rollback between two pinned
+materializations.
 
 ## Non-Negotiable Invariants
 
@@ -421,7 +427,8 @@ Progress as of 2026-08-22:
 
 - complete: incomplete-society transfer, hard price/BHK/numeric gates, optional
   missing-evidence neutrality, mixed-cohort regression, and pointer isolation;
-- next: proof handoff and bundle-switch cache/rollback tests;
+- complete: named-place result-to-detail proof handoff;
+- next: bundle-switch cache/rollback tests;
 - later: required-evidence transfer, more fact families and paraphrases, a
   materially larger cohort, and durable-data corrections for known category
   errors.

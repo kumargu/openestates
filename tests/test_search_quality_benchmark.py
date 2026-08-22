@@ -3,6 +3,7 @@ import unittest
 from pipeline.benchmark_search_quality import (
     case_result,
     evaluate_case,
+    evaluate_proof_handoffs,
     flattened_results,
     public_quality_summary,
     serving_bundle_requirement_error,
@@ -319,6 +320,71 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
         checks = evaluate_case(case, response)
 
         self.assertTrue(all(check["passed"] for check in checks), checks)
+
+    def test_proof_handoff_preserves_focus_feature_receipt_and_version(self) -> None:
+        search_focus = {
+            "surfaceId": "around_this_home",
+            "layerId": "metro",
+            "factKey": "nearby_metro_stations",
+            "entityId": "place:hoodi",
+            "matchedLabel": "Hoodi",
+            "distanceM": 100,
+            "reason": "matched near Hoodi",
+        }
+        scene_focus = {
+            **search_focus,
+            "featureId": "feature:hoodi",
+            "receiptId": "receipt:hoodi",
+        }
+        handoffs = [
+            {
+                "result_id": "property:godrej-air-3bhk",
+                "search_focus": search_focus,
+                "scene": {
+                    "servingBundleVersion": "bundle-v1",
+                    "proofFocus": scene_focus,
+                    "features": [
+                        {
+                            "id": "feature:hoodi",
+                            "entityId": "place:hoodi",
+                            "layerId": "metro",
+                            "receiptIds": ["receipt:hoodi"],
+                        }
+                    ],
+                    "receipts": [
+                        {
+                            "id": "receipt:hoodi",
+                            "factKey": "nearby_metro_stations",
+                            "sourceType": "Google",
+                            "sourceUrl": "https://maps.google.com/hoodi",
+                            "learnedAt": "2026-08-01T00:00:00Z",
+                        }
+                    ],
+                },
+            }
+        ]
+        requirements = [
+            {
+                "result_id": "property:godrej-air-3bhk",
+                "fact_key": "nearby_metro_stations",
+                "entity_id": "place:hoodi",
+                "distance_m": 100,
+                "source_type": "Google",
+                "serving_bundle_version": "bundle-v1",
+            }
+        ]
+
+        checks = evaluate_proof_handoffs(requirements, handoffs)
+
+        self.assertEqual(len(checks), 5)
+        self.assertTrue(all(check["passed"] for check in checks), checks)
+
+        handoffs[0]["scene"]["receipts"][0]["sourceUrl"] = ""
+        failed = evaluate_proof_handoffs(requirements, handoffs)
+        self.assertIn(
+            "receipt_lineage_1",
+            {check["check"] for check in failed if not check["passed"]},
+        )
 
 if __name__ == "__main__":
     unittest.main()
