@@ -215,7 +215,7 @@
         "property \u2192 in_society \u2192 society \u2192 served_by_road \u2192 road_segment"
       ],
       "components": [
-        "ApproachRoadTrail",
+        "PropertyArrivalFilm",
         "livability_brief:risk",
         "search_chip:approach_road"
       ],

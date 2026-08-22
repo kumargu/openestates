@@ -90,6 +90,10 @@
     transform: translateX(50%);
   }
 
+  .property-story-mobile-progress.is-overview {
+    display: none;
+  }
+
   .property-story-mobile-progress button {
     min-width: 2.75rem;
     min-height: 2.75rem;

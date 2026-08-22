@@ -76,7 +76,12 @@ export function PropertyStoryRail({ chapters }: Props) {
         ))}
       </aside>
 
-      <nav className="property-story-mobile-progress" aria-label="Story progress">
+      <nav
+        className={`property-story-mobile-progress${
+          activeIndex === 0 ? " is-overview" : ""
+        }`}
+        aria-label="Story progress"
+      >
         <button
           type="button"
           aria-label="Previous chapter"

@@ -1,6 +1,6 @@
 # Property detail — next pass
 
-**Status:** M0–M6 implemented on `agent/property-detail-next-pass`; M7 next.
+**Status:** M0–M7 implemented and locally verified on `agent/property-detail-next-pass`; promotion pending review.
 **Updated:** 2026-08-23
 **Companion:** canvas `property-detail-mocks.canvas.tsx`
 
@@ -48,6 +48,22 @@ Search already presents a journey instead of a dump. Detail should feel the same
 - Theme tints must remain restrained and contrast-led. Warm, mineral, deep, and editorial treatments should be related expressions of one product, not per-property art direction.
 - Reduced motion should not offer a play control that cannot play. Keep previous/next and gallery access, remove misleading autoplay controls, and render a complete still frame.
 - Test the production projection path explicitly. A fixture test that injects richer roles can prove determinism while still missing a production integration gap.
+
+## M7 verification and learnings
+
+- The automated Story Lab matrix now covers 810 deterministic combinations across three properties, rich/partial/sparse coverage, lifecycle, reviews, RERA, media count, and provenance. Every projection keeps bounded media and unique primary fact keys.
+- Optimized local profile for the Birla Tisya story: FCP/LCP 468 ms, CLS 0.0488, no long tasks, and no frame above 20 ms during a three-second 120 Hz sample.
+- Across two autoplay transitions, the rendered scene returned to one active layer with no retained previous layer; measured heap changed from 28.1 MB to 28.2 MB.
+- Mobile full-bleed width must override the reusable padded-card offset. Otherwise facts and gallery controls extend 16 px beyond the viewport.
+- Mobile chapter progress should stay hidden over the hero, where chapter count and media controls already provide orientation. It appears after the buyer enters the evidence chapters.
+- `PropertyArrivalFilm` now owns the `approach_road` UI surface. The superseded `ApproachRoadTrail`, its CSS, stale component registry entry, and orphan mosaic CSS were removed.
+- The cleanup reduced the main minified stylesheet from about 227.2 KB to 219.8 KB (41.4 KB to 40.2 KB gzip).
+
+Known follow-ups:
+
+- The existing Around This Home map chunk remains about 1.07 MB and deserves a separate route/deck loading pass.
+- ESLint still reports the pre-existing `viewport.center` dependency warning in `AroundThisHomeMap.tsx`.
+- No runtime feature flag was added because this repository has no frontend flag control plane and an ad hoc environment flag would create parallel behavior. The feature branch is the rollout boundary; promotion remains a PR/review decision.
 
 ## What is already good
 

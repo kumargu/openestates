@@ -33,6 +33,62 @@ test("property story projection is deterministic", () => {
   );
 });
 
+test("Story Lab projection matrix stays deterministic and bounded", () => {
+  const propertyIds = [
+    "fixture-prestige-lakeside-3bhk",
+    "fixture-sobha-royal-pavilion-4bhk",
+    "fixture-vaswani-starlight-3bhk",
+  ] as const;
+  const coverages = ["rich", "partial", "sparse"] as const;
+  const lifecycles = ["ready", "under-construction"] as const;
+  const reviewStates = ["present", "unresolved", "empty"] as const;
+  const reraStates = ["complete", "partial", "missing"] as const;
+  const mediaCases = [
+    { count: "none", provenance: "current" },
+    { count: "single", provenance: "current" },
+    { count: "many", provenance: "current" },
+    { count: "many", provenance: "mixed" },
+    { count: "many", provenance: "render" },
+  ] as const;
+  let projections = 0;
+
+  for (const propertyId of propertyIds) {
+    for (const coverage of coverages) {
+      for (const lifecycle of lifecycles) {
+        for (const reviews of reviewStates) {
+          for (const rera of reraStates) {
+            const detail = storyLabDetailFixture({
+              propertyId,
+              coverage,
+              lifecycle,
+              reviews,
+              rera,
+            });
+            for (const mediaCase of mediaCases) {
+              const media = storyLabMediaFixture(mediaCase);
+              const first = projectPropertyStory(detail, { media });
+              const second = projectPropertyStory(detail, { media });
+              const factKeys = primaryStoryFactKeys(first);
+
+              assert.deepEqual(first, second);
+              assert.equal(new Set(factKeys).size, factKeys.length);
+              assert.ok(first.media.frames.length <= 7);
+              assert.ok(first.arrival.frames.length <= 6);
+              assert.ok(first.coverage.availableDecks <= first.coverage.totalDecks);
+              if (mediaCase.count === "none") {
+                assert.equal(first.media.frames.length, 0);
+              }
+              projections += 1;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert.equal(projections, 810);
+});
+
 test("sparse properties compact unavailable decks", () => {
   const detail = storyLabDetailFixture({
     propertyId: "fixture-vaswani-starlight-3bhk",
