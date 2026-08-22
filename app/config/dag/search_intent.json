@@ -221,6 +221,8 @@
     },
     "budget": {
       "operators": [
+        "costing no more than",
+        "no more than",
         "under",
         "undr",
         "below",

@@ -17,6 +17,8 @@ use tempfile::tempdir;
 
 const FROZEN_BANK: &str =
     include_str!("../../data/validation/query_bank/search_conversational_semantics_v1.json");
+const BUYER_LANGUAGE_BANK: &str =
+    include_str!("../../data/validation/query_bank/search_buyer_language_v1.json");
 static QUERY_BANK: OnceLock<QueryBank> = OnceLock::new();
 
 #[derive(Deserialize)]
@@ -28,6 +30,39 @@ struct QueryBank {
 struct QueryCase {
     id: String,
     query: String,
+}
+
+#[derive(Deserialize)]
+struct BuyerLanguageBank {
+    cases: Vec<BuyerLanguageCase>,
+}
+
+#[derive(Deserialize)]
+struct BuyerLanguageCase {
+    id: String,
+    query: String,
+    expected_semantics: BuyerLanguageSemantics,
+    fixture_expectation: FixtureExpectation,
+}
+
+#[derive(Deserialize)]
+struct BuyerLanguageSemantics {
+    #[serde(default)]
+    positive_preferences: Vec<String>,
+    #[serde(default)]
+    negative_preferences: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct FixtureExpectation {
+    result_sets: Option<Vec<Vec<String>>>,
+    first_id: Option<String>,
+    #[serde(default)]
+    includes: Vec<String>,
+    #[serde(default)]
+    excludes: Vec<String>,
+    #[serde(default)]
+    forbidden_proof_labels: Vec<String>,
 }
 
 #[test]
@@ -115,6 +150,18 @@ fn frozen_contextual_alternatives_apply_global_exclusion() {
         &output,
         &["mock-hoodi-alternative-3bhk", "mock-larger-elsewhere-4bhk"],
     );
+}
+
+#[test]
+fn frozen_buyer_language_queries_execute_against_product_model() {
+    let fixture = MockSearchFixture::new();
+    let bank: BuyerLanguageBank =
+        serde_json::from_str(BUYER_LANGUAGE_BANK).expect("buyer-language bank is valid");
+
+    for case in bank.cases {
+        let output = fixture.search(&case.query);
+        assert_buyer_language_expectation(&case, &output);
+    }
 }
 
 fn query(id: &str) -> &'static str {
@@ -206,9 +253,91 @@ fn assert_proves_places(output: &ObservedSearch, result_id: &str, labels: &[&str
     }
 }
 
+fn assert_buyer_language_expectation(case: &BuyerLanguageCase, output: &ObservedSearch) {
+    let expectation = &case.fixture_expectation;
+    if let Some(expected_sets) = &expectation.result_sets {
+        let actual_sets = output
+            .result_sets
+            .iter()
+            .map(|result_set| {
+                result_set
+                    .iter()
+                    .map(|result| result.id.as_str())
+                    .collect::<Vec<_>>()
+            })
+            .filter(|result_set| !result_set.is_empty())
+            .collect::<Vec<_>>();
+        let expected_sets = expected_sets
+            .iter()
+            .map(|result_set| result_set.iter().map(String::as_str).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual_sets, expected_sets,
+            "{} returned unexpected branches; warnings={:?}",
+            case.id, output.warnings
+        );
+    }
+
+    let actual_ids = result_ids(output);
+    if let Some(first_id) = &expectation.first_id {
+        assert_eq!(
+            actual_ids.first().copied(),
+            Some(first_id.as_str()),
+            "{} returned unexpected first result; all={actual_ids:?}; warnings={:?}",
+            case.id,
+            output.warnings
+        );
+    }
+    for expected_id in &expectation.includes {
+        assert!(
+            actual_ids.contains(&expected_id.as_str()),
+            "{} is missing {expected_id}; actual={actual_ids:?}; warnings={:?}",
+            case.id,
+            output.warnings
+        );
+    }
+    for excluded_id in &expectation.excludes {
+        assert!(
+            !actual_ids.contains(&excluded_id.as_str()),
+            "{} unexpectedly returned {excluded_id}; actual={actual_ids:?}",
+            case.id
+        );
+    }
+
+    for expected_preference in &case.expected_semantics.positive_preferences {
+        assert!(
+            output.positive_preferences.contains(expected_preference),
+            "{} did not compile positive preference {expected_preference:?}; actual={:?}",
+            case.id,
+            output.positive_preferences
+        );
+    }
+    for expected_preference in &case.expected_semantics.negative_preferences {
+        assert!(
+            output.negative_preferences.contains(expected_preference),
+            "{} did not compile negative preference {expected_preference:?}; actual={:?}",
+            case.id,
+            output.negative_preferences
+        );
+    }
+    for forbidden_label in &expectation.forbidden_proof_labels {
+        assert!(
+            output
+                .result_sets
+                .iter()
+                .flatten()
+                .flat_map(|result| &result.proof_labels)
+                .all(|label| !label.to_ascii_lowercase().contains(forbidden_label)),
+            "{} fabricated forbidden proof {forbidden_label:?}",
+            case.id
+        );
+    }
+}
+
 struct ObservedSearch {
     result_sets: Vec<Vec<ObservedResult>>,
     warnings: Vec<String>,
+    positive_preferences: Vec<String>,
     negative_preferences: Vec<String>,
 }
 
@@ -448,6 +577,15 @@ impl MockSearchFixture {
             77.7152,
         ));
         builder.add_home(HomeSpec::new(
+            "mock-hoodi-expensive-3bhk",
+            "Hoodi Premium Homes",
+            "Hoodi",
+            3,
+            26_000_000,
+            12.9908,
+            77.7157,
+        ));
+        builder.add_home(HomeSpec::new(
             "mock-larger-elsewhere-4bhk",
             "Larger Elsewhere",
             "South Bengaluru",
@@ -490,6 +628,12 @@ impl MockSearchFixture {
             .iter()
             .map(|preference| preference.raw_text.clone())
             .collect();
+        let positive_preferences = output
+            .intent
+            .positive_preferences
+            .iter()
+            .map(|preference| preference.raw_text.clone())
+            .collect();
         ObservedSearch {
             result_sets: output
                 .result_sets
@@ -510,6 +654,7 @@ impl MockSearchFixture {
                 })
                 .collect(),
             warnings: output.diagnostics.warnings,
+            positive_preferences,
             negative_preferences,
         }
     }

@@ -500,8 +500,12 @@ pub(crate) fn unresolved_named_entity_clause(
                             .chars()
                             .all(|character| !character.is_ascii_alphanumeric())
                 })
+                .max_by(|(left_start, left_end), (right_start, right_end)| {
+                    left_end
+                        .cmp(right_end)
+                        .then_with(|| right_start.cmp(left_start))
+                })
                 .map(|(start, _)| start)
-                .max()
         })
         .min();
     let first_relation_start = plan
@@ -1790,6 +1794,28 @@ mod tests {
 
             assert_eq!(unresolved, None, "{query}");
         }
+    }
+
+    #[test]
+    fn longest_overlapping_budget_operator_owns_entity_boundary() {
+        let query = "3 bedrooms in Hoodi costing no more than 2.4 crore";
+        let plan = compile_query_plan(query);
+        let unresolved = unresolved_named_entity_clause(
+            query,
+            &plan,
+            |_| false,
+            |span| {
+                query[span.start..span.end]
+                    .trim()
+                    .eq_ignore_ascii_case("hoodi")
+            },
+        );
+
+        assert_eq!(
+            plan.slots.budget_max.as_ref().map(|budget| budget.value),
+            Some(24_000_000)
+        );
+        assert_eq!(unresolved, None);
     }
 
     #[test]

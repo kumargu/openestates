@@ -100,7 +100,7 @@
         "near": "Hoodi Metro"
       },
       "fixture_expectation": {
-        "includes": ["mock-godrej-air-3bhk"],
+        "includes": ["mock-dual-place-3bhk"],
         "excludes": ["mock-far-delivered-4bhk"]
       }
     },
