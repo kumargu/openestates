@@ -1090,6 +1090,7 @@ export type SearchResponse = {
   totalMatches: number;
   areaContext?: SearchAreaContext;
   state: "results" | "no_matches";
+  searchGuidance?: SearchGuidance;
 };
 
 export type ReraInfo = {

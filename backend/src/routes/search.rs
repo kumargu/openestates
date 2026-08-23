@@ -10,8 +10,8 @@ use crate::knowledge::edge::Relation;
 use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::{KnowledgeGraph, SearchEvent};
 use crate::search::{
-    guard_search_query, intent, schema, KnowledgeContext, SearchEngine, SearchEvidenceGap,
-    SearchResponse, SearchResultCard, SearchResultSet, SourcedClaim,
+    guard_search_query, intent, no_results_guidance, schema, KnowledgeContext, SearchEngine,
+    SearchEvidenceGap, SearchResponse, SearchResultCard, SearchResultSet, SourcedClaim,
 };
 use crate::state::{
     AppState, CachedSearchOutput, EnrichmentGapPersistence, SearchCacheKey, SearchLogMessage,
@@ -41,6 +41,7 @@ pub async fn search_properties(
             total_matches: 0,
             area_context: None,
             state: "no_matches".to_string(),
+            search_guidance: None,
         });
     }
 
@@ -64,6 +65,7 @@ pub async fn search_properties(
                 total_matches: 0,
                 area_context: None,
                 state: "no_matches".to_string(),
+                search_guidance: Some(guarded.guidance),
             });
         }
     }
@@ -179,6 +181,7 @@ pub async fn search_properties(
         } else {
             "results".to_string()
         },
+        search_guidance: (total_matches == 0).then(no_results_guidance),
     };
     state
         .search_cache
@@ -668,6 +671,7 @@ mod tests {
             total_matches: 0,
             area_context: None,
             state: "no_matches".to_string(),
+            search_guidance: None,
         };
 
         let value = serde_json::to_value(response).expect("search response should serialize");
@@ -675,6 +679,7 @@ mod tests {
         assert_eq!(value["resultSets"], serde_json::json!([]));
         assert_eq!(value["totalMatches"], 0);
         assert_eq!(value["state"], "no_matches");
+        assert!(value.get("searchGuidance").is_none());
         for internal in [
             "intent",
             "results",
@@ -684,6 +689,28 @@ mod tests {
         ] {
             assert!(value.get(internal).is_none(), "leaked {internal}");
         }
+    }
+
+    #[test]
+    fn buyer_response_can_expose_guidance_without_parser_state() {
+        let response = SearchResponse {
+            query: "find me something good".to_string(),
+            result_sets: Vec::new(),
+            total_matches: 0,
+            area_context: None,
+            state: "no_matches".to_string(),
+            search_guidance: Some(crate::search::SearchGuidance {
+                mode: "needs_more_specifics".to_string(),
+                title: "Tell us one thing that matters".to_string(),
+                message: "Add a place, budget, or home size.".to_string(),
+                suggestions: Vec::new(),
+            }),
+        };
+
+        let value = serde_json::to_value(response).expect("search response should serialize");
+        assert_eq!(value["searchGuidance"]["mode"], "needs_more_specifics");
+        assert!(value.get("intent").is_none());
+        assert!(value.get("searchDiagnostics").is_none());
     }
 
     #[test]
@@ -751,6 +778,7 @@ mod tests {
             total_matches: 0,
             area_context: None,
             state: "no_matches".to_string(),
+            search_guidance: None,
         };
         let messages = vec![
             SearchLogMessage::SearchEvent(event),
@@ -1093,5 +1121,8 @@ async fn guarded_search_has_local_recall(
 
     let snapshot = state.search_runtime.load_full();
     let compiled = crate::search::CompiledQuery::from_text(query);
-    !snapshot.search_index.recall_ids(&compiled).is_empty()
+    !snapshot
+        .search_index
+        .recall_named_entity_ids(&compiled)
+        .is_empty()
 }

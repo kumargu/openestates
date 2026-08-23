@@ -144,7 +144,7 @@ fn is_vague_home_query(query: &str, intent: &SearchIntent) -> bool {
 
 fn is_weak_anchor_only(query: &str, tokens: &[&str], intent: &SearchIntent) -> bool {
     let config = search_guardrail_config();
-    if has_structured_anchor(intent) || has_strong_lexical_home_anchor(query) {
+    if has_explicit_home_anchor(intent) || has_strong_lexical_home_anchor(query) {
         return false;
     }
 
@@ -154,6 +154,15 @@ fn is_weak_anchor_only(query: &str, tokens: &[&str], intent: &SearchIntent) -> b
             .weak_anchor_terms
             .iter()
             .any(|term| query_contains_term(query, term))
+}
+
+fn has_explicit_home_anchor(intent: &SearchIntent) -> bool {
+    !intent.requested_areas().is_empty()
+        || !intent.requested_bhks().is_empty()
+        || intent.budget_min.is_some()
+        || intent.budget_max.is_some()
+        || !intent.excluded_areas.is_empty()
+        || !intent.hard_constraints.is_empty()
 }
 
 fn structured_home_intent_score(intent: &SearchIntent) -> i32 {
@@ -316,6 +325,15 @@ mod tests {
         let guarded = guard_search_query("find me something good").unwrap();
 
         assert_eq!(guarded.guidance.mode, "needs_more_specifics");
+    }
+
+    #[test]
+    fn generic_place_family_without_a_home_anchor_asks_for_one() {
+        for query in ["near office", "close to school"] {
+            let guarded = guard_search_query(query)
+                .unwrap_or_else(|| panic!("weak place query should be guarded: {query}"));
+            assert_eq!(guarded.guidance.mode, "needs_home_anchor", "{query}");
+        }
     }
 
     #[test]

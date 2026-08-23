@@ -162,4 +162,8 @@ pub struct SearchResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub area_context: Option<AreaProfile>,
     pub state: String,
+    /// Buyer-facing next step for guarded or empty searches. Parser and
+    /// diagnostic state remain private.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search_guidance: Option<SearchGuidance>,
 }

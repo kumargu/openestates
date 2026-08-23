@@ -1,5 +1,7 @@
 import type { ProofFocus, SearchResultItem } from "./types.ts";
 
+const DEFAULT_PROPERTY_SURFACE_ID = "around_this_home";
+
 type ProofFocusSource = Pick<
   SearchResultItem,
   "proof_focuses" | "match_reason" | "match_explanation"
@@ -33,6 +35,10 @@ export function primaryProofFocus(
     }
   }
   return best;
+}
+
+export function initialPropertySurfaceId(focus?: ProofFocus): string {
+  return focus?.surfaceId.trim() || DEFAULT_PROPERTY_SURFACE_ID;
 }
 
 function scoreProofFocus(

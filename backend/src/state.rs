@@ -343,6 +343,7 @@ mod tests {
                 total_matches: 0,
                 area_context: None,
                 state: "no_matches".to_string(),
+                search_guidance: None,
             }),
             log_messages: Vec::new(),
         }

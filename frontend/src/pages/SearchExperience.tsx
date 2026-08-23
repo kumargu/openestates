@@ -349,6 +349,7 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.areaContext ?? null : null;
   const totalCount = useBackendResults ? searchResponse.totalMatches : hasQuery ? 0 : filtered.length;
   const returnedCount = totalCount;
+  const searchGuidance = useBackendResults ? searchResponse.searchGuidance : undefined;
   const containerClass = "inline-results-shell";
 
   if (status === "loading") return (
@@ -422,7 +423,22 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
 
       {matchResults.length === 0 && query && !waitingForSearchResults && (
         <div className="empty-state">
-          <h2>No homes match this search.</h2>
+          <h2>{searchGuidance?.title ?? "No homes match this search."}</h2>
+          {searchGuidance?.message && <p>{searchGuidance.message}</p>}
+          {searchGuidance && searchGuidance.suggestions.length > 0 && (
+            <div className="empty-state-chips">
+              {searchGuidance.suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  className="empty-state-chip"
+                  onClick={() => setSearchParams({ q: suggestion })}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             type="button"
             className="inline-results-clear"

@@ -30,6 +30,37 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 DEFAULT_BASE_URL = "http://127.0.0.1:4000"
 DEFAULT_SPEC = "data/validation/search_query_bank.json"
 
+PUBLIC_API_EXPECTATION_KEYS = {
+    "branch_labels",
+    "branch_result_ids",
+    "forbidden_proof_focus_fact_keys",
+    "forbidden_reason_fact_keys",
+    "forbidden_result_ids",
+    "max_results",
+    "min_results",
+    "ordered_result_ids_prefix",
+    "proof_focus_any",
+    "proof_focus_matches_all",
+    "proof_handoff_matches_all",
+    "reason_fact_keys_all",
+    "reason_fact_keys_any",
+    "reason_scoring_methods_any",
+    "result_areas_all",
+    "result_bhks_all",
+    "result_budget_max",
+    "result_ids_all",
+    "result_ids_any",
+    "result_match_tiers_all",
+    "result_price_max",
+    "result_title_any",
+    "search_guidance_mode",
+    "state",
+    "top_result_ids_any",
+    "top_title_any",
+    "total_matches",
+    "zero_results",
+}
+
 
 PREFERENCE_ALIASES: Dict[str, set[str]] = {
     "approach_road": {"approach_road"},
@@ -338,6 +369,19 @@ def load_suite(
     )
     if duplicate_ids:
         raise SystemExit(f"duplicate benchmark case ids: {', '.join(duplicate_ids)}")
+
+    private_expectations = {
+        str(case["id"]): sorted(
+            set((case.get("expected") or {}).keys()) - PUBLIC_API_EXPECTATION_KEYS
+        )
+        for case in cases
+        if set((case.get("expected") or {}).keys()) - PUBLIC_API_EXPECTATION_KEYS
+    }
+    if private_expectations:
+        raise SystemExit(
+            f"live API suite {suite_id!r} contains non-public expectations: "
+            f"{private_expectations}"
+        )
 
     return suite, cases, [f"{bank_path}#{suite_id}"]
 
@@ -673,6 +717,23 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
                 "result_price_max",
                 not over_budget,
                 f"results above {expected['result_price_max']}: {over_budget}",
+            )
+        )
+    if "result_budget_max" in expected:
+        budget_max = expected["result_budget_max"]
+        outside_budget = []
+        for result in results:
+            price_low = result.get("price_min", result.get("priceMin"))
+            if not isinstance(price_low, (int, float)) or price_low <= 0:
+                price_low = result.get("price")
+            if not isinstance(price_low, (int, float)) or price_low <= 0 or price_low > budget_max:
+                outside_budget.append({"id": result.get("id"), "price_low": price_low})
+        checks.append(
+            check(
+                "hard_constraint",
+                "result_budget_max",
+                not outside_budget,
+                f"results outside budget {budget_max}: {outside_budget}",
             )
         )
     if "result_match_tiers_all" in expected:

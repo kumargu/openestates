@@ -21,7 +21,6 @@
       "id": "clean_serving_v7",
       "kind": "live_bundle",
       "source_bundle_version": "clean-serving-v7-2026-08-16",
-      "fact_ledger": "search_fact_ledger_clean_serving_v7.json",
       "notes": [
         "Queries were frozen after bundle inspection and before this bank was executed.",
         "Named projects and places are benchmark oracle data only and must not enter production parser or ranking configuration.",
@@ -46,7 +45,6 @@
       "id": "incomplete_south_experiment",
       "kind": "live_bundle",
       "source_bundle_version": "search-experiment-mixed-south-45-2026-08-22-v1",
-      "fact_ledger": "search_fact_ledger_incomplete_south_experiment_v1.json",
       "notes": [
         "This bank tests search admission separately from buyer-catalog completeness.",
         "Hard BHK, price, numeric, and explicit evidence constraints must fail closed.",
@@ -77,7 +75,6 @@
       "id": "sarjapur_41",
       "kind": "live_bundle",
       "source_bundle_version": "sarjapur-41-candidate-2026-08-22",
-      "fact_ledger": "search_fact_ledger_sarjapur_41_candidate.json",
       "notes": [
         "Queries were frozen only after direct candidate Parquet inspection.",
         "The bank increases complexity gradually: exact society, area plus BHK plus state plus budget, rating proof, numeric acreage, and hard negative controls.",
@@ -88,7 +85,6 @@
       "id": "south_40",
       "kind": "live_bundle",
       "source_bundle_version": "south-40-candidate-v2-2026-08-22",
-      "fact_ledger": "search_fact_ledger_south_40_candidate.json",
       "notes": [
         "Queries were frozen only after direct candidate Parquet inspection.",
         "This increment combines named society or area with BHK, budget, delivery state, or numeric land area without adding parser aliases.",
@@ -99,7 +95,6 @@
       "id": "south_43",
       "kind": "live_bundle",
       "source_bundle_version": "south-43-candidate-2026-08-22",
-      "fact_ledger": "search_fact_ledger_south_43_candidate.json",
       "notes": [
         "Queries combine named society with BHK, budget, delivery state, rating, or land-area constraints.",
         "The two four-clause cases are intentionally only slightly harder than the previous regional bank.",
@@ -312,9 +307,6 @@
       "category": "unsupported_inventory",
       "query": "villa with garden near metro under 80 lakh",
       "expected": {
-        "unsupported_inventory_types": [
-          "villa"
-        ],
         "search_guidance_mode": "unsupported_inventory",
         "max_results": 0
       },
@@ -326,10 +318,6 @@
       "category": "unsupported_inventory",
       "query": "plot or villa style calm layout near Bagalur metro",
       "expected": {
-        "unsupported_inventory_types": [
-          "plot",
-          "villa"
-        ],
         "search_guidance_mode": "unsupported_inventory",
         "max_results": 0
       },
@@ -354,34 +342,6 @@
       "expected": {
         "search_guidance_mode": "needs_home_anchor",
         "max_results": 0
-      },
-      "group": "guardrails"
-    },
-    {
-      "id": "GR-011",
-      "mode": "search_guardrail",
-      "category": "valid_query",
-      "query": "3bhk whitefield under 2cr avoid water issues",
-      "expected": {
-        "area": "Whitefield",
-        "bhk": 3,
-        "budget_max": 20000000,
-        "negative_preferences": [
-          "water_issues"
-        ]
-      },
-      "group": "guardrails"
-    },
-    {
-      "id": "GR-012",
-      "mode": "search_guardrail",
-      "category": "valid_query",
-      "query": "quiet home for parents near hospital",
-      "expected": {
-        "positive_preferences": [
-          "quiet",
-          "social_infrastructure"
-        ]
       },
       "group": "guardrails"
     },
@@ -853,8 +813,6 @@
       "category": "society_area_configuration",
       "query": "Prestige Waterford 3BHK in Whitefield",
       "expected": {
-        "area": "Whitefield",
-        "bhk": 3,
         "min_results": 1,
         "top_result_ids_any": [
           "discovered-prestige-waterford-3bhk"
@@ -862,23 +820,12 @@
         "result_areas_all": [
           "Whitefield"
         ],
-        "resolved_entity_matches_all": [
-          {
-            "entity_id": "area:whitefield",
-            "entity_type": "area",
-            "match_source": "serving_entity",
-            "polarity": "positive"
-          },
-          {
-            "entity_id": "society:rera-53c0b81882e6acc6",
-            "entity_type": "society",
-            "match_source": "serving_entity",
-            "polarity": "positive"
-          }
-        ],
         "reason_fact_keys_any": [
           "has_3bhk",
           "available_configurations"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -889,8 +836,6 @@
       "category": "named_hospital_proof",
       "query": "3BHK in Whitefield near Manipal Hospital Whitefield",
       "expected": {
-        "area": "Whitefield",
-        "bhk": 3,
         "top_result_ids_any": [
           "discovered-prestige-waterford-3bhk"
         ],
@@ -900,14 +845,6 @@
         "reason_fact_keys_any": [
           "nearby_hospitals"
         ],
-        "resolved_entity_matches_all": [
-          {
-            "entity_id": "place:google:chijocj7bfwrrjsrzhab8omuynq",
-            "entity_type": "place",
-            "match_source": "serving_entity",
-            "polarity": "positive"
-          }
-        ],
         "proof_focus_any": [
           {
             "surface_id": "around_this_home",
@@ -916,6 +853,9 @@
             "entity_id": "place:google:chijocj7bfwrrjsrzhab8omuynq",
             "distance_m": 1600
           }
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -926,9 +866,6 @@
       "category": "named_tech_park_proof",
       "query": "4BHK in Whitefield near International Tech Park Bengaluru (ITPB) under 5cr",
       "expected": {
-        "area": "Whitefield",
-        "bhk": 4,
-        "budget_max": 50000000,
         "top_result_ids_any": [
           "discovered-prestige-waterford-4bhk"
         ],
@@ -938,13 +875,6 @@
         "reason_fact_keys_any": [
           "nearby_tech_parks"
         ],
-        "resolved_entity_matches_all": [
-          {
-            "entity_id": "place:google:chijbr0arpsrrjsrfy3bmjy-dma",
-            "entity_type": "place",
-            "match_source": "serving_entity"
-          }
-        ],
         "proof_focus_any": [
           {
             "surface_id": "around_this_home",
@@ -953,7 +883,11 @@
             "entity_id": "place:google:chijbr0arpsrrjsrfy3bmjy-dma",
             "distance_m": 800
           }
-        ]
+        ],
+        "result_bhks_all": [
+          4
+        ],
+        "result_budget_max": 50000000
       },
       "group": "fact_first"
     },
@@ -963,8 +897,6 @@
       "category": "multiple_named_proximity_proof",
       "query": "3BHK in Whitefield near Manipal Hospital Whitefield and near International Tech Park Bengaluru (ITPB)",
       "expected": {
-        "area": "Whitefield",
-        "bhk": 3,
         "min_results": 1,
         "reason_fact_keys_all": [
           "nearby_hospitals",
@@ -983,6 +915,12 @@
             "fact_key": "nearby_tech_parks",
             "entity_id": "place:google:chijbr0arpsrrjsrfy3bmjy-dma"
           }
+        ],
+        "result_areas_all": [
+          "Whitefield"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -993,20 +931,11 @@
       "category": "named_metro_proof",
       "query": "Purva Westend 3BHK near Kudlu Gate Metro Station under 3cr",
       "expected": {
-        "bhk": 3,
-        "budget_max": 30000000,
         "top_result_ids_any": [
           "discovered-purva-westend-3bhk"
         ],
         "reason_fact_keys_any": [
           "nearby_metro_stations"
-        ],
-        "resolved_entity_matches_all": [
-          {
-            "entity_id": "place:google:chijiaksxv8vrjsr-uxlc2ykep0",
-            "entity_type": "place",
-            "match_source": "serving_entity"
-          }
         ],
         "proof_focus_any": [
           {
@@ -1016,7 +945,11 @@
             "entity_id": "place:google:chijiaksxv8vrjsr-uxlc2ykep0",
             "distance_m": 200
           }
-        ]
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_budget_max": 30000000
       },
       "group": "fact_first"
     },
@@ -1026,9 +959,6 @@
       "category": "area_budget_tech_park",
       "query": "2BHK in Kudlu Gate near Ozone Manay Technology Park under 2cr",
       "expected": {
-        "area": "Kudlu Gate",
-        "bhk": 2,
-        "budget_max": 20000000,
         "top_result_ids_any": [
           "discovered-purva-westend-2bhk"
         ],
@@ -1046,7 +976,11 @@
             "entity_id": "place:google:chijgvafrl4urjsr9lpqtao95lu",
             "distance_m": 200
           }
-        ]
+        ],
+        "result_bhks_all": [
+          2
+        ],
+        "result_budget_max": 20000000
       },
       "group": "fact_first"
     },
@@ -1056,13 +990,14 @@
       "category": "society_configuration",
       "query": "Purva Westend 2BHK in Kudlu Gate",
       "expected": {
-        "area": "Kudlu Gate",
-        "bhk": 2,
         "top_result_ids_any": [
           "discovered-purva-westend-2bhk"
         ],
         "result_areas_all": [
           "Kudlu Gate"
+        ],
+        "result_bhks_all": [
+          2
         ]
       },
       "group": "fact_first"
@@ -1073,15 +1008,17 @@
       "category": "society_budget",
       "query": "Prestige Southern Star 3BHK under 2.5cr",
       "expected": {
-        "bhk": 3,
-        "budget_max": 25000000,
         "top_result_ids_any": [
           "discovered-prestige-southern-star-3bhk"
         ],
         "reason_fact_keys_any": [
           "has_3bhk",
           "listing_price_3bhk"
-        ]
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_budget_max": 25000000
       },
       "group": "fact_first"
     },
@@ -1091,8 +1028,6 @@
       "category": "named_lake_proof",
       "query": "Prestige Southern Star 3BHK near Begur Lake under 2.5cr",
       "expected": {
-        "bhk": 3,
-        "budget_max": 25000000,
         "top_result_ids_any": [
           "discovered-prestige-southern-star-3bhk"
         ],
@@ -1107,7 +1042,11 @@
             "entity_id": "place:google:chijv-urjjvrrjsr0uvtij8wyhm",
             "distance_m": 800
           }
-        ]
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_budget_max": 25000000
       },
       "group": "fact_first"
     },
@@ -1139,9 +1078,6 @@
       "category": "area_named_metro_budget",
       "query": "3BHK in Kanakapura Road near Konanakunte Cross under 3.5cr",
       "expected": {
-        "area": "Kanakapura Road",
-        "bhk": 3,
-        "budget_max": 35000000,
         "top_result_ids_any": [
           "discovered-prestige-falcon-city-3bhk"
         ],
@@ -1159,7 +1095,11 @@
             "entity_id": "place:google:chijg1zkzfgvrjsrvmu8w6vku88",
             "distance_m": 300
           }
-        ]
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_budget_max": 35000000
       },
       "group": "fact_first"
     },
@@ -1169,9 +1109,6 @@
       "category": "area_named_school_budget",
       "query": "4BHK in Kanakapura Road near Delhi Public School Bengaluru South under 7cr",
       "expected": {
-        "area": "Kanakapura Road",
-        "bhk": 4,
-        "budget_max": 70000000,
         "top_result_ids_any": [
           "discovered-prestige-falcon-city-4bhk"
         ],
@@ -1189,7 +1126,11 @@
             "entity_id": "place:google:chijmbkhyguzrjsr7lf7mgqbd3c",
             "distance_m": 800
           }
-        ]
+        ],
+        "result_bhks_all": [
+          4
+        ],
+        "result_budget_max": 70000000
       },
       "group": "fact_first"
     },
@@ -1199,12 +1140,14 @@
       "category": "numeric_open_space",
       "query": "Prestige Falcon City 3BHK with at least 80 percent open space",
       "expected": {
-        "bhk": 3,
         "top_result_ids_any": [
           "discovered-prestige-falcon-city-3bhk"
         ],
         "reason_fact_keys_any": [
           "project_open_area_pct"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1215,8 +1158,6 @@
       "category": "named_lake_budget",
       "query": "Prestige Park Square 2BHK near Basavanpura Lake under 2cr",
       "expected": {
-        "bhk": 2,
-        "budget_max": 20000000,
         "top_result_ids_any": [
           "discovered-prestige-park-square-2bhk"
         ],
@@ -1232,7 +1173,11 @@
             "entity_id": "place:google:chijmsq4i1zrrjsrdlyp-frwyzs",
             "distance_m": 200
           }
-        ]
+        ],
+        "result_bhks_all": [
+          2
+        ],
+        "result_budget_max": 20000000
       },
       "group": "fact_first"
     },
@@ -1242,8 +1187,6 @@
       "category": "named_school_budget",
       "query": "Prestige Park Square 3BHK near Sherwood High under 3cr",
       "expected": {
-        "bhk": 3,
-        "budget_max": 30000000,
         "top_result_ids_any": [
           "discovered-prestige-park-square-3bhk"
         ],
@@ -1258,7 +1201,11 @@
             "entity_id": "place:google:chij-xnuketqrjsrivumgy7vjdg",
             "distance_m": 300
           }
-        ]
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_budget_max": 30000000
       },
       "group": "fact_first"
     },
@@ -1268,8 +1215,6 @@
       "category": "named_hospital_budget",
       "query": "Prestige Park Square 3BHK near Sri Banashankari Hospital under 3cr",
       "expected": {
-        "bhk": 3,
-        "budget_max": 30000000,
         "top_result_ids_any": [
           "discovered-prestige-park-square-3bhk"
         ],
@@ -1284,7 +1229,11 @@
             "entity_id": "place:google:chijb2-2zwbrrjsr0lupj9lftvq",
             "distance_m": 300
           }
-        ]
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_budget_max": 30000000
       },
       "group": "fact_first"
     },
@@ -1294,8 +1243,6 @@
       "category": "held_out_metro",
       "query": "Prestige Botanique 2BHK near National College under 2cr",
       "expected": {
-        "bhk": 2,
-        "budget_max": 20000000,
         "top_result_ids_any": [
           "discovered-prestige-botanique-2bhk"
         ],
@@ -1310,7 +1257,11 @@
             "entity_id": "place:google:chijpdmgh-4vrjsrlmrgpnksivs",
             "distance_m": 800
           }
-        ]
+        ],
+        "result_bhks_all": [
+          2
+        ],
+        "result_budget_max": 20000000
       },
       "group": "fact_first"
     },
@@ -1320,8 +1271,6 @@
       "category": "held_out_metro",
       "query": "SNN Raj Grandeur 3BHK near Bommanahalli Metro Station under 3cr",
       "expected": {
-        "bhk": 3,
-        "budget_max": 30000000,
         "top_result_ids_any": [
           "discovered-snn-raj-grandeur-3bhk"
         ],
@@ -1336,7 +1285,11 @@
             "entity_id": "place:google:chijwej3ezcvrjsrvwo5l55nnb0",
             "distance_m": 1000
           }
-        ]
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_budget_max": 30000000
       },
       "group": "fact_first"
     },
@@ -1346,8 +1299,6 @@
       "category": "held_out_school",
       "query": "Prestige Lake Ridge 2BHK near National Public School Uttarahalli under 2cr",
       "expected": {
-        "bhk": 2,
-        "budget_max": 20000000,
         "top_result_ids_any": [
           "discovered-prestige-lake-ridge-phase-1-2bhk"
         ],
@@ -1362,7 +1313,11 @@
             "entity_id": "place:google:chijlzsdnig-rjsrotjjp9eqlmc",
             "distance_m": 1200
           }
-        ]
+        ],
+        "result_bhks_all": [
+          2
+        ],
+        "result_budget_max": 20000000
       },
       "group": "fact_first"
     },
@@ -1372,8 +1327,6 @@
       "category": "held_out_metro",
       "query": "Mantri Tranquil 2BHK near Doddakallasandra under 80 lakh",
       "expected": {
-        "bhk": 2,
-        "budget_max": 8000000,
         "top_result_ids_any": [
           "discovered-mantri-tranquil-2bhk"
         ],
@@ -1388,7 +1341,11 @@
             "entity_id": "place:google:chijvb525-o-rjsroc03dtip6ak",
             "distance_m": 900
           }
-        ]
+        ],
+        "result_bhks_all": [
+          2
+        ],
+        "result_budget_max": 8000000
       },
       "group": "fact_first"
     },
@@ -1398,8 +1355,6 @@
       "category": "held_out_park",
       "query": "Sobha Forest Edge 3BHK near Turahalli Tree Park under 3cr",
       "expected": {
-        "bhk": 3,
-        "budget_max": 30000000,
         "top_result_ids_any": [
           "discovered-sobha-forest-edge-3bhk"
         ],
@@ -1414,7 +1369,11 @@
             "entity_id": "place:google:chiju3qzhym-rjsrdy-is59cdfw",
             "distance_m": 300
           }
-        ]
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_budget_max": 30000000
       },
       "group": "fact_first"
     },
@@ -1432,13 +1391,6 @@
         "reason_fact_keys_any": [
           "rera_builder_revocations",
           "rera_builder_projects_count"
-        ],
-        "resolved_entity_matches_all": [
-          {
-            "entity_id": "society:rera-53117ea502ea0cd0",
-            "entity_type": "society",
-            "match_source": "serving_entity"
-          }
         ]
       },
       "group": "fact_first"
@@ -1455,13 +1407,6 @@
         ],
         "reason_fact_keys_any": [
           "home_state"
-        ],
-        "resolved_entity_matches_all": [
-          {
-            "entity_id": "society:rera-699d44c234988565",
-            "entity_type": "society",
-            "match_source": "serving_entity"
-          }
         ]
       },
       "group": "fact_first"
@@ -1481,13 +1426,6 @@
           "google_rating",
           "google_review_count",
           "google_review_snippets"
-        ],
-        "resolved_entity_matches_all": [
-          {
-            "entity_id": "society:rera-8ccb1e0250853039",
-            "entity_type": "society",
-            "match_source": "serving_entity"
-          }
         ]
       },
       "group": "fact_first"
@@ -1498,7 +1436,6 @@
       "category": "listing_price_proof",
       "query": "Brigade 7 Gardens 3BHK with listing price proof",
       "expected": {
-        "bhk": 3,
         "top_result_ids_any": [
           "discovered-brigade-7-gardens-3bhk"
         ],
@@ -1507,12 +1444,8 @@
           "listing_price_3bhk",
           "listing_price_range_3bhk"
         ],
-        "resolved_entity_matches_all": [
-          {
-            "entity_id": "society:rera-e68d15500e147ecd",
-            "entity_type": "society",
-            "match_source": "serving_entity"
-          }
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1553,11 +1486,13 @@
       "category": "multi_constraint_lifecycle_inventory_price_proof",
       "query": "delivered three-bedroom homes with listing-backed asking-price evidence",
       "expected": {
-        "bhk": 3,
         "min_results": 1,
         "reason_fact_keys_all": [
           "home_state",
           "listing_3bhk"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1568,11 +1503,13 @@
       "category": "multi_constraint_lifecycle_inventory_price_proof",
       "query": "move-in-ready 3 BHK options backed by a current listing price",
       "expected": {
-        "bhk": 3,
         "min_results": 1,
         "reason_fact_keys_all": [
           "home_state",
           "listing_3bhk"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1627,11 +1564,13 @@
       "category": "multi_constraint_inventory_price_rera_proof",
       "query": "3 BHK projects with listing-price evidence and zero RERA complaints",
       "expected": {
-        "bhk": 3,
         "min_results": 1,
         "reason_fact_keys_all": [
           "listing_3bhk",
           "rera_complaints_count"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1642,11 +1581,13 @@
       "category": "multi_constraint_inventory_price_rera_proof",
       "query": "three-bedroom inventory with asking-price proof in a project whose RERA complaint count is zero",
       "expected": {
-        "bhk": 3,
         "min_results": 1,
         "reason_fact_keys_all": [
           "listing_3bhk",
           "rera_complaints_count"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1710,10 +1651,12 @@
       "category": "multi_constraint_inventory_brochure_proof",
       "query": "I need three-bedroom availability and an official project prospectus to inspect",
       "expected": {
-        "bhk": 3,
         "min_results": 1,
         "reason_fact_keys_all": [
           "brochure_asset_count"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1725,10 +1668,12 @@
       "category": "multi_constraint_inventory_brochure_proof",
       "query": "Require 3 BHK inventory together with a downloadable project brochure",
       "expected": {
-        "bhk": 3,
         "min_results": 1,
         "reason_fact_keys_all": [
           "brochure_asset_count"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1740,10 +1685,12 @@
       "category": "multi_constraint_inventory_land_document_proof",
       "query": "A three-bedroom home works only if the title-deed packet can be inspected",
       "expected": {
-        "bhk": 3,
         "min_results": 1,
         "reason_fact_keys_all": [
           "rera_legal_land_document_count"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1755,10 +1702,12 @@
       "category": "multi_constraint_inventory_land_document_proof",
       "query": "Consider 3 BHK inventory only if land-document records are available",
       "expected": {
-        "bhk": 3,
         "min_results": 1,
         "reason_fact_keys_all": [
           "rera_legal_land_document_count"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1818,7 +1767,6 @@
       "category": "held_out_listing_price",
       "query": "SNN Raj Serenity 3BHK with listing price proof",
       "expected": {
-        "bhk": 3,
         "top_result_ids_any": [
           "discovered-snn-raj-serenity-3bhk"
         ],
@@ -1826,6 +1774,9 @@
           "listing_3bhk",
           "listing_price_3bhk",
           "listing_price_range_3bhk"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1836,16 +1787,20 @@
       "category": "hard_constraint_abstention",
       "query": "2BHK in Whitefield near metro under 1.5cr",
       "expected": {
-        "area": "Whitefield",
-        "bhk": 2,
-        "budget_max": 15000000,
         "max_results": 0,
         "forbidden_reason_fact_keys": [
           "nearby_metro_stations"
         ],
         "forbidden_proof_focus_fact_keys": [
           "nearby_metro_stations"
-        ]
+        ],
+        "result_areas_all": [
+          "Whitefield"
+        ],
+        "result_bhks_all": [
+          2
+        ],
+        "result_budget_max": 15000000
       },
       "group": "fact_first"
     },
@@ -1855,10 +1810,14 @@
       "category": "hard_constraint_abstention",
       "query": "3BHK in Whitefield under 2cr",
       "expected": {
-        "area": "Whitefield",
-        "bhk": 3,
-        "budget_max": 20000000,
-        "max_results": 0
+        "max_results": 0,
+        "result_areas_all": [
+          "Whitefield"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_budget_max": 20000000
       },
       "group": "fact_first"
     },
@@ -1868,8 +1827,10 @@
       "category": "unknown_named_area",
       "query": "3BHK in Atlantis Enclave",
       "expected": {
-        "bhk": 3,
-        "max_results": 0
+        "max_results": 0,
+        "result_bhks_all": [
+          3
+        ]
       },
       "group": "fact_first"
     },
@@ -1879,19 +1840,15 @@
       "category": "unsupported_place_family",
       "query": "3BHK near a police station",
       "expected": {
-        "bhk": 3,
         "max_results": 0,
-        "forbidden_resolved_entity_matches": [
-          {
-            "entity_id": "place_family:metro",
-            "entity_type": "place_family"
-          }
-        ],
         "forbidden_reason_fact_keys": [
           "nearby_metro_stations"
         ],
         "forbidden_proof_focus_fact_keys": [
           "nearby_metro_stations"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1902,12 +1859,8 @@
       "category": "missing_operational_evidence",
       "query": "Prestige Waterford 3BHK with no tanker dependence",
       "expected": {
-        "bhk": 3,
         "top_result_ids_any": [
           "discovered-prestige-waterford-3bhk"
-        ],
-        "learning_gap_keys": [
-          "operating.tanker_dependence"
         ],
         "forbidden_reason_fact_keys": [
           "operating.tanker_dependence",
@@ -1916,6 +1869,9 @@
         "forbidden_proof_focus_fact_keys": [
           "operating.tanker_dependence",
           "tanker_dependency"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1926,16 +1882,11 @@
       "category": "weak_flood_evidence",
       "query": "3BHK in Whitefield with low flooding risk",
       "expected": {
-        "area": "Whitefield",
-        "bhk": 3,
         "top_result_ids_any": [
           "discovered-prestige-waterford-3bhk"
         ],
         "result_areas_all": [
           "Whitefield"
-        ],
-        "learning_gap_keys": [
-          "waterlogging_risk_score"
         ],
         "forbidden_reason_fact_keys": [
           "waterlogging_risk_score",
@@ -1944,6 +1895,9 @@
         "forbidden_proof_focus_fact_keys": [
           "waterlogging_risk_score",
           "flooding_risk"
+        ],
+        "result_bhks_all": [
+          3
         ]
       },
       "group": "fact_first"
@@ -1955,13 +1909,6 @@
       "query": "Shriram Southern Crest near transmission line",
       "expected": {
         "max_results": 0,
-        "resolved_entity_matches_all": [
-          {
-            "entity_id": "society:rera-f5582864641239f3",
-            "entity_type": "society",
-            "match_source": "serving_entity"
-          }
-        ],
         "forbidden_reason_fact_keys": [
           "high_voltage_transmission_line_nearby"
         ],

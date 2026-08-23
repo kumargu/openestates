@@ -271,6 +271,15 @@ impl SearchIndex {
         ordered
     }
 
+    pub fn recall_named_entity_ids(&self, query: &CompiledQuery) -> Vec<String> {
+        let candidate = self.fuzzy_named_entity_candidates(&query.raw, &query.constraints);
+        self.all_ids
+            .iter()
+            .filter(|id| candidate.contains(*id))
+            .cloned()
+            .collect()
+    }
+
     pub fn recall_constraint_ids(&self, query: &CompiledQuery) -> Vec<String> {
         if !query.constraints.has_terms() {
             return self.all_ids.clone();
@@ -574,6 +583,33 @@ impl SearchIndex {
                         || (phrase.len() >= query.len()
                             && phrase_has_multiple_tokens(&query)
                             && query_contains_phrase(phrase, &query)))
+            })
+            .flat_map(|(_, ids)| ids.iter().cloned())
+            .collect()
+    }
+
+    fn fuzzy_named_entity_candidates(
+        &self,
+        query: &str,
+        constraints: &ConstraintExpr,
+    ) -> HashSet<String> {
+        let query_tokens = analyzer::surface_tokens(query, &[]);
+        if query_tokens.is_empty() || (query_tokens.len() == 1 && query_tokens[0].len() < 4) {
+            return HashSet::new();
+        }
+
+        self.by_named_entity_phrase
+            .iter()
+            .filter(|(phrase, _)| {
+                if ast_excludes_named_entity(constraints, phrase, false) {
+                    return false;
+                }
+                let phrase_tokens = analyzer::surface_tokens(phrase, &[]);
+                query_tokens.iter().all(|query_token| {
+                    phrase_tokens
+                        .iter()
+                        .any(|phrase_token| token_matches_query(query_token, phrase_token))
+                })
             })
             .flat_map(|(_, ids)| ids.iter().cloned())
             .collect()
@@ -894,6 +930,27 @@ mod tests {
             index.recall_ids(&CompiledQuery::from_text("gorej")),
             vec!["prop-1"]
         );
+    }
+
+    #[test]
+    fn named_entity_recall_requires_a_concrete_project_match() {
+        let property = test_property("prop-1", "prestige-waterford");
+        let index = SearchIndex::build(&[property]);
+
+        assert_eq!(
+            index.recall_named_entity_ids(&CompiledQuery::from_text("Prestige Waterfor")),
+            vec!["prop-1"]
+        );
+        assert_eq!(
+            index.recall_named_entity_ids(&CompiledQuery::from_text("Prestge")),
+            vec!["prop-1"]
+        );
+        assert!(index
+            .recall_named_entity_ids(&CompiledQuery::from_text("near office"))
+            .is_empty());
+        assert!(index
+            .recall_named_entity_ids(&CompiledQuery::from_text("hi"))
+            .is_empty());
     }
 
     #[test]

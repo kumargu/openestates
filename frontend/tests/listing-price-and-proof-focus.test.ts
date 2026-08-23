@@ -4,7 +4,10 @@ import {
   formatListingPrice,
   listingSatisfiesBudget,
 } from "../src/lib/listing-price.ts";
-import { primaryProofFocus } from "../src/lib/proof-focus.ts";
+import {
+  initialPropertySurfaceId,
+  primaryProofFocus,
+} from "../src/lib/proof-focus.ts";
 import type { ProofFocus, SearchResultItem } from "../src/lib/types.ts";
 
 function hospitalFocus(): ProofFocus {
@@ -99,4 +102,14 @@ test("primaryProofFocus is empty when search had no proof overlay", () => {
     match_reason: "Matches 3 BHK",
     proof_focuses: [],
   }), undefined);
+});
+
+test("property detail requests the proof focus's declared surface", () => {
+  assert.equal(initialPropertySurfaceId({
+    surfaceId: "flooding",
+    layerId: "flooding",
+    factKey: "waterlogging_risk_score",
+    reason: "Matched low flooding risk",
+  }), "flooding");
+  assert.equal(initialPropertySurfaceId(), "around_this_home");
 });

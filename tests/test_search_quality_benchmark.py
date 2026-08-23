@@ -41,6 +41,33 @@ def search_diagnostics() -> dict:
 
 
 class SearchQualityBenchmarkTests(unittest.TestCase):
+    def test_every_live_suite_uses_only_public_response_expectations(self) -> None:
+        bank_path = Path("data/validation/search_query_bank.json")
+        bank = json.loads(bank_path.read_text(encoding="utf-8"))
+
+        for suite in bank["suites"]:
+            if suite["runner"] == "live_api":
+                load_suite(bank, suite["id"], bank_path)
+
+    def test_live_suite_rejects_private_response_expectations(self) -> None:
+        bank = {
+            "case_groups": [{"id": "private"}],
+            "suites": [
+                {"id": "private", "runner": "live_api", "case_groups": ["private"]}
+            ],
+            "cases": [
+                {
+                    "id": "PRIVATE-001",
+                    "group": "private",
+                    "query": "3BHK in Whitefield",
+                    "expected": {"area": "Whitefield"},
+                }
+            ],
+        }
+
+        with self.assertRaisesRegex(SystemExit, "non-public expectations"):
+            load_suite(bank, "private", Path("query-bank.json"))
+
     def test_unified_query_bank_selects_one_live_suite(self) -> None:
         bank_path = Path("data/validation/search_query_bank.json")
         bank = json.loads(bank_path.read_text(encoding="utf-8"))
@@ -142,6 +169,58 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
             "resultSets": [],
             "totalMatches": 0,
             "state": "no_matches",
+            "_request_duration_ms": 1.0,
+        }
+
+        checks = evaluate_case(case, response)
+
+        self.assertTrue(all(check["passed"] for check in checks), checks)
+
+    def test_guardrail_guidance_uses_the_public_response_contract(self) -> None:
+        case = {
+            "id": "GUIDANCE",
+            "query": "find me something good",
+            "expected": {"search_guidance_mode": "needs_more_specifics"},
+        }
+        response = {
+            "query": case["query"],
+            "resultSets": [],
+            "totalMatches": 0,
+            "state": "no_matches",
+            "searchGuidance": {
+                "mode": "needs_more_specifics",
+                "title": "Tell us one thing that matters",
+                "message": "Add a place, budget, or home size.",
+                "suggestions": [],
+            },
+            "_request_duration_ms": 1.0,
+        }
+
+        checks = evaluate_case(case, response)
+
+        self.assertTrue(all(check["passed"] for check in checks), checks)
+
+    def test_budget_constraint_uses_the_public_listing_lower_bound(self) -> None:
+        case = {
+            "id": "BUDGET-BAND",
+            "query": "3BHK under 2cr",
+            "expected": {"result_budget_max": 20_000_000},
+        }
+        response = {
+            "resultSets": [
+                {
+                    "branchId": "branch-1",
+                    "label": "3 BHK",
+                    "results": [
+                        {
+                            "id": "property:banded",
+                            "price": 22_000_000,
+                            "price_min": 19_000_000,
+                            "price_max": 25_000_000,
+                        }
+                    ],
+                }
+            ],
             "_request_duration_ms": 1.0,
         }
 

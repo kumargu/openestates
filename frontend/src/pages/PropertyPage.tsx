@@ -49,6 +49,7 @@ import { isRedundantHomeState } from "../lib/property-signals.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
 import { formatListingPrice } from "../lib/listing-price.ts";
+import { initialPropertySurfaceId } from "../lib/proof-focus.ts";
 
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -834,7 +835,7 @@ function PropertyPageBody({
     let cancelled = false;
 
     const focus = parseProofFocusParam(focusParam);
-    getPropertySurface(propertyId, "around_this_home", focus)
+    getPropertySurface(propertyId, initialPropertySurfaceId(focus), focus)
       .then((scene) => {
         if (!cancelled) setAroundThisHomeScene(scene);
       })
