@@ -479,5 +479,34 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
             {check["check"] for check in failed if not check["passed"]},
         )
 
+    def test_section_proof_handoff_requires_target_and_reachable_detail(self) -> None:
+        focus = {
+            "surfaceId": "legal_rera",
+            "layerId": "legal_rera",
+            "factKey": "rera_status",
+            "destinationKind": "section",
+            "targetId": "official-record",
+            "reason": "RERA registration found",
+        }
+        handoffs = [{
+            "result_id": "discovered-godrej-air-3bhk",
+            "search_focus": focus,
+            "scene": None,
+            "detail": {
+                "property": {"id": "discovered-godrej-air-3bhk"},
+            },
+        }]
+        requirements = [{
+            "result_id": "discovered-godrej-air-3bhk",
+            "fact_key": "rera_status",
+            "destination_kind": "section",
+            "target_id": "official-record",
+        }]
+
+        checks = evaluate_proof_handoffs(requirements, handoffs)
+
+        self.assertEqual(len(checks), 3)
+        self.assertTrue(all(check["passed"] for check in checks), checks)
+
 if __name__ == "__main__":
     unittest.main()

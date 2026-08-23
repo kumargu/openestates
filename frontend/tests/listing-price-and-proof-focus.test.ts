@@ -113,3 +113,14 @@ test("property detail requests the proof focus's declared surface", () => {
   }), "flooding");
   assert.equal(initialPropertySurfaceId(), "around_this_home");
 });
+
+test("section proof handoff keeps the map request on its default surface", () => {
+  assert.equal(initialPropertySurfaceId({
+    surfaceId: "legal_rera",
+    layerId: "legal_rera",
+    factKey: "rera_status",
+    destinationKind: "section",
+    targetId: "official-record",
+    reason: "RERA registration found",
+  }), "around_this_home");
+});

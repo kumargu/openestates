@@ -11,6 +11,10 @@ pub struct ProofFocus {
     pub surface_id: String,
     pub layer_id: String,
     pub fact_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub destination_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entity_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

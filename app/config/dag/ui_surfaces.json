@@ -32,6 +32,10 @@
         "search_chip:nearby"
       ],
       "primary_entity": "society",
+      "proofHandoff": {
+        "kind": "scene",
+        "targetId": "around-this-home"
+      },
       "scene": {
         "anchor": { "entityRef": "society" },
         "layers": [
@@ -220,6 +224,10 @@
         "search_chip:approach_road"
       ],
       "primary_entity": "road_segment",
+      "proofHandoff": {
+        "kind": "scene",
+        "targetId": "remote-arrival"
+      },
       "scene": {
         "anchor": { "entityRef": "society" },
         "layers": [
@@ -270,6 +278,10 @@
         "search_chip:water_context"
       ],
       "primary_entity": "society",
+      "proofHandoff": {
+        "kind": "scene",
+        "targetId": "around-this-home"
+      },
       "scene": {
         "anchor": { "entityRef": "society" },
         "layers": [
@@ -337,7 +349,17 @@
         "livability_brief:operating",
         "search_chip:water_issues"
       ],
-      "primary_entity": "society"
+      "primary_entity": "society",
+      "proofHandoff": {
+        "kind": "section",
+        "targetId": "property-search-match",
+        "factKeys": [
+          "water_supply",
+          "water_reliability",
+          "water_supply_risk",
+          "project.water_supply_mode"
+        ]
+      }
     },
     {
       "id": "flooding",
@@ -359,6 +381,10 @@
         "search_chip:waterlogging"
       ],
       "primary_entity": "road_segment",
+      "proofHandoff": {
+        "kind": "scene",
+        "targetId": "around-this-home"
+      },
       "scene": {
         "anchor": { "entityRef": "society" },
         "layers": [
@@ -424,7 +450,19 @@
         "TrustBadge",
         "search_chip:legal_safety"
       ],
-      "primary_entity": "society"
+      "primary_entity": "society",
+      "proofHandoff": {
+        "kind": "section",
+        "targetId": "official-record",
+        "factKeys": [
+          "legal_safety",
+          "legal_risk",
+          "litigation_risk",
+          "rera_registered",
+          "rera_status",
+          "rera_number"
+        ]
+      }
     },
     {
       "id": "home_state",
@@ -445,7 +483,21 @@
         "livability_brief:lifecycle",
         "search_chip:delivered"
       ],
-      "primary_entity": "society"
+      "primary_entity": "society",
+      "proofHandoff": {
+        "kind": "section",
+        "targetId": "property-summary",
+        "factKeys": [
+          "home_state",
+          "home_age_years",
+          "home_age_bucket",
+          "home_timeline_state",
+          "possession_status",
+          "project_status",
+          "rera_completion_date",
+          "occupancy_certificate_status"
+        ]
+      }
     },
     {
       "id": "livability_positive",
@@ -480,7 +532,18 @@
         "livability_brief:positive",
         "CommunityPulse"
       ],
-      "primary_entity": "society"
+      "primary_entity": "society",
+      "proofHandoff": {
+        "kind": "section",
+        "targetId": "resident-voice",
+        "factKeys": [
+          "google_rating",
+          "google_review_count",
+          "google_review_snippets",
+          "resident_sentiment",
+          "resident_review_summary"
+        ]
+      }
     },
     {
       "id": "property_short_compare",

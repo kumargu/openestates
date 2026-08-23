@@ -113,3 +113,51 @@ test("a near-area chip is omitted when the card already names that place", () =>
   });
   assert.deepEqual(labels, []);
 });
+
+test("result chips prefer factual matched displays and stay capped at two", () => {
+  const labels = searchResultReasonLabels({
+    title: "3 BHK in Example Society",
+    area: "Whitefield",
+    society_name: "Example Society",
+    builder_name: "Example Builder",
+    match_reason: "Legal safety · Good reviews · Near metro",
+    match_explanation: {
+      reasons: [
+        {
+          preference: "RERA registration",
+          fact_key: "rera_status",
+          display: "RERA registration found",
+          score: 0.9,
+          confidence: 0.95,
+          source_type: "Rera",
+          scoring_method: "serving-text",
+        },
+        {
+          preference: "review quality",
+          fact_key: "google_rating",
+          display: "Google 4.4 · 320 reviews",
+          score: 0.8,
+          confidence: 0.9,
+          source_type: "Google",
+          scoring_method: "serving-numeric",
+        },
+        {
+          preference: "near metro",
+          fact_key: "nearby_metro_stations",
+          display: "0.7 km from Hoodi Metro",
+          score: 0.7,
+          confidence: 0.9,
+          source_type: "Google",
+          scoring_method: "serving-nearby-distance",
+        },
+      ],
+      preference_coverage: [],
+      graph_driven_pct: 1,
+      total_facts_consulted: 3,
+    },
+  });
+  assert.deepEqual(labels, [
+    "RERA registration found",
+    "Google 4.4 · 320 reviews",
+  ]);
+});

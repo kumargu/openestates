@@ -470,6 +470,8 @@ export type ProofFocus = {
   surfaceId: string;
   layerId: string;
   factKey: string;
+  destinationKind?: "scene" | "section" | string;
+  targetId?: string;
   entityId?: string;
   featureId?: string;
   receiptId?: string;

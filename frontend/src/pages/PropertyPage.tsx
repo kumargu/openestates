@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Link,
   useParams,
@@ -8,6 +8,7 @@ import { Helmet } from "react-helmet-async";
 import type {
   PropertyCard,
   PropertyDetailResponse,
+  ProofFocus,
   RecommendationResponse,
   RecommendationStatus,
   SurfaceSceneResponse,
@@ -51,6 +52,44 @@ import { initialPropertySurfaceId } from "../lib/proof-focus.ts";
 
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function focusedEvidenceSource(data: PropertyDetailResponse, focus: ProofFocus) {
+  for (const section of data.evidence?.sections ?? []) {
+    const item = section.items.find((candidate) =>
+      candidate.key?.toLocaleLowerCase("en-IN")
+        === focus.factKey.toLocaleLowerCase("en-IN")
+    );
+    if (item?.source_url) return item.source_url;
+  }
+  return undefined;
+}
+
+function PropertySearchMatch({
+  data,
+  focus,
+}: {
+  data: PropertyDetailResponse;
+  focus?: ProofFocus;
+}) {
+  if (focus?.targetId !== "property-search-match") return null;
+  const value = focus.matchedValue?.trim() || focus.matchedLabel?.trim();
+  if (!value) return null;
+  const sourceUrl = focusedEvidenceSource(data, focus);
+  return (
+    <section
+      id="property-search-match"
+      className="property-fact-deck property-search-match"
+      aria-label="Matched your search"
+      tabIndex={-1}
+    >
+      <span>Matched your search</span>
+      <strong>{value}</strong>
+      {sourceUrl && (
+        <a href={sourceUrl} target="_blank" rel="noreferrer">Source ↗</a>
+      )}
+    </section>
+  );
 }
 
 function comparablePrice(price: number): number {
@@ -421,6 +460,10 @@ function PropertyPageBody({
   id: string;
   focusParam: string | null;
 }) {
+  const proofFocus = useMemo(
+    () => parseProofFocusParam(focusParam),
+    [focusParam],
+  );
   const { compareIds } = useNotebook();
   const [storyPlaying, setStoryPlaying] = useState(true);
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
@@ -481,8 +524,11 @@ function PropertyPageBody({
     if (!propertyId) return;
     let cancelled = false;
 
-    const focus = parseProofFocusParam(focusParam);
-    getPropertySurface(propertyId, initialPropertySurfaceId(focus), focus)
+    getPropertySurface(
+      propertyId,
+      initialPropertySurfaceId(proofFocus),
+      proofFocus,
+    )
       .then((scene) => {
         if (!cancelled) setAroundThisHomeScene(scene);
       })
@@ -493,7 +539,24 @@ function PropertyPageBody({
     return () => {
       cancelled = true;
     };
-  }, [data?.property?.id, focusParam]);
+  }, [data?.property?.id, proofFocus]);
+
+  useEffect(() => {
+    if (status !== "ok" || !proofFocus?.targetId) return undefined;
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        const target = document.getElementById(proofFocus.targetId ?? "");
+        if (!target) return;
+        target.scrollIntoView({ block: "start" });
+        target.focus({ preventScroll: true });
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame) window.cancelAnimationFrame(secondFrame);
+    };
+  }, [status, data?.property?.id, proofFocus, aroundThisHomeScene]);
 
   useEffect(() => {
     let cancelled = false;
@@ -664,6 +727,8 @@ function PropertyPageBody({
       />
 
       <main className="property-clean-flow">
+        <PropertySearchMatch data={data} focus={proofFocus} />
+
         {showNearbyPlate && aroundThisHomeContext && (
           <section
             id="around-this-home"

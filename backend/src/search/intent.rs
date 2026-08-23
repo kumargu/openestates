@@ -749,6 +749,7 @@ mod tests {
             "Need safe paperwork, RERA clarity and clean legal receipts.\nAvoid projects where possession or legal status is unclear.",
         );
         assert!(has_positive_label(&legal, "legal safety"));
+        assert!(has_positive_label(&legal, "RERA registration"));
         assert!(has_positive_label(&legal, "ready to move"));
 
         let builder = parse_intent(
@@ -758,7 +759,7 @@ mod tests {
             &builder,
             "rera_builder_projects_count"
         ));
-        assert!(has_positive_label(&builder, "legal safety"));
+        assert!(!has_positive_label(&builder, "legal safety"));
     }
 
     #[test]
@@ -780,7 +781,7 @@ mod tests {
         );
         assert!(has_positive_label(&receipts, "legal safety"));
         assert!(has_positive_label(&receipts, "listing evidence"));
-        assert!(has_expanded_positive_key(&receipts, "rera_status"));
+        assert!(!has_expanded_positive_key(&receipts, "rera_status"));
         assert!(has_expanded_positive_key(&receipts, "listing_price_3bhk"));
     }
 
@@ -841,7 +842,8 @@ mod tests {
             "Legal risk is a hard no: complaints, litigation and builder revocations should be checked from RERA.\nShow options with those receipts, not guesses.",
         );
 
-        assert!(has_positive_label(&intent, "legal safety"));
+        assert!(has_positive_label(&intent, "RERA registration"));
+        assert!(!has_positive_label(&intent, "legal safety"));
         assert!(!has_positive_label(&intent, "reliable builder"));
         assert!(has_expanded_negative_key(&intent, "rera_complaints"));
         assert!(!has_expanded_positive_key(
@@ -1042,13 +1044,32 @@ mod tests {
     #[test]
     fn proof_and_layout_avoidance_language_maps_to_negative_dimensions() {
         let proof = parse_intent("hide anything with weak proof");
-        assert!(has_positive_label(&proof, "legal safety"));
+        assert!(!has_positive_label(&proof, "legal safety"));
         assert!(has_negative_label(&proof, "proof gap"));
 
         let layout = parse_intent("avoid cramped layouts, poor ventilation and west facing heat");
         assert!(has_negative_label(&layout, "density risk"));
         assert!(has_negative_label(&layout, "layout quality"));
         assert!(has_negative_label(&layout, "facing"));
+    }
+
+    #[test]
+    fn rera_registration_does_not_expand_into_legal_safety() {
+        let registration = parse_intent("RERA registered with a RERA number");
+        assert!(has_positive_label(&registration, "RERA registration"));
+        assert!(has_expanded_positive_key(&registration, "rera_status"));
+        assert!(has_expanded_positive_key(&registration, "rera_number"));
+        assert!(!has_positive_label(&registration, "legal safety"));
+        assert!(!has_expanded_positive_key(
+            &registration,
+            "legal.title_clear"
+        ));
+
+        let legal = parse_intent("legally safe with clear title and no litigation");
+        assert!(has_positive_label(&legal, "legal safety"));
+        assert!(!has_positive_label(&legal, "RERA registration"));
+        assert!(!has_expanded_positive_key(&legal, "rera_status"));
+        assert!(!has_expanded_positive_key(&legal, "rera_number"));
     }
 
     fn has_positive_label(intent: &SearchIntent, label: &str) -> bool {

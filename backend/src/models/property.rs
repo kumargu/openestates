@@ -70,15 +70,11 @@ pub struct Property {
 }
 
 impl Property {
-    /// Buyer-facing surfaces can show priced homes, or explicit project
-    /// configurations whose price is still unavailable.
+    /// Discovery can retain a known home configuration while its asking price
+    /// is unavailable. Budget constraints still fail closed on an unknown
+    /// price in the search constraint evaluator.
     pub fn is_listable(&self) -> bool {
-        self.price > 0
-            || (self.bhk > 0
-                && self
-                    .transparency_tags
-                    .iter()
-                    .any(|tag| tag.eq_ignore_ascii_case("Price unavailable")))
+        self.price > 0 || self.bhk > 0
     }
 }
 

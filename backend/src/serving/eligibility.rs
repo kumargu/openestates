@@ -816,7 +816,7 @@ mod tests {
     }
 
     #[test]
-    fn property_entity_that_cannot_project_quarantines_its_society() {
+    fn property_entity_without_price_remains_projectable() {
         let (entities, mut facts, _, edges) = two_society_records(true);
         facts.retain(|fact| {
             fact.entity_id != "property:incomplete-2bhk" || fact.fact_key != "price"
@@ -826,18 +826,49 @@ mod tests {
         let result = classify_and_prune(entities, facts, metadata, edges, "test-v5", &policy())
             .expect("eligibility classification should succeed");
 
-        let quarantined = result
-            .quarantine
-            .societies
-            .iter()
-            .find(|society| society.runtime_society_id == "soc-incomplete")
-            .expect("unprojectable property should quarantine its society");
-        assert!(quarantined
-            .reason_codes
-            .contains(&"missing_property_projection".to_string()));
+        assert!(result.quarantine.societies.is_empty());
         assert!(result
             .entities
             .iter()
-            .all(|entity| entity.entity_id != "property:incomplete-2bhk"));
+            .any(|entity| entity.entity_id == "property:incomplete-2bhk"));
+    }
+
+    #[test]
+    fn launch_policy_admits_image_backed_discovery_with_optional_gaps() {
+        let entities = vec![
+            entity("society:promising", "society", "Promising"),
+            entity("property:promising-3bhk", "property", "Promising 3 BHK"),
+        ];
+        let facts = vec![
+            fact("property:promising-3bhk", "bhk", FactValue::Numeric(3.0)),
+            fact(
+                "property:promising-3bhk",
+                "hero_image",
+                FactValue::Text("/media/promising.webp".to_string()),
+            ),
+            fact(
+                "society:promising",
+                "google_rating",
+                FactValue::Numeric(4.4),
+            ),
+        ];
+        let metadata = facts.iter().map(metadata).collect();
+        let edges = vec![edge(
+            "property:promising-3bhk",
+            "in_society",
+            "society:promising",
+        )];
+        let policy =
+            crate::dag_config::load_serving_eligibility().expect("launch eligibility policy");
+
+        let result =
+            classify_and_prune(entities, facts, metadata, edges, "test-lenient-v1", &policy)
+                .expect("classification succeeds");
+
+        assert!(result.quarantine.societies.is_empty());
+        assert!(result
+            .entities
+            .iter()
+            .any(|entity| entity.entity_id == "property:promising-3bhk"));
     }
 }

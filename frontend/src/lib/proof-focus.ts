@@ -38,6 +38,9 @@ export function primaryProofFocus(
 }
 
 export function initialPropertySurfaceId(focus?: ProofFocus): string {
+  if (focus?.destinationKind && focus.destinationKind !== "scene") {
+    return DEFAULT_PROPERTY_SURFACE_ID;
+  }
   return focus?.surfaceId.trim() || DEFAULT_PROPERTY_SURFACE_ID;
 }
 

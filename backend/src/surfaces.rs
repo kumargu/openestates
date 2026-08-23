@@ -1624,6 +1624,7 @@ mod tests {
             components: Vec::new(),
             primary_entity: Some("society".to_string()),
             comparison_dimensions: Vec::new(),
+            proof_handoff: None,
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
@@ -1728,6 +1729,7 @@ mod tests {
             components: Vec::new(),
             primary_entity: Some("society".to_string()),
             comparison_dimensions: Vec::new(),
+            proof_handoff: None,
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
@@ -1826,6 +1828,7 @@ mod tests {
             components: Vec::new(),
             primary_entity: Some("society".to_string()),
             comparison_dimensions: Vec::new(),
+            proof_handoff: None,
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
@@ -1863,6 +1866,8 @@ mod tests {
             surface_id: "around_this_home".to_string(),
             layer_id: "red_flags".to_string(),
             fact_key: "nearby_graveyards".to_string(),
+            destination_kind: Some("scene".to_string()),
+            target_id: Some("around-this-home".to_string()),
             entity_id: None,
             feature_id: None,
             receipt_id: None,
@@ -1947,6 +1952,7 @@ mod tests {
             components: Vec::new(),
             primary_entity: Some("society".to_string()),
             comparison_dimensions: Vec::new(),
+            proof_handoff: None,
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
@@ -2064,6 +2070,7 @@ mod tests {
             components: Vec::new(),
             primary_entity: Some("society".to_string()),
             comparison_dimensions: Vec::new(),
+            proof_handoff: None,
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
@@ -2163,6 +2170,7 @@ mod tests {
             components: Vec::new(),
             primary_entity: Some("society".to_string()),
             comparison_dimensions: Vec::new(),
+            proof_handoff: None,
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),

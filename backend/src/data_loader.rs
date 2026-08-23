@@ -2717,7 +2717,7 @@ mod tests {
     }
 
     #[test]
-    fn serving_properties_without_price_are_excluded_from_runtime_catalog() {
+    fn serving_properties_without_price_remain_in_runtime_catalog_when_configured() {
         let entities = vec![ServingEntityRecord {
             entity_id: "property:discovered-prestige-lakeside-habitat-3bhk".to_string(),
             entity_type: "property".to_string(),
@@ -2736,9 +2736,8 @@ mod tests {
         );
 
         let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
-        assert!(
-            properties.is_empty(),
-            "zero-price homes must not enter the catalog"
-        );
+        assert_eq!(properties.len(), 1);
+        assert_eq!(properties[0].bhk, 3);
+        assert_eq!(properties[0].price, 0);
     }
 }

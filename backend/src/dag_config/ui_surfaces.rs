@@ -32,8 +32,19 @@ pub struct UiSurfaceConfig {
     pub primary_entity: Option<String>,
     #[serde(default)]
     pub scene: Option<UiSurfaceSceneConfig>,
+    #[serde(default, rename = "proofHandoff")]
+    pub proof_handoff: Option<UiSurfaceProofHandoffConfig>,
     #[serde(default, rename = "comparisonDimensions")]
     pub comparison_dimensions: Vec<UiComparisonDimensionConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiSurfaceProofHandoffConfig {
+    pub kind: String,
+    #[serde(rename = "targetId")]
+    pub target_id: String,
+    #[serde(default, rename = "factKeys")]
+    pub fact_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -161,6 +172,29 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                 )));
             }
         }
+        if let Some(handoff) = surface.proof_handoff.as_ref() {
+            if !matches!(handoff.kind.as_str(), "scene" | "section") {
+                return Err(DagConfigError::InvalidConfig(format!(
+                    "surface {} has unsupported proof handoff kind {}",
+                    surface.id, handoff.kind
+                )));
+            }
+            if handoff.target_id.trim().is_empty() {
+                return Err(DagConfigError::InvalidConfig(format!(
+                    "surface {} has a blank proof handoff targetId",
+                    surface.id
+                )));
+            }
+            if handoff.kind == "section"
+                && handoff.fact_keys.is_empty()
+                && surface.leaf_keys.is_empty()
+            {
+                return Err(DagConfigError::InvalidConfig(format!(
+                    "surface {} section proof handoff has no fact keys",
+                    surface.id
+                )));
+            }
+        }
         let Some(scene) = surface.scene.as_ref() else {
             continue;
         };
@@ -249,6 +283,20 @@ mod tests {
         let scene = around.scene.as_ref().expect("scene rules exist");
         assert_eq!(scene.anchor.entity_ref, "society");
         assert!(scene.layers.iter().any(|layer| layer.id == "metro"));
+    }
+
+    #[test]
+    fn ui_surfaces_load_non_scene_proof_handoffs() {
+        let config = load_ui_surfaces().expect("ui_surfaces.json should load");
+        let legal = config
+            .surfaces
+            .iter()
+            .find(|surface| surface.id == "legal_rera")
+            .expect("legal surface");
+        let handoff = legal.proof_handoff.as_ref().expect("legal proof handoff");
+        assert_eq!(handoff.kind, "section");
+        assert_eq!(handoff.target_id, "official-record");
+        assert!(handoff.fact_keys.contains(&"rera_status".to_string()));
     }
 
     #[test]

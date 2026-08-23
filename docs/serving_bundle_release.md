@@ -5,9 +5,9 @@ its Parquet/Tantivy artifacts, pinned lineage, and every local media reference
 are available together.
 
 Format 7 classifies societies before serving artifacts are written. A society
-enters the clean bundle only when every projected property satisfies the
-configured area, configuration, size, builder, and media requirements and the society
-has configured RERA and approach-road evidence. The policy lives in
+enters the clean bundle when its projected discovery cards have usable media.
+Price, inventory, RERA, road, review, and other optional evidence may be absent;
+those gaps affect matching and ranking rather than removing the society. The policy lives in
 `app/config/dag/serving_eligibility.json`; fact keys and edge types are not
 branched in the builder.
 

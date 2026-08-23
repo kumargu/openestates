@@ -46,7 +46,11 @@ export function PropertySceneFacts({
 
   if (pageScoped) {
     return (
-      <div className="property-story-sticky-facts" aria-label="Home summary">
+      <div
+        id="property-summary"
+        className="property-story-sticky-facts"
+        aria-label="Home summary"
+      >
         <div className="property-story-sticky-facts__inner">{facts}</div>
       </div>
     );

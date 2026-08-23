@@ -863,6 +863,8 @@ struct ProofFocusTarget {
     surface_id: String,
     layer_id: String,
     fact_key: String,
+    destination_kind: String,
+    target_id: String,
 }
 
 struct ProofFocusCandidate<'a> {
@@ -881,31 +883,76 @@ fn proof_focus_targets() -> Vec<ProofFocusTarget> {
     };
     let mut targets = Vec::new();
     for surface in &config.surfaces {
-        let Some(scene) = surface.scene.as_ref() else {
+        if let Some(scene) = surface.scene.as_ref() {
+            let destination_kind = surface
+                .proof_handoff
+                .as_ref()
+                .map(|handoff| handoff.kind.as_str())
+                .unwrap_or("scene");
+            let target_id = surface
+                .proof_handoff
+                .as_ref()
+                .map(|handoff| handoff.target_id.as_str())
+                .unwrap_or(surface.id.as_str());
+            for layer in &scene.layers {
+                for fact_key in layer
+                    .fact_keys
+                    .iter()
+                    .chain(layer.linked_entity_fact_keys.iter())
+                {
+                    push_proof_focus_target(
+                        &mut targets,
+                        &surface.id,
+                        &layer.id,
+                        fact_key,
+                        destination_kind,
+                        target_id,
+                    );
+                }
+            }
+        }
+        let Some(handoff) = surface.proof_handoff.as_ref() else {
             continue;
         };
-        for layer in &scene.layers {
-            for fact_key in layer
-                .fact_keys
-                .iter()
-                .chain(layer.linked_entity_fact_keys.iter())
-            {
-                if targets.iter().any(|target: &ProofFocusTarget| {
-                    target.surface_id == surface.id
-                        && target.layer_id == layer.id
-                        && target.fact_key.eq_ignore_ascii_case(fact_key)
-                }) {
-                    continue;
-                }
-                targets.push(ProofFocusTarget {
-                    surface_id: surface.id.clone(),
-                    layer_id: layer.id.clone(),
-                    fact_key: fact_key.to_string(),
-                });
-            }
+        if handoff.kind == "scene" {
+            continue;
+        }
+        for fact_key in surface.leaf_keys.iter().chain(handoff.fact_keys.iter()) {
+            push_proof_focus_target(
+                &mut targets,
+                &surface.id,
+                &surface.id,
+                fact_key,
+                &handoff.kind,
+                &handoff.target_id,
+            );
         }
     }
     targets
+}
+
+fn push_proof_focus_target(
+    targets: &mut Vec<ProofFocusTarget>,
+    surface_id: &str,
+    layer_id: &str,
+    fact_key: &str,
+    destination_kind: &str,
+    target_id: &str,
+) {
+    if targets.iter().any(|target| {
+        target.surface_id == surface_id
+            && target.layer_id == layer_id
+            && target.fact_key.eq_ignore_ascii_case(fact_key)
+    }) {
+        return;
+    }
+    targets.push(ProofFocusTarget {
+        surface_id: surface_id.to_string(),
+        layer_id: layer_id.to_string(),
+        fact_key: fact_key.to_string(),
+        destination_kind: destination_kind.to_string(),
+        target_id: target_id.to_string(),
+    });
 }
 
 fn push_proof_focus(
@@ -932,6 +979,8 @@ fn push_proof_focus(
             surface_id: target.surface_id.clone(),
             layer_id: target.layer_id.clone(),
             fact_key: candidate.fact_key.to_string(),
+            destination_kind: Some(target.destination_kind.clone()),
+            target_id: Some(target.target_id.clone()),
             entity_id: candidate.entity_id.map(str::to_string),
             feature_id: None,
             receipt_id: None,
@@ -1924,7 +1973,9 @@ fn serving_entity_preference_evidence(
                 preference: preference.to_string(),
                 fact_key: fact.fact_key.clone(),
                 fact_key_rank,
-                display: render_serving_fact_display(fact, metadata, &fact.value),
+                display: schema::match_display_template(preference)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| render_serving_fact_display(fact, metadata, &fact.value)),
                 normalized_score,
                 ranking_score,
                 score_delta,
@@ -4517,6 +4568,156 @@ mod tests {
                 .reasons
                 .iter()
                 .any(|reason| reason.fact_key == "google_rating")));
+    }
+
+    #[test]
+    fn rera_registration_is_precise_and_cannot_prove_legal_safety() {
+        let properties = vec![local_property(
+            "rera-home",
+            "Whitefield",
+            "rera-home",
+            3,
+            0,
+            8,
+            0.2,
+        )];
+        let society_names = local_society_names(&properties);
+        let serving_facts = ServingFactIndex::from_records(
+            vec![serving_fact(
+                "rera-home",
+                "rera_status",
+                FactValue::Text("APPROVED".to_string()),
+                "Rera",
+                0.95,
+            )],
+            vec![serving_metadata(
+                "rera-home",
+                "rera_status",
+                vec!["RERA registration"],
+                "TextMatch",
+                1.0,
+                vec![],
+            )],
+        );
+        let registration = CompiledQuery::from_text("RERA registered");
+        let registration_results = TextSearch::search(TextSearchRequest {
+            properties: &properties,
+            search_index: None,
+            extra_candidate_ids: None,
+            candidate_property_indexes: None,
+            geo_query: None,
+            serving_facts: Some(&serving_facts),
+            society_names: &society_names,
+            societies: &[],
+            compiled_query: &registration,
+            graph: None,
+        });
+
+        assert_eq!(registration_results.len(), 1);
+        let reason = registration_results[0]
+            .match_explanation
+            .as_ref()
+            .and_then(|explanation| explanation.reasons.first())
+            .expect("registration should have a factual reason");
+        assert_eq!(reason.preference, "RERA registration");
+        assert_eq!(reason.display, "RERA registration found");
+        assert!(!registration_results[0]
+            .match_reason
+            .to_ascii_lowercase()
+            .contains("legal safety"));
+        assert!(registration_results[0].proof_focuses.iter().any(|focus| {
+            focus.surface_id == "legal_rera"
+                && focus.destination_kind.as_deref() == Some("section")
+                && focus.target_id.as_deref() == Some("official-record")
+        }));
+
+        let mut legal_intent = crate::search::intent::parse_intent("must have legal safety");
+        let legal = legal_intent
+            .positive_preferences
+            .iter_mut()
+            .find(|preference| preference.raw_text == "legal safety")
+            .expect("legal safety intent");
+        legal.required = true;
+        let legal_query =
+            CompiledQuery::from_text_with_intent("must have legal safety", legal_intent);
+        let legal_results = TextSearch::search(TextSearchRequest {
+            properties: &properties,
+            search_index: None,
+            extra_candidate_ids: None,
+            candidate_property_indexes: None,
+            geo_query: None,
+            serving_facts: Some(&serving_facts),
+            society_names: &society_names,
+            societies: &[],
+            compiled_query: &legal_query,
+            graph: None,
+        });
+        assert!(legal_results.is_empty());
+    }
+
+    #[test]
+    fn ordinary_discovery_keeps_unknown_price_homes_with_supported_facts() {
+        let properties = vec![
+            local_property("priced", "Whitefield", "priced", 3, 18_000_000, 8, 0.2),
+            local_property("unpriced", "Whitefield", "unpriced", 3, 0, 8, 0.2),
+        ];
+        let society_names = local_society_names(&properties);
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "priced",
+                    "google_rating",
+                    FactValue::Numeric(4.2),
+                    "Google",
+                    0.9,
+                ),
+                serving_fact(
+                    "unpriced",
+                    "google_rating",
+                    FactValue::Numeric(4.6),
+                    "Google",
+                    0.9,
+                ),
+            ],
+            vec![
+                serving_metadata(
+                    "priced",
+                    "google_rating",
+                    vec!["good reviews"],
+                    "HigherIsBetter",
+                    1.0,
+                    vec![4.2, 4.0],
+                ),
+                serving_metadata(
+                    "unpriced",
+                    "google_rating",
+                    vec!["good reviews"],
+                    "HigherIsBetter",
+                    1.0,
+                    vec![4.2, 4.0],
+                ),
+            ],
+        );
+        let query = CompiledQuery::from_text("3BHK Whitefield with good reviews");
+        let results = TextSearch::search(TextSearchRequest {
+            properties: &properties,
+            search_index: None,
+            extra_candidate_ids: None,
+            candidate_property_indexes: None,
+            geo_query: None,
+            serving_facts: Some(&serving_facts),
+            society_names: &society_names,
+            societies: &[],
+            compiled_query: &query,
+            graph: None,
+        });
+        assert_eq!(
+            results
+                .iter()
+                .map(|result| result.card.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["unpriced", "priced"]
+        );
     }
 
     #[test]

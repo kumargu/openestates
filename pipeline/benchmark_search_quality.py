@@ -316,9 +316,19 @@ def collect_proof_handoffs(
                 "result_id": property_id,
                 "search_focus": focus,
                 "scene": None,
+                "detail": None,
             }
             try:
                 property_path = urllib.parse.quote(property_id, safe="")
+                destination_kind = field_value(focus, "destination_kind")
+                if destination_kind == "section":
+                    url = f"{base_url}/api/properties/{property_path}"
+                    with urllib.request.urlopen(url, timeout=timeout_seconds) as detail_response:
+                        detail = json.loads(detail_response.read())
+                        if isinstance(detail, dict):
+                            handoff["detail"] = detail
+                    handoffs.append(handoff)
+                    continue
                 surface_path = urllib.parse.quote(surface_id, safe="")
                 focus_query = urllib.parse.urlencode(
                     {"focus": json.dumps(focus, separators=(",", ":"))}
@@ -1084,6 +1094,8 @@ def matching_proof_handoff(
         "surface_id",
         "layer_id",
         "fact_key",
+        "destination_kind",
+        "target_id",
         "entity_id",
         "matched_label",
         "matched_value",
@@ -1111,6 +1123,27 @@ def proof_handoff_detail_checks(
     index: int, requirement: Dict[str, Any], handoff: Dict[str, Any]
 ) -> List[Dict[str, Any]]:
     search_focus = handoff["search_focus"]
+    if field_value(search_focus, "destination_kind") == "section":
+        detail = handoff.get("detail")
+        detail_property = detail.get("property") if isinstance(detail, dict) else None
+        detail_property_id = (
+            field_value(detail_property, "id") if isinstance(detail_property, dict) else None
+        )
+        result_id = handoff.get("result_id")
+        return [
+            check(
+                "proof_handoff",
+                f"section_target_{index}",
+                bool(field_value(search_focus, "target_id")),
+                f"section focus target was {field_value(search_focus, 'target_id')!r}",
+            ),
+            check(
+                "proof_handoff",
+                f"detail_reachable_{index}",
+                isinstance(detail, dict) and detail_property_id == result_id,
+                f"expected detail property {result_id!r}, got {detail_property_id!r}",
+            ),
+        ]
     scene = handoff.get("scene")
     scene_focus = field_value(scene, "proof_focus") if isinstance(scene, dict) else None
     mismatches = proof_focus_mismatches(search_focus, scene_focus)
@@ -1150,6 +1183,8 @@ def proof_focus_mismatches(
         "surface_id",
         "layer_id",
         "fact_key",
+        "destination_kind",
+        "target_id",
         "entity_id",
         "matched_label",
         "matched_value",
@@ -1247,6 +1282,11 @@ def proof_handoff_summaries(handoffs: List[Dict[str, Any]]) -> List[Dict[str, An
                 if isinstance(scene, dict)
                 else None,
                 "error": handoff.get("error"),
+                "detail_property_id": field_value(
+                    handoff.get("detail", {}).get("property", {}), "id"
+                )
+                if isinstance(handoff.get("detail"), dict)
+                else None,
             }
         )
     return summaries
