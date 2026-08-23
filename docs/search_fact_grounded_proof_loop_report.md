@@ -62,6 +62,16 @@ the controlled product model. Selected classifier-era phrases now have
 complete search context and executable result/proof expectations instead of
 isolated labels.
 
+The follow-up test audit retired three misleading owners: the report-style
+`search_quality.rs` integration test, its inline fuzzy API companion, and the
+July golden/Whitefield oracle banks. The Rust test depended on whichever
+serving bundle happened to be promoted, accepted a movable pass floor, and
+treated most zero-result cases as success. The golden bank mixed intent with
+inventory-independent gap guesses, while the Whitefield oracle targeted an
+obsolete bundle without a spec-level version guard. Generic engine contracts,
+route guardrails, the 50 controlled scenarios, and every version-pinned live
+proof-loop bank remain.
+
 The regional profile adds three price tiers or configurations per region and
 three coordinate-backed metro anchors. Its first diagnostic run found that
 `2BHK or 3BHK near Nagawara Metro under 1.8 Cr` leaked unrelated 2BHKs from

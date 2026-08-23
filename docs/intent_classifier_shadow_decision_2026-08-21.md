@@ -14,8 +14,11 @@ phrases owned by more than one label were excluded.
 
 ## Baselines
 
-- Search contract: `backend/tests/search_quality.rs`
-- Baseline: 27/32 labelled quality checks, with all four test cases passing.
+- Historical baseline: 27/32 labelled checks in the now-retired
+  `backend/tests/search_quality.rs` report-style test.
+- Current search contract:
+  `backend/tests/search_conversational_semantics_contract.rs` with typed,
+  exact result and proof expectations.
 - Hardcoding audit: two pre-existing comment-only `office` findings in
   `backend/src/search/geo.rs`; no blocked config aliases.
 - Held-out classifier bank at the time:
@@ -99,7 +102,8 @@ the original experiment corpus if the classifier decision is revisited.
 ## Verification
 
 - Rust library: 620/620 passed.
-- Search contracts: 11/11 efficiency, 4/4 quality, and 5/5 quality contract.
+- Search contracts: 11/11 efficiency, 50/50 controlled product scenarios, and
+  5/5 generic serving-fact quality checks.
 - Serving runtime: 5/5 passed.
 - Frontend: 145/145 tests and production build passed.
 - Fresh-server smoke suite: 50/50 passed.

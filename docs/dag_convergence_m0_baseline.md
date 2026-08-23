@@ -78,7 +78,7 @@ These are the current behavior owners to preserve while later milestones move se
 | Recommendations | `backend/src/recommendations/*` unit coverage and `frontend/tests/property-detail-ui.test.ts` test `recommendation scenes are stable and wrap after exhaustion`. |
 | Area Tracker | `backend/src/routes/areas.rs` test `area_tracker_combines_inventory_and_search_demand`; route still derives demand and labels in runtime code, which is M6 debt. |
 | Source labels | `backend/src/dag_config/resolution.rs` tests source tier/visibility; `backend/src/routes/properties.rs` source panel tests; `backend/tests/source_input_provider_contract.rs`. |
-| Search | `backend/tests/search_quality_contract.rs`, `backend/tests/search_efficiency_contract.rs`, `backend/tests/search_quality.rs`, `data/validation/query_bank/*.json`, and `tests/fuzzy_search_quality.py`. |
+| Search | `backend/tests/search_conversational_semantics_contract.rs` owns controlled buyer decisions; `backend/tests/search_quality_contract.rs` and `backend/tests/search_efficiency_contract.rs` own generic engine invariants; version-pinned query banks own live serving-data checks. |
 
 ## M0 Review Notes
 
