@@ -1,138 +1,194 @@
-import { useEffect, useMemo, useState } from "react";
-import { ImageWithFallback } from "../ImageWithFallback.tsx";
-import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
-import { sceneLabelForIndex } from "../../lib/propertyScene.ts";
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import type {
+  PropertyStoryModel,
+  StoryMediaFrame,
+} from "../../lib/propertyStory.ts";
+import {
+  PropertyFilmstrip,
+  type PropertyFilmstripFrame,
+  type StoryPlaybackSpeed,
+  type StoryScenePlayback,
+} from "./PropertyFilmstrip.tsx";
+import { PropertyPhotoWalker } from "./PropertyPhotoWalker.tsx";
 
-type SceneChip = { label: string; value: string };
+export type { StoryPlaybackSpeed, StoryScenePlayback };
 
 type Props = {
-  title: string;
-  societyName?: string;
-  heroImage?: string | null;
-  images?: string[];
-  chips: SceneChip[];
+  story: PropertyStoryModel;
+  actions?: ReactNode;
+  playback?: StoryScenePlayback;
+  sectionId?: string;
+  showIdentity?: boolean;
+  cinematicMotion?: boolean;
 };
 
-const KEN_BURNS = [
-  "property-scene__layer--pan-right",
-  "property-scene__layer--pan-left",
-  "property-scene__layer--zoom-in",
-  "property-scene__layer--zoom-out",
-  "property-scene__layer--drift-up",
-];
+type IdentityProps = {
+  story: PropertyStoryModel;
+  actions?: ReactNode;
+  showFacts?: boolean;
+};
 
-export function PropertySceneCard({
-  title,
-  societyName,
-  heroImage,
-  images,
-  chips,
-}: Props) {
-  const { images: sceneImages, loading, hasImages } = usePropertySceneImages({
-    heroImage,
-    images,
-  });
+export function PropertySceneFacts({
+  story,
+  pageScoped = false,
+}: {
+  story: PropertyStoryModel;
+  pageScoped?: boolean;
+}) {
+  const facts = story.identity.facts.map((fact) => (
+    <span key={fact.key}>{fact.value}</span>
+  ));
 
-  const [active, setActive] = useState(0);
-  const [reducedMotion, setReducedMotion] = useState(false);
-  const safeActive = sceneImages.length > 0 ? active % sceneImages.length : 0;
-
-  useEffect(() => {
-    if (reducedMotion || sceneImages.length <= 1) return undefined;
-    const timer = window.setInterval(() => {
-      setActive((index) => (index + 1) % sceneImages.length);
-    }, 6800);
-    return () => window.clearInterval(timer);
-  }, [reducedMotion, sceneImages.length]);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReducedMotion(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-
-  const sceneLabel = useMemo(() => sceneLabelForIndex(safeActive), [safeActive]);
-  const motionClass = KEN_BURNS[safeActive % KEN_BURNS.length];
-  // Keep mosaic slots stable so auto-rotate only moves the living hero stage.
-  const mosaicImages = sceneImages
-    .map((src, index) => ({ src, index }))
-    .filter(({ index }) => index > 0)
-    .slice(0, 4);
+  if (pageScoped) {
+    return (
+      <div className="property-story-sticky-facts" aria-label="Home summary">
+        <div className="property-story-sticky-facts__inner">{facts}</div>
+      </div>
+    );
+  }
 
   return (
-    <div className={`property-scene ${hasImages ? "property-scene--live" : "property-scene--empty"}${mosaicImages.length > 0 ? " property-scene--mosaic" : ""}`}>
-      <div className="property-scene__stage" aria-hidden={!hasImages}>
-        {hasImages ? (
-          sceneImages.map((src, index) => (
-            <div
-              key={src}
-              className={`property-scene__layer ${motionClass} ${index === safeActive ? "is-active" : ""}`}
-            >
-              <ImageWithFallback
-                src={src}
-                alt={`${title} — ${sceneLabelForIndex(index)}`}
-                className="property-scene__image"
-                loading={index === 0 ? "eager" : "lazy"}
-                fetchPriority={index === 0 ? "high" : "low"}
-              />
-            </div>
-          ))
-        ) : (
-          <div className="property-scene__placeholder">
-            <span className="property-scene__placeholder-kicker">Project photos</span>
-            <strong>{societyName || title}</strong>
-            <p>{loading ? "Loading photos…" : "Photos unavailable"}</p>
+    <div className="property-scene__facts" aria-label="Home summary">
+      {facts}
+    </div>
+  );
+}
+
+export function PropertySceneIdentity({
+  story,
+  actions,
+  showFacts = true,
+}: IdentityProps) {
+  return (
+    <>
+      <div className="property-scene__identity">
+        <div className="property-scene__identity-copy">
+          <p>{story.identity.location}</p>
+          <h1 id="property-scene-title">{story.identity.title}</h1>
+        </div>
+        {actions && (
+          <div className="property-scene__actions" aria-label="Property actions">
+            {actions}
           </div>
         )}
-
-        <div className="property-scene__vignette" />
-        <div className="property-scene__grain" />
-        <div className="property-scene__glass">
-          <div className="property-scene__glass-top">
-            <span className="property-scene__scene-label">{hasImages ? sceneLabel : "Preview"}</span>
-            {hasImages && sceneImages.length > 1 && (
-              <span className="property-scene__scene-count">
-                {safeActive + 1} / {sceneImages.length}
-              </span>
-            )}
-          </div>
-          <div className="property-scene__chips">
-            {chips.map((chip) => (
-              <span key={chip.label} className="property-scene__chip">
-                <em>{chip.label}</em> {chip.value}
-              </span>
-            ))}
-          </div>
-        </div>
       </div>
+      {showFacts && <PropertySceneFacts story={story} />}
+    </>
+  );
+}
 
-      {mosaicImages.length > 0 && (
-        <div className="property-scene__mosaic" role="tablist" aria-label="Property scenes">
-          {mosaicImages.map(({ src, index }, position) => (
-            <button
-              key={src}
-              type="button"
-              role="tab"
-              aria-selected={index === safeActive}
-              className={`property-scene__mosaic-frame${index === safeActive ? " is-active" : ""}`}
-              onClick={() => setActive(index)}
-            >
-              <ImageWithFallback
-                src={src}
-                alt={`${title} — ${sceneLabelForIndex(index)}`}
-                loading="lazy"
-                fetchPriority="low"
-              />
-              <span>{sceneLabelForIndex(index)}</span>
-              {position === mosaicImages.length - 1 && sceneImages.length > 5 && (
-                <b>{sceneImages.length} photos</b>
-              )}
-            </button>
-          ))}
-        </div>
+function frameLabel(frame: StoryMediaFrame, index: number): string {
+  if (frame.lifecycle === "current") return "Current image";
+  if (frame.lifecycle === "proposed") return "Proposed render";
+  if (frame.role === "exterior" || frame.role === "building") return "Exterior";
+  if (frame.role === "amenity") return "Amenity";
+  if (frame.role === "neighbourhood") return "Neighbourhood";
+  return `Property view ${String(index + 1).padStart(2, "0")}`;
+}
+
+function sameIds(left: string[], right: string[]): boolean {
+  return left.length === right.length
+    && left.every((id, index) => id === right[index]);
+}
+
+export function PropertySceneCard({
+  story,
+  actions,
+  playback,
+  sectionId,
+  showIdentity = true,
+  cinematicMotion = true,
+}: Props) {
+  const [walkerIndex, setWalkerIndex] = useState<number | null>(null);
+  const [usableFrameIds, setUsableFrameIds] = useState(
+    () => story.media.frames.map((frame) => frame.id),
+  );
+  const filmstripFrames = useMemo<PropertyFilmstripFrame[]>(
+    () =>
+      story.media.frames.map((frame, index) => ({
+        id: frame.id,
+        url: frame.url,
+        label: frameLabel(frame, index),
+        meta: frame.capturedAt,
+        lifecycle: frame.lifecycle,
+        sourceUrl: frame.sourceUrl,
+        focalPoint: frame.focalPoint,
+        showCaption:
+          frame.lifecycle !== "unknown"
+          || ["exterior", "building", "amenity", "neighbourhood"].includes(
+            frame.role,
+          ),
+      })),
+    [story.media.frames],
+  );
+  const usableGalleryUrls = useMemo(() => {
+    const usableIds = new Set(usableFrameIds);
+    const failedUrls = new Set(
+      story.media.frames
+        .filter((frame) => !usableIds.has(frame.id))
+        .map((frame) => frame.url),
+    );
+    return story.media.galleryUrls.filter((url) => !failedUrls.has(url));
+  }, [story.media.frames, story.media.galleryUrls, usableFrameIds]);
+
+  const syncUsableFrames = useCallback((frameIds: string[]) => {
+    setUsableFrameIds((current) =>
+      sameIds(current, frameIds) ? current : frameIds);
+  }, []);
+
+  function openGallery(activeFrameId: string) {
+    const activeUrl = story.media.frames.find(
+      (frame) => frame.id === activeFrameId,
+    )?.url;
+    const activeGalleryIndex = activeUrl
+      ? usableGalleryUrls.indexOf(activeUrl)
+      : 0;
+    setWalkerIndex(activeGalleryIndex >= 0 ? activeGalleryIndex : 0);
+  }
+
+  const hasImages = filmstripFrames.length > 0;
+
+  return (
+    <section
+      id={sectionId}
+      className={`property-scene${hasImages ? "" : " property-scene--empty"}`}
+      aria-labelledby="property-scene-title"
+    >
+      {showIdentity && (
+        <PropertySceneIdentity story={story} actions={actions} />
       )}
-    </div>
+
+      {hasImages && (
+        <PropertyFilmstrip
+          ariaLabel={`${story.identity.title} property views`}
+          frames={filmstripFrames}
+          motionSeed={story.motionSeed}
+          motionTheme={story.motionTheme}
+          playback={playback}
+          priority
+          presentation="stage"
+          cinematicMotion={cinematicMotion}
+          showPlaybackControl
+          galleryLabel={`All photos · ${usableGalleryUrls.length}`}
+          onOpenGallery={usableGalleryUrls.length > 0 ? openGallery : undefined}
+          onUsableFramesChange={syncUsableFrames}
+        />
+      )}
+
+      {walkerIndex !== null && usableGalleryUrls.length > 0 && (
+        <PropertyPhotoWalker
+          title={story.identity.title}
+          images={usableGalleryUrls}
+          index={walkerIndex}
+          onIndexChange={setWalkerIndex}
+          onClose={() => setWalkerIndex(null)}
+        />
+      )}
+    </section>
   );
 }

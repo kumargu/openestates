@@ -1,0 +1,18 @@
+.property-arrival {
+  display: grid;
+  gap: 1rem;
+  margin: var(--property-story-section-space, clamp(4rem, 8vw, 7rem)) 0 0;
+  scroll-margin-top: 5rem;
+  container-type: inline-size;
+}
+
+@media (max-width: 760px) {
+  .property-arrival {
+    width: calc(100% + 2rem);
+    margin: 4rem -1rem 0;
+  }
+
+  .property-arrival .property-story-heading {
+    padding-inline: 1rem;
+  }
+}

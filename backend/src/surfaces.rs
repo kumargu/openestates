@@ -1623,6 +1623,7 @@ mod tests {
             traversal: Vec::new(),
             components: Vec::new(),
             primary_entity: Some("society".to_string()),
+            comparison_dimensions: Vec::new(),
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
@@ -1726,6 +1727,7 @@ mod tests {
             traversal: Vec::new(),
             components: Vec::new(),
             primary_entity: Some("society".to_string()),
+            comparison_dimensions: Vec::new(),
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
@@ -1823,6 +1825,7 @@ mod tests {
             traversal: Vec::new(),
             components: Vec::new(),
             primary_entity: Some("society".to_string()),
+            comparison_dimensions: Vec::new(),
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
@@ -1943,6 +1946,7 @@ mod tests {
             traversal: Vec::new(),
             components: Vec::new(),
             primary_entity: Some("society".to_string()),
+            comparison_dimensions: Vec::new(),
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
@@ -2059,6 +2063,7 @@ mod tests {
             traversal: Vec::new(),
             components: Vec::new(),
             primary_entity: Some("society".to_string()),
+            comparison_dimensions: Vec::new(),
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
@@ -2157,6 +2162,7 @@ mod tests {
             traversal: Vec::new(),
             components: Vec::new(),
             primary_entity: Some("society".to_string()),
+            comparison_dimensions: Vec::new(),
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),

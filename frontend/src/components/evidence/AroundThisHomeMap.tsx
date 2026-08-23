@@ -647,7 +647,7 @@ export function AroundThisHomeMap({
       zoom: viewport.zoom,
       duration: 280,
     });
-  }, [viewport.center.latitude, viewport.center.longitude, viewport.zoom]);
+  }, [viewport.center, viewport.zoom]);
 
   useEffect(() => {
     const map = mapRef.current;

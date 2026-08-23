@@ -99,9 +99,9 @@ Phase 5 is done when:
 
 ### 5A.3 Approach road — one primary surface
 
-**Current:** `ApproachRoadTrail` rendered above brief; `approach_road` section excluded from `EvidenceStack` when trail shows.
+**Current:** `approach_road` media is projected into `PropertyArrivalFilm`; the brief retains separate risk prose.
 
-**Keep:** Trail owns visual proof; brief owns risk prose; evidence section excluded when trail present. Document this in a code comment referencing `ui_surfaces.json` `approach_road` surface.
+**Keep:** The arrival film owns visual proof; the brief owns risk prose; evidence remains one primary surface. `ui_surfaces.json` names the production component.
 
 ---
 

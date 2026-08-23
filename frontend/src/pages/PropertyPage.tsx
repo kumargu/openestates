@@ -2,14 +2,10 @@ import { useEffect, useState } from "react";
 import {
   Link,
   useParams,
-  useNavigate,
   useSearchParams,
 } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import type {
-  DetailSignal,
-  EvidenceSection,
-  ExternalReviewCard,
   PropertyCard,
   PropertyDetailResponse,
   RecommendationResponse,
@@ -24,30 +20,32 @@ import {
   parseProofFocusParam,
 } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
-import { RailPageControls } from "../components/RailPageControls.tsx";
-import {
-  ApproachRoadTrail,
-  hasApproachRoadTrail,
-} from "../components/evidence/ApproachRoadTrail.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
-import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
-import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
-import {
-  derivePriceBands,
-  formatSqftCompact,
-} from "../components/AreaPriceBands.tsx";
-import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
+import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
+import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
+import { useNotebook } from "../hooks/useNotebook.ts";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
-import { PropertyPhotoWalker } from "../components/property/PropertyPhotoWalker.tsx";
+import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
+import { PropertyReraTeaser } from "../components/property/PropertyReraTeaser.tsx";
+import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
 import {
-  photoIndexFromMosaicSlot,
-  propertySceneImageAt,
-} from "../lib/propertyScene.ts";
-import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
-import { isRedundantHomeState } from "../lib/property-signals.ts";
+  PropertySceneCard,
+  PropertySceneFacts,
+  PropertySceneIdentity,
+} from "../components/property/PropertySceneCard.tsx";
+import { PropertyShortCompare } from "../components/property/PropertyShortCompare.tsx";
+import { propertySceneImageAt } from "../lib/propertyScene.ts";
+import {
+  projectPropertyStory,
+  projectStoryComparison,
+  type StoryComparison,
+} from "../lib/propertyStory.ts";
+import { readShortlistIds } from "../lib/compare.ts";
+import { formatGoogleRating } from "../lib/reviewFormatting.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
+import { workspaceCompareHref } from "../lib/workspaceNav.ts";
 import { formatListingPrice } from "../lib/listing-price.ts";
 import { initialPropertySurfaceId } from "../lib/proof-focus.ts";
 
@@ -59,116 +57,6 @@ function comparablePrice(price: number): number {
   return hasKnownNumber(price) ? price : Number.MAX_SAFE_INTEGER;
 }
 
-function compactLifecycleLabel(value: string): string {
-  const normalized = value
-    .replace(/^home state:\s*/i, "")
-    .replace(/_/g, " ")
-    .trim();
-  if (!normalized) return value;
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-}
-
-function truncateCopy(value: string, limit = 220): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= limit) return normalized;
-  const trimmed = normalized.slice(0, limit).replace(/\s+\S*$/, "");
-  return `${trimmed}...`;
-}
-
-function reviewSnippetCopy(value: string): string {
-  return truncateCopy(
-    value
-      .replace(/^Google review feedback reads/i, "Google reviews read")
-      .replace(
-        /,?\s*though recurring themes are still being extracted\.?/i,
-        ".",
-      ),
-  );
-}
-
-function formatGoogleRating(value: number | null | undefined): string | null {
-  if (!hasKnownNumber(value)) return null;
-  return value.toFixed(1);
-}
-
-function ratingTone(value: number | null | undefined): "good" | "weak" | null {
-  if (!hasKnownNumber(value)) return null;
-  return value >= 4 ? "good" : "weak";
-}
-
-function formatReviewCount(value: number | null | undefined): string | null {
-  if (!hasKnownNumber(value)) return null;
-  return `${value.toLocaleString("en-IN")} Google ${value === 1 ? "review" : "reviews"}`;
-}
-
-function reviewSpaceCost(review: ExternalReviewCard): number {
-  const words = review.text.trim().split(/\s+/).filter(Boolean).length;
-  if (words <= 32) return 1;
-  if (words <= 70) return 1.8;
-  return 2.4;
-}
-
-function fitReviewCards(
-  reviewCards: ExternalReviewCard[],
-  budget = 22,
-): ExternalReviewCard[] {
-  const selected: ExternalReviewCard[] = [];
-  let used = 0;
-  for (const review of reviewCards) {
-    const cost = reviewSpaceCost(review);
-    if (selected.length >= 8 && used + cost > budget) break;
-    if (selected.length >= 12) break;
-    selected.push(review);
-    used += cost;
-  }
-  return selected;
-}
-
-function detailSignalPills(
-  signals: DetailSignal[] | undefined,
-): DetailSignal[] {
-  return (signals ?? []).filter((signal) => signal.label.trim()).slice(0, 8);
-}
-
-function PropertySignalPills({
-  signals,
-}: {
-  signals: DetailSignal[] | undefined;
-}) {
-  const signalPills = detailSignalPills(signals);
-  if (signalPills.length === 0) return null;
-
-  return (
-    <section
-      className="property-signal-section"
-      aria-label="Positive review themes"
-    >
-      <span className="property-signal-section__label">Positive themes</span>
-      <div className="property-signal-pills">
-        {signalPills.map((signal) => (
-          <span key={signal.key} className="property-signal-pill">
-            <LabelVisualIcon id={signal.icon || signal.key} size={22} />
-            <strong>{signal.label}</strong>
-          </span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function cleanAreaToken(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s,-]/g, " ")
-    .split(/[,\s]+/)
-    .filter((part) => part.length > 2)
-    .join(" ");
-}
-
-function areaTokens(value: string): Set<string> {
-  return new Set(cleanAreaToken(value).split(" ").filter(Boolean));
-}
-
 function societyKey(
   property: Pick<PropertyCard, "kg_entity_refs" | "society_name">,
 ): string {
@@ -176,6 +64,51 @@ function societyKey(
     property.kg_entity_refs?.society_entity_id ||
     property.society_name.trim().toLowerCase()
   );
+}
+
+function savedComparisonHomes(
+  requestedIds: string[],
+  propertiesById: Map<string, PropertyCard>,
+  currentPropertyId: string,
+): StoryComparison[] {
+  const orderedIds = requestedIds.includes(currentPropertyId)
+    ? [
+        currentPropertyId,
+        ...requestedIds.filter((propertyId) => propertyId !== currentPropertyId),
+      ]
+    : requestedIds;
+  const usedSocieties = new Set<string>();
+  const homes: StoryComparison[] = [];
+
+  for (const propertyId of orderedIds) {
+    const property = propertiesById.get(propertyId);
+    if (!property) continue;
+    const key = societyKey(property) || property.title.trim().toLocaleLowerCase();
+    if (usedSocieties.has(key)) continue;
+    usedSocieties.add(key);
+    homes.push(projectStoryComparison(property, currentPropertyId));
+    if (homes.length === 4) break;
+  }
+
+  return homes;
+}
+
+function distinctSocietyIds(
+  requestedIds: string[],
+  propertiesById: Map<string, PropertyCard>,
+): string[] {
+  const usedSocieties = new Set<string>();
+  const ids: string[] = [];
+  for (const propertyId of requestedIds) {
+    const property = propertiesById.get(propertyId);
+    if (!property) continue;
+    const key = societyKey(property) || property.title.trim().toLocaleLowerCase();
+    if (usedSocieties.has(key)) continue;
+    usedSocieties.add(key);
+    ids.push(propertyId);
+    if (ids.length === 4) break;
+  }
+  return ids;
 }
 
 function propertyToCard(data: PropertyDetailResponse): PropertyCard {
@@ -271,312 +204,58 @@ function rankedRecommendationItems(
     .slice(0, 8);
 }
 
-function nearbyRailItems(
+function recommendationShelfItems(
   primaryItems: RankedRecommendationItem[],
   properties: PropertyCard[],
   currentProperty: PropertyCard,
-  preferredAreas: string[],
+  excludedIds: Set<string>,
 ): RankedRecommendationItem[] {
-  const currentSocietyKey = societyKey(currentProperty);
-  const allowedAreas = new Set([currentProperty.area, ...preferredAreas]);
-  const isDifferentSociety = (property: PropertyCard) =>
-    !currentSocietyKey || societyKey(property) !== currentSocietyKey;
-  const scopedPrimaryItems = primaryItems.filter(
-    (item) =>
-      allowedAreas.has(item.property.area) && isDifferentSociety(item.property),
-  );
-  const used = new Set(scopedPrimaryItems.map((item) => item.property.id));
-  used.add(currentProperty.id);
-  const areaRank = new Map(preferredAreas.map((area, index) => [area, index]));
-  const fillers: RankedRecommendationItem[] = properties
-    .filter((property) => !used.has(property.id))
-    .filter((property) => allowedAreas.has(property.area))
-    .filter(isDifferentSociety)
-    .filter((property) => property.hero_image || property.society_name)
-    .sort((left, right) => {
-      const leftAreaRank = areaRank.get(left.area) ?? 99;
-      const rightAreaRank = areaRank.get(right.area) ?? 99;
-      if (leftAreaRank !== rightAreaRank) return leftAreaRank - rightAreaRank;
-      const reviewDelta = reviewStrength(right) - reviewStrength(left);
-      if (Math.abs(reviewDelta) > 0.001) return reviewDelta;
-      return comparablePrice(left.price) - comparablePrice(right.price);
-    })
-    .slice(0, Math.max(0, 8 - scopedPrimaryItems.length))
+  const fallbackItems: RankedRecommendationItem[] = properties
     .map((property) => ({
       kind: "nearby",
       id: `nearby-${property.id}`,
       property,
-    }));
+    } as const))
+    .sort((left, right) => {
+      const areaDelta =
+        Number(right.property.area === currentProperty.area) -
+        Number(left.property.area === currentProperty.area);
+      if (areaDelta !== 0) return areaDelta;
+      const reviewDelta =
+        reviewStrength(right.property) - reviewStrength(left.property);
+      if (Math.abs(reviewDelta) > 0.001) return reviewDelta;
+      return comparablePrice(left.property.price) -
+        comparablePrice(right.property.price);
+    });
+  const usedIds = new Set([currentProperty.id, ...excludedIds]);
+  const usedSocieties = new Set([
+    societyKey(currentProperty) || currentProperty.title.trim().toLowerCase(),
+  ]);
+  const items: RankedRecommendationItem[] = [];
 
-  return [...scopedPrimaryItems, ...fillers].slice(0, 8);
-}
-
-function InlinePriceRangeSignal({
-  area,
-  pricePerSqft,
-  properties,
-}: {
-  area: string;
-  pricePerSqft: number;
-  properties: PropertyCard[];
-}) {
-  if (!hasKnownNumber(pricePerSqft)) return null;
-  const band = derivePriceBands(properties, [area])[0];
-  if (!band) return null;
-
-  const typicalLow = band.p25;
-  const typicalHigh = band.p75;
-  const areaName = area.split(",")[0];
-
-  return (
-    <p
-      className="property-price-range"
-      aria-label={`${formatSqftCompact(pricePerSqft)} per sqft against ${areaName} range ${formatSqftCompact(typicalLow)} to ${formatSqftCompact(typicalHigh)}`}
-    >
-      <span>{formatSqftCompact(pricePerSqft)}/sqft</span>
-      <span>
-        {areaName} range {formatSqftCompact(typicalLow)}-
-        {formatSqftCompact(typicalHigh)}/sqft
-      </span>
-    </p>
-  );
-}
-
-function microMarketAreas(
-  currentArea: string,
-  currentPricePerSqft: number,
-  properties: PropertyCard[],
-  recommendationItems: RankedRecommendationItem[],
-): string[] {
-  const byArea = new Map<string, PropertyCard[]>();
-  for (const property of properties) {
-    if (!property.area || property.price_per_sqft <= 0) continue;
-    const list = byArea.get(property.area) ?? [];
-    list.push(property);
-    byArea.set(property.area, list);
+  for (const item of [...primaryItems, ...fallbackItems]) {
+    const property = item.property;
+    const key = societyKey(property) || property.title.trim().toLowerCase();
+    if (
+      usedIds.has(property.id)
+      || usedSocieties.has(key)
+      || (!property.hero_image && !property.society_name)
+    ) {
+      continue;
+    }
+    usedIds.add(property.id);
+    usedSocieties.add(key);
+    items.push(item);
+    if (items.length === 4) break;
   }
 
-  const currentTokens = areaTokens(currentArea);
-  const recommendedAreas = new Set(
-    recommendationItems.map((item) => item.property.area),
-  );
-  return [...byArea.entries()]
-    .filter(([, areaProperties]) => areaProperties.length >= 2)
-    .map(([area, areaProperties]) => {
-      const tokens = areaTokens(area);
-      const sharedTokenCount = [...tokens].filter((token) =>
-        currentTokens.has(token),
-      ).length;
-      const medianPpsf = areaProperties
-        .map((property) => property.price_per_sqft)
-        .sort((a, b) => a - b)[Math.floor(areaProperties.length / 2)];
-      const priceCloseness = hasKnownNumber(currentPricePerSqft)
-        ? Math.max(0, 25 - Math.abs(medianPpsf - currentPricePerSqft) / 1000)
-        : 0;
-      const score =
-        (area === currentArea ? 100 : 0) +
-        (recommendedAreas.has(area) ? 45 : 0) +
-        sharedTokenCount * 30 +
-        Math.min(areaProperties.length, 10) +
-        priceCloseness;
-      return { area, score };
-    })
-    .sort(
-      (left, right) =>
-        right.score - left.score || left.area.localeCompare(right.area),
-    )
-    .slice(0, 5)
-    .map((item) => item.area);
+  return items;
 }
 
-function reviewEvidenceSections(
-  sections: EvidenceSection[],
-): EvidenceSection[] {
-  return sections.filter(
-    (section) =>
-      ["community", "community_pulse", "resident_reviews", "reviews"].includes(
-        section.kind,
-      ) ||
-      /review|resident|community/i.test(`${section.kind} ${section.title}`),
-  );
-}
-
-function PropertyPhotoMosaic({
-  title,
-  societyName,
-  heroImage,
-  images,
-}: {
-  title: string;
-  societyName?: string;
-  heroImage?: string | null;
-  images?: string[];
-}) {
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const [readyLeadImage, setReadyLeadImage] = useState<string | null>(null);
-  const {
-    images: sceneImages,
-    loading,
-    hasImages,
-  } = usePropertySceneImages({
-    heroImage,
-    images,
-  });
-  const leadImage = propertySceneImageAt(sceneImages, 0, heroImage);
-  const leadImageReady = Boolean(leadImage && readyLeadImage === leadImage);
-  const mosaicImages = sceneImages.slice(1, 5);
-  const total = sceneImages.length || (heroImage ? 1 : 0);
-
-  function openFrom(slot: "lead" | "all" | { tile: number }) {
-    if (!hasImages) return;
-    setOpenIndex(photoIndexFromMosaicSlot(slot));
-  }
-
-  return (
-    <section className="property-photo-mosaic" aria-label="Property photos">
-      {leadImage ? (
-        <button
-          type="button"
-          className={`property-photo-mosaic__lead${leadImageReady ? " is-ready" : ""}`}
-          onClick={() => openFrom("lead")}
-        >
-          <ImageWithFallback
-            src={leadImage}
-            alt={title}
-            loading="eager"
-            decoding="auto"
-            fetchPriority="high"
-            onReady={() => setReadyLeadImage(leadImage)}
-          />
-        </button>
-      ) : (
-        <div className="property-photo-mosaic__lead">
-          <div className="property-photo-mosaic__empty">
-            <span>{loading ? "Loading photos" : "Photos unavailable"}</span>
-            <strong>{societyName || title}</strong>
-          </div>
-        </div>
-      )}
-      <div className="property-photo-mosaic__grid">
-        {mosaicImages.map((src, index) => (
-          <button
-            key={src}
-            type="button"
-            onClick={() => openFrom({ tile: index })}
-          >
-            <ImageWithFallback
-              src={src}
-              alt={`${title}, photo ${index + 2} of ${total}`}
-              loading="lazy"
-              fetchPriority="low"
-            />
-          </button>
-        ))}
-      </div>
-      {hasImages && (
-        <button
-          type="button"
-          className="property-photo-mosaic__all"
-          onClick={() => openFrom("all")}
-        >
-          Show all photos
-          <span>{total}</span>
-        </button>
-      )}
-
-      {openIndex !== null && hasImages && (
-        <PropertyPhotoWalker
-          title={title}
-          images={sceneImages}
-          index={openIndex}
-          onIndexChange={setOpenIndex}
-          onClose={() => setOpenIndex(null)}
-        />
-      )}
-    </section>
-  );
-}
-
-function GoogleReviewsSection({
-  data,
-  reviewSections,
-}: {
-  data: PropertyDetailResponse;
-  reviewSections: EvidenceSection[];
-}) {
-  const { society } = data;
-  const reviews = data.external_reviews;
-  const googleUrl = reviews?.google_reviews_url ?? society?.google_reviews_url;
-  const rating = formatGoogleRating(reviews?.google_rating);
-  const reviewCount = formatReviewCount(reviews?.google_review_count);
-  const communityPulse = reviewSections.find(
-    (section) => section.community_pulse,
-  )?.community_pulse;
-  const fallbackCards: ExternalReviewCard[] = [
-    communityPulse?.paragraph,
-    ...(communityPulse?.quotes?.slice(0, 2).map((quote) => quote.text) ?? []),
-  ]
-    .filter((value): value is string => Boolean(value?.trim()))
-    .map((value, index) => ({
-      id: `review-fallback-${index}`,
-      source: "Google",
-      author: "Google reviewer",
-      text: reviewSnippetCopy(value),
-      tone: "neutral" as const,
-    }));
-  const reviewSourceCards = reviews?.reviews?.length
-    ? reviews.reviews
-    : fallbackCards;
-  const reviewCards = fitReviewCards(reviewSourceCards);
-  const reviewButtonLabel = reviewCount
-    ? `Show all ${reviewCount.replace(" Google ", " ")}`
-    : "Show more Google reviews";
-
-  if (!googleUrl && reviewCards.length === 0 && !rating) return null;
-
-  return (
-    <section
-      className="property-google-reviews"
-      aria-labelledby="property-google-reviews-title"
-    >
-      <div className="property-section-line">
-        <h2 id="property-google-reviews-title">
-          {rating ? `★ ${rating}` : "Google reviews"}
-          {reviewCount ? ` · ${reviewCount}` : ""}
-        </h2>
-      </div>
-
-      {reviewCards.length > 0 && (
-        <div className="property-review-grid">
-          {reviewCards.map((review) => (
-            <article key={review.id} className="property-review-card">
-              {(review.rating || review.date_label) && (
-                <p className="property-review-card__meta">
-                  {review.rating && (
-                    <span>{"★".repeat(Math.round(review.rating))}</span>
-                  )}
-                  {review.rating && review.date_label && " · "}
-                  {review.date_label}
-                </p>
-              )}
-              <p>{review.text}</p>
-            </article>
-          ))}
-        </div>
-      )}
-
-      {googleUrl && (
-        <a
-          className="property-review-more"
-          href={googleUrl}
-          target="_blank"
-          rel="noreferrer"
-        >
-          {reviewButtonLabel}
-        </a>
-      )}
-    </section>
-  );
+function compactRecommendationArea(area: string): string {
+  const parts = area.split(",").map((part) => part.trim()).filter(Boolean);
+  if (area.length <= 32 || parts.length < 2) return area;
+  return parts.at(-1) ?? area;
 }
 
 function NearbyHomeCard({
@@ -592,17 +271,28 @@ function NearbyHomeCard({
     images: property.images,
   });
   const image = propertySceneImageAt(images, sceneIndex, property.hero_image);
-  const title = property.title.trim();
-  const note = `${property.area} · ${property.bhk} BHK`;
+  const title = property.society_name.trim() || property.title.trim();
+  const area = compactRecommendationArea(property.area);
+  const note = property.society_name
+    ? `${area} · ${property.bhk} BHK`
+    : area;
+  const price = formatListingPrice(property);
+  const rating = formatGoogleRating(property.google_rating);
+  const accessibleLabel = [
+    title,
+    note.replace(" · ", ", "),
+    price,
+    rating ? `Google ${rating}` : null,
+  ].filter(Boolean).join(", ");
 
   return (
     <article className="property-nearby-card">
-      <Link to={`/property/${property.id}`}>
+      <Link to={`/property/${property.id}`} aria-label={accessibleLabel}>
         <span className="property-nearby-card__image">
           {image ? (
             <ImageWithFallback
               src={image}
-              alt={title}
+              alt=""
               loading="lazy"
               fetchPriority="low"
             />
@@ -610,14 +300,14 @@ function NearbyHomeCard({
             <span>{property.society_name || property.title}</span>
           )}
         </span>
-        <strong>{title}</strong>
-        <span>{note}</span>
         <em>
-          {formatListingPrice(property)}
-          {formatGoogleRating(property.google_rating)
-            ? ` · ★ ${formatGoogleRating(property.google_rating)}`
+          {price}
+          {rating
+            ? ` · ★ ${rating}`
             : ""}
         </em>
+        <strong>{title}</strong>
+        <span>{note}</span>
       </Link>
     </article>
   );
@@ -630,39 +320,16 @@ function NearbyHomesRail({
   items: RankedRecommendationItem[];
   status: RecommendationStatus;
 }) {
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(4);
-
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 760px)");
-    const syncPageSize = () => setPageSize(media.matches ? 1 : 4);
-    syncPageSize();
-    media.addEventListener("change", syncPageSize);
-    return () => media.removeEventListener("change", syncPageSize);
-  }, []);
-
-  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
-  const safePage = Math.min(page, pageCount - 1);
-  const visibleItems = items.slice(
-    safePage * pageSize,
-    safePage * pageSize + pageSize,
-  );
-
   if (items.length === 0 && status !== "pending") return null;
 
   return (
     <section
+      id="more-homes"
       className="property-nearby-rail"
       aria-labelledby="property-nearby-title"
     >
       <div className="property-section-line">
-        <h2 id="property-nearby-title">More homes nearby</h2>
-        <RailPageControls
-          page={safePage}
-          pageCount={items.length > pageSize ? pageCount : 1}
-          onPageChange={setPage}
-          label="More homes pages"
-        />
+        <h2 id="property-nearby-title">More homes to compare</h2>
       </div>
       <div className="property-nearby-rail__scroller">
         {status === "pending" && items.length === 0 && (
@@ -670,41 +337,20 @@ function NearbyHomesRail({
             <span className="property-nearby-skeleton" />
             <span className="property-nearby-skeleton" />
             <span className="property-nearby-skeleton" />
+            <span className="property-nearby-skeleton" />
           </>
         )}
-        {visibleItems.map((item, index) => (
+        {items.map((item, index) => (
           <NearbyHomeCard key={item.id} item={item} sceneIndex={index} />
         ))}
       </div>
+      <Link
+        className="property-nearby-rail__all"
+        to="/"
+      >
+        Explore all homes
+      </Link>
     </section>
-  );
-}
-
-function MicroMarketTracker({
-  currentArea,
-  properties,
-  areas,
-  onSelectArea,
-}: {
-  currentArea: string;
-  properties: PropertyCard[];
-  areas: string[];
-  onSelectArea: (area: string) => void;
-}) {
-  if (areas.length === 0) return null;
-
-  return (
-    <AreaTrackerSection
-      id="property-micro-markets"
-      className="property-micro-market"
-      properties={properties}
-      areaTracker={null}
-      preferredAreas={areas}
-      highlightArea={currentArea}
-      onSearch={onSelectArea}
-      heading="Nearby markets"
-      maxMarkets={areas.length}
-    />
   );
 }
 
@@ -775,7 +421,8 @@ function PropertyPageBody({
   id: string;
   focusParam: string | null;
 }) {
-  const navigate = useNavigate();
+  const { compareIds } = useNotebook();
+  const [storyPlaying, setStoryPlaying] = useState(true);
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
   const [recommendations, setRecommendations] =
     useState<RecommendationResponse | null>(null);
@@ -866,72 +513,24 @@ function PropertyPageBody({
 
   if (status === "loading")
     return (
-      <div className="page-container-wide">
-        {/* Hero placeholder */}
-        <div
-          className="skeleton-bar"
-          style={{
-            width: "100%",
-            height: "320px",
-            borderRadius: "var(--radius-md)",
-            marginBottom: "1.5rem",
-          }}
-        />
-        {/* Title bar */}
-        <div
-          className="skeleton-bar"
-          style={{ width: "60%", height: "28px", marginBottom: "0.5rem" }}
-        />
-        {/* Subtitle */}
-        <div
-          className="skeleton-bar"
-          style={{ width: "40%", height: "16px", marginBottom: "1rem" }}
-        />
-        {/* Price bar */}
-        <div
-          className="skeleton-bar"
-          style={{ width: "25%", height: "24px", marginBottom: "0.75rem" }}
-        />
-        {/* Tags row */}
-        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "2rem" }}>
-          <div
-            className="skeleton-bar"
-            style={{ width: "60px", height: "24px", borderRadius: "999px" }}
-          />
-          <div
-            className="skeleton-bar"
-            style={{ width: "80px", height: "24px", borderRadius: "999px" }}
-          />
-          <div
-            className="skeleton-bar"
-            style={{ width: "70px", height: "24px", borderRadius: "999px" }}
-          />
-          <div
-            className="skeleton-bar"
-            style={{ width: "90px", height: "24px", borderRadius: "999px" }}
-          />
-        </div>
-        {/* Two-column layout */}
-        <div className="property-layout">
-          <div className="property-main">
-            <div className="skeleton-detail-section skeleton-bar" />
-            <div className="skeleton-detail-section skeleton-bar" />
-            <div
-              className="skeleton-detail-section skeleton-bar"
-              style={{ height: "140px" }}
-            />
+      <div
+        className="property-story-page property-story-loading"
+        aria-label="Loading property"
+        aria-busy="true"
+      >
+        <section className="property-scene">
+          <div className="property-story-loading__identity">
+            <div>
+              <div className="skeleton-bar property-story-loading__location" />
+              <div className="skeleton-bar property-story-loading__title" />
+            </div>
+            <div className="property-story-loading__summary">
+              <div className="skeleton-bar property-story-loading__facts" />
+              <div className="skeleton-bar property-story-loading__actions" />
+            </div>
           </div>
-          <div className="property-sidebar">
-            <div
-              className="skeleton-detail-section skeleton-bar"
-              style={{ height: "120px" }}
-            />
-            <div
-              className="skeleton-detail-section skeleton-bar"
-              style={{ height: "160px" }}
-            />
-          </div>
-        </div>
+          <div className="skeleton-bar property-story-loading__media" />
+        </section>
       </div>
     );
   if (status === "not_found")
@@ -965,25 +564,11 @@ function PropertyPageBody({
   ]
     .filter(Boolean)
     .join(". ");
-  const detailEvidenceSections = data.evidence?.sections ?? [];
-  const showApproachTrail = hasApproachRoadTrail(detailEvidenceSections);
   const aroundThisHomeContext = propertyMapContextFromSurfaceScene(
     aroundThisHomeScene,
     data.map_context,
   );
   const showNearbyPlate = hasAroundThisHomePlate(aroundThisHomeContext);
-  const showHomeStateChip = Boolean(
-    data.home_state_display &&
-    !isRedundantHomeState(
-      data.home_state_display,
-      data.project_status_display,
-      p.possession_status,
-    ),
-  );
-  const lifecycleTag =
-    showHomeStateChip && data.home_state_display
-      ? compactLifecycleLabel(data.home_state_display)
-      : null;
   const recommendationBranches =
     recommendations?.items ?? data.recommendation_branches ?? [];
   const recommendationItems = rankedRecommendationItems(
@@ -1001,40 +586,38 @@ function PropertyPageBody({
     marketPropertyMap.set(property.id, property);
   }
   const marketProperties = [...marketPropertyMap.values()];
-  const microAreas = microMarketAreas(
-    p.area,
-    p.price_per_sqft,
-    marketProperties,
-    recommendationItems,
+  const displayTitle = p.title.trim();
+  const story = projectPropertyStory(data);
+  const savedIds = readShortlistIds();
+  const requestedCompareIds = compareIds.length > 0 ? compareIds : savedIds;
+  const availableCompareIds = compareIds.length > 0
+    ? requestedCompareIds
+        .filter((propertyId) => marketPropertyMap.has(propertyId))
+        .slice(0, 4)
+    : distinctSocietyIds(requestedCompareIds, marketPropertyMap);
+  const selectedCompareIds = [
+    p.id,
+    ...availableCompareIds.filter((propertyId) => propertyId !== p.id),
+  ].slice(0, 4);
+  const savedComparisons = savedComparisonHomes(
+    selectedCompareIds,
+    marketPropertyMap,
+    p.id,
   );
-  const nearbyItems = nearbyRailItems(
+  const savedCompareHref = workspaceCompareHref(
+    selectedCompareIds,
+    p.id,
+  );
+  const comparisonIds = new Set(savedComparisons.map((home) => home.id));
+  const moreNearbyItems = recommendationShelfItems(
     recommendationItems,
     marketProperties,
     currentCard,
-    microAreas,
+    comparisonIds,
   );
-  const googleRating = formatGoogleRating(data.external_reviews?.google_rating);
-  const googleRatingTone = ratingTone(data.external_reviews?.google_rating);
-  const compactStatusRead = (
-    lifecycleTag ||
-    data.home_state_display ||
-    data.project_status_display ||
-    p.possession_status
-  )
-    ?.split("·")[0]
-    ?.trim();
-  const reviewsSections = reviewEvidenceSections(detailEvidenceSections);
-  const displayTitle = p.title.trim();
-  const reraReport = data.rera_report_ref.availability === "unavailable"
-    ? undefined
-    : data.rera_report_ref;
-
-  function handleAreaSelect(area: string) {
-    navigate(`/?q=${encodeURIComponent(area)}`);
-  }
 
   return (
-    <div className="page-container-wide property-decision-page">
+    <div className="property-decision-page property-story-page">
       <Helmet>
         <title>{pageTitle}</title>
         <meta name="description" content={pageDescription} />
@@ -1047,106 +630,79 @@ function PropertyPageBody({
           {JSON.stringify(buildPropertyJsonLd(p))}
         </script>
       </Helmet>
-      <section className="property-clean-head">
-        <div className="property-clean-head__copy">
-          <p>
-            {p.area}, {p.city}
-          </p>
-          <h1>{displayTitle}</h1>
-        </div>
-        <div className="property-clean-actions" aria-label="Property actions">
-          <SaveHeartButton
-            propertyId={p.id}
-            className="property-action-link property-action-save"
-            label="Save"
-          />
-          <NotebookCommentAnchor
-            propertyId={p.id}
-            labels={[]}
-            detail={displayTitle}
-            source="Property detail"
-            className="property-action-note"
-          />
-        </div>
-      </section>
-
-      <div className="property-clean-facts" aria-label="Home summary">
-        <div className="property-clean-meta">
-          <span>{formatListingPrice(p)}</span>
-          <span>{p.bhk} BHK</span>
-          {sizeLabel && <span>{sizeLabel}</span>}
-          {compactStatusRead && <span>{compactStatusRead}</span>}
-          {googleRating && (
-            <span
-              className={`property-rating-pill property-rating-pill--${googleRatingTone ?? "good"}`}
-            >
-              <span aria-hidden="true">★</span> {googleRating} Google
-            </span>
+      <div className="property-scene property-scene--identity-only">
+        <PropertySceneIdentity
+          story={story}
+          showFacts={false}
+          actions={(
+            <>
+              <SaveHeartButton
+                propertyId={p.id}
+                className="property-action-link property-action-save"
+                label="Save"
+              />
+              <NotebookCommentAnchor
+                propertyId={p.id}
+                labels={[]}
+                detail={displayTitle}
+                source="Property detail"
+                label="Note"
+              />
+            </>
           )}
-        </div>
-        <InlinePriceRangeSignal
-          area={p.area}
-          pricePerSqft={p.price_per_sqft}
-          properties={marketProperties}
         />
       </div>
-
-      <PropertyPhotoMosaic
-        title={displayTitle}
-        societyName={society?.name}
-        heroImage={p.hero_image}
-        images={p.images}
+      <PropertySceneFacts story={story} pageScoped />
+      <PropertySceneCard
+        sectionId="property-cinema"
+        story={story}
+        showIdentity={false}
+        playback={{
+          playing: storyPlaying,
+          onPlayingChange: setStoryPlaying,
+        }}
       />
 
       <main className="property-clean-flow">
-        <section className="property-map-section" aria-label="Around this home">
-          {showNearbyPlate && aroundThisHomeContext && (
+        {showNearbyPlate && aroundThisHomeContext && (
+          <section
+            id="around-this-home"
+            className="property-map-section"
+            aria-label="Around this home"
+          >
             <AroundThisHomePlate
               propertyId={id}
               context={aroundThisHomeContext}
             />
-          )}
-        </section>
-
-        {(showApproachTrail || reraReport) && (
-          <section className="property-popup-row" aria-label="Home details">
-            {showApproachTrail && (
-              <ApproachRoadTrail
-                propertyId={id}
-                sections={detailEvidenceSections}
-                variant="compact"
-              />
-            )}
-            {reraReport && (
-              <Link className="property-popup-action" to={reraReport.href}>
-                <span><strong>RERA report</strong></span>
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  aria-hidden="true"
-                >
-                  <path d="m9 18 6-6-6-6" />
-                </svg>
-              </Link>
-            )}
           </section>
         )}
 
-        <PropertySignalPills signals={data.detail_signals} />
+        <PropertyArrivalFilm
+          propertyId={p.id}
+          title={story.identity.title}
+          frames={story.arrival.frames}
+          playback={{
+            playing: storyPlaying,
+            onPlayingChange: setStoryPlaying,
+          }}
+        />
 
-        <GoogleReviewsSection data={data} reviewSections={reviewsSections} />
+        <PropertyReviewsDeck
+          model={story.reviews}
+          reviews={data.external_reviews}
+          signals={data.detail_signals}
+        />
 
-        <NearbyHomesRail items={nearbyItems} status={recommendationStatus} />
+        <PropertyReraTeaser cards={story.recordCards} />
 
-        <MicroMarketTracker
-          currentArea={p.area}
-          properties={marketProperties}
-          areas={microAreas}
-          onSelectArea={handleAreaSelect}
+        <PropertyShortCompare
+          homes={savedComparisons}
+          compareHref={savedCompareHref}
+        />
+
+        <NearbyHomesRail
+          items={moreNearbyItems}
+          status={recommendationStatus}
         />
       </main>
 

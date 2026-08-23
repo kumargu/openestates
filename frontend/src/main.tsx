@@ -25,6 +25,7 @@ const PropertyPage = lazy(() => import("./pages/PropertyPage.tsx").then(m => ({ 
 const HomePlanPage = lazy(() => import("./pages/HomePlanPage.tsx").then(m => ({ default: m.HomePlanPage })));
 const ReraReportPage = lazy(() => import("./pages/ReraReportPage.tsx").then(m => ({ default: m.ReraReportPage })));
 const WorkspacePage = lazy(() => import("./pages/WorkspacePage.tsx").then(m => ({ default: m.WorkspacePage })));
+const PropertyStoryLabPage = lazy(() => import("./pages/PropertyStoryLabPage.tsx").then(m => ({ default: m.PropertyStoryLabPage })));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.tsx").then(m => ({ default: m.NotFoundPage })));
 
 /** Scroll to top and move focus to main content on route change */
@@ -107,6 +108,12 @@ export function App() {
                   <Route path="/workspace/compare" element={<WorkspacePage />} />
                   <Route path="/workspace/buy-vs-rent" element={<HomePlanPage />} />
                   <Route path="/workspace/buy-vs-rent/:id" element={<HomePlanPage />} />
+                  {import.meta.env.DEV && (
+                    <>
+                      <Route path="/dev/story-lab" element={<PropertyStoryLabPage />} />
+                      <Route path="/_internal/property-story" element={<PropertyStoryLabPage />} />
+                    </>
+                  )}
                   <Route path="/notebook" element={<LegacyWorkspaceRedirect mode="notes" />} />
                   <Route path="/compare" element={<LegacyWorkspaceRedirect mode="compare" />} />
                   <Route path="*" element={<NotFoundPage />} />

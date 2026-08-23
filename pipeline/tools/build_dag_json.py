@@ -321,7 +321,7 @@ def build_ui_surfaces(facts: List[Dict[str, Any]]) -> Dict[str, Any]:
             "kicker": "Access proof",
             "leaf_keys": leaf_keys_for_surface("approach_road", facts),
             "traversal": ["property → in_society → society → served_by_road → road_segment"],
-            "components": ["ApproachRoadTrail", "livability_brief:risk", "search_chip:approach_road"],
+            "components": ["PropertyArrivalFilm", "livability_brief:risk", "search_chip:approach_road"],
             "primary_entity": "road_segment",
         },
         {

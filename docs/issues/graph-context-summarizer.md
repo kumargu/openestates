@@ -172,7 +172,7 @@ Or add `--force canonical_road_nodes,approach_road_graph_facts,kg_society_view,s
 ### Step 5: UI cleanup
 
 1. Livability brief = **only** `summary_paragraph` when present (remove block/chip fallback for enriched societies)
-2. Show graph context even when `ApproachRoadTrail` is visible (or merge into one section)
+2. Show graph context alongside `PropertyArrivalFilm` without duplicating the arrival evidence
 3. Smoke: `curl /api/properties/discovered-prestige-waterford-3bhk` → `livability_brief.summary_paragraph` contains `ECC Road` and `Deens`
 
 **Files:** `PropertyPage.tsx`, `LivabilityBriefCard.tsx`, `tests/smoke_test.sh`

@@ -1,10 +1,69 @@
 # Property detail — next pass
 
-**Status:** mocks only. Live `/property/:id` is unchanged.
-**Date:** 2026-08-17
+**Status:** M0–M7 implemented and locally verified on `agent/property-detail-next-pass`; promotion pending review.
+**Updated:** 2026-08-23
 **Companion:** canvas `property-detail-mocks.canvas.tsx`
 
 Search already presents a journey instead of a dump. Detail should feel the same: one home, a walkable set of photos, then context — not a listings page that throws media and facts at the buyer.
+
+## M0–M2 learnings
+
+- Treat the public property-story reference as the visual contract: full-bleed sequence, compact dark navigation, stationary facts, and no workspace sidebar on the story route.
+- The Story Lab must render the same projection and production component as `/property/:id`. Add a deck to the Lab only when its production component is genuinely auditable there.
+- Projection owns deterministic ordering, sparse compaction, fact deduplication, and buyer-safe formatting. Presentation must not repair or reinterpret data.
+- Unknown image provenance stays unlabelled. Never infer current-site or proposed-render state from a URL.
+- Motion timing has one owner. Autoplay, cross-fade cleanup, CSS animation duration, and speed controls all use the same registry values.
+- Failed media must disappear from both the hero sequence and gallery handoff; an enabled action that opens nothing is a product bug.
+- Sparse media should compact to identity typography rather than reserve a cinematic empty slab.
+- Mobile story controls need 44 px touch targets even when the visual control remains compact.
+- Story and dossier modes share the projection and component tree. Dossier mode pauses decorative motion instead of creating a second detail page.
+- Preserve existing property subroutes and workspace tools. Only the cinematic property detail and internal Lab bypass workspace sidebar chrome.
+
+## M3–M4 learnings
+
+- Preserve the map as a product surface. Story framing can change its position and surrounding rhythm, but not its filters, proof focus, notes, zoom, metrics, or MapLibre implementation.
+- Arrival projection must select `approach_road` evidence explicitly. Flattening every evidence strip into a film silently turns unrelated media into a buyer claim.
+- Street View remains linked evidence: render the runtime image, keep the source action, and never copy it into owned story assets.
+- Below-fold cinema needs the same pause contract as the hero. Pausing only the timer while CSS motion continues still wastes work offscreen.
+- Google review cards come only from `external_reviews`. Community-pulse prose is not a substitute for a canonical review card.
+- An unresolved review match may stay as a compact source handoff; missing reviews omit the deck.
+- The property-page RERA teaser uses detail-payload registration and document facts. It does not fetch, summarize, or duplicate the dedicated report.
+- Short Compare is the current home plus two distinct peers, or it is omitted. The full Compare link is projected with the same IDs and current-home focus.
+- If one comparison home lacks media, remove the media row from all three cards. A uniform compact comparison is better than large empty image slabs.
+
+## M5 learnings
+
+- The reference rail works because it is chapter progress, not a second navigation system: one active label, quiet dots, native buttons, and no content sidebar.
+- Derive chapters only from decks that actually render. Sparse properties should not advertise destinations with no evidence, and a two-chapter page does not need a desktop rail.
+- Chapter targets belong on the production sections themselves. The rail and mobile progress use those stable anchors without changing the URL or rebuilding page content.
+- Mobile progress should stay compact, clear the safe area, and preserve normal document scrolling. Native previous/next buttons provide touch and keyboard behavior without a swipe or scroll-trap abstraction.
+- Story and Full Detail remain one projection and one component tree. The mode switch only changes motion and orientation chrome.
+- Decision actions are a final chapter over existing Save, Notebook, Compare, and RERA contracts. Reuse those contracts rather than introducing story-only state.
+
+## M6 learnings
+
+- Theme variation must be reachable through normal property media, not only role-rich Story Lab inputs. Production 5–7 frame galleries use the same stable four-theme pool.
+- Media profile narrows or orders the candidate themes; the property ID hash only breaks the tie. Proposed-majority stories stay on architectural drift, single-image stories stay still, and reduced motion stays reduced.
+- Atmosphere belongs in CSS tokens on the existing motion classes. Vignette tone, stage fallback, grain, and title shadow may vary; facts, controls, deck order, and component structure may not.
+- Theme tints must remain restrained and contrast-led. Warm, mineral, deep, and editorial treatments should be related expressions of one product, not per-property art direction.
+- Reduced motion should not offer a play control that cannot play. Keep previous/next and gallery access, remove misleading autoplay controls, and render a complete still frame.
+- Test the production projection path explicitly. A fixture test that injects richer roles can prove determinism while still missing a production integration gap.
+
+## M7 verification and learnings
+
+- The automated Story Lab matrix now covers 810 deterministic combinations across three properties, rich/partial/sparse coverage, lifecycle, reviews, RERA, media count, and provenance. Every projection keeps bounded media and unique primary fact keys.
+- Optimized local profile for the Birla Tisya story: FCP/LCP 468 ms, CLS 0.0488, no long tasks, and no frame above 20 ms during a three-second 120 Hz sample.
+- Across two autoplay transitions, the rendered scene returned to one active layer with no retained previous layer; measured heap changed from 28.1 MB to 28.2 MB.
+- Mobile full-bleed width must override the reusable padded-card offset. Otherwise facts and gallery controls extend 16 px beyond the viewport.
+- Mobile chapter progress should stay hidden over the hero, where chapter count and media controls already provide orientation. It appears after the buyer enters the evidence chapters.
+- `PropertyArrivalFilm` now owns the `approach_road` UI surface. The superseded `ApproachRoadTrail`, its CSS, stale component registry entry, and orphan mosaic CSS were removed.
+- The cleanup reduced the main minified stylesheet from about 227.2 KB to 219.8 KB (41.4 KB to 40.2 KB gzip).
+
+Known follow-ups:
+
+- The existing Around This Home map chunk remains about 1.07 MB and deserves a separate route/deck loading pass.
+- ESLint still reports the pre-existing `viewport.center` dependency warning in `AroundThisHomeMap.tsx`.
+- No runtime feature flag was added because this repository has no frontend flag control plane and an ad hoc environment flag would create parallel behavior. The feature branch is the rollout boundary; promotion remains a PR/review decision.
 
 ## What is already good
 
