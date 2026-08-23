@@ -133,11 +133,18 @@ export function WorkspaceSidebar({
   const [showAllHomes, setShowAllHomes] = useState(false);
   const { notes } = useNotebook();
   const noteCount = notes.length;
-  const previewHomes = homes.slice(0, 4);
-  if (focusedHome && !previewHomes.some((home) => home.id === focusedHome.id)) {
+  const shortlistHomes = mode === "property-context"
+    ? homes.filter((home) => home.id !== focusedId)
+    : homes;
+  const previewHomes = shortlistHomes.slice(0, 4);
+  if (
+    mode !== "property-context"
+    && focusedHome
+    && !previewHomes.some((home) => home.id === focusedHome.id)
+  ) {
     previewHomes[previewHomes.length - 1] = focusedHome;
   }
-  const visibleHomes = showAllHomes ? homes : previewHomes;
+  const visibleHomes = showAllHomes ? shortlistHomes : previewHomes;
 
   return (
     <aside
@@ -200,14 +207,20 @@ export function WorkspaceSidebar({
           aria-labelledby="workspace-shortlist-title"
         >
           <div className="workspace-sidebar__shortlist-head">
-            <h2 id="workspace-shortlist-title">Shortlist</h2>
-            <span>{homes.length}</span>
+            <h2 id="workspace-shortlist-title">
+              {mode === "property-context" ? "Other saved homes" : "Shortlist"}
+            </h2>
+            <span>{shortlistHomes.length}</span>
           </div>
           <div className="workspace-sidebar__shortlist-list">
             {visibleHomes.length === 0 && (
               <div className="workspace-sidebar__empty">
-                <strong>Your shortlist is empty</strong>
-                <p>Save homes you want to investigate or compare.</p>
+                <strong>
+                  {mode === "property-context"
+                    ? "No other saved homes"
+                    : "Your shortlist is empty"}
+                </strong>
+                <p>Save another home to compare.</p>
               </div>
             )}
             {visibleHomes.map((home) => {
@@ -244,7 +257,7 @@ export function WorkspaceSidebar({
               );
             })}
           </div>
-          {homes.length > previewHomes.length && (
+          {shortlistHomes.length > previewHomes.length && (
             <button
               type="button"
               className="workspace-sidebar__shortlist-toggle"

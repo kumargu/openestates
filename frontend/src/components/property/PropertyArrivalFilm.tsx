@@ -84,6 +84,7 @@ export function PropertyArrivalFilm({
         frames={filmstripFrames}
         motionSeed={stableStoryHash(`${propertyId}:arrival`)}
         playback={playback}
+          showPlaybackControl
         onUsableFramesChange={syncAvailability}
       />
     </section>

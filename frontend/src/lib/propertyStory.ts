@@ -473,6 +473,37 @@ function projectRecordCards(
   return cards;
 }
 
+export function projectStoryComparison(
+  property: PropertyCard,
+  currentPropertyId?: string,
+): StoryComparison {
+  return {
+    id: property.id,
+    title: property.society_name.trim() || property.title,
+    area: property.area,
+    bhk: hasKnownNumber(property.bhk) ? property.bhk : undefined,
+    price: hasKnownNumber(property.price) ? property.price : undefined,
+    sizeLabel: hasKnownNumber(property.carpet_area_sqft)
+      ? `${property.carpet_area_sqft.toLocaleString("en-IN")} sqft carpet`
+      : hasKnownNumber(property.super_builtup_sqft)
+        ? `${property.super_builtup_sqft.toLocaleString("en-IN")} sqft super built-up`
+        : hasKnownNumber(property.sqft)
+          ? `${property.sqft.toLocaleString("en-IN")} sqft`
+          : undefined,
+    status:
+      property.home_state_display
+      || property.project_status_display
+      || property.possession_status
+      || undefined,
+    societyName: property.society_name.trim() || undefined,
+    heroImage: property.hero_image || property.images?.[0] || undefined,
+    googleRating: hasKnownNumber(property.google_rating)
+      ? property.google_rating
+      : undefined,
+    isCurrent: property.id === currentPropertyId,
+  };
+}
+
 function projectComparisons(
   data: PropertyDetailResponse,
   comparisonProperties: PropertyCard[] = [],
@@ -518,31 +549,7 @@ function projectComparisons(
     if (usedSocieties.has(societyKey)) continue;
     usedIds.add(property.id);
     usedSocieties.add(societyKey);
-    homes.push({
-      id: property.id,
-      title: property.society_name.trim() || property.title,
-      area: property.area,
-      bhk: hasKnownNumber(property.bhk) ? property.bhk : undefined,
-      price: hasKnownNumber(property.price) ? property.price : undefined,
-      sizeLabel: hasKnownNumber(property.carpet_area_sqft)
-        ? `${property.carpet_area_sqft.toLocaleString("en-IN")} sqft carpet`
-        : hasKnownNumber(property.super_builtup_sqft)
-          ? `${property.super_builtup_sqft.toLocaleString("en-IN")} sqft super built-up`
-          : hasKnownNumber(property.sqft)
-            ? `${property.sqft.toLocaleString("en-IN")} sqft`
-            : undefined,
-      status:
-        property.home_state_display
-        || property.project_status_display
-        || property.possession_status
-        || undefined,
-      societyName: property.society_name.trim() || undefined,
-      heroImage: property.hero_image || property.images?.[0] || undefined,
-      googleRating: hasKnownNumber(property.google_rating)
-        ? property.google_rating
-        : undefined,
-      isCurrent: false,
-    });
+    homes.push(projectStoryComparison(property, current.id));
     if (homes.length === 3) break;
   }
   if (homes.length !== 3) return { homes: [] };

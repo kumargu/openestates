@@ -114,6 +114,7 @@ export function PropertyStoryLabPage() {
         labels={[]}
         detail={story.identity.title}
         source="Property Story Lab"
+        label="Note"
       />
     </>
   );

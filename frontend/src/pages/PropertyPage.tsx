@@ -25,18 +25,26 @@ import { RailPageControls } from "../components/RailPageControls.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
+import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
+import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
+import { useNotebook } from "../hooks/useNotebook.ts";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
 import { PropertyReraTeaser } from "../components/property/PropertyReraTeaser.tsx";
 import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import { PropertyShortCompare } from "../components/property/PropertyShortCompare.tsx";
-import { PropertyStoryTopbar } from "../components/property/PropertyStoryTopbar.tsx";
 import { propertySceneImageAt } from "../lib/propertyScene.ts";
-import { projectPropertyStory } from "../lib/propertyStory.ts";
+import {
+  projectPropertyStory,
+  projectStoryComparison,
+  type StoryComparison,
+} from "../lib/propertyStory.ts";
+import { readShortlistIds } from "../lib/compare.ts";
 import { formatGoogleRating } from "../lib/reviewFormatting.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
+import { workspaceCompareHref } from "../lib/workspaceNav.ts";
 
 function formatPrice(price: number): string {
   if (!hasKnownNumber(price)) return "Price unavailable";
@@ -73,6 +81,51 @@ function societyKey(
     property.kg_entity_refs?.society_entity_id ||
     property.society_name.trim().toLowerCase()
   );
+}
+
+function savedComparisonHomes(
+  requestedIds: string[],
+  propertiesById: Map<string, PropertyCard>,
+  currentPropertyId: string,
+): StoryComparison[] {
+  const orderedIds = requestedIds.includes(currentPropertyId)
+    ? [
+        currentPropertyId,
+        ...requestedIds.filter((propertyId) => propertyId !== currentPropertyId),
+      ]
+    : requestedIds;
+  const usedSocieties = new Set<string>();
+  const homes: StoryComparison[] = [];
+
+  for (const propertyId of orderedIds) {
+    const property = propertiesById.get(propertyId);
+    if (!property) continue;
+    const key = societyKey(property) || property.title.trim().toLocaleLowerCase();
+    if (usedSocieties.has(key)) continue;
+    usedSocieties.add(key);
+    homes.push(projectStoryComparison(property, currentPropertyId));
+    if (homes.length === 4) break;
+  }
+
+  return homes;
+}
+
+function distinctSocietyIds(
+  requestedIds: string[],
+  propertiesById: Map<string, PropertyCard>,
+): string[] {
+  const usedSocieties = new Set<string>();
+  const ids: string[] = [];
+  for (const propertyId of requestedIds) {
+    const property = propertiesById.get(propertyId);
+    if (!property) continue;
+    const key = societyKey(property) || property.title.trim().toLocaleLowerCase();
+    if (usedSocieties.has(key)) continue;
+    usedSocieties.add(key);
+    ids.push(propertyId);
+    if (ids.length === 4) break;
+  }
+  return ids;
 }
 
 function propertyToCard(data: PropertyDetailResponse): PropertyCard {
@@ -330,12 +383,12 @@ function NearbyHomesRail({
       aria-labelledby="property-nearby-title"
     >
       <div className="property-section-line">
-        <h2 id="property-nearby-title">More homes nearby</h2>
+        <h2 id="property-nearby-title">Other homes</h2>
         <RailPageControls
           page={safePage}
           pageCount={items.length > pageSize ? pageCount : 1}
           onPageChange={setPage}
-          label="More homes pages"
+          label="Other homes pages"
         />
       </div>
       <div className="property-nearby-rail__scroller">
@@ -376,7 +429,7 @@ function MicroMarketTracker({
       preferredAreas={areas}
       highlightArea={currentArea}
       onSearch={onSelectArea}
-      heading="Nearby markets"
+      heading="Other markets"
       maxMarkets={areas.length}
     />
   );
@@ -450,7 +503,8 @@ function PropertyPageBody({
   focusParam: string | null;
 }) {
   const navigate = useNavigate();
-  const [storyPlaying, setStoryPlaying] = useState(true);
+  const { compareIds } = useNotebook();
+  const [storyPlaying, setStoryPlaying] = useState(false);
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
   const [recommendations, setRecommendations] =
     useState<RecommendationResponse | null>(null);
@@ -541,72 +595,24 @@ function PropertyPageBody({
 
   if (status === "loading")
     return (
-      <div className="page-container-wide">
-        {/* Hero placeholder */}
-        <div
-          className="skeleton-bar"
-          style={{
-            width: "100%",
-            height: "320px",
-            borderRadius: "var(--radius-md)",
-            marginBottom: "1.5rem",
-          }}
-        />
-        {/* Title bar */}
-        <div
-          className="skeleton-bar"
-          style={{ width: "60%", height: "28px", marginBottom: "0.5rem" }}
-        />
-        {/* Subtitle */}
-        <div
-          className="skeleton-bar"
-          style={{ width: "40%", height: "16px", marginBottom: "1rem" }}
-        />
-        {/* Price bar */}
-        <div
-          className="skeleton-bar"
-          style={{ width: "25%", height: "24px", marginBottom: "0.75rem" }}
-        />
-        {/* Tags row */}
-        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "2rem" }}>
-          <div
-            className="skeleton-bar"
-            style={{ width: "60px", height: "24px", borderRadius: "999px" }}
-          />
-          <div
-            className="skeleton-bar"
-            style={{ width: "80px", height: "24px", borderRadius: "999px" }}
-          />
-          <div
-            className="skeleton-bar"
-            style={{ width: "70px", height: "24px", borderRadius: "999px" }}
-          />
-          <div
-            className="skeleton-bar"
-            style={{ width: "90px", height: "24px", borderRadius: "999px" }}
-          />
-        </div>
-        {/* Two-column layout */}
-        <div className="property-layout">
-          <div className="property-main">
-            <div className="skeleton-detail-section skeleton-bar" />
-            <div className="skeleton-detail-section skeleton-bar" />
-            <div
-              className="skeleton-detail-section skeleton-bar"
-              style={{ height: "140px" }}
-            />
+      <div
+        className="property-story-page property-story-loading"
+        aria-label="Loading property"
+        aria-busy="true"
+      >
+        <section className="property-scene">
+          <div className="property-story-loading__identity">
+            <div>
+              <div className="skeleton-bar property-story-loading__location" />
+              <div className="skeleton-bar property-story-loading__title" />
+            </div>
+            <div className="property-story-loading__summary">
+              <div className="skeleton-bar property-story-loading__facts" />
+              <div className="skeleton-bar property-story-loading__actions" />
+            </div>
           </div>
-          <div className="property-sidebar">
-            <div
-              className="skeleton-detail-section skeleton-bar"
-              style={{ height: "120px" }}
-            />
-            <div
-              className="skeleton-detail-section skeleton-bar"
-              style={{ height: "160px" }}
-            />
-          </div>
-        </div>
+          <div className="skeleton-bar property-story-loading__media" />
+        </section>
       </div>
     );
   if (status === "not_found")
@@ -675,12 +681,30 @@ function PropertyPageBody({
     microAreas,
   );
   const displayTitle = p.title.trim();
-  const story = projectPropertyStory(data, {
-    comparisonProperties: recommendationBranches.map(
-      (branch) => branch.property,
-    ),
-  });
-  const comparisonIds = new Set(story.comparisons.map((home) => home.id));
+  const story = projectPropertyStory(data);
+  const savedIds = readShortlistIds();
+  const requestedCompareIds = compareIds.length > 0 ? compareIds : savedIds;
+  const availableCompareIds = compareIds.length > 0
+    ? requestedCompareIds
+        .filter((propertyId) => marketPropertyMap.has(propertyId))
+        .slice(0, 4)
+    : distinctSocietyIds(requestedCompareIds, marketPropertyMap);
+  const selectedCompareIds = availableCompareIds.includes(p.id)
+    ? [
+        p.id,
+        ...availableCompareIds.filter((propertyId) => propertyId !== p.id),
+      ]
+    : availableCompareIds;
+  const savedComparisons = savedComparisonHomes(
+    selectedCompareIds,
+    marketPropertyMap,
+    p.id,
+  );
+  const savedCompareHref = workspaceCompareHref(
+    selectedCompareIds,
+    selectedCompareIds.includes(p.id) ? p.id : undefined,
+  );
+  const comparisonIds = new Set(savedComparisons.map((home) => home.id));
   const moreNearbyItems = nearbyItems.filter(
     (item) => !comparisonIds.has(item.property.id),
   );
@@ -702,18 +726,25 @@ function PropertyPageBody({
           {JSON.stringify(buildPropertyJsonLd(p))}
         </script>
       </Helmet>
-      <PropertyStoryTopbar
-        propertyId={p.id}
-        title={displayTitle}
-        canPlay={
-          story.media.frames.length > 1 || story.arrival.frames.length > 1
-        }
-        playing={storyPlaying}
-        onPlayingChange={setStoryPlaying}
-      />
       <PropertySceneCard
         sectionId="property-cinema"
         story={story}
+        actions={(
+          <>
+            <SaveHeartButton
+              propertyId={p.id}
+              className="property-action-link property-action-save"
+              label="Save"
+            />
+            <NotebookCommentAnchor
+              propertyId={p.id}
+              labels={[]}
+              detail={displayTitle}
+              source="Property detail"
+              label="Note"
+            />
+          </>
+        )}
         playback={{
           playing: storyPlaying,
           onPlayingChange: setStoryPlaying,
@@ -753,8 +784,8 @@ function PropertyPageBody({
         <PropertyReraTeaser cards={story.recordCards} />
 
         <PropertyShortCompare
-          homes={story.comparisons}
-          compareHref={story.compareHref}
+          homes={savedComparisons}
+          compareHref={savedCompareHref}
         />
 
         <NearbyHomesRail

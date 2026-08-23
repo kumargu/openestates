@@ -1,9 +1,5 @@
 import { Link } from "react-router-dom";
 import type { StoryComparison } from "../../lib/propertyStory.ts";
-import {
-  PropertyEvidenceCard,
-  type PropertyEvidenceFact,
-} from "./PropertyEvidenceCard.tsx";
 import "../../styles/property-fact-decks.css";
 
 type Props = {
@@ -36,10 +32,10 @@ const COMPARISON_DIMENSIONS: ComparisonDimension[] = [
 ];
 
 export function PropertyShortCompare({ homes, compareHref }: Props) {
-  if (homes.length !== 3 || !compareHref) return null;
-  const showMedia = homes.every((home) => Boolean(home.heroImage));
+  if (homes.length < 2 || homes.length > 4 || !compareHref) return null;
   const dimensions = COMPARISON_DIMENSIONS.filter((dimension) =>
     homes.every((home) => Boolean(dimension.value(home))));
+  if (dimensions.length === 0) return null;
 
   return (
     <section
@@ -49,37 +45,46 @@ export function PropertyShortCompare({ homes, compareHref }: Props) {
     >
       <header className="property-story-heading">
         <span>Compare</span>
-        <h2 id="property-short-compare-title">Three homes. Same facts.</h2>
+        <h2 id="property-short-compare-title">Saved homes. Same facts.</h2>
       </header>
 
-      <div className="property-evidence-grid property-evidence-grid--compare">
-        {homes.map((home) => {
-          const facts: PropertyEvidenceFact[] = dimensions.flatMap(
-            (dimension) => {
-              const value = dimension.value(home);
-              return value
-                ? [{
-                    key: dimension.key,
-                    label: dimension.label,
-                    value,
-                  }]
-                : [];
-            },
-          );
-          return (
-            <PropertyEvidenceCard
-              key={home.id}
-              to={`/property/${encodeURIComponent(home.id)}`}
-              eyebrow={home.area}
-              title={home.title}
-              facts={facts}
-              footer="View home"
-              imageUrl={showMedia ? home.heroImage : undefined}
-              imageAlt=""
-              current={home.isCurrent}
-            />
-          );
-        })}
+      <div className="property-short-compare__table-wrap">
+        <table className="property-short-compare__table">
+          <thead>
+            <tr>
+              <th scope="col">Fact</th>
+              {homes.map((home, index) => (
+                <th
+                  key={home.id}
+                  scope="col"
+                  className={home.isCurrent ? "is-current" : ""}
+                >
+                  <Link to={`/property/${encodeURIComponent(home.id)}`}>
+                    <i aria-hidden="true">{String(index + 1).padStart(2, "0")}</i>
+                    <strong>{home.title}</strong>
+                    <span>{home.area}</span>
+                    {home.isCurrent && <em>Current home</em>}
+                  </Link>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {dimensions.map((dimension) => (
+              <tr key={dimension.key}>
+                <th scope="row">{dimension.label}</th>
+                {homes.map((home) => (
+                  <td
+                    key={home.id}
+                    className={home.isCurrent ? "is-current" : ""}
+                  >
+                    {dimension.value(home)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <div className="property-short-compare__handoff">

@@ -49,6 +49,7 @@ type Props = {
   motionTheme?: StoryMotionTheme;
   playback?: StoryScenePlayback;
   priority?: boolean;
+  showPlaybackControl?: boolean;
   galleryLabel?: string;
   onOpenGallery?: (activeFrameId: string) => void;
   onUsableFramesChange?: (frameIds: string[]) => void;
@@ -81,6 +82,7 @@ export function PropertyFilmstrip({
   motionTheme,
   playback,
   priority = false,
+  showPlaybackControl = false,
   galleryLabel,
   onOpenGallery,
   onUsableFramesChange,
@@ -325,14 +327,18 @@ export function PropertyFilmstrip({
             </button>
           ))}
         </div>
+        <span className="property-filmstrip__count" aria-live="polite">
+          {String(safeActive + 1).padStart(2, "0")} /{" "}
+          {String(frames.length).padStart(2, "0")}
+        </span>
         {!reducedMotion
           && frames.length > 1
-          && playback?.playing === undefined
+          && showPlaybackControl
           && (
           <button
             type="button"
             aria-label={playing ? "Pause images" : "Play images"}
-            aria-pressed={!playing}
+            aria-pressed={playing}
             onClick={() => writePlaying(!playing)}
           >
             {playing ? "Pause" : "Play"}

@@ -1,5 +1,5 @@
+import { Link } from "react-router-dom";
 import type { StoryRecordCard } from "../../lib/propertyStory.ts";
-import { PropertyEvidenceCard } from "./PropertyEvidenceCard.tsx";
 import "../../styles/property-fact-decks.css";
 
 type Props = {
@@ -9,7 +9,22 @@ type Props = {
 export function PropertyReraTeaser({ cards }: Props) {
   const visibleCards = cards.filter((card) =>
     card.facts.some((fact) => Boolean(fact.value)));
-  if (visibleCards.length === 0) return null;
+  const registration = visibleCards
+    .flatMap((card) => card.facts)
+    .find((fact) => fact.key === "registration" && fact.value);
+  const documentFacts = visibleCards
+    .flatMap((card) => card.facts)
+    .filter((fact) => fact.key !== "registration" && fact.value)
+    .slice(0, 3);
+  const href = visibleCards[0]?.href;
+  if (!registration?.value || !href) return null;
+  const facts = [
+    { ...registration, label: "Registration" },
+    ...documentFacts.map((fact) => ({
+      ...fact,
+      label: fact.label.replace(/\s+available$/i, ""),
+    })),
+  ];
 
   return (
     <section
@@ -17,30 +32,22 @@ export function PropertyReraTeaser({ cards }: Props) {
       className="property-fact-deck property-rera-teaser"
       aria-labelledby="property-rera-teaser-title"
     >
-      <header className="property-story-heading">
-        <span>Official record</span>
-        <h2 id="property-rera-teaser-title">What is filed.</h2>
+      <header className="property-rera-teaser__intro">
+        <h2 id="property-rera-teaser-title">RERA record</h2>
       </header>
 
-      <div className="property-evidence-grid property-evidence-grid--record">
-        {visibleCards.map((card) => (
-          <PropertyEvidenceCard
-            key={card.id}
-            to={card.href}
-            eyebrow={card.label}
-            title={card.title}
-            facts={card.facts.flatMap((fact) =>
-              fact.value
-                ? [{
-                    key: fact.key,
-                    label: fact.label,
-                    value: fact.value,
-                  }]
-                : [])}
-            footer="View RERA report"
-          />
+      <dl className="property-rera-teaser__facts">
+        {facts.map((fact) => (
+          <div key={fact.key}>
+            <dt>{fact.label}</dt>
+            <dd>{fact.value}</dd>
+          </div>
         ))}
-      </div>
+      </dl>
+
+      <Link className="property-rera-teaser__open" to={href}>
+        Open report ↗
+      </Link>
     </section>
   );
 }

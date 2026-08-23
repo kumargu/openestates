@@ -8,6 +8,7 @@ type NotebookCommentAnchorProps = {
   labels: NotebookLabelId[];
   detail: string;
   source: string;
+  label?: string;
   className?: string;
 };
 
@@ -16,6 +17,7 @@ export function NotebookCommentAnchor({
   labels,
   detail,
   source,
+  label,
   className = "",
 }: NotebookCommentAnchorProps) {
   const { addHandwritten } = useNotebook();
@@ -68,6 +70,7 @@ export function NotebookCommentAnchor({
         }}
       >
         <NotebookSaveIcon size={16} />
+        {label && <span>{label}</span>}
       </button>
       {open && (
         <form

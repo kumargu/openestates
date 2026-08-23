@@ -100,20 +100,6 @@ export function PropertySceneCard({
       className={`property-scene${hasImages ? "" : " property-scene--empty"}`}
       aria-labelledby="property-scene-title"
     >
-      {hasImages && (
-        <PropertyFilmstrip
-          ariaLabel={`${story.identity.title} property views`}
-          frames={filmstripFrames}
-          motionSeed={story.motionSeed}
-          motionTheme={story.motionTheme}
-          playback={playback}
-          priority
-          galleryLabel={`All photos · ${usableGalleryUrls.length}`}
-          onOpenGallery={usableGalleryUrls.length > 0 ? openGallery : undefined}
-          onUsableFramesChange={syncUsableFrames}
-        />
-      )}
-
       <div className="property-scene__identity">
         <div className="property-scene__identity-copy">
           <p>{story.identity.location}</p>
@@ -130,6 +116,21 @@ export function PropertySceneCard({
           </div>
         )}
       </div>
+
+      {hasImages && (
+        <PropertyFilmstrip
+          ariaLabel={`${story.identity.title} property views`}
+          frames={filmstripFrames}
+          motionSeed={story.motionSeed}
+          motionTheme={story.motionTheme}
+          playback={playback}
+          priority
+          showPlaybackControl
+          galleryLabel={`All photos · ${usableGalleryUrls.length}`}
+          onOpenGallery={usableGalleryUrls.length > 0 ? openGallery : undefined}
+          onUsableFramesChange={syncUsableFrames}
+        />
+      )}
 
       {walkerIndex !== null && usableGalleryUrls.length > 0 && (
         <PropertyPhotoWalker
