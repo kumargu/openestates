@@ -127,6 +127,7 @@ export function PropertyArrivalFilm({
         playback={playback}
         presentation="stage"
         cinematicMotion={cinematicMotion}
+        cinematicPace="brisk"
         showPlaybackControl
         onUsableFramesChange={syncAvailability}
       />

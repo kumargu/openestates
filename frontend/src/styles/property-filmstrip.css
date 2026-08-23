@@ -352,19 +352,34 @@
   min-height: 32rem;
 }
 
-.property-filmstrip--cinematic {
+.property-filmstrip.property-filmstrip--cinematic {
   --filmstrip-motion-duration: 7.8s;
   --filmstrip-transition-duration: 1.45s;
 }
 
-.property-filmstrip--cinematic.story-speed--half {
+.property-filmstrip.property-filmstrip--cinematic.story-speed--half {
   --filmstrip-motion-duration: 15.6s;
   --filmstrip-transition-duration: 2.9s;
 }
 
-.property-filmstrip--cinematic.story-speed--double {
+.property-filmstrip.property-filmstrip--cinematic.story-speed--double {
   --filmstrip-motion-duration: 3.9s;
   --filmstrip-transition-duration: 725ms;
+}
+
+.property-filmstrip.property-filmstrip--cinematic-brisk {
+  --filmstrip-motion-duration: 6.4s;
+  --filmstrip-transition-duration: 1.2s;
+}
+
+.property-filmstrip.property-filmstrip--cinematic-brisk.story-speed--half {
+  --filmstrip-motion-duration: 12.8s;
+  --filmstrip-transition-duration: 2.4s;
+}
+
+.property-filmstrip.property-filmstrip--cinematic-brisk.story-speed--double {
+  --filmstrip-motion-duration: 3.2s;
+  --filmstrip-transition-duration: 600ms;
 }
 
 .property-filmstrip--stage .property-filmstrip__card {

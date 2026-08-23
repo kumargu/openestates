@@ -19,9 +19,13 @@ import {
 } from "../../lib/propertyStory.ts";
 import "../../styles/property-filmstrip.css";
 
-const CINEMATIC_STAGE_DURATION_MS = 7_800;
+const CINEMATIC_STAGE_DURATION_MS = {
+  standard: 7_800,
+  brisk: 6_400,
+} as const;
 
 export type StoryPlaybackSpeed = 0.5 | 1 | 2;
+export type StoryCinematicPace = keyof typeof CINEMATIC_STAGE_DURATION_MS;
 
 export type StoryScenePlayback = {
   activeIndex?: number;
@@ -55,6 +59,7 @@ type Props = {
   showPlaybackControl?: boolean;
   presentation?: "card" | "stage";
   cinematicMotion?: boolean;
+  cinematicPace?: StoryCinematicPace;
   galleryLabel?: string;
   onOpenGallery?: (activeFrameId: string) => void;
   onUsableFramesChange?: (frameIds: string[]) => void;
@@ -90,6 +95,7 @@ export function PropertyFilmstrip({
   showPlaybackControl = false,
   presentation = "card",
   cinematicMotion = false,
+  cinematicPace = "standard",
   galleryLabel,
   onOpenGallery,
   onUsableFramesChange,
@@ -150,7 +156,7 @@ export function PropertyFilmstrip({
   });
   const motion = STORY_MOTION_REGISTRY[selectedTheme];
   const sceneDurationMs = cinematicMotion
-    ? CINEMATIC_STAGE_DURATION_MS
+    ? CINEMATIC_STAGE_DURATION_MS[cinematicPace]
     : motion.durationMs;
   const durationMs = sceneDurationMs > 0
     ? Math.max(1_000, sceneDurationMs / speed)
@@ -288,6 +294,7 @@ export function PropertyFilmstrip({
         isReady ? " is-ready" : ""
       }${isReady ? " is-frame-ready" : ""}${
         cinematicMotion ? " property-filmstrip--cinematic" : ""
+      }${cinematicMotion ? ` property-filmstrip--cinematic-${cinematicPace}` : ""
       }${paused ? " is-paused" : ""}${
         presentation === "stage" ? " property-filmstrip--stage" : ""
       }`}
