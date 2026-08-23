@@ -98,12 +98,8 @@ pub(crate) fn classify_and_prune(
         }
     }
 
-    evaluate_property_requirements(
-        &projected_properties,
-        &property_runtime_ids,
-        config,
-        &mut groups,
-    )?;
+    let ineligible_property_ids =
+        evaluate_property_requirements(&projected_properties, config, &mut groups)?;
     evaluate_society_requirements(&facts, &edges, config, &mut groups);
     classify_missing_search_metadata(
         &facts,
@@ -111,6 +107,7 @@ pub(crate) fn classify_and_prune(
         &edges,
         &runtime_id_by_entity_id,
         &property_runtime_ids,
+        &ineligible_property_ids,
         &mut groups,
     );
 
@@ -120,10 +117,14 @@ pub(crate) fn classify_and_prune(
         .iter()
         .flat_map(|society| society.society_entity_ids.iter().cloned())
         .collect::<BTreeSet<_>>();
-    let removed_property_ids = quarantine
+    let quarantined_property_ids = quarantine
         .societies
         .iter()
         .flat_map(|society| society.property_entity_ids.iter().cloned())
+        .collect::<BTreeSet<_>>();
+    let removed_property_ids = quarantined_property_ids
+        .union(&ineligible_property_ids)
+        .cloned()
         .collect::<BTreeSet<_>>();
     let removed_entity_ids = entities_to_remove(
         &entities,
@@ -188,43 +189,63 @@ fn property_society_runtime_ids(
 
 fn evaluate_property_requirements(
     properties: &[crate::models::Property],
-    property_runtime_ids: &BTreeMap<String, BTreeSet<String>>,
     config: &ServingEligibilityFile,
     groups: &mut BTreeMap<String, SocietyGroup>,
-) -> Result<(), serde_json::Error> {
-    for group in groups.values_mut() {
-        let has_unprojected_property_entity = group.property_entity_ids.iter().any(|entity_id| {
-            let property_id = entity_id.strip_prefix("property:").unwrap_or(entity_id);
-            !group.projected_property_ids.contains(property_id)
-        });
-        if group.projected_property_ids.len() < config.minimum_projected_properties
-            || has_unprojected_property_entity
-        {
-            group
-                .reasons
-                .insert(config.missing_projection_reason_code.clone());
+) -> Result<BTreeSet<String>, serde_json::Error> {
+    let mut ineligible_property_ids = BTreeSet::new();
+    let mut failure_reasons = BTreeMap::<String, BTreeSet<String>>::new();
+    for property in properties {
+        let property_entity_id = format!("property:{}", property.id);
+        let projected = serde_json::to_value(property)?;
+        let reasons = config
+            .property_requirements
+            .iter()
+            .filter(|requirement| !projected_property_satisfies(&projected, requirement))
+            .map(|requirement| requirement.reason_code.clone())
+            .collect::<BTreeSet<_>>();
+        if !reasons.is_empty() {
+            ineligible_property_ids.insert(property_entity_id.clone());
+            failure_reasons.insert(property_entity_id, reasons);
         }
     }
 
-    for property in properties {
-        let property_entity_id = format!("property:{}", property.id);
-        let runtime_ids = property_runtime_ids
-            .get(&property_entity_id)
-            .cloned()
-            .unwrap_or_else(|| BTreeSet::from([property.society_id.clone()]));
-        let projected = serde_json::to_value(property)?;
-        for requirement in &config.property_requirements {
-            if projected_property_satisfies(&projected, requirement) {
-                continue;
-            }
-            for runtime_id in &runtime_ids {
-                if let Some(group) = groups.get_mut(runtime_id) {
-                    group.reasons.insert(requirement.reason_code.clone());
-                }
+    // Property entities that cannot become a buyer-safe card are pruned as
+    // individual inputs. They do not disqualify sibling cards in the society.
+    for group in groups.values() {
+        for entity_id in &group.property_entity_ids {
+            let property_id = entity_id.strip_prefix("property:").unwrap_or(entity_id);
+            if !group.projected_property_ids.contains(property_id) {
+                ineligible_property_ids.insert(entity_id.clone());
             }
         }
     }
-    Ok(())
+
+    for group in groups.values_mut() {
+        let eligible_projected_count = group
+            .projected_property_ids
+            .iter()
+            .filter(|property_id| {
+                !ineligible_property_ids.contains(&format!("property:{property_id}"))
+            })
+            .count();
+        if eligible_projected_count < config.minimum_projected_properties {
+            let property_reasons = group
+                .projected_property_ids
+                .iter()
+                .filter_map(|property_id| failure_reasons.get(&format!("property:{property_id}")))
+                .flatten()
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            if property_reasons.is_empty() {
+                group
+                    .reasons
+                    .insert(config.missing_projection_reason_code.clone());
+            } else {
+                group.reasons.extend(property_reasons);
+            }
+        }
+    }
+    Ok(ineligible_property_ids)
 }
 
 fn projected_property_satisfies(
@@ -348,6 +369,7 @@ fn classify_missing_search_metadata(
     edges: &[ServingEdgeRecord],
     runtime_id_by_entity_id: &BTreeMap<String, String>,
     property_runtime_ids: &BTreeMap<String, BTreeSet<String>>,
+    ineligible_property_ids: &BTreeSet<String>,
     groups: &mut BTreeMap<String, SocietyGroup>,
 ) {
     let linked_runtime_ids = edges.iter().fold(
@@ -373,6 +395,9 @@ fn classify_missing_search_metadata(
         .map(|metadata| (metadata.entity_id.as_str(), metadata.fact_key.as_str()))
         .collect::<BTreeSet<_>>();
     for fact in facts {
+        if ineligible_property_ids.contains(&fact.entity_id) {
+            continue;
+        }
         if metadata_pairs.contains(&(fact.entity_id.as_str(), fact.fact_key.as_str())) {
             continue;
         }
@@ -733,7 +758,7 @@ mod tests {
     }
 
     #[test]
-    fn one_incomplete_card_quarantines_the_whole_society() {
+    fn one_incomplete_card_is_pruned_without_hiding_image_backed_siblings() {
         let (mut entities, mut facts, _, mut edges) = two_society_records(true);
         entities.push(entity(
             "property:complete-3bhk",
@@ -774,19 +799,22 @@ mod tests {
             .expect("eligibility classification should succeed");
 
         assert!(result
-            .entities
-            .iter()
-            .all(|entity| entity.entity_id != "society:complete"
-                && !entity.entity_id.starts_with("property:complete-")));
-        let quarantined = result
             .quarantine
             .societies
             .iter()
-            .find(|society| society.runtime_society_id == "soc-complete")
-            .expect("complete society should be quarantined by its incomplete card");
-        assert!(quarantined
-            .reason_codes
-            .contains(&"missing_property_media".to_string()));
+            .all(|society| society.runtime_society_id != "soc-complete"));
+        assert!(result
+            .entities
+            .iter()
+            .any(|entity| entity.entity_id == "society:complete"));
+        assert!(result
+            .entities
+            .iter()
+            .any(|entity| entity.entity_id == "property:complete-2bhk"));
+        assert!(result
+            .entities
+            .iter()
+            .all(|entity| entity.entity_id != "property:complete-3bhk"));
     }
 
     #[test]
@@ -834,15 +862,14 @@ mod tests {
     }
 
     #[test]
-    fn launch_policy_admits_image_backed_discovery_with_optional_gaps() {
+    fn launch_policy_admits_image_backed_discovery_without_price_or_configuration() {
         let entities = vec![
             entity("society:promising", "society", "Promising"),
-            entity("property:promising-3bhk", "property", "Promising 3 BHK"),
+            entity("property:promising", "property", "Promising"),
         ];
         let facts = vec![
-            fact("property:promising-3bhk", "bhk", FactValue::Numeric(3.0)),
             fact(
-                "property:promising-3bhk",
+                "property:promising",
                 "hero_image",
                 FactValue::Text("/media/promising.webp".to_string()),
             ),
@@ -854,7 +881,7 @@ mod tests {
         ];
         let metadata = facts.iter().map(metadata).collect();
         let edges = vec![edge(
-            "property:promising-3bhk",
+            "property:promising",
             "in_society",
             "society:promising",
         )];
@@ -869,6 +896,6 @@ mod tests {
         assert!(result
             .entities
             .iter()
-            .any(|entity| entity.entity_id == "property:promising-3bhk"));
+            .any(|entity| entity.entity_id == "property:promising"));
     }
 }

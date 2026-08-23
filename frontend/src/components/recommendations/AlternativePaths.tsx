@@ -110,7 +110,11 @@ function RecommendationCard({
   const Icon = badge
     ? Object.values(LENS_META).find((meta) => meta.gainLabel === badge)?.icon
     : undefined;
-  const meta = [property.society_name, property.area, `${property.bhk} BHK`]
+  const meta = [
+    property.society_name,
+    property.area,
+    property.bhk > 0 ? `${property.bhk} BHK` : null,
+  ]
     .filter(Boolean)
     .join(" · ");
 
@@ -211,7 +215,9 @@ export function AlternativePaths({
             <RecommendationCard
               key={item.id}
               property={item.property}
-              note={`Same area · ${item.property.bhk} BHK`}
+              note={item.property.bhk > 0
+                ? `Same area · ${item.property.bhk} BHK`
+                : "Same area"}
               sceneIndex={sceneIndexes.get(item.id) ?? 0}
             />
           ),

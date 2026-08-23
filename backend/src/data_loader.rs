@@ -293,6 +293,9 @@ fn representative_properties_from_serving_societies(
 
 fn has_representative_property_signal(rows: &ServingEntityFactRows) -> bool {
     latest_bool(Some(rows), "source_scan_selected").unwrap_or(false)
+        || latest_text(Some(rows), "hero_image").is_some_and(|image| !image.trim().is_empty())
+        || latest_tags(Some(rows), "images")
+            .is_some_and(|images| images.iter().any(|image| !image.trim().is_empty()))
         || rows.facts.iter().any(|fact| {
             priced_bhk_from_fact(fact).is_some() || configured_bhks_from_fact(fact).next().is_some()
         })
@@ -312,7 +315,11 @@ fn representative_property_from_serving_society(
         .unwrap_or_else(|| title_case_slug(strip_entity_prefix(entity_id, "society:").as_str()));
     let society_id = society_runtime_id_from_parts(entity_id, &society_name);
     let society_slug = society_id.strip_prefix("soc-").unwrap_or(&society_id);
-    let id = format!("discovered-{society_slug}-{bhk}bhk");
+    let id = if bhk > 0 {
+        format!("discovered-{society_slug}-{bhk}bhk")
+    } else {
+        format!("discovered-{society_slug}")
+    };
     let area = resolve_serving_society_area(Some(rows), area_lookup, entity_id);
     let area_slug = slug(&area);
     let pricing = serving_market_pricing(rows, bhk);
@@ -347,7 +354,11 @@ fn representative_property_from_serving_society(
 
     Property {
         id,
-        title: format!("{bhk} BHK in {society_name}"),
+        title: if bhk > 0 {
+            format!("{bhk} BHK in {society_name}")
+        } else {
+            society_name.clone()
+        },
         area: area.clone(),
         area_id: format!("area-{area_slug}"),
         city: latest_text(Some(rows), "city").unwrap_or_else(|| "Bengaluru".to_string()),
@@ -825,7 +836,9 @@ fn serving_society_bhks(rows: &ServingEntityFactRows) -> Vec<u32> {
         priced_bhks
     };
     if bhks.is_empty() {
-        bhks.insert(3);
+        // Keep an image-backed society discoverable without inventing a home
+        // configuration. BHK-constrained search will reject this zero value.
+        bhks.insert(0);
     }
     bhks.into_iter().collect()
 }
@@ -2725,13 +2738,22 @@ mod tests {
             root_source: Some("discovered".to_string()),
             searchable_text: "3 BHK in Prestige Lakeside Habitat".to_string(),
         }];
+        let property_id = "property:discovered-prestige-lakeside-habitat-3bhk";
         let fact_index = ServingFactIndex::from_records(
-            vec![serving_fact(
-                "property:discovered-prestige-lakeside-habitat-3bhk",
-                "title",
-                FactValue::Text("3 BHK in Prestige Lakeside Habitat".to_string()),
-                0.8,
-            )],
+            vec![
+                serving_fact(
+                    property_id,
+                    "title",
+                    FactValue::Text("3 BHK in Prestige Lakeside Habitat".to_string()),
+                    0.8,
+                ),
+                serving_fact(
+                    property_id,
+                    "hero_image",
+                    FactValue::Text("/media/lakeside.webp".to_string()),
+                    0.8,
+                ),
+            ],
             Vec::new(),
         );
 
@@ -2739,5 +2761,34 @@ mod tests {
         assert_eq!(properties.len(), 1);
         assert_eq!(properties[0].bhk, 3);
         assert_eq!(properties[0].price, 0);
+    }
+
+    #[test]
+    fn image_backed_society_without_configuration_stays_unknown_instead_of_becoming_3bhk() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "society:promising-unknown-config".to_string(),
+            entity_type: "society".to_string(),
+            name: "Promising Unknown Config".to_string(),
+            root_source: Some("discovered".to_string()),
+            searchable_text: String::new(),
+        }];
+        let fact_index = ServingFactIndex::from_records(
+            vec![serving_fact(
+                "society:promising-unknown-config",
+                "hero_image",
+                FactValue::Text("/media/promising.webp".to_string()),
+                0.9,
+            )],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v3");
+
+        assert_eq!(properties.len(), 1);
+        assert_eq!(properties[0].id, "discovered-promising-unknown-config");
+        assert_eq!(properties[0].title, "Promising Unknown Config");
+        assert_eq!(properties[0].bhk, 0);
+        assert_eq!(properties[0].price, 0);
+        assert_eq!(properties[0].hero_image, "/media/promising.webp");
     }
 }

@@ -2545,7 +2545,11 @@ fn meaningful_fact_value(value: &FactValue) -> bool {
     match value {
         FactValue::Text(value) => !value.trim().is_empty(),
         FactValue::Tags(values) => values.iter().any(|value| !value.trim().is_empty()),
-        FactValue::Bool(_) | FactValue::Numeric(_) | FactValue::Score { .. } => true,
+        // Positive Boolean preferences are proven only by `true`. A `false`
+        // observation is still useful canonical evidence, but it must not be
+        // scored as support for claims such as "RERA registered".
+        FactValue::Bool(value) => *value,
+        FactValue::Numeric(_) | FactValue::Score { .. } => true,
     }
 }
 
@@ -4026,8 +4030,8 @@ mod tests {
             interest_level: None,
             saves_last_7d: None,
             offers_last_7d: None,
-            images: Vec::new(),
-            hero_image: String::new(),
+            images: vec![format!("/media/{id}.webp")],
+            hero_image: format!("/media/{id}.webp"),
             description_summary: "Local test listing".to_string(),
             transparency_tags: Vec::new(),
             source_reference: "unit-test".to_string(),
@@ -4656,6 +4660,176 @@ mod tests {
     }
 
     #[test]
+    fn adverse_or_claimed_legal_facts_do_not_prove_required_legal_safety() {
+        let properties = vec![local_property(
+            "legally-uncertain-home",
+            "Whitefield",
+            "legally-uncertain-home",
+            3,
+            0,
+            8,
+            0.2,
+        )];
+        let society_names = local_society_names(&properties);
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "legally-uncertain-home",
+                    "legal.litigation",
+                    FactValue::Text("ongoing court case".to_string()),
+                    "RedditTheme",
+                    0.9,
+                ),
+                serving_fact(
+                    "legally-uncertain-home",
+                    "legal.title_clear",
+                    FactValue::Text("seller claims clear title".to_string()),
+                    "Google",
+                    0.9,
+                ),
+            ],
+            vec![
+                serving_metadata(
+                    "legally-uncertain-home",
+                    "legal.litigation",
+                    vec!["litigation"],
+                    "TextMatch",
+                    1.2,
+                    vec![],
+                ),
+                serving_metadata(
+                    "legally-uncertain-home",
+                    "legal.title_clear",
+                    vec!["clear title"],
+                    "TextMatch",
+                    0.9,
+                    vec![],
+                ),
+            ],
+        );
+
+        let ordinary = CompiledQuery::from_text("legal safety");
+        let ordinary_results = TextSearch::search(TextSearchRequest {
+            properties: &properties,
+            search_index: None,
+            extra_candidate_ids: None,
+            candidate_property_indexes: None,
+            geo_query: None,
+            serving_facts: Some(&serving_facts),
+            society_names: &society_names,
+            societies: &[],
+            compiled_query: &ordinary,
+            graph: None,
+        });
+        assert_eq!(ordinary_results.len(), 1, "soft discovery remains lenient");
+        assert!(ordinary_results[0]
+            .match_explanation
+            .as_ref()
+            .is_some_and(|explanation| explanation.reasons.is_empty()));
+
+        let mut required_intent = crate::search::intent::parse_intent("legal safety");
+        required_intent
+            .positive_preferences
+            .iter_mut()
+            .find(|preference| preference.raw_text == "legal safety")
+            .expect("legal safety preference")
+            .required = true;
+        let required =
+            CompiledQuery::from_text_with_intent("must have legal safety", required_intent);
+        let required_results = TextSearch::search(TextSearchRequest {
+            properties: &properties,
+            search_index: None,
+            extra_candidate_ids: None,
+            candidate_property_indexes: None,
+            geo_query: None,
+            serving_facts: Some(&serving_facts),
+            society_names: &society_names,
+            societies: &[],
+            compiled_query: &required,
+            graph: None,
+        });
+        assert!(required_results.is_empty());
+    }
+
+    #[test]
+    fn false_rera_registration_is_no_data_and_fails_required_evidence() {
+        let properties = vec![local_property(
+            "unregistered-home",
+            "Whitefield",
+            "unregistered-home",
+            3,
+            0,
+            8,
+            0.2,
+        )];
+        let society_names = local_society_names(&properties);
+        let serving_facts = ServingFactIndex::from_records(
+            vec![serving_fact(
+                "unregistered-home",
+                "rera_registered",
+                FactValue::Bool(false),
+                "Rera",
+                0.8,
+            )],
+            vec![serving_metadata(
+                "unregistered-home",
+                "rera_registered",
+                vec!["RERA registration"],
+                "TextMatch",
+                1.0,
+                vec![],
+            )],
+        );
+
+        let ordinary = CompiledQuery::from_text("RERA registered");
+        let ordinary_results = TextSearch::search(TextSearchRequest {
+            properties: &properties,
+            search_index: None,
+            extra_candidate_ids: None,
+            candidate_property_indexes: None,
+            geo_query: None,
+            serving_facts: Some(&serving_facts),
+            society_names: &society_names,
+            societies: &[],
+            compiled_query: &ordinary,
+            graph: None,
+        });
+        assert_eq!(ordinary_results.len(), 1, "soft discovery remains lenient");
+        let explanation = ordinary_results[0]
+            .match_explanation
+            .as_ref()
+            .expect("preference coverage");
+        assert!(explanation.reasons.is_empty());
+        assert!(explanation.preference_coverage.iter().any(|coverage| {
+            coverage.preference == "RERA registration" && coverage.status == "no_data"
+        }));
+        assert!(ordinary_results[0].proof_focuses.is_empty());
+
+        let mut required_intent = crate::search::intent::parse_intent("RERA registered");
+        required_intent
+            .positive_preferences
+            .iter_mut()
+            .find(|preference| preference.raw_text == "RERA registration")
+            .expect("RERA registration preference")
+            .required = true;
+        let required =
+            CompiledQuery::from_text_with_intent("must be RERA registered", required_intent);
+        let required_results = TextSearch::search(TextSearchRequest {
+            properties: &properties,
+            search_index: None,
+            extra_candidate_ids: None,
+            candidate_property_indexes: None,
+            geo_query: None,
+            serving_facts: Some(&serving_facts),
+            society_names: &society_names,
+            societies: &[],
+            compiled_query: &required,
+            graph: None,
+        });
+        assert!(required_results.is_empty());
+    }
+
+    #[test]
     fn ordinary_discovery_keeps_unknown_price_homes_with_supported_facts() {
         let properties = vec![
             local_property("priced", "Whitefield", "priced", 3, 18_000_000, 8, 0.2),
@@ -4718,6 +4892,50 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["unpriced", "priced"]
         );
+    }
+
+    #[test]
+    fn unknown_configuration_remains_discoverable_but_fails_hard_bhk() {
+        let properties = vec![local_property(
+            "unknown-config",
+            "Whitefield",
+            "unknown-config",
+            0,
+            0,
+            0,
+            0.2,
+        )];
+        let society_names = local_society_names(&properties);
+
+        let ordinary = CompiledQuery::from_text("Whitefield homes");
+        let ordinary_results = TextSearch::search(TextSearchRequest {
+            properties: &properties,
+            search_index: None,
+            extra_candidate_ids: None,
+            candidate_property_indexes: None,
+            geo_query: None,
+            serving_facts: None,
+            society_names: &society_names,
+            societies: &[],
+            compiled_query: &ordinary,
+            graph: None,
+        });
+        assert_eq!(ordinary_results.len(), 1);
+
+        let constrained = CompiledQuery::from_text("3BHK in Whitefield");
+        let constrained_results = TextSearch::search(TextSearchRequest {
+            properties: &properties,
+            search_index: None,
+            extra_candidate_ids: None,
+            candidate_property_indexes: None,
+            geo_query: None,
+            serving_facts: None,
+            society_names: &society_names,
+            societies: &[],
+            compiled_query: &constrained,
+            graph: None,
+        });
+        assert!(constrained_results.is_empty());
     }
 
     #[test]

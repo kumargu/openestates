@@ -1,12 +1,14 @@
 import { Link } from "react-router-dom";
 import type { StoryRecordCard } from "../../lib/propertyStory.ts";
+import type { PropertyProofMatch } from "../../lib/proof-focus.ts";
 import "../../styles/property-fact-decks.css";
 
 type Props = {
   cards: StoryRecordCard[];
+  focusedMatch?: PropertyProofMatch;
 };
 
-export function PropertyReraTeaser({ cards }: Props) {
+export function PropertyReraTeaser({ cards, focusedMatch }: Props) {
   const visibleCards = cards.filter((card) =>
     card.facts.some((fact) => Boolean(fact.value)));
   const registration = visibleCards
@@ -17,7 +19,8 @@ export function PropertyReraTeaser({ cards }: Props) {
     .filter((fact) => fact.key !== "registration" && fact.value)
     .slice(0, 3);
   const href = visibleCards[0]?.href;
-  if (!href || (!registration?.value && documentFacts.length === 0)) return null;
+  const hasRecordFacts = Boolean(registration?.value) || documentFacts.length > 0;
+  if (!focusedMatch && (!href || !hasRecordFacts)) return null;
   const facts = [
     ...(registration?.value
       ? [{ ...registration, label: "Registration" }]
@@ -26,6 +29,9 @@ export function PropertyReraTeaser({ cards }: Props) {
       ...fact,
       label: fact.label.replace(/\s+available$/i, ""),
     })),
+    ...(!hasRecordFacts && focusedMatch
+      ? [{ key: "search-match", label: "Matched your search", value: focusedMatch.value }]
+      : []),
   ];
 
   return (
@@ -33,6 +39,7 @@ export function PropertyReraTeaser({ cards }: Props) {
       id="official-record"
       className="property-fact-deck property-rera-teaser"
       aria-labelledby="property-rera-teaser-title"
+      tabIndex={-1}
     >
       <header className="property-rera-teaser__intro">
         <h2 id="property-rera-teaser-title">RERA record</h2>
@@ -47,9 +54,20 @@ export function PropertyReraTeaser({ cards }: Props) {
         ))}
       </dl>
 
-      <Link className="property-rera-teaser__open" to={href}>
-        Open report ↗
-      </Link>
+      {href ? (
+        <Link className="property-rera-teaser__open" to={href}>
+          Open report ↗
+        </Link>
+      ) : focusedMatch?.sourceUrl ? (
+        <a
+          className="property-rera-teaser__open"
+          href={focusedMatch.sourceUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Source ↗
+        </a>
+      ) : null}
     </section>
   );
 }

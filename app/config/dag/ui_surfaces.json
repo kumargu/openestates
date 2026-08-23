@@ -226,7 +226,7 @@
       "primary_entity": "road_segment",
       "proofHandoff": {
         "kind": "scene",
-        "targetId": "remote-arrival"
+        "targetId": "around-this-home"
       },
       "scene": {
         "anchor": { "entityRef": "society" },

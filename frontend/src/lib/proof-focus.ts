@@ -1,5 +1,21 @@
 import type { ProofFocus, SearchResultItem } from "./types.ts";
 
+export type PropertyProofMatch = {
+  value: string;
+  sourceUrl?: string;
+};
+
+export function propertyProofMatch(
+  focus: ProofFocus | undefined,
+  targetId: string,
+  sourceUrl?: string,
+): PropertyProofMatch | undefined {
+  if (focus?.targetId !== targetId) return undefined;
+  const value = focus.matchedValue?.trim() || focus.matchedLabel?.trim();
+  if (!value) return undefined;
+  return { value, sourceUrl };
+}
+
 const DEFAULT_PROPERTY_SURFACE_ID = "around_this_home";
 
 type ProofFocusSource = Pick<
@@ -42,6 +58,10 @@ export function initialPropertySurfaceId(focus?: ProofFocus): string {
     return DEFAULT_PROPERTY_SURFACE_ID;
   }
   return focus?.surfaceId.trim() || DEFAULT_PROPERTY_SURFACE_ID;
+}
+
+export function propertySceneProofFocus(focus?: ProofFocus): ProofFocus | undefined {
+  return focus?.destinationKind === "section" ? undefined : focus;
 }
 
 function scoreProofFocus(

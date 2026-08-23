@@ -1988,11 +1988,7 @@
         ],
         "label": "legal safety",
         "expanded_keys": [
-          "legal_safety",
-          "legal.title_clear",
-          "legal.litigation",
-          "legal_risk",
-          "litigation_risk"
+          "legal_safety"
         ],
         "weight": 1.2
       },

@@ -50,6 +50,7 @@ export function PropertySceneFacts({
         id="property-summary"
         className="property-story-sticky-facts"
         aria-label="Home summary"
+        tabIndex={-1}
       >
         <div className="property-story-sticky-facts__inner">{facts}</div>
       </div>

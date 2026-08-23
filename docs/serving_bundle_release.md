@@ -11,9 +11,14 @@ those gaps affect matching and ranking rather than removing the society. The pol
 `app/config/dag/serving_eligibility.json`; fact keys and edge types are not
 branched in the builder.
 
-All property rows for an ineligible society are removed atomically, together
-with their facts and incident edges. Related area, road, builder, and place
-entities remain when a retained society still references them. The builder
+Eligibility policy version 3 prunes an unusable card independently. A society
+remains discoverable when at least one image-backed card survives, including a
+society card whose price and BHK configuration are still unknown.
+
+An individually unusable property row is removed with its facts and incident
+edges. If no eligible card remains—or society identity is ambiguous—the whole
+society is removed atomically. Related area, road, builder, and place entities
+remain when a retained society still references them. The builder
 writes `quarantine/societies.json` with stable reason codes, source bundle
 version, affected entity IDs, and a manifest hash. It does not copy or mutate
 durable DAG facts. Fixing those facts therefore readmits the society on the

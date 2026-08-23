@@ -48,7 +48,11 @@ import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
 import { workspaceCompareHref } from "../lib/workspaceNav.ts";
 import { formatListingPrice } from "../lib/listing-price.ts";
-import { initialPropertySurfaceId } from "../lib/proof-focus.ts";
+import {
+  initialPropertySurfaceId,
+  propertyProofMatch,
+  propertySceneProofFocus,
+} from "../lib/proof-focus.ts";
 
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -313,7 +317,9 @@ function NearbyHomeCard({
   const title = property.society_name.trim() || property.title.trim();
   const area = compactRecommendationArea(property.area);
   const note = property.society_name
-    ? `${area} · ${property.bhk} BHK`
+    ? [area, hasKnownNumber(property.bhk) ? `${property.bhk} BHK` : null]
+        .filter(Boolean)
+        .join(" · ")
     : area;
   const price = formatListingPrice(property);
   const rating = formatGoogleRating(property.google_rating);
@@ -401,9 +407,11 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
     "@context": "https://schema.org",
     "@type": "RealEstateListing",
     name: p.title,
-    description:
-      p.description_summary ||
-      `${p.bhk} BHK, ${sizeDescription} in ${p.area}, ${p.city}`,
+    description: p.description_summary || [
+      hasKnownNumber(p.bhk) ? `${p.bhk} BHK` : null,
+      sizeDescription,
+      `in ${p.area}, ${p.city}`,
+    ].filter(Boolean).join(", "),
     url: `https://openestates.in/property/${p.id}`,
     offers: {
       "@type": "Offer",
@@ -415,8 +423,10 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
       addressLocality: p.area,
       addressRegion: p.city,
     },
-    numberOfRooms: p.bhk,
   };
+  if (hasKnownNumber(p.bhk)) {
+    jsonLd.numberOfRooms = p.bhk;
+  }
   if (hasKnownNumber(p.carpet_area_sqft)) {
     jsonLd.floorSize = {
       "@type": "QuantitativeValue",
@@ -527,7 +537,7 @@ function PropertyPageBody({
     getPropertySurface(
       propertyId,
       initialPropertySurfaceId(proofFocus),
-      proofFocus,
+      propertySceneProofFocus(proofFocus),
     )
       .then((scene) => {
         if (!cancelled) setAroundThisHomeScene(scene);
@@ -610,7 +620,9 @@ function PropertyPageBody({
 
   const { property: p, society } = data;
 
-  const pageTitle = `${p.title} — ${p.bhk} BHK in ${p.area} | OpenEstates`;
+  const pageTitle = hasKnownNumber(p.bhk)
+    ? `${p.title} — ${p.bhk} BHK in ${p.area} | OpenEstates`
+    : `${p.title} in ${p.area} | OpenEstates`;
   const pricePerSqftLabel = hasKnownNumber(p.price_per_sqft)
     ? `${p.price_per_sqft.toLocaleString("en-IN")} /sqft`
     : null;
@@ -618,7 +630,7 @@ function PropertyPageBody({
     ? `${p.carpet_area_sqft.toLocaleString("en-IN")} sqft`
     : null;
   const pageDescription = [
-    `${p.bhk} BHK`,
+    hasKnownNumber(p.bhk) ? `${p.bhk} BHK` : null,
     sizeLabel,
     `in ${society?.name ? society.name + ", " : ""}${p.area}`,
     hasKnownNumber(p.price) ? formatListingPrice(p) : null,
@@ -651,6 +663,19 @@ function PropertyPageBody({
   const marketProperties = [...marketPropertyMap.values()];
   const displayTitle = p.title.trim();
   const story = projectPropertyStory(data);
+  const proofSourceUrl = proofFocus
+    ? focusedEvidenceSource(data, proofFocus)
+    : undefined;
+  const officialRecordMatch = propertyProofMatch(
+    proofFocus,
+    "official-record",
+    proofSourceUrl,
+  );
+  const residentVoiceMatch = propertyProofMatch(
+    proofFocus,
+    "resident-voice",
+    proofSourceUrl,
+  );
   const savedIds = readShortlistIds();
   const requestedCompareIds = compareIds.length > 0 ? compareIds : savedIds;
   const availableCompareIds = compareIds.length > 0
@@ -734,6 +759,7 @@ function PropertyPageBody({
             id="around-this-home"
             className="property-map-section"
             aria-label="Around this home"
+            tabIndex={-1}
           >
             <AroundThisHomePlate
               propertyId={id}
@@ -756,9 +782,13 @@ function PropertyPageBody({
           model={story.reviews}
           reviews={data.external_reviews}
           signals={data.detail_signals}
+          focusedMatch={residentVoiceMatch}
         />
 
-        <PropertyReraTeaser cards={story.recordCards} />
+        <PropertyReraTeaser
+          cards={story.recordCards}
+          focusedMatch={officialRecordMatch}
+        />
 
         <PropertyShortCompare
           homes={savedComparisons}

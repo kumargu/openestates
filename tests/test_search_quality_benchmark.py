@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from pipeline.benchmark_search_quality import (
+    PREFERENCE_ALIASES,
     case_result,
     evaluate_case,
     evaluate_proof_handoffs,
@@ -41,6 +42,11 @@ def search_diagnostics() -> dict:
 
 
 class SearchQualityBenchmarkTests(unittest.TestCase):
+    def test_rera_registration_aliases_do_not_claim_legal_safety(self) -> None:
+        for fact_key in ("rera_registered", "rera_number", "rera_status"):
+            self.assertEqual(PREFERENCE_ALIASES[fact_key], {"rera_registration"})
+            self.assertNotIn("legal_safety", PREFERENCE_ALIASES[fact_key])
+
     def test_every_live_suite_uses_only_public_response_expectations(self) -> None:
         bank_path = Path("data/validation/search_query_bank.json")
         bank = json.loads(bank_path.read_text(encoding="utf-8"))
@@ -486,6 +492,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
             "factKey": "rera_status",
             "destinationKind": "section",
             "targetId": "official-record",
+            "matchedValue": "RERA registration found",
             "reason": "RERA registration found",
         }
         handoffs = [{
@@ -505,7 +512,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
 
         checks = evaluate_proof_handoffs(requirements, handoffs)
 
-        self.assertEqual(len(checks), 3)
+        self.assertEqual(len(checks), 4)
         self.assertTrue(all(check["passed"] for check in checks), checks)
 
 if __name__ == "__main__":

@@ -44,7 +44,9 @@ export function PropertySidePanel({ propertyId, card, onClose }: Props) {
   const [closing, setClosing] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const specs = [
-    { value: card.bhk.toString(), label: "BHK" },
+    hasKnownNumber(card.bhk)
+      ? { value: card.bhk.toString(), label: "BHK" }
+      : null,
     hasKnownNumber(card.sqft)
       ? { value: card.sqft.toLocaleString("en-IN"), label: "sqft" }
       : null,

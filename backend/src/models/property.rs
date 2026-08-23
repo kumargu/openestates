@@ -70,11 +70,15 @@ pub struct Property {
 }
 
 impl Property {
-    /// Discovery can retain a known home configuration while its asking price
-    /// is unavailable. Budget constraints still fail closed on an unknown
-    /// price in the search constraint evaluator.
+    /// A runtime card is representable when it has a known commercial/config
+    /// identity or usable media. The promoted serving eligibility policy owns
+    /// the stricter buyer-visible media gate. Explicit budget and BHK
+    /// constraints still fail closed on zero/unknown values.
     pub fn is_listable(&self) -> bool {
-        self.price > 0 || self.bhk > 0
+        self.price > 0
+            || self.bhk > 0
+            || !self.hero_image.trim().is_empty()
+            || self.images.iter().any(|image| !image.trim().is_empty())
     }
 }
 

@@ -92,7 +92,11 @@ function propertyLabel(home: PropertyCard): string {
 }
 
 function propertyMeta(bhk: number, sqft: number, price: number): string {
-  return `${bhk} BHK · ${sqft.toLocaleString("en-IN")} sqft · ${formatCurrency(price, true)}`;
+  return [
+    bhk > 0 ? `${bhk} BHK` : null,
+    sqft > 0 ? `${sqft.toLocaleString("en-IN")} sqft` : null,
+    price > 0 ? formatCurrency(price, true) : "Price unavailable",
+  ].filter(Boolean).join(" · ");
 }
 
 export function HomePlanPage() {
