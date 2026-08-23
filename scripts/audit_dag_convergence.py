@@ -29,10 +29,7 @@ DEFAULT_SCAN_ROOTS = (
     "tests",
     "scripts",
     "docs",
-    "data/validation/query_bank",
-    "data/validation/search_guardrails_v1.json",
-    "data/validation/search_quality_golden_intent_gap_v1.json",
-    "data/validation/search_quality_whitefield_oracle_v1.json",
+    "data/validation/search_query_bank.json",
 )
 
 REQUIRED_CONFIG_FILES = (

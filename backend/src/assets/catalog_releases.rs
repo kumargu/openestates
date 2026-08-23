@@ -467,9 +467,9 @@ impl CatalogReleaseStore {
             CatalogReleaseError::GateRejected(format!("invalid serving manifest key: {error}"))
         })?;
         let manifest: ServingBundleManifest = self.lake.get_json(&manifest_key).await?;
-        if manifest.format_version < 7 {
+        if manifest.format_version < 8 {
             return Err(CatalogReleaseError::GateRejected(format!(
-                "serving bundle format {} predates build-time eligibility quarantine",
+                "serving bundle format {} predates materialized entity aliases",
                 manifest.format_version
             )));
         }
@@ -635,9 +635,9 @@ impl CatalogReleaseStore {
             Ok(manifest) => manifest,
             Err(error) => return Ok(vec![failed_gate(error.to_string())]),
         };
-        if manifest.format_version < 7 {
+        if manifest.format_version < 8 {
             return Ok(vec![warning_gate(format!(
-                "serving bundle format {} predates build-time eligibility quarantine and cannot be promoted",
+                "serving bundle format {} predates materialized entity aliases and cannot be promoted",
                 manifest.format_version
             ))]);
         }
@@ -943,9 +943,9 @@ impl CatalogReleaseStore {
             CatalogReleaseError::GateRejected(format!("invalid serving manifest key: {err}"))
         })?;
         let manifest: ServingBundleManifest = self.lake.get_json(&manifest_key).await?;
-        if manifest.format_version < 7 {
+        if manifest.format_version < 8 {
             return Ok(vec![warning_gate(format!(
-                "serving bundle format {} predates build-time eligibility quarantine and cannot be promoted",
+                "serving bundle format {} predates materialized entity aliases and cannot be promoted",
                 manifest.format_version
             ))]);
         }
@@ -1495,9 +1495,10 @@ mod tests {
         let manifest_key = LakeKey::new("serving/test-promotion/manifest.json").unwrap();
         let manifest = ServingBundleManifest {
             bundle_version: "test-promotion".to_string(),
-            format_version: 7,
+            format_version: 8,
             created_at: Utc::now(),
             entity_count: 0,
+            entity_alias_count: 0,
             fact_count: 0,
             search_metadata_count: 0,
             rera_evidence_count: 0,
@@ -1507,6 +1508,7 @@ mod tests {
             quarantined_society_count: 0,
             quarantine_reason_counts: BTreeMap::new(),
             entity_parquet_key: String::new(),
+            entity_alias_parquet_key: None,
             fact_parquet_key: String::new(),
             search_metadata_parquet_key: String::new(),
             rera_evidence_parquet_key: None,
@@ -1608,6 +1610,7 @@ mod tests {
             format_version: 6,
             created_at: Utc::now(),
             entity_count: 0,
+            entity_alias_count: 0,
             fact_count: 0,
             search_metadata_count: 0,
             rera_evidence_count: 0,
@@ -1617,6 +1620,7 @@ mod tests {
             quarantined_society_count: 0,
             quarantine_reason_counts: BTreeMap::new(),
             entity_parquet_key: String::new(),
+            entity_alias_parquet_key: None,
             fact_parquet_key: String::new(),
             search_metadata_parquet_key: String::new(),
             rera_evidence_parquet_key: None,
@@ -1661,7 +1665,7 @@ mod tests {
 
         assert!(error
             .to_string()
-            .contains("predates build-time eligibility quarantine"));
+            .contains("predates materialized entity aliases"));
         assert!(store
             .current_pointer(CatalogEnvironment::Dev)
             .await
@@ -1762,6 +1766,7 @@ mod tests {
             format_version: 1,
             created_at: Utc::now(),
             entity_count: entities.len() as u64,
+            entity_alias_count: 0,
             fact_count: 0,
             search_metadata_count: 0,
             rera_evidence_count: evidence.len() as u64,
@@ -1771,6 +1776,7 @@ mod tests {
             quarantined_society_count: 0,
             quarantine_reason_counts: BTreeMap::new(),
             entity_parquet_key: entities_key.to_string(),
+            entity_alias_parquet_key: None,
             fact_parquet_key: format!("{prefix}/facts.parquet"),
             search_metadata_parquet_key: format!("{prefix}/search_metadata.parquet"),
             rera_evidence_parquet_key: Some(evidence_key.to_string()),

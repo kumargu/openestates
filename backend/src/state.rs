@@ -322,3 +322,48 @@ impl AppState {
             .fetch_add(1, Ordering::Relaxed);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn version_key(bundle: &str) -> RuntimeVersionKey {
+        RuntimeVersionKey {
+            serving_bundle_version: bundle.to_string(),
+            scoring_policy_version: 1,
+            search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
+        }
+    }
+
+    fn zero_result_output(query: &str) -> CachedSearchOutput {
+        CachedSearchOutput {
+            response: Arc::new(SearchResponse {
+                query: query.to_string(),
+                result_sets: Vec::new(),
+                total_matches: 0,
+                area_context: None,
+                state: "no_matches".to_string(),
+                search_guidance: None,
+            }),
+            log_messages: Vec::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn search_cache_isolated_by_serving_version_including_zero_results() {
+        let cache = SearchResponseCache::new(4);
+        let query = "Ajmera Nucleus 2BHK under 1.5cr";
+        let south_key = SearchCacheKey::new(query, &version_key("south-43"));
+        let mixed_key = SearchCacheKey::new(query, &version_key("mixed-south-45"));
+
+        cache
+            .put(south_key.clone(), zero_result_output(query))
+            .await;
+
+        assert!(cache.get(&south_key).await.is_some());
+        assert!(cache.get(&mixed_key).await.is_none());
+
+        cache.clear().await;
+        assert!(cache.get(&south_key).await.is_none());
+    }
+}

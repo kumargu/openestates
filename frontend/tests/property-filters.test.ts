@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  filterListableSearchResponse,
   societyKey,
   uniqueSocietiesForDiscovery,
 } from "../src/lib/property-filters.ts";
@@ -60,47 +59,4 @@ test("uniqueSocietiesForDiscovery keeps one card per society", () => {
     ["godrej-3", "prestige-3"],
   );
   assert.equal(societyKey(unique[0]!), "society:godrej-air");
-});
-
-test("filterListableSearchResponse keeps focus rails listable", () => {
-  const response = filterListableSearchResponse({
-    query: "3bhk in waterford",
-    intent: {
-      area: null,
-      bhk: 3,
-      budget_max: null,
-      preferences: [],
-    },
-    results: [
-      card({ id: "waterford-3", bhk: 3 }),
-      card({ id: "zero", bhk: 2, price: 0 }),
-    ],
-    area_context: null,
-    total_results: 2,
-    focus: {
-      mode: "named_society",
-      society_name: "Prestige Waterford",
-      focus_results: [card({ id: "waterford-3", bhk: 3 })],
-      sibling_configs: [
-        card({ id: "waterford-2", bhk: 2 }),
-        card({ id: "waterford-0", bhk: 1, price: 0 }),
-      ],
-      more_homes: [card({
-        id: "other-3",
-        bhk: 3,
-        society_name: "Other",
-        kg_entity_refs: {
-          property_entity_id: "property:other-3",
-          society_entity_id: "society:other",
-          area_entity_id: "area:sarjapur",
-        },
-      })],
-    },
-    knowledge_context: null,
-  });
-
-  assert.equal(response.results.length, 1);
-  assert.equal(response.focus?.sibling_configs?.length, 1);
-  assert.equal(response.focus?.sibling_configs?.[0]?.id, "waterford-2");
-  assert.equal(response.focus?.more_homes?.length, 1);
 });

@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
-import type { SearchResultFocus, SearchResultItem } from "../../lib/types.ts";
+import type { SearchResultItem, SearchResultSet } from "../../lib/types.ts";
 
 type RenderResult = (result: SearchResultItem) => ReactNode;
 
 type Props = {
-  focus: SearchResultFocus;
+  resultSets: SearchResultSet[];
   renderResult: RenderResult;
 };
 
@@ -62,20 +62,22 @@ function ResultRail({
 /**
  * Journey rails for search: asked config, small +, sibling configs, then More homes.
  */
-export function SearchFocusBoard({ focus, renderResult }: Props) {
-  const siblings = focus.sibling_configs ?? [];
-  const moreHomes = focus.more_homes ?? [];
-
+export function SearchFocusBoard({ resultSets, renderResult }: Props) {
   return (
     <div className="search-focus-board">
-      <ResultRail
-        results={focus.focus_results}
-        siblings={siblings}
-        renderResult={renderResult}
-      />
-      {moreHomes.length > 0 ? (
-        <ResultRail title="More homes" results={moreHomes} renderResult={renderResult} />
-      ) : null}
+      {resultSets.map((set) => {
+        const results = set.results.filter((result) => result.match_tier !== "supported");
+        const siblings = set.results.filter((result) => result.match_tier === "supported");
+        return (
+          <ResultRail
+            key={set.branchId}
+            title={set.label === "Matches" ? undefined : set.label}
+            results={results}
+            siblings={siblings}
+            renderResult={renderResult}
+          />
+        );
+      })}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import type {
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
 import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
 import { propertySceneImageAt } from "../../lib/propertyScene.ts";
+import { formatListingPrice } from "../../lib/listing-price.ts";
 import {
   BuildingIcon,
   RupeeIcon,
@@ -23,13 +24,6 @@ type RecommendationItem =
       branch: RecommendationBranch;
     }
   | { kind: "nearby"; id: string; property: PropertyCard };
-
-function formatPrice(price: number): string {
-  if (!hasKnownNumber(price)) return "Price unavailable";
-  if (price >= 1_00_00_000) return `₹${(price / 1_00_00_000).toFixed(2)} Cr`;
-  if (price >= 1_00_000) return `₹${(price / 1_00_000).toFixed(1)} L`;
-  return `₹${price.toLocaleString("en-IN")}`;
-}
 
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -147,7 +141,7 @@ function RecommendationCard({
           <p className="catalog-card__meta">{meta}</p>
           <div className="catalog-card__foot alt-paths__foot">
             <span className="catalog-card__price">
-              {formatPrice(property.price)}
+              {formatListingPrice(property)}
             </span>
             {note ? <span className="alt-paths__note">{note}</span> : null}
           </div>

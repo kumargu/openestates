@@ -74,7 +74,48 @@
   "resolution": {
     "min_resolvable_entity_name_chars": 3,
     "ignored_entity_names": ["a", "an", "the", "in", "near", "for", "with"],
+    "residual_ignored_terms": [
+      "among",
+      "show me",
+      "give me",
+      "find me",
+      "i want",
+      "i can",
+      "i'll take",
+      "i’ll take",
+      "i liked",
+      "if",
+      "it's",
+      "it’s",
+      "it",
+      "on",
+      "my",
+      "is",
+      "something",
+      "option",
+      "options",
+      "available home",
+      "compare",
+      "only consider",
+      "prefer",
+      "prioritizing",
+      "keep it",
+      "i can stretch",
+      "can stretch",
+      "either way"
+    ],
     "resolvable_entity_types": ["area", "place", "society", "builder"],
+    "min_partial_entity_name_chars": 5,
+    "mechanical_alias_blocked_tokens": [
+      "bangalore",
+      "bengaluru",
+      "capital",
+      "central",
+      "east",
+      "north",
+      "south",
+      "west"
+    ],
     "named_entity_scope_prefixes": ["in"],
     "generic_scope_nouns": [
       "project",
@@ -82,18 +123,7 @@
       "society",
       "societies",
       "community",
-      "communities",
-      "home",
-      "homes",
-      "property",
-      "properties",
-      "apartment",
-      "apartments",
-      "flat",
-      "flats",
-      "inventory",
-      "option",
-      "options"
+      "communities"
     ],
     "exclusion_prefixes": [
       "not interested in",
@@ -109,7 +139,8 @@
       "away from",
       "outside",
       "not in",
-      "not"
+      "not",
+      "unless"
     ],
     "place_families": [
       {
@@ -148,6 +179,7 @@
     "bhk": {
       "unit_aliases": [
         "bhk",
+        "bhks",
         "bedroom",
         "bedrooms"
       ],
@@ -178,10 +210,22 @@
         }
       ],
       "min": 1,
-      "max": 6
+      "max": 6,
+      "alternative_joiners": [
+        "or",
+        "and",
+        "to"
+      ],
+      "exclusion_gap_tokens": [
+        "a",
+        "an",
+        "the"
+      ]
     },
     "budget": {
       "operators": [
+        "costing no more than",
+        "no more than",
         "under",
         "undr",
         "below",
@@ -189,7 +233,23 @@
         "max",
         "within",
         "upto",
-        "up to"
+        "up to",
+        "less than"
+      ],
+      "min_operators": [
+        "above",
+        "over",
+        "at least",
+        "minimum",
+        "min",
+        "more than",
+        "greater than",
+        "from"
+      ],
+      "range_connectors": [
+        "to",
+        "and",
+        "-"
       ],
       "units": [
         {
@@ -266,8 +326,29 @@
           "requires_distance_limit": true
         },
         {
-          "alias": "close to"
+          "alias": "close to",
+          "default_distance_limit_km": 2.0
         }
+      ]
+    },
+    "discourse": {
+      "branch_joiners": ["or"],
+      "alternative_prefixes": ["either"],
+      "conditional_branch_starters": ["if"],
+      "conjunctive_relation_markers": ["both"],
+      "paired_branch_joiners": ["with"],
+      "branch_ordinals": ["first", "second"],
+      "ranking_instruction_prefixes": ["rank only by", "rank", "choose"],
+      "ranking_scope_end_markers": ["even if"],
+      "scoped_exclusion_markers": ["unless"],
+      "shared_suffix_markers": [
+        "but not",
+        "but only",
+        "unless",
+        "keep both",
+        "but i need",
+        "prefer",
+        "exclude"
       ]
     }
   },

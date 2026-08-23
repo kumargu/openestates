@@ -1,4 +1,4 @@
-import type { PropertyCard, SearchResponse } from "./types.ts";
+import type { PropertyCard } from "./types.ts";
 
 type ListabilityFields = Pick<PropertyCard, "price"> &
   Partial<Pick<PropertyCard, "bhk" | "transparency_tags">>;
@@ -20,26 +20,6 @@ export function filterListableProperties<T extends ListabilityFields>(
   properties: T[],
 ): T[] {
   return properties.filter(isListableProperty);
-}
-
-export function filterListableSearchResponse(
-  response: SearchResponse,
-): SearchResponse {
-  const results = filterListableProperties(response.results);
-  const focus = response.focus
-    ? {
-        ...response.focus,
-        focus_results: filterListableProperties(response.focus.focus_results),
-        sibling_configs: filterListableProperties(response.focus.sibling_configs ?? []),
-        more_homes: filterListableProperties(response.focus.more_homes ?? []),
-      }
-    : response.focus;
-  return {
-    ...response,
-    results,
-    focus,
-    total_results: results.length,
-  };
 }
 
 /** Stable society key for browse/discovery dedupe. */

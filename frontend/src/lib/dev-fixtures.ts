@@ -402,35 +402,19 @@ function searchFixtureProperties(query: string): SearchResponse {
     match_score: Math.round(score),
     match_label: score >= 82 ? "Strong match" : score >= 68 ? "Good match" : score >= 54 ? "Value pick" : "Good match",
     match_reason: reason,
+    match_tier: "exact" as const,
     match_explanation: makeMatchExplanation(property, intent),
     confidence_score: confidenceFor(property),
   }));
 
   return {
     query,
-    intent: {
-      area: intent.area,
-      bhk: intent.bhk,
-      budget_max: intent.budgetMax,
-      preferences: intent.preferences,
-    },
-    results,
-    area_context: areaContext,
-    total_results: results.length,
-    knowledge_context: {
-      claims: areaContext
-        ? [
-            {
-              entity_name: areaContext.name,
-              claim: areaContext.trend_summary,
-              confidence: 0.74,
-              source_type: "fixture",
-            },
-          ]
-        : [],
-      nodes_consulted: areaContext ? 4 : 2,
-      learning_gaps: ["Live backend unavailable; showing local product-review fixtures."],
-    },
+    resultSets: results.length > 0
+      ? [{ branchId: "branch-1", label: "Matches", results }]
+      : [],
+    totalMatches: results.length,
+    areaContext: areaContext ?? undefined,
+    state: results.length > 0 ? "results" : "no_matches",
   };
 }
 

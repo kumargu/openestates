@@ -6,8 +6,9 @@ import { RailPageControls } from "./RailPageControls.tsx";
 import { useFittedRailPage } from "../hooks/useFittedRailPage.ts";
 import { propertyDetailPath, searchProperties } from "../lib/api.ts";
 import { composeLandingSearchRails } from "../lib/landing-search-rails.ts";
+import { primaryProofFocus } from "../lib/proof-focus.ts";
 import { searchResultReasonLabels } from "../lib/search.ts";
-import type { PropertyCard, SearchResponse, SearchResultItem } from "../lib/types.ts";
+import type { ProofFocus, PropertyCard, SearchResponse, SearchResultItem } from "../lib/types.ts";
 import {
   LANDING_RESOLVE_QUERY,
   LANDING_STORY_CHAPTERS,
@@ -121,9 +122,11 @@ function matchLabels(property: PropertyCard, lensId: FeaturedLensId): string[] {
 function LandingResultCard({
   property,
   matchLabels,
+  proofFocus,
 }: {
   property: PropertyCard;
   matchLabels: string[];
+  proofFocus?: ProofFocus;
 }) {
   return (
     <div className="landing-stage__feature-card">
@@ -131,6 +134,7 @@ function LandingResultCard({
         property={property}
         variant="browse"
         matchLabels={matchLabels}
+        proofFocus={proofFocus}
         allowSave
       />
     </div>
@@ -205,10 +209,12 @@ function LandingResultRail({
   results,
   siblings = [],
   label,
+  query,
 }: {
   results: SearchResultItem[];
   siblings?: SearchResultItem[];
   label?: string;
+  query?: string;
 }) {
   const items = [...results, ...siblings];
   if (items.length === 0) return null;
@@ -223,6 +229,7 @@ function LandingResultRail({
         <LandingResultCard
           property={item}
           matchLabels={searchResultReasonLabels(item as SearchResultItem)}
+          proofFocus={primaryProofFocus(item as SearchResultItem, query)}
         />
       )}
     />
@@ -291,6 +298,7 @@ function LandingSearchResults({
           results={rail.results}
           siblings={rail.siblings}
           label={rail.label}
+          query={query}
         />
       ))}
     </div>

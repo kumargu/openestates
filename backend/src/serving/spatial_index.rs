@@ -115,6 +115,48 @@ impl SpatialServingIndex {
         });
         matches
     }
+
+    pub fn nearest_societies(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        limit: usize,
+    ) -> Vec<(&SpatialPoint, f64)> {
+        self.nearest_societies_matching(latitude, longitude, limit, |_| true)
+    }
+
+    pub fn nearest_societies_matching(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        limit: usize,
+        mut is_eligible: impl FnMut(&SpatialPoint) -> bool,
+    ) -> Vec<(&SpatialPoint, f64)> {
+        if !valid_coordinate_pair(latitude, longitude) || limit == 0 {
+            return Vec::new();
+        }
+        let target = [longitude, latitude];
+        let mut matches = self
+            .tree
+            .nearest_neighbor_iter(&target)
+            .filter_map(|indexed| self.points.get(indexed.index))
+            .filter(|point| point.entity_type.eq_ignore_ascii_case("society"))
+            .filter(|point| is_eligible(point))
+            .take(limit)
+            .map(|point| {
+                (
+                    point,
+                    haversine_km(latitude, longitude, point.latitude, point.longitude),
+                )
+            })
+            .collect::<Vec<_>>();
+        matches.sort_by(|(left, left_distance), (right, right_distance)| {
+            left_distance
+                .total_cmp(right_distance)
+                .then_with(|| left.entity_id.cmp(&right.entity_id))
+        });
+        matches
+    }
 }
 
 fn spatial_point_from_rows(
@@ -246,5 +288,40 @@ mod tests {
         let fact_index = ServingFactIndex::from_records(facts, Vec::new());
         let index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
         assert!(index.point_for_entity("society:bad").is_none());
+    }
+
+    #[test]
+    fn spatial_index_returns_only_nearest_societies() {
+        let entities = vec![
+            entity("place:anchor", "place", "Anchor"),
+            entity("society:near", "society", "Near"),
+            entity("society:next", "society", "Next"),
+            entity("society:far", "society", "Far"),
+        ];
+        let facts = vec![
+            coord("place:anchor", "geo.latitude", 12.98, 0.9),
+            coord("place:anchor", "geo.longitude", 77.75, 0.9),
+            coord("society:near", "geo.latitude", 12.981, 0.9),
+            coord("society:near", "geo.longitude", 77.75, 0.9),
+            coord("society:next", "geo.latitude", 12.99, 0.9),
+            coord("society:next", "geo.longitude", 77.75, 0.9),
+            coord("society:far", "geo.latitude", 13.08, 0.9),
+            coord("society:far", "geo.longitude", 77.75, 0.9),
+        ];
+        let fact_index = ServingFactIndex::from_records(facts, Vec::new());
+        let index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
+
+        let matches = index.nearest_societies(12.98, 77.75, 2);
+        assert_eq!(
+            matches
+                .iter()
+                .map(|(point, _)| point.entity_id.as_str())
+                .collect::<Vec<_>>(),
+            ["society:near", "society:next"]
+        );
+
+        let eligible = index
+            .nearest_societies_matching(12.98, 77.75, 1, |point| point.entity_id == "society:far");
+        assert_eq!(eligible[0].0.entity_id, "society:far");
     }
 }

@@ -393,7 +393,8 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     );
     assert_eq!(
         parquet_rows_for_artifact(&lake, &image_facts, "facts/part-00000.parquet").await,
-        4
+        5,
+        "slot facts plus the curated gallery frame fact are materialized"
     );
 
     let kg_record =
@@ -792,20 +793,13 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     .await
     .0;
     assert_eq!(response.query, query);
-    assert_eq!(response.total_results, 1);
-    assert_eq!(response.intent.bhk, Some(3));
-    assert_eq!(response.intent.area.as_deref(), Some("Whitefield"));
-    let knowledge_context = response
-        .knowledge_context
-        .as_ref()
-        .expect("search endpoint should return knowledge context");
-    assert!(knowledge_context.learning_gaps.is_empty());
-    assert_eq!(knowledge_context.claims.len(), 1);
-    assert!(knowledge_context
-        .claims
-        .iter()
-        .any(|claim| claim.source_type == "Rera" && claim.claim.contains("RERA land area")));
-    let results = response.results;
+    assert_eq!(response.total_matches, 1);
+    assert_eq!(response.state, "results");
+    let results = response
+        .result_sets
+        .into_iter()
+        .flat_map(|set| set.results)
+        .collect::<Vec<_>>();
 
     assert_eq!(
         results
@@ -1888,6 +1882,8 @@ fn search_property(id: &str, society_id: &str, society_name: &str) -> Property {
         listing_type: "Resale".to_string(),
         bhk: 3,
         price: 18_000_000,
+        price_min: None,
+        price_max: None,
         price_per_sqft: 12_000,
         carpet_area_sqft: 1_200,
         super_builtup_sqft: 1_500,
@@ -2138,6 +2134,8 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                         .to_string(),
                 ),
                 classification_method: Some("heuristic".to_string()),
+                gallery_order: None,
+                curation_confidence: None,
                 width: Some(1200),
                 height: Some(800),
                 rank: Some(1),
@@ -2147,6 +2145,7 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                 content_sha256: None,
                 observed_at: now + Duration::minutes(2),
             }],
+            max_promoted_gallery_frames: None,
             source_health: Vec::new(),
             media_qa_report: None,
             source_watermarks: Vec::new(),

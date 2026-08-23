@@ -126,6 +126,7 @@ pub struct SearchGuardrailGuidanceConfig {
     pub needs_home_anchor: SearchGuidanceTemplate,
     pub unsupported_inventory: SearchGuidanceTemplate,
     pub no_results: SearchGuidanceTemplate,
+    pub named_society_alternatives: SearchGuidanceTemplate,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]

@@ -1078,6 +1078,8 @@ pub fn enrich_property_card(
         title: p.title.clone(),
         area: p.area.clone(),
         price: p.price,
+        price_min: p.price_min,
+        price_max: p.price_max,
         price_per_sqft: p.price_per_sqft,
         bhk: p.bhk,
         sqft: p.carpet_area_sqft,

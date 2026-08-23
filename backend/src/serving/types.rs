@@ -208,6 +208,7 @@ impl ServingEntityFactRows {
 #[serde(rename_all = "snake_case")]
 pub enum BundleArtifactKind {
     EntitiesParquet,
+    EntityAliasesParquet,
     FactsParquet,
     EdgesParquet,
     SearchMetadataParquet,
@@ -322,6 +323,8 @@ pub struct ServingBundleManifest {
     pub format_version: u32,
     pub created_at: DateTime<Utc>,
     pub entity_count: u64,
+    #[serde(default)]
+    pub entity_alias_count: u64,
     pub fact_count: u64,
     pub search_metadata_count: u64,
     #[serde(default)]
@@ -339,6 +342,8 @@ pub struct ServingBundleManifest {
     #[serde(default)]
     pub quarantine_reason_counts: BTreeMap<String, u64>,
     pub entity_parquet_key: String,
+    #[serde(default)]
+    pub entity_alias_parquet_key: Option<String>,
     pub fact_parquet_key: String,
     pub search_metadata_parquet_key: String,
     #[serde(default)]

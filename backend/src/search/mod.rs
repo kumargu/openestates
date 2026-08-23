@@ -1,4 +1,6 @@
 pub mod analyzer;
+pub mod ast;
+pub mod capabilities;
 pub mod engine;
 pub mod focus;
 pub mod geo;
@@ -11,15 +13,19 @@ pub mod resolver;
 pub mod schema;
 pub mod text;
 
+pub use ast::{CompiledQuery, ConstraintExpr, ConstraintTerm};
+pub use capabilities::SearchCapabilityIndex;
 pub use engine::{
     CandidateScore, SearchDiagnostics, SearchEngine, SearchEvidenceGap, SearchLayerTiming,
-    SearchRecallDiagnostics, SearchRelaxation,
+    SearchRecallDiagnostics,
 };
 pub use focus::{build_search_result_focus, FocusBuildInputs, SearchResultFocus};
-pub use guard::{guard_search_query, no_results_guidance, SearchGuidance};
+pub use guard::{
+    guard_search_query, named_society_alternatives_guidance, no_results_guidance, SearchGuidance,
+};
 pub use index::SearchIndex;
-pub use intent::SearchIntent;
-pub use text::TextSearch;
+pub use intent::{SearchIntent, SourceSpan};
+pub use text::{TextSearch, TextSearchRequest};
 
 use serde::Serialize;
 
@@ -103,6 +109,9 @@ pub struct SearchResultCard {
     pub match_score: f64,
     pub match_label: String,
     pub match_reason: String,
+    pub match_tier: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tradeoff_label: Option<String>,
     /// Structured match explanation — present when query has preferences.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub match_explanation: Option<MatchExplanation>,
@@ -112,6 +121,14 @@ pub struct SearchResultCard {
     /// Data confidence score — how trustworthy is this result's data?
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence_score: Option<ConfidenceScore>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResultSet {
+    pub branch_id: String,
+    pub label: String,
+    pub results: Vec<SearchResultCard>,
 }
 
 /// Sourced claim — a piece of knowledge with provenance, shown alongside results.
@@ -134,27 +151,19 @@ pub struct KnowledgeContext {
     pub learning_gaps: Vec<String>,
 }
 
-/// The full search response for the upgraded endpoint.
+/// Buyer-safe search response. Internal parsing, diagnostics and enrichment
+/// gaps stay in logs/admin surfaces rather than leaking into product copy.
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchResponse {
     pub query: String,
-    pub intent: SearchIntent,
-    pub results: Vec<SearchResultCard>,
+    pub result_sets: Vec<SearchResultSet>,
+    pub total_matches: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub area_context: Option<AreaProfile>,
-    pub total_results: usize,
-    /// Journey rails: named-society focus + siblings, or ranked matches + more homes.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub focus: Option<SearchResultFocus>,
-    /// Knowledge graph provenance for the results
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub knowledge_context: Option<KnowledgeContext>,
-    /// Internal search diagnostics used by benchmarks and milestone validation.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub search_diagnostics: Option<SearchDiagnostics>,
-    /// Deterministic relaxations applied after exact constraints produced no results.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub relaxations: Vec<SearchRelaxation>,
-    /// Early guardrail guidance for vague, unsupported, or off-topic queries.
+    pub state: String,
+    /// Buyer-facing next step for guarded or empty searches. Parser and
+    /// diagnostic state remain private.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub search_guidance: Option<SearchGuidance>,
 }

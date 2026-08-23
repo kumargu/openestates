@@ -27,12 +27,6 @@
     "broad_local_recall_min_extra": 64,
     "positive_evidence_floor_ratio": 0.6,
     "no_positive_evidence_score_multiplier": 0.4,
-    "constraint_relaxation": {
-      "target_result_count": 3,
-      "order": ["budget_tolerance", "budget_cap", "area_radius"],
-      "budget_multipliers": [1.1, 1.25, 1.5],
-      "area_radii_km": [2.0, 5.0, 10.0]
-    },
     "nearby_area_score_penalty": -0.35,
     "graph_area_score_penalty": -0.25,
     "geo_distance_fact_keys": [
@@ -48,6 +42,8 @@
     "named_place_full_score_km": 0.75,
     "named_place_zero_score_km": 5.0,
     "named_place_score_weight": 2.0,
+    "named_place_candidate_limit": 128,
+    "named_place_relative_distance_multiplier": 2.0,
     "named_place_distinctive_token_max_place_count": 3,
     "named_place_distinctive_token_max_place_ratio": 0.15,
     "ambiguous_named_place_score_multiplier": 0.4,
@@ -77,6 +73,7 @@
       "from",
       "to",
       "with",
+      "evidence",
       "within",
       "kid",
       "kids",
@@ -102,6 +99,21 @@
     "review_rating_weight": 0.75,
     "review_count_weight": 0.25,
     "review_count_log_divisor": 8.0,
+    "result_limit": 32,
+    "best_effort_ranking_tiers": [
+      "explicit_intent",
+      "named_place_distance",
+      "lexical_relevance",
+      "review_quality",
+      "major_access",
+      "evidence_quality"
+    ],
+    "best_effort_access_fact_keys": [
+      "nearby_metro_stations",
+      "nearby_tech_parks",
+      "access.metro_good"
+    ],
+    "max_consecutive_results_per_society": 1,
     "ranked_focus_min_match_score": 0.35,
     "min_score_with_positive_evidence": 0.2,
     "max_score_with_positive_evidence": 0.45,

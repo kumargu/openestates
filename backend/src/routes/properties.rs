@@ -4154,25 +4154,27 @@ mod serving_state_tests {
 
     #[test]
     fn buyer_report_documents_keep_only_public_links_and_configured_group_labels() {
-        let mut info = ReraInfo::default();
-        info.document_manifest = vec![
-            ReraDocumentManifestItem {
-                artifact_id: "public-noc".to_string(),
-                label: "Fire clearance".to_string(),
-                source_url: Some("https://example.com/fire-clearance.pdf".to_string()),
-                document_group: "approvals_nocs".to_string(),
-                buyer_visibility: Some("public".to_string()),
-                ..ReraDocumentManifestItem::default()
-            },
-            ReraDocumentManifestItem {
-                artifact_id: "private-finance".to_string(),
-                label: "Account statement".to_string(),
-                source_url: Some("https://example.com/private.pdf".to_string()),
-                document_group: "promoter_financials".to_string(),
-                buyer_visibility: Some("private_or_sensitive".to_string()),
-                ..ReraDocumentManifestItem::default()
-            },
-        ];
+        let info = ReraInfo {
+            document_manifest: vec![
+                ReraDocumentManifestItem {
+                    artifact_id: "public-noc".to_string(),
+                    label: "Fire clearance".to_string(),
+                    source_url: Some("https://example.com/fire-clearance.pdf".to_string()),
+                    document_group: "approvals_nocs".to_string(),
+                    buyer_visibility: Some("public".to_string()),
+                    ..ReraDocumentManifestItem::default()
+                },
+                ReraDocumentManifestItem {
+                    artifact_id: "private-finance".to_string(),
+                    label: "Account statement".to_string(),
+                    source_url: Some("https://example.com/private.pdf".to_string()),
+                    document_group: "promoter_financials".to_string(),
+                    buyer_visibility: Some("private_or_sensitive".to_string()),
+                    ..ReraDocumentManifestItem::default()
+                },
+            ],
+            ..ReraInfo::default()
+        };
 
         let documents = rera_buyer_documents(
             &info,
@@ -5423,6 +5425,8 @@ mod serving_state_tests {
             listing_type: "Resale".to_string(),
             bhk: 3,
             price: 20_000_000,
+            price_min: None,
+            price_max: None,
             price_per_sqft: 10_000,
             carpet_area_sqft: 1_500,
             super_builtup_sqft: 2_000,
