@@ -23,7 +23,63 @@ type Props = {
   actions?: ReactNode;
   playback?: StoryScenePlayback;
   sectionId?: string;
+  showIdentity?: boolean;
 };
+
+type IdentityProps = {
+  story: PropertyStoryModel;
+  actions?: ReactNode;
+  showFacts?: boolean;
+};
+
+export function PropertySceneFacts({
+  story,
+  pageScoped = false,
+}: {
+  story: PropertyStoryModel;
+  pageScoped?: boolean;
+}) {
+  const facts = story.identity.facts.map((fact) => (
+    <span key={fact.key}>{fact.value}</span>
+  ));
+
+  if (pageScoped) {
+    return (
+      <div className="property-story-sticky-facts" aria-label="Home summary">
+        <div className="property-story-sticky-facts__inner">{facts}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="property-scene__facts" aria-label="Home summary">
+      {facts}
+    </div>
+  );
+}
+
+export function PropertySceneIdentity({
+  story,
+  actions,
+  showFacts = true,
+}: IdentityProps) {
+  return (
+    <>
+      <div className="property-scene__identity">
+        <div className="property-scene__identity-copy">
+          <p>{story.identity.location}</p>
+          <h1 id="property-scene-title">{story.identity.title}</h1>
+        </div>
+        {actions && (
+          <div className="property-scene__actions" aria-label="Property actions">
+            {actions}
+          </div>
+        )}
+      </div>
+      {showFacts && <PropertySceneFacts story={story} />}
+    </>
+  );
+}
 
 function frameLabel(frame: StoryMediaFrame, index: number): string {
   if (frame.lifecycle === "current") return "Current image";
@@ -44,6 +100,7 @@ export function PropertySceneCard({
   actions,
   playback,
   sectionId,
+  showIdentity = true,
 }: Props) {
   const [walkerIndex, setWalkerIndex] = useState<number | null>(null);
   const [usableFrameIds, setUsableFrameIds] = useState(
@@ -100,22 +157,9 @@ export function PropertySceneCard({
       className={`property-scene${hasImages ? "" : " property-scene--empty"}`}
       aria-labelledby="property-scene-title"
     >
-      <div className="property-scene__identity">
-        <div className="property-scene__identity-copy">
-          <p>{story.identity.location}</p>
-          <h1 id="property-scene-title">{story.identity.title}</h1>
-        </div>
-        <div className="property-scene__facts" aria-label="Home summary">
-          {story.identity.facts.map((fact) => (
-            <span key={fact.key}>{fact.value}</span>
-          ))}
-        </div>
-        {actions && (
-          <div className="property-scene__actions" aria-label="Property actions">
-            {actions}
-          </div>
-        )}
-      </div>
+      {showIdentity && (
+        <PropertySceneIdentity story={story} actions={actions} />
+      )}
 
       {hasImages && (
         <PropertyFilmstrip
@@ -125,6 +169,7 @@ export function PropertySceneCard({
           motionTheme={story.motionTheme}
           playback={playback}
           priority
+          presentation="stage"
           showPlaybackControl
           galleryLabel={`All photos · ${usableGalleryUrls.length}`}
           onOpenGallery={usableGalleryUrls.length > 0 ? openGallery : undefined}

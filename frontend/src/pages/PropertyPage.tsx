@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   Link,
   useParams,
-  useNavigate,
   useSearchParams,
 } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
@@ -21,10 +20,8 @@ import {
   parseProofFocusParam,
 } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
-import { RailPageControls } from "../components/RailPageControls.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
-import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { useNotebook } from "../hooks/useNotebook.ts";
@@ -32,7 +29,11 @@ import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
 import { PropertyReraTeaser } from "../components/property/PropertyReraTeaser.tsx";
 import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
-import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
+import {
+  PropertySceneCard,
+  PropertySceneFacts,
+  PropertySceneIdentity,
+} from "../components/property/PropertySceneCard.tsx";
 import { PropertyShortCompare } from "../components/property/PropertyShortCompare.tsx";
 import { propertySceneImageAt } from "../lib/propertyScene.ts";
 import {
@@ -59,19 +60,6 @@ function hasKnownNumber(value: number | null | undefined): value is number {
 
 function comparablePrice(price: number): number {
   return hasKnownNumber(price) ? price : Number.MAX_SAFE_INTEGER;
-}
-
-function cleanAreaToken(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s,-]/g, " ")
-    .split(/[,\s]+/)
-    .filter((part) => part.length > 2)
-    .join(" ");
-}
-
-function areaTokens(value: string): Set<string> {
-  return new Set(cleanAreaToken(value).split(" ").filter(Boolean));
 }
 
 function societyKey(
@@ -219,91 +207,58 @@ function rankedRecommendationItems(
     .slice(0, 8);
 }
 
-function nearbyRailItems(
+function recommendationShelfItems(
   primaryItems: RankedRecommendationItem[],
   properties: PropertyCard[],
   currentProperty: PropertyCard,
-  preferredAreas: string[],
+  excludedIds: Set<string>,
 ): RankedRecommendationItem[] {
-  const currentSocietyKey = societyKey(currentProperty);
-  const allowedAreas = new Set([currentProperty.area, ...preferredAreas]);
-  const isDifferentSociety = (property: PropertyCard) =>
-    !currentSocietyKey || societyKey(property) !== currentSocietyKey;
-  const scopedPrimaryItems = primaryItems.filter(
-    (item) =>
-      allowedAreas.has(item.property.area) && isDifferentSociety(item.property),
-  );
-  const used = new Set(scopedPrimaryItems.map((item) => item.property.id));
-  used.add(currentProperty.id);
-  const areaRank = new Map(preferredAreas.map((area, index) => [area, index]));
-  const fillers: RankedRecommendationItem[] = properties
-    .filter((property) => !used.has(property.id))
-    .filter((property) => allowedAreas.has(property.area))
-    .filter(isDifferentSociety)
-    .filter((property) => property.hero_image || property.society_name)
-    .sort((left, right) => {
-      const leftAreaRank = areaRank.get(left.area) ?? 99;
-      const rightAreaRank = areaRank.get(right.area) ?? 99;
-      if (leftAreaRank !== rightAreaRank) return leftAreaRank - rightAreaRank;
-      const reviewDelta = reviewStrength(right) - reviewStrength(left);
-      if (Math.abs(reviewDelta) > 0.001) return reviewDelta;
-      return comparablePrice(left.price) - comparablePrice(right.price);
-    })
-    .slice(0, Math.max(0, 8 - scopedPrimaryItems.length))
+  const fallbackItems: RankedRecommendationItem[] = properties
     .map((property) => ({
       kind: "nearby",
       id: `nearby-${property.id}`,
       property,
-    }));
+    } as const))
+    .sort((left, right) => {
+      const areaDelta =
+        Number(right.property.area === currentProperty.area) -
+        Number(left.property.area === currentProperty.area);
+      if (areaDelta !== 0) return areaDelta;
+      const reviewDelta =
+        reviewStrength(right.property) - reviewStrength(left.property);
+      if (Math.abs(reviewDelta) > 0.001) return reviewDelta;
+      return comparablePrice(left.property.price) -
+        comparablePrice(right.property.price);
+    });
+  const usedIds = new Set([currentProperty.id, ...excludedIds]);
+  const usedSocieties = new Set([
+    societyKey(currentProperty) || currentProperty.title.trim().toLowerCase(),
+  ]);
+  const items: RankedRecommendationItem[] = [];
 
-  return [...scopedPrimaryItems, ...fillers].slice(0, 8);
-}
-
-function microMarketAreas(
-  currentArea: string,
-  currentPricePerSqft: number,
-  properties: PropertyCard[],
-  recommendationItems: RankedRecommendationItem[],
-): string[] {
-  const byArea = new Map<string, PropertyCard[]>();
-  for (const property of properties) {
-    if (!property.area || property.price_per_sqft <= 0) continue;
-    const list = byArea.get(property.area) ?? [];
-    list.push(property);
-    byArea.set(property.area, list);
+  for (const item of [...primaryItems, ...fallbackItems]) {
+    const property = item.property;
+    const key = societyKey(property) || property.title.trim().toLowerCase();
+    if (
+      usedIds.has(property.id)
+      || usedSocieties.has(key)
+      || (!property.hero_image && !property.society_name)
+    ) {
+      continue;
+    }
+    usedIds.add(property.id);
+    usedSocieties.add(key);
+    items.push(item);
+    if (items.length === 4) break;
   }
 
-  const currentTokens = areaTokens(currentArea);
-  const recommendedAreas = new Set(
-    recommendationItems.map((item) => item.property.area),
-  );
-  return [...byArea.entries()]
-    .filter(([, areaProperties]) => areaProperties.length >= 2)
-    .map(([area, areaProperties]) => {
-      const tokens = areaTokens(area);
-      const sharedTokenCount = [...tokens].filter((token) =>
-        currentTokens.has(token),
-      ).length;
-      const medianPpsf = areaProperties
-        .map((property) => property.price_per_sqft)
-        .sort((a, b) => a - b)[Math.floor(areaProperties.length / 2)];
-      const priceCloseness = hasKnownNumber(currentPricePerSqft)
-        ? Math.max(0, 25 - Math.abs(medianPpsf - currentPricePerSqft) / 1000)
-        : 0;
-      const score =
-        (area === currentArea ? 100 : 0) +
-        (recommendedAreas.has(area) ? 45 : 0) +
-        sharedTokenCount * 30 +
-        Math.min(areaProperties.length, 10) +
-        priceCloseness;
-      return { area, score };
-    })
-    .sort(
-      (left, right) =>
-        right.score - left.score || left.area.localeCompare(right.area),
-    )
-    .slice(0, 5)
-    .map((item) => item.area);
+  return items;
+}
+
+function compactRecommendationArea(area: string): string {
+  const parts = area.split(",").map((part) => part.trim()).filter(Boolean);
+  if (area.length <= 32 || parts.length < 2) return area;
+  return parts.at(-1) ?? area;
 }
 
 function NearbyHomeCard({
@@ -319,17 +274,28 @@ function NearbyHomeCard({
     images: property.images,
   });
   const image = propertySceneImageAt(images, sceneIndex, property.hero_image);
-  const title = property.title.trim();
-  const note = `${property.area} · ${property.bhk} BHK`;
+  const title = property.society_name.trim() || property.title.trim();
+  const area = compactRecommendationArea(property.area);
+  const note = property.society_name
+    ? `${area} · ${property.bhk} BHK`
+    : area;
+  const price = formatPrice(property.price);
+  const rating = formatGoogleRating(property.google_rating);
+  const accessibleLabel = [
+    title,
+    note.replace(" · ", ", "),
+    price,
+    rating ? `Google ${rating}` : null,
+  ].filter(Boolean).join(", ");
 
   return (
     <article className="property-nearby-card">
-      <Link to={`/property/${property.id}`}>
+      <Link to={`/property/${property.id}`} aria-label={accessibleLabel}>
         <span className="property-nearby-card__image">
           {image ? (
             <ImageWithFallback
               src={image}
-              alt={title}
+              alt=""
               loading="lazy"
               fetchPriority="low"
             />
@@ -337,14 +303,14 @@ function NearbyHomeCard({
             <span>{property.society_name || property.title}</span>
           )}
         </span>
-        <strong>{title}</strong>
-        <span>{note}</span>
         <em>
-          {formatPrice(property.price)}
-          {formatGoogleRating(property.google_rating)
-            ? ` · ★ ${formatGoogleRating(property.google_rating)}`
+          {price}
+          {rating
+            ? ` · ★ ${rating}`
             : ""}
         </em>
+        <strong>{title}</strong>
+        <span>{note}</span>
       </Link>
     </article>
   );
@@ -357,39 +323,16 @@ function NearbyHomesRail({
   items: RankedRecommendationItem[];
   status: RecommendationStatus;
 }) {
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(4);
-
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 760px)");
-    const syncPageSize = () => setPageSize(media.matches ? 1 : 4);
-    syncPageSize();
-    media.addEventListener("change", syncPageSize);
-    return () => media.removeEventListener("change", syncPageSize);
-  }, []);
-
-  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
-  const safePage = Math.min(page, pageCount - 1);
-  const visibleItems = items.slice(
-    safePage * pageSize,
-    safePage * pageSize + pageSize,
-  );
-
   if (items.length === 0 && status !== "pending") return null;
 
   return (
     <section
+      id="more-homes"
       className="property-nearby-rail"
       aria-labelledby="property-nearby-title"
     >
       <div className="property-section-line">
-        <h2 id="property-nearby-title">Other homes</h2>
-        <RailPageControls
-          page={safePage}
-          pageCount={items.length > pageSize ? pageCount : 1}
-          onPageChange={setPage}
-          label="Other homes pages"
-        />
+        <h2 id="property-nearby-title">More homes to compare</h2>
       </div>
       <div className="property-nearby-rail__scroller">
         {status === "pending" && items.length === 0 && (
@@ -397,41 +340,20 @@ function NearbyHomesRail({
             <span className="property-nearby-skeleton" />
             <span className="property-nearby-skeleton" />
             <span className="property-nearby-skeleton" />
+            <span className="property-nearby-skeleton" />
           </>
         )}
-        {visibleItems.map((item, index) => (
+        {items.map((item, index) => (
           <NearbyHomeCard key={item.id} item={item} sceneIndex={index} />
         ))}
       </div>
+      <Link
+        className="property-nearby-rail__all"
+        to="/"
+      >
+        Explore all homes
+      </Link>
     </section>
-  );
-}
-
-function MicroMarketTracker({
-  currentArea,
-  properties,
-  areas,
-  onSelectArea,
-}: {
-  currentArea: string;
-  properties: PropertyCard[];
-  areas: string[];
-  onSelectArea: (area: string) => void;
-}) {
-  if (areas.length === 0) return null;
-
-  return (
-    <AreaTrackerSection
-      id="property-micro-markets"
-      className="property-micro-market"
-      properties={properties}
-      areaTracker={null}
-      preferredAreas={areas}
-      highlightArea={currentArea}
-      onSearch={onSelectArea}
-      heading="Other markets"
-      maxMarkets={areas.length}
-    />
   );
 }
 
@@ -502,7 +424,6 @@ function PropertyPageBody({
   id: string;
   focusParam: string | null;
 }) {
-  const navigate = useNavigate();
   const { compareIds } = useNotebook();
   const [storyPlaying, setStoryPlaying] = useState(false);
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
@@ -668,18 +589,6 @@ function PropertyPageBody({
     marketPropertyMap.set(property.id, property);
   }
   const marketProperties = [...marketPropertyMap.values()];
-  const microAreas = microMarketAreas(
-    p.area,
-    p.price_per_sqft,
-    marketProperties,
-    recommendationItems,
-  );
-  const nearbyItems = nearbyRailItems(
-    recommendationItems,
-    marketProperties,
-    currentCard,
-    microAreas,
-  );
   const displayTitle = p.title.trim();
   const story = projectPropertyStory(data);
   const savedIds = readShortlistIds();
@@ -705,12 +614,12 @@ function PropertyPageBody({
     selectedCompareIds.includes(p.id) ? p.id : undefined,
   );
   const comparisonIds = new Set(savedComparisons.map((home) => home.id));
-  const moreNearbyItems = nearbyItems.filter(
-    (item) => !comparisonIds.has(item.property.id),
+  const moreNearbyItems = recommendationShelfItems(
+    recommendationItems,
+    marketProperties,
+    currentCard,
+    comparisonIds,
   );
-  function handleAreaSelect(area: string) {
-    navigate(`/?q=${encodeURIComponent(area)}`);
-  }
 
   return (
     <div className="property-decision-page property-story-page">
@@ -726,25 +635,33 @@ function PropertyPageBody({
           {JSON.stringify(buildPropertyJsonLd(p))}
         </script>
       </Helmet>
+      <div className="property-scene property-scene--identity-only">
+        <PropertySceneIdentity
+          story={story}
+          showFacts={false}
+          actions={(
+            <>
+              <SaveHeartButton
+                propertyId={p.id}
+                className="property-action-link property-action-save"
+                label="Save"
+              />
+              <NotebookCommentAnchor
+                propertyId={p.id}
+                labels={[]}
+                detail={displayTitle}
+                source="Property detail"
+                label="Note"
+              />
+            </>
+          )}
+        />
+      </div>
+      <PropertySceneFacts story={story} pageScoped />
       <PropertySceneCard
         sectionId="property-cinema"
         story={story}
-        actions={(
-          <>
-            <SaveHeartButton
-              propertyId={p.id}
-              className="property-action-link property-action-save"
-              label="Save"
-            />
-            <NotebookCommentAnchor
-              propertyId={p.id}
-              labels={[]}
-              detail={displayTitle}
-              source="Property detail"
-              label="Note"
-            />
-          </>
-        )}
+        showIdentity={false}
         playback={{
           playing: storyPlaying,
           onPlayingChange: setStoryPlaying,
@@ -791,12 +708,6 @@ function PropertyPageBody({
         <NearbyHomesRail
           items={moreNearbyItems}
           status={recommendationStatus}
-        />
-        <MicroMarketTracker
-          currentArea={p.area}
-          properties={marketProperties}
-          areas={microAreas}
-          onSelectArea={handleAreaSelect}
         />
       </main>
 

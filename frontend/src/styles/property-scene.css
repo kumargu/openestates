@@ -70,6 +70,7 @@
 }
 
 .property-scene > .property-filmstrip,
+.property-scene__facts,
 .property-scene__identity {
   max-width: 1380px;
   margin-inline: auto;
@@ -89,7 +90,6 @@
 
 .property-scene__identity-copy {
   min-width: 0;
-  grid-row: 1 / 3;
 }
 
 .property-scene__identity-copy > p {
@@ -117,11 +117,40 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 0.35rem 0;
+  margin-bottom: 0.65rem;
+  padding: 0.7rem 0 0.85rem;
 }
 
-.property-scene__facts > span {
+.property-story-sticky-facts {
+  position: sticky;
+  top: 0;
+  z-index: 14;
+  width: 100%;
+  background:
+    linear-gradient(
+      to bottom,
+      var(--property-story-paper) 0%,
+      var(--property-story-paper) 72%,
+      color-mix(in srgb, var(--property-story-paper) 55%, transparent) 100%
+    );
+}
+
+.property-story-sticky-facts__inner {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  max-width: 1380px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0;
+  margin-inline: auto;
+  padding: 0.7rem clamp(1rem, 2.5vw, 2rem) 0.85rem;
+}
+
+.property-scene__facts > span,
+.property-story-sticky-facts__inner > span {
   display: inline-flex;
   align-items: center;
   padding: 0;
@@ -131,7 +160,8 @@
   white-space: nowrap;
 }
 
-.property-scene__facts > span + span::before {
+.property-scene__facts > span + span::before,
+.property-story-sticky-facts__inner > span + span::before {
   content: "·";
   margin: 0 0.55rem;
   color: var(--color-text-muted);
@@ -242,7 +272,7 @@
   }
 
   .property-scene__identity-copy {
-    grid-row: auto;
+    min-width: 0;
   }
 
   .property-scene__identity h1 {
@@ -252,13 +282,26 @@
   .property-scene__facts {
     justify-content: flex-start;
     gap: 0.4rem 1rem;
+    margin-inline: 1rem;
+    padding-block: 0.65rem 0.8rem;
   }
 
-  .property-scene__facts > span {
+  .property-story-sticky-facts {
+    top: env(safe-area-inset-top);
+  }
+
+  .property-story-sticky-facts__inner {
+    gap: 0.4rem 1rem;
+    padding-block: 0.65rem 0.8rem;
+  }
+
+  .property-scene__facts > span,
+  .property-story-sticky-facts__inner > span {
     white-space: normal;
   }
 
-  .property-scene__facts > span + span::before {
+  .property-scene__facts > span + span::before,
+  .property-story-sticky-facts__inner > span + span::before {
     display: none;
   }
 

@@ -205,7 +205,7 @@
 }
 
 .story-lab__production-shell {
-  overflow: hidden;
+  overflow: clip;
   border-radius: 16px;
   background: var(--property-story-paper, #f5f1e9);
 }

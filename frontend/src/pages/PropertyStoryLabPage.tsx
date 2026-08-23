@@ -7,6 +7,8 @@ import { PropertyReraTeaser } from "../components/property/PropertyReraTeaser.ts
 import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
 import {
   PropertySceneCard,
+  PropertySceneFacts,
+  PropertySceneIdentity,
   type StoryPlaybackSpeed,
   type StoryScenePlayback,
 } from "../components/property/PropertySceneCard.tsx";
@@ -354,11 +356,21 @@ export function PropertyStoryLabPage() {
             className={`story-lab__viewport story-lab__viewport--${viewport}`}
           >
             {deck === "page" && (
-              <div className="property-story-page story-lab__production-shell">
+              <div
+                key={`page:${propertyId}:${imageCount}:${provenance}`}
+                className="property-story-page story-lab__production-shell"
+              >
+                <div className="property-scene property-scene--identity-only">
+                  <PropertySceneIdentity
+                    story={story}
+                    actions={actions}
+                    showFacts={false}
+                  />
+                </div>
+                <PropertySceneFacts story={story} pageScoped />
                 <PropertySceneCard
-                  key={`page:${propertyId}:${imageCount}:${provenance}`}
                   story={story}
-                  actions={actions}
+                  showIdentity={false}
                   playback={{
                     activeIndex,
                     playing,

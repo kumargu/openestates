@@ -6,10 +6,6 @@
   container-type: inline-size;
 }
 
-.property-arrival .property-filmstrip {
-  --property-story-media-height: clamp(28rem, 58svh, 38rem);
-}
-
 @media (max-width: 760px) {
   .property-arrival {
     width: calc(100% + 2rem);

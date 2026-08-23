@@ -249,6 +249,77 @@
   color: #26302c;
 }
 
+.property-filmstrip--stage .property-filmstrip__track {
+  inset: 0;
+}
+
+.property-filmstrip--stage {
+  --property-story-media-height: clamp(32rem, 72svh, 48rem);
+  min-height: 32rem;
+}
+
+.property-filmstrip--stage .property-filmstrip__card {
+  inset: 0;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  transform: none;
+  transition: opacity var(--filmstrip-transition-duration) ease;
+}
+
+.property-filmstrip--stage .property-filmstrip__card.filmstrip-position--active,
+.property-filmstrip--stage .property-filmstrip__card.filmstrip-position--m1,
+.property-filmstrip--stage .property-filmstrip__card.filmstrip-position--p1 {
+  transform: none;
+}
+
+.property-filmstrip--stage .property-filmstrip__card::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(8, 13, 11, 0.12) 35%, rgba(8, 13, 11, 0.82) 100%);
+  content: "";
+  pointer-events: none;
+}
+
+.property-filmstrip--stage .property-filmstrip__card figcaption {
+  z-index: 2;
+  right: clamp(1.25rem, 4vw, 3.25rem);
+  bottom: 5.6rem;
+  left: clamp(1.25rem, 4vw, 3.25rem);
+  display: grid;
+  justify-content: start;
+  gap: 0.45rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.property-filmstrip--stage .property-filmstrip__card figcaption strong {
+  max-width: 18ch;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2rem, 4.2vw, 4rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 0.96;
+  text-wrap: balance;
+}
+
+.property-filmstrip--stage .property-filmstrip__card figcaption span {
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 0.72rem;
+  font-weight: 680;
+  letter-spacing: 0.03em;
+}
+
+.property-filmstrip--stage .property-filmstrip__controls {
+  right: clamp(1rem, 3vw, 2.5rem);
+  bottom: 1rem;
+  left: clamp(1rem, 3vw, 2.5rem);
+}
+
 .filmstrip-focal--left img {
   object-position: left center;
 }
@@ -301,6 +372,16 @@
   to { transform: scale(1.055) translate3d(-0.3%, -0.4%, 0); }
 }
 
+@keyframes filmstrip-arrival-wide {
+  from { transform: scale(1.025) translate3d(-0.35%, 0.15%, 0); }
+  to { transform: scale(1.08) translate3d(0.45%, -0.35%, 0); }
+}
+
+@keyframes filmstrip-arrival-close {
+  from { transform: scale(1.12) translate3d(0.2%, -0.15%, 0); }
+  to { transform: scale(1.035) translate3d(-0.25%, 0.2%, 0); }
+}
+
 .story-motion--quiet-pan .property-filmstrip__card.is-active img {
   animation: filmstrip-quiet-pan var(--filmstrip-motion-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
@@ -317,6 +398,14 @@
   animation: filmstrip-editorial-cut var(--filmstrip-motion-duration) cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
+.property-filmstrip--stage .property-filmstrip__card.filmstrip-view--wide.is-active img {
+  animation: filmstrip-arrival-wide var(--filmstrip-motion-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.property-filmstrip--stage .property-filmstrip__card.filmstrip-view--close.is-active img {
+  animation: filmstrip-arrival-close var(--filmstrip-motion-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 .property-filmstrip.is-paused .property-filmstrip__card.is-active img {
   animation-play-state: paused;
 }
@@ -327,6 +416,10 @@
   }
 
   .property-filmstrip__controls {
+    bottom: calc(4.85rem + env(safe-area-inset-bottom));
+  }
+
+  .property-filmstrip--stage .property-filmstrip__controls {
     bottom: calc(4.85rem + env(safe-area-inset-bottom));
   }
 }
@@ -394,6 +487,50 @@
     color: rgba(255, 255, 255, 0.76);
     font-size: 0.68rem;
     font-weight: 740;
+  }
+
+  .property-filmstrip--stage .property-filmstrip__card figcaption {
+    right: 1rem;
+    bottom: calc(11rem + env(safe-area-inset-bottom));
+    left: 1rem;
+  }
+
+  .property-filmstrip--stage {
+    --property-story-media-height-mobile: min(76svh, 42rem);
+    min-height: 32rem;
+  }
+
+  .property-filmstrip--stage .property-filmstrip__card figcaption strong {
+    max-width: 15ch;
+    font-size: clamp(2rem, 10vw, 3.25rem);
+  }
+
+  .property-filmstrip--stage .property-filmstrip__controls {
+    right: 0.65rem;
+    bottom: calc(6.75rem + env(safe-area-inset-bottom));
+    left: 0.65rem;
+  }
+
+  .property-filmstrip--stage .property-filmstrip__controls > a {
+    display: inline-flex;
+  }
+
+  @keyframes filmstrip-arrival-wide-mobile {
+    from { transform: scale(1.01) translate3d(-0.2%, 0.1%, 0); }
+    to { transform: scale(1.045) translate3d(0.25%, -0.2%, 0); }
+  }
+
+  @keyframes filmstrip-arrival-close-mobile {
+    from { transform: scale(1.055) translate3d(0.1%, -0.1%, 0); }
+    to { transform: scale(1.01) translate3d(-0.15%, 0.1%, 0); }
+  }
+
+  .property-filmstrip--stage .property-filmstrip__card.filmstrip-view--wide.is-active img {
+    animation-name: filmstrip-arrival-wide-mobile;
+  }
+
+  .property-filmstrip--stage .property-filmstrip__card.filmstrip-view--close.is-active img {
+    animation-name: filmstrip-arrival-close-mobile;
   }
 
 }

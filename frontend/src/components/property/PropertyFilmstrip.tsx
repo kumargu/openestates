@@ -40,6 +40,7 @@ export type PropertyFilmstripFrame = {
   sourceUrl?: string;
   focalPoint?: StoryFocalPoint;
   showCaption?: boolean;
+  viewScale?: "wide" | "close";
 };
 
 type Props = {
@@ -50,6 +51,7 @@ type Props = {
   playback?: StoryScenePlayback;
   priority?: boolean;
   showPlaybackControl?: boolean;
+  presentation?: "card" | "stage";
   galleryLabel?: string;
   onOpenGallery?: (activeFrameId: string) => void;
   onUsableFramesChange?: (frameIds: string[]) => void;
@@ -83,6 +85,7 @@ export function PropertyFilmstrip({
   playback,
   priority = false,
   showPlaybackControl = false,
+  presentation = "card",
   galleryLabel,
   onOpenGallery,
   onUsableFramesChange,
@@ -233,11 +236,12 @@ export function PropertyFilmstrip({
   ]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+    if (frames.length <= 1) return;
+    if (event.key === "ArrowLeft") {
       event.preventDefault();
       selectFrame(safeActive - 1);
     }
-    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+    if (event.key === "ArrowRight") {
       event.preventDefault();
       selectFrame(safeActive + 1);
     }
@@ -250,7 +254,9 @@ export function PropertyFilmstrip({
       ref={rootRef}
       className={`property-filmstrip ${motion.className} ${speedClass(speed)}${
         isReady ? " is-ready" : ""
-      }${paused ? " is-paused" : ""}`}
+      }${paused ? " is-paused" : ""}${
+        presentation === "stage" ? " property-filmstrip--stage" : ""
+      }`}
       data-motion-theme={selectedTheme}
       tabIndex={0}
       role="region"
@@ -266,7 +272,10 @@ export function PropertyFilmstrip({
               key={frame.id}
               className={`property-filmstrip__card ${positionClass(offset)} ${
                 activeCard ? "is-active" : ""
-              } ${focalPointClass(frame.focalPoint)}`}
+              } ${focalPointClass(frame.focalPoint)}${
+                frame.viewScale ? ` filmstrip-view--${frame.viewScale}` : ""
+              }`}
+              data-lifecycle={frame.lifecycle}
               aria-hidden={!activeCard}
             >
               <ImageWithFallback
@@ -306,33 +315,39 @@ export function PropertyFilmstrip({
       <div className="property-filmstrip__loading" aria-hidden="true" />
 
       <div className="property-filmstrip__controls">
-        <button
-          type="button"
-          aria-label="Previous image"
-          onClick={() => selectFrame(safeActive - 1)}
-        >
-          ←
-        </button>
-        <div className="property-filmstrip__sequence" aria-label="Property views">
-          {frames.map((frame, index) => (
+        {frames.length > 1 && (
+          <>
             <button
-              key={frame.id}
               type="button"
-              className={index === safeActive ? "is-active" : ""}
-              aria-label={`Show ${frame.label}`}
-              aria-pressed={index === safeActive}
-              onClick={() => selectFrame(index)}
+              aria-label="Previous image"
+              onClick={() => selectFrame(safeActive - 1)}
             >
-              {String(index + 1).padStart(2, "0")}
+              ←
             </button>
-          ))}
-        </div>
-        <span className="property-filmstrip__count" aria-live="polite">
-          {String(safeActive + 1).padStart(2, "0")} /{" "}
-          {String(frames.length).padStart(2, "0")}
-        </span>
+            <div
+              className="property-filmstrip__sequence"
+              aria-label="Property views"
+            >
+              {frames.map((frame, index) => (
+                <button
+                  key={frame.id}
+                  type="button"
+                  className={index === safeActive ? "is-active" : ""}
+                  aria-label={`Show ${frame.label}`}
+                  aria-pressed={index === safeActive}
+                  onClick={() => selectFrame(index)}
+                >
+                  {String(index + 1).padStart(2, "0")}
+                </button>
+              ))}
+            </div>
+            <span className="property-filmstrip__count" aria-live="polite">
+              {String(safeActive + 1).padStart(2, "0")} /{" "}
+              {String(frames.length).padStart(2, "0")}
+            </span>
+          </>
+        )}
         {!reducedMotion
-          && frames.length > 1
           && showPlaybackControl
           && (
           <button
@@ -362,13 +377,15 @@ export function PropertyFilmstrip({
             {galleryLabel}
           </button>
         )}
-        <button
-          type="button"
-          aria-label="Next image"
-          onClick={() => selectFrame(safeActive + 1)}
-        >
-          →
-        </button>
+        {frames.length > 1 && (
+          <button
+            type="button"
+            aria-label="Next image"
+            onClick={() => selectFrame(safeActive + 1)}
+          >
+            →
+          </button>
+        )}
       </div>
     </div>
   );
