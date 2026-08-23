@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "engine_version": "scoring-v1",
   "missing_data": {
     "default_behavior": "skip",
@@ -249,41 +249,128 @@
       ]
     }
   },
+  "recommendation_recall": {
+    "candidate_limit": 80,
+    "branch_limit": 5,
+    "target_branch_count": 3,
+    "eligibility": {
+      "require_same_bhk": true,
+      "require_same_listing_type": true,
+      "require_same_property_type": true,
+      "compatible_property_type_groups": [
+        {
+          "id": "residential_apartment_project",
+          "values": [
+            "Apartment",
+            "Residential/Group Housing",
+            "Mixed Development"
+          ]
+        }
+      ],
+      "exclude_anchor_society": true,
+      "max_properties_per_society": 1
+    },
+    "channels": [
+      {
+        "id": "same_area",
+        "operator": "same_area",
+        "enabled": true,
+        "can_recall": true,
+        "score": 1.0
+      },
+      {
+        "id": "price_band",
+        "operator": "price_band",
+        "enabled": true,
+        "can_recall": false,
+        "score": 0.65,
+        "min_ratio": 0.82,
+        "max_ratio": 1.18
+      },
+      {
+        "id": "same_builder",
+        "operator": "same_builder",
+        "enabled": true,
+        "can_recall": false,
+        "score": 0.25
+      },
+      {
+        "id": "shared_graph_neighbor",
+        "operator": "shared_graph_neighbor",
+        "enabled": true,
+        "can_recall": true,
+        "score": 0.7,
+        "edge_types": [
+          "served_by_road",
+          "near_transit"
+        ]
+      },
+      {
+        "id": "spatial_nearby",
+        "operator": "spatial_radius",
+        "enabled": true,
+        "can_recall": true,
+        "score": 0.85,
+        "limit": 32,
+        "max_distance_km": 8.0
+      },
+      {
+        "id": "lexical",
+        "operator": "lexical",
+        "enabled": false,
+        "can_recall": true,
+        "score": 0.35,
+        "limit": 30
+      }
+    ],
+    "fallback_branch": {
+      "enabled": true,
+      "id": "similar_tradeoff",
+      "headline": "Similar tradeoff",
+      "lens": "proof",
+      "max_items": 3
+    }
+  },
   "recommendation_branches": [
     {
       "id": "better_value",
       "primary_signal": "price_value",
       "min_delta": 0.12,
       "headline": "Better value",
-      "lens": "value"
+      "lens": "value",
+      "priority": 1
     },
     {
       "id": "stronger_proof",
       "primary_signal": "proof_strength",
       "min_delta": 0.15,
       "headline": "More receipts",
-      "lens": "proof"
+      "lens": "proof",
+      "priority": 2
     },
     {
       "id": "easier_access",
       "primary_signal": "access_strength",
       "min_delta": 0.1,
       "headline": "Easier access",
-      "lens": "commute"
+      "lens": "commute",
+      "priority": 3
     },
     {
       "id": "safer_timeline",
       "primary_signal": "legal_timeline_safety",
       "min_delta": 0.1,
       "headline": "Safer file",
-      "lens": "trust"
+      "lens": "trust",
+      "priority": 4
     },
     {
       "id": "better_living_fit",
       "primary_signal": "living_fit",
       "min_delta": 0.12,
       "headline": "Better day-to-day fit",
-      "lens": "proof"
+      "lens": "proof",
+      "priority": 5
     }
   ]
 }

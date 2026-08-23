@@ -3909,8 +3909,7 @@ body {
   min-width: 0;
 }
 
-.property-decision-main > .nearby-plate,
-.property-decision-main > .alt-paths {
+.property-decision-main > .nearby-plate {
   margin-bottom: 0;
 }
 
