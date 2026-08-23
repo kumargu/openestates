@@ -51,7 +51,7 @@ means a specific area. That is the serving resolver's job.
 - Run focused tests for touched logic.
 - Run search contracts:
   - `cargo test --manifest-path backend/Cargo.toml --test search_quality_contract`
-  - `cargo test --manifest-path backend/Cargo.toml --test search_quality`
+  - `cargo test --manifest-path backend/Cargo.toml --test search_semantic_quality_contract`
   - `cargo test --manifest-path backend/Cargo.toml --test search_efficiency_contract`
 - Run the relevant buyer-language benchmark before and after behavior changes,
   using the same serving bundle and spec.
@@ -75,38 +75,8 @@ Completed locally:
 - Added/updated tests that prove named localities do not resolve through parser
   config.
 - Kept generic ontology phrases and fact-key expansion in config.
-- Removed the fastText residual intent classifier, its runtime dependency,
-  training binary, model loading, and shadow diagnostics. Configured
-  deterministic intent plus serving-backed entity and capability indexes are
-  now the only production search path.
-- Compiled structured constraints into backend-owned result sets. Top-level OR
-  branches retain their order and exact eligible counts; the frontend renders
-  those sets without inventing new price, BHK, or area groups.
-- Kept BHK, named-society, area, and other hard constraints intact during
-  fallback. Budget-only expansion is bounded by the configured 10% and 25%
-  tiers and carries an explicit buyer tradeoff label.
-- Made missing soft evidence additive. Only preferences explicitly marked
-  `required` in the fact registry can gate eligibility.
-- Stopped named-entity scopes before configured budget operators, BHK clauses,
-  and evidence constraints so natural buyer queries do not turn whole suffixes
-  into entity names.
-- Reduced the buyer API to `query`, backend-owned `resultSets`, `totalMatches`,
-  optional `areaContext`, and `state`; parser, diagnostics, enrichment gaps,
-  and relaxation machinery remain internal.
-
-Verification checkpoint — 2026-08-22:
-
-- Rust library: 620/620 passed.
-- Search/DAG contracts: asset executor 12/12, search efficiency 11/11,
-  search quality 4/4, search quality contract 5/5, serving runtime 5/5.
-- Frontend: 145/145 tests passed; TypeScript and production Vite build passed.
-- Fresh-server smoke test: 50/50 passed against promoted bundle
-  `clean-serving-v7-2026-08-16` (86 runtime properties).
-- Production search hardcoding audit passed with no blocked config aliases. Its
-  only two warnings are the existing comment-only `office` examples in
-  `backend/src/search/geo.rs`.
-- `cargo check`, Rust formatting, and diff whitespace checks passed. The macOS
-  linker still emits its existing large `__eh_frame` advisory during tests.
+- Preserved the semantic quality contract after fixing the fixture to avoid
+  hidden area filters.
 
 Known follow-up audit findings:
 
@@ -124,15 +94,12 @@ Known follow-up audit findings:
 
 ## Next Proof Loop
 
-Detailed execution plan:
-`docs/search_fact_grounded_proof_loop_plan.md`.
+Use the pinned Bangalore bundle as the reset baseline:
 
-Use the current promoted bundle as the first proof-loop baseline:
-
-- bundle version: `clean-serving-v7-2026-08-16`
-- materialization: `fe16ca1a-a301-4306-ae10-06cc27f792e2`
-- scope: 697 entities, 13,310 facts, 3,353 graph edges, 12,969 search
-  metadata rows
+- bundle version: `bangalore-catalog-60-coherent-2026-08-01`
+- materialization: `909a8bd0-3af0-42af-ae26-ba493f54174a`
+- scope: 286 entities, 6,901 facts, 1,894 graph edges, 6,754 search metadata
+  rows
 
 Run one small loop at a time:
 

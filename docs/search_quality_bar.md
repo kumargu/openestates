@@ -93,16 +93,16 @@ The stronger buyer-language benchmark is:
 ```bash
 python3.10 -m pipeline.benchmark_search_quality \
   --base-url http://127.0.0.1:4011 \
-  --spec data/validation/search_query_bank.json \
-  --suite fact_first \
+  --spec data/validation/search_quality_queries_v1.json \
   --output tmp/search_quality_benchmark_v1_data_backed.json \
   --markdown-output tmp/search_quality_benchmark_v1_data_backed.md
 ```
 
-`data/validation/search_query_bank.json` owns every query and suite. Add new
-buyer queries to a named case group, then include that group in compatible
-suites. Rust controlled contracts and live API benchmarks both select from the
-same bank.
+The suite manifest is `data/validation/search_quality_queries_v1.json`. Reusable
+queries live under `data/validation/query_bank/`; add new real buyer queries
+there first, then include them in a suite with `case_files`. This lets the same
+case bank feed ad hoc runs, future integration tests, and regression suites as
+the DAG grows.
 
 The contract tests that encode the product bar are:
 

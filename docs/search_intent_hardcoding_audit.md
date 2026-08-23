@@ -1,6 +1,6 @@
 # Search Intent Hardcoding Audit
 
-Date: 2026-08-23
+Date: 2026-07-28
 
 Scope: search parsing, geo resolution, search ranking proof handoff, map/detail nearby evidence projection, and product vocabulary in Rust/TypeScript.
 
@@ -28,22 +28,16 @@ The repo already has substantial config-backed search semantics in `app/config/d
 Run:
 
 ```bash
-python3 scripts/audit_search_hardcoding.py --mode production-search --gate
+python3 scripts/audit_search_hardcoding.py
 ```
 
-The production gate derives scan terms and fact keys from DAG config, excludes
-test fixtures and structural fact keys, and fails when search runtime contains
-buyer vocabulary, configured product-fact comparisons, or blocked entity
-aliases. Running without `--gate` remains available as a broader warning-only
-review aid.
+The command is warning-only. It derives scan terms from DAG config and scans Rust/TypeScript for buyer/product vocabulary outside approved config, test, and rendering locations. It should stay non-blocking until false positives are reviewed.
 
-Current production gate result:
+Current warning baseline from this pass:
 
 ```text
-Config-derived terms: 65
-Findings: 0
-Fact-key comparison findings: 0
-Blocked search-config alias findings: 0
+Config-derived terms: 78
+Findings: 759
 ```
 
 ## Implemented In This Pass
@@ -56,14 +50,11 @@ Blocked search-config alias findings: 0
 - Routed geo distance limits through the same parser and gated named-place geo resolution on relation intent.
 - Added regression coverage for whitespace, optional hyphen, number words, distance units, budget formats, Manipal/tech-park queries, and non-proximity place mentions.
 - Added a warning-only hardcoding audit command that scans parser production code and excludes inline Rust test modules as fixtures.
-- Added a tested failing gate for production vocabulary, product fact-key
-  comparisons, and blocked config aliases.
-- Removed the search-card projection that compared directly against
-  `builder_delivery_rate`; builder ranking remains generic and metadata-driven.
 - Verified the backend library suite and frontend proof-focus/map projection tests after the parser and geo handoff changes.
 
 ## Remaining Follow-Up
 
+- `backend/src/search/intent.rs::apply_bhk_fact_key_derivations` still hardcodes listing fact-key template behavior and should move to `fact_registry.json` or `search_intent.json`.
 - `backend/src/search/schema.rs` still contains some numeric constraint direction/context mechanics around age constraints; dimensions are config-backed, but context vocabulary can move further into config.
 - `frontend/src/lib/search.ts` still contains display-suppression vocabulary for result reasons; this should move to response metadata or UI config.
-- Keep new structural exceptions narrow and covered by a gate regression test.
+- The audit command still reports many known findings and should gain a reviewed baseline before becoming a CI gate.
