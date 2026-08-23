@@ -5,7 +5,6 @@ use crate::assets::{
     KgSocietyViewMaterialization, KgViewRecords, MaterializationId, MaterializationRecord,
     SourceWatermark, KG_SOCIETY_VIEW_ASSET_ID,
 };
-use crate::dag_config::ServingAdmissionProfile;
 use crate::knowledge::KnowledgeGraph;
 use crate::lake::{LakeError, LakeStore};
 
@@ -19,7 +18,6 @@ use super::{
 pub struct SearchServingBundleMaterializer {
     lake: LakeStore,
     materializations: AssetMaterializationStore,
-    admission_profile: ServingAdmissionProfile,
 }
 
 #[derive(Debug, Clone)]
@@ -34,33 +32,7 @@ impl SearchServingBundleMaterializer {
         Self {
             lake,
             materializations,
-            admission_profile: ServingAdmissionProfile::BuyerCatalog,
         }
-    }
-
-    pub fn for_search_experiment(lake: LakeStore) -> Self {
-        let materializations = AssetMaterializationStore::new(lake.clone());
-        Self {
-            lake,
-            materializations,
-            admission_profile: ServingAdmissionProfile::SearchExperiment,
-        }
-    }
-
-    fn bundle_builder(&self) -> ServingBundleBuilder {
-        match self.admission_profile {
-            ServingAdmissionProfile::BuyerCatalog => ServingBundleBuilder::new(self.lake.clone()),
-            ServingAdmissionProfile::SearchExperiment => {
-                ServingBundleBuilder::for_search_experiment(self.lake.clone())
-            }
-        }
-    }
-
-    fn ensure_promotion_allowed(&self) -> Result<(), SearchServingBundleMaterializeError> {
-        if self.admission_profile == ServingAdmissionProfile::SearchExperiment {
-            return Err(SearchServingBundleMaterializeError::ExperimentPromotionForbidden);
-        }
-        Ok(())
     }
 
     pub async fn materialize_and_promote(
@@ -100,7 +72,6 @@ impl SearchServingBundleMaterializer {
         run_id: MaterializationId,
         partition: AssetPartition,
     ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
-        self.ensure_promotion_allowed()?;
         let materialization = self
             .materialize_from_kg_view_for_run(kg_view, bundle_version, run_id, partition)
             .await?;
@@ -142,8 +113,7 @@ impl SearchServingBundleMaterializer {
     ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
         let mut parent_materializations = vec![kg_view.record.materialization_id.clone()];
         parent_materializations.extend(rera_parent_materializations);
-        let manifest = self
-            .bundle_builder()
+        let manifest = ServingBundleBuilder::new(self.lake.clone())
             .build_from_kg_view_records_with_rera(&kg_view.records, rera_evidence, bundle_version)
             .await?;
         self.write_unpromoted_record(
@@ -166,7 +136,6 @@ impl SearchServingBundleMaterializer {
         source_watermarks: Vec<SourceWatermark>,
         parent_materializations: Vec<MaterializationId>,
     ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
-        self.ensure_promotion_allowed()?;
         let materialization = self
             .materialize_with_parents_for_run(
                 records,
@@ -192,7 +161,6 @@ impl SearchServingBundleMaterializer {
         run_id: MaterializationId,
         partition: AssetPartition,
     ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
-        self.ensure_promotion_allowed()?;
         let materialization = self
             .materialize_with_parents_for_run(
                 records,
@@ -270,8 +238,7 @@ impl SearchServingBundleMaterializer {
         parent_materializations: Vec<MaterializationId>,
         run_id: MaterializationId,
     ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
-        let manifest = self
-            .bundle_builder()
+        let manifest = ServingBundleBuilder::new(self.lake.clone())
             .build_child_from_serving_records_with_rera(
                 entities,
                 facts,
@@ -301,8 +268,7 @@ impl SearchServingBundleMaterializer {
         run_id: MaterializationId,
         partition: AssetPartition,
     ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
-        let manifest = self
-            .bundle_builder()
+        let manifest = ServingBundleBuilder::new(self.lake.clone())
             .build_from_kg_view_records(records, bundle_version)
             .await?;
         self.write_unpromoted_record(
@@ -351,7 +317,6 @@ impl SearchServingBundleMaterializer {
 #[derive(Debug)]
 pub enum SearchServingBundleMaterializeError {
     Bundle(ServingBundleError),
-    ExperimentPromotionForbidden,
     Json(serde_json::Error),
     Lake(LakeError),
 }
@@ -360,10 +325,6 @@ impl fmt::Display for SearchServingBundleMaterializeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Bundle(err) => write!(f, "search serving bundle build failed: {err}"),
-            Self::ExperimentPromotionForbidden => write!(
-                f,
-                "search-experiment bundles must remain unpromoted and be selected by immutable materialization id"
-            ),
             Self::Json(err) => write!(f, "search serving bundle KG conversion failed: {err}"),
             Self::Lake(err) => write!(f, "search serving bundle materialization failed: {err}"),
         }
@@ -387,22 +348,5 @@ impl From<LakeError> for SearchServingBundleMaterializeError {
 impl From<serde_json::Error> for SearchServingBundleMaterializeError {
     fn from(err: serde_json::Error) -> Self {
         Self::Json(err)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn search_experiment_materializer_rejects_current_pointer_promotion() {
-        let root = tempfile::tempdir().expect("temporary lake");
-        let lake = LakeStore::local(root.path()).expect("local lake");
-        let materializer = SearchServingBundleMaterializer::for_search_experiment(lake);
-
-        assert!(matches!(
-            materializer.ensure_promotion_allowed(),
-            Err(SearchServingBundleMaterializeError::ExperimentPromotionForbidden)
-        ));
     }
 }

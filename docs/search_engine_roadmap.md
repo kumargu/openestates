@@ -165,14 +165,14 @@ surfacing, ranking, or embeddings.
 
 Deliverables:
 
-- Reusable query bank under `data/validation/query_bank/`.
+- One reusable query bank at `data/validation/search_query_bank.json`.
 - Serving-bundle profile from promoted Parquet.
 - Benchmark report split by `data_backed` and `data_gap`.
 - Baseline latency report for current search endpoint.
 
 Quality gates:
 
-- Query bank loads through `case_files`.
+- Query suites select compatible case groups from the unified bank.
 - No duplicate query IDs.
 - Current scoreable benchmark remains reproducible.
 - Chain audit maps existing search commits/files to roadmap milestones and
@@ -186,7 +186,8 @@ Measurement:
 ```bash
 python3.10 -m pipeline.benchmark_search_quality \
   --base-url http://127.0.0.1:4011 \
-  --spec data/validation/search_quality_queries_v1.json \
+  --spec data/validation/search_query_bank.json \
+  --suite fact_first \
   --output tmp/search_quality_benchmark_v1_data_backed.json \
   --markdown-output tmp/search_quality_benchmark_v1_data_backed.md
 ```

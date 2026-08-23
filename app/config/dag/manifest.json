@@ -23,7 +23,6 @@
     "rera_report_surface.json",
     "scoring_policy.json",
     "search_guardrails.json",
-    "search_experiment_eligibility.json",
     "search_intent.json",
     "serving_eligibility.json",
     "source_adapters/",

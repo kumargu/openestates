@@ -1,8 +1,0 @@
-{
-  "benchmark": "incomplete_south_search_experiment",
-  "version": 1,
-  "description": "Fact-grounded search checks over an immutable experiment-profile bundle containing properties incomplete for the buyer catalog.",
-  "required_serving_bundle_version": "search-experiment-mixed-south-45-2026-08-22-v1",
-  "scoreable_modes": ["data_backed", "transfer", "abstention"],
-  "case_files": ["query_bank/search_incomplete_south_experiment_v1.json"]
-}

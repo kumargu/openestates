@@ -14,23 +14,40 @@ use chrono::{TimeZone, Utc};
 use serde::Deserialize;
 use tempfile::tempdir;
 
-const PRODUCT_SCENARIOS_BANK: &str =
-    include_str!("../../data/validation/query_bank/search_product_scenarios_v1.json");
+const SEARCH_QUERY_BANK: &str = include_str!("../../data/validation/search_query_bank.json");
+const CONTROLLED_SUITE_ID: &str = "controlled_product";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ControlledQueryBank {
+struct SearchQueryBank {
     version: u32,
     generated_at: String,
-    mode: String,
+    description: String,
+    case_groups: Vec<QueryCaseGroup>,
+    suites: Vec<QuerySuite>,
+    cases: Vec<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct QueryCaseGroup {
+    id: String,
+    #[serde(default)]
     notes: Vec<String>,
-    cases: Vec<ControlledQueryCase>,
+}
+
+#[derive(Deserialize)]
+struct QuerySuite {
+    id: String,
+    runner: String,
+    case_groups: Vec<String>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ControlledQueryCase {
     id: String,
+    #[serde(rename = "group")]
+    _group: String,
     query: String,
     #[serde(rename = "category")]
     _category: String,
@@ -121,29 +138,53 @@ struct FixtureExpectation {
 
 #[test]
 fn frozen_product_scenarios_execute_against_controlled_inventory() {
-    let bank: ControlledQueryBank = serde_json::from_str(PRODUCT_SCENARIOS_BANK)
-        .expect("controlled product-scenario bank is valid");
-    assert_eq!(bank.version, 1, "unsupported controlled bank version");
-    assert_eq!(bank.mode, "controlled_product_scenarios");
+    let bank: SearchQueryBank =
+        serde_json::from_str(SEARCH_QUERY_BANK).expect("unified search query bank is valid");
+    assert_eq!(bank.version, 1, "unsupported search query bank version");
     assert!(
         !bank.generated_at.trim().is_empty(),
         "bank date is required"
     );
     assert!(
-        !bank.notes.is_empty(),
-        "bank purpose must remain documented"
+        !bank.description.trim().is_empty(),
+        "bank purpose is required"
     );
-    assert_eq!(bank.cases.len(), 50, "controlled bank size changed");
-
-    let unique_ids = bank
+    let suite = bank
+        .suites
+        .iter()
+        .find(|suite| suite.id == CONTROLLED_SUITE_ID)
+        .expect("controlled product suite is required");
+    assert_eq!(suite.runner, "rust_controlled");
+    assert_eq!(suite.case_groups, [CONTROLLED_SUITE_ID]);
+    let group = bank
+        .case_groups
+        .iter()
+        .find(|group| group.id == CONTROLLED_SUITE_ID)
+        .expect("controlled product group is required");
+    assert!(
+        !group.notes.is_empty(),
+        "controlled group purpose must remain documented"
+    );
+    let cases = bank
         .cases
+        .into_iter()
+        .filter(|case| {
+            case.get("group").and_then(serde_json::Value::as_str) == Some(CONTROLLED_SUITE_ID)
+        })
+        .map(|case| {
+            serde_json::from_value::<ControlledQueryCase>(case)
+                .expect("controlled search case follows the typed contract")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(cases.len(), 50, "controlled bank size changed");
+
+    let unique_ids = cases
         .iter()
         .map(|case| case.id.as_str())
         .collect::<HashSet<_>>();
-    assert_eq!(unique_ids.len(), bank.cases.len(), "duplicate scenario IDs");
+    assert_eq!(unique_ids.len(), cases.len(), "duplicate scenario IDs");
 
-    let represented_fixtures = bank
-        .cases
+    let represented_fixtures = cases
         .iter()
         .map(|case| case.fixture)
         .collect::<HashSet<_>>();
@@ -163,7 +204,7 @@ fn frozen_product_scenarios_execute_against_controlled_inventory() {
         .into_iter()
         .map(|kind| (kind, MockSearchFixture::for_kind(kind)))
         .collect::<HashMap<_, _>>();
-    for case in &bank.cases {
+    for case in &cases {
         let output = fixtures[&case.fixture].search(&case.query);
         if std::env::var_os("OPENESTATES_TRACE_SEARCH_SCENARIOS").is_some() {
             let observed = output
@@ -1332,7 +1373,6 @@ impl FixtureBuilder {
                 rera_evidence_count: 0,
                 excluded_rera_evidence_society_ids: Vec::new(),
                 edge_count: 0,
-                admission_profile: backend::dag_config::ServingAdmissionProfile::BuyerCatalog,
                 eligibility_policy_version: 0,
                 quarantined_society_count: 0,
                 quarantine_reason_counts: Default::default(),

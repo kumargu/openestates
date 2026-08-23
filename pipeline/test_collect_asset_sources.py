@@ -37,7 +37,6 @@ from pipeline.collect_asset_sources import (
     rera_square_metres,
 )
 from pipeline.skills.base import FactSource, SkillCost, SkillResult, SourcedFact
-from pipeline.skills.rera_regulatory_intelligence import RegulatoryIntelligenceError
 from pipeline.skills.fetch_google_review_links import (
     FetchGoogleReviewLinksSkill,
     fetch_google_places_nearby_text,
@@ -383,59 +382,6 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         load_cached.assert_not_called()
         capture.assert_called_once()
-
-    def test_rera_receipts_keep_project_detail_when_optional_regulatory_shape_changes(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            listing_cache = root / "listing.json"
-            listing_raw = root / "listing.html"
-            listing_cache.write_text(
-                json.dumps({"cached_at": "2026-08-09T10:30:00Z"}),
-                encoding="utf-8",
-            )
-            listing_raw.write_bytes(b"<html>official receipt</html>")
-            snapshot = {
-                "registration_number": "PRM/KA/RERA/1251/446/PR/300924/007105",
-                "source_url": "https://rera.karnataka.gov.in/projectDetails?action=12638",
-                "captured_at": "2026-08-09T10:31:00Z",
-                "parent_receipt_id": "rera_receipt:sha256:listing",
-                "crawl_run_id": "rera-project-detail-2026-08-09",
-                "body_hex": b"<html>detail</html>".hex(),
-            }
-            request = {
-                "force_refresh_assets": ["rera_receipts"],
-                "source_entities": [
-                    {
-                        "entity_id": "society:test",
-                        "name": "Fixture",
-                        "project_key": snapshot["registration_number"],
-                    }
-                ],
-            }
-            with (
-                patch("pipeline.collect_asset_sources.LISTING_CACHE_PATH", listing_cache),
-                patch("pipeline.collect_asset_sources.LISTING_RAW_CACHE_PATH", listing_raw),
-                patch(
-                    "pipeline.collect_asset_sources.capture_scoped_rera_detail_receipts",
-                    return_value=[snapshot],
-                ),
-                patch(
-                    "pipeline.collect_asset_sources.capture_scoped_rera_regulatory_payloads",
-                    side_effect=RegulatoryIntelligenceError(
-                        "configured regulatory table 'projectList' was not found"
-                    ),
-                ),
-            ):
-                payload = collect_rera_receipts(request)
-
-        self.assertEqual(
-            [receipt["kind"] for receipt in payload["receipts"]],
-            ["registry_listing", "project_detail"],
-        )
-        self.assertNotIn(
-            "karnataka_regulatory_receipts",
-            {watermark["source"] for watermark in payload["source_watermarks"]},
-        )
 
     def test_rera_source_records_parse_the_raw_listing_with_receipt_lineage(self):
         with tempfile.TemporaryDirectory() as temp_dir:

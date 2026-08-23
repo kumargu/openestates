@@ -1,0 +1,3977 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-23",
+  "description": "Single source of truth for controlled and live search queries. Suites select compatible case groups without splitting cases across files.",
+  "case_groups": [
+    {
+      "id": "guardrails",
+      "kind": "controlled",
+      "purpose": "Early search guardrail suite for rejecting or clarifying bad, vague, unsupported, assistant-directed, or no-home-intent queries before ranking."
+    },
+    {
+      "id": "south_43_absent_project",
+      "kind": "live_bundle",
+      "source_bundle_version": "south-43-candidate-2026-08-22",
+      "notes": [
+        "Ajmera Nucleus is absent from this immutable bundle and must not degrade into a generic BHK/budget query.",
+        "The mixed experiment bank separately proves that the same query resolves when Ajmera is present."
+      ]
+    },
+    {
+      "id": "clean_serving_v7",
+      "kind": "live_bundle",
+      "source_bundle_version": "clean-serving-v7-2026-08-16",
+      "fact_ledger": "search_fact_ledger_clean_serving_v7.json",
+      "notes": [
+        "Queries were frozen after bundle inspection and before this bank was executed.",
+        "Named projects and places are benchmark oracle data only and must not enter production parser or ranking configuration.",
+        "BHK, budget, named society, numeric thresholds, and unsupported configurations are hard constraints.",
+        "Conflicting proximity rows are safety sentinels and must not become confident proof."
+      ]
+    },
+    {
+      "id": "fact_first",
+      "kind": "live_bundle",
+      "source_bundle_version": "bangalore-catalog-60-coherent-2026-08-01-run-4f169729-4564-4f33-b552-0d8dc6c562a0",
+      "source_bundle_path": "data/lake/serving/search_bundle/version=bangalore-catalog-60-coherent-2026-08-01-run-4f169729-4564-4f33-b552-0d8dc6c562a0",
+      "notes": [
+        "Entity names and expected IDs come from the pinned serving Parquet and are allowed only in this test fixture.",
+        "Production parser/config/code must not copy locality, society, or landmark names from this file.",
+        "Proximity expectations require a direct nearby_* fact and matching near_place edge; graph reachability is not enough.",
+        "Abstention cases test missing evidence and must never be converted into invented proof.",
+        "Version 2 retires implicit BHK and budget relaxation: explicit hard constraints now abstain when no exact candidate exists."
+      ]
+    },
+    {
+      "id": "incomplete_south_experiment",
+      "kind": "live_bundle",
+      "source_bundle_version": "search-experiment-mixed-south-45-2026-08-22-v1",
+      "fact_ledger": "search_fact_ledger_incomplete_south_experiment_v1.json",
+      "notes": [
+        "This bank tests search admission separately from buyer-catalog completeness.",
+        "Hard BHK, price, numeric, and explicit evidence constraints must fail closed.",
+        "Missing optional evidence may not become a reason or proof focus."
+      ]
+    },
+    {
+      "id": "controlled_product",
+      "kind": "controlled",
+      "mode": "controlled_product_scenarios",
+      "notes": [
+        "This is the single executable controlled-search bank. Live DAG/materialization banks remain separate.",
+        "Each case selects a reusable fixture profile and declares typed semantics plus buyer-visible result/proof expectations.",
+        "The regional profile spans Whitefield, Sarjapur Road, and North Bengaluru with varied prices, configurations, lifecycle states, ratings, noise evidence, and named metro anchors.",
+        "Entity names are controlled benchmark instances, never parser aliases or production hardcoding."
+      ]
+    },
+    {
+      "id": "proof_handoff",
+      "kind": "live_bundle",
+      "source_bundle_version": "search-experiment-mixed-south-45-2026-08-22-v1",
+      "notes": [
+        "This bank verifies that a search proof focus survives into the configured property-detail surface.",
+        "The detail scene must preserve the search fact and entity handles, attach a matching feature and receipt, and report the same immutable serving version."
+      ]
+    },
+    {
+      "id": "sarjapur_41",
+      "kind": "live_bundle",
+      "source_bundle_version": "sarjapur-41-candidate-2026-08-22",
+      "fact_ledger": "search_fact_ledger_sarjapur_41_candidate.json",
+      "notes": [
+        "Queries were frozen only after direct candidate Parquet inspection.",
+        "The bank increases complexity gradually: exact society, area plus BHK plus state plus budget, rating proof, numeric acreage, and hard negative controls.",
+        "The 4BHK case asserts listing-backed inventory only; it does not assert RERA configuration proof."
+      ]
+    },
+    {
+      "id": "south_40",
+      "kind": "live_bundle",
+      "source_bundle_version": "south-40-candidate-v2-2026-08-22",
+      "fact_ledger": "search_fact_ledger_south_40_candidate.json",
+      "notes": [
+        "Queries were frozen only after direct candidate Parquet inspection.",
+        "This increment combines named society or area with BHK, budget, delivery state, or numeric land area without adding parser aliases.",
+        "Missing nearby-place facts are treated as a data gap, so this bank deliberately contains no invented proximity oracle."
+      ]
+    },
+    {
+      "id": "south_43",
+      "kind": "live_bundle",
+      "source_bundle_version": "south-43-candidate-2026-08-22",
+      "fact_ledger": "search_fact_ledger_south_43_candidate.json",
+      "notes": [
+        "Queries combine named society with BHK, budget, delivery state, rating, or land-area constraints.",
+        "The two four-clause cases are intentionally only slightly harder than the previous regional bank.",
+        "Negative controls use thresholds just outside facts inspected directly in candidate Parquet."
+      ]
+    },
+    {
+      "id": "unknown_project",
+      "kind": "controlled",
+      "notes": [
+        "Unresolved project-like residual text must not be discarded after BHK and budget parsing.",
+        "The names are synthetic and must remain absent from serving config and runtime aliases."
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "controlled_product",
+      "runner": "rust_controlled",
+      "case_groups": [
+        "controlled_product"
+      ]
+    },
+    {
+      "id": "search_guardrails",
+      "runner": "live_api",
+      "benchmark": "search_guardrails_v1",
+      "description": "Early guardrails for vague, unsupported, assistant-directed, and no-home-intent queries.",
+      "scoreable_modes": [
+        "search_guardrail"
+      ],
+      "case_groups": [
+        "guardrails"
+      ]
+    },
+    {
+      "id": "clean_serving_v7",
+      "runner": "live_api",
+      "benchmark": "Clean serving v7 fact-grounded proof loop",
+      "required_serving_bundle_version": "clean-serving-v7-2026-08-16",
+      "scoreable_modes": [
+        "data_backed"
+      ],
+      "case_groups": [
+        "clean_serving_v7"
+      ]
+    },
+    {
+      "id": "fact_first",
+      "runner": "live_api",
+      "benchmark": "current_bundle_fact_first_search_quality",
+      "description": "Fact-first search behavior against the pinned coherent Bengaluru catalog.",
+      "required_serving_bundle_version": "bangalore-catalog-60-coherent-2026-08-01-run-4f169729-4564-4f33-b552-0d8dc6c562a0",
+      "scoreable_modes": [
+        "supported",
+        "transfer",
+        "abstention"
+      ],
+      "capability_matrix": "search_fact_capability_matrix_v1.json",
+      "case_groups": [
+        "fact_first"
+      ]
+    },
+    {
+      "id": "incomplete_south_experiment",
+      "runner": "live_api",
+      "benchmark": "incomplete_south_search_experiment",
+      "description": "Search admission for incomplete societies without buyer-catalog promotion.",
+      "required_serving_bundle_version": "search-experiment-mixed-south-45-2026-08-22-v1",
+      "scoreable_modes": [
+        "data_backed",
+        "transfer",
+        "abstention"
+      ],
+      "case_groups": [
+        "incomplete_south_experiment"
+      ]
+    },
+    {
+      "id": "mixed_south_experiment",
+      "runner": "live_api",
+      "benchmark": "mixed_south_search_experiment",
+      "description": "Regression suite across the clean baseline and incremental South Bengaluru search experiment.",
+      "required_serving_bundle_version": "search-experiment-mixed-south-45-2026-08-22-v1",
+      "scoreable_modes": [
+        "data_backed",
+        "transfer",
+        "abstention"
+      ],
+      "case_groups": [
+        "clean_serving_v7",
+        "south_40",
+        "sarjapur_41",
+        "south_43",
+        "incomplete_south_experiment",
+        "unknown_project"
+      ]
+    },
+    {
+      "id": "proof_handoff_mixed",
+      "runner": "live_api",
+      "benchmark": "mixed_south_search_proof_handoff",
+      "description": "Search-to-detail proof lineage against the mixed South experiment bundle.",
+      "required_serving_bundle_version": "search-experiment-mixed-south-45-2026-08-22-v1",
+      "scoreable_modes": [
+        "data_backed"
+      ],
+      "case_groups": [
+        "proof_handoff"
+      ]
+    },
+    {
+      "id": "sarjapur_41",
+      "runner": "live_api",
+      "benchmark": "Sarjapur 41-society fact-grounded proof loop",
+      "required_serving_bundle_version": "sarjapur-41-candidate-2026-08-22",
+      "scoreable_modes": [
+        "data_backed"
+      ],
+      "case_groups": [
+        "sarjapur_41"
+      ]
+    },
+    {
+      "id": "south_43",
+      "runner": "live_api",
+      "benchmark": "South Bengaluru 43-society fact-grounded proof loop",
+      "required_serving_bundle_version": "south-43-candidate-2026-08-22",
+      "scoreable_modes": [
+        "data_backed",
+        "abstention"
+      ],
+      "case_groups": [
+        "south_43",
+        "unknown_project",
+        "south_43_absent_project"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "GR-001",
+      "mode": "search_guardrail",
+      "category": "too_short",
+      "query": "hi",
+      "expected": {
+        "search_guidance_mode": "too_short",
+        "max_results": 0
+      },
+      "group": "guardrails"
+    },
+    {
+      "id": "GR-002",
+      "mode": "search_guardrail",
+      "category": "no_home_intent",
+      "query": "what should I do with my life",
+      "expected": {
+        "search_guidance_mode": "out_of_scope",
+        "max_results": 0
+      },
+      "group": "guardrails"
+    },
+    {
+      "id": "GR-003",
+      "mode": "search_guardrail",
+      "category": "assistant_directed",
+      "query": "are you looking for a home",
+      "expected": {
+        "search_guidance_mode": "out_of_scope",
+        "max_results": 0
+      },
+      "group": "guardrails"
+    },
+    {
+      "id": "GR-004",
+      "mode": "search_guardrail",
+      "category": "vague",
+      "query": "find me something good",
+      "expected": {
+        "search_guidance_mode": "needs_more_specifics",
+        "max_results": 0
+      },
+      "group": "guardrails"
+    },
+    {
+      "id": "GR-005",
+      "mode": "search_guardrail",
+      "category": "vague",
+      "query": "best property",
+      "expected": {
+        "search_guidance_mode": "needs_more_specifics",
+        "max_results": 0
+      },
+      "group": "guardrails"
+    },
+    {
+      "id": "GR-006",
+      "mode": "search_guardrail",
+      "category": "decision_brief",
+      "query": "I am confused, should I buy or rent",
+      "expected": {
+        "search_guidance_mode": "needs_more_specifics",
+        "max_results": 0
+      },
+      "group": "guardrails"
+    },
+    {
+      "id": "GR-007",
+      "mode": "search_guardrail",
+      "category": "unsupported_inventory",
+      "query": "villa with garden near metro under 80 lakh",
+      "expected": {
+        "unsupported_inventory_types": [
+          "villa"
+        ],
+        "search_guidance_mode": "unsupported_inventory",
+        "max_results": 0
+      },
+      "group": "guardrails"
+    },
+    {
+      "id": "GR-008",
+      "mode": "search_guardrail",
+      "category": "unsupported_inventory",
+      "query": "plot or villa style calm layout near Bagalur metro",
+      "expected": {
+        "unsupported_inventory_types": [
+          "plot",
+          "villa"
+        ],
+        "search_guidance_mode": "unsupported_inventory",
+        "max_results": 0
+      },
+      "group": "guardrails"
+    },
+    {
+      "id": "GR-009",
+      "mode": "search_guardrail",
+      "category": "needs_anchor",
+      "query": "near office",
+      "expected": {
+        "search_guidance_mode": "needs_home_anchor",
+        "max_results": 0
+      },
+      "group": "guardrails"
+    },
+    {
+      "id": "GR-010",
+      "mode": "search_guardrail",
+      "category": "needs_anchor",
+      "query": "close to school",
+      "expected": {
+        "search_guidance_mode": "needs_home_anchor",
+        "max_results": 0
+      },
+      "group": "guardrails"
+    },
+    {
+      "id": "GR-011",
+      "mode": "search_guardrail",
+      "category": "valid_query",
+      "query": "3bhk whitefield under 2cr avoid water issues",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 3,
+        "budget_max": 20000000,
+        "negative_preferences": [
+          "water_issues"
+        ]
+      },
+      "group": "guardrails"
+    },
+    {
+      "id": "GR-012",
+      "mode": "search_guardrail",
+      "category": "valid_query",
+      "query": "quiet home for parents near hospital",
+      "expected": {
+        "positive_preferences": [
+          "quiet",
+          "social_infrastructure"
+        ]
+      },
+      "group": "guardrails"
+    },
+    {
+      "id": "S43-ABSENT-AJMERA-001",
+      "mode": "abstention",
+      "category": "absent_named_project",
+      "query": "Ajmera Nucleus 2BHK under 1.5cr",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "south_43_absent_project"
+    },
+    {
+      "id": "CSV7-GA-001",
+      "mode": "data_backed",
+      "category": "exact_society",
+      "query": "Godrej Air",
+      "expected": {
+        "state": "results",
+        "total_matches": 2,
+        "result_ids_all": [
+          "discovered-godrej-air-2bhk",
+          "discovered-godrej-air-3bhk"
+        ],
+        "ordered_result_ids_prefix": [
+          "discovered-godrej-air-2bhk",
+          "discovered-godrej-air-3bhk"
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-GA-002",
+      "mode": "data_backed",
+      "category": "hard_bhk",
+      "query": "Godrej Air 2BHK",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-godrej-air-2bhk"
+        ],
+        "forbidden_result_ids": [
+          "discovered-godrej-air-3bhk"
+        ],
+        "result_bhks_all": [
+          2
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-GA-003",
+      "mode": "data_backed",
+      "category": "hard_bhk",
+      "query": "Godrej Air 3BHK",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-godrej-air-3bhk"
+        ],
+        "forbidden_result_ids": [
+          "discovered-godrej-air-2bhk"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-GA-004",
+      "mode": "data_backed",
+      "category": "unsupported_configuration",
+      "query": "Godrej Air 4BHK",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-GA-005",
+      "mode": "data_backed",
+      "category": "named_metro_proof",
+      "query": "Godrej Air near Hoodi Metro",
+      "expected": {
+        "state": "results",
+        "total_matches": 2,
+        "result_ids_all": [
+          "discovered-godrej-air-2bhk",
+          "discovered-godrej-air-3bhk"
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_metro_stations"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "metro",
+            "fact_key": "nearby_metro_stations",
+            "entity_id": "place:google:chijcyddpjarrjsrknxrc3lzvnk",
+            "distance_m": 100
+          }
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-GA-006",
+      "mode": "data_backed",
+      "category": "named_hospital_proof",
+      "query": "Godrej Air near Manipal Hospital Whitefield",
+      "expected": {
+        "state": "results",
+        "total_matches": 2,
+        "result_ids_all": [
+          "discovered-godrej-air-2bhk",
+          "discovered-godrej-air-3bhk"
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_hospitals"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "hospitals",
+            "fact_key": "nearby_hospitals",
+            "entity_id": "place:google:chijocj7bfwrrjsrzhab8omuynq",
+            "distance_m": 1800
+          }
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-GA-007",
+      "mode": "data_backed",
+      "category": "compound_place_bhk_budget",
+      "query": "3BHK near Hoodi Metro under 3.5cr",
+      "expected": {
+        "state": "results",
+        "min_results": 1,
+        "top_result_ids_any": [
+          "discovered-godrej-air-3bhk"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_price_max": 35000000,
+        "result_match_tiers_all": [
+          "exact"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_metro_stations"
+        ],
+        "proof_focus_any": [
+          {
+            "fact_key": "nearby_metro_stations",
+            "entity_id": "place:google:chijcyddpjarrjsrknxrc3lzvnk",
+            "distance_m": 100
+          }
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-GA-008",
+      "mode": "data_backed",
+      "category": "numeric_land_area",
+      "query": "Godrej Air with at least 5 acres",
+      "expected": {
+        "state": "results",
+        "total_matches": 2,
+        "result_ids_all": [
+          "discovered-godrej-air-2bhk",
+          "discovered-godrej-air-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "project_land_area_acres",
+          "rera_total_land_area_sqm"
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-GA-009",
+      "mode": "data_backed",
+      "category": "impossible_numeric_threshold",
+      "query": "Godrej Air with at least 6 acres",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-GA-010",
+      "mode": "data_backed",
+      "category": "hard_budget",
+      "query": "Godrej Air 3BHK under 3cr",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-godrej-air-3bhk"
+        ],
+        "forbidden_result_ids": [
+          "discovered-godrej-air-2bhk"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "oracle_note": "The promoted 3BHK listing band starts at 2.80Cr, so the society has qualifying inventory even though the projected card midpoint is 3.175Cr.",
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-GA-011",
+      "mode": "data_backed",
+      "category": "minor_society_typo",
+      "query": "Godrej Ari 3BHK",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-godrej-air-3bhk"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-GA-012",
+      "mode": "data_backed",
+      "category": "or_configurations",
+      "query": "Godrej Air 2BHK or 3BHK",
+      "expected": {
+        "state": "results",
+        "total_matches": 2,
+        "result_ids_all": [
+          "discovered-godrej-air-2bhk",
+          "discovered-godrej-air-3bhk"
+        ],
+        "result_bhks_all": [
+          2,
+          3
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-WF-013",
+      "mode": "data_backed",
+      "category": "area_bhk_budget",
+      "query": "3BHK in Whitefield under 2cr",
+      "expected": {
+        "state": "results",
+        "min_results": 1,
+        "result_ids_all": [
+          "discovered-godrej-splendour-3bhk"
+        ],
+        "result_areas_all": [
+          "Whitefield"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_price_max": 20000000,
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-WF-014",
+      "mode": "data_backed",
+      "category": "area_bhk_budget",
+      "query": "2BHK in Whitefield under 2cr",
+      "expected": {
+        "state": "results",
+        "min_results": 2,
+        "result_ids_all": [
+          "discovered-brigade-lakefront-crimson-2bhk",
+          "discovered-godrej-splendour-2bhk"
+        ],
+        "result_areas_all": [
+          "Whitefield"
+        ],
+        "result_bhks_all": [
+          2
+        ],
+        "result_price_max": 20000000,
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-WF-015",
+      "mode": "data_backed",
+      "category": "area_bhk_budget",
+      "query": "4BHK in Whitefield under 4cr",
+      "expected": {
+        "state": "results",
+        "min_results": 2,
+        "result_ids_all": [
+          "discovered-sumadhura-capitol-residences-4bhk",
+          "discovered-vaswani-starlight-4bhk"
+        ],
+        "result_areas_all": [
+          "Whitefield"
+        ],
+        "result_bhks_all": [
+          4
+        ],
+        "result_price_max": 40000000,
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-WF-016",
+      "mode": "data_backed",
+      "category": "named_place_transfer",
+      "query": "3BHK near Manipal Hospital Whitefield under 3.5cr",
+      "expected": {
+        "state": "results",
+        "min_results": 1,
+        "result_bhks_all": [
+          3
+        ],
+        "result_price_max": 35000000,
+        "result_match_tiers_all": [
+          "exact"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_hospitals"
+        ],
+        "proof_focus_any": [
+          {
+            "fact_key": "nearby_hospitals",
+            "entity_id": "place:google:chijocj7bfwrrjsrzhab8omuynq"
+          }
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-SAFE-017",
+      "mode": "data_backed",
+      "category": "misclassified_place_sentinel",
+      "query": "Godrej Air near Cult Neo Gym Hoodi",
+      "expected": {
+        "state": "results",
+        "result_ids_all": [
+          "discovered-godrej-air-2bhk",
+          "discovered-godrej-air-3bhk"
+        ],
+        "forbidden_reason_fact_keys": [
+          "nearby_hospitals"
+        ],
+        "forbidden_proof_focus_fact_keys": [
+          "nearby_hospitals"
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-SAFE-018",
+      "mode": "data_backed",
+      "category": "misclassified_place_sentinel",
+      "query": "Godrej Air near Sri Sathya Sai Hospital",
+      "expected": {
+        "state": "results",
+        "result_ids_all": [
+          "discovered-godrej-air-2bhk",
+          "discovered-godrej-air-3bhk"
+        ],
+        "forbidden_reason_fact_keys": [
+          "nearby_metro_stations"
+        ],
+        "forbidden_proof_focus_fact_keys": [
+          "nearby_metro_stations"
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-GA-019",
+      "mode": "data_backed",
+      "category": "delivered_state",
+      "query": "ready to move 3BHK in Godrej Air",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-godrej-air-3bhk"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ],
+        "reason_fact_keys_any": [
+          "home_state"
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "CSV7-GA-020",
+      "mode": "data_backed",
+      "category": "review_rating",
+      "query": "Godrej Air with Google rating at least 4",
+      "expected": {
+        "state": "results",
+        "total_matches": 2,
+        "result_ids_all": [
+          "discovered-godrej-air-2bhk",
+          "discovered-godrej-air-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "google_rating"
+        ]
+      },
+      "group": "clean_serving_v7"
+    },
+    {
+      "id": "FF-S-001",
+      "mode": "supported",
+      "category": "society_area_configuration",
+      "query": "Prestige Waterford 3BHK in Whitefield",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 3,
+        "min_results": 1,
+        "top_result_ids_any": [
+          "discovered-prestige-waterford-3bhk"
+        ],
+        "result_areas_all": [
+          "Whitefield"
+        ],
+        "resolved_entity_matches_all": [
+          {
+            "entity_id": "area:whitefield",
+            "entity_type": "area",
+            "match_source": "serving_entity",
+            "polarity": "positive"
+          },
+          {
+            "entity_id": "society:rera-53c0b81882e6acc6",
+            "entity_type": "society",
+            "match_source": "serving_entity",
+            "polarity": "positive"
+          }
+        ],
+        "reason_fact_keys_any": [
+          "has_3bhk",
+          "available_configurations"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-002",
+      "mode": "supported",
+      "category": "named_hospital_proof",
+      "query": "3BHK in Whitefield near Manipal Hospital Whitefield",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 3,
+        "top_result_ids_any": [
+          "discovered-prestige-waterford-3bhk"
+        ],
+        "result_areas_all": [
+          "Whitefield"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_hospitals"
+        ],
+        "resolved_entity_matches_all": [
+          {
+            "entity_id": "place:google:chijocj7bfwrrjsrzhab8omuynq",
+            "entity_type": "place",
+            "match_source": "serving_entity",
+            "polarity": "positive"
+          }
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "hospitals",
+            "fact_key": "nearby_hospitals",
+            "entity_id": "place:google:chijocj7bfwrrjsrzhab8omuynq",
+            "distance_m": 1600
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-003",
+      "mode": "supported",
+      "category": "named_tech_park_proof",
+      "query": "4BHK in Whitefield near International Tech Park Bengaluru (ITPB) under 5cr",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 4,
+        "budget_max": 50000000,
+        "top_result_ids_any": [
+          "discovered-prestige-waterford-4bhk"
+        ],
+        "result_areas_all": [
+          "Whitefield"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_tech_parks"
+        ],
+        "resolved_entity_matches_all": [
+          {
+            "entity_id": "place:google:chijbr0arpsrrjsrfy3bmjy-dma",
+            "entity_type": "place",
+            "match_source": "serving_entity"
+          }
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "tech",
+            "fact_key": "nearby_tech_parks",
+            "entity_id": "place:google:chijbr0arpsrrjsrfy3bmjy-dma",
+            "distance_m": 800
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-004A",
+      "mode": "supported",
+      "category": "multiple_named_proximity_proof",
+      "query": "3BHK in Whitefield near Manipal Hospital Whitefield and near International Tech Park Bengaluru (ITPB)",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 3,
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "nearby_hospitals",
+          "nearby_tech_parks"
+        ],
+        "proof_focus_matches_all": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "hospitals",
+            "fact_key": "nearby_hospitals",
+            "entity_id": "place:google:chijocj7bfwrrjsrzhab8omuynq"
+          },
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "tech",
+            "fact_key": "nearby_tech_parks",
+            "entity_id": "place:google:chijbr0arpsrrjsrfy3bmjy-dma"
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-004",
+      "mode": "supported",
+      "category": "named_metro_proof",
+      "query": "Purva Westend 3BHK near Kudlu Gate Metro Station under 3cr",
+      "expected": {
+        "bhk": 3,
+        "budget_max": 30000000,
+        "top_result_ids_any": [
+          "discovered-purva-westend-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_metro_stations"
+        ],
+        "resolved_entity_matches_all": [
+          {
+            "entity_id": "place:google:chijiaksxv8vrjsr-uxlc2ykep0",
+            "entity_type": "place",
+            "match_source": "serving_entity"
+          }
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "metro",
+            "fact_key": "nearby_metro_stations",
+            "entity_id": "place:google:chijiaksxv8vrjsr-uxlc2ykep0",
+            "distance_m": 200
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-005",
+      "mode": "supported",
+      "category": "area_budget_tech_park",
+      "query": "2BHK in Kudlu Gate near Ozone Manay Technology Park under 2cr",
+      "expected": {
+        "area": "Kudlu Gate",
+        "bhk": 2,
+        "budget_max": 20000000,
+        "top_result_ids_any": [
+          "discovered-purva-westend-2bhk"
+        ],
+        "result_areas_all": [
+          "Kudlu Gate"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_tech_parks"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "tech",
+            "fact_key": "nearby_tech_parks",
+            "entity_id": "place:google:chijgvafrl4urjsr9lpqtao95lu",
+            "distance_m": 200
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-006",
+      "mode": "supported",
+      "category": "society_configuration",
+      "query": "Purva Westend 2BHK in Kudlu Gate",
+      "expected": {
+        "area": "Kudlu Gate",
+        "bhk": 2,
+        "top_result_ids_any": [
+          "discovered-purva-westend-2bhk"
+        ],
+        "result_areas_all": [
+          "Kudlu Gate"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-007",
+      "mode": "supported",
+      "category": "society_budget",
+      "query": "Prestige Southern Star 3BHK under 2.5cr",
+      "expected": {
+        "bhk": 3,
+        "budget_max": 25000000,
+        "top_result_ids_any": [
+          "discovered-prestige-southern-star-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "has_3bhk",
+          "listing_price_3bhk"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-008",
+      "mode": "supported",
+      "category": "named_lake_proof",
+      "query": "Prestige Southern Star 3BHK near Begur Lake under 2.5cr",
+      "expected": {
+        "bhk": 3,
+        "budget_max": 25000000,
+        "top_result_ids_any": [
+          "discovered-prestige-southern-star-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_lakes"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "lakes",
+            "fact_key": "nearby_lakes",
+            "entity_id": "place:google:chijv-urjjvrrjsr0uvtij8wyhm",
+            "distance_m": 800
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-009",
+      "mode": "supported",
+      "category": "stormwater_proof",
+      "query": "Prestige Southern Star near stormwater drain",
+      "expected": {
+        "top_result_ids_any": [
+          "discovered-prestige-southern-star-3bhk",
+          "discovered-prestige-southern-star-2bhk"
+        ],
+        "reason_fact_keys_any": [
+          "stormwater_drain_nearby"
+        ],
+        "proof_focus_any": [
+          {
+            "fact_key": "stormwater_drain_nearby",
+            "distance_m": 237
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-010",
+      "mode": "supported",
+      "category": "area_named_metro_budget",
+      "query": "3BHK in Kanakapura Road near Konanakunte Cross under 3.5cr",
+      "expected": {
+        "area": "Kanakapura Road",
+        "bhk": 3,
+        "budget_max": 35000000,
+        "top_result_ids_any": [
+          "discovered-prestige-falcon-city-3bhk"
+        ],
+        "result_areas_all": [
+          "Kanakapura Road"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_metro_stations"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "metro",
+            "fact_key": "nearby_metro_stations",
+            "entity_id": "place:google:chijg1zkzfgvrjsrvmu8w6vku88",
+            "distance_m": 300
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-011",
+      "mode": "supported",
+      "category": "area_named_school_budget",
+      "query": "4BHK in Kanakapura Road near Delhi Public School Bengaluru South under 7cr",
+      "expected": {
+        "area": "Kanakapura Road",
+        "bhk": 4,
+        "budget_max": 70000000,
+        "top_result_ids_any": [
+          "discovered-prestige-falcon-city-4bhk"
+        ],
+        "result_areas_all": [
+          "Kanakapura Road"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_schools"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "schools",
+            "fact_key": "nearby_schools",
+            "entity_id": "place:google:chijmbkhyguzrjsr7lf7mgqbd3c",
+            "distance_m": 800
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-012",
+      "mode": "supported",
+      "category": "numeric_open_space",
+      "query": "Prestige Falcon City 3BHK with at least 80 percent open space",
+      "expected": {
+        "bhk": 3,
+        "top_result_ids_any": [
+          "discovered-prestige-falcon-city-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "project_open_area_pct"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-013",
+      "mode": "supported",
+      "category": "named_lake_budget",
+      "query": "Prestige Park Square 2BHK near Basavanpura Lake under 2cr",
+      "expected": {
+        "bhk": 2,
+        "budget_max": 20000000,
+        "top_result_ids_any": [
+          "discovered-prestige-park-square-2bhk"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_lakes",
+          "lake_within_250m"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "lakes",
+            "fact_key": "nearby_lakes",
+            "entity_id": "place:google:chijmsq4i1zrrjsrdlyp-frwyzs",
+            "distance_m": 200
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-014",
+      "mode": "supported",
+      "category": "named_school_budget",
+      "query": "Prestige Park Square 3BHK near Sherwood High under 3cr",
+      "expected": {
+        "bhk": 3,
+        "budget_max": 30000000,
+        "top_result_ids_any": [
+          "discovered-prestige-park-square-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_schools"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "schools",
+            "fact_key": "nearby_schools",
+            "entity_id": "place:google:chij-xnuketqrjsrivumgy7vjdg",
+            "distance_m": 300
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-015",
+      "mode": "supported",
+      "category": "named_hospital_budget",
+      "query": "Prestige Park Square 3BHK near Sri Banashankari Hospital under 3cr",
+      "expected": {
+        "bhk": 3,
+        "budget_max": 30000000,
+        "top_result_ids_any": [
+          "discovered-prestige-park-square-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_hospitals"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "hospitals",
+            "fact_key": "nearby_hospitals",
+            "entity_id": "place:google:chijb2-2zwbrrjsr0lupj9lftvq",
+            "distance_m": 300
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-T-001",
+      "mode": "transfer",
+      "category": "held_out_metro",
+      "query": "Prestige Botanique 2BHK near National College under 2cr",
+      "expected": {
+        "bhk": 2,
+        "budget_max": 20000000,
+        "top_result_ids_any": [
+          "discovered-prestige-botanique-2bhk"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_metro_stations"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "metro",
+            "fact_key": "nearby_metro_stations",
+            "entity_id": "place:google:chijpdmgh-4vrjsrlmrgpnksivs",
+            "distance_m": 800
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-T-002",
+      "mode": "transfer",
+      "category": "held_out_metro",
+      "query": "SNN Raj Grandeur 3BHK near Bommanahalli Metro Station under 3cr",
+      "expected": {
+        "bhk": 3,
+        "budget_max": 30000000,
+        "top_result_ids_any": [
+          "discovered-snn-raj-grandeur-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_metro_stations"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "metro",
+            "fact_key": "nearby_metro_stations",
+            "entity_id": "place:google:chijwej3ezcvrjsrvwo5l55nnb0",
+            "distance_m": 1000
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-T-003",
+      "mode": "transfer",
+      "category": "held_out_school",
+      "query": "Prestige Lake Ridge 2BHK near National Public School Uttarahalli under 2cr",
+      "expected": {
+        "bhk": 2,
+        "budget_max": 20000000,
+        "top_result_ids_any": [
+          "discovered-prestige-lake-ridge-phase-1-2bhk"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_schools"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "schools",
+            "fact_key": "nearby_schools",
+            "entity_id": "place:google:chijlzsdnig-rjsrotjjp9eqlmc",
+            "distance_m": 1200
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-T-004",
+      "mode": "transfer",
+      "category": "held_out_metro",
+      "query": "Mantri Tranquil 2BHK near Doddakallasandra under 80 lakh",
+      "expected": {
+        "bhk": 2,
+        "budget_max": 8000000,
+        "top_result_ids_any": [
+          "discovered-mantri-tranquil-2bhk"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_metro_stations"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "metro",
+            "fact_key": "nearby_metro_stations",
+            "entity_id": "place:google:chijvb525-o-rjsroc03dtip6ak",
+            "distance_m": 900
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-T-005",
+      "mode": "transfer",
+      "category": "held_out_park",
+      "query": "Sobha Forest Edge 3BHK near Turahalli Tree Park under 3cr",
+      "expected": {
+        "bhk": 3,
+        "budget_max": 30000000,
+        "top_result_ids_any": [
+          "discovered-sobha-forest-edge-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "nearby_public_parks"
+        ],
+        "proof_focus_any": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "parks",
+            "fact_key": "nearby_public_parks",
+            "entity_id": "place:google:chiju3qzhym-rjsrdy-is59cdfw",
+            "distance_m": 300
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-016",
+      "mode": "supported",
+      "category": "builder_rera_proof",
+      "query": "SNN Raj Serenity trusted builder",
+      "expected": {
+        "top_result_ids_any": [
+          "discovered-snn-raj-serenity-2bhk",
+          "discovered-snn-raj-serenity-3bhk",
+          "discovered-snn-raj-serenity-4bhk"
+        ],
+        "reason_fact_keys_any": [
+          "rera_builder_revocations",
+          "rera_builder_projects_count"
+        ],
+        "resolved_entity_matches_all": [
+          {
+            "entity_id": "society:rera-53117ea502ea0cd0",
+            "entity_type": "society",
+            "match_source": "serving_entity"
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-017",
+      "mode": "supported",
+      "category": "lifecycle_proof",
+      "query": "SNN Raj Spiritua ready to move",
+      "expected": {
+        "top_result_ids_any": [
+          "discovered-snn-raj-spiritua-3bhk",
+          "discovered-snn-raj-spiritua-4bhk"
+        ],
+        "reason_fact_keys_any": [
+          "home_state"
+        ],
+        "resolved_entity_matches_all": [
+          {
+            "entity_id": "society:rera-699d44c234988565",
+            "entity_type": "society",
+            "match_source": "serving_entity"
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-018",
+      "mode": "supported",
+      "category": "google_review_proof",
+      "query": "Prestige Bagamane Temple Bells highly rated",
+      "expected": {
+        "top_result_ids_any": [
+          "discovered-prestige-bagamane-temple-bells-1bhk",
+          "discovered-prestige-bagamane-temple-bells-2bhk",
+          "discovered-prestige-bagamane-temple-bells-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "google_rating",
+          "google_review_count",
+          "google_review_snippets"
+        ],
+        "resolved_entity_matches_all": [
+          {
+            "entity_id": "society:rera-8ccb1e0250853039",
+            "entity_type": "society",
+            "match_source": "serving_entity"
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-S-019",
+      "mode": "supported",
+      "category": "listing_price_proof",
+      "query": "Brigade 7 Gardens 3BHK with listing price proof",
+      "expected": {
+        "bhk": 3,
+        "top_result_ids_any": [
+          "discovered-brigade-7-gardens-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "listing_3bhk",
+          "listing_price_3bhk",
+          "listing_price_range_3bhk"
+        ],
+        "resolved_entity_matches_all": [
+          {
+            "entity_id": "society:rera-e68d15500e147ecd",
+            "entity_type": "society",
+            "match_source": "serving_entity"
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RC-A-001",
+      "mode": "supported",
+      "category": "multi_constraint_lifecycle_reviews",
+      "query": "ready-to-move homes with a Google rating of at least 4.2 and at least 100 reviews",
+      "expected": {
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "home_state",
+          "google_rating",
+          "google_review_count"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RC-B-001",
+      "mode": "transfer",
+      "category": "multi_constraint_lifecycle_reviews",
+      "query": "completed projects rated 4.2 or higher on Google with 100 or more reviews",
+      "expected": {
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "home_state",
+          "google_rating",
+          "google_review_count"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RC-A-003",
+      "mode": "supported",
+      "category": "multi_constraint_lifecycle_inventory_price_proof",
+      "query": "delivered three-bedroom homes with listing-backed asking-price evidence",
+      "expected": {
+        "bhk": 3,
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "home_state",
+          "listing_3bhk"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RC-B-003",
+      "mode": "transfer",
+      "category": "multi_constraint_lifecycle_inventory_price_proof",
+      "query": "move-in-ready 3 BHK options backed by a current listing price",
+      "expected": {
+        "bhk": 3,
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "home_state",
+          "listing_3bhk"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RC-A-004",
+      "mode": "supported",
+      "category": "multi_constraint_reviews_school_proof",
+      "query": "societies with Google rating at least 4.2, at least 100 reviews, and nearby schools",
+      "expected": {
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "google_rating",
+          "google_review_count",
+          "nearby_schools"
+        ],
+        "proof_focus_matches_all": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "schools",
+            "fact_key": "nearby_schools"
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RC-B-004",
+      "mode": "transfer",
+      "category": "multi_constraint_reviews_school_proof",
+      "query": "projects rated 4.2 plus on Google with 100 plus reviews and school evidence nearby",
+      "expected": {
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "google_rating",
+          "google_review_count",
+          "nearby_schools"
+        ],
+        "proof_focus_matches_all": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "schools",
+            "fact_key": "nearby_schools"
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RC-A-005",
+      "mode": "supported",
+      "category": "multi_constraint_inventory_price_rera_proof",
+      "query": "3 BHK projects with listing-price evidence and zero RERA complaints",
+      "expected": {
+        "bhk": 3,
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "listing_3bhk",
+          "rera_complaints_count"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RC-B-005",
+      "mode": "transfer",
+      "category": "multi_constraint_inventory_price_rera_proof",
+      "query": "three-bedroom inventory with asking-price proof in a project whose RERA complaint count is zero",
+      "expected": {
+        "bhk": 3,
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "listing_3bhk",
+          "rera_complaints_count"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RC-A-006",
+      "mode": "supported",
+      "category": "multi_constraint_metro_school_proof",
+      "query": "homes with both nearby metro-station evidence and nearby school evidence",
+      "expected": {
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "nearby_metro_stations",
+          "nearby_schools"
+        ],
+        "proof_focus_matches_all": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "metro",
+            "fact_key": "nearby_metro_stations"
+          },
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "schools",
+            "fact_key": "nearby_schools"
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RC-B-006",
+      "mode": "transfer",
+      "category": "multi_constraint_metro_school_proof",
+      "query": "apartments where both a metro station and schools are recorded nearby",
+      "expected": {
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "nearby_metro_stations",
+          "nearby_schools"
+        ],
+        "proof_focus_matches_all": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "metro",
+            "fact_key": "nearby_metro_stations"
+          },
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "schools",
+            "fact_key": "nearby_schools"
+          }
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RP-A-001",
+      "mode": "intent_gap",
+      "failure_bucket": "intent_gap",
+      "category": "multi_constraint_inventory_brochure_proof",
+      "query": "I need three-bedroom availability and an official project prospectus to inspect",
+      "expected": {
+        "bhk": 3,
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "brochure_asset_count"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RP-B-001",
+      "mode": "intent_gap",
+      "failure_bucket": "intent_gap",
+      "category": "multi_constraint_inventory_brochure_proof",
+      "query": "Require 3 BHK inventory together with a downloadable project brochure",
+      "expected": {
+        "bhk": 3,
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "brochure_asset_count"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RP-A-004",
+      "mode": "intent_gap",
+      "failure_bucket": "intent_gap",
+      "category": "multi_constraint_inventory_land_document_proof",
+      "query": "A three-bedroom home works only if the title-deed packet can be inspected",
+      "expected": {
+        "bhk": 3,
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "rera_legal_land_document_count"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "RP-B-004",
+      "mode": "intent_gap",
+      "failure_bucket": "intent_gap",
+      "category": "multi_constraint_inventory_land_document_proof",
+      "query": "Consider 3 BHK inventory only if land-document records are available",
+      "expected": {
+        "bhk": 3,
+        "min_results": 1,
+        "reason_fact_keys_all": [
+          "rera_legal_land_document_count"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-T-006",
+      "mode": "transfer",
+      "category": "held_out_builder_rera",
+      "query": "Sobha Forest Edge safe builder",
+      "expected": {
+        "top_result_ids_any": [
+          "discovered-sobha-forest-edge-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "rera_builder_revocations",
+          "rera_builder_projects_count"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-T-007",
+      "mode": "transfer",
+      "category": "held_out_lifecycle",
+      "query": "Purva Westend completed project",
+      "expected": {
+        "top_result_ids_any": [
+          "discovered-purva-westend-2bhk",
+          "discovered-purva-westend-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "home_state"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-T-008",
+      "mode": "transfer",
+      "category": "held_out_google_reviews",
+      "query": "Sobha Forest Edge highly rated",
+      "expected": {
+        "top_result_ids_any": [
+          "discovered-sobha-forest-edge-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "google_rating",
+          "google_review_count",
+          "google_review_snippets"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-T-009",
+      "mode": "transfer",
+      "category": "held_out_listing_price",
+      "query": "SNN Raj Serenity 3BHK with listing price proof",
+      "expected": {
+        "bhk": 3,
+        "top_result_ids_any": [
+          "discovered-snn-raj-serenity-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "listing_3bhk",
+          "listing_price_3bhk",
+          "listing_price_range_3bhk"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-A-001",
+      "mode": "abstention",
+      "category": "hard_constraint_abstention",
+      "query": "2BHK in Whitefield near metro under 1.5cr",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 2,
+        "budget_max": 15000000,
+        "max_results": 0,
+        "forbidden_reason_fact_keys": [
+          "nearby_metro_stations"
+        ],
+        "forbidden_proof_focus_fact_keys": [
+          "nearby_metro_stations"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-A-002",
+      "mode": "abstention",
+      "category": "hard_constraint_abstention",
+      "query": "3BHK in Whitefield under 2cr",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 3,
+        "budget_max": 20000000,
+        "max_results": 0
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-A-003",
+      "mode": "abstention",
+      "category": "unknown_named_area",
+      "query": "3BHK in Atlantis Enclave",
+      "expected": {
+        "bhk": 3,
+        "max_results": 0
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-A-004",
+      "mode": "abstention",
+      "category": "unsupported_place_family",
+      "query": "3BHK near a police station",
+      "expected": {
+        "bhk": 3,
+        "max_results": 0,
+        "forbidden_resolved_entity_matches": [
+          {
+            "entity_id": "place_family:metro",
+            "entity_type": "place_family"
+          }
+        ],
+        "forbidden_reason_fact_keys": [
+          "nearby_metro_stations"
+        ],
+        "forbidden_proof_focus_fact_keys": [
+          "nearby_metro_stations"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-A-005",
+      "mode": "abstention",
+      "category": "missing_operational_evidence",
+      "query": "Prestige Waterford 3BHK with no tanker dependence",
+      "expected": {
+        "bhk": 3,
+        "top_result_ids_any": [
+          "discovered-prestige-waterford-3bhk"
+        ],
+        "learning_gap_keys": [
+          "operating.tanker_dependence"
+        ],
+        "forbidden_reason_fact_keys": [
+          "operating.tanker_dependence",
+          "tanker_dependency"
+        ],
+        "forbidden_proof_focus_fact_keys": [
+          "operating.tanker_dependence",
+          "tanker_dependency"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-A-006",
+      "mode": "abstention",
+      "category": "weak_flood_evidence",
+      "query": "3BHK in Whitefield with low flooding risk",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 3,
+        "top_result_ids_any": [
+          "discovered-prestige-waterford-3bhk"
+        ],
+        "result_areas_all": [
+          "Whitefield"
+        ],
+        "learning_gap_keys": [
+          "waterlogging_risk_score"
+        ],
+        "forbidden_reason_fact_keys": [
+          "waterlogging_risk_score",
+          "flooding_risk"
+        ],
+        "forbidden_proof_focus_fact_keys": [
+          "waterlogging_risk_score",
+          "flooding_risk"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "FF-A-007",
+      "mode": "abstention",
+      "category": "missing_transmission_evidence",
+      "query": "Shriram Southern Crest near transmission line",
+      "expected": {
+        "max_results": 0,
+        "resolved_entity_matches_all": [
+          {
+            "entity_id": "society:rera-f5582864641239f3",
+            "entity_type": "society",
+            "match_source": "serving_entity"
+          }
+        ],
+        "forbidden_reason_fact_keys": [
+          "high_voltage_transmission_line_nearby"
+        ],
+        "forbidden_proof_focus_fact_keys": [
+          "high_voltage_transmission_line_nearby"
+        ]
+      },
+      "group": "fact_first"
+    },
+    {
+      "id": "ISE-MANTRI-001",
+      "mode": "data_backed",
+      "category": "incomplete_size_exact_society",
+      "query": "Mantri Serenity1",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-mantri-serenity1-3bhk"
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "incomplete_south_experiment"
+    },
+    {
+      "id": "ISE-MANTRI-002",
+      "mode": "data_backed",
+      "category": "incomplete_size_supported_bhk",
+      "query": "Mantri Serenity1 3BHK",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-mantri-serenity1-3bhk"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "incomplete_south_experiment"
+    },
+    {
+      "id": "ISE-MANTRI-003",
+      "mode": "abstention",
+      "category": "unknown_price_hard_budget",
+      "query": "Mantri Serenity1 3BHK under 3cr",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "incomplete_south_experiment"
+    },
+    {
+      "id": "ISE-MANTRI-004",
+      "mode": "abstention",
+      "category": "unsupported_hard_bhk",
+      "query": "Mantri Serenity1 2BHK",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "incomplete_south_experiment"
+    },
+    {
+      "id": "ISE-MANTRI-005",
+      "mode": "data_backed",
+      "category": "supported_state_fact",
+      "query": "ready to move Mantri Serenity1 3BHK",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-mantri-serenity1-3bhk"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "reason_fact_keys_any": [
+          "home_state"
+        ]
+      },
+      "group": "incomplete_south_experiment"
+    },
+    {
+      "id": "ISE-MANTRI-006",
+      "mode": "data_backed",
+      "category": "supported_numeric_fact",
+      "query": "Mantri Serenity1 with at least 19 acres",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-mantri-serenity1-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "project_land_area_acres",
+          "rera_total_land_area_sqm"
+        ]
+      },
+      "group": "incomplete_south_experiment"
+    },
+    {
+      "id": "ISE-MANTRI-007",
+      "mode": "abstention",
+      "category": "impossible_numeric_threshold",
+      "query": "Mantri Serenity1 with at least 20 acres",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "incomplete_south_experiment"
+    },
+    {
+      "id": "ISE-AJMERA-008",
+      "mode": "data_backed",
+      "category": "missing_media_hard_bhk_budget",
+      "query": "Ajmera Nucleus 2BHK under 1.5cr",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-ajmera-nucleus-2bhk"
+        ],
+        "result_bhks_all": [
+          2
+        ],
+        "result_price_max": 15000000,
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "incomplete_south_experiment"
+    },
+    {
+      "id": "ISE-AJMERA-009",
+      "mode": "abstention",
+      "category": "hard_budget_below_listing_band",
+      "query": "Ajmera Nucleus 2BHK under 1.2cr",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "incomplete_south_experiment"
+    },
+    {
+      "id": "ISE-AJMERA-010",
+      "mode": "abstention",
+      "category": "missing_required_numeric_evidence",
+      "query": "Ajmera Nucleus with Google rating at least 4",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true,
+        "forbidden_reason_fact_keys": [
+          "google_rating"
+        ],
+        "forbidden_proof_focus_fact_keys": [
+          "google_rating"
+        ]
+      },
+      "group": "incomplete_south_experiment"
+    },
+    {
+      "id": "ISE-AJMERA-011",
+      "mode": "data_backed",
+      "category": "missing_optional_evidence_neutral",
+      "query": "Ajmera Nucleus with good reviews",
+      "expected": {
+        "state": "results",
+        "total_matches": 3,
+        "result_ids_all": [
+          "discovered-ajmera-nucleus-1bhk",
+          "discovered-ajmera-nucleus-2bhk",
+          "discovered-ajmera-nucleus-3bhk"
+        ],
+        "forbidden_reason_fact_keys": [
+          "google_rating",
+          "google_review_count"
+        ],
+        "forbidden_proof_focus_fact_keys": [
+          "google_rating",
+          "google_review_count"
+        ]
+      },
+      "group": "incomplete_south_experiment"
+    },
+    {
+      "id": "ISE-MEDIA-012",
+      "mode": "transfer",
+      "category": "missing_media_transfer",
+      "query": "Prestige Song of the South 3BHK under 3cr",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-prestige-song-of-the-south-3bhk"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_price_max": 30000000,
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "incomplete_south_experiment"
+    },
+    {
+      "id": "CONV-SEM-001",
+      "category": "paired_area_bhk_budget_alternatives",
+      "query": "Show me either a 3BHK in Hoodi under ₹2.4 Cr or a 4BHK on Sarjapur Road under ₹3.2 Cr.",
+      "expected_semantics": {
+        "branches": [
+          {
+            "area": "Hoodi",
+            "bhk": 3,
+            "budget_max": 24000000
+          },
+          {
+            "area": "Sarjapur Road",
+            "bhk": 4,
+            "budget_max": 32000000
+          }
+        ]
+      },
+      "fixture": "core",
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk"
+          ],
+          [
+            "mock-lakeside-orchard-4bhk"
+          ]
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "CONV-SEM-002",
+      "category": "proximity_or_space_with_global_exclusion",
+      "query": "I’ll take a smaller home within 2 km of Bagmane Tech Park, or a larger 4BHK farther away under ₹3 Cr—but not in an under-construction project.",
+      "expected_semantics": {
+        "exclude_home_state": "under_construction"
+      },
+      "fixture": "core",
+      "fixture_expectation": {
+        "includes": [
+          "mock-bagmane-small-3bhk",
+          "mock-far-delivered-4bhk"
+        ],
+        "excludes": [
+          "mock-bagmane-under-construction-3bhk"
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "CONV-SEM-003",
+      "category": "required_dual_named_place_proximity",
+      "query": "Find a 3BHK under ₹2.7 Cr that is close to both Hoodi Metro and Manipal Hospital, not merely one of them.",
+      "expected_semantics": {
+        "bhk": 3,
+        "budget_max": 27000000
+      },
+      "fixture": "core",
+      "fixture_expectation": {
+        "includes": [
+          "mock-dual-place-3bhk"
+        ],
+        "excludes": [
+          "mock-hoodi-only-3bhk",
+          "mock-manipal-only-3bhk"
+        ],
+        "required_proof_labels": {
+          "mock-dual-place-3bhk": [
+            "Hoodi Metro",
+            "Manipal Hospital"
+          ]
+        }
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "CONV-SEM-004",
+      "category": "named_school_or_generic_metro_with_shared_budget",
+      "query": "Either give me a home within 2 km of Gopalan National School, or one within 1 km of a metro station; keep both options under ₹2.5 Cr.",
+      "expected_semantics": {
+        "budget_max": 25000000
+      },
+      "fixture": "core",
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-school-home-3bhk"
+          ],
+          [
+            "mock-metro-home-2bhk"
+          ]
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "CONV-SEM-005",
+      "category": "anaphoric_branch_pairing",
+      "query": "Compare Godrej Air under ₹2.6 Cr with Godrej Lakeside Orchard under ₹3.1 Cr, but only show 3BHKs in the first and 4BHKs in the second.",
+      "expected_semantics": {
+        "branches": [
+          {
+            "society": "Godrej Air",
+            "bhk": 3,
+            "budget_max": 26000000
+          },
+          {
+            "society": "Godrej Lakeside Orchard",
+            "bhk": 4,
+            "budget_max": 31000000
+          }
+        ]
+      },
+      "fixture": "core",
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-godrej-air-3bhk"
+          ],
+          [
+            "mock-lakeside-orchard-4bhk"
+          ]
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "CONV-SEM-006",
+      "category": "hard_filters_with_optional_soft_evidence",
+      "query": "I want a ready-to-move 3BHK near a tech park. Prefer a quieter society with stronger reviews, but don’t hide homes just because noise evidence is missing.",
+      "expected_semantics": {
+        "bhk": 3,
+        "home_state": "ready_to_move"
+      },
+      "fixture": "core",
+      "fixture_expectation": {
+        "first_id": "mock-quiet-reviewed-3bhk",
+        "includes": [
+          "mock-missing-noise-3bhk"
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "CONV-SEM-007",
+      "category": "society_alternatives_with_unless_exclusions",
+      "query": "Show me SNN Raj Etternia or Prestige Song of the South, unless the available home is above ₹2.8 Cr or still under construction.",
+      "expected_semantics": {
+        "budget_max": 28000000,
+        "exclude_home_state": "under_construction",
+        "branches": [
+          {
+            "society": "SNN Raj Etternia"
+          },
+          {
+            "society": "Prestige Song of the South"
+          }
+        ]
+      },
+      "fixture": "core",
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-snn-etternia-3bhk"
+          ],
+          [
+            "mock-prestige-song-3bhk"
+          ]
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "CONV-SEM-008",
+      "category": "conditional_area_budgets_with_shared_bhk",
+      "query": "If it’s in Electronic City, keep it below ₹1.8 Cr; if it’s on Kanakapura Road, I can stretch to ₹2.4 Cr—but I need a 3BHK either way.",
+      "expected_semantics": {
+        "branches": [
+          {
+            "area": "Electronic City",
+            "bhk": 3,
+            "budget_max": 18000000
+          },
+          {
+            "area": "Kanakapura Road",
+            "bhk": 3,
+            "budget_max": 24000000
+          }
+        ]
+      },
+      "fixture": "core",
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-electronic-city-3bhk"
+          ],
+          [
+            "mock-kanakapura-road-3bhk"
+          ]
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "CONV-SEM-009",
+      "category": "dual_commute_proof_with_balance_ranking",
+      "query": "My office is near Bagmane Tech Park and my partner works near Manipal Hospital Whitefield. Find homes with measured distance evidence to both, prioritizing the better-balanced commute.",
+      "expected_semantics": {},
+      "fixture": "core",
+      "fixture_expectation": {
+        "first_id": "mock-balanced-commute-3bhk",
+        "required_proof_labels": {
+          "mock-balanced-commute-3bhk": [
+            "Bagmane Tech Park",
+            "Manipal Hospital Whitefield"
+          ]
+        }
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "CONV-SEM-010",
+      "category": "contextual_alternatives_with_global_entity_exclusion",
+      "query": "I liked Godrej Air, but show alternatives: either something closer to Hoodi Metro at a similar price, or a larger home under ₹3 Cr elsewhere. Exclude Godrej Air itself.",
+      "expected_semantics": {},
+      "fixture": "core",
+      "fixture_expectation": {
+        "includes": [
+          "mock-hoodi-alternative-3bhk",
+          "mock-larger-elsewhere-4bhk"
+        ],
+        "excludes": [
+          "mock-godrej-air-3bhk"
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-001",
+      "category": "simple_exact_society",
+      "query": "Godrej Air",
+      "expected_semantics": {
+        "society": "Godrej Air"
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-godrej-air-3bhk"
+          ]
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-002",
+      "category": "simple_area_bhk_budget",
+      "query": "3BHK in Hoodi under ₹2.4 Cr",
+      "expected_semantics": {
+        "area": "Hoodi",
+        "bhk": 3,
+        "budget_max": 24000000
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-godrej-air-3bhk",
+          "mock-hoodi-only-3bhk",
+          "mock-hoodi-alternative-3bhk"
+        ],
+        "excludes": [
+          "mock-hoodi-expensive-3bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-003",
+      "category": "simple_state_place_bhk_budget",
+      "query": "Ready-to-move 3BHK near Bagmane Tech Park under ₹2.4 Cr",
+      "expected_semantics": {
+        "bhk": 3,
+        "budget_max": 24000000,
+        "home_state": "ready_to_move",
+        "near": "Bagmane Tech Park"
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-bagmane-small-3bhk",
+          "mock-quiet-reviewed-3bhk",
+          "mock-missing-noise-3bhk"
+        ],
+        "excludes": [
+          "mock-bagmane-under-construction-3bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-004",
+      "category": "minor_society_typo",
+      "query": "Godrej Ari 3BHK",
+      "expected_semantics": {
+        "society": "Godrej Air",
+        "bhk": 3
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-godrej-air-3bhk"
+          ]
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-005",
+      "category": "spelling_and_compact_grammar",
+      "query": "gud 3bhk Hoodi undr 2.4cr",
+      "expected_semantics": {
+        "area": "Hoodi",
+        "bhk": 3,
+        "budget_max": 24000000
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-godrej-air-3bhk",
+          "mock-hoodi-only-3bhk",
+          "mock-hoodi-alternative-3bhk"
+        ],
+        "excludes": [
+          "mock-hoodi-expensive-3bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-006",
+      "category": "minor_named_place_typo",
+      "query": "3BHK near Hodi Metro under ₹2.7 Cr",
+      "expected_semantics": {
+        "bhk": 3,
+        "budget_max": 27000000,
+        "near": "Hoodi Metro"
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-dual-place-3bhk"
+        ],
+        "excludes": [
+          "mock-far-delivered-4bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-007",
+      "category": "fragmented_constraint_order",
+      "query": "3bhk near Bagmane Tech Park, under 2.4cr, not under construction",
+      "expected_semantics": {
+        "bhk": 3,
+        "budget_max": 24000000,
+        "near": "Bagmane Tech Park",
+        "exclude_home_state": "under_construction"
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-bagmane-small-3bhk"
+        ],
+        "excludes": [
+          "mock-bagmane-under-construction-3bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-008",
+      "category": "quiet_paraphrase_with_optional_missing_evidence",
+      "query": "Ready 3BHK near Bagmane Tech Park under ₹2.4 Cr. I want to sleep without horns outside.",
+      "expected_semantics": {
+        "bhk": 3,
+        "budget_max": 24000000,
+        "positive_preferences": [
+          "quiet neighborhood"
+        ],
+        "missing_optional_evidence": "include_without_claim"
+      },
+      "fixture_expectation": {
+        "first_id": "mock-quiet-reviewed-3bhk",
+        "includes": [
+          "mock-missing-noise-3bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-009",
+      "category": "review_paraphrase",
+      "query": "Ready 3BHK near Bagmane Tech Park under ₹2.4 Cr. People living there should genuinely rate it well.",
+      "expected_semantics": {
+        "bhk": 3,
+        "budget_max": 24000000,
+        "positive_preferences": [
+          "review quality"
+        ]
+      },
+      "fixture_expectation": {
+        "first_id": "mock-quiet-reviewed-3bhk",
+        "includes": [
+          "mock-missing-noise-3bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-010",
+      "category": "missing_optional_fact_paraphrase",
+      "query": "Ready 3BHK near Bagmane Tech Park under ₹2.4 Cr; the place should feel consistently cared for.",
+      "expected_semantics": {
+        "positive_preferences": [
+          "maintenance"
+        ],
+        "missing_optional_evidence": "include_without_claim"
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-bagmane-small-3bhk",
+          "mock-quiet-reviewed-3bhk",
+          "mock-missing-noise-3bhk"
+        ],
+        "forbidden_proof_labels": [
+          "maintenance"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-011",
+      "category": "negative_risk_paraphrase",
+      "query": "3BHK near Bagmane Tech Park under ₹2.4 Cr; daily gridlock is a deal breaker.",
+      "expected_semantics": {
+        "negative_preferences": [
+          "traffic"
+        ]
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-bagmane-small-3bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-012",
+      "category": "numeric_review_constraint",
+      "query": "Ready-to-move 3BHK near Bagmane Tech Park with Google rating at least 4.2",
+      "expected_semantics": {
+        "bhk": 3,
+        "home_state": "ready_to_move",
+        "numeric_min": {
+          "field": "google_rating",
+          "value": 4.2
+        }
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-quiet-reviewed-3bhk",
+          "mock-missing-noise-3bhk"
+        ],
+        "excludes": [
+          "mock-bagmane-small-3bhk",
+          "mock-bagmane-under-construction-3bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-013",
+      "category": "generic_place_family",
+      "query": "2BHK within 1 km of a metro under ₹2.5 Cr",
+      "expected_semantics": {
+        "bhk": 2,
+        "budget_max": 25000000,
+        "place_family": "metro",
+        "distance_max_km": 1
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-metro-home-2bhk"
+          ]
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-014",
+      "category": "unsupported_configuration_abstention",
+      "query": "Godrej Air 4BHK",
+      "expected_semantics": {
+        "society": "Godrej Air",
+        "bhk": 4,
+        "abstain": true
+      },
+      "fixture_expectation": {
+        "result_sets": []
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-015",
+      "category": "unknown_society_abstention",
+      "query": "Blue Mango Residency 2BHK under ₹1.5 Cr",
+      "expected_semantics": {
+        "unresolved_society": "Blue Mango Residency",
+        "abstain": true
+      },
+      "fixture_expectation": {
+        "result_sets": []
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-016",
+      "category": "false_proximity_proof_sentinel",
+      "query": "Godrej Air 3BHK within 1 km of Gopalan National School",
+      "expected_semantics": {
+        "society": "Godrej Air",
+        "bhk": 3,
+        "near": "Gopalan National School",
+        "distance_max_km": 1,
+        "abstain": true
+      },
+      "fixture_expectation": {
+        "result_sets": []
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-017",
+      "category": "fragmented_branch_alternatives",
+      "query": "3bhk Hoodi under 2.4cr OR 4bhk Sarjapur Road under 3.2cr",
+      "expected_semantics": {
+        "branches": [
+          {
+            "area": "Hoodi",
+            "bhk": 3,
+            "budget_max": 24000000
+          },
+          {
+            "area": "Sarjapur Road",
+            "bhk": 4,
+            "budget_max": 32000000
+          }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk"
+          ],
+          [
+            "mock-lakeside-orchard-4bhk"
+          ]
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "BUYER-LANG-018",
+      "category": "equivalent_budget_wording",
+      "query": "3 bedrooms in Hoodi costing no more than 2.4 crore",
+      "expected_semantics": {
+        "area": "Hoodi",
+        "bhk": 3,
+        "budget_max": 24000000
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-godrej-air-3bhk",
+          "mock-hoodi-only-3bhk",
+          "mock-hoodi-alternative-3bhk"
+        ],
+        "excludes": [
+          "mock-hoodi-expensive-3bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "DECISION-RANK-001",
+      "category": "explicit_preference_priority",
+      "query": "Among ready-to-move 3BHKs near Bagmane Tech Park under ₹2.4 Cr, rank quietness first and resident reviews second.",
+      "expected_semantics": {
+        "bhk": 3,
+        "budget_max": 24000000,
+        "home_state": "ready_to_move",
+        "near": "Bagmane Tech Park",
+        "positive_preferences": [
+          "quiet neighborhood",
+          "review quality"
+        ],
+        "ranking_priorities": [
+          "quiet neighborhood",
+          "review quality"
+        ]
+      },
+      "fixture_expectation": {
+        "ordered_prefix": [
+          "mock-quiet-priority-3bhk",
+          "mock-quiet-reviewed-3bhk",
+          "mock-review-priority-3bhk",
+          "mock-value-priority-3bhk"
+        ]
+      },
+      "fixture": "decision_ranking",
+      "group": "controlled_product"
+    },
+    {
+      "id": "DECISION-RANK-002",
+      "category": "accepted_tradeoff_with_compensating_strengths",
+      "query": "I can tolerate traffic if the society is quiet and strongly reviewed. Show ready-to-move 3BHKs near Bagmane Tech Park under ₹2.4 Cr.",
+      "expected_semantics": {
+        "bhk": 3,
+        "budget_max": 24000000,
+        "home_state": "ready_to_move",
+        "near": "Bagmane Tech Park",
+        "positive_preferences": [
+          "quiet neighborhood",
+          "review quality"
+        ],
+        "accepted_tradeoffs": [
+          "traffic"
+        ],
+        "negative_preferences": []
+      },
+      "fixture_expectation": {
+        "first_id": "mock-quiet-reviewed-3bhk",
+        "includes": [
+          "mock-quiet-priority-3bhk",
+          "mock-value-priority-3bhk",
+          "mock-review-priority-3bhk"
+        ]
+      },
+      "fixture": "decision_ranking",
+      "group": "controlled_product"
+    },
+    {
+      "id": "DECISION-RANK-003",
+      "category": "hard_evidence_gate_then_soft_decision",
+      "query": "Only consider ready-to-move 3BHKs near Bagmane Tech Park under ₹2.4 Cr with Google rating at least 4.2. Among those, choose the quieter home even if another has the higher rating.",
+      "expected_semantics": {
+        "bhk": 3,
+        "budget_max": 24000000,
+        "home_state": "ready_to_move",
+        "near": "Bagmane Tech Park",
+        "numeric_min": {
+          "field": "google_rating",
+          "value": 4.2
+        },
+        "positive_preferences": [
+          "quiet neighborhood"
+        ],
+        "ranking_priorities": [
+          "quiet neighborhood"
+        ]
+      },
+      "fixture_expectation": {
+        "ordered_prefix": [
+          "mock-quiet-reviewed-3bhk",
+          "mock-review-priority-3bhk",
+          "mock-value-priority-3bhk"
+        ],
+        "excludes": [
+          "mock-quiet-priority-3bhk",
+          "mock-bagmane-small-3bhk"
+        ]
+      },
+      "fixture": "decision_ranking",
+      "group": "controlled_product"
+    },
+    {
+      "id": "MULTI-OR-001",
+      "category": "shared_society_dual_configuration",
+      "query": "Godrej Air 2BHK or 3BHK",
+      "expected_semantics": {
+        "society": "Godrej Air",
+        "bhks": [
+          2,
+          3
+        ],
+        "branches": [
+          {
+            "society": "Godrej Air",
+            "bhk": 2
+          },
+          {
+            "society": "Godrej Air",
+            "bhk": 3
+          }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-godrej-air-2bhk"
+          ],
+          [
+            "mock-godrej-air-3bhk"
+          ]
+        ],
+        "unique_result_ids": true
+      },
+      "fixture": "multi_or",
+      "group": "controlled_product"
+    },
+    {
+      "id": "MULTI-OR-002",
+      "category": "shared_society_three_configuration_alternatives",
+      "query": "Godrej Air 2BHK or 3BHK or 4BHK",
+      "expected_semantics": {
+        "society": "Godrej Air",
+        "bhks": [
+          2,
+          3,
+          4
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-godrej-air-2bhk"
+          ],
+          [
+            "mock-godrej-air-3bhk"
+          ]
+        ],
+        "excludes": [
+          "mock-lakeside-orchard-4bhk"
+        ],
+        "unique_result_ids": true
+      },
+      "fixture": "multi_or",
+      "group": "controlled_product"
+    },
+    {
+      "id": "MULTI-OR-003",
+      "category": "shared_society_branch_specific_budgets",
+      "query": "Godrej Air 2BHK under 2 Cr or 3BHK under 2.4 Cr",
+      "expected_semantics": {
+        "society": "Godrej Air",
+        "bhks": [
+          2,
+          3
+        ],
+        "branches": [
+          {
+            "society": "Godrej Air",
+            "bhk": 2,
+            "budget_max": 20000000
+          },
+          {
+            "society": "Godrej Air",
+            "bhk": 3,
+            "budget_max": 24000000
+          }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-godrej-air-2bhk"
+          ],
+          [
+            "mock-godrej-air-3bhk"
+          ]
+        ],
+        "unique_result_ids": true
+      },
+      "fixture": "multi_or",
+      "group": "controlled_product"
+    },
+    {
+      "id": "MULTI-OR-004",
+      "category": "global_limit_across_large_branches",
+      "query": "2BHK or 3BHK",
+      "expected_semantics": {
+        "bhks": [
+          2,
+          3
+        ]
+      },
+      "fixture_expectation": {
+        "max_total_results": 32,
+        "non_empty_result_sets": 2,
+        "unique_result_ids": true,
+        "result_set_counts": [
+          16,
+          16
+        ],
+        "result_set_ordered_prefixes": [
+          [
+            "mock-godrej-air-2bhk",
+            "mock-metro-home-2bhk",
+            "mock-or-decoy-2-00"
+          ],
+          [
+            "mock-quiet-reviewed-3bhk",
+            "mock-missing-noise-3bhk",
+            "mock-godrej-air-3bhk"
+          ]
+        ]
+      },
+      "fixture": "multi_or",
+      "group": "controlled_product"
+    },
+    {
+      "id": "MULTI-OR-005",
+      "category": "deduplicate_overlapping_branches",
+      "query": "2BHK or homes under 2.4 Cr",
+      "expected_semantics": {
+        "bhk": 2,
+        "budget_max": 24000000,
+        "branches": [
+          {
+            "bhk": 2
+          },
+          {
+            "budget_max": 24000000
+          }
+        ]
+      },
+      "fixture_expectation": {
+        "max_total_results": 32,
+        "non_empty_result_sets": 2,
+        "unique_result_ids": true
+      },
+      "fixture": "multi_or",
+      "group": "controlled_product"
+    },
+    {
+      "id": "MULTI-OR-006",
+      "category": "shared_prefix_before_later_independent_scope",
+      "query": "Godrej Air 2BHK or 3BHK or Prestige Song of the South 3BHK",
+      "expected_semantics": {
+        "bhks": [
+          2,
+          3
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-godrej-air-2bhk"
+          ],
+          [
+            "mock-godrej-air-3bhk"
+          ],
+          [
+            "mock-prestige-song-3bhk"
+          ]
+        ],
+        "unique_result_ids": true
+      },
+      "fixture": "multi_or",
+      "group": "controlled_product"
+    },
+    {
+      "id": "MULTI-OR-007",
+      "category": "shared_area_dual_configuration",
+      "query": "Hoodi 2BHK or 3BHK",
+      "expected_semantics": {
+        "area": "Hoodi",
+        "bhks": [
+          2,
+          3
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-godrej-air-2bhk"
+          ],
+          [
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
+          ]
+        ],
+        "unique_result_ids": true
+      },
+      "fixture": "multi_or",
+      "group": "controlled_product"
+    },
+    {
+      "id": "MULTI-OR-008",
+      "category": "shared_named_place_dual_configuration",
+      "query": "Near Hoodi Metro, 2BHK or 3BHK",
+      "expected_semantics": {
+        "bhks": [
+          2,
+          3
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-godrej-air-2bhk"
+          ],
+          [
+            "mock-dual-place-3bhk",
+            "mock-godrej-air-3bhk",
+            "mock-balanced-commute-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-manipal-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
+          ]
+        ],
+        "unique_result_ids": true
+      },
+      "fixture": "multi_or",
+      "group": "controlled_product"
+    },
+    {
+      "id": "MULTI-OR-009",
+      "category": "shared_trailing_named_place_dual_configuration",
+      "query": "2BHK near Hoodi Metro or 3BHK",
+      "expected_semantics": {
+        "bhks": [
+          2,
+          3
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-godrej-air-2bhk"
+          ],
+          [
+            "mock-dual-place-3bhk",
+            "mock-godrej-air-3bhk",
+            "mock-balanced-commute-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-manipal-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
+          ]
+        ],
+        "unique_result_ids": true
+      },
+      "fixture": "multi_or",
+      "group": "controlled_product"
+    },
+    {
+      "id": "REGION-MIX-001",
+      "category": "whitefield_value_budget",
+      "query": "2BHK in Whitefield under 1.6 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "area": "Whitefield",
+        "bhk": 2,
+        "budget_max": 16000000
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-whitefield-value-2bhk"
+        ],
+        "excludes": [
+          "mock-whitefield-family-3bhk",
+          "mock-whitefield-premium-3bhk"
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "REGION-MIX-002",
+      "category": "sarjapur_family_budget",
+      "query": "3BHK in Sarjapur Road under 2 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "area": "Sarjapur Road",
+        "bhk": 3,
+        "budget_max": 20000000
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-sarjapur-family-3bhk"
+        ],
+        "excludes": [
+          "mock-sarjapur-premium-4bhk",
+          "mock-lakeside-orchard-4bhk"
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "REGION-MIX-003",
+      "category": "north_bengaluru_family_budget",
+      "query": "3BHK in North Bengaluru under 1.8 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "area": "North Bengaluru",
+        "bhk": 3,
+        "budget_max": 18000000
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-north-family-3bhk"
+        ],
+        "excludes": [
+          "mock-north-premium-3bhk"
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "REGION-MIX-004",
+      "category": "whitefield_named_metro_budget",
+      "query": "2BHK within 1 km of Kadugodi Tree Park Metro under 1.6 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "bhk": 2,
+        "budget_max": 16000000,
+        "near": "Kadugodi Tree Park Metro",
+        "distance_max_km": 1
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-whitefield-value-2bhk"
+        ],
+        "required_proof_labels": {
+          "mock-whitefield-value-2bhk": [
+            "Kadugodi Tree Park Metro"
+          ]
+        },
+        "excludes": [
+          "mock-sarjapur-value-2bhk",
+          "mock-north-value-2bhk"
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "REGION-MIX-005",
+      "category": "sarjapur_named_metro_budget",
+      "query": "3BHK near Iblur Metro under 2 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "bhk": 3,
+        "budget_max": 20000000,
+        "near": "Iblur Metro"
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-sarjapur-family-3bhk"
+        ],
+        "required_proof_labels": {
+          "mock-sarjapur-family-3bhk": [
+            "Iblur Metro"
+          ]
+        },
+        "excludes": [
+          "mock-north-family-3bhk",
+          "mock-whitefield-family-3bhk"
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "REGION-MIX-006",
+      "category": "north_named_metro_budget",
+      "query": "3BHK near Nagawara Metro under 1.8 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "bhk": 3,
+        "budget_max": 18000000,
+        "near": "Nagawara Metro"
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-north-family-3bhk"
+        ],
+        "required_proof_labels": {
+          "mock-north-family-3bhk": [
+            "Nagawara Metro"
+          ]
+        },
+        "excludes": [
+          "mock-sarjapur-family-3bhk"
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "REGION-MIX-007",
+      "category": "three_region_or_budgets",
+      "query": "Whitefield 2BHK under 1.6 Cr or Sarjapur Road 3BHK under 2 Cr or North Bengaluru 3BHK under 1.8 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "branches": [
+          {
+            "area": "Whitefield",
+            "bhk": 2,
+            "budget_max": 16000000
+          },
+          {
+            "area": "Sarjapur Road",
+            "bhk": 3,
+            "budget_max": 20000000
+          },
+          {
+            "area": "North Bengaluru",
+            "bhk": 3,
+            "budget_max": 18000000
+          }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-whitefield-value-2bhk"
+          ],
+          [
+            "mock-sarjapur-family-3bhk"
+          ],
+          [
+            "mock-north-family-3bhk"
+          ]
+        ],
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "REGION-MIX-008",
+      "category": "shared_north_metro_bhk_alternatives",
+      "query": "2BHK or 3BHK near Nagawara Metro under 1.8 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "bhks": [
+          2,
+          3
+        ],
+        "budget_max": 18000000,
+        "near": "Nagawara Metro"
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-north-value-2bhk"
+          ],
+          [
+            "mock-north-family-3bhk"
+          ]
+        ],
+        "required_proof_labels": {
+          "mock-north-value-2bhk": [
+            "Nagawara Metro"
+          ],
+          "mock-north-family-3bhk": [
+            "Nagawara Metro"
+          ]
+        },
+        "excludes": [
+          "mock-whitefield-value-2bhk",
+          "mock-sarjapur-value-2bhk",
+          "mock-metro-home-2bhk"
+        ],
+        "non_empty_result_sets": 2,
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "REGION-MIX-009",
+      "category": "whitefield_budget_negative_control",
+      "query": "3BHK in Whitefield under 2 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "area": "Whitefield",
+        "bhk": 3,
+        "budget_max": 20000000,
+        "abstain": true
+      },
+      "fixture_expectation": {
+        "result_sets": [],
+        "excludes": [
+          "mock-whitefield-family-3bhk",
+          "mock-whitefield-premium-3bhk"
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "REGION-MIX-010",
+      "category": "north_quietness_ranking",
+      "query": "Among 3BHKs in North Bengaluru under 2.5 Cr, rank quietness first and resident reviews second.",
+      "fixture": "regional",
+      "expected_semantics": {
+        "area": "North Bengaluru",
+        "bhk": 3,
+        "budget_max": 25000000,
+        "ranking_priorities": [
+          "quiet neighborhood",
+          "review quality"
+        ]
+      },
+      "fixture_expectation": {
+        "ordered_prefix": [
+          "mock-north-premium-3bhk",
+          "mock-north-family-3bhk"
+        ]
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "PROOF-HANDOFF-001",
+      "mode": "data_backed",
+      "category": "named_metro_detail_lineage",
+      "query": "Godrej Air 3BHK near Hoodi Metro",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-godrej-air-3bhk"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "reason_fact_keys_any": [
+          "nearby_metro_stations"
+        ],
+        "proof_focus_matches_all": [
+          {
+            "surface_id": "around_this_home",
+            "layer_id": "metro",
+            "fact_key": "nearby_metro_stations",
+            "entity_id": "place:google:chijcyddpjarrjsrknxrc3lzvnk",
+            "distance_m": 100
+          }
+        ],
+        "proof_handoff_matches_all": [
+          {
+            "result_id": "discovered-godrej-air-3bhk",
+            "surface_id": "around_this_home",
+            "layer_id": "metro",
+            "fact_key": "nearby_metro_stations",
+            "entity_id": "place:google:chijcyddpjarrjsrknxrc3lzvnk",
+            "distance_m": 100,
+            "source_type": "Google",
+            "serving_bundle_version": "search-experiment-mixed-south-45-2026-08-22-v1"
+          }
+        ]
+      },
+      "group": "proof_handoff"
+    },
+    {
+      "id": "SAR41-GLO-001",
+      "mode": "data_backed",
+      "category": "exact_society",
+      "query": "Godrej Lakeside Orchard",
+      "expected": {
+        "state": "results",
+        "total_matches": 3,
+        "result_ids_all": [
+          "discovered-godrej-lakeside-orchard-2bhk",
+          "discovered-godrej-lakeside-orchard-3bhk",
+          "discovered-godrej-lakeside-orchard-4bhk"
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "sarjapur_41"
+    },
+    {
+      "id": "SAR41-GLO-002",
+      "mode": "data_backed",
+      "category": "area_bhk_budget_state",
+      "query": "under construction 2BHK in Sarjapur Road under 1.7cr",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-godrej-lakeside-orchard-2bhk"
+        ],
+        "result_areas_all": [
+          "Sarjapur Road"
+        ],
+        "result_bhks_all": [
+          2
+        ],
+        "result_price_max": 17000000,
+        "result_match_tiers_all": [
+          "exact"
+        ],
+        "reason_fact_keys_any": [
+          "home_state"
+        ]
+      },
+      "group": "sarjapur_41"
+    },
+    {
+      "id": "SAR41-GLO-003",
+      "mode": "data_backed",
+      "category": "area_bhk_budget_state_rating",
+      "query": "under construction 3BHK in Sarjapur Road under 1.8cr with Google rating at least 3.5",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-godrej-lakeside-orchard-3bhk"
+        ],
+        "result_areas_all": [
+          "Sarjapur Road"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ],
+        "reason_fact_keys_any": [
+          "home_state",
+          "google_rating",
+          "google_review_count"
+        ]
+      },
+      "oracle_note": "The promoted 3BHK listing band starts at 1.70Cr, so qualifying inventory exists under 1.8Cr even though the projected card midpoint is 2.55Cr.",
+      "group": "sarjapur_41"
+    },
+    {
+      "id": "SAR41-GLO-004",
+      "mode": "data_backed",
+      "category": "numeric_land_area",
+      "query": "Godrej Lakeside Orchard with at least 12 acres",
+      "expected": {
+        "state": "results",
+        "total_matches": 3,
+        "result_ids_all": [
+          "discovered-godrej-lakeside-orchard-2bhk",
+          "discovered-godrej-lakeside-orchard-3bhk",
+          "discovered-godrej-lakeside-orchard-4bhk"
+        ],
+        "reason_fact_keys_any": [
+          "project_land_area_acres",
+          "rera_total_land_area_sqm"
+        ]
+      },
+      "group": "sarjapur_41"
+    },
+    {
+      "id": "SAR41-GLO-005",
+      "mode": "data_backed",
+      "category": "impossible_numeric_threshold",
+      "query": "Godrej Lakeside Orchard with at least 13 acres",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "sarjapur_41"
+    },
+    {
+      "id": "SAR41-GLO-006",
+      "mode": "data_backed",
+      "category": "hard_budget_no_match",
+      "query": "Godrej Lakeside Orchard 3BHK under 1.6cr",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "sarjapur_41"
+    },
+    {
+      "id": "SAR41-GLO-007",
+      "mode": "data_backed",
+      "category": "listing_backed_configuration_budget",
+      "query": "Godrej Lakeside Orchard 4BHK under 3.1cr",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-godrej-lakeside-orchard-4bhk"
+        ],
+        "result_bhks_all": [
+          4
+        ],
+        "result_price_max": 31000000,
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "sarjapur_41"
+    },
+    {
+      "id": "S40-SNN-001",
+      "mode": "data_backed",
+      "category": "exact_society",
+      "query": "SNN Raj Etternia",
+      "expected": {
+        "state": "results",
+        "total_matches": 3,
+        "result_ids_all": [
+          "discovered-snn-raj-etternia-2bhk",
+          "discovered-snn-raj-etternia-3bhk",
+          "discovered-snn-raj-etternia-4bhk"
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "south_40"
+    },
+    {
+      "id": "S40-SNN-002",
+      "mode": "data_backed",
+      "category": "area_bhk_budget_state",
+      "query": "ready to move 3BHK in Haralur Road under 3cr",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-snn-raj-etternia-3bhk"
+        ],
+        "result_areas_all": [
+          "Haralur Road"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_price_max": 30000000,
+        "result_match_tiers_all": [
+          "exact"
+        ],
+        "reason_fact_keys_any": [
+          "home_state"
+        ]
+      },
+      "group": "south_40"
+    },
+    {
+      "id": "S40-SNN-003",
+      "mode": "data_backed",
+      "category": "numeric_land_area",
+      "query": "SNN Raj Etternia with at least 15 acres",
+      "expected": {
+        "state": "results",
+        "total_matches": 3,
+        "result_ids_all": [
+          "discovered-snn-raj-etternia-2bhk",
+          "discovered-snn-raj-etternia-3bhk",
+          "discovered-snn-raj-etternia-4bhk"
+        ],
+        "reason_fact_keys_any": [
+          "project_land_area_acres",
+          "rera_total_land_area_sqm"
+        ]
+      },
+      "group": "south_40"
+    },
+    {
+      "id": "S40-SNN-004",
+      "mode": "data_backed",
+      "category": "impossible_numeric_threshold",
+      "query": "SNN Raj Etternia with at least 16 acres",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "south_40"
+    },
+    {
+      "id": "S40-GE-005",
+      "mode": "data_backed",
+      "category": "society_bhk_budget_state",
+      "query": "ready to move Godrej Eternity 2BHK under 1.5cr",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-godrej-eternity-2bhk"
+        ],
+        "result_bhks_all": [
+          2
+        ],
+        "result_price_max": 15000000,
+        "result_match_tiers_all": [
+          "exact"
+        ],
+        "reason_fact_keys_any": [
+          "home_state"
+        ]
+      },
+      "group": "south_40"
+    },
+    {
+      "id": "S40-GE-006",
+      "mode": "data_backed",
+      "category": "hard_budget_no_match",
+      "query": "Godrej Eternity 3BHK under 1.7cr",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "south_40"
+    },
+    {
+      "id": "S40-BKH-007",
+      "mode": "data_backed",
+      "category": "area_bhk_budget_state",
+      "query": "under construction 3BHK in Padmanabhanagar under 3.1cr",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-brigade-komarla-heights-3bhk"
+        ],
+        "result_areas_all": [
+          "Padmanabhanagar"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_price_max": 31000000,
+        "result_match_tiers_all": [
+          "exact"
+        ],
+        "reason_fact_keys_any": [
+          "home_state"
+        ]
+      },
+      "group": "south_40"
+    },
+    {
+      "id": "S40-BKH-008",
+      "mode": "data_backed",
+      "category": "numeric_land_area",
+      "query": "Brigade Komarla Heights with at least 4 acres",
+      "expected": {
+        "state": "results",
+        "total_matches": 3,
+        "result_ids_all": [
+          "discovered-brigade-komarla-heights-2bhk",
+          "discovered-brigade-komarla-heights-3bhk",
+          "discovered-brigade-komarla-heights-4bhk"
+        ],
+        "reason_fact_keys_any": [
+          "project_land_area_acres",
+          "rera_total_land_area_sqm"
+        ]
+      },
+      "group": "south_40"
+    },
+    {
+      "id": "S43-MR-001",
+      "mode": "data_backed",
+      "category": "exact_society",
+      "query": "Mahaveer Ranches",
+      "expected": {
+        "state": "results",
+        "total_matches": 3,
+        "result_ids_all": [
+          "discovered-mahaveer-ranches-1bhk",
+          "discovered-mahaveer-ranches-2bhk",
+          "discovered-mahaveer-ranches-3bhk"
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "south_43"
+    },
+    {
+      "id": "S43-MR-002",
+      "mode": "data_backed",
+      "category": "society_bhk_budget_state_rating",
+      "query": "ready to move Mahaveer Ranches 3BHK under 2cr with Google rating at least 3.5",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-mahaveer-ranches-3bhk"
+        ],
+        "result_areas_all": [
+          "Hosa Road"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_price_max": 20000000,
+        "result_match_tiers_all": [
+          "exact"
+        ],
+        "reason_fact_keys_any": [
+          "google_rating",
+          "home_state"
+        ]
+      },
+      "group": "south_43"
+    },
+    {
+      "id": "S43-MR-003",
+      "mode": "data_backed",
+      "category": "hard_budget_no_match",
+      "query": "Mahaveer Ranches 2BHK under 1.5cr",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "south_43"
+    },
+    {
+      "id": "S43-MR-004",
+      "mode": "data_backed",
+      "category": "numeric_land_area",
+      "query": "Mahaveer Ranches with at least 16 acres",
+      "expected": {
+        "state": "results",
+        "total_matches": 3,
+        "result_ids_all": [
+          "discovered-mahaveer-ranches-1bhk",
+          "discovered-mahaveer-ranches-2bhk",
+          "discovered-mahaveer-ranches-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "project_land_area_acres",
+          "rera_total_land_area_sqm"
+        ]
+      },
+      "group": "south_43"
+    },
+    {
+      "id": "S43-MR-005",
+      "mode": "data_backed",
+      "category": "impossible_numeric_threshold",
+      "query": "Mahaveer Ranches with at least 17 acres",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "south_43"
+    },
+    {
+      "id": "S43-PS-006",
+      "mode": "data_backed",
+      "category": "exact_society",
+      "query": "Prestige Song of the South",
+      "expected": {
+        "state": "results",
+        "total_matches": 3,
+        "result_ids_all": [
+          "discovered-prestige-song-of-the-south-2bhk",
+          "discovered-prestige-song-of-the-south-3bhk",
+          "discovered-prestige-song-of-the-south-4bhk"
+        ],
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "south_43"
+    },
+    {
+      "id": "S43-PS-007",
+      "mode": "data_backed",
+      "category": "society_bhk_budget_state_rating",
+      "query": "ready to move Prestige Song of the South 3BHK under 3cr with Google rating at least 4.5",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-prestige-song-of-the-south-3bhk"
+        ],
+        "result_areas_all": [
+          "Begur Road"
+        ],
+        "result_bhks_all": [
+          3
+        ],
+        "result_price_max": 30000000,
+        "result_match_tiers_all": [
+          "exact"
+        ],
+        "reason_fact_keys_any": [
+          "google_rating",
+          "home_state"
+        ]
+      },
+      "group": "south_43"
+    },
+    {
+      "id": "S43-PS-008",
+      "mode": "data_backed",
+      "category": "society_bhk_budget",
+      "query": "Prestige Song of the South 4BHK under 4cr",
+      "expected": {
+        "state": "results",
+        "total_matches": 1,
+        "result_ids_all": [
+          "discovered-prestige-song-of-the-south-4bhk"
+        ],
+        "result_bhks_all": [
+          4
+        ],
+        "result_price_max": 40000000,
+        "result_match_tiers_all": [
+          "exact"
+        ]
+      },
+      "group": "south_43"
+    },
+    {
+      "id": "S43-PS-009",
+      "mode": "data_backed",
+      "category": "numeric_land_area",
+      "query": "Prestige Song of the South with at least 32 acres",
+      "expected": {
+        "state": "results",
+        "total_matches": 3,
+        "result_ids_all": [
+          "discovered-prestige-song-of-the-south-2bhk",
+          "discovered-prestige-song-of-the-south-3bhk",
+          "discovered-prestige-song-of-the-south-4bhk"
+        ],
+        "reason_fact_keys_any": [
+          "project_land_area_acres",
+          "rera_total_land_area_sqm"
+        ]
+      },
+      "group": "south_43"
+    },
+    {
+      "id": "S43-PS-010",
+      "mode": "data_backed",
+      "category": "impossible_numeric_threshold",
+      "query": "Prestige Song of the South with at least 33 acres",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "south_43"
+    },
+    {
+      "id": "PROJECT-GUARDRAIL-001",
+      "mode": "abstention",
+      "category": "unknown_project_with_hard_constraints",
+      "query": "Foo Bar Residency 2BHK under 1.5cr",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "unknown_project"
+    },
+    {
+      "id": "PROJECT-GUARDRAIL-002",
+      "mode": "abstention",
+      "category": "unknown_project_with_hard_constraints",
+      "query": "Unknown Heights 2BHK under 1.5cr",
+      "expected": {
+        "state": "no_matches",
+        "total_matches": 0,
+        "zero_results": true
+      },
+      "group": "unknown_project"
+    }
+  ]
+}

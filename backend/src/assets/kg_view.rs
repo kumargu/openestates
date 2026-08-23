@@ -591,24 +591,21 @@ fn canonical_society_alias_map(
     canonical_entities: &[KgViewEntityRecord],
 ) -> Result<HashMap<String, String>, KgSocietyViewMaterializeError> {
     let mut aliases = HashMap::new();
-    let mut ambiguous_aliases = HashSet::new();
     for entity in canonical_entities
         .iter()
         .filter(|entity| entity.entity_type == "society")
     {
         let alias_entity_id = format!("society:{}", slug(&entity.name));
-        if ambiguous_aliases.contains(&alias_entity_id) {
-            continue;
-        }
-        if let Some(existing) = aliases.get(&alias_entity_id) {
-            if existing == &entity.entity_id {
-                continue;
+        if let Some(existing) = aliases.insert(alias_entity_id.clone(), entity.entity_id.clone()) {
+            if existing != entity.entity_id {
+                return Err(KgSocietyViewMaterializeError::InvalidCanonicalIdentity(
+                    format!(
+                        "{alias_entity_id} maps to both {existing} and {}",
+                        entity.entity_id
+                    ),
+                ));
             }
-            aliases.remove(&alias_entity_id);
-            ambiguous_aliases.insert(alias_entity_id);
-            continue;
         }
-        aliases.insert(alias_entity_id, entity.entity_id.clone());
     }
     aliases.retain(|alias, canonical| alias != canonical);
     Ok(aliases)
@@ -1797,7 +1794,7 @@ mod tests {
     use crate::knowledge::{FactValue, SourcedFact};
 
     #[test]
-    fn duplicate_canonical_society_names_do_not_create_an_ambiguous_alias() {
+    fn duplicate_canonical_society_names_fail_before_kg_merge() {
         let learned_at = Utc.with_ymd_and_hms(2026, 8, 16, 7, 0, 0).unwrap();
         let canonical_entities = [
             KgViewEntityRecord {
@@ -1820,27 +1817,18 @@ mod tests {
             },
         ];
 
-        let records = KgViewRecords::from_graph_with_asset_rows(
+        let error = KgViewRecords::from_graph_with_asset_rows(
             &KnowledgeGraph::new(),
             &canonical_entities,
             &[],
             &[],
             &[],
         )
-        .unwrap();
+        .unwrap_err();
 
-        assert!(!records
-            .entities
-            .iter()
-            .any(|entity| entity.entity_id == "society:arvind-bel-air"));
-        assert!(records
-            .entities
-            .iter()
-            .any(|entity| entity.entity_id == "society:rera-first"));
-        assert!(records
-            .entities
-            .iter()
-            .any(|entity| entity.entity_id == "society:rera-second"));
+        assert!(error.to_string().contains("society:arvind-bel-air"));
+        assert!(error.to_string().contains("society:rera-first"));
+        assert!(error.to_string().contains("society:rera-second"));
     }
 
     #[test]

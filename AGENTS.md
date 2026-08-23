@@ -168,16 +168,15 @@ Every new discovery behavior should be testable with fuzzy/user-like queries and
 The frozen buyer-query banks and their controlled mock search fixtures are not
 disposable test data. They are the executable model for how buyer intent,
 inventory, evidence, ranking, exclusions, tradeoffs, and proof handoff fit
-together. Preserve `data/validation/query_bank/search_product_scenarios_v1.json`
-and `backend/tests/search_conversational_semantics_contract.rs` as first-class
-contracts. Keep controlled product scenarios in this one bank; keep immutable
-live-bundle and materialization banks separate because they validate specific
-data snapshots.
+together. Preserve `data/validation/search_query_bank.json` and
+`backend/tests/search_conversational_semantics_contract.rs` as first-class
+contracts. Keep every controlled and immutable live-bundle query in this one
+bank; select compatible groups through its named suites.
 
 - Model a new buyer-facing capability in a controlled scenario before wiring
   live DAG data or UI behavior.
 - Use mock facts to prove runtime semantics independently from DAG coverage;
-  use a separate live-bundle bank to prove the DAG supplies those facts.
+  use a version-pinned live-bundle suite to prove the DAG supplies those facts.
 - Reuse the same scenario vocabulary when adding API and UI journey contracts
   so search, detail proof, compare, and buyer surfaces do not drift.
 - Do not delete or weaken a scenario to make an implementation pass. Change a

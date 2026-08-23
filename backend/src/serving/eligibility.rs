@@ -114,12 +114,7 @@ pub(crate) fn classify_and_prune(
         &mut groups,
     );
 
-    let quarantine = quarantine_report(
-        bundle_version,
-        config.admission_profile,
-        config.version,
-        groups,
-    );
+    let quarantine = quarantine_report(bundle_version, config.version, groups);
     let removed_society_ids = quarantine
         .societies
         .iter()
@@ -405,7 +400,6 @@ fn classify_missing_search_metadata(
 
 fn quarantine_report(
     bundle_version: &str,
-    admission_profile: crate::dag_config::ServingAdmissionProfile,
     eligibility_policy_version: u32,
     groups: BTreeMap<String, SocietyGroup>,
 ) -> ServingQuarantineReport {
@@ -429,7 +423,6 @@ fn quarantine_report(
     }
     ServingQuarantineReport {
         format_version: 1,
-        admission_profile,
         eligibility_policy_version,
         source_bundle_version: bundle_version.to_string(),
         excluded_society_count: societies.len() as u64,
@@ -516,7 +509,6 @@ mod tests {
 
     fn policy() -> ServingEligibilityFile {
         ServingEligibilityFile {
-            admission_profile: crate::dag_config::ServingAdmissionProfile::BuyerCatalog,
             version: 1,
             minimum_projected_properties: 1,
             missing_projection_reason_code: "missing_property_projection".to_string(),
@@ -558,28 +550,6 @@ mod tests {
                     edge_presence_counts: true,
                 },
             ],
-        }
-    }
-
-    fn search_experiment_policy() -> ServingEligibilityFile {
-        ServingEligibilityFile {
-            admission_profile: crate::dag_config::ServingAdmissionProfile::SearchExperiment,
-            version: 1,
-            minimum_projected_properties: 1,
-            missing_projection_reason_code: "missing_property_projection".to_string(),
-            property_requirements: vec![
-                ProjectedPropertyRequirement {
-                    reason_code: "missing_property_area".to_string(),
-                    predicate: EligibilityValuePredicate::AnyNonEmpty,
-                    fields: vec!["area".to_string()],
-                },
-                ProjectedPropertyRequirement {
-                    reason_code: "missing_property_configuration".to_string(),
-                    predicate: EligibilityValuePredicate::AnyPositive,
-                    fields: vec!["bhk".to_string()],
-                },
-            ],
-            society_requirements: Vec::new(),
         }
     }
 
@@ -751,40 +721,6 @@ mod tests {
         let result = classify_and_prune(entities, facts, metadata, edges, "test-v2", &policy())
             .expect("eligibility classification should succeed");
 
-        assert!(result.quarantine.societies.is_empty());
-        assert!(result
-            .entities
-            .iter()
-            .any(|entity| entity.entity_id == "society:incomplete"));
-        assert!(result
-            .entities
-            .iter()
-            .any(|entity| entity.entity_id == "property:incomplete-2bhk"));
-    }
-
-    #[test]
-    fn search_experiment_admits_society_missing_buyer_only_fields() {
-        let (entities, mut facts, _, edges) = two_society_records(false);
-        facts.retain(|fact| {
-            fact.entity_id != "property:incomplete-2bhk"
-                || !matches!(fact.fact_key.as_str(), "carpet_area_sqft" | "builder_name")
-        });
-        let metadata = facts.iter().map(metadata).collect();
-
-        let result = classify_and_prune(
-            entities,
-            facts,
-            metadata,
-            edges,
-            "search-experiment-v1",
-            &search_experiment_policy(),
-        )
-        .expect("search experiment classification should succeed");
-
-        assert_eq!(
-            result.quarantine.admission_profile,
-            crate::dag_config::ServingAdmissionProfile::SearchExperiment
-        );
         assert!(result.quarantine.societies.is_empty());
         assert!(result
             .entities

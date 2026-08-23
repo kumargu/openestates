@@ -121,7 +121,7 @@ quarantine status, and lineage directly.
 ### Controlled conversational model checkpoint
 
 The first next-phase milestone is complete. The 10 frozen `core` buyer queries
-in `data/validation/query_bank/search_product_scenarios_v1.json` now run against
+in the `controlled_product` group of `data/validation/search_query_bank.json` now run against
 the controlled product model in
 `backend/tests/search_conversational_semantics_contract.rs`.
 
@@ -161,7 +161,7 @@ Commits:
 ### Varied buyer-language checkpoint
 
 The controlled model now also executes the 18 `buyer_language` cases in
-`data/validation/query_bank/search_product_scenarios_v1.json`. Together with
+the `controlled_product` group of `data/validation/search_query_bank.json`. Together with
 the original cases, 28 frozen buyer searches cover simple constraints,
 conversational preferences, society and place typos, compact/broken grammar,
 equivalent budget wording, branch alternatives, missing optional evidence,
@@ -213,7 +213,7 @@ deferred so this pass remains focused on search quality.
 ### Multi-decision ranking checkpoint — 2026-08-23
 
 Three additional `decision_ranking` cases in
-`data/validation/query_bank/search_product_scenarios_v1.json` extend the
+the `controlled_product` group of `data/validation/search_query_bank.json` extend the
 controlled product model to 31 buyer searches. They add only decision classes
 that were absent from the first two profiles:
 
@@ -329,7 +329,7 @@ The recovery keeps the behavior generic:
   branch without letting the first branch consume the limit.
 
 The `multi_or` profile in
-`data/validation/query_bank/search_product_scenarios_v1.json` adds nine frozen
+the `controlled_product` group of `data/validation/search_query_bank.json` adds nine frozen
 cases. Its fixture generates 24 decoys for each of two BHK branches and proves
 shared scope across two and three alternatives, branch-specific budgets, a
 later independent named scope, area and leading/trailing named-place scope,
@@ -352,10 +352,11 @@ Recovery verification:
 
 ### Regional controlled-bank consolidation — 2026-08-23
 
-The four controlled banks were consolidated into the single typed
-`search_product_scenarios_v1.json` contract. Its 50 cases select one of five
-fixture profiles, so richer inventory does not silently change older scenario
-expectations. Immutable live-bundle and materialization banks remain separate.
+The four controlled banks were consolidated into the typed
+`controlled_product` group in `data/validation/search_query_bank.json`. Its 50
+cases select one of five fixture profiles, so richer inventory does not
+silently change older scenario expectations. Version-pinned live cases occupy
+separate groups in the same bank.
 
 The new `regional` profile adds nine homes across Whitefield, Sarjapur Road,
 and North Bengaluru. It varies BHK, price, lifecycle state, noise evidence,

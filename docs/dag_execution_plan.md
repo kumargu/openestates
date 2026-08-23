@@ -600,7 +600,7 @@ Full checklist: `app/config/coverage.json` → `graph_ui_readiness`.
 | Check | Command / artifact |
 |-------|-------------------|
 | Rust unit/integration | `cargo test` |
-| Search quality | `pipeline/eval_search.py` + `data/validation/search_quality_benchmark.json` |
+| Search quality | `pipeline/eval_search.py` + named suites in `data/validation/search_query_bank.json` |
 | Frontend types | `npx tsc --noEmit` |
 | DAG plan | `openestates-run-assets --dry-run` |
 | Parquet schema | serving `schema.json` format_version |

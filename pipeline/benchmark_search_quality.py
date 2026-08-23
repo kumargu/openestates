@@ -7,7 +7,8 @@ signals separate prevents us from collapsing search quality into one magic score
 Usage:
     python3.10 -m pipeline.benchmark_search_quality \
       --base-url http://127.0.0.1:4000 \
-      --spec data/validation/search_quality_queries_v1.json \
+      --spec data/validation/search_query_bank.json \
+      --suite fact_first \
       --output tmp/search_quality_benchmark_v1.json \
       --markdown-output tmp/search_quality_benchmark_v1.md
 """
@@ -27,7 +28,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
 DEFAULT_BASE_URL = "http://127.0.0.1:4000"
-DEFAULT_SPEC = "data/validation/search_quality_queries_v1.json"
+DEFAULT_SPEC = "data/validation/search_query_bank.json"
 
 
 PREFERENCE_ALIASES: Dict[str, set[str]] = {
@@ -94,8 +95,8 @@ PREFERENCE_ALIASES: Dict[str, set[str]] = {
 def main() -> None:
     args = parse_args()
     spec_path = Path(args.spec)
-    spec = load_json(spec_path)
-    cases, query_sources = load_cases(spec, spec_path.parent)
+    bank = load_json(spec_path)
+    spec, cases, query_sources = load_suite(bank, args.suite, spec_path)
     if not cases:
         raise SystemExit("benchmark spec has no cases")
 
@@ -205,6 +206,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run buyer-language search quality benchmark")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     parser.add_argument("--spec", default=DEFAULT_SPEC)
+    parser.add_argument(
+        "--suite",
+        required=True,
+        help="suite id from the unified search query bank",
+    )
     parser.add_argument("--output", default="tmp/search_quality_benchmark_v1.json")
     parser.add_argument("--markdown-output")
     parser.add_argument("--timeout-seconds", type=int, default=15)
@@ -300,25 +306,32 @@ def collect_proof_handoffs(
     return handoffs
 
 
-def load_cases(spec: Dict[str, Any], spec_dir: Path) -> Tuple[List[Dict[str, Any]], List[str]]:
-    cases: List[Dict[str, Any]] = []
-    sources: List[str] = []
+def load_suite(
+    bank: Dict[str, Any], suite_id: str, bank_path: Path
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str]]:
+    suites = bank.get("suites") or []
+    matching_suites = [suite for suite in suites if suite.get("id") == suite_id]
+    if len(matching_suites) != 1:
+        available = sorted(str(suite.get("id")) for suite in suites if suite.get("id"))
+        raise SystemExit(
+            f"query suite {suite_id!r} must exist exactly once; available suites: {available}"
+        )
+    suite = matching_suites[0]
+    if suite.get("runner") != "live_api":
+        raise SystemExit(f"query suite {suite_id!r} is not a live API benchmark")
 
-    inline_cases = spec.get("cases") or []
-    if inline_cases:
-        cases.extend(inline_cases)
-        sources.append("<inline>")
-
-    for case_file in spec.get("case_files") or []:
-        path = Path(str(case_file))
-        if not path.is_absolute():
-            path = spec_dir / path
-        bank = load_json(path)
-        bank_cases = bank.get("cases") or []
-        if not bank_cases:
-            raise SystemExit(f"query bank has no cases: {path}")
-        cases.extend(bank_cases)
-        sources.append(str(path))
+    known_groups = {
+        str(group.get("id")) for group in bank.get("case_groups") or [] if group.get("id")
+    }
+    selected_groups = {str(group_id) for group_id in suite.get("case_groups") or []}
+    unknown_groups = sorted(selected_groups - known_groups)
+    if unknown_groups:
+        raise SystemExit(f"query suite {suite_id!r} references unknown groups: {unknown_groups}")
+    cases = [
+        case for case in bank.get("cases") or [] if case.get("group") in selected_groups
+    ]
+    if not cases:
+        raise SystemExit(f"query suite {suite_id!r} has no cases")
 
     duplicate_ids = sorted(
         case_id for case_id, count in Counter(case["id"] for case in cases).items() if count > 1
@@ -326,7 +339,7 @@ def load_cases(spec: Dict[str, Any], spec_dir: Path) -> Tuple[List[Dict[str, Any
     if duplicate_ids:
         raise SystemExit(f"duplicate benchmark case ids: {', '.join(duplicate_ids)}")
 
-    return cases, sources
+    return suite, cases, [f"{bank_path}#{suite_id}"]
 
 
 def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[str, Any]]:

@@ -1,7 +1,0 @@
-{
-  "benchmark": "Clean serving v7 fact-grounded proof loop",
-  "version": 1,
-  "required_serving_bundle_version": "clean-serving-v7-2026-08-16",
-  "scoreable_modes": ["data_backed"],
-  "case_files": ["query_bank/search_clean_serving_v7_godrej_air.json"]
-}

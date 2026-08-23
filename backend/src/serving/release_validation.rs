@@ -7,9 +7,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::assets::{AssetPathBuilder, MaterializationRecord, MaterializationStatus};
-use crate::dag_config::{
-    load_search_experiment_eligibility, load_serving_eligibility, ServingAdmissionProfile,
-};
+use crate::dag_config::load_serving_eligibility;
 use crate::knowledge::FactValue;
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
@@ -399,7 +397,7 @@ pub async fn validate_search_serving_candidate(
         &fact_index,
         &manifest.bundle_version,
     );
-    validate_property_projection(&properties, manifest.admission_profile, &mut issues);
+    validate_property_projection(&properties, &mut issues);
 
     let media_references = collect_media_references(&facts);
     let media_references_checked = media_references.len();
@@ -497,14 +495,6 @@ async fn validate_quarantine_contract(
             Some(report.eligibility_policy_version.to_string()),
         );
     }
-    if report.admission_profile != manifest.admission_profile {
-        issue(
-            issues,
-            "quarantine_admission_profile_mismatch",
-            "quarantine report and serving manifest use different admission profiles",
-            Some(format!("{:?}", report.admission_profile)),
-        );
-    }
     check_count(
         issues,
         "quarantined_society_count_mismatch",
@@ -561,11 +551,7 @@ fn validate_clean_bundle_eligibility(
     edges: &[super::ServingEdgeRecord],
     issues: &mut Vec<ServingBundleValidationIssue>,
 ) {
-    let loaded_policy = match manifest.admission_profile {
-        ServingAdmissionProfile::BuyerCatalog => load_serving_eligibility(),
-        ServingAdmissionProfile::SearchExperiment => load_search_experiment_eligibility(),
-    };
-    let policy = match loaded_policy {
+    let policy = match load_serving_eligibility() {
         Ok(policy) => policy,
         Err(error) => {
             issue(
@@ -754,7 +740,6 @@ fn validate_record_relations(
 
 fn validate_property_projection(
     properties: &[crate::models::Property],
-    admission_profile: ServingAdmissionProfile,
     issues: &mut Vec<ServingBundleValidationIssue>,
 ) {
     if properties.is_empty() {
@@ -797,31 +782,29 @@ fn validate_property_projection(
                 Some(property.id.clone()),
             );
         }
-        if admission_profile == ServingAdmissionProfile::BuyerCatalog {
-            if property.hero_image.trim().is_empty() || property.images.is_empty() {
-                issue(
-                    issues,
-                    "incomplete_property_media",
-                    "property card requires a hero image and gallery",
-                    Some(property.id.clone()),
-                );
-            }
-            if property.builder_name.trim().is_empty() {
-                issue(
-                    issues,
-                    "incomplete_property_builder",
-                    "property card requires a builder",
-                    Some(property.id.clone()),
-                );
-            }
-            if property.carpet_area_sqft == 0 {
-                issue(
-                    issues,
-                    "incomplete_property_size",
-                    "property card requires positive size data",
-                    Some(property.id.clone()),
-                );
-            }
+        if property.hero_image.trim().is_empty() || property.images.is_empty() {
+            issue(
+                issues,
+                "incomplete_property_media",
+                "property card requires a hero image and gallery",
+                Some(property.id.clone()),
+            );
+        }
+        if property.builder_name.trim().is_empty() {
+            issue(
+                issues,
+                "incomplete_property_builder",
+                "property card requires a builder",
+                Some(property.id.clone()),
+            );
+        }
+        if property.carpet_area_sqft == 0 {
+            issue(
+                issues,
+                "incomplete_property_size",
+                "property card requires positive size data",
+                Some(property.id.clone()),
+            );
         }
     }
 }

@@ -22,10 +22,10 @@ phrases owned by more than one label were excluded.
 - Hardcoding audit: two pre-existing comment-only `office` findings in
   `backend/src/search/geo.rs`; no blocked config aliases.
 - Held-out classifier bank at the time:
-  `data/validation/query_bank/search_intent_classifier_v1.json` (retired after
+  `search_intent_classifier_v1.json` (retired after
   the classifier was removed; selected human phrases now live in the
   `buyer_language` profile of the executable
-  `search_product_scenarios_v1.json` bank).
+  `controlled_product` group in `data/validation/search_query_bank.json`).
 
 ## Experiment result
 
@@ -95,7 +95,7 @@ constraints, recall, or proof semantics.
 The classifier-only bank was subsequently removed because its 48 isolated
 clauses had no observable search-result contract. Useful phrases were curated
 into the `buyer_language` profile of
-`data/validation/query_bank/search_product_scenarios_v1.json`, where they are
+`data/validation/search_query_bank.json`, where the `controlled_product` group is
 tested as complete buyer searches against controlled facts. Git history keeps
 the original experiment corpus if the classifier decision is revisited.
 

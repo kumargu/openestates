@@ -55,12 +55,12 @@ The branch is synchronized with `origin/main` at `f245e7fc`. The merge keeps
 main's expanded gallery curation together with alias-aware local media lookup;
 the full post-merge backend and API suites pass. No remote branch was pushed.
 
-The stale classifier-only bank and four fragmented controlled banks were
-replaced by `search_product_scenarios_v1.json`. Historical live-bundle banks
-were preserved; they describe pinned data runs and should not be merged into
-the controlled product model. Selected classifier-era phrases now have
-complete search context and executable result/proof expectations instead of
-isolated labels.
+The stale classifier-only bank and fragmented controlled/live banks were
+consolidated into `data/validation/search_query_bank.json`. Named groups retain
+the distinction between controlled product semantics and version-pinned live
+data while every runner reads the same document. Selected classifier-era
+phrases now have complete search context and executable result/proof
+expectations instead of isolated labels.
 
 The follow-up test audit retired three misleading owners: the report-style
 `search_quality.rs` integration test, its inline fuzzy API companion, and the
@@ -330,12 +330,9 @@ its immutable materialization id.
 Artifacts:
 
 - ledger: `data/validation/search_fact_ledger_incomplete_south_experiment_v1.json`;
-- incomplete bank:
-  `data/validation/query_bank/search_incomplete_south_experiment_v1.json`;
-- scoped suite:
-  `data/validation/search_quality_incomplete_south_experiment_v1.json`;
-- mixed suite:
-  `data/validation/search_quality_mixed_south_experiment_v1.json`;
+- unified query bank: `data/validation/search_query_bank.json`;
+- incomplete group and suite: `incomplete_south_experiment`;
+- mixed suite: `mixed_south_experiment`;
 - measured outputs: `tmp/search-proof-loop/incomplete-south-experiment-v1/`
   and `tmp/search-proof-loop/mixed-south-45-experiment-v1/`.
 
@@ -346,10 +343,9 @@ the Hoodi place entity, `nearby_metro_stations` fact, 100 m distance, focused
 feature, Google receipt lineage, and mixed-bundle version. The case passed
 13/13 checks with 12.76 ms endpoint p50 and p95.
 
-- handoff bank:
-  `data/validation/query_bank/search_proof_handoff_mixed_v1.json`;
-- handoff suite:
-  `data/validation/search_quality_proof_handoff_mixed_v1.json`;
+- unified query bank: `data/validation/search_query_bank.json`;
+- handoff group: `proof_handoff`;
+- handoff suite: `proof_handoff_mixed`;
 - measured output:
   `tmp/search-proof-loop/mixed-south-45-experiment-v1/proof-handoff.json`.
 
@@ -386,10 +382,9 @@ catalog or global serving pointer moved.
 
 Artifacts:
 
-- common unknown-name bank:
-  `data/validation/query_bank/search_unknown_project_guardrail_v1.json`;
-- South 43 absent-Ajmera bank:
-  `data/validation/query_bank/search_absent_ajmera_south_43_v1.json`;
+- unified query bank: `data/validation/search_query_bank.json`;
+- common unknown-name group: `unknown_project`;
+- South 43 absent-Ajmera group: `south_43_absent_project`;
 - measured outputs: `tmp/search-proof-loop/bundle-switch-v1/`.
 
 ## Historical execution log
@@ -411,7 +406,7 @@ data gap that warrants a new DAG materialization or promotion.
 - 37 eligible societies, 86 searchable properties, 28 quarantined societies
 - Hardcoding audit: passed; no blocked search-config alias findings
 - Fact ledger: `data/validation/search_fact_ledger_clean_serving_v7.json`
-- Frozen bank: `data/validation/query_bank/search_clean_serving_v7_godrej_air.json`
+- Query group: `clean_serving_v7` in `data/validation/search_query_bank.json`
 
 Local artifacts:
 
@@ -514,7 +509,7 @@ Final proof artifacts:
 - South Bengaluru 8-query bank: `tmp/search-proof-loop/south-40-candidate/final-regional-bank.json`
   — 57/57 checks passed
 - Fact ledger: `data/validation/search_fact_ledger_south_40_candidate.json`
-- Query bank: `data/validation/query_bank/search_south_40_candidate.json`
+- Query group: `south_40` in `data/validation/search_query_bank.json`
 
 The hardcoding audit reported zero blocked search-config aliases. Catalog
 validation passed every required gate; its only warning correctly records four
@@ -561,8 +556,7 @@ Final proof artifacts:
   49/49 checks passed, endpoint p95 23.15 ms
 - Fact ledger:
   `data/validation/search_fact_ledger_sarjapur_41_candidate.json`
-- Query bank:
-  `data/validation/query_bank/search_sarjapur_41_candidate.json`
+- Query group: `sarjapur_41` in `data/validation/search_query_bank.json`
 
 All three banks retained 100% recall and proof precision, zero hard-constraint
 violations, zero unsupported claims, and stable ordering. The hardcoding audit
@@ -608,7 +602,7 @@ Final proof artifacts:
   `tmp/search-proof-loop/south-43-candidate/new-south-bank.json` — 67/67
   checks passed, endpoint p95 22.84 ms
 - Fact ledger: `data/validation/search_fact_ledger_south_43_candidate.json`
-- Query bank: `data/validation/query_bank/search_south_43_candidate.json`
+- Query group: `south_43` in `data/validation/search_query_bank.json`
 
 All banks retained 100% recall and proof precision, zero hard-constraint
 violations, zero unsupported claims, and stable ordering. The 43-society

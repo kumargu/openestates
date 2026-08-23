@@ -6,8 +6,6 @@ use super::loader::{dag_root, load_json, DagConfigError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServingEligibilityFile {
-    #[serde(default)]
-    pub admission_profile: ServingAdmissionProfile,
     pub version: u32,
     #[serde(default = "default_minimum_projected_properties")]
     pub minimum_projected_properties: usize,
@@ -17,14 +15,6 @@ pub struct ServingEligibilityFile {
     pub property_requirements: Vec<ProjectedPropertyRequirement>,
     #[serde(default)]
     pub society_requirements: Vec<SocietyEvidenceRequirement>,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ServingAdmissionProfile {
-    #[default]
-    BuyerCatalog,
-    SearchExperiment,
 }
 
 fn default_minimum_projected_properties() -> usize {
@@ -67,10 +57,6 @@ pub fn serving_eligibility_path() -> PathBuf {
     dag_root().join("serving_eligibility.json")
 }
 
-pub fn search_experiment_eligibility_path() -> PathBuf {
-    dag_root().join("search_experiment_eligibility.json")
-}
-
 pub fn load_serving_eligibility_from_path(
     path: &Path,
 ) -> Result<ServingEligibilityFile, DagConfigError> {
@@ -81,10 +67,6 @@ pub fn load_serving_eligibility_from_path(
 
 pub fn load_serving_eligibility() -> Result<ServingEligibilityFile, DagConfigError> {
     load_serving_eligibility_from_path(&serving_eligibility_path())
-}
-
-pub fn load_search_experiment_eligibility() -> Result<ServingEligibilityFile, DagConfigError> {
-    load_serving_eligibility_from_path(&search_experiment_eligibility_path())
 }
 
 fn validate_serving_eligibility(config: &ServingEligibilityFile) -> Result<(), DagConfigError> {
@@ -158,24 +140,8 @@ mod tests {
             return;
         }
         let config = load_serving_eligibility().expect("serving_eligibility.json should load");
-        assert_eq!(
-            config.admission_profile,
-            ServingAdmissionProfile::BuyerCatalog
-        );
         assert_eq!(config.version, 1);
         assert!(!config.property_requirements.is_empty());
         assert!(!config.society_requirements.is_empty());
-    }
-
-    #[test]
-    fn search_experiment_eligibility_config_loads() {
-        let config = load_search_experiment_eligibility()
-            .expect("search_experiment_eligibility.json should load");
-        assert_eq!(
-            config.admission_profile,
-            ServingAdmissionProfile::SearchExperiment
-        );
-        assert_eq!(config.version, 1);
-        assert!(config.society_requirements.is_empty());
     }
 }

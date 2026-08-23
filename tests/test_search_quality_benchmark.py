@@ -1,10 +1,13 @@
 import unittest
+import json
+from pathlib import Path
 
 from pipeline.benchmark_search_quality import (
     case_result,
     evaluate_case,
     evaluate_proof_handoffs,
     flattened_results,
+    load_suite,
     public_quality_summary,
     serving_bundle_requirement_error,
 )
@@ -38,6 +41,17 @@ def search_diagnostics() -> dict:
 
 
 class SearchQualityBenchmarkTests(unittest.TestCase):
+    def test_unified_query_bank_selects_one_live_suite(self) -> None:
+        bank_path = Path("data/validation/search_query_bank.json")
+        bank = json.loads(bank_path.read_text(encoding="utf-8"))
+
+        suite, cases, sources = load_suite(bank, "mixed_south_experiment", bank_path)
+
+        self.assertEqual(suite["required_serving_bundle_version"], "search-experiment-mixed-south-45-2026-08-22-v1")
+        self.assertEqual(len(cases), 59)
+        self.assertEqual(len({case["id"] for case in cases}), 59)
+        self.assertEqual(sources, [f"{bank_path}#mixed_south_experiment"])
+
     def test_public_result_sets_are_flattened_with_branch_provenance(self) -> None:
         response = {
             "resultSets": [

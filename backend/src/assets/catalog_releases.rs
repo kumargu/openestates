@@ -473,12 +473,6 @@ impl CatalogReleaseStore {
                 manifest.format_version
             )));
         }
-        if manifest.admission_profile != crate::dag_config::ServingAdmissionProfile::BuyerCatalog {
-            return Err(CatalogReleaseError::GateRejected(
-                "search-experiment serving bundles cannot be promoted as buyer catalog releases"
-                    .to_string(),
-            ));
-        }
         Ok(())
     }
 
@@ -1510,7 +1504,6 @@ mod tests {
             rera_evidence_count: 0,
             excluded_rera_evidence_society_ids: Vec::new(),
             edge_count: 0,
-            admission_profile: crate::dag_config::ServingAdmissionProfile::BuyerCatalog,
             eligibility_policy_version: 1,
             quarantined_society_count: 0,
             quarantine_reason_counts: BTreeMap::new(),
@@ -1623,7 +1616,6 @@ mod tests {
             rera_evidence_count: 0,
             excluded_rera_evidence_society_ids: Vec::new(),
             edge_count: 0,
-            admission_profile: crate::dag_config::ServingAdmissionProfile::BuyerCatalog,
             eligibility_policy_version: 0,
             quarantined_society_count: 0,
             quarantine_reason_counts: BTreeMap::new(),
@@ -1679,69 +1671,6 @@ mod tests {
             .await
             .unwrap()
             .is_none());
-    }
-
-    #[tokio::test]
-    async fn buyer_catalog_gate_rejects_search_experiment_bundle() {
-        let root = tempdir().unwrap();
-        let lake = LakeStore::local(root.path()).unwrap();
-        let store = CatalogReleaseStore::new(lake.clone());
-        let materializations = AssetMaterializationStore::new(lake.clone());
-        let mut serving = record(SEARCH_SERVING_BUNDLE_ASSET_ID, Vec::new());
-        let manifest_key = LakeKey::new("serving/search-experiment/manifest.json").unwrap();
-        let manifest = ServingBundleManifest {
-            bundle_version: "search-experiment".to_string(),
-            format_version: 8,
-            created_at: Utc::now(),
-            entity_count: 0,
-            entity_alias_count: 0,
-            fact_count: 0,
-            search_metadata_count: 0,
-            rera_evidence_count: 0,
-            excluded_rera_evidence_society_ids: Vec::new(),
-            edge_count: 0,
-            admission_profile: crate::dag_config::ServingAdmissionProfile::SearchExperiment,
-            eligibility_policy_version: 1,
-            quarantined_society_count: 0,
-            quarantine_reason_counts: BTreeMap::new(),
-            entity_parquet_key: String::new(),
-            entity_alias_parquet_key: None,
-            fact_parquet_key: String::new(),
-            search_metadata_parquet_key: String::new(),
-            rera_evidence_parquet_key: None,
-            edge_parquet_key: None,
-            quarantine_report_key: None,
-            schema_key: String::new(),
-            trust_policy_key: String::new(),
-            tantivy_index_prefix: String::new(),
-            artifacts: Vec::new(),
-        };
-        serving.artifacts = vec![ArtifactRef::json(
-            lake.put_json(&manifest_key, &manifest).await.unwrap(),
-        )];
-        materializations
-            .write_materialization(&serving)
-            .await
-            .unwrap();
-        let release = CatalogRelease::candidate(
-            None,
-            None,
-            DerivedCatalogAssets {
-                serving_materialization_id: serving.materialization_id,
-                kg_materialization_id: MaterializationId::new(),
-                project_facts_materialization_id: MaterializationId::new(),
-                materializations: Vec::new(),
-            },
-        );
-
-        let error = store
-            .require_eligibility_quarantine_format(&release)
-            .await
-            .unwrap_err();
-
-        assert!(error
-            .to_string()
-            .contains("search-experiment serving bundles cannot be promoted"));
     }
 
     fn membership(property_id: &str) -> CatalogMembership {
@@ -1843,7 +1772,6 @@ mod tests {
             rera_evidence_count: evidence.len() as u64,
             excluded_rera_evidence_society_ids,
             edge_count: 0,
-            admission_profile: crate::dag_config::ServingAdmissionProfile::BuyerCatalog,
             eligibility_policy_version: 0,
             quarantined_society_count: 0,
             quarantine_reason_counts: BTreeMap::new(),

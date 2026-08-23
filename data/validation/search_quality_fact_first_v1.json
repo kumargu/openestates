@@ -1,9 +1,0 @@
-{
-  "benchmark": "current_bundle_fact_first_search_quality",
-  "version": 1,
-  "description": "Fact-first proof loop pinned to the current promoted serving bundle. Supported cases use direct Parquet facts; abstention cases assert missing or unsupported evidence without inventing proof.",
-  "required_serving_bundle_version": "bangalore-catalog-60-coherent-2026-08-01-run-4f169729-4564-4f33-b552-0d8dc6c562a0",
-  "scoreable_modes": ["supported", "transfer", "abstention"],
-  "capability_matrix": "search_fact_capability_matrix_v1.json",
-  "case_files": ["query_bank/search_fact_first_v1.json"]
-}
