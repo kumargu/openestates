@@ -101,6 +101,7 @@ export type StoryReviewsModel = {
 export type StoryRecordCard = {
   id: string;
   label: string;
+  title: string;
   href: string;
   availability: "available" | "partial";
   registrationIds: string[];
@@ -117,17 +118,12 @@ export type StoryComparison = {
   area: string;
   bhk?: number;
   price?: number;
+  sizeLabel?: string;
   status?: string;
   societyName?: string;
   heroImage?: string;
   googleRating?: number;
   isCurrent: boolean;
-};
-
-export type StoryDecisionModel = {
-  canSave: boolean;
-  canNote: boolean;
-  galleryCount: number;
 };
 
 export type StoryCoverage = {
@@ -147,8 +143,7 @@ export type PropertyStoryDeck =
   | (StoryDeckBase & { kind: "arrival" })
   | (StoryDeckBase & { kind: "reviews" })
   | (StoryDeckBase & { kind: "record" })
-  | (StoryDeckBase & { kind: "compare" })
-  | (StoryDeckBase & { kind: "decision" });
+  | (StoryDeckBase & { kind: "compare" });
 
 export type PropertyStoryModel = {
   identity: StoryIdentity;
@@ -159,7 +154,6 @@ export type PropertyStoryModel = {
   recordCards: StoryRecordCard[];
   comparisons: StoryComparison[];
   compareHref?: string;
-  decision: StoryDecisionModel;
   coverage: StoryCoverage;
   motionSeed: number;
   motionTheme: StoryMotionTheme;
@@ -221,7 +215,6 @@ const STORY_DECK_ORDER: PropertyStoryDeck["kind"][] = [
   "reviews",
   "record",
   "compare",
-  "decision",
 ];
 
 function hasKnownNumber(
@@ -426,45 +419,58 @@ function projectRecordCards(
   const report = data.rera_report_ref;
   if (report.availability === "unavailable") return [];
   const summary = data.decision_check_summary;
-  const facts: StoryRecordCard["facts"] = [];
   const registrationNumber =
     summary?.registrationNumberCompact?.trim()
-    || summary?.registrationNumber?.trim();
-  if (registrationNumber) {
-    facts.push({
-      key: "registration",
-      label: "Registration",
-      value: registrationNumber,
-    });
-  }
+    || summary?.registrationNumber?.trim()
+    || report.registration_ids[0]?.trim();
+  const cards: StoryRecordCard[] = registrationNumber
+    ? [{
+        id: "rera-registration",
+        label: "Karnataka RERA",
+        title: "Registration",
+        href: report.href,
+        availability: report.availability,
+        registrationIds: [...report.registration_ids].sort(),
+        facts: [{
+          key: "registration",
+          label: "Number",
+          value: registrationNumber,
+        }],
+      }]
+    : [];
   const documentLabels = [
     ...(summary?.groups?.find((group) => group.id === "documents")?.labels ?? []),
     ...(summary?.primaryLabels ?? []).filter(
       (label) => label.groupId === "documents",
     ),
   ];
-  const usedFactKeys = new Set(facts.map((fact) => fact.key));
+  const documentFacts: StoryRecordCard["facts"] = [];
+  const usedFactKeys = new Set<string>();
   for (const label of documentLabels) {
     if (label.groupId !== "documents" || !label.label.trim()) continue;
     if (usedFactKeys.has(label.key)) continue;
     usedFactKeys.add(label.key);
-    facts.push({
+    documentFacts.push({
       key: label.key,
       label: label.label.trim(),
       value: label.valueText?.trim()
-        ? `${label.valueText.trim()} found`
-        : undefined,
+        ? label.valueText.trim()
+        : "Found",
     });
-    if (facts.length >= 3) break;
+    if (documentFacts.length >= 3) break;
   }
-  return [{
-    id: "rera",
-    label: "Registration & filings",
-    href: report.href,
-    availability: report.availability,
-    registrationIds: [...report.registration_ids].sort(),
-    facts,
-  }];
+  if (documentFacts.length > 0) {
+    cards.push({
+      id: "rera-documents",
+      label: "Official record",
+      title: "Documents",
+      href: report.href,
+      availability: report.availability,
+      registrationIds: [...report.registration_ids].sort(),
+      facts: documentFacts,
+    });
+  }
+  return cards;
 }
 
 function projectComparisons(
@@ -478,6 +484,11 @@ function projectComparisons(
     area: data.property.area,
     bhk: hasKnownNumber(data.property.bhk) ? data.property.bhk : undefined,
     price: hasKnownNumber(data.property.price) ? data.property.price : undefined,
+    sizeLabel: hasKnownNumber(data.property.carpet_area_sqft)
+      ? `${data.property.carpet_area_sqft.toLocaleString("en-IN")} sqft carpet`
+      : hasKnownNumber(data.property.super_builtup_sqft)
+        ? `${data.property.super_builtup_sqft.toLocaleString("en-IN")} sqft super built-up`
+        : undefined,
     status: compactStatus(data),
     societyName: currentSocietyName,
     heroImage: data.property.hero_image || data.property.images?.[0] || undefined,
@@ -513,6 +524,13 @@ function projectComparisons(
       area: property.area,
       bhk: hasKnownNumber(property.bhk) ? property.bhk : undefined,
       price: hasKnownNumber(property.price) ? property.price : undefined,
+      sizeLabel: hasKnownNumber(property.carpet_area_sqft)
+        ? `${property.carpet_area_sqft.toLocaleString("en-IN")} sqft carpet`
+        : hasKnownNumber(property.super_builtup_sqft)
+          ? `${property.super_builtup_sqft.toLocaleString("en-IN")} sqft super built-up`
+          : hasKnownNumber(property.sqft)
+            ? `${property.sqft.toLocaleString("en-IN")} sqft`
+            : undefined,
       status:
         property.home_state_display
         || property.project_status_display
@@ -631,11 +649,6 @@ function orderedDecks(input: {
           primaryFactKeys: ["comparison_options"],
         }]
       : []),
-    {
-      id: "decision",
-      kind: "decision",
-      primaryFactKeys: [],
-    },
   ];
   return decks.sort(
     (left, right) =>
@@ -695,11 +708,6 @@ export function projectPropertyStory(
     recordCards,
     comparisons,
     compareHref: compare.href,
-    decision: {
-      canSave: true,
-      canNote: true,
-      galleryCount: media.galleryUrls.length,
-    },
     coverage: {
       level: coverageLevel,
       availableDecks,
@@ -725,16 +733,31 @@ export function nextStoryFrameIndex(
   return (Math.max(0, Math.floor(current)) + 1) % total;
 }
 
+export function wrappedFilmstripOffset(
+  index: number,
+  activeIndex: number,
+  total: number,
+): number {
+  if (total <= 1) return 0;
+  let offset = index - activeIndex;
+  const midpoint = total / 2;
+  if (offset > midpoint) offset -= total;
+  if (offset < -midpoint) offset += total;
+  return Math.max(-3, Math.min(3, offset));
+}
+
 export function shouldAutoAdvanceStory(input: {
   playing: boolean;
   frameCount: number;
   reducedMotion: boolean;
   isVisible: boolean;
   documentVisible: boolean;
+  durationMs?: number;
 }): boolean {
   return (
     input.playing &&
     input.frameCount > 1 &&
+    (input.durationMs === undefined || input.durationMs > 0) &&
     !input.reducedMotion &&
     input.isVisible &&
     input.documentVisible

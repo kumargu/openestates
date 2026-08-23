@@ -7,6 +7,7 @@ import {
   selectStoryMotionTheme,
   shouldAutoAdvanceStory,
   stableStoryHash,
+  wrappedFilmstripOffset,
   type StoryMotionTheme,
 } from "../src/lib/propertyStory.ts";
 import {
@@ -101,7 +102,7 @@ test("sparse properties compact unavailable decks", () => {
   assert.equal(story.coverage.level, "sparse");
   assert.deepEqual(
     story.decks.map((deck) => deck.kind),
-    ["hero", "decision"],
+    ["hero"],
   );
   assert.equal(story.media.frames.length, 0);
 });
@@ -247,22 +248,27 @@ test("official record teaser projects only known registration and document facts
       }],
     }],
   };
-  const card = projectPropertyStory(detail).recordCards[0];
-  assert.equal(card?.availability, "available");
-  assert.deepEqual(card?.facts, [
+  const cards = projectPropertyStory(detail).recordCards;
+  assert.equal(cards.length, 2);
+  assert.equal(cards[0]?.availability, "available");
+  assert.deepEqual(cards[0]?.facts, [
     {
       key: "registration",
-      label: "Registration",
+      label: "Number",
       value: "PRM/KA/.../004371",
     },
+  ]);
+  assert.deepEqual(cards[1]?.facts, [
     {
       key: "sanction_plan_available",
       label: "Sanction plan available",
-      value: "1 found",
+      value: "1",
     },
   ]);
   assert.equal(
-    card?.facts.some((fact) => fact.label === "1 parking/home"),
+    cards.flatMap((card) => card.facts).some(
+      (fact) => fact.label === "1 parking/home",
+    ),
     false,
   );
 });
@@ -279,9 +285,12 @@ test("partial official records and unresolved reviews stay compact without inven
     google_reviews_url: "https://www.google.com/maps",
   };
   const story = projectPropertyStory(detail);
-  assert.deepEqual(story.recordCards[0]?.facts, []);
-  assert.equal(story.recordCards[0]?.availability, "partial");
+  assert.deepEqual(story.recordCards, []);
   assert.equal(story.reviews.state, "unresolved");
+  assert.equal(
+    story.decks.some((deck) => deck.kind === "record"),
+    false,
+  );
   assert.equal(
     story.decks.some((deck) => deck.kind === "reviews"),
     true,
@@ -450,7 +459,19 @@ test("pause, offscreen, hidden, and step behavior are bounded", () => {
     shouldAutoAdvanceStory({ ...base, playing: true, documentVisible: false }),
     false,
   );
+  assert.equal(
+    shouldAutoAdvanceStory({ ...base, playing: true, durationMs: 0 }),
+    false,
+  );
   assert.equal(shouldAutoAdvanceStory({ ...base, playing: true }), true);
   assert.equal(nextStoryFrameIndex(3, 4), 0);
   assert.equal(nextStoryFrameIndex(0, 1), 0);
+});
+
+test("filmstrip offsets wrap adjacent frames without edge jumps", () => {
+  assert.equal(wrappedFilmstripOffset(0, 0, 7), 0);
+  assert.equal(wrappedFilmstripOffset(6, 0, 7), -1);
+  assert.equal(wrappedFilmstripOffset(0, 6, 7), 1);
+  assert.equal(wrappedFilmstripOffset(4, 0, 7), -3);
+  assert.equal(wrappedFilmstripOffset(0, 0, 1), 0);
 });

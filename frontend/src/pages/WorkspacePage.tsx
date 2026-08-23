@@ -154,6 +154,9 @@ export function WorkspacePage() {
     removeNote,
   } = useNotebook();
   const [homes, setHomes] = useState<PropertyCard[]>([]);
+  const [catalogStatus, setCatalogStatus] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
   const [compareState, setCompareState] = useState<CompareState>({
     key: "",
     status: "idle",
@@ -163,9 +166,13 @@ export function WorkspacePage() {
   useEffect(() => {
     const controller = new AbortController();
     getProperties({ signal: controller.signal })
-      .then(setHomes)
+      .then((properties) => {
+        setHomes(properties);
+        setCatalogStatus("ready");
+      })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
+        setCatalogStatus("error");
       });
     return () => controller.abort();
   }, []);
@@ -216,6 +223,16 @@ export function WorkspacePage() {
   );
   const compareHref = workspaceCompareHref(activeCompareIds, focusedWorkspaceId);
   const buyVsRentHref = workspaceBuyVsRentHref(focusedWorkspaceId);
+  const compareViewStatus: CompareStatus =
+    selectedHomes.length < 2
+      ? catalogStatus === "loading" && activeCompareIds.length >= 2
+        ? "loading"
+        : catalogStatus === "error"
+          ? "error"
+          : "idle"
+      : compareState.key === compareKey
+        ? compareState.status
+        : "loading";
 
   function quickAdd(propertyId: string, text: string, labels: NotebookLabelId[] = []) {
     if (!propertyId || !text.trim()) return;
@@ -282,20 +299,20 @@ export function WorkspacePage() {
       />
       <h1 className="visually-hidden">Workspace</h1>
 
-      {propertyIds.length === 0 ? (
+      {mode === "compare" ? (
+        <CompareWorkspaceView
+          selectedHomes={selectedHomes}
+          catalog={homes}
+          details={compareState.key === compareKey ? compareState.details : []}
+          status={compareViewStatus}
+          onRemoveHome={removeCompareHomes}
+        />
+      ) : propertyIds.length === 0 ? (
         <div className="notion-empty">
           <h2>Empty workspace</h2>
           <p>Save a home or add a note from a property page to start your decision workspace.</p>
           <Link to="/">Explore</Link>
         </div>
-      ) : mode === "compare" ? (
-        <CompareWorkspaceView
-          selectedHomes={selectedHomes}
-          catalog={homes}
-          details={compareState.key === compareKey ? compareState.details : []}
-          status={compareState.key === compareKey ? compareState.status : "loading"}
-          onRemoveHome={removeCompareHomes}
-        />
       ) : (
         <EditorialView
           propertyIds={orderedPropertyIds}
@@ -331,13 +348,13 @@ function CompareWorkspaceView({
   status: CompareStatus;
   onRemoveHome: (propertyIds: string[]) => void;
 }) {
-  if (selectedHomes.length < 2) {
+  if (status === "loading") {
     return (
-      <section className="workspace-compare-empty">
-        <span>Compare</span>
-        <h2>Add one more home to compare.</h2>
-        <p>Use the compare toggle beside saved homes in Notes. The workspace keeps the same notes and labels when you switch views.</p>
-        <Link to="/workspace">Back to notes</Link>
+      <section className="workspace-compare-view" aria-label="Compare homes">
+        <div className="workspace-compare-loading" aria-label="Loading comparison">
+          <div />
+          <div />
+        </div>
       </section>
     );
   }
@@ -353,21 +370,25 @@ function CompareWorkspaceView({
     );
   }
 
+  if (selectedHomes.length < 2) {
+    return (
+      <section className="workspace-compare-empty">
+        <span>Compare</span>
+        <h2>Add one more home to compare.</h2>
+        <p>Use the compare toggle beside saved homes in Notes. The workspace keeps the same notes and labels when you switch views.</p>
+        <Link to="/workspace">Back to notes</Link>
+      </section>
+    );
+  }
+
   return (
-    <section className="workspace-compare-view" aria-label="Compare saved homes">
-      {status === "loading" ? (
-        <div className="workspace-compare-loading" aria-label="Loading comparison">
-          <div />
-          <div />
-        </div>
-      ) : (
-        <SocietyComparisonMatrix
-          selectedHomes={selectedHomes}
-          catalog={catalog}
-          details={details}
-          onRemoveColumn={onRemoveHome}
-        />
-      )}
+    <section className="workspace-compare-view" aria-label="Compare homes">
+      <SocietyComparisonMatrix
+        selectedHomes={selectedHomes}
+        catalog={catalog}
+        details={details}
+        onRemoveColumn={onRemoveHome}
+      />
     </section>
   );
 }

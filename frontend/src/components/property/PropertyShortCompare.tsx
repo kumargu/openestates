@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
-import { ImageWithFallback } from "../ImageWithFallback.tsx";
 import type { StoryComparison } from "../../lib/propertyStory.ts";
+import {
+  PropertyEvidenceCard,
+  type PropertyEvidenceFact,
+} from "./PropertyEvidenceCard.tsx";
 import "../../styles/property-fact-decks.css";
 
 type Props = {
@@ -15,9 +18,28 @@ function formatPrice(price?: number): string | undefined {
   return `₹${price.toLocaleString("en-IN")}`;
 }
 
+type ComparisonDimension = {
+  key: string;
+  label: string;
+  value: (home: StoryComparison) => string | undefined;
+};
+
+const COMPARISON_DIMENSIONS: ComparisonDimension[] = [
+  { key: "price", label: "Price", value: (home) => formatPrice(home.price) },
+  {
+    key: "configuration",
+    label: "Home",
+    value: (home) => home.bhk ? `${home.bhk} BHK` : undefined,
+  },
+  { key: "size", label: "Area", value: (home) => home.sizeLabel },
+  { key: "status", label: "Status", value: (home) => home.status },
+];
+
 export function PropertyShortCompare({ homes, compareHref }: Props) {
   if (homes.length !== 3 || !compareHref) return null;
   const showMedia = homes.every((home) => Boolean(home.heroImage));
+  const dimensions = COMPARISON_DIMENSIONS.filter((dimension) =>
+    homes.every((home) => Boolean(dimension.value(home))));
 
   return (
     <section
@@ -25,65 +47,42 @@ export function PropertyShortCompare({ homes, compareHref }: Props) {
       className="property-fact-deck property-short-compare"
       aria-labelledby="property-short-compare-title"
     >
-      <header className="property-fact-deck__intro">
-        <span>Short comparison</span>
-        <h2 id="property-short-compare-title">Three homes. Facts first.</h2>
+      <header className="property-story-heading">
+        <span>Compare</span>
+        <h2 id="property-short-compare-title">Three homes. Same facts.</h2>
       </header>
 
-      <div className="property-short-compare__grid">
+      <div className="property-evidence-grid property-evidence-grid--compare">
         {homes.map((home) => {
-          const price = formatPrice(home.price);
+          const facts: PropertyEvidenceFact[] = dimensions.flatMap(
+            (dimension) => {
+              const value = dimension.value(home);
+              return value
+                ? [{
+                    key: dimension.key,
+                    label: dimension.label,
+                    value,
+                  }]
+                : [];
+            },
+          );
           return (
-            <article key={home.id} className="property-short-compare__card">
-              <Link
-                className="property-short-compare__home"
-                to={`/property/${encodeURIComponent(home.id)}`}
-              >
-                {showMedia && (
-                  <div className="property-short-compare__media">
-                    <ImageWithFallback
-                      src={home.heroImage ?? ""}
-                      alt=""
-                      loading="lazy"
-                      fetchPriority="low"
-                    />
-                  </div>
-                )}
-                <div className="property-short-compare__copy">
-                  <div className="property-short-compare__eyebrow">
-                    <span>{home.isCurrent ? "This home" : "Compare"}</span>
-                    <span>{home.area}</span>
-                  </div>
-                  <h3>{home.title}</h3>
-                  <dl>
-                    {price && (
-                      <div>
-                        <dt>Price</dt>
-                        <dd>{price}</dd>
-                      </div>
-                    )}
-                    {home.bhk && (
-                      <div>
-                        <dt>Home</dt>
-                        <dd>{home.bhk} BHK</dd>
-                      </div>
-                    )}
-                    {home.status && (
-                      <div>
-                        <dt>Status</dt>
-                        <dd>{home.status}</dd>
-                      </div>
-                    )}
-                  </dl>
-                </div>
-              </Link>
-            </article>
+            <PropertyEvidenceCard
+              key={home.id}
+              to={`/property/${encodeURIComponent(home.id)}`}
+              eyebrow={home.area}
+              title={home.title}
+              facts={facts}
+              footer="View home"
+              imageUrl={showMedia ? home.heroImage : undefined}
+              imageAlt=""
+              current={home.isCurrent}
+            />
           );
         })}
       </div>
 
       <div className="property-short-compare__handoff">
-        <span>Continue with these three homes</span>
         <Link to={compareHref}>Open full Compare ↗</Link>
       </div>
     </section>

@@ -1687,3 +1687,114 @@
   font-size: 0.8rem;
   color: rgba(42, 74, 122, 0.95);
 }
+
+/* Property story composition. Map behavior stays owned by the rules above. */
+.property-map-section {
+  margin: var(--property-story-section-space, clamp(4rem, 8vw, 7rem)) 0 0;
+  scroll-margin-top: 5rem;
+}
+
+.property-map-section .nearby-plate {
+  container-type: inline-size;
+  margin: 0;
+}
+
+.nearby-plate__story-layout {
+  display: grid;
+  grid-template-columns: minmax(14rem, 0.34fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+}
+
+.nearby-plate__story-rail {
+  display: grid;
+  align-content: start;
+  gap: 1.4rem;
+  padding-top: 0.4rem;
+}
+
+.nearby-plate__story-rail .nearby-plate__layers {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border-top: 1px solid var(--property-story-rule, rgba(32, 39, 33, 0.14));
+}
+
+.nearby-plate__story-rail .nearby-plate__chip {
+  width: 100%;
+  min-height: 3.25rem;
+  justify-content: flex-start;
+  padding: 0.35rem 0.25rem;
+  border: 0;
+  border-bottom: 1px solid var(--property-story-rule, rgba(32, 39, 33, 0.14));
+  border-radius: 0;
+  background: transparent;
+}
+
+.nearby-plate__story-rail .nearby-plate__chip.is-active {
+  background: transparent;
+  color: var(--property-story-forest, #263b31);
+}
+
+.nearby-plate__story-rail .nearby-plate__chip.is-active::after {
+  width: 1.5rem;
+  height: 1px;
+  margin-left: auto;
+  background: currentColor;
+  content: "";
+}
+
+.nearby-plate__story-layout .nearby-plate__body {
+  min-width: 0;
+  margin: 0;
+}
+
+.nearby-plate__story-layout .nearby-plate__canvas {
+  height: var(--property-story-media-height, clamp(28rem, 58svh, 38rem));
+  border-color: var(--property-story-rule, rgba(32, 39, 33, 0.14));
+  border-radius: 16px;
+}
+
+.nearby-plate__story-layout .nearby-map,
+.nearby-plate__story-layout .nearby-map__canvas {
+  height: 100%;
+}
+
+@container (max-width: 760px) {
+  .nearby-plate__story-layout {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .nearby-plate__story-rail {
+    gap: 1rem;
+  }
+
+  .nearby-plate__story-rail .nearby-plate__layers {
+    display: flex;
+    gap: 0.4rem;
+    padding-bottom: 0.35rem;
+    overflow-x: auto;
+    border-top: 0;
+  }
+
+  .nearby-plate__story-rail .nearby-plate__chip {
+    width: auto;
+    min-height: 44px;
+    padding: 0.35rem 0.8rem 0.35rem 0.35rem;
+    border: 1px solid var(--property-story-rule, rgba(32, 39, 33, 0.14));
+    border-radius: 999px;
+  }
+
+  .nearby-plate__story-rail .nearby-plate__chip.is-active::after {
+    display: none;
+  }
+
+  .nearby-plate__story-layout .nearby-plate__canvas {
+    height: min(62svh, 34rem);
+    border-radius: 12px;
+  }
+}

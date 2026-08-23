@@ -3,7 +3,6 @@ import { Helmet } from "react-helmet-async";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
-import { PropertyDecisionDeck } from "../components/property/PropertyDecisionDeck.tsx";
 import { PropertyReraTeaser } from "../components/property/PropertyReraTeaser.tsx";
 import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
 import {
@@ -35,18 +34,18 @@ import "../styles/story-lab.css";
 type LabViewport = "desktop" | "tablet" | "mobile";
 type LabMotionTheme = "auto" | StoryMotionTheme;
 type LabDeck =
+  | "page"
   | "hero"
   | "map"
   | "arrival"
   | "reviews"
   | "record"
-  | "compare"
-  | "decision";
+  | "compare";
 
 export function PropertyStoryLabPage() {
   const [propertyId, setPropertyId] =
     useState<StoryLabPropertyFixture>("fixture-prestige-lakeside-3bhk");
-  const [deck, setDeck] = useState<LabDeck>("hero");
+  const [deck, setDeck] = useState<LabDeck>("page");
   const [viewport, setViewport] = useState<LabViewport>("desktop");
   const [coverage, setCoverage] = useState<StoryLabCoverage>("rich");
   const [imageCount, setImageCount] = useState<StoryLabImageCount>("many");
@@ -87,7 +86,7 @@ export function PropertyStoryLabPage() {
       }),
     [detail, media, theme],
   );
-  const frameCount = deck === "hero"
+  const frameCount = deck === "hero" || deck === "page"
     ? story.media.frames.length
     : deck === "arrival"
       ? story.arrival.frames.length
@@ -290,6 +289,14 @@ export function PropertyStoryLabPage() {
           <nav className="story-lab__decks" aria-label="Story deck">
             <button
               type="button"
+              className={deck === "page" ? "is-active" : ""}
+              aria-pressed={deck === "page"}
+              onClick={() => selectDeck("page")}
+            >
+              Full page
+            </button>
+            <button
+              type="button"
               className={deck === "hero" ? "is-active" : ""}
               aria-pressed={deck === "hero"}
               onClick={() => selectDeck("hero")}
@@ -341,18 +348,62 @@ export function PropertyStoryLabPage() {
               Compare
               {!compareAvailable && <span>omitted</span>}
             </button>
-            <button
-              type="button"
-              className={deck === "decision" ? "is-active" : ""}
-              aria-pressed={deck === "decision"}
-              onClick={() => selectDeck("decision")}
-            >
-              Decision
-            </button>
           </nav>
           <div
             className={`story-lab__viewport story-lab__viewport--${viewport}`}
           >
+            {deck === "page" && (
+              <div className="property-story-page story-lab__production-shell">
+                <PropertySceneCard
+                  key={`page:${propertyId}:${imageCount}:${provenance}`}
+                  story={story}
+                  actions={actions}
+                  playback={{
+                    activeIndex,
+                    playing,
+                    speed,
+                    reducedMotion,
+                    visibility,
+                    onActiveIndexChange: setActiveIndex,
+                    onPlayingChange: setPlaying,
+                  }}
+                />
+                <main className="property-clean-flow">
+                  {mapAvailable && detail.map_context && (
+                    <section
+                      id="around-this-home"
+                      className="property-map-section"
+                    >
+                      <AroundThisHomePlate
+                        propertyId={story.identity.propertyId}
+                        context={detail.map_context}
+                      />
+                    </section>
+                  )}
+                  <PropertyArrivalFilm
+                    propertyId={story.identity.propertyId}
+                    title={story.identity.title}
+                    frames={story.arrival.frames}
+                    playback={{
+                      playing,
+                      speed,
+                      reducedMotion,
+                      visibility,
+                      onPlayingChange: setPlaying,
+                    }}
+                  />
+                  <PropertyReviewsDeck
+                    model={story.reviews}
+                    reviews={detail.external_reviews}
+                  />
+                  <PropertyReraTeaser cards={story.recordCards} />
+                  <PropertyShortCompare
+                    homes={story.comparisons}
+                    compareHref={story.compareHref}
+                  />
+                </main>
+              </div>
+            )}
             {deck === "hero" && (
               <PropertySceneCard
                 key={`${propertyId}:${imageCount}:${provenance}`}
@@ -398,20 +449,12 @@ export function PropertyStoryLabPage() {
               />
             )}
             {deck === "record" && recordAvailable && (
-              <PropertyReraTeaser card={story.recordCards[0]} />
+              <PropertyReraTeaser cards={story.recordCards} />
             )}
             {deck === "compare" && compareAvailable && (
               <PropertyShortCompare
                 homes={story.comparisons}
                 compareHref={story.compareHref}
-              />
-            )}
-            {deck === "decision" && (
-              <PropertyDecisionDeck
-                propertyId={story.identity.propertyId}
-                title={story.identity.title}
-                compareHref={story.compareHref}
-                reraHref={story.recordCards[0]?.href}
               />
             )}
             {((deck === "map" && !mapAvailable)

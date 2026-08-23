@@ -31,8 +31,8 @@ export function PropertyReviewsDeck({ model, reviews, signals }: Props) {
       className="property-fact-deck property-reviews-deck"
       aria-labelledby="property-reviews-deck-title"
     >
-      <header className="property-fact-deck__intro">
-        <span>{model.state === "present" ? "Resident voice" : "Home signals"}</span>
+      <header className="property-story-heading">
+        <span>{model.state === "present" ? "Reviews" : "Home signals"}</span>
         <h2 id="property-reviews-deck-title">{heading}</h2>
       </header>
       {reviewSignals.length > 0 && (

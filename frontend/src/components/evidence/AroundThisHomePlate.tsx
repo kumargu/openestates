@@ -417,90 +417,93 @@ function AroundThisHomePlateInner({
       className={`nearby-plate${expanded ? " is-expanded" : ""}`}
       aria-labelledby="around-this-home-title"
     >
-      <div className="nearby-plate__head">
-        <div>
-          <h2 id="around-this-home-title" className="nearby-plate__title">Around this home</h2>
-        </div>
-      </div>
+      <div className="nearby-plate__story-layout">
+        <aside className="nearby-plate__story-rail">
+          <header className="property-story-heading">
+            <span>Location</span>
+            <h2 id="around-this-home-title">Around this home.</h2>
+          </header>
 
-      <div className="nearby-plate__layers" role="toolbar" aria-label="Map layers">
-        {layers.map((layer) => {
-          const on = story.kind === "layer" && story.layer === layer;
-          const label = layerLabel(layer, context);
-          return (
+          <div className="nearby-plate__layers" role="toolbar" aria-label="Map layers">
+            {layers.map((layer) => {
+              const on = story.kind === "layer" && story.layer === layer;
+              const label = layerLabel(layer, context);
+              return (
+                <button
+                  key={layer}
+                  type="button"
+                  className={`nearby-plate__chip nearby-plate__chip--${layer}${on ? " is-active" : ""}`}
+                  aria-pressed={on}
+                  onClick={() => selectStory({ kind: "layer", layer })}
+                >
+                  <SoftNearbyIcon kind={layer} />
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+            {context.water && (
             <button
-              key={layer}
               type="button"
-              className={`nearby-plate__chip nearby-plate__chip--${layer}${on ? " is-active" : ""}`}
-              aria-pressed={on}
-              onClick={() => selectStory({ kind: "layer", layer })}
+                className={`nearby-plate__chip nearby-plate__chip--water${waterFocused ? " is-active" : ""}`}
+                aria-pressed={waterFocused}
+                onClick={() => selectStory({ kind: "water" })}
             >
-              <SoftNearbyIcon kind={layer} />
-              <span>{label}</span>
+                <SoftNearbyIcon kind="water" />
+                <span>Water</span>
             </button>
-          );
-        })}
-        {context.water && (
-          <button
-            type="button"
-            className={`nearby-plate__chip nearby-plate__chip--water${waterFocused ? " is-active" : ""}`}
-            aria-pressed={waterFocused}
-            onClick={() => selectStory({ kind: "water" })}
-          >
-            <SoftNearbyIcon kind="water" />
-            <span>Water</span>
-          </button>
-        )}
-      </div>
+            )}
+          </div>
+        </aside>
 
-      <div className="nearby-plate__body">
-        <div className="nearby-plate__canvas">
-          {canRenderMap && home ? (
-            <NearbyMapBoundary
-              key={`${home.latitude.toFixed(5)}-${home.longitude.toFixed(5)}`}
-            >
-              <RetryableAroundThisHomeMap
-                home={{
-                  latitude: home.latitude,
-                  longitude: home.longitude,
-                  name: context.home.name,
+        <div className="nearby-plate__body">
+          <div className="nearby-plate__canvas">
+            {canRenderMap && home ? (
+              <NearbyMapBoundary
+                key={`${home.latitude.toFixed(5)}-${home.longitude.toFixed(5)}`}
+              >
+                <RetryableAroundThisHomeMap
+                  home={{
+                    latitude: home.latitude,
+                    longitude: home.longitude,
+                    name: context.home.name,
+                  }}
+                  places={singles}
+                  clusters={clusters}
+                  selectedId={selected?.id ?? null}
+                  viewport={viewport}
+                  metroLines={activeMetroLines}
+                  redFlagLines={activeRedFlagLines}
+                  showMetroLines={showMetroLines}
+                  water={context.water}
+                  waterTint={showWater}
+                  expanded={expanded}
+                  pinnedPlaceIds={pinnedPlaceIds}
+                  onSelectPlace={selectPlace}
+                  onSelectCluster={selectCluster}
+                  onSelectRedFlagLine={selectRedFlagLine}
+                  onRememberPlace={rememberPlace}
+                  onToggleExpanded={() => setExpanded((current) => !current)}
+                />
+              </NearbyMapBoundary>
+            ) : (
+              <div className="nearby-plate__empty-map">
+                <p>Map unavailable</p>
+              </div>
+            )}
+
+            {mapSelection && (
+              <MapEvidenceTray
+                key={mapSelection.id}
+                propertyId={propertyId}
+                selection={mapSelection}
+                onClose={() => {
+                  setSelectedId(null);
+                  setSelectedLineId(null);
+                  setSelectionDismissed(true);
                 }}
-                places={singles}
-                clusters={clusters}
-                selectedId={selected?.id ?? null}
-                viewport={viewport}
-                metroLines={activeMetroLines}
-                redFlagLines={activeRedFlagLines}
-                showMetroLines={showMetroLines}
-                water={context.water}
-                waterTint={showWater}
-                expanded={expanded}
-                pinnedPlaceIds={pinnedPlaceIds}
-                onSelectPlace={selectPlace}
-                onSelectCluster={selectCluster}
-                onSelectRedFlagLine={selectRedFlagLine}
-                onRememberPlace={rememberPlace}
-                onToggleExpanded={() => setExpanded((current) => !current)}
               />
-            </NearbyMapBoundary>
-          ) : (
-            <div className="nearby-plate__empty-map">
-              <p>Map unavailable</p>
-            </div>
-          )}
-
-          {mapSelection && (
-            <MapEvidenceTray
-              key={mapSelection.id}
-              propertyId={propertyId}
-              selection={mapSelection}
-              onClose={() => {
-                setSelectedId(null);
-                setSelectedLineId(null);
-                setSelectionDismissed(true);
-              }}
-            />
-          )}
+            )}
+          </div>
         </div>
       </div>
     </section>

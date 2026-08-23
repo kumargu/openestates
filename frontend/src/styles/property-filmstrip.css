@@ -1,0 +1,396 @@
+.property-filmstrip {
+  --filmstrip-card-width: min(68vw, 58rem);
+  --filmstrip-side-offset: min(58vw, 49rem);
+  --filmstrip-motion-duration: 7.6s;
+  --filmstrip-transition-duration: 1.2s;
+  position: relative;
+  isolation: isolate;
+  height: var(--property-story-media-height, clamp(28rem, 58svh, 38rem));
+  min-height: 28rem;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #17201c;
+  color: #fff;
+  outline: none;
+}
+
+.property-filmstrip:focus-visible {
+  outline: 3px solid #b97148;
+  outline-offset: 3px;
+}
+
+.property-filmstrip.story-motion--architectural-drift {
+  --filmstrip-motion-duration: 8.2s;
+  --filmstrip-transition-duration: 1.4s;
+  background: #172022;
+}
+
+.property-filmstrip.story-motion--slow-push {
+  --filmstrip-motion-duration: 7.8s;
+  --filmstrip-transition-duration: 1.25s;
+  background: #211a17;
+}
+
+.property-filmstrip.story-motion--editorial-cut {
+  --filmstrip-motion-duration: 5.8s;
+  --filmstrip-transition-duration: 850ms;
+  background: #1d1d1a;
+}
+
+.property-filmstrip.story-motion--quiet-pan.story-speed--half {
+  --filmstrip-motion-duration: 15.2s;
+  --filmstrip-transition-duration: 2.4s;
+}
+
+.property-filmstrip.story-motion--architectural-drift.story-speed--half {
+  --filmstrip-motion-duration: 16.4s;
+  --filmstrip-transition-duration: 2.8s;
+}
+
+.property-filmstrip.story-motion--slow-push.story-speed--half {
+  --filmstrip-motion-duration: 15.6s;
+  --filmstrip-transition-duration: 2.5s;
+}
+
+.property-filmstrip.story-motion--editorial-cut.story-speed--half {
+  --filmstrip-motion-duration: 11.6s;
+  --filmstrip-transition-duration: 1.7s;
+}
+
+.property-filmstrip.story-motion--quiet-pan.story-speed--double {
+  --filmstrip-motion-duration: 3.8s;
+  --filmstrip-transition-duration: 600ms;
+}
+
+.property-filmstrip.story-motion--architectural-drift.story-speed--double {
+  --filmstrip-motion-duration: 4.1s;
+  --filmstrip-transition-duration: 700ms;
+}
+
+.property-filmstrip.story-motion--slow-push.story-speed--double {
+  --filmstrip-motion-duration: 3.9s;
+  --filmstrip-transition-duration: 625ms;
+}
+
+.property-filmstrip.story-motion--editorial-cut.story-speed--double {
+  --filmstrip-motion-duration: 2.9s;
+  --filmstrip-transition-duration: 425ms;
+}
+
+.property-filmstrip__track {
+  position: absolute;
+  inset: 1.2rem 0 4.8rem;
+}
+
+.property-filmstrip__card {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  z-index: 0;
+  width: var(--filmstrip-card-width);
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: #29312e;
+  opacity: 0;
+  transform: translate3d(-50%, 0, 0) scale(0.82);
+  transition:
+    transform var(--filmstrip-transition-duration) cubic-bezier(0.22, 1, 0.36, 1),
+    opacity var(--filmstrip-transition-duration) ease,
+    filter var(--filmstrip-transition-duration) ease;
+  filter: saturate(0.7) brightness(0.62);
+  pointer-events: none;
+}
+
+.property-filmstrip__card.filmstrip-position--active {
+  z-index: 4;
+  opacity: 1;
+  transform: translate3d(-50%, 0, 0) scale(1);
+  filter: none;
+  pointer-events: auto;
+}
+
+.property-filmstrip__card.filmstrip-position--m1 {
+  z-index: 2;
+  opacity: 0.7;
+  transform: translate3d(calc(-50% - var(--filmstrip-side-offset)), 0, 0) scale(0.86);
+}
+
+.property-filmstrip__card.filmstrip-position--p1 {
+  z-index: 2;
+  opacity: 0.7;
+  transform: translate3d(calc(-50% + var(--filmstrip-side-offset)), 0, 0) scale(0.86);
+}
+
+.property-filmstrip__card.filmstrip-position--m2 {
+  transform: translate3d(calc(-50% - var(--filmstrip-side-offset) * 1.8), 0, 0) scale(0.76);
+}
+
+.property-filmstrip__card.filmstrip-position--p2 {
+  transform: translate3d(calc(-50% + var(--filmstrip-side-offset) * 1.8), 0, 0) scale(0.76);
+}
+
+.property-filmstrip__card.filmstrip-position--m3,
+.property-filmstrip__card.filmstrip-position--p3 {
+  visibility: hidden;
+}
+
+.property-filmstrip__card img,
+.property-filmstrip__card > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.property-filmstrip__card figcaption {
+  position: absolute;
+  right: 0.8rem;
+  bottom: 0.8rem;
+  left: 0.8rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 7px;
+  background: rgba(12, 14, 13, 0.74);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.property-filmstrip__card figcaption strong {
+  font-weight: 760;
+}
+
+.property-filmstrip__card figcaption span {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.66);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.property-filmstrip__loading {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  background: #26302c;
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity 240ms ease;
+}
+
+.property-filmstrip.is-ready .property-filmstrip__loading {
+  opacity: 0;
+}
+
+.property-filmstrip__controls {
+  position: absolute;
+  z-index: 6;
+  right: 1rem;
+  bottom: 0.8rem;
+  left: 1rem;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.property-filmstrip__sequence {
+  display: flex;
+  min-width: 0;
+  gap: 0.28rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.property-filmstrip__sequence::-webkit-scrollbar {
+  display: none;
+}
+
+.property-filmstrip__controls button,
+.property-filmstrip__controls a {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 730;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.property-filmstrip__controls button:hover,
+.property-filmstrip__controls button.is-active,
+.property-filmstrip__controls a:hover {
+  border-color: rgba(255, 255, 255, 0.68);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.property-filmstrip__sequence button.is-active {
+  min-width: 3.3rem;
+  background: #fff;
+  color: #26302c;
+}
+
+.property-filmstrip__controls .property-filmstrip__gallery {
+  padding-inline: 1rem;
+  border-color: #fff;
+  background: #fff;
+  color: #26302c;
+}
+
+.filmstrip-focal--left img {
+  object-position: left center;
+}
+
+.filmstrip-focal--right img {
+  object-position: right center;
+}
+
+.filmstrip-focal--top img {
+  object-position: center top;
+}
+
+.filmstrip-focal--bottom img {
+  object-position: center bottom;
+}
+
+.filmstrip-focal--left.filmstrip-focal--top img {
+  object-position: left top;
+}
+
+.filmstrip-focal--left.filmstrip-focal--bottom img {
+  object-position: left bottom;
+}
+
+.filmstrip-focal--right.filmstrip-focal--top img {
+  object-position: right top;
+}
+
+.filmstrip-focal--right.filmstrip-focal--bottom img {
+  object-position: right bottom;
+}
+
+@keyframes filmstrip-quiet-pan {
+  from { transform: scale(1.035) translate3d(-0.8%, 0, 0); }
+  to { transform: scale(1.075) translate3d(0.8%, -0.4%, 0); }
+}
+
+@keyframes filmstrip-architectural-drift {
+  from { transform: scale(1.025) translate3d(0, 0.6%, 0); }
+  to { transform: scale(1.065) translate3d(-0.6%, -0.7%, 0); }
+}
+
+@keyframes filmstrip-slow-push {
+  from { transform: scale(1.01); }
+  to { transform: scale(1.08); }
+}
+
+@keyframes filmstrip-editorial-cut {
+  from { transform: scale(1.02) translate3d(0.3%, 0, 0); }
+  to { transform: scale(1.055) translate3d(-0.3%, -0.4%, 0); }
+}
+
+.story-motion--quiet-pan .property-filmstrip__card.is-active img {
+  animation: filmstrip-quiet-pan var(--filmstrip-motion-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.story-motion--architectural-drift .property-filmstrip__card.is-active img {
+  animation: filmstrip-architectural-drift var(--filmstrip-motion-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.story-motion--slow-push .property-filmstrip__card.is-active img {
+  animation: filmstrip-slow-push var(--filmstrip-motion-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.story-motion--editorial-cut .property-filmstrip__card.is-active img {
+  animation: filmstrip-editorial-cut var(--filmstrip-motion-duration) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.property-filmstrip.is-paused .property-filmstrip__card.is-active img {
+  animation-play-state: paused;
+}
+
+@media (max-width: 760px) {
+  .property-filmstrip {
+    --filmstrip-card-width: calc(100% - 2rem);
+    --filmstrip-side-offset: 62%;
+    height: var(--property-story-media-height-mobile, min(68svh, 38rem));
+    min-height: 30rem;
+    border-radius: 0;
+  }
+
+  .property-filmstrip__track {
+    inset: 0.8rem 0 4.8rem;
+  }
+
+  .property-filmstrip__card {
+    top: 50%;
+    bottom: auto;
+    height: 72%;
+    transform: translate3d(-50%, -50%, 0) scale(0.82);
+  }
+
+  .property-filmstrip__card.filmstrip-position--active {
+    transform: translate3d(-50%, -50%, 0) scale(1);
+  }
+
+  .property-filmstrip__card.filmstrip-position--m1 {
+    opacity: 0.48;
+    transform: translate3d(-50%, calc(-50% - var(--filmstrip-side-offset)), 0) scale(0.86);
+  }
+
+  .property-filmstrip__card.filmstrip-position--p1 {
+    opacity: 0.48;
+    transform: translate3d(-50%, calc(-50% + var(--filmstrip-side-offset)), 0) scale(0.86);
+  }
+
+  .property-filmstrip__card.filmstrip-position--m2,
+  .property-filmstrip__card.filmstrip-position--p2 {
+    visibility: hidden;
+  }
+
+  .property-filmstrip__controls {
+    right: 0.65rem;
+    bottom: 0.65rem;
+    left: 0.65rem;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .property-filmstrip__sequence {
+    flex: 1 1 auto;
+  }
+
+  .property-filmstrip__controls > button:first-child,
+  .property-filmstrip__controls > button:last-child,
+  .property-filmstrip__controls > a {
+    display: none;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .property-filmstrip__card,
+  .property-filmstrip__card img,
+  .property-filmstrip__loading {
+    animation: none !important;
+    transition-duration: 120ms !important;
+  }
+}
