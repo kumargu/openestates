@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from pipeline.benchmark_search_quality import (
+    PREFERENCE_ALIASES,
     case_result,
     evaluate_case,
     evaluate_proof_handoffs,
@@ -41,6 +42,11 @@ def search_diagnostics() -> dict:
 
 
 class SearchQualityBenchmarkTests(unittest.TestCase):
+    def test_rera_registration_aliases_do_not_claim_legal_safety(self) -> None:
+        for fact_key in ("rera_registered", "rera_number", "rera_status"):
+            self.assertEqual(PREFERENCE_ALIASES[fact_key], {"rera_registration"})
+            self.assertNotIn("legal_safety", PREFERENCE_ALIASES[fact_key])
+
     def test_every_live_suite_uses_only_public_response_expectations(self) -> None:
         bank_path = Path("data/validation/search_query_bank.json")
         bank = json.loads(bank_path.read_text(encoding="utf-8"))
@@ -478,6 +484,36 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
             "receipt_lineage_1",
             {check["check"] for check in failed if not check["passed"]},
         )
+
+    def test_section_proof_handoff_requires_target_and_reachable_detail(self) -> None:
+        focus = {
+            "surfaceId": "legal_rera",
+            "layerId": "legal_rera",
+            "factKey": "rera_status",
+            "destinationKind": "section",
+            "targetId": "official-record",
+            "matchedValue": "RERA registration found",
+            "reason": "RERA registration found",
+        }
+        handoffs = [{
+            "result_id": "discovered-godrej-air-3bhk",
+            "search_focus": focus,
+            "scene": None,
+            "detail": {
+                "property": {"id": "discovered-godrej-air-3bhk"},
+            },
+        }]
+        requirements = [{
+            "result_id": "discovered-godrej-air-3bhk",
+            "fact_key": "rera_status",
+            "destination_kind": "section",
+            "target_id": "official-record",
+        }]
+
+        checks = evaluate_proof_handoffs(requirements, handoffs)
+
+        self.assertEqual(len(checks), 4)
+        self.assertTrue(all(check["passed"] for check in checks), checks)
 
 if __name__ == "__main__":
     unittest.main()

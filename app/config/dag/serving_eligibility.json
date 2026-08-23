@@ -1,45 +1,13 @@
 {
-  "version": 1,
+  "version": 3,
   "minimum_projected_properties": 1,
   "missing_projection_reason_code": "missing_property_projection",
   "property_requirements": [
     {
-      "reason_code": "missing_property_area",
-      "predicate": "any_non_empty",
-      "fields": ["area"]
-    },
-    {
-      "reason_code": "missing_property_configuration",
-      "predicate": "any_positive",
-      "fields": ["bhk"]
-    },
-    {
-      "reason_code": "missing_property_size",
-      "predicate": "any_positive",
-      "fields": ["carpet_area_sqft"]
-    },
-    {
-      "reason_code": "missing_property_builder",
-      "predicate": "any_non_empty",
-      "fields": ["builder_name"]
-    },
-    {
       "reason_code": "missing_property_media",
-      "predicate": "all_non_empty",
+      "predicate": "any_non_empty",
       "fields": ["hero_image", "images"]
     }
   ],
-  "society_requirements": [
-    {
-      "reason_code": "missing_rera_registration",
-      "fact_keys": ["rera_number", "rera_registered"]
-    },
-    {
-      "reason_code": "missing_approach_road_evidence",
-      "fact_keys": ["approach_road_visual_available", "approach_road_condition"],
-      "related_edge_types": ["served_by_road"],
-      "related_fact_keys": ["access_road_quality", "road_width", "approach_road_condition"],
-      "edge_presence_counts": true
-    }
-  ]
+  "society_requirements": []
 }

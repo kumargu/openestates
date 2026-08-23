@@ -61,7 +61,7 @@ export function LivingEvidenceTile({
       ? property.society_name
       : null,
     property.area,
-    titleIncludesBhk(property.title, property.bhk)
+    !hasKnownNumber(property.bhk) || titleIncludesBhk(property.title, property.bhk)
       ? null
       : `${property.bhk} BHK`,
     hasKnownNumber(property.sqft)

@@ -239,8 +239,9 @@ export function WorkspaceSidebar({
                   >
                     <strong>{name}</strong>
                     <span>
-                      {home.area} · {home.bhk}BHK ·{" "}
-                      {formatCompactPrice(home.price)}
+                      {[home.area, home.bhk > 0 ? `${home.bhk}BHK` : null]
+                        .filter(Boolean)
+                        .join(" · ")} · {formatCompactPrice(home.price)}
                     </span>
                     {state && <em>{state}</em>}
                   </button>

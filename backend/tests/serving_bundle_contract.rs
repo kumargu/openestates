@@ -35,7 +35,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert_eq!(manifest.search_metadata_count, 18);
     assert_eq!(manifest.rera_evidence_count, 0);
     assert_eq!(manifest.edge_count, 0);
-    assert_eq!(manifest.eligibility_policy_version, 1);
+    assert_eq!(manifest.eligibility_policy_version, 3);
     assert_eq!(manifest.quarantined_society_count, 0);
     assert_eq!(
         manifest.entity_parquet_key,

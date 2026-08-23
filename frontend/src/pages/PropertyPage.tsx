@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Link,
   useParams,
@@ -8,6 +8,7 @@ import { Helmet } from "react-helmet-async";
 import type {
   PropertyCard,
   PropertyDetailResponse,
+  ProofFocus,
   RecommendationResponse,
   RecommendationStatus,
   SurfaceSceneResponse,
@@ -47,10 +48,52 @@ import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
 import { workspaceCompareHref } from "../lib/workspaceNav.ts";
 import { formatListingPrice } from "../lib/listing-price.ts";
-import { initialPropertySurfaceId } from "../lib/proof-focus.ts";
+import {
+  initialPropertySurfaceId,
+  propertyProofMatch,
+  propertySceneProofFocus,
+} from "../lib/proof-focus.ts";
 
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function focusedEvidenceSource(data: PropertyDetailResponse, focus: ProofFocus) {
+  for (const section of data.evidence?.sections ?? []) {
+    const item = section.items.find((candidate) =>
+      candidate.key?.toLocaleLowerCase("en-IN")
+        === focus.factKey.toLocaleLowerCase("en-IN")
+    );
+    if (item?.source_url) return item.source_url;
+  }
+  return undefined;
+}
+
+function PropertySearchMatch({
+  data,
+  focus,
+}: {
+  data: PropertyDetailResponse;
+  focus?: ProofFocus;
+}) {
+  if (focus?.targetId !== "property-search-match") return null;
+  const value = focus.matchedValue?.trim() || focus.matchedLabel?.trim();
+  if (!value) return null;
+  const sourceUrl = focusedEvidenceSource(data, focus);
+  return (
+    <section
+      id="property-search-match"
+      className="property-fact-deck property-search-match"
+      aria-label="Matched your search"
+      tabIndex={-1}
+    >
+      <span>Matched your search</span>
+      <strong>{value}</strong>
+      {sourceUrl && (
+        <a href={sourceUrl} target="_blank" rel="noreferrer">Source ↗</a>
+      )}
+    </section>
+  );
 }
 
 function comparablePrice(price: number): number {
@@ -274,7 +317,9 @@ function NearbyHomeCard({
   const title = property.society_name.trim() || property.title.trim();
   const area = compactRecommendationArea(property.area);
   const note = property.society_name
-    ? `${area} · ${property.bhk} BHK`
+    ? [area, hasKnownNumber(property.bhk) ? `${property.bhk} BHK` : null]
+        .filter(Boolean)
+        .join(" · ")
     : area;
   const price = formatListingPrice(property);
   const rating = formatGoogleRating(property.google_rating);
@@ -362,9 +407,11 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
     "@context": "https://schema.org",
     "@type": "RealEstateListing",
     name: p.title,
-    description:
-      p.description_summary ||
-      `${p.bhk} BHK, ${sizeDescription} in ${p.area}, ${p.city}`,
+    description: p.description_summary || [
+      hasKnownNumber(p.bhk) ? `${p.bhk} BHK` : null,
+      sizeDescription,
+      `in ${p.area}, ${p.city}`,
+    ].filter(Boolean).join(", "),
     url: `https://openestates.in/property/${p.id}`,
     offers: {
       "@type": "Offer",
@@ -376,8 +423,10 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
       addressLocality: p.area,
       addressRegion: p.city,
     },
-    numberOfRooms: p.bhk,
   };
+  if (hasKnownNumber(p.bhk)) {
+    jsonLd.numberOfRooms = p.bhk;
+  }
   if (hasKnownNumber(p.carpet_area_sqft)) {
     jsonLd.floorSize = {
       "@type": "QuantitativeValue",
@@ -421,6 +470,10 @@ function PropertyPageBody({
   id: string;
   focusParam: string | null;
 }) {
+  const proofFocus = useMemo(
+    () => parseProofFocusParam(focusParam),
+    [focusParam],
+  );
   const { compareIds } = useNotebook();
   const [storyPlaying, setStoryPlaying] = useState(true);
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
@@ -481,8 +534,11 @@ function PropertyPageBody({
     if (!propertyId) return;
     let cancelled = false;
 
-    const focus = parseProofFocusParam(focusParam);
-    getPropertySurface(propertyId, initialPropertySurfaceId(focus), focus)
+    getPropertySurface(
+      propertyId,
+      initialPropertySurfaceId(proofFocus),
+      propertySceneProofFocus(proofFocus),
+    )
       .then((scene) => {
         if (!cancelled) setAroundThisHomeScene(scene);
       })
@@ -493,7 +549,24 @@ function PropertyPageBody({
     return () => {
       cancelled = true;
     };
-  }, [data?.property?.id, focusParam]);
+  }, [data?.property?.id, proofFocus]);
+
+  useEffect(() => {
+    if (status !== "ok" || !proofFocus?.targetId) return undefined;
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        const target = document.getElementById(proofFocus.targetId ?? "");
+        if (!target) return;
+        target.scrollIntoView({ block: "start" });
+        target.focus({ preventScroll: true });
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame) window.cancelAnimationFrame(secondFrame);
+    };
+  }, [status, data?.property?.id, proofFocus, aroundThisHomeScene]);
 
   useEffect(() => {
     let cancelled = false;
@@ -547,7 +620,9 @@ function PropertyPageBody({
 
   const { property: p, society } = data;
 
-  const pageTitle = `${p.title} — ${p.bhk} BHK in ${p.area} | OpenEstates`;
+  const pageTitle = hasKnownNumber(p.bhk)
+    ? `${p.title} — ${p.bhk} BHK in ${p.area} | OpenEstates`
+    : `${p.title} in ${p.area} | OpenEstates`;
   const pricePerSqftLabel = hasKnownNumber(p.price_per_sqft)
     ? `${p.price_per_sqft.toLocaleString("en-IN")} /sqft`
     : null;
@@ -555,7 +630,7 @@ function PropertyPageBody({
     ? `${p.carpet_area_sqft.toLocaleString("en-IN")} sqft`
     : null;
   const pageDescription = [
-    `${p.bhk} BHK`,
+    hasKnownNumber(p.bhk) ? `${p.bhk} BHK` : null,
     sizeLabel,
     `in ${society?.name ? society.name + ", " : ""}${p.area}`,
     hasKnownNumber(p.price) ? formatListingPrice(p) : null,
@@ -588,6 +663,19 @@ function PropertyPageBody({
   const marketProperties = [...marketPropertyMap.values()];
   const displayTitle = p.title.trim();
   const story = projectPropertyStory(data);
+  const proofSourceUrl = proofFocus
+    ? focusedEvidenceSource(data, proofFocus)
+    : undefined;
+  const officialRecordMatch = propertyProofMatch(
+    proofFocus,
+    "official-record",
+    proofSourceUrl,
+  );
+  const residentVoiceMatch = propertyProofMatch(
+    proofFocus,
+    "resident-voice",
+    proofSourceUrl,
+  );
   const savedIds = readShortlistIds();
   const requestedCompareIds = compareIds.length > 0 ? compareIds : savedIds;
   const availableCompareIds = compareIds.length > 0
@@ -664,11 +752,14 @@ function PropertyPageBody({
       />
 
       <main className="property-clean-flow">
+        <PropertySearchMatch data={data} focus={proofFocus} />
+
         {showNearbyPlate && aroundThisHomeContext && (
           <section
             id="around-this-home"
             className="property-map-section"
             aria-label="Around this home"
+            tabIndex={-1}
           >
             <AroundThisHomePlate
               propertyId={id}
@@ -691,9 +782,13 @@ function PropertyPageBody({
           model={story.reviews}
           reviews={data.external_reviews}
           signals={data.detail_signals}
+          focusedMatch={residentVoiceMatch}
         />
 
-        <PropertyReraTeaser cards={story.recordCards} />
+        <PropertyReraTeaser
+          cards={story.recordCards}
+          focusedMatch={officialRecordMatch}
+        />
 
         <PropertyShortCompare
           homes={savedComparisons}

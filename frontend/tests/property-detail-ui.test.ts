@@ -37,6 +37,8 @@ test("proof focus URL contract round-trips through detail and surface paths", ()
     surfaceId: "around_this_home",
     layerId: "hospitals",
     factKey: "nearby_hospitals",
+    destinationKind: "scene",
+    targetId: "around-this-home",
     entityId: "place:manipal",
     featureId: "around_this_home:hospitals:place-manipal",
     receiptId: "receipt:manipal",

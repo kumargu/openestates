@@ -559,25 +559,20 @@
     {
       "rank": 2,
       "dimension": "legal_rera",
-      "label": "legal and RERA safety",
+      "label": "RERA registration",
       "layer": "proof",
       "intent_terms": [
         "rera",
-        "legal",
-        "clear title",
-        "litigation",
-        "approval",
-        "khata"
+        "rera registered",
+        "rera number"
       ],
       "fact_keys": [
         "rera_registered",
+        "rera_status",
         "rera_number"
       ],
       "source_priority": [
-        "rera",
-        "bbmp",
-        "court_records",
-        "reddit"
+        "rera"
       ]
     },
     {
@@ -1947,6 +1942,27 @@
       {
         "rank": 37,
         "patterns": [
+          "rera approved",
+          "rera registered",
+          "rera number",
+          "rera clarity",
+          "rera record",
+          "rera mapping",
+          "checked from rera",
+          "rera receipts"
+        ],
+        "label": "RERA registration",
+        "expanded_keys": [
+          "rera_registered",
+          "rera_status",
+          "rera_number"
+        ],
+        "match_display_template": "RERA registration found",
+        "weight": 1.2
+      },
+      {
+        "rank": 37,
+        "patterns": [
           "legal paperwork",
           "safe legal",
           "clean legal receipts",
@@ -1956,9 +1972,6 @@
           "legal clarity",
           "legal risk low",
           "low legal risk",
-          "rera approved",
-          "rera registered",
-          "rera number",
           "approval",
           "approvals",
           "documents",
@@ -1967,27 +1980,15 @@
           "clean oc",
           "legal and listing receipts",
           "legal and listing proof",
-          "rera clarity",
-          "rera record",
-          "rera track record",
-          "rera mapping",
-          "checked from rera",
-          "rera receipts",
           "paperwork",
           "legal status",
           "legal safety",
           "safe society",
-          "safe community",
-          "weak proof"
+          "safe community"
         ],
         "label": "legal safety",
         "expanded_keys": [
-          "legal_safety",
-          "rera_status",
-          "rera_number",
-          "legal.litigation",
-          "legal_risk",
-          "litigation_risk"
+          "legal_safety"
         ],
         "weight": 1.2
       },

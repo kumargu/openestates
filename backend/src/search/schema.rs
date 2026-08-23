@@ -265,6 +265,8 @@ pub struct PreferencePatternSpec {
     pub require_evidence: bool,
     #[serde(default)]
     pub missing_evidence_neutral: bool,
+    #[serde(default)]
+    pub match_display_template: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -357,6 +359,9 @@ fn merge_preference_patterns(patterns: Vec<PreferencePatternSpec>) -> Vec<Prefer
         existing.weight = existing.weight.max(pattern.weight);
         existing.require_evidence |= pattern.require_evidence;
         existing.missing_evidence_neutral |= pattern.missing_evidence_neutral;
+        if existing.match_display_template.is_none() {
+            existing.match_display_template = pattern.match_display_template;
+        }
     }
     merged
 }
@@ -452,6 +457,13 @@ pub fn lifecycle_compatibility_rule(
 
 pub fn positive_preference_patterns() -> &'static [PreferencePatternSpec] {
     &registry().positive_preference_patterns
+}
+
+pub fn match_display_template(preference: &str) -> Option<&'static str> {
+    positive_preference_patterns()
+        .iter()
+        .find(|pattern| pattern.label.eq_ignore_ascii_case(preference))
+        .and_then(|pattern| pattern.match_display_template.as_deref())
 }
 
 pub fn negative_preference_patterns() -> &'static [PreferencePatternSpec] {

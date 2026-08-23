@@ -44,7 +44,9 @@ function toMicroMarket(area: string, areaProperties: PropertyCard[]): MicroMarke
     priceMin: projectPrices.length > 0 ? Math.min(...projectPrices) : 0,
     priceMax: projectPrices.length > 0 ? Math.max(...projectPrices) : 0,
     count: areaProperties.length,
-    bhks: [...new Set(areaProperties.map((property) => property.bhk))].sort((a, b) => a - b),
+    bhks: [...new Set(areaProperties
+      .map((property) => property.bhk)
+      .filter((bhk) => bhk > 0))].sort((a, b) => a - b),
     readyToMove: areaProperties.filter((property) =>
       property.possession_status === "ready"
       || property.project_status === "ready_to_move"

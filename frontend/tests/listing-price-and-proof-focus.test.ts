@@ -7,6 +7,8 @@ import {
 import {
   initialPropertySurfaceId,
   primaryProofFocus,
+  propertyProofMatch,
+  propertySceneProofFocus,
 } from "../src/lib/proof-focus.ts";
 import type { ProofFocus, SearchResultItem } from "../src/lib/types.ts";
 
@@ -112,4 +114,25 @@ test("property detail requests the proof focus's declared surface", () => {
     reason: "Matched low flooding risk",
   }), "flooding");
   assert.equal(initialPropertySurfaceId(), "around_this_home");
+});
+
+test("section proof handoff keeps the map request on its default surface", () => {
+  const focus: ProofFocus = {
+    surfaceId: "legal_rera",
+    layerId: "legal_rera",
+    factKey: "rera_status",
+    destinationKind: "section",
+    targetId: "official-record",
+    matchedValue: "RERA registration found",
+    reason: "RERA registration found",
+  };
+  assert.equal(initialPropertySurfaceId(focus), "around_this_home");
+  assert.equal(propertySceneProofFocus(focus), undefined);
+  assert.deepEqual(
+    propertyProofMatch(focus, "official-record", "https://rera.example/record"),
+    {
+      value: "RERA registration found",
+      sourceUrl: "https://rera.example/record",
+    },
+  );
 });

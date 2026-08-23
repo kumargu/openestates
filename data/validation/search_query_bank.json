@@ -72,6 +72,15 @@
       ]
     },
     {
+      "id": "issue_91_acceptance",
+      "kind": "live_bundle",
+      "source_bundle_version": "clean-serving-v7-2026-08-16",
+      "notes": [
+        "RERA registration must remain distinct from general legal safety.",
+        "Non-scene proof handoff targets the existing property-detail section without calling a scene-only route."
+      ]
+    },
+    {
       "id": "sarjapur_41",
       "kind": "live_bundle",
       "source_bundle_version": "sarjapur-41-candidate-2026-08-22",
@@ -140,6 +149,18 @@
       ],
       "case_groups": [
         "clean_serving_v7"
+      ]
+    },
+    {
+      "id": "issue_91_acceptance",
+      "runner": "live_api",
+      "benchmark": "Issue 91 RERA and non-scene proof handoff acceptance",
+      "required_serving_bundle_version": "clean-serving-v7-2026-08-16",
+      "scoreable_modes": [
+        "data_backed"
+      ],
+      "case_groups": [
+        "issue_91_acceptance"
       ]
     },
     {
@@ -3403,6 +3424,66 @@
         ]
       },
       "group": "proof_handoff"
+    },
+    {
+      "id": "PROOF-HANDOFF-002",
+      "mode": "data_backed",
+      "category": "rera_registration_detail_handoff",
+      "query": "Godrej Air RERA registered",
+      "expected": {
+        "state": "results",
+        "total_matches": 2,
+        "result_ids_all": [
+          "discovered-godrej-air-2bhk",
+          "discovered-godrej-air-3bhk"
+        ],
+        "reason_fact_keys_any": [
+          "rera_status",
+          "rera_number",
+          "rera_registered"
+        ],
+        "proof_focus_matches_all": [
+          {
+            "surface_id": "legal_rera",
+            "destination_kind": "section",
+            "target_id": "official-record"
+          }
+        ],
+        "proof_handoff_matches_all": [
+          {
+            "result_id": "discovered-godrej-air-3bhk",
+            "surface_id": "legal_rera",
+            "destination_kind": "section",
+            "target_id": "official-record"
+          }
+        ]
+      },
+      "group": "issue_91_acceptance"
+    },
+    {
+      "id": "PROOF-HANDOFF-003",
+      "mode": "data_backed",
+      "category": "rera_does_not_prove_legal_safety",
+      "query": "Godrej Air legal safety",
+      "expected": {
+        "state": "results",
+        "total_matches": 2,
+        "result_ids_all": [
+          "discovered-godrej-air-2bhk",
+          "discovered-godrej-air-3bhk"
+        ],
+        "forbidden_reason_fact_keys": [
+          "rera_status",
+          "rera_number",
+          "rera_registered"
+        ],
+        "forbidden_proof_focus_fact_keys": [
+          "rera_status",
+          "rera_number",
+          "rera_registered"
+        ]
+      },
+      "group": "issue_91_acceptance"
     },
     {
       "id": "SAR41-GLO-001",

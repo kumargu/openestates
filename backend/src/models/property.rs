@@ -70,15 +70,15 @@ pub struct Property {
 }
 
 impl Property {
-    /// Buyer-facing surfaces can show priced homes, or explicit project
-    /// configurations whose price is still unavailable.
+    /// A runtime card is representable when it has a known commercial/config
+    /// identity or usable media. The promoted serving eligibility policy owns
+    /// the stricter buyer-visible media gate. Explicit budget and BHK
+    /// constraints still fail closed on zero/unknown values.
     pub fn is_listable(&self) -> bool {
         self.price > 0
-            || (self.bhk > 0
-                && self
-                    .transparency_tags
-                    .iter()
-                    .any(|tag| tag.eq_ignore_ascii_case("Price unavailable")))
+            || self.bhk > 0
+            || !self.hero_image.trim().is_empty()
+            || self.images.iter().any(|image| !image.trim().is_empty())
     }
 }
 

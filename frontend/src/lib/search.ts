@@ -151,9 +151,16 @@ export function friendlyMatchLabel(label: string): string {
 
 function compactExplanationLabel(reason: MatchReason): string | null {
   if (reason.score <= 0) return null;
+  const display = reason.display.replace(/\s+/g, " ").trim();
+  if (display) return truncateCompactDisplay(display);
   const preference = reason.preference.trim();
   if (!preference) return null;
   return compactLabel(preference);
+}
+
+function truncateCompactDisplay(value: string, maxChars = 64): string {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, maxChars - 1).trimEnd()}…`;
 }
 
 function compactReasonPart(part: string): string | null {
