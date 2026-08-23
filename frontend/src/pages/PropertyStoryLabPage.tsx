@@ -371,6 +371,7 @@ export function PropertyStoryLabPage() {
                 <PropertySceneCard
                   story={story}
                   showIdentity={false}
+                  cinematicMotion={false}
                   playback={{
                     activeIndex,
                     playing,
@@ -397,6 +398,7 @@ export function PropertyStoryLabPage() {
                     propertyId={story.identity.propertyId}
                     title={story.identity.title}
                     frames={story.arrival.frames}
+                    cinematicMotion={false}
                     playback={{
                       playing,
                       speed,
@@ -422,6 +424,7 @@ export function PropertyStoryLabPage() {
                 key={`${propertyId}:${imageCount}:${provenance}`}
                 story={story}
                 actions={actions}
+                cinematicMotion={false}
                 playback={{
                   activeIndex,
                   playing,
@@ -444,6 +447,7 @@ export function PropertyStoryLabPage() {
                 propertyId={story.identity.propertyId}
                 title={story.identity.title}
                 frames={story.arrival.frames}
+                cinematicMotion={false}
                 playback={{
                   activeIndex,
                   playing,

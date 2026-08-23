@@ -189,13 +189,14 @@
   min-width: 0;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 0.65rem;
 }
 
 .property-filmstrip__sequence {
   display: flex;
-  min-width: 0;
-  gap: 0.28rem;
+  width: min(15vw, 10rem);
+  min-width: 6rem;
+  gap: 0.35rem;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -205,7 +206,13 @@
 }
 
 .property-filmstrip__count {
-  display: none;
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .property-filmstrip__controls button,
@@ -229,24 +236,111 @@
 }
 
 .property-filmstrip__controls button:hover,
-.property-filmstrip__controls button.is-active,
 .property-filmstrip__controls a:hover {
   border-color: rgba(255, 255, 255, 0.68);
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
 
-.property-filmstrip__sequence button.is-active {
-  min-width: 3.3rem;
+.property-filmstrip__sequence button {
+  position: relative;
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.property-filmstrip__sequence button::before,
+.property-filmstrip__sequence button::after {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 2px;
+  content: "";
+  transform: translateY(-50%);
+}
+
+.property-filmstrip__sequence button::before {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.property-filmstrip__sequence button::after {
+  right: auto;
+  width: 0;
   background: #fff;
-  color: #26302c;
+}
+
+.property-filmstrip__sequence button.is-active::after {
+  animation: filmstrip-progress var(--filmstrip-motion-duration) linear forwards;
+}
+
+.story-motion--still .property-filmstrip__sequence button.is-active::after,
+.story-motion--reduced .property-filmstrip__sequence button.is-active::after {
+  width: 100%;
+  animation: none;
+}
+
+.property-filmstrip__sequence button:hover,
+.property-filmstrip__sequence button:focus-visible,
+.property-filmstrip__sequence button.is-active {
+  border: 0;
+  background: transparent;
+}
+
+.property-filmstrip__sequence button:focus-visible::before {
+  height: 4px;
+  background: #fff;
 }
 
 .property-filmstrip__controls .property-filmstrip__gallery {
-  padding-inline: 1rem;
-  border-color: #fff;
-  background: #fff;
-  color: #26302c;
+  min-width: auto;
+  padding-inline: 0.25rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.32);
+  text-underline-offset: 0.28em;
+}
+
+.property-filmstrip__controls .property-filmstrip__gallery:hover,
+.property-filmstrip__controls .property-filmstrip__gallery:focus-visible {
+  border: 0;
+  background: transparent;
+  color: #fff;
+  text-decoration-color: #fff;
+}
+
+.property-filmstrip__playback {
+  position: absolute;
+  z-index: 7;
+  top: 1.25rem;
+  right: clamp(1.25rem, 3vw, 2.5rem);
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  padding: 0.3rem 0;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.32);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 680;
+}
+
+.property-filmstrip__playback:hover,
+.property-filmstrip__playback:focus-visible {
+  border-bottom-color: #fff;
+  color: #fff;
 }
 
 .property-filmstrip--stage .property-filmstrip__track {
@@ -258,13 +352,28 @@
   min-height: 32rem;
 }
 
+.property-filmstrip--cinematic {
+  --filmstrip-motion-duration: 7.8s;
+  --filmstrip-transition-duration: 1.45s;
+}
+
+.property-filmstrip--cinematic.story-speed--half {
+  --filmstrip-motion-duration: 15.6s;
+  --filmstrip-transition-duration: 2.9s;
+}
+
+.property-filmstrip--cinematic.story-speed--double {
+  --filmstrip-motion-duration: 3.9s;
+  --filmstrip-transition-duration: 725ms;
+}
+
 .property-filmstrip--stage .property-filmstrip__card {
   inset: 0;
   width: 100%;
   border: 0;
   border-radius: 0;
   transform: none;
-  transition: opacity var(--filmstrip-transition-duration) ease;
+  transition: opacity var(--filmstrip-transition-duration) cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .property-filmstrip--stage .property-filmstrip__card.filmstrip-position--active,
@@ -372,41 +481,38 @@
   to { transform: scale(1.055) translate3d(-0.3%, -0.4%, 0); }
 }
 
-@keyframes filmstrip-arrival-wide {
-  from { transform: scale(1.025) translate3d(-0.35%, 0.15%, 0); }
-  to { transform: scale(1.08) translate3d(0.45%, -0.35%, 0); }
+@keyframes filmstrip-cinematic-drift {
+  from { transform: scale(1.105) translate3d(0, 0, 0); }
+  to { transform: scale(1.035) translate3d(-0.5%, 0.35%, 0); }
 }
 
-@keyframes filmstrip-arrival-close {
-  from { transform: scale(1.12) translate3d(0.2%, -0.15%, 0); }
-  to { transform: scale(1.035) translate3d(-0.25%, 0.2%, 0); }
+@keyframes filmstrip-progress {
+  from { width: 0; }
+  to { width: 100%; }
 }
 
-.story-motion--quiet-pan .property-filmstrip__card.is-active img {
+.is-frame-ready.story-motion--quiet-pan .property-filmstrip__card.is-active img {
   animation: filmstrip-quiet-pan var(--filmstrip-motion-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.story-motion--architectural-drift .property-filmstrip__card.is-active img {
+.is-frame-ready.story-motion--architectural-drift .property-filmstrip__card.is-active img {
   animation: filmstrip-architectural-drift var(--filmstrip-motion-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.story-motion--slow-push .property-filmstrip__card.is-active img {
+.is-frame-ready.story-motion--slow-push .property-filmstrip__card.is-active img {
   animation: filmstrip-slow-push var(--filmstrip-motion-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.story-motion--editorial-cut .property-filmstrip__card.is-active img {
+.is-frame-ready.story-motion--editorial-cut .property-filmstrip__card.is-active img {
   animation: filmstrip-editorial-cut var(--filmstrip-motion-duration) cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-.property-filmstrip--stage .property-filmstrip__card.filmstrip-view--wide.is-active img {
-  animation: filmstrip-arrival-wide var(--filmstrip-motion-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+.property-filmstrip--cinematic.is-frame-ready .property-filmstrip__card.is-active img {
+  animation: filmstrip-cinematic-drift var(--filmstrip-motion-duration) cubic-bezier(0.16, 0.7, 0.28, 1) forwards;
 }
 
-.property-filmstrip--stage .property-filmstrip__card.filmstrip-view--close.is-active img {
-  animation: filmstrip-arrival-close var(--filmstrip-motion-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-.property-filmstrip.is-paused .property-filmstrip__card.is-active img {
+.property-filmstrip.is-paused .property-filmstrip__card.is-active img,
+.property-filmstrip.is-paused .property-filmstrip__sequence button.is-active::after {
   animation-play-state: paused;
 }
 
@@ -470,7 +576,9 @@
   }
 
   .property-filmstrip__sequence {
-    display: none;
+    display: flex;
+    width: clamp(5.5rem, 24vw, 7.5rem);
+    min-width: 5.5rem;
   }
 
   .property-filmstrip__controls > a {
@@ -478,15 +586,7 @@
   }
 
   .property-filmstrip__count {
-    display: inline-flex;
-    min-width: 3.5rem;
-    min-height: 2.75rem;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    color: rgba(255, 255, 255, 0.76);
-    font-size: 0.68rem;
-    font-weight: 740;
+    display: none;
   }
 
   .property-filmstrip--stage .property-filmstrip__card figcaption {
@@ -515,22 +615,9 @@
     display: inline-flex;
   }
 
-  @keyframes filmstrip-arrival-wide-mobile {
-    from { transform: scale(1.01) translate3d(-0.2%, 0.1%, 0); }
-    to { transform: scale(1.045) translate3d(0.25%, -0.2%, 0); }
-  }
-
-  @keyframes filmstrip-arrival-close-mobile {
-    from { transform: scale(1.055) translate3d(0.1%, -0.1%, 0); }
-    to { transform: scale(1.01) translate3d(-0.15%, 0.1%, 0); }
-  }
-
-  .property-filmstrip--stage .property-filmstrip__card.filmstrip-view--wide.is-active img {
-    animation-name: filmstrip-arrival-wide-mobile;
-  }
-
-  .property-filmstrip--stage .property-filmstrip__card.filmstrip-view--close.is-active img {
-    animation-name: filmstrip-arrival-close-mobile;
+  .property-filmstrip__playback {
+    top: 1rem;
+    right: 1rem;
   }
 
 }
@@ -538,8 +625,13 @@
 @media (prefers-reduced-motion: reduce) {
   .property-filmstrip__card,
   .property-filmstrip__card img,
-  .property-filmstrip__loading {
+  .property-filmstrip__loading,
+  .property-filmstrip__sequence button.is-active::after {
     animation: none !important;
     transition-duration: 120ms !important;
+  }
+
+  .property-filmstrip__sequence button.is-active::after {
+    width: 100%;
   }
 }

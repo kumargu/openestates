@@ -15,6 +15,7 @@ type Props = {
   title: string;
   frames: StoryArrivalFrame[];
   playback?: StoryScenePlayback;
+  cinematicMotion?: boolean;
 };
 
 const ARRIVAL_CLOSE_DISTANCE_M = 50;
@@ -76,6 +77,7 @@ export function PropertyArrivalFilm({
   title,
   frames,
   playback,
+  cinematicMotion = true,
 }: Props) {
   const distinctFrames = useMemo(() => distinctArrivalFrames(frames), [frames]);
   const frameKey = distinctFrames.map((frame) => frame.id).join("|");
@@ -124,6 +126,7 @@ export function PropertyArrivalFilm({
         motionSeed={stableStoryHash(`${propertyId}:arrival`)}
         playback={playback}
         presentation="stage"
+        cinematicMotion={cinematicMotion}
         showPlaybackControl
         onUsableFramesChange={syncAvailability}
       />

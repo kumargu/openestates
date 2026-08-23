@@ -19,6 +19,8 @@ import {
 } from "../../lib/propertyStory.ts";
 import "../../styles/property-filmstrip.css";
 
+const CINEMATIC_STAGE_DURATION_MS = 7_800;
+
 export type StoryPlaybackSpeed = 0.5 | 1 | 2;
 
 export type StoryScenePlayback = {
@@ -52,6 +54,7 @@ type Props = {
   priority?: boolean;
   showPlaybackControl?: boolean;
   presentation?: "card" | "stage";
+  cinematicMotion?: boolean;
   galleryLabel?: string;
   onOpenGallery?: (activeFrameId: string) => void;
   onUsableFramesChange?: (frameIds: string[]) => void;
@@ -86,6 +89,7 @@ export function PropertyFilmstrip({
   priority = false,
   showPlaybackControl = false,
   presentation = "card",
+  cinematicMotion = false,
   galleryLabel,
   onOpenGallery,
   onUsableFramesChange,
@@ -98,6 +102,8 @@ export function PropertyFilmstrip({
   const [documentVisible, setDocumentVisible] = useState(
     () => document.visibilityState !== "hidden",
   );
+  const remainingDurationRef = useRef(0);
+  const timerDeadlineRef = useRef<number | null>(null);
   const [failedFrameIds, setFailedFrameIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -143,14 +149,17 @@ export function PropertyFilmstrip({
     reducedMotion,
   });
   const motion = STORY_MOTION_REGISTRY[selectedTheme];
-  const durationMs = motion.durationMs > 0
-    ? Math.max(1_000, motion.durationMs / speed)
+  const sceneDurationMs = cinematicMotion
+    ? CINEMATIC_STAGE_DURATION_MS
+    : motion.durationMs;
+  const durationMs = sceneDurationMs > 0
+    ? Math.max(1_000, sceneDurationMs / speed)
     : 0;
-  const paused =
-    !playing || reducedMotion || !viewportVisible || !pageVisible;
   const isReady = Boolean(
     activeFrame && readyFrameIds.has(activeFrame.id),
   );
+  const paused =
+    !playing || reducedMotion || !viewportVisible || !pageVisible || !isReady;
 
   const writeActive = useCallback(
     (index: number) => {
@@ -206,7 +215,12 @@ export function PropertyFilmstrip({
   }, [frames, onUsableFramesChange]);
 
   useEffect(() => {
-    if (durationMs <= 0) return undefined;
+    remainingDurationRef.current = durationMs;
+    timerDeadlineRef.current = null;
+  }, [durationMs, safeActive]);
+
+  useEffect(() => {
+    if (durationMs <= 0 || !isReady) return undefined;
     if (
       !shouldAutoAdvanceStory({
         playing,
@@ -219,14 +233,32 @@ export function PropertyFilmstrip({
     ) {
       return undefined;
     }
+    const remainingMs = remainingDurationRef.current > 0
+      ? Math.min(remainingDurationRef.current, durationMs)
+      : durationMs;
+    timerDeadlineRef.current = performance.now() + remainingMs;
     const timer = window.setTimeout(
-      () => selectFrame(nextStoryFrameIndex(safeActive, frames.length)),
-      durationMs,
+      () => {
+        timerDeadlineRef.current = null;
+        remainingDurationRef.current = durationMs;
+        selectFrame(nextStoryFrameIndex(safeActive, frames.length));
+      },
+      remainingMs,
     );
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      if (timerDeadlineRef.current !== null) {
+        remainingDurationRef.current = Math.max(
+          0,
+          timerDeadlineRef.current - performance.now(),
+        );
+        timerDeadlineRef.current = null;
+      }
+    };
   }, [
     durationMs,
     frames.length,
+    isReady,
     pageVisible,
     playing,
     reducedMotion,
@@ -254,6 +286,8 @@ export function PropertyFilmstrip({
       ref={rootRef}
       className={`property-filmstrip ${motion.className} ${speedClass(speed)}${
         isReady ? " is-ready" : ""
+      }${isReady ? " is-frame-ready" : ""}${
+        cinematicMotion ? " property-filmstrip--cinematic" : ""
       }${paused ? " is-paused" : ""}${
         presentation === "stage" ? " property-filmstrip--stage" : ""
       }`}
@@ -314,6 +348,17 @@ export function PropertyFilmstrip({
 
       <div className="property-filmstrip__loading" aria-hidden="true" />
 
+      {!reducedMotion && showPlaybackControl && (
+        <button
+          type="button"
+          className="property-filmstrip__playback"
+          aria-label={playing ? "Pause images" : "Resume images"}
+          onClick={() => writePlaying(!playing)}
+        >
+          {playing ? "Pause images" : "Resume images"}
+        </button>
+      )}
+
       <div className="property-filmstrip__controls">
         {frames.length > 1 && (
           <>
@@ -337,7 +382,9 @@ export function PropertyFilmstrip({
                   aria-pressed={index === safeActive}
                   onClick={() => selectFrame(index)}
                 >
-                  {String(index + 1).padStart(2, "0")}
+                  <span className="sr-only">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
                 </button>
               ))}
             </div>
@@ -347,18 +394,6 @@ export function PropertyFilmstrip({
             </span>
           </>
         )}
-        {!reducedMotion
-          && showPlaybackControl
-          && (
-          <button
-            type="button"
-            aria-label={playing ? "Pause images" : "Play images"}
-            aria-pressed={playing}
-            onClick={() => writePlaying(!playing)}
-          >
-            {playing ? "Pause" : "Play"}
-          </button>
-          )}
         {activeFrame.sourceUrl && (
           <a
             href={activeFrame.sourceUrl}

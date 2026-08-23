@@ -425,7 +425,7 @@ function PropertyPageBody({
   focusParam: string | null;
 }) {
   const { compareIds } = useNotebook();
-  const [storyPlaying, setStoryPlaying] = useState(false);
+  const [storyPlaying, setStoryPlaying] = useState(true);
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
   const [recommendations, setRecommendations] =
     useState<RecommendationResponse | null>(null);

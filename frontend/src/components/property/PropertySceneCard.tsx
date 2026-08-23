@@ -24,6 +24,7 @@ type Props = {
   playback?: StoryScenePlayback;
   sectionId?: string;
   showIdentity?: boolean;
+  cinematicMotion?: boolean;
 };
 
 type IdentityProps = {
@@ -101,6 +102,7 @@ export function PropertySceneCard({
   playback,
   sectionId,
   showIdentity = true,
+  cinematicMotion = true,
 }: Props) {
   const [walkerIndex, setWalkerIndex] = useState<number | null>(null);
   const [usableFrameIds, setUsableFrameIds] = useState(
@@ -170,6 +172,7 @@ export function PropertySceneCard({
           playback={playback}
           priority
           presentation="stage"
+          cinematicMotion={cinematicMotion}
           showPlaybackControl
           galleryLabel={`All photos · ${usableGalleryUrls.length}`}
           onOpenGallery={usableGalleryUrls.length > 0 ? openGallery : undefined}
