@@ -69,7 +69,7 @@ export function GoogleReviewsSection({ reviews }: Props) {
   const reviewCount = formatReviewCount(reviews?.google_review_count);
   const reviewCards = fitReviewCards(reviews?.reviews ?? []);
   const reviewButtonLabel = reviewCount
-    ? `Show all ${reviewCount.replace(" Google ", " ")}`
+    ? "Show all reviews"
     : "Open Google reviews";
 
   if (!googleUrl && reviewCards.length === 0 && !rating) return null;
