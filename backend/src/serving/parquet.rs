@@ -20,8 +20,8 @@ use crate::parquet_data::{
 };
 
 use super::{
-    ServingEdgeRecord, ServingEntityRecord, ServingFactRecord, ServingReraEvidenceRecord,
-    ServingSearchMetadataRecord,
+    ServingEdgeRecord, ServingEntityAliasRecord, ServingEntityRecord, ServingFactRecord,
+    ServingReraEvidenceRecord, ServingSearchMetadataRecord,
 };
 
 pub fn write_entities_parquet(
@@ -72,6 +72,58 @@ pub fn read_entities_parquet(bytes: &[u8]) -> Result<Vec<ServingEntityRecord>, P
                 name: required_string(name, row, "name")?,
                 root_source: optional_string(root_source, row),
                 searchable_text: required_string(searchable_text, row, "searchable_text")?,
+            });
+        }
+    }
+    Ok(records)
+}
+
+pub fn write_entity_aliases_parquet(
+    aliases: &[ServingEntityAliasRecord],
+) -> Result<Vec<u8>, ParquetWriteError> {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("alias", DataType::Utf8, false),
+        Field::new("normalized_alias", DataType::Utf8, false),
+        Field::new("entity_id", DataType::Utf8, false),
+        Field::new("entity_type", DataType::Utf8, false),
+        Field::new("entity_name", DataType::Utf8, false),
+        Field::new("source", DataType::Utf8, false),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            string_array(aliases.iter().map(|record| record.alias.clone())),
+            string_array(aliases.iter().map(|record| record.normalized_alias.clone())),
+            string_array(aliases.iter().map(|record| record.entity_id.clone())),
+            string_array(aliases.iter().map(|record| record.entity_type.clone())),
+            string_array(aliases.iter().map(|record| record.entity_name.clone())),
+            string_array(aliases.iter().map(|record| record.source.clone())),
+        ],
+    )
+    .map_err(ParquetWriteError::Arrow)?;
+    write_batch(batch)
+}
+
+pub fn read_entity_aliases_parquet(
+    bytes: &[u8],
+) -> Result<Vec<ServingEntityAliasRecord>, ParquetReadError> {
+    let mut records = Vec::new();
+    for batch in ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes))?.build()? {
+        let batch = batch?;
+        let alias = string_column(&batch, "alias")?;
+        let normalized_alias = string_column(&batch, "normalized_alias")?;
+        let entity_id = string_column(&batch, "entity_id")?;
+        let entity_type = string_column(&batch, "entity_type")?;
+        let entity_name = string_column(&batch, "entity_name")?;
+        let source = string_column(&batch, "source")?;
+        for row in 0..batch.num_rows() {
+            records.push(ServingEntityAliasRecord {
+                alias: required_string(alias, row, "alias")?,
+                normalized_alias: required_string(normalized_alias, row, "normalized_alias")?,
+                entity_id: required_string(entity_id, row, "entity_id")?,
+                entity_type: required_string(entity_type, row, "entity_type")?,
+                entity_name: required_string(entity_name, row, "entity_name")?,
+                source: required_string(source, row, "source")?,
             });
         }
     }

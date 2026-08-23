@@ -108,8 +108,12 @@ export function App() {
                   <Route path="/workspace/compare" element={<WorkspacePage />} />
                   <Route path="/workspace/buy-vs-rent" element={<HomePlanPage />} />
                   <Route path="/workspace/buy-vs-rent/:id" element={<HomePlanPage />} />
-                  <Route path="/dev/story-lab" element={<PropertyStoryLabPage />} />
-                  <Route path="/_internal/property-story" element={<PropertyStoryLabPage />} />
+                  {import.meta.env.DEV && (
+                    <>
+                      <Route path="/dev/story-lab" element={<PropertyStoryLabPage />} />
+                      <Route path="/_internal/property-story" element={<PropertyStoryLabPage />} />
+                    </>
+                  )}
                   <Route path="/notebook" element={<LegacyWorkspaceRedirect mode="notes" />} />
                   <Route path="/compare" element={<LegacyWorkspaceRedirect mode="compare" />} />
                   <Route path="*" element={<NotFoundPage />} />

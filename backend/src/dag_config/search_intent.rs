@@ -1,8 +1,8 @@
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::OnceLock;
 
 use serde::Deserialize;
-use std::collections::HashSet;
 
 use super::loader::{dag_root, load_json, DagConfigError};
 
@@ -38,7 +38,13 @@ pub struct SearchResolutionConfig {
     #[serde(default)]
     pub ignored_entity_names: Vec<String>,
     #[serde(default)]
+    pub residual_ignored_terms: Vec<String>,
+    #[serde(default)]
     pub resolvable_entity_types: Vec<String>,
+    #[serde(default)]
+    pub min_partial_entity_name_chars: usize,
+    #[serde(default)]
+    pub mechanical_alias_blocked_tokens: Vec<String>,
     #[serde(default)]
     pub named_entity_scope_prefixes: Vec<String>,
     #[serde(default)]
@@ -63,6 +69,31 @@ pub struct SearchParserConfig {
     pub budget: UnitValueParserConfig,
     pub distance: UnitValueParserConfig,
     pub relations: RelationParserConfig,
+    pub discourse: DiscourseParserConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct DiscourseParserConfig {
+    #[serde(default)]
+    pub branch_joiners: Vec<String>,
+    #[serde(default)]
+    pub alternative_prefixes: Vec<String>,
+    #[serde(default)]
+    pub conditional_branch_starters: Vec<String>,
+    #[serde(default)]
+    pub shared_suffix_markers: Vec<String>,
+    #[serde(default)]
+    pub conjunctive_relation_markers: Vec<String>,
+    #[serde(default)]
+    pub paired_branch_joiners: Vec<String>,
+    #[serde(default)]
+    pub branch_ordinals: Vec<String>,
+    #[serde(default)]
+    pub ranking_instruction_prefixes: Vec<String>,
+    #[serde(default)]
+    pub ranking_scope_end_markers: Vec<String>,
+    #[serde(default)]
+    pub scoped_exclusion_markers: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -71,6 +102,10 @@ pub struct BhkParserConfig {
     pub number_words: Vec<NumberWord>,
     pub min: u32,
     pub max: u32,
+    #[serde(default)]
+    pub alternative_joiners: Vec<String>,
+    #[serde(default)]
+    pub exclusion_gap_tokens: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -82,6 +117,10 @@ pub struct NumberWord {
 #[derive(Debug, Clone, Deserialize)]
 pub struct UnitValueParserConfig {
     pub operators: Vec<String>,
+    #[serde(default)]
+    pub min_operators: Vec<String>,
+    #[serde(default)]
+    pub range_connectors: Vec<String>,
     pub units: Vec<UnitAliasConfig>,
 }
 
@@ -107,6 +146,8 @@ pub struct RelationAliasConfig {
     pub alias: String,
     #[serde(default)]
     pub requires_distance_limit: bool,
+    #[serde(default)]
+    pub default_distance_limit_km: Option<f64>,
 }
 
 pub fn search_intent_path() -> std::path::PathBuf {
@@ -171,6 +212,15 @@ fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
         "parser.bhk.unit_aliases",
         config.bhk.unit_aliases.iter().map(String::as_str),
     )?;
+    if config.relations.aliases.iter().any(|entry| {
+        entry
+            .default_distance_limit_km
+            .is_some_and(|distance| !distance.is_finite() || distance <= 0.0)
+    }) {
+        return Err(
+            "parser.relations default_distance_limit_km must be positive and finite".to_string(),
+        );
+    }
     if config.bhk.unit_aliases.is_empty() {
         return Err("parser.bhk.unit_aliases must not be empty".to_string());
     }
@@ -192,6 +242,12 @@ fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
             .iter()
             .map(|entry| entry.word.as_str()),
     )?;
+    if !config.bhk.alternative_joiners.is_empty() {
+        validate_aliases(
+            "parser.bhk.alternative_joiners",
+            config.bhk.alternative_joiners.iter().map(String::as_str),
+        )?;
+    }
     validate_unit_value_config("parser.budget", &config.budget, true)?;
     validate_unit_value_config("parser.distance", &config.distance, true)?;
     if config.relations.aliases.is_empty() {
@@ -212,6 +268,78 @@ fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
         "parser.relations.clause_joiners",
         config.relations.clause_joiners.iter().map(String::as_str),
     )?;
+    validate_aliases(
+        "parser.discourse.branch_joiners",
+        config.discourse.branch_joiners.iter().map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.alternative_prefixes",
+        config
+            .discourse
+            .alternative_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.conditional_branch_starters",
+        config
+            .discourse
+            .conditional_branch_starters
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.shared_suffix_markers",
+        config
+            .discourse
+            .shared_suffix_markers
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.conjunctive_relation_markers",
+        config
+            .discourse
+            .conjunctive_relation_markers
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.paired_branch_joiners",
+        config
+            .discourse
+            .paired_branch_joiners
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.branch_ordinals",
+        config.discourse.branch_ordinals.iter().map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.ranking_instruction_prefixes",
+        config
+            .discourse
+            .ranking_instruction_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.ranking_scope_end_markers",
+        config
+            .discourse
+            .ranking_scope_end_markers
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.scoped_exclusion_markers",
+        config
+            .discourse
+            .scoped_exclusion_markers
+            .iter()
+            .map(String::as_str),
+    )?;
     Ok(())
 }
 
@@ -229,6 +357,18 @@ fn validate_unit_value_config(
     }
     if config.units.is_empty() {
         return Err(format!("{label}.units must not be empty"));
+    }
+    if !config.min_operators.is_empty() {
+        validate_aliases(
+            &format!("{label}.min_operators"),
+            config.min_operators.iter().map(String::as_str),
+        )?;
+    }
+    if !config.range_connectors.is_empty() {
+        validate_aliases(
+            &format!("{label}.range_connectors"),
+            config.range_connectors.iter().map(String::as_str),
+        )?;
     }
     for unit in &config.units {
         if unit.unit.trim().is_empty() {

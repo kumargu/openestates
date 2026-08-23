@@ -18,7 +18,6 @@ import type {
 import { getFixtureResponse } from "./dev-fixtures.ts";
 import {
   filterListableProperties,
-  filterListableSearchResponse,
   isListableProperty,
 } from "./property-filters.ts";
 
@@ -197,7 +196,6 @@ export function searchProperties(query: string): Promise<SearchResponse> {
   if (existing) return existing;
 
   const request = fetchJson<SearchResponse>(`/api/search?q=${encodeURIComponent(query)}`)
-    .then(filterListableSearchResponse)
     .finally(() => {
       if (inFlightSearches.get(key) === request) {
         inFlightSearches.delete(key);

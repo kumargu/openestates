@@ -39,6 +39,9 @@ export default defineConfig(({ command }) => {
   return {
     plugins: [react()],
     server: {
+      fs: {
+        allow: [resolve(frontendRoot, '..')],
+      },
       proxy: {
         '/api': 'http://127.0.0.1:4000',
         '/media': 'http://127.0.0.1:4000',

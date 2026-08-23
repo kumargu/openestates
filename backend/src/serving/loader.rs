@@ -8,10 +8,12 @@ use crate::assets::{
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
 use super::{
-    hydrate_tantivy_index, read_edges_parquet, read_entities_parquet, read_facts_parquet,
-    read_rera_evidence_parquet, read_search_metadata_parquet, ParquetReadError, ReraEvidenceIndex,
-    ServingBundleManifest, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex,
-    SpatialServingIndex, TantivyIndexError, TantivyRecallIndex, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    hydrate_tantivy_index, read_edges_parquet, read_entities_parquet, read_entity_aliases_parquet,
+    read_facts_parquet, read_rera_evidence_parquet, read_search_metadata_parquet,
+    validate_society_aliases, ParquetReadError, ReraEvidenceIndex, ServingBundleManifest,
+    ServingEdgeRecord, ServingEntityAliasIndex, ServingEntityAliasRecord, ServingEntityRecord,
+    ServingFactIndex, SpatialServingIndex, TantivyIndexError, TantivyRecallIndex,
+    SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 use crate::graph::GraphIndex;
 use crate::search::geo::GeoSearchIndex;
@@ -26,6 +28,7 @@ pub struct ServingBundleLoader {
 pub struct LoadedServingBundle {
     pub manifest: ServingBundleManifest,
     pub entities: Vec<ServingEntityRecord>,
+    pub entity_alias_index: ServingEntityAliasIndex,
     pub edges: Vec<ServingEdgeRecord>,
     pub graph_index: GraphIndex,
     pub recall_index: TantivyRecallIndex,
@@ -33,6 +36,7 @@ pub struct LoadedServingBundle {
     pub rera_evidence_index: ReraEvidenceIndex,
     pub geo_index: GeoSearchIndex,
     pub spatial_index: SpatialServingIndex,
+    pub search_capabilities: crate::search::SearchCapabilityIndex,
     pub cache_dir: PathBuf,
 }
 
@@ -108,6 +112,11 @@ impl ServingBundleLoader {
 
         let recall_index = TantivyRecallIndex::open(&cache_dir)?;
         let entities = load_entities(&self.lake, &manifest).await?;
+        let entity_aliases = load_entity_aliases(&self.lake, &manifest).await?;
+        validate_society_aliases(&entity_aliases, &entities)
+            .map_err(|err| ServingBundleLoadError::Configuration(err.to_string()))?;
+        let entity_alias_index = ServingEntityAliasIndex::from_records(entity_aliases)
+            .map_err(|err| ServingBundleLoadError::Configuration(err.to_string()))?;
         let edges = load_edges(&self.lake, &manifest).await?;
         let aliases = super::types::unique_society_aliases(&entities);
         let mut fact_index = load_fact_index(&self.lake, &manifest).await?;
@@ -118,9 +127,12 @@ impl ServingBundleLoader {
         graph_index.add_entity_aliases(&aliases);
         let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
         let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
+        let search_capabilities =
+            crate::search::SearchCapabilityIndex::from_bundle(&entities, &fact_index);
         Ok(LoadedServingBundle {
             manifest,
             entities,
+            entity_alias_index,
             edges,
             graph_index,
             recall_index,
@@ -128,6 +140,7 @@ impl ServingBundleLoader {
             rera_evidence_index,
             geo_index,
             spatial_index,
+            search_capabilities,
             cache_dir,
         })
     }
@@ -148,6 +161,18 @@ async fn load_entities(
         LakeKey::new(manifest.entity_parquet_key.clone()).map_err(ServingBundleLoadError::Key)?;
     let entity_bytes = lake.get_bytes(&entity_key).await?;
     Ok(read_entities_parquet(&entity_bytes)?)
+}
+
+async fn load_entity_aliases(
+    lake: &LakeStore,
+    manifest: &ServingBundleManifest,
+) -> Result<Vec<ServingEntityAliasRecord>, ServingBundleLoadError> {
+    let Some(key) = manifest.entity_alias_parquet_key.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let alias_key = LakeKey::new(key.clone()).map_err(ServingBundleLoadError::Key)?;
+    let alias_bytes = lake.get_bytes(&alias_key).await?;
+    Ok(read_entity_aliases_parquet(&alias_bytes)?)
 }
 
 async fn load_edges(

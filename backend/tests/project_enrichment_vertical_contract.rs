@@ -431,6 +431,8 @@ fn source_inputs(
                         slug(project.name)
                     )),
                     classification_method: Some("heuristic".to_string()),
+                    gallery_order: None,
+                    curation_confidence: None,
                     width: Some(1200),
                     height: Some(800),
                     rank: Some(1),
@@ -441,6 +443,7 @@ fn source_inputs(
                     observed_at,
                 })
                 .collect(),
+            max_promoted_gallery_frames: None,
             source_health: Vec::new(),
             media_qa_report: None,
             source_watermarks: watermark.clone(),

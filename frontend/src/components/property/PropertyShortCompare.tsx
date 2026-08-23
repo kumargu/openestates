@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import uiSurfacesConfig from "../../../../app/config/dag/ui_surfaces.json";
 import type { StoryComparison } from "../../lib/propertyStory.ts";
 import "../../styles/property-fact-decks.css";
 
@@ -14,27 +15,48 @@ function formatPrice(price?: number): string | undefined {
   return `₹${price.toLocaleString("en-IN")}`;
 }
 
+type ComparisonValueKey = "price" | "bhk" | "sizeLabel" | "status";
+type ComparisonFormat = "inr_short" | "bhk" | "text";
+
 type ComparisonDimension = {
   key: string;
   label: string;
-  value: (home: StoryComparison) => string | undefined;
+  valueKey: ComparisonValueKey;
+  format: ComparisonFormat;
 };
 
-const COMPARISON_DIMENSIONS: ComparisonDimension[] = [
-  { key: "price", label: "Price", value: (home) => formatPrice(home.price) },
-  {
-    key: "configuration",
-    label: "Home",
-    value: (home) => home.bhk ? `${home.bhk} BHK` : undefined,
-  },
-  { key: "size", label: "Area", value: (home) => home.sizeLabel },
-  { key: "status", label: "Status", value: (home) => home.status },
-];
+type UiSurfacesConfig = {
+  surfaces: Array<{
+    id: string;
+    comparisonDimensions?: ComparisonDimension[];
+  }>;
+};
+
+const COMPARISON_DIMENSIONS =
+  (uiSurfacesConfig as UiSurfacesConfig).surfaces.find(
+    (surface) => surface.id === "property_short_compare",
+  )?.comparisonDimensions ?? [];
+
+function dimensionValue(
+  home: StoryComparison,
+  dimension: ComparisonDimension,
+): string | undefined {
+  const value = home[dimension.valueKey];
+  if (dimension.format === "inr_short") {
+    return typeof value === "number" ? formatPrice(value) : undefined;
+  }
+  if (dimension.format === "bhk") {
+    return typeof value === "number" && value > 0
+      ? `${value} BHK`
+      : undefined;
+  }
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
 
 export function PropertyShortCompare({ homes, compareHref }: Props) {
   if (homes.length < 2 || homes.length > 4 || !compareHref) return null;
   const dimensions = COMPARISON_DIMENSIONS.filter((dimension) =>
-    homes.every((home) => Boolean(dimension.value(home))));
+    homes.every((home) => Boolean(dimensionValue(home, dimension))));
   if (dimensions.length === 0) return null;
 
   return (
@@ -78,7 +100,7 @@ export function PropertyShortCompare({ homes, compareHref }: Props) {
                     key={home.id}
                     className={home.isCurrent ? "is-current" : ""}
                   >
-                    {dimension.value(home)}
+                    {dimensionValue(home, dimension)}
                   </td>
                 ))}
               </tr>

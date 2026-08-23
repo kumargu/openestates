@@ -86,7 +86,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         societies.len()
     );
 
-    println!("Request-time AI disabled: search uses only local serving bundle data");
+    println!("Request-time network AI disabled: search uses only local artifacts");
     let discovery_config = load_discovery_config();
     let map_overlays = crate::routes::map_overlays::load_city_map_overlays(project_root);
     let knowledge = Arc::new(RwLock::new(graph));
@@ -120,7 +120,8 @@ pub fn runtime_snapshot_from_serving_bundle(
     let properties = properties_from_serving_bundle(&bundle);
     let societies = societies_from_serving_bundle(&bundle);
     let areas = areas_from_serving_properties(&properties);
-    let search_index = SearchIndex::build_with_serving_entities(&properties, &bundle.entities);
+    let search_index =
+        SearchIndex::build_with_serving_graph(&properties, &bundle.entities, &bundle.edges);
     SearchRuntimeSnapshot::new(bundle, properties, societies, areas, search_index)
 }
 
@@ -321,6 +322,7 @@ fn representative_property_from_serving_society(
     let carpet_area_sqft = pricing
         .map(|pricing| pricing.representative_sqft())
         .unwrap_or(0);
+    let (price_min, price_max) = pricing.map(listing_band).unwrap_or((None, None));
     let price_per_sqft = if price > 0 && carpet_area_sqft > 0 {
         price / carpet_area_sqft as u64
     } else {
@@ -356,6 +358,8 @@ fn representative_property_from_serving_society(
         listing_type: "Project".to_string(),
         bhk,
         price,
+        price_min,
+        price_max,
         price_per_sqft,
         carpet_area_sqft,
         super_builtup_sqft: carpet_area_sqft,
@@ -474,24 +478,24 @@ fn property_from_serving_entity(
         .unwrap_or(0.0)
         .round()
         .max(0.0) as u64;
+    let had_direct_asking_price = price > 0;
     let mut carpet_area_sqft = latest_numeric(rows, "carpet_area_sqft")
         .unwrap_or(0.0)
         .round()
         .max(0.0) as u32;
+    let mut price_min = None;
+    let mut price_max = None;
 
     if let Some(pricing) = market_pricing_for_serving_property(fact_index, &id, bhk) {
         let price_confidence = latest_confidence(rows, "price").unwrap_or(0.0);
         let sqft_confidence = latest_confidence(rows, "carpet_area_sqft").unwrap_or(0.0);
-        if should_use_market_pricing(
+        (price, carpet_area_sqft, price_min, price_max) = resolve_listing_pricing(
             price,
             carpet_area_sqft,
             price_confidence,
             sqft_confidence,
             pricing,
-        ) {
-            price = pricing.representative_price();
-            carpet_area_sqft = pricing.representative_sqft();
-        }
+        );
     }
 
     let price_per_sqft = if carpet_area_sqft > 0 && price > 0 {
@@ -526,6 +530,15 @@ fn property_from_serving_entity(
         ));
         transparency_tags.push("Lake indexed".to_string());
     }
+    if had_direct_asking_price
+        && price == 0
+        && bhk > 0
+        && !transparency_tags
+            .iter()
+            .any(|tag| tag.eq_ignore_ascii_case("Price unavailable"))
+    {
+        transparency_tags.push("Price unavailable".to_string());
+    }
     let possession_status = latest_text(rows, "possession_status")
         .or_else(|| serving_society_text(fact_index, &society_id, "rera_status"))
         .unwrap_or_else(|| "unknown".to_string());
@@ -543,6 +556,8 @@ fn property_from_serving_entity(
         listing_type: latest_text(rows, "listing_type").unwrap_or_else(|| "Resale".to_string()),
         bhk,
         price,
+        price_min,
+        price_max,
         price_per_sqft,
         carpet_area_sqft,
         super_builtup_sqft: latest_numeric(rows, "super_builtup_sqft")
@@ -1207,19 +1222,18 @@ pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
             let bhk = fact_numeric(node, "bhk") as u32;
             let mut price = fact_numeric(node, "price") as u64;
             let mut carpet_area_sqft = fact_numeric(node, "carpet_area_sqft") as u32;
+            let mut price_min = None;
+            let mut price_max = None;
             if let Some(pricing) = market_pricing_for_property(graph, &id, bhk) {
                 let price_confidence = fact_confidence(node, "price");
                 let sqft_confidence = fact_confidence(node, "carpet_area_sqft");
-                if should_use_market_pricing(
+                (price, carpet_area_sqft, price_min, price_max) = resolve_listing_pricing(
                     price,
                     carpet_area_sqft,
                     price_confidence,
                     sqft_confidence,
                     pricing,
-                ) {
-                    price = pricing.representative_price();
-                    carpet_area_sqft = pricing.representative_sqft();
-                }
+                );
             }
             let price_per_sqft = if carpet_area_sqft > 0 && price > 0 {
                 price / carpet_area_sqft as u64
@@ -1278,6 +1292,8 @@ pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
                 },
                 bhk,
                 price,
+                price_min,
+                price_max,
                 price_per_sqft,
                 carpet_area_sqft,
                 super_builtup_sqft: fact_numeric(node, "super_builtup_sqft") as u32,
@@ -1373,6 +1389,13 @@ struct MarketPricing {
     sqft: u32,
     sqft_low: u32,
     sqft_high: u32,
+    basis: PricingBasis,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PricingBasis {
+    DirectAsking,
+    ProjectAggregate,
 }
 
 impl MarketPricing {
@@ -1383,6 +1406,56 @@ impl MarketPricing {
     fn representative_sqft(&self) -> u32 {
         self.sqft
     }
+}
+
+fn listing_band(pricing: MarketPricing) -> (Option<u64>, Option<u64>) {
+    if pricing.basis == PricingBasis::ProjectAggregate
+        && pricing.price_low > 0
+        && pricing.price_high > pricing.price_low
+    {
+        (Some(pricing.price_low), Some(pricing.price_high))
+    } else {
+        (None, None)
+    }
+}
+
+fn resolve_listing_pricing(
+    price: u64,
+    sqft: u32,
+    price_confidence: f32,
+    sqft_confidence: f32,
+    pricing: MarketPricing,
+) -> (u64, u32, Option<u64>, Option<u64>) {
+    let replace_price = pricing.basis == PricingBasis::DirectAsking
+        && should_replace_price(price, price_confidence, pricing);
+    let discard_weak_direct_price = pricing.basis == PricingBasis::ProjectAggregate
+        && should_replace_price(price, price_confidence, pricing);
+    let replace_sqft = should_replace_sqft(sqft, sqft_confidence, pricing);
+    let (price_min, price_max) = if replace_price {
+        listing_band(pricing)
+    } else {
+        // A project/configuration range is not provenance for an exact asking
+        // price. Keep the listing as a point so budget filters cannot admit it
+        // through an unrelated low end of the wider project market.
+        (None, None)
+    };
+
+    (
+        if replace_price {
+            pricing.representative_price()
+        } else if discard_weak_direct_price {
+            0
+        } else {
+            price
+        },
+        if replace_sqft {
+            pricing.representative_sqft()
+        } else {
+            sqft
+        },
+        price_min,
+        price_max,
+    )
 }
 
 fn market_pricing_for_property(
@@ -1425,6 +1498,7 @@ fn parse_market_pricing(raw: &str) -> Option<MarketPricing> {
         sqft: ((sqft_low + sqft_high) / 2.0).round() as u32,
         sqft_low: sqft_low.round() as u32,
         sqft_high: sqft_high.round() as u32,
+        basis: PricingBasis::ProjectAggregate,
     })
 }
 
@@ -1477,6 +1551,7 @@ fn parse_listing_pricing(raw: &str) -> Option<MarketPricing> {
         sqft: sqft.round() as u32,
         sqft_low: sqft_low.round() as u32,
         sqft_high: sqft_high.round() as u32,
+        basis: PricingBasis::ProjectAggregate,
     })
 }
 
@@ -1494,6 +1569,7 @@ fn parse_text_listing_pricing(raw: &str) -> Option<MarketPricing> {
         sqft,
         sqft_low: sqft,
         sqft_high: sqft,
+        basis: PricingBasis::ProjectAggregate,
     })
 }
 
@@ -1534,29 +1610,24 @@ fn parse_number_range(raw: &str) -> Option<(f64, f64)> {
     }
 }
 
-fn should_use_market_pricing(
-    price: u64,
-    sqft: u32,
-    price_confidence: f32,
-    sqft_confidence: f32,
-    pricing: MarketPricing,
-) -> bool {
-    let low_confidence = price_confidence <= 0.65 || sqft_confidence <= 0.65;
-    if !low_confidence {
+fn should_replace_price(price: u64, price_confidence: f32, pricing: MarketPricing) -> bool {
+    if price_confidence > 0.65 {
         return false;
     }
 
     let price_low_floor = pricing.price_low.saturating_mul(3) / 4;
     let price_high_ceiling = pricing.price_high.saturating_mul(5) / 4;
+    price == 0 || price < price_low_floor || price > price_high_ceiling
+}
+
+fn should_replace_sqft(sqft: u32, sqft_confidence: f32, pricing: MarketPricing) -> bool {
+    if sqft_confidence > 0.65 {
+        return false;
+    }
+
     let sqft_low_floor = pricing.sqft_low.saturating_mul(1) / 2;
     let sqft_high_ceiling = pricing.sqft_high.saturating_mul(3) / 2;
-
-    price == 0
-        || sqft == 0
-        || price < price_low_floor
-        || price > price_high_ceiling
-        || sqft < sqft_low_floor
-        || sqft > sqft_high_ceiling
+    sqft == 0 || sqft < sqft_low_floor || sqft > sqft_high_ceiling
 }
 
 // --- Fact extraction helpers ---
@@ -1784,7 +1855,9 @@ mod tests {
         assert_eq!(property.id, "discovered-prestige-lavender-fields-3bhk");
         assert_eq!(property.society_id, "soc-prestige-lavender-fields");
         assert_eq!(property.area, "Varthur");
-        assert_eq!(property.price, 30_000_000);
+        assert_eq!(property.price, 0);
+        assert_eq!(property.price_min, None);
+        assert_eq!(property.price_max, None);
         assert_eq!(property.carpet_area_sqft, 2_000);
         assert_eq!(property.possession_status, "Completed");
         assert_eq!(property.source_reference, "search_serving_bundle:bundle-v1");
@@ -1792,6 +1865,89 @@ mod tests {
         let society = society_from_serving_entity(&entities[1], &fact_index, &[]);
         assert_eq!(society.id, "soc-prestige-lavender-fields");
         assert_eq!(society.review_summary, "Google signal is mixed-positive.");
+    }
+
+    #[test]
+    fn representative_property_preserves_aggregate_listing_range() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "society:brigade-lakefront-crimson".to_string(),
+            entity_type: "society".to_string(),
+            name: "Brigade Lakefront Crimson".to_string(),
+            root_source: Some("discovered".to_string()),
+            searchable_text: String::new(),
+        }];
+        let fact_index = ServingFactIndex::from_records(
+            vec![serving_fact(
+                "society:brigade-lakefront-crimson",
+                "listing_3bhk",
+                FactValue::Text(listing_payload_range(
+                    32_250_000.0,
+                    30_000_000.0,
+                    48_000_000.0,
+                    1_800.0,
+                )),
+                0.8,
+            )],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        assert_eq!(properties.len(), 1);
+        let property = &properties[0];
+        assert_eq!(property.price, 32_250_000);
+        assert_eq!(property.price_min, Some(30_000_000));
+        assert_eq!(property.price_max, Some(48_000_000));
+    }
+
+    #[test]
+    fn exact_asking_price_does_not_inherit_project_market_band() {
+        let market = MarketPricing {
+            price: 30_000_000,
+            price_low: 10_000_000,
+            price_high: 50_000_000,
+            sqft: 1_800,
+            sqft_low: 1_000,
+            sqft_high: 2_500,
+            basis: PricingBasis::ProjectAggregate,
+        };
+
+        let resolved = resolve_listing_pricing(45_000_000, 2_000, 0.9, 0.9, market);
+
+        assert_eq!(resolved, (45_000_000, 2_000, None, None));
+    }
+
+    #[test]
+    fn weak_area_does_not_replace_a_strong_exact_asking_price() {
+        let market = MarketPricing {
+            price: 30_000_000,
+            price_low: 10_000_000,
+            price_high: 50_000_000,
+            sqft: 1_800,
+            sqft_low: 1_000,
+            sqft_high: 2_500,
+            basis: PricingBasis::ProjectAggregate,
+        };
+
+        let resolved = resolve_listing_pricing(45_000_000, 1, 0.9, 0.2, market);
+
+        assert_eq!(resolved, (45_000_000, 1_800, None, None));
+    }
+
+    #[test]
+    fn missing_direct_asking_price_does_not_inherit_project_aggregate() {
+        let aggregate = MarketPricing {
+            price: 17_200_000,
+            price_low: 14_700_000,
+            price_high: 21_000_000,
+            sqft: 1_500,
+            sqft_low: 1_300,
+            sqft_high: 1_700,
+            basis: PricingBasis::ProjectAggregate,
+        };
+
+        let resolved = resolve_listing_pricing(0, 0, 0.0, 0.0, aggregate);
+
+        assert_eq!(resolved, (0, 1_500, None, None));
     }
 
     #[test]
@@ -2343,7 +2499,7 @@ mod tests {
     }
 
     #[test]
-    fn test_low_confidence_property_uses_society_market_pricing() {
+    fn test_low_confidence_property_does_not_borrow_society_market_price() {
         let mut graph = KnowledgeGraph::new();
         let mut society = make_society_node(
             "prestige-raintree-park",
@@ -2381,13 +2537,13 @@ mod tests {
             .iter()
             .find(|p| p.id == "discovered-prestige-raintree-park-3bhk")
             .expect("property should be derived");
-        assert_eq!(p.price, 30_600_000);
+        assert_eq!(p.price, 0);
         assert_eq!(p.carpet_area_sqft, 2243);
-        assert_eq!(p.price_per_sqft, 13_642);
+        assert_eq!(p.price_per_sqft, 0);
     }
 
     #[test]
-    fn test_low_confidence_property_prefers_external_listing_pricing() {
+    fn test_low_confidence_property_does_not_borrow_external_project_listing() {
         let mut graph = KnowledgeGraph::new();
         let mut society = make_society_node(
             "prestige-raintree-park",
@@ -2432,9 +2588,9 @@ mod tests {
             .iter()
             .find(|p| p.id == "discovered-prestige-raintree-park-3bhk")
             .expect("property should be derived");
-        assert_eq!(p.price, 31_000_000);
+        assert_eq!(p.price, 0);
         assert_eq!(p.carpet_area_sqft, 1900);
-        assert_eq!(p.price_per_sqft, 16_315);
+        assert_eq!(p.price_per_sqft, 0);
     }
 
     #[test]
@@ -2477,10 +2633,14 @@ mod tests {
     }
 
     fn listing_payload(price: f64, sqft: f64) -> String {
+        listing_payload_range(price, price, price, sqft)
+    }
+
+    fn listing_payload_range(price: f64, price_min: f64, price_max: f64, sqft: f64) -> String {
         serde_json::json!({
             "price": price,
-            "price_min": price,
-            "price_max": price,
+            "price_min": price_min,
+            "price_max": price_max,
             "area_sqft": sqft,
             "area_sqft_min": sqft,
             "area_sqft_max": sqft

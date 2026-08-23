@@ -1303,6 +1303,8 @@ mod tests {
             listing_type: "Resale".to_string(),
             bhk: 3,
             price: 20_000_000,
+            price_min: None,
+            price_max: None,
             price_per_sqft: 10_000,
             carpet_area_sqft: 1_500,
             super_builtup_sqft: 2_000,

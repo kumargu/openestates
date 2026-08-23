@@ -16,6 +16,12 @@ pub struct Property {
     pub listing_type: String,
     pub bhk: u32,
     pub price: u64,
+    /// Inclusive listing band when the source is a range, not a point asking price.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub price_min: Option<u64>,
+    /// Inclusive listing band when the source is a range, not a point asking price.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub price_max: Option<u64>,
     pub price_per_sqft: u64,
     pub carpet_area_sqft: u32,
     pub super_builtup_sqft: u32,
@@ -99,6 +105,12 @@ pub struct PropertyCard {
     pub title: String,
     pub area: String,
     pub price: u64,
+    /// Inclusive listing band when the source is a range, not a point asking price.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub price_min: Option<u64>,
+    /// Inclusive listing band when the source is a range, not a point asking price.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub price_max: Option<u64>,
     pub price_per_sqft: u64,
     pub bhk: u32,
     pub sqft: u32,

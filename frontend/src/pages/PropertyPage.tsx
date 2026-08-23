@@ -46,13 +46,8 @@ import { formatGoogleRating } from "../lib/reviewFormatting.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
 import { workspaceCompareHref } from "../lib/workspaceNav.ts";
-
-function formatPrice(price: number): string {
-  if (!hasKnownNumber(price)) return "Price unavailable";
-  if (price >= 10_000_000) return `₹${(price / 10_000_000).toFixed(1)} Cr`;
-  if (price >= 100_000) return `₹${(price / 100_000).toFixed(1)} L`;
-  return `₹${price.toLocaleString("en-IN")}`;
-}
+import { formatListingPrice } from "../lib/listing-price.ts";
+import { initialPropertySurfaceId } from "../lib/proof-focus.ts";
 
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -124,6 +119,8 @@ function propertyToCard(data: PropertyDetailResponse): PropertyCard {
     title: p.title,
     area: p.area,
     price: p.price,
+    price_min: p.price_min,
+    price_max: p.price_max,
     price_per_sqft: p.price_per_sqft,
     bhk: p.bhk,
     sqft: p.super_builtup_sqft || p.carpet_area_sqft || 0,
@@ -279,7 +276,7 @@ function NearbyHomeCard({
   const note = property.society_name
     ? `${area} · ${property.bhk} BHK`
     : area;
-  const price = formatPrice(property.price);
+  const price = formatListingPrice(property);
   const rating = formatGoogleRating(property.google_rating);
   const accessibleLabel = [
     title,
@@ -485,7 +482,7 @@ function PropertyPageBody({
     let cancelled = false;
 
     const focus = parseProofFocusParam(focusParam);
-    getPropertySurface(propertyId, "around_this_home", focus)
+    getPropertySurface(propertyId, initialPropertySurfaceId(focus), focus)
       .then((scene) => {
         if (!cancelled) setAroundThisHomeScene(scene);
       })
@@ -561,7 +558,7 @@ function PropertyPageBody({
     `${p.bhk} BHK`,
     sizeLabel,
     `in ${society?.name ? society.name + ", " : ""}${p.area}`,
-    hasKnownNumber(p.price) ? formatPrice(p.price) : null,
+    hasKnownNumber(p.price) ? formatListingPrice(p) : null,
     pricePerSqftLabel,
     `${p.area}, ${p.city}`,
   ]
@@ -598,12 +595,10 @@ function PropertyPageBody({
         .filter((propertyId) => marketPropertyMap.has(propertyId))
         .slice(0, 4)
     : distinctSocietyIds(requestedCompareIds, marketPropertyMap);
-  const selectedCompareIds = availableCompareIds.includes(p.id)
-    ? [
-        p.id,
-        ...availableCompareIds.filter((propertyId) => propertyId !== p.id),
-      ]
-    : availableCompareIds;
+  const selectedCompareIds = [
+    p.id,
+    ...availableCompareIds.filter((propertyId) => propertyId !== p.id),
+  ].slice(0, 4);
   const savedComparisons = savedComparisonHomes(
     selectedCompareIds,
     marketPropertyMap,
@@ -611,7 +606,7 @@ function PropertyPageBody({
   );
   const savedCompareHref = workspaceCompareHref(
     selectedCompareIds,
-    selectedCompareIds.includes(p.id) ? p.id : undefined,
+    p.id,
   );
   const comparisonIds = new Set(savedComparisons.map((home) => home.id));
   const moreNearbyItems = recommendationShelfItems(

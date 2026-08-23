@@ -264,18 +264,18 @@ echo ""
 echo "Search"
 check "GET /api/search?q=3BHK returns results" \
   "${BASE}/api/search?q=3BHK%20Whitefield" \
-  '.results | length > 0' \
+  '[.resultSets[].results[]] | length > 0' \
   "expected non-empty results"
 
 check "Search results have match fields" \
   "${BASE}/api/search?q=3BHK%20Whitefield" \
-  '(.results[0] | has("match_score", "match_label", "match_reason"))' \
-  "expected match_score, match_label, match_reason"
+  '([.resultSets[].results[]][0] | has("match_score", "match_label", "match_reason", "match_tier"))' \
+  "expected match_score, match_label, match_reason, and match_tier"
 
-check "Search response has intent" \
+check "Search response has buyer-safe result sets" \
   "${BASE}/api/search?q=3BHK%20Whitefield" \
-  '.intent | has("area", "bhk")' \
-  "expected intent with area, bhk"
+  'has("query", "resultSets", "totalMatches", "state") and (.resultSets | all(has("branchId", "label", "results"))) and (has("intent") | not) and (has("searchDiagnostics") | not)' \
+  "expected grouped results without internal parser or diagnostic state"
 
 check "Search response has query echo" \
   "${BASE}/api/search?q=hello" \
@@ -284,7 +284,7 @@ check "Search response has query echo" \
 
 check "Empty search returns empty results" \
   "${BASE}/api/search?q=" \
-  '.results | length == 0' \
+  '(.resultSets | length == 0) and .totalMatches == 0 and .state == "no_matches"' \
   "expected empty results for empty query"
 
 SOCIETY_FIXTURE=$(curl -s "${BASE}/api/properties" 2>/dev/null | jq -r '
@@ -308,12 +308,12 @@ else
 
   check "GET /api/search recalls loaded society" \
     "${BASE}/api/search?q=${FIRST_SOCIETY_QUERY}" \
-    '(.results | length > 0) and any(.results[]; (.society_name | ascii_downcase) == (env.FIRST_SOCIETY_NAME | ascii_downcase))' \
+    '([.resultSets[].results[]] as $results | ($results | length > 0) and any($results[]; (.society_name | ascii_downcase) == (env.FIRST_SOCIETY_NAME | ascii_downcase)))' \
     "expected society-name recall for ${FIRST_SOCIETY_NAME}"
 
   check "GET /api/search tolerates society typo" \
     "${BASE}/api/search?q=${FIRST_SOCIETY_TYPO}" \
-    '(.results | length > 0) and any(.results[]; (.society_name | ascii_downcase) == (env.FIRST_SOCIETY_NAME | ascii_downcase))' \
+    '([.resultSets[].results[]] as $results | ($results | length > 0) and any($results[]; (.society_name | ascii_downcase) == (env.FIRST_SOCIETY_NAME | ascii_downcase)))' \
     "expected fuzzy recall for ${FIRST_SOCIETY_TYPO} typo"
 fi
 
@@ -391,28 +391,28 @@ else
   printf "  %s Society search — unexpected HTTP %s\n" "$(red "✗")" "$SOC_SEARCH_CODE"
 fi
 
-# ── Search: Intent Parsing ──
+# ── Search: Result-set Contract ──
 echo ""
-echo "Search Intent Parsing"
-check "Budget parsed from '3BHK Whitefield under 2Cr'" \
+echo "Search Result-set Contract"
+check "Search result sets carry stable branch identities" \
   "${BASE}/api/search?q=3BHK%20Whitefield%20under%202Cr" \
-  '.intent.budget_max != null and .intent.budget_max > 0' \
-  "expected budget_max to be parsed"
+  '.resultSets | all((.branchId | startswith("branch-")) and (.label | type == "string") and (.results | type == "array"))' \
+  "expected branch ids, buyer labels, and result arrays"
 
-check "BHK parsed correctly" \
+check "Search result tiers use the public contract" \
   "${BASE}/api/search?q=3BHK%20Whitefield%20under%202Cr" \
-  '.intent.bhk == 3' \
-  "expected bhk=3"
+  '[.resultSets[].results[]] | all(.match_tier == "exact" or .match_tier == "supported")' \
+  "expected exact or supported tiers"
 
-check "Area parsed correctly" \
+check "Search response omits internal execution state" \
   "${BASE}/api/search?q=3BHK%20Whitefield%20under%202Cr" \
-  '.intent.area == "Whitefield"' \
-  "expected area=Whitefield"
+  '(has("intent") | not) and (has("results") | not) and (has("knowledgeContext") | not) and (has("relaxations") | not)' \
+  "expected parser, flat-result, knowledge, and relaxation internals to be absent"
 
-check "Search results sorted by score descending" \
+check "Search results stay sorted within each branch" \
   "${BASE}/api/search?q=3BHK%20Whitefield" \
-  '[.results[].match_score] | . as $scores | ($scores == ($scores | sort | reverse))' \
-  "expected results sorted by match_score desc"
+  '.resultSets | all([.results[].match_score] as $scores | ($scores == ($scores | sort | reverse)))' \
+  "expected each result set to be sorted by match_score desc"
 
 # ── Property Detail: Canonical Evidence ──
 echo ""

@@ -12,9 +12,10 @@ use crate::knowledge::FactValue;
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
 use super::{
-    read_edges_parquet, read_entities_parquet, read_facts_parquet, read_search_metadata_parquet,
-    BundleArtifactKind, ParquetReadError, ServingBundleManifest, ServingFactIndex,
-    ServingFactRecord, ServingQuarantineReport, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    read_edges_parquet, read_entities_parquet, read_entity_aliases_parquet, read_facts_parquet,
+    read_search_metadata_parquet, validate_society_aliases, BundleArtifactKind, ParquetReadError,
+    ServingBundleManifest, ServingFactIndex, ServingFactRecord, ServingQuarantineReport,
+    SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 
 const PUBLIC_MEDIA_PREFIX: &str = "/societies/";
@@ -35,6 +36,7 @@ pub struct ServingBundleValidationReport {
     pub bundle_version: String,
     pub artifacts_checked: usize,
     pub entity_count: usize,
+    pub entity_alias_count: usize,
     pub property_count: usize,
     pub fact_count: usize,
     pub search_metadata_count: usize,
@@ -248,6 +250,17 @@ pub async fn validate_search_serving_candidate(
     if manifest.format_version >= 7 {
         required_artifact_kinds.push(BundleArtifactKind::QuarantineJson);
     }
+    if manifest.format_version >= 8 {
+        required_artifact_kinds.push(BundleArtifactKind::EntityAliasesParquet);
+        if manifest.entity_alias_parquet_key.is_none() {
+            issue(
+                &mut issues,
+                "missing_entity_alias_table",
+                "format 8 serving bundle has no materialized entity alias table",
+                None,
+            );
+        }
+    }
     for required in required_artifact_kinds {
         if !artifact_kinds.contains(&format!("{required:?}")) {
             issue(
@@ -267,6 +280,9 @@ pub async fn validate_search_serving_candidate(
     ];
     if let Some(edge_key) = manifest.edge_parquet_key.as_ref() {
         manifest_table_keys.push(edge_key);
+    }
+    if let Some(alias_key) = manifest.entity_alias_parquet_key.as_ref() {
+        manifest_table_keys.push(alias_key);
     }
     if let Some(quarantine_key) = manifest.quarantine_report_key.as_ref() {
         manifest_table_keys.push(quarantine_key);
@@ -304,6 +320,10 @@ pub async fn validate_search_serving_candidate(
             .get_bytes(&validated_key(&manifest.entity_parquet_key)?)
             .await?,
     )?;
+    let entity_aliases = match manifest.entity_alias_parquet_key.as_deref() {
+        Some(key) => read_entity_aliases_parquet(&lake.get_bytes(&validated_key(key)?).await?)?,
+        None => Vec::new(),
+    };
     let facts = read_facts_parquet(
         &lake
             .get_bytes(&validated_key(&manifest.fact_parquet_key)?)
@@ -337,6 +357,12 @@ pub async fn validate_search_serving_candidate(
     );
     check_count(
         &mut issues,
+        "entity_alias_count_mismatch",
+        manifest.entity_alias_count,
+        entity_aliases.len(),
+    );
+    check_count(
+        &mut issues,
         "fact_count_mismatch",
         manifest.fact_count,
         facts.len(),
@@ -355,6 +381,14 @@ pub async fn validate_search_serving_candidate(
     );
 
     validate_record_relations(&entities, &facts, &metadata, &edges, &mut issues);
+    if let Err(error) = validate_society_aliases(&entity_aliases, &entities) {
+        issue(
+            &mut issues,
+            "invalid_entity_aliases",
+            error.to_string(),
+            manifest.entity_alias_parquet_key.clone(),
+        );
+    }
     let mut fact_index = ServingFactIndex::from_records(facts.clone(), metadata.clone());
     fact_index.add_society_aliases(&entities);
     let properties = crate::data_loader::properties_from_serving_records_with_edges(
@@ -387,6 +421,7 @@ pub async fn validate_search_serving_candidate(
         bundle_version: manifest.bundle_version,
         artifacts_checked: manifest.artifacts.len(),
         entity_count: entities.len(),
+        entity_alias_count: entity_aliases.len(),
         property_count: properties.len(),
         fact_count: facts.len(),
         search_metadata_count: metadata.len(),
@@ -727,27 +762,11 @@ fn validate_property_projection(
                 Some(property.id.clone()),
             );
         }
-        if property.hero_image.trim().is_empty() || property.images.is_empty() {
-            issue(
-                issues,
-                "incomplete_property_media",
-                "property card requires a hero image and gallery",
-                Some(property.id.clone()),
-            );
-        }
         if property.area.trim().is_empty() {
             issue(
                 issues,
                 "incomplete_property_area",
                 "property card requires an area",
-                Some(property.id.clone()),
-            );
-        }
-        if property.builder_name.trim().is_empty() {
-            issue(
-                issues,
-                "incomplete_property_builder",
-                "property card requires a builder",
                 Some(property.id.clone()),
             );
         }
@@ -760,6 +779,22 @@ fn validate_property_projection(
                 issues,
                 "incomplete_property_price",
                 "property card requires a positive price or an explicit unavailable state",
+                Some(property.id.clone()),
+            );
+        }
+        if property.hero_image.trim().is_empty() || property.images.is_empty() {
+            issue(
+                issues,
+                "incomplete_property_media",
+                "property card requires a hero image and gallery",
+                Some(property.id.clone()),
+            );
+        }
+        if property.builder_name.trim().is_empty() {
+            issue(
+                issues,
+                "incomplete_property_builder",
+                "property card requires a builder",
                 Some(property.id.clone()),
             );
         }

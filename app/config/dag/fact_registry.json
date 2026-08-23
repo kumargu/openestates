@@ -1258,6 +1258,9 @@
           "upkeep is good",
           "daily upkeep",
           "clean common areas",
+          "cared for",
+          "managed well",
+          "clean shared spaces",
           "low maintenance"
         ],
         "label": "maintenance",
@@ -1433,7 +1436,14 @@
           "review strength",
           "resident reviews",
           "strong resident reviews",
+          "strongly reviewed",
+          "stronger reviews",
           "residents say",
+          "residents speak well",
+          "residents consistently speak well",
+          "rate it well",
+          "positive resident feedback",
+          "well rated by residents",
           "resident snippets",
           "community proof",
           "resident themes",
@@ -1490,7 +1500,8 @@
           "possession_status",
           "project_status"
         ],
-        "weight": 1.2
+        "weight": 1.2,
+        "require_evidence": true
       },
       {
         "rank": 14,
@@ -1543,7 +1554,8 @@
           "home_timeline_state",
           "project_status"
         ],
-        "weight": 1.0
+        "weight": 1.0,
+        "require_evidence": true
       },
       {
         "rank": 17,
@@ -1675,9 +1687,17 @@
         "rank": 24,
         "patterns": [
           "quiet",
+          "quietness",
+          "quieter",
+          "quieter society",
           "peaceful",
           "calm",
           "calmer",
+          "quiet at night",
+          "low traffic noise",
+          "no honking",
+          "without horns",
+          "horn noise",
           "less chaos"
         ],
         "label": "quiet neighborhood",
@@ -1826,7 +1846,8 @@
           "possession_status",
           "project_status"
         ],
-        "weight": 1.2
+        "weight": 1.2,
+        "require_evidence": true
       },
       {
         "rank": 33,
@@ -1866,6 +1887,12 @@
           "quick commute",
           "office commute",
           "daily commute",
+          "short travel time",
+          "easy weekday travel",
+          "painless commute",
+          "not hours of travel",
+          "hours travelling",
+          "hours traveling",
           "airport road",
           "emergency access",
           "medical emergency access",
@@ -2138,7 +2165,13 @@
         "patterns": [
           "good construction quality",
           "quality construction",
-          "well built homes"
+          "well built homes",
+          "solid build",
+          "solidly built",
+          "solidly the homes are built",
+          "good workmanship",
+          "workmanship",
+          "durable finishes"
         ],
         "label": "construction quality",
         "expanded_keys": [
@@ -2169,6 +2202,8 @@
           "quiet society",
           "peaceful society",
           "calm society",
+          "quiet at night",
+          "no honking",
           "low noise"
         ],
         "label": "quiet neighborhood",
@@ -2184,7 +2219,10 @@
         "patterns": [
           "good open space",
           "spacious common areas",
-          "uncrowded society"
+          "uncrowded society",
+          "tower spacing",
+          "space between towers",
+          "not tightly packed"
         ],
         "label": "open space",
         "expanded_keys": [
@@ -2214,7 +2252,11 @@
         "patterns": [
           "airy homes",
           "good ventilation",
-          "natural airflow"
+          "natural airflow",
+          "cross ventilation",
+          "fresh airflow",
+          "not stuffy",
+          "not feel stuffy"
         ],
         "label": "ventilation",
         "expanded_keys": [
@@ -2238,6 +2280,9 @@
           "flooding",
           "roads flood",
           "roads flood during rain",
+          "standing water",
+          "heavy rain access",
+          "rain flooded roads",
           "rainwater",
           "dry access"
         ],
@@ -2257,6 +2302,10 @@
         "rank": 2,
         "patterns": [
           "traffic",
+          "gridlock",
+          "traffic jam",
+          "jammed roads",
+          "rush hour congestion",
           "road chaos",
           "outer ring road chaos",
           "traffic reality"
@@ -2279,6 +2328,9 @@
           "airport noise",
           "main road noise",
           "noisy main road",
+          "honking",
+          "loud at night",
+          "late night noise",
           "construction noise"
         ],
         "label": "noise",
@@ -2326,6 +2378,10 @@
           "prelaunch",
           "pre-launch",
           "prelaunch marketing",
+          "handover uncertainty",
+          "uncertain handover",
+          "moving completion date",
+          "shifting possession date",
           "under construction delays"
         ],
         "label": "delay risk",
@@ -2531,6 +2587,9 @@
           "poor maintenance",
           "bad maintenance",
           "poor association management",
+          "neglected common areas",
+          "poorly managed common spaces",
+          "basic upkeep neglected",
           "leaking walls",
           "lift problems",
           "lift reliability is bad",
@@ -2612,6 +2671,8 @@
         "patterns": [
           "too dense",
           "too packed",
+          "towers packed tightly",
+          "packed tightly together",
           "crowding",
           "too crowded",
           "cramped layouts"
@@ -2953,6 +3014,60 @@
   },
   "numeric_constraints": [
     {
+      "dimension": "carpet_area",
+      "label": "Carpet area",
+      "fact_keys": [],
+      "runtime_field": "carpet_area_sqft",
+      "query_units": [
+        {
+          "unit": "sqft",
+          "aliases": ["sqft", "sq ft", "square feet"],
+          "to_canonical": 1.0
+        }
+      ],
+      "qualitative_bounds": [
+        {
+          "patterns": ["high carpet area", "large carpet area", "large usable area"],
+          "operator": "min",
+          "value": 2000.0,
+          "unit": "sqft"
+        }
+      ],
+      "proof_sources": [],
+      "scoring_method": "serving-property"
+    },
+    {
+      "dimension": "lake_distance",
+      "label": "Nearest observed lake",
+      "fact_keys": ["nearby_lakes"],
+      "query_units": [
+        {
+          "unit": "km",
+          "aliases": ["km", "kms", "kilometer", "kilometers"],
+          "to_canonical": 1.0
+        }
+      ],
+      "qualitative_bounds": [
+        {
+          "patterns": [
+            "far from lake",
+            "far away from lake",
+            "away from lake",
+            "far from lake bed",
+            "far away from lake bed",
+            "far way from lake bed"
+          ],
+          "operator": "min",
+          "value": 0.5,
+          "unit": "km"
+        }
+      ],
+      "value_kind": "distance_km_in_text",
+      "aggregation": "minimum",
+      "proof_sources": ["Google"],
+      "scoring_method": "serving-nearby-distance"
+    },
+    {
       "dimension": "land_area",
       "label": "RERA land area",
       "fact_keys": [
@@ -2991,6 +3106,14 @@
             "percentage"
           ],
           "to_canonical": 1.0
+        }
+      ],
+      "qualitative_bounds": [
+        {
+          "patterns": ["large open space", "high open area", "lots of open space"],
+          "operator": "min",
+          "value": 60.0,
+          "unit": "percent"
         }
       ],
       "proof_sources": [

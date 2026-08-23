@@ -1,3 +1,5 @@
+#![allow(clippy::items_after_test_module)]
+
 use std::sync::Arc;
 
 use axum::extract::{Query, State};
@@ -5,12 +7,11 @@ use axum::Json;
 use serde::Deserialize;
 
 use crate::knowledge::edge::Relation;
-use crate::knowledge::fact::ScoringDirection;
 use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::{KnowledgeGraph, SearchEvent};
 use crate::search::{
     guard_search_query, intent, no_results_guidance, schema, KnowledgeContext, SearchEngine,
-    SearchEvidenceGap, SearchResponse, SearchResultCard, SourcedClaim,
+    SearchEvidenceGap, SearchResponse, SearchResultCard, SearchResultSet, SourcedClaim,
 };
 use crate::state::{
     AppState, CachedSearchOutput, EnrichmentGapPersistence, SearchCacheKey, SearchLogMessage,
@@ -36,26 +37,10 @@ pub async fn search_properties(
     if query.trim().is_empty() {
         return Json(SearchResponse {
             query,
-            intent: intent::SearchIntent {
-                area: None,
-                excluded_areas: Vec::new(),
-                bhk: None,
-                budget_max: None,
-                hard_constraints: Vec::new(),
-                preferences: Vec::new(),
-                positive_preferences: Vec::new(),
-                negative_preferences: Vec::new(),
-                accepted_tradeoffs: Vec::new(),
-                unsupported_inventory_types: Vec::new(),
-                buyer_archetype: None,
-            },
-            results: Vec::new(),
+            result_sets: Vec::new(),
+            total_matches: 0,
             area_context: None,
-            total_results: 0,
-            focus: None,
-            knowledge_context: None,
-            search_diagnostics: None,
-            relaxations: Vec::new(),
+            state: "no_matches".to_string(),
             search_guidance: None,
         });
     }
@@ -76,14 +61,10 @@ pub async fn search_properties(
 
             return Json(SearchResponse {
                 query,
-                intent: guarded.intent,
-                results: Vec::new(),
+                result_sets: Vec::new(),
+                total_matches: 0,
                 area_context: None,
-                total_results: 0,
-                focus: None,
-                knowledge_context: None,
-                search_diagnostics: None,
-                relaxations: Vec::new(),
+                state: "no_matches".to_string(),
                 search_guidance: Some(guarded.guidance),
             });
         }
@@ -99,10 +80,10 @@ pub async fn search_properties(
     }
 
     let serving_facts = Some(&snapshot.bundle.fact_index);
-    let (engine_output, focus) = {
+    let engine_output = {
         let graph = state.knowledge.read().await;
 
-        let engine_output = SearchEngine {
+        SearchEngine {
             properties: &snapshot.properties,
             search_index: &snapshot.search_index,
             serving_bundle: Some(snapshot.bundle.as_ref()),
@@ -111,24 +92,11 @@ pub async fn search_properties(
             societies: &snapshot.societies,
             graph: Some(&graph),
         }
-        .search(&query);
-
-        let focus = crate::search::build_search_result_focus(crate::search::FocusBuildInputs {
-            query: &query,
-            intent: &engine_output.intent,
-            results: &engine_output.results,
-            properties: &snapshot.properties,
-            society_names: &snapshot.society_names,
-            societies: &snapshot.societies,
-            serving_facts,
-            graph: Some(&graph),
-        });
-
-        (engine_output, focus)
+        .search(&query)
     };
     let parsed_intent = engine_output.intent;
     let results = engine_output.results;
-    let relaxations = engine_output.relaxations;
+    let result_sets = engine_output.result_sets;
     let search_evidence_gaps = engine_output.evidence_gaps;
 
     // Look up area context if the intent identified an area.
@@ -140,12 +108,12 @@ pub async fn search_properties(
             .cloned()
     });
 
-    let total_results = results.len();
+    let results_returned = results.len();
     let evidence_claims = result_evidence_claims(&results);
 
     // --- Extract knowledge context from the graph ---
     let graph = state.knowledge.read().await;
-    let (knowledge_context, graph_nodes_hit, enrichment_gaps, gap_candidate_society_ids) = {
+    let (_knowledge_context, graph_nodes_hit, enrichment_gaps, gap_candidate_society_ids) = {
         let mut matched_society_ids: Vec<String> = Vec::new();
         for result in &results {
             if let Some(society_id) = snapshot
@@ -183,7 +151,7 @@ pub async fn search_properties(
     drop(graph);
 
     // --- Log search event ---
-    let mut event = SearchEvent::new(query.clone(), parsed_intent.clone(), total_results);
+    let mut event = SearchEvent::new(query.clone(), parsed_intent.clone(), results_returned);
     event.graph_nodes_hit = graph_nodes_hit;
     event.enrichment_gaps = enrichment_gaps.clone();
     let mut log_messages = vec![SearchLogMessage::SearchEvent(event)];
@@ -193,7 +161,7 @@ pub async fn search_properties(
                 gaps: enrichment_gaps.clone(),
                 query: query.clone(),
                 intent: parsed_intent.clone(),
-                results_returned: total_results,
+                results_returned,
                 top_candidate_society_ids: gap_candidate_society_ids.clone(),
             },
         ));
@@ -202,38 +170,39 @@ pub async fn search_properties(
         enqueue_search_log(&state, message);
     }
 
-    let buyer_knowledge_context = KnowledgeContext {
-        claims: knowledge_context.claims,
-        nodes_consulted: knowledge_context.nodes_consulted,
-        learning_gaps: Vec::new(),
-    };
-
+    let total_matches = unique_result_count(&result_sets);
     let response = SearchResponse {
         query,
-        intent: parsed_intent,
-        results,
+        result_sets,
+        total_matches,
         area_context,
-        total_results,
-        focus,
-        knowledge_context: Some(buyer_knowledge_context),
-        search_diagnostics: None,
-        relaxations,
-        search_guidance: (total_results == 0).then(no_results_guidance),
+        state: if total_matches == 0 {
+            "no_matches".to_string()
+        } else {
+            "results".to_string()
+        },
+        search_guidance: (total_matches == 0).then(no_results_guidance),
     };
-    if response.total_results > 0 {
-        state
-            .search_cache
-            .put(
-                cache_key,
-                CachedSearchOutput {
-                    response: Arc::new(response.clone()),
-                    log_messages,
-                },
-            )
-            .await;
-    }
+    state
+        .search_cache
+        .put(
+            cache_key,
+            CachedSearchOutput {
+                response: Arc::new(response.clone()),
+                log_messages,
+            },
+        )
+        .await;
 
     Json(response)
+}
+
+fn unique_result_count(result_sets: &[SearchResultSet]) -> usize {
+    result_sets
+        .iter()
+        .flat_map(|set| set.results.iter().map(|result| result.card.id.as_str()))
+        .collect::<std::collections::HashSet<_>>()
+        .len()
 }
 
 fn merge_search_evidence_gaps(
@@ -448,20 +417,6 @@ struct GapPreference {
 
 fn gap_preferences(intent: &intent::SearchIntent) -> Vec<GapPreference> {
     let mut prefs = Vec::new();
-
-    for constraint in &intent.hard_constraints {
-        if let Some(schema) = schema::numeric_constraint_schema(&constraint.field) {
-            let mut match_labels = vec![constraint.raw_text.clone(), schema.label.to_string()];
-            match_labels.push(schema.dimension.replace('_', " "));
-            prefs.push(GapPreference {
-                label: constraint.raw_text.clone(),
-                match_labels,
-                candidate_fact_keys: schema.fact_keys.iter().map(|key| key.to_string()).collect(),
-                gap_fact_keys: Vec::new(),
-                reason: format!("Hard constraint: {}", constraint.raw_text),
-            });
-        }
-    }
 
     for pref in &intent.positive_preferences {
         prefs.push(GapPreference {
@@ -702,357 +657,61 @@ fn fuzzy_preference_match(left: &str, right: &str) -> bool {
     left == right || left.contains(&right) || right.contains(&left)
 }
 
-// ---------------------------------------------------------------------------
-// Graph-driven preference scoring (used by text.rs)
-// ---------------------------------------------------------------------------
-
-/// Score how well a node's facts match a user preference, using the graph's own
-/// scoring_hint metadata. Returns a score 0.0-2.0 and fact detail for MatchReason.
-pub fn graph_preference_score_detailed(
-    graph: &KnowledgeGraph,
-    society_id: &str,
-    preference: &str,
-) -> Option<(f64, GraphFactDetail)> {
-    graph_preference_score_for_keys(graph, society_id, preference, &[])
-}
-
-pub fn graph_preference_score_for_keys(
-    graph: &KnowledgeGraph,
-    society_id: &str,
-    preference: &str,
-    candidate_fact_keys: &[String],
-) -> Option<(f64, GraphFactDetail)> {
-    let node_id = society_node_id(society_id);
-    let node = graph.get_node(&node_id)?;
-    let pref_lower = preference.to_lowercase();
-
-    // Find any fact that declares it answers this preference AND has a scoring_hint.
-    // Uses contains-based fuzzy matching so "ready to move" matches
-    // "ready to move", "ready possession", etc. and vice versa.
-    for fact in &node.facts {
-        let answers = fact.answers_preferences.iter().any(|ap| {
-            let ap_lower = ap.to_lowercase();
-            ap_lower == pref_lower
-                || ap_lower.contains(&pref_lower)
-                || pref_lower.contains(&ap_lower)
-        });
-
-        let key_matches = candidate_fact_keys
-            .iter()
-            .any(|key| key.eq_ignore_ascii_case(&fact.key));
-        let keyed_match = answers
-            || (key_matches
-                && fact
-                    .scoring_hint
-                    .as_ref()
-                    .is_some_and(|hint| !matches!(hint.direction, ScoringDirection::TextMatch)));
-        if (!candidate_fact_keys.is_empty() && !keyed_match)
-            || (candidate_fact_keys.is_empty() && !answers)
-        {
-            continue;
-        }
-
-        let score = if let Some(ref hint) = fact.scoring_hint {
-            score_fact_with_hint(&fact.value, hint)
-        } else {
-            1.0
-        };
-        if score <= 0.0 {
-            continue;
-        }
-
-        let display = render_template(
-            fact.display_template.as_deref().unwrap_or("{value}"),
-            &fact.value,
-        );
-
-        let detail = GraphFactDetail {
-            fact_key: fact.key.clone(),
-            display,
-            confidence: fact.confidence,
-            source_type: format!("{:?}", fact.source.source_type),
-        };
-
-        return Some((score, detail));
-    }
-
-    if let Some(schema) = schema::numeric_evidence_schema(preference) {
-        for fact in &node.facts {
-            let key_matches = schema
-                .fact_keys
-                .iter()
-                .any(|key| key.eq_ignore_ascii_case(&fact.key))
-                || candidate_fact_keys
-                    .iter()
-                    .any(|key| key.eq_ignore_ascii_case(&fact.key));
-            if !key_matches {
-                continue;
-            }
-            let Some(score) = score_fact_with_numeric_schema(&fact.value, schema) else {
-                continue;
-            };
-            if score <= 0.0 {
-                continue;
-            }
-            let value = render_template("{value}", &fact.value);
-            return Some((
-                score,
-                GraphFactDetail {
-                    fact_key: fact.key.clone(),
-                    display: format!("{}: {}", schema.display_label, value),
-                    confidence: fact.confidence,
-                    source_type: format!("{:?}", fact.source.source_type),
-                },
-            ));
-        }
-    }
-
-    // --- Cross-node scoring: traverse BuiltBy edge to check builder facts ---
-    if let Some(result) = check_builder_facts(graph, &node_id, &pref_lower, candidate_fact_keys) {
-        return Some(result);
-    }
-
-    None // No fact answers this preference
-}
-
-/// Traverse BuiltBy edges from a society node to its builder node and check
-/// builder-level facts for preference matches. Returns the first match found.
-fn check_builder_facts(
-    graph: &KnowledgeGraph,
-    society_node_id: &str,
-    pref_lower: &str,
-    candidate_fact_keys: &[String],
-) -> Option<(f64, GraphFactDetail)> {
-    for edge in graph.edges_from(society_node_id) {
-        if edge.relation != Relation::BuiltBy {
-            continue;
-        }
-        let builder_node = graph.get_node(&edge.to)?;
-        for fact in &builder_node.facts {
-            let answers = fact.answers_preferences.iter().any(|ap| {
-                let ap_lower = ap.to_lowercase();
-                ap_lower == *pref_lower
-                    || ap_lower.contains(pref_lower)
-                    || pref_lower.contains(&ap_lower)
-            });
-
-            let key_matches = candidate_fact_keys
-                .iter()
-                .any(|key| key.eq_ignore_ascii_case(&fact.key));
-            let keyed_match = answers
-                || (key_matches
-                    && fact.scoring_hint.as_ref().is_some_and(|hint| {
-                        !matches!(hint.direction, ScoringDirection::TextMatch)
-                    }));
-            if (!candidate_fact_keys.is_empty() && !keyed_match)
-                || (candidate_fact_keys.is_empty() && !answers)
-            {
-                continue;
-            }
-
-            let score = if let Some(ref hint) = fact.scoring_hint {
-                score_fact_with_hint(&fact.value, hint)
-            } else {
-                1.0
-            };
-            if score <= 0.0 {
-                continue;
-            }
-
-            let display = render_template(
-                fact.display_template.as_deref().unwrap_or("{value}"),
-                &fact.value,
-            );
-
-            let detail = GraphFactDetail {
-                fact_key: fact.key.clone(),
-                display,
-                confidence: fact.confidence,
-                source_type: format!("{:?}", fact.source.source_type),
-            };
-
-            return Some((score, detail));
-        }
-    }
-    None
-}
-
-/// Metadata from a graph fact, used to build MatchReason.
-pub struct GraphFactDetail {
-    pub fact_key: String,
-    pub display: String,
-    pub confidence: f32,
-    pub source_type: String,
-}
-
-/// Apply a scoring hint to a fact value. Returns 0.0 - weight (typically 0-2).
-fn score_fact_with_hint(
-    value: &crate::knowledge::FactValue,
-    hint: &crate::knowledge::fact::ScoringHint,
-) -> f64 {
-    let weight = hint.weight as f64;
-
-    match &hint.direction {
-        ScoringDirection::HigherIsBetter => {
-            let num = fact_to_numeric(value).unwrap_or(0.0);
-            if hint.thresholds.len() >= 2 {
-                // thresholds: [good, ok] e.g. [0.8, 0.5]
-                if num >= hint.thresholds[0] {
-                    weight // full score
-                } else if num >= hint.thresholds[1] {
-                    weight * 0.5 // partial
-                } else {
-                    0.0
-                }
-            } else {
-                // No thresholds: linear scale assuming 0-1 range
-                num.clamp(0.0, 1.0) * weight
-            }
-        }
-        ScoringDirection::LowerIsBetter => {
-            let num = fact_to_numeric(value).unwrap_or(f64::MAX);
-            if hint.thresholds.len() >= 2 {
-                // thresholds: [good, ok] e.g. [10.0, 20.0] for metro_distance
-                if num <= hint.thresholds[0] {
-                    weight
-                } else if num <= hint.thresholds[1] {
-                    weight * 0.5
-                } else {
-                    0.0
-                }
-            } else {
-                // No thresholds: inverse scale
-                let score = (1.0 - num.clamp(0.0, 1.0)) * weight;
-                score.max(0.0)
-            }
-        }
-        ScoringDirection::TextMatch => {
-            // For text facts: if matched via answers_preferences, the match already
-            // proves relevance — score at full weight unless the value is explicitly
-            // negative. This handles category values like "ready_to_move",
-            // "under_construction" etc. that aren't sentiment words.
-            let text = fact_to_search_text(value).to_lowercase();
-            let negative = [
-                "poor",
-                "bad",
-                "low",
-                "terrible",
-                "worst",
-                "dangerous",
-                "unsafe",
-            ];
-            let partial = ["average", "moderate", "mixed", "ok"];
-
-            if negative.iter().any(|n| text.contains(n)) {
-                0.0
-            } else if partial.iter().any(|p| text.contains(p)) {
-                weight * 0.5
-            } else if !text.is_empty() {
-                // Non-empty, non-negative text: score at full weight.
-                // This covers both sentiment words ("good", "high") and
-                // category values ("ready_to_move", "new_launch") that were
-                // matched via answers_preferences.
-                weight
-            } else {
-                0.0
-            }
-        }
-    }
-}
-
-fn score_fact_with_numeric_schema(
-    value: &crate::knowledge::FactValue,
-    schema: &schema::NumericEvidenceSchema,
-) -> Option<f64> {
-    let num = fact_to_numeric(value)?;
-    if !num.is_finite() {
-        return None;
-    }
-    let weight = schema.score_delta.clamp(0.0, 2.0);
-    if schema.direction.eq_ignore_ascii_case("HigherIsBetter")
-        || schema.direction.eq_ignore_ascii_case("higher_is_better")
-    {
-        if schema.thresholds.len() >= 2 {
-            if num >= schema.thresholds[0] {
-                Some(weight)
-            } else if num >= schema.thresholds[1] {
-                Some(weight * 0.5)
-            } else {
-                None
-            }
-        } else {
-            Some(num.clamp(0.0, 1.0) * weight).filter(|score| *score > 0.0)
-        }
-    } else if schema.direction.eq_ignore_ascii_case("LowerIsBetter")
-        || schema.direction.eq_ignore_ascii_case("lower_is_better")
-    {
-        if schema.thresholds.len() >= 2 {
-            if num <= schema.thresholds[0] {
-                Some(weight)
-            } else if num <= schema.thresholds[1] {
-                Some(weight * 0.5)
-            } else {
-                None
-            }
-        } else {
-            Some((1.0 - num.clamp(0.0, 1.0)) * weight).filter(|score| *score > 0.0)
-        }
-    } else {
-        None
-    }
-}
-
-fn fact_to_numeric(value: &crate::knowledge::FactValue) -> Option<f64> {
-    match value {
-        crate::knowledge::FactValue::Numeric(n) => Some(*n),
-        crate::knowledge::FactValue::Score { value: v, .. } => Some(*v),
-        _ => None,
-    }
-}
-
-fn fact_to_search_text(value: &crate::knowledge::FactValue) -> String {
-    match value {
-        crate::knowledge::FactValue::Text(s) => s.clone(),
-        crate::knowledge::FactValue::Tags(tags) => tags.join(" "),
-        crate::knowledge::FactValue::Score { explanation, .. } => explanation.clone(),
-        crate::knowledge::FactValue::Bool(value) => value.to_string(),
-        crate::knowledge::FactValue::Numeric(value) => value.to_string(),
-    }
-}
-
-/// Render a display template by replacing `{value}` with the fact's value.
-fn render_template(template: &str, value: &crate::knowledge::FactValue) -> String {
-    let value_str = match value {
-        crate::knowledge::FactValue::Text(s) => s.clone(),
-        crate::knowledge::FactValue::Numeric(n) => {
-            if *n == (*n as i64) as f64 {
-                format!("{}", *n as i64)
-            } else {
-                format!("{:.1}", n)
-            }
-        }
-        crate::knowledge::FactValue::Bool(b) => {
-            if *b {
-                "yes".to_string()
-            } else {
-                "no".to_string()
-            }
-        }
-        crate::knowledge::FactValue::Tags(tags) => tags.join(", "),
-        crate::knowledge::FactValue::Score {
-            value: v,
-            explanation: _,
-        } => format!("{:.1}", v),
-    };
-    template.replace("{value}", &value_str)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::knowledge::fact::{ScoringDirection, ScoringHint};
     use crate::knowledge::FactValue;
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[test]
+    fn buyer_response_exposes_result_sets_without_internal_search_state() {
+        let response = SearchResponse {
+            query: "3bhk whitefield".to_string(),
+            result_sets: Vec::new(),
+            total_matches: 0,
+            area_context: None,
+            state: "no_matches".to_string(),
+            search_guidance: None,
+        };
+
+        let value = serde_json::to_value(response).expect("search response should serialize");
+        assert_eq!(value["query"], "3bhk whitefield");
+        assert_eq!(value["resultSets"], serde_json::json!([]));
+        assert_eq!(value["totalMatches"], 0);
+        assert_eq!(value["state"], "no_matches");
+        assert!(value.get("searchGuidance").is_none());
+        for internal in [
+            "intent",
+            "results",
+            "searchDiagnostics",
+            "knowledgeContext",
+            "relaxations",
+        ] {
+            assert!(value.get(internal).is_none(), "leaked {internal}");
+        }
+    }
+
+    #[test]
+    fn buyer_response_can_expose_guidance_without_parser_state() {
+        let response = SearchResponse {
+            query: "find me something good".to_string(),
+            result_sets: Vec::new(),
+            total_matches: 0,
+            area_context: None,
+            state: "no_matches".to_string(),
+            search_guidance: Some(crate::search::SearchGuidance {
+                mode: "needs_more_specifics".to_string(),
+                title: "Tell us one thing that matters".to_string(),
+                message: "Add a place, budget, or home size.".to_string(),
+                suggestions: Vec::new(),
+            }),
+        };
+
+        let value = serde_json::to_value(response).expect("search response should serialize");
+        assert_eq!(value["searchGuidance"]["mode"], "needs_more_specifics");
+        assert!(value.get("intent").is_none());
+        assert!(value.get("searchDiagnostics").is_none());
+    }
 
     #[test]
     fn search_evidence_gaps_are_persisted_and_available_only_for_debug_context() {
@@ -1091,6 +750,19 @@ mod tests {
     }
 
     #[test]
+    fn hard_constraints_are_not_flattened_into_result_gap_preferences() {
+        let parsed = intent::parse_intent("3BHK above 10 acres under 2Cr or 4BHK under 4Cr");
+
+        assert!(!parsed.hard_constraints.is_empty());
+        assert!(
+            gap_preferences(&parsed)
+                .iter()
+                .all(|preference| !preference.label.contains("acres")),
+            "branch-local hard constraints must not become global result gaps"
+        );
+    }
+
+    #[test]
     fn cached_response_and_log_messages_are_rebased_to_current_query() {
         let intent = intent::parse_intent("3bhk whitefield");
         let mut event = SearchEvent::new("3bhk whitefield".to_string(), intent.clone(), 2);
@@ -1102,14 +774,10 @@ mod tests {
         });
         let response = SearchResponse {
             query: "3bhk whitefield".to_string(),
-            intent: intent.clone(),
-            results: Vec::new(),
+            result_sets: Vec::new(),
+            total_matches: 0,
             area_context: None,
-            total_results: 2,
-            focus: None,
-            knowledge_context: None,
-            search_diagnostics: None,
-            relaxations: Vec::new(),
+            state: "no_matches".to_string(),
             search_guidance: None,
         };
         let messages = vec![
@@ -1176,120 +844,6 @@ mod tests {
 
         assert_eq!(dropped.load(Ordering::Relaxed), 1);
         assert!(rx.try_recv().is_ok());
-    }
-
-    // --- Day 62: TextMatch scoring fix tests ---
-
-    #[test]
-    fn test_textmatch_scores_category_values() {
-        // "ready_to_move" is a category value, not a sentiment word.
-        // It should score at full weight because it's non-empty and non-negative.
-        let value = FactValue::Text("ready_to_move".to_string());
-        let hint = ScoringHint {
-            direction: ScoringDirection::TextMatch,
-            weight: 3.0,
-            thresholds: vec![],
-        };
-        let score = score_fact_with_hint(&value, &hint);
-        assert_eq!(
-            score, 3.0,
-            "ready_to_move should score at full weight (3.0), got {}",
-            score
-        );
-    }
-
-    #[test]
-    fn test_textmatch_scores_under_construction() {
-        let value = FactValue::Text("under_construction".to_string());
-        let hint = ScoringHint {
-            direction: ScoringDirection::TextMatch,
-            weight: 3.0,
-            thresholds: vec![],
-        };
-        let score = score_fact_with_hint(&value, &hint);
-        assert_eq!(score, 3.0, "under_construction should score at full weight");
-    }
-
-    #[test]
-    fn test_textmatch_scores_new_launch() {
-        let value = FactValue::Text("new_launch".to_string());
-        let hint = ScoringHint {
-            direction: ScoringDirection::TextMatch,
-            weight: 3.0,
-            thresholds: vec![],
-        };
-        let score = score_fact_with_hint(&value, &hint);
-        assert_eq!(score, 3.0, "new_launch should score at full weight");
-    }
-
-    #[test]
-    fn test_textmatch_zero_for_negative_values() {
-        let value = FactValue::Text("poor".to_string());
-        let hint = ScoringHint {
-            direction: ScoringDirection::TextMatch,
-            weight: 3.0,
-            thresholds: vec![],
-        };
-        let score = score_fact_with_hint(&value, &hint);
-        assert_eq!(score, 0.0, "negative value 'poor' should score 0.0");
-    }
-
-    #[test]
-    fn test_textmatch_zero_for_empty_string() {
-        let value = FactValue::Text("".to_string());
-        let hint = ScoringHint {
-            direction: ScoringDirection::TextMatch,
-            weight: 3.0,
-            thresholds: vec![],
-        };
-        let score = score_fact_with_hint(&value, &hint);
-        assert_eq!(score, 0.0, "empty text should score 0.0");
-    }
-
-    #[test]
-    fn test_textmatch_partial_for_mixed() {
-        let value = FactValue::Text("mixed".to_string());
-        let hint = ScoringHint {
-            direction: ScoringDirection::TextMatch,
-            weight: 3.0,
-            thresholds: vec![],
-        };
-        let score = score_fact_with_hint(&value, &hint);
-        assert_eq!(
-            score, 1.5,
-            "partial value 'mixed' should score 0.5 * weight"
-        );
-    }
-
-    #[test]
-    fn test_textmatch_still_works_for_sentiment_words() {
-        // Existing behavior must be preserved: "good" still scores full weight
-        let value = FactValue::Text("good".to_string());
-        let hint = ScoringHint {
-            direction: ScoringDirection::TextMatch,
-            weight: 2.0,
-            thresholds: vec![],
-        };
-        let score = score_fact_with_hint(&value, &hint);
-        assert_eq!(
-            score, 2.0,
-            "sentiment word 'good' should still score at full weight"
-        );
-    }
-
-    #[test]
-    fn test_textmatch_scores_non_empty_tags() {
-        let value = FactValue::Tags(vec!["Greenwood High (1.2 km, 4.3 rating)".to_string()]);
-        let hint = ScoringHint {
-            direction: ScoringDirection::TextMatch,
-            weight: 0.8,
-            thresholds: vec![],
-        };
-        let score = score_fact_with_hint(&value, &hint);
-        assert!(
-            (score - 0.8).abs() < 0.00001,
-            "non-empty tag evidence should score, got {score}"
-        );
     }
 
     #[test]
@@ -1428,339 +982,11 @@ mod tests {
         ));
     }
 
-    // --- Day 62: Graph scoring integration tests ---
-
-    fn make_test_fact(status: &str, answers: Vec<&str>) -> crate::knowledge::fact::SourcedFact {
-        use crate::knowledge::fact::{FactSource, SourceType};
-        use chrono::Utc;
-
-        crate::knowledge::fact::SourcedFact {
-            key: "project_status".to_string(),
-            value: FactValue::Text(status.to_string()),
-            confidence: 1.0,
-            source: FactSource {
-                source_type: SourceType::Computed,
-                url: None,
-                model: None,
-                skill_id: Some("classify_project_status".to_string()),
-                triggered_by: None,
-            },
-            learned_at: Utc::now(),
-            version: 1,
-            display_template: Some(status.replace('_', " ").to_string()),
-            answers_preferences: answers.into_iter().map(String::from).collect(),
-            scoring_hint: Some(ScoringHint {
-                direction: ScoringDirection::TextMatch,
-                weight: 3.0,
-                thresholds: vec![],
-            }),
-        }
-    }
-
-    fn make_test_node(
-        graph: &mut crate::knowledge::KnowledgeGraph,
-        slug: &str,
-        name: &str,
-        fact: crate::knowledge::fact::SourcedFact,
-    ) {
-        use crate::knowledge::node::{Node, NodeType};
-
-        let mut node = Node::new(format!("society:{}", slug), NodeType::Society, name);
-        node.add_fact(fact);
-        graph.add_node(node);
-    }
-
-    #[test]
-    fn test_graph_preference_score_with_project_status() {
-        let mut graph = crate::knowledge::KnowledgeGraph::new();
-
-        let fact = make_test_fact(
-            "ready_to_move",
-            vec![
-                "ready to move",
-                "ready possession",
-                "completed project",
-                "immediate possession",
-            ],
-        );
-        make_test_node(&mut graph, "prestige-test", "Prestige Test", fact);
-
-        // Test: "ready to move" preference should match and score 3.0
-        let result = graph_preference_score_detailed(&graph, "prestige-test", "ready to move");
-        assert!(
-            result.is_some(),
-            "Should find matching fact for 'ready to move'"
-        );
-        let (score, detail) = result.unwrap();
-        assert_eq!(
-            score, 3.0,
-            "ready_to_move fact should score 3.0, got {}",
-            score
-        );
-        assert_eq!(detail.fact_key, "project_status");
-
-        // Test: "under construction" should NOT match this society
-        let result = graph_preference_score_detailed(&graph, "prestige-test", "under construction");
-        assert!(
-            result.is_none(),
-            "Should NOT match 'under construction' for a ready_to_move society"
-        );
-    }
-
-    #[test]
-    fn structured_candidate_keys_reject_unrelated_preference_facts() {
-        let mut graph = crate::knowledge::KnowledgeGraph::new();
-        let mut google_fact = make_test_fact("positive", vec!["resident feedback"]);
-        google_fact.key = "google_sentiment".to_string();
-        make_test_node(
-            &mut graph,
-            "source-specific",
-            "Source Specific Society",
-            google_fact,
-        );
-
-        let reddit_keys = vec!["reddit_thread_count".to_string()];
-        assert!(graph_preference_score_for_keys(
-            &graph,
-            "source-specific",
-            "reddit discussions",
-            &reddit_keys,
-        )
-        .is_none());
-    }
-
-    #[test]
-    fn zero_scored_fact_is_not_positive_preference_evidence() {
-        let mut graph = crate::knowledge::KnowledgeGraph::new();
-        let mut reddit_fact = make_test_fact("unused", vec!["resident feedback"]);
-        reddit_fact.key = "reddit_thread_count".to_string();
-        reddit_fact.value = FactValue::Numeric(0.0);
-        reddit_fact.scoring_hint = Some(ScoringHint {
-            direction: ScoringDirection::HigherIsBetter,
-            weight: 1.0,
-            thresholds: vec![5.0, 2.0],
-        });
-        make_test_node(
-            &mut graph,
-            "no-reddit-evidence",
-            "No Reddit Evidence Society",
-            reddit_fact,
-        );
-
-        let reddit_keys = vec!["reddit_thread_count".to_string()];
-        assert!(graph_preference_score_for_keys(
-            &graph,
-            "no-reddit-evidence",
-            "reddit discussions",
-            &reddit_keys,
-        )
-        .is_none());
-    }
-
-    #[test]
-    fn numeric_schema_scores_premium_without_per_fact_hint() {
-        let mut graph = crate::knowledge::KnowledgeGraph::new();
-        let mut premium_fact = crate::knowledge::fact::SourcedFact::manual(
-            "price_per_sqft",
-            FactValue::Numeric(26_500.0),
-        );
-        premium_fact.confidence = 0.7;
-        premium_fact.source.source_type = crate::knowledge::fact::SourceType::Google;
-        premium_fact.source.url = Some("https://maps.google.com/?cid=test".to_string());
-        premium_fact.display_template = Some("{value}/sqft".to_string());
-        premium_fact.answers_preferences = Vec::new();
-        premium_fact.scoring_hint = None;
-        make_test_node(
-            &mut graph,
-            "k-raheja-vivarea",
-            "K Raheja Vivarea",
-            premium_fact,
-        );
-
-        let premium_keys = vec!["price_per_sqft".to_string()];
-        let (score, detail) =
-            graph_preference_score_for_keys(&graph, "k-raheja-vivarea", "premium", &premium_keys)
-                .expect("registry numeric evidence should score premium price signals");
-
-        assert_eq!(score, 2.0);
-        assert_eq!(detail.fact_key, "price_per_sqft");
-        assert_eq!(detail.display, "Premium price signal: 26500");
-        assert_eq!(detail.source_type, "Google");
-    }
-
-    #[test]
-    fn test_graph_fuzzy_matching_answers_preferences() {
-        let mut graph = crate::knowledge::KnowledgeGraph::new();
-
-        let fact = make_test_fact(
-            "under_construction",
-            vec!["under construction", "ongoing project", "in progress"],
-        );
-        make_test_node(&mut graph, "test-society", "Test Society", fact);
-
-        // Exact match
-        let result = graph_preference_score_detailed(&graph, "test-society", "under construction");
-        assert!(
-            result.is_some(),
-            "Exact match 'under construction' should work"
-        );
-        assert_eq!(result.unwrap().0, 3.0);
-
-        // Fuzzy: preference contains answers_preference substring
-        let result = graph_preference_score_detailed(&graph, "test-society", "ongoing");
-        // "ongoing" is contained in "ongoing project" → should match
-        assert!(
-            result.is_some(),
-            "Fuzzy match: 'ongoing' should match 'ongoing project'"
-        );
-    }
-
-    // --- Day 63: Cross-node builder scoring tests ---
-
-    fn make_builder_fact(
-        key: &str,
-        value: FactValue,
-        answers: Vec<&str>,
-        direction: ScoringDirection,
-        weight: f32,
-    ) -> crate::knowledge::fact::SourcedFact {
-        use crate::knowledge::fact::{FactSource, SourceType};
-        use chrono::Utc;
-
-        crate::knowledge::fact::SourcedFact {
-            key: key.to_string(),
-            value,
-            confidence: 0.9,
-            source: FactSource {
-                source_type: SourceType::Computed,
-                url: None,
-                model: None,
-                skill_id: Some("compute_builder_delivery_rate".to_string()),
-                triggered_by: None,
-            },
-            learned_at: Utc::now(),
-            version: 1,
-            display_template: Some("Builder delivers on time: 80% of projects".to_string()),
-            answers_preferences: answers.into_iter().map(String::from).collect(),
-            scoring_hint: Some(ScoringHint {
-                direction,
-                weight,
-                thresholds: vec![],
-            }),
-        }
-    }
-
-    #[test]
-    fn test_cross_node_builder_scoring() {
-        use crate::knowledge::edge::Edge;
-        use crate::knowledge::node::{Node, NodeType};
-
-        let mut graph = crate::knowledge::KnowledgeGraph::new();
-
-        // Create society node (no builder-related facts)
-        let society_node = Node::new(
-            "society:test-society".to_string(),
-            NodeType::Society,
-            "Test Society",
-        );
-        graph.add_node(society_node);
-
-        // Create builder node with delivery_rate fact
-        let mut builder_node = Node::new(
-            "builder:test-builder".to_string(),
-            NodeType::Builder,
-            "Test Builder",
-        );
-        builder_node.add_fact(make_builder_fact(
-            "builder_delivery_rate",
-            FactValue::Numeric(0.8),
-            vec!["reliable builder", "trusted builder", "on time delivery"],
-            ScoringDirection::HigherIsBetter,
-            2.5,
-        ));
-        graph.add_node(builder_node);
-
-        // Create BuiltBy edge: society -> builder
-        let edge = Edge::new(
-            "society:test-society".to_string(),
-            "builder:test-builder".to_string(),
-            Relation::BuiltBy,
-        );
-        graph.add_edge(edge);
-
-        // Test: "reliable builder" should score via cross-node traversal
-        let result = graph_preference_score_detailed(&graph, "test-society", "reliable builder");
-        assert!(
-            result.is_some(),
-            "Should find builder fact via BuiltBy edge for 'reliable builder'"
-        );
-        let (score, detail) = result.unwrap();
-        assert!(score > 0.0, "Score should be positive, got {}", score);
-        assert_eq!(detail.fact_key, "builder_delivery_rate");
-    }
-
-    #[test]
-    fn test_no_cross_node_scoring_without_edge() {
-        use crate::knowledge::node::{Node, NodeType};
-
-        let mut graph = crate::knowledge::KnowledgeGraph::new();
-
-        // Create society node (no facts, no edges)
-        let society_node = Node::new(
-            "society:orphan-society".to_string(),
-            NodeType::Society,
-            "Orphan Society",
-        );
-        graph.add_node(society_node);
-
-        // Create builder node with facts but NO edge connecting them
-        let mut builder_node = Node::new(
-            "builder:unlinked-builder".to_string(),
-            NodeType::Builder,
-            "Unlinked Builder",
-        );
-        builder_node.add_fact(make_builder_fact(
-            "builder_delivery_rate",
-            FactValue::Numeric(1.0),
-            vec!["reliable builder"],
-            ScoringDirection::HigherIsBetter,
-            2.5,
-        ));
-        graph.add_node(builder_node);
-
-        // Test: should NOT score because there is no BuiltBy edge
-        let result = graph_preference_score_detailed(&graph, "orphan-society", "reliable builder");
-        assert!(
-            result.is_none(),
-            "Should NOT match builder fact without BuiltBy edge"
-        );
-    }
-
-    #[test]
-    fn test_no_graph_node_returns_none_for_preferences() {
-        // When a society has no KG node, graph_preference_score_detailed returns None.
-        // Search should rely on serving/graph evidence only — no seed-field fallback.
-        let graph = crate::knowledge::KnowledgeGraph::new();
-
-        let result =
-            graph_preference_score_detailed(&graph, "nonexistent-society", "reliable builder");
-        assert!(
-            result.is_none(),
-            "Should return None for non-existent society"
-        );
-
-        let result = graph_preference_score_detailed(&graph, "nonexistent-society", "metro access");
-        assert!(
-            result.is_none(),
-            "Should return None for non-existent society on standard preferences too"
-        );
-    }
-
     #[test]
     fn test_no_kg_node_still_matches_hard_constraints() {
         // A property whose society has no KG node should still match hard constraints
         // (area, BHK) but not receive legacy preference scoring.
-        use crate::search::TextSearch;
+        use crate::search::{CompiledQuery, TextSearch, TextSearchRequest};
 
         let graph = crate::knowledge::KnowledgeGraph::new();
 
@@ -1777,6 +1003,8 @@ mod tests {
             listing_type: "Resale".into(),
             bhk: 3,
             price: 10_000_000,
+            price_min: None,
+            price_max: None,
             price_per_sqft: 7500,
             carpet_area_sqft: 1200,
             super_builtup_sqft: 1500,
@@ -1817,25 +1045,39 @@ mod tests {
         let intent = crate::search::SearchIntent {
             area: Some("TestArea".into()),
             excluded_areas: Vec::new(),
+            excluded_societies: Vec::new(),
+            excluded_builders: Vec::new(),
+            areas: Vec::new(),
             bhk: Some(3),
+            bhks: Vec::new(),
+            exclude_bhks: Vec::new(),
+            bhk_spans: Vec::new(),
+            budget_min: None,
             budget_max: None,
             hard_constraints: Vec::new(),
             preferences: vec!["metro access".into(), "quiet neighborhood".into()],
             positive_preferences: Vec::new(),
             negative_preferences: Vec::new(),
+            ranking_priorities: Vec::new(),
             accepted_tradeoffs: Vec::new(),
             unsupported_inventory_types: Vec::new(),
             buyer_archetype: None,
         };
 
-        let results = TextSearch::search_with_intent(
-            &properties,
-            &society_names,
-            &societies,
-            "3bhk TestArea metro access quiet",
-            &intent,
-            Some(&graph),
-        );
+        let compiled_query =
+            CompiledQuery::from_text_with_intent("3bhk TestArea metro access quiet", intent);
+        let results = TextSearch::search(TextSearchRequest {
+            properties: &properties,
+            search_index: None,
+            extra_candidate_ids: None,
+            candidate_property_indexes: None,
+            geo_query: None,
+            serving_facts: None,
+            society_names: &society_names,
+            societies: &societies,
+            compiled_query: &compiled_query,
+            graph: Some(&graph),
+        });
 
         assert_eq!(
             results.len(),
@@ -1878,8 +1120,9 @@ async fn guarded_search_has_local_recall(
     }
 
     let snapshot = state.search_runtime.load_full();
+    let compiled = crate::search::CompiledQuery::from_text(query);
     !snapshot
         .search_index
-        .recall_ids(query, &guarded.intent)
+        .recall_named_entity_ids(&compiled)
         .is_empty()
 }

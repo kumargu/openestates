@@ -17,9 +17,11 @@ export function PropertyReraTeaser({ cards }: Props) {
     .filter((fact) => fact.key !== "registration" && fact.value)
     .slice(0, 3);
   const href = visibleCards[0]?.href;
-  if (!registration?.value || !href) return null;
+  if (!href || (!registration?.value && documentFacts.length === 0)) return null;
   const facts = [
-    { ...registration, label: "Registration" },
+    ...(registration?.value
+      ? [{ ...registration, label: "Registration" }]
+      : []),
     ...documentFacts.map((fact) => ({
       ...fact,
       label: fact.label.replace(/\s+available$/i, ""),

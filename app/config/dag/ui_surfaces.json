@@ -481,7 +481,21 @@
         "CommunityPulse"
       ],
       "primary_entity": "society"
+    },
+    {
+      "id": "property_short_compare",
+      "title": "Saved homes. Same facts.",
+      "components": [
+        "PropertyShortCompare"
+      ],
+      "primary_entity": "property",
+      "comparisonDimensions": [
+        { "key": "price", "label": "Price", "valueKey": "price", "format": "inr_short" },
+        { "key": "configuration", "label": "Home", "valueKey": "bhk", "format": "bhk" },
+        { "key": "size", "label": "Area", "valueKey": "sizeLabel", "format": "text" },
+        { "key": "status", "label": "Status", "valueKey": "status", "format": "text" }
+      ]
     }
   ],
-  "surface_count": 8
+  "surface_count": 9
 }

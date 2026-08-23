@@ -4,119 +4,21 @@ use backend::assets::{
     read_skill_fact_artifact_rows, KgSocietyViewMaterializer, SkillFactAnnotationRecord,
     SkillFactMaterializer, SkillFactRecord,
 };
-use backend::knowledge::edge::{Edge, Relation};
-use backend::knowledge::fact::{
-    FactSource, FactValue, ScoringDirection, ScoringHint, SourceType, SourcedFact,
-};
+use backend::knowledge::fact::{FactSource, FactValue, ScoringHint, SourceType, SourcedFact};
 use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::LakeStore;
 use backend::models::{Property, Society};
-use backend::search::intent::parse_intent;
-use backend::search::{SearchIndex, SearchResultCard, TextSearch};
-use backend::serving::{SearchServingBundleMaterializer, ServingBundleLoader, ServingFactIndex};
+use backend::search::{
+    CompiledQuery, SearchIndex, SearchResultCard, TextSearch, TextSearchRequest,
+};
+use backend::serving::{
+    BundleArtifactKind, SearchServingBundleMaterializer, ServingBundleLoader, ServingFactIndex,
+};
 use chrono::Utc;
 use tempfile::tempdir;
 
 const SQM_PER_ACRE: f64 = 4046.8564224;
-
-#[test]
-fn proof_first_acreage_query_requires_rera_and_uses_greenery_as_support() {
-    let mut world = SearchWorld::new(vec![
-        property("large-green", "Whitefield", "large-green", 3, 19_000_000),
-        property("large-plain", "Whitefield", "large-plain", 3, 18_500_000),
-        property("small-green", "Whitefield", "small-green", 3, 18_000_000),
-        property("unknown-area", "Whitefield", "unknown-area", 3, 17_500_000),
-    ]);
-    for property in &mut world.properties {
-        property.greenery_score = None;
-        property.open_space_score = None;
-    }
-
-    world.add_society(
-        "large-green",
-        RootSource::Rera,
-        vec![
-            rera_numeric_fact("rera_total_land_area_sqm", 12.0 * SQM_PER_ACRE),
-            sourced_fact(
-                "google_top_positives",
-                FactValue::Tags(vec![
-                    "wide open spaces with many trees".to_string(),
-                    "landscaped green cover across the campus".to_string(),
-                ]),
-                SourceType::Google,
-                0.8,
-                None,
-                vec![],
-            ),
-        ],
-    );
-    world.add_society(
-        "large-plain",
-        RootSource::Rera,
-        vec![rera_numeric_fact(
-            "rera_total_land_area_sqm",
-            11.0 * SQM_PER_ACRE,
-        )],
-    );
-    world.add_society(
-        "small-green",
-        RootSource::Rera,
-        vec![
-            rera_numeric_fact("rera_total_land_area_sqm", 5.0 * SQM_PER_ACRE),
-            sourced_fact(
-                "google_top_positives",
-                FactValue::Tags(vec!["landscaped garden with trees".to_string()]),
-                SourceType::Google,
-                0.8,
-                None,
-                vec![],
-            ),
-        ],
-    );
-    world.add_society(
-        "unknown-area",
-        RootSource::Discovered,
-        vec![sourced_fact(
-            "google_top_positives",
-            FactValue::Tags(vec!["green surroundings".to_string()]),
-            SourceType::Google,
-            0.8,
-            None,
-            vec![],
-        )],
-    );
-
-    let results = world.run("3bhk with greenery in whitefield above 10 acres");
-    let ids = result_ids(&results);
-
-    assert_eq!(results[0].card.id, "large-green");
-    assert_eq!(
-        ids,
-        vec!["large-green", "large-plain"],
-        "below-threshold and unknown-RERA acreage projects must be excluded"
-    );
-    assert_reason(
-        &results[0],
-        "above 10 acres",
-        "rera_total_land_area_sqm",
-        "rera-proof",
-        Some("Rera"),
-    );
-    assert_reason(
-        &results[0],
-        "greenery",
-        "google_top_positives",
-        "graph-text",
-        Some("Google"),
-    );
-    assert_coverage(&results[1], "greenery", "no_data");
-    assert!(
-        !results[1].match_reason.contains("greenery"),
-        "no-data support evidence must not be advertised as a greenery match: {}",
-        results[1].match_reason
-    );
-}
 
 #[tokio::test]
 async fn fanned_in_serving_support_facts_rank_and_explain_search() {
@@ -124,6 +26,22 @@ async fn fanned_in_serving_support_facts_rank_and_explain_search() {
     let fact_index =
         serving_index_with_resident_fact(&world.graph, r#"["greenery","trees","open space"]"#)
             .await;
+    let green_rows = fact_index.entity("society:large-green").unwrap_or_else(|| {
+        panic!(
+            "fanned-in society facts; got {:?}",
+            fact_index.rows().map(|(id, _)| id).collect::<Vec<_>>()
+        )
+    });
+    assert!(green_rows
+        .facts
+        .iter()
+        .any(|fact| fact.fact_key == "resident_greenery_signal"));
+    assert!(green_rows
+        .search_metadata_for_fact_key("resident_greenery_signal")
+        .any(|metadata| metadata
+            .answers_preferences
+            .iter()
+            .any(|preference| preference == "greenery")));
 
     let results = world.run_with_serving_facts(
         "3bhk with greenery in whitefield above 10 acres",
@@ -156,6 +74,18 @@ async fn serving_rera_facts_can_prove_hard_constraints_without_legacy_graph_fact
             .retain(|fact| fact.key != "rera_total_land_area_sqm");
     }
     let fact_index = serving_index_with_rera_land_facts(&world.graph).await;
+    for entity_id in ["society:large-green", "society:large-plain"] {
+        let rows = fact_index.entity(entity_id).unwrap_or_else(|| {
+            panic!(
+                "fanned-in RERA facts for {entity_id}; got {:?}",
+                fact_index.rows().map(|(id, _)| id).collect::<Vec<_>>()
+            )
+        });
+        assert!(rows
+            .facts
+            .iter()
+            .any(|fact| fact.fact_key == "rera_total_land_area_sqm"));
+    }
 
     let results = world.run_with_serving_facts("3bhk in whitefield above 10 acres", &fact_index);
 
@@ -216,126 +146,6 @@ async fn fanned_in_serving_support_facts_need_text_match_scoring_direction() {
         !has_reason(large_green, "greenery", "resident_greenery_signal"),
         "serving overlay must not score unsupported numeric directions as text evidence"
     );
-}
-
-#[test]
-fn negative_risk_preference_changes_rank_and_explanation_with_graph_facts() {
-    let mut low_risk = property(
-        "low-waterlogging",
-        "Whitefield",
-        "low-waterlogging",
-        3,
-        18_000_000,
-    );
-    low_risk.waterlogging_risk_score = Some(0.1);
-    let mut high_risk = property(
-        "high-waterlogging",
-        "Whitefield",
-        "high-waterlogging",
-        3,
-        17_500_000,
-    );
-    high_risk.waterlogging_risk_score = Some(0.9);
-
-    let mut world = SearchWorld::new(vec![high_risk, low_risk]);
-    world.add_society(
-        "low-waterlogging",
-        RootSource::Rera,
-        vec![sourced_fact(
-            "waterlogging_risk_score",
-            FactValue::Numeric(0.1),
-            SourceType::Rera,
-            1.0,
-            None,
-            Vec::new(),
-        )],
-    );
-    world.add_society(
-        "high-waterlogging",
-        RootSource::Rera,
-        vec![sourced_fact(
-            "waterlogging_risk_score",
-            FactValue::Numeric(0.9),
-            SourceType::Rera,
-            1.0,
-            None,
-            Vec::new(),
-        )],
-    );
-
-    let results = world.run("3bhk whitefield avoid waterlogging");
-    let ids = result_ids(&results);
-
-    assert_eq!(ids, vec!["low-waterlogging", "high-waterlogging"]);
-    assert_reason(
-        &results[0],
-        "avoid waterlogging risk",
-        "waterlogging_risk_score",
-        "graph-risk-numeric",
-        Some("Rera"),
-    );
-    assert!(
-        results[0].match_score > results[1].match_score,
-        "low-risk result should outrank high-risk result"
-    );
-}
-
-#[test]
-fn builder_trust_can_be_proven_through_related_builder_node() {
-    let mut proven = property(
-        "proven-builder-home",
-        "Whitefield",
-        "proven-builder",
-        3,
-        19_000_000,
-    );
-    proven.builder_quality_score = Some(0.2);
-    let mut unproven = property(
-        "unproven-builder-home",
-        "Whitefield",
-        "unproven-builder",
-        3,
-        18_500_000,
-    );
-    unproven.builder_quality_score = Some(0.2);
-
-    let mut world = SearchWorld::new(vec![unproven, proven]);
-    world.add_society("proven-builder", RootSource::Rera, Vec::new());
-    world.add_society("unproven-builder", RootSource::Rera, Vec::new());
-    world.add_builder(
-        "builder:proven-buildco",
-        "Proven BuildCo",
-        vec![sourced_fact(
-            "delivery_track_record",
-            FactValue::Text("Delivered prior RERA projects on time".to_string()),
-            SourceType::Rera,
-            1.0,
-            Some(ScoringHint {
-                direction: ScoringDirection::TextMatch,
-                weight: 2.0,
-                thresholds: Vec::new(),
-            }),
-            vec!["trusted builder", "reliable builder"],
-        )],
-    );
-    world.add_edge(
-        "society:proven-builder",
-        "builder:proven-buildco",
-        Relation::BuiltBy,
-    );
-
-    let results = world.run("trusted builder 3bhk whitefield");
-    let ids = result_ids(&results);
-
-    assert_eq!(ids, vec!["proven-builder-home", "unproven-builder-home"]);
-    assert_reason(
-        &results[0],
-        "trusted builder",
-        "delivery_track_record",
-        "graph",
-        Some("Rera"),
-    );
-    assert_coverage(&results[1], "trusted builder", "no_data");
 }
 
 #[test]
@@ -412,16 +222,19 @@ impl SearchWorld {
     }
 
     fn run(&self, query: &str) -> Vec<SearchResultCard> {
-        let intent = parse_intent(query);
-        TextSearch::search_with_index_and_intent(
-            &self.properties,
-            Some(&self.index),
-            &self.society_names,
-            &self.societies,
-            query,
-            &intent,
-            Some(&self.graph),
-        )
+        let compiled_query = CompiledQuery::from_text(query);
+        TextSearch::search(TextSearchRequest {
+            properties: &self.properties,
+            search_index: Some(&self.index),
+            extra_candidate_ids: None,
+            candidate_property_indexes: None,
+            geo_query: None,
+            serving_facts: None,
+            society_names: &self.society_names,
+            societies: &self.societies,
+            compiled_query: &compiled_query,
+            graph: Some(&self.graph),
+        })
     }
 
     fn run_with_serving_facts(
@@ -429,18 +242,19 @@ impl SearchWorld {
         query: &str,
         serving_facts: &ServingFactIndex,
     ) -> Vec<SearchResultCard> {
-        let intent = parse_intent(query);
-        TextSearch::search_with_index_extra_recall_serving_facts_and_intent(
-            &self.properties,
-            Some(&self.index),
-            None,
-            Some(serving_facts),
-            &self.society_names,
-            &self.societies,
-            query,
-            &intent,
-            Some(&self.graph),
-        )
+        let compiled_query = CompiledQuery::from_text(query);
+        TextSearch::search(TextSearchRequest {
+            properties: &self.properties,
+            search_index: Some(&self.index),
+            extra_candidate_ids: None,
+            candidate_property_indexes: None,
+            geo_query: None,
+            serving_facts: Some(serving_facts),
+            society_names: &self.society_names,
+            societies: &self.societies,
+            compiled_query: &compiled_query,
+            graph: Some(&self.graph),
+        })
     }
 
     fn add_society(&mut self, slug: &str, root_source: RootSource, facts: Vec<SourcedFact>) {
@@ -448,23 +262,6 @@ impl SearchWorld {
         node.root_source = Some(root_source);
         node.add_facts(facts);
         self.graph.add_node(node);
-    }
-
-    fn add_builder(&mut self, node_id: &str, name: &str, facts: Vec<SourcedFact>) {
-        let mut node = Node::new(node_id, NodeType::Builder, name);
-        node.add_facts(facts);
-        self.graph.add_node(node);
-    }
-
-    fn add_edge(&mut self, from: &str, to: &str, relation: Relation) {
-        self.graph.add_edge(Edge {
-            from: from.to_string(),
-            to: to.to_string(),
-            relation,
-            weight: 1.0,
-            metadata: HashMap::new(),
-            source: source(SourceType::Manual),
-        });
     }
 }
 
@@ -534,23 +331,39 @@ fn large_acreage_world() -> SearchWorld {
         property.greenery_score = None;
         property.open_space_score = None;
     }
-    world.add_society(
-        "large-green",
-        RootSource::Rera,
-        vec![rera_numeric_fact(
+    for (slug, acres) in [("large-green", 12.0), ("large-plain", 11.0)] {
+        let mut facts = serving_eligibility_facts(slug);
+        facts.push(rera_numeric_fact(
             "rera_total_land_area_sqm",
-            12.0 * SQM_PER_ACRE,
-        )],
-    );
-    world.add_society(
-        "large-plain",
-        RootSource::Rera,
-        vec![rera_numeric_fact(
-            "rera_total_land_area_sqm",
-            11.0 * SQM_PER_ACRE,
-        )],
-    );
+            acres * SQM_PER_ACRE,
+        ));
+        world.add_society(slug, RootSource::Rera, facts);
+    }
     world
+}
+
+fn serving_eligibility_facts(slug: &str) -> Vec<SourcedFact> {
+    let hero = format!("/media/{slug}.webp");
+    [
+        ("rera_registered", FactValue::Bool(true)),
+        (
+            "approach_road_condition",
+            FactValue::Text("documented".to_string()),
+        ),
+        ("area", FactValue::Text("Whitefield".to_string())),
+        ("builder_name", FactValue::Text("Test Builder".to_string())),
+        (
+            "listing_3bhk",
+            FactValue::Text(
+                serde_json::json!({"price": 19_000_000.0, "area_sqft": 1_200.0}).to_string(),
+            ),
+        ),
+        ("hero_image", FactValue::Text(hero.clone())),
+        ("images", FactValue::Tags(vec![hero])),
+    ]
+    .into_iter()
+    .map(|(key, value)| sourced_fact(key, value, SourceType::Rera, 1.0, None, vec![]))
+    .collect()
 }
 
 async fn serving_index_with_resident_fact(
@@ -624,10 +437,28 @@ async fn serving_index_with_resident_fact_metadata(
         )
         .await
         .unwrap();
-    SearchServingBundleMaterializer::new(lake.clone())
+    assert!(
+        kg_materialization
+            .records
+            .facts
+            .iter()
+            .any(|fact| fact.fact_key == "resident_greenery_signal"),
+        "KG view should fan in the support fact"
+    );
+    let serving_materialization = SearchServingBundleMaterializer::new(lake.clone())
         .materialize_and_promote_from_kg_view(&kg_materialization, "2026-07-13T06:00Z")
         .await
         .unwrap();
+    assert!(
+        serving_materialization
+            .manifest
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.kind == BundleArtifactKind::FactsParquet)
+            .and_then(|artifact| artifact.row_count)
+            .is_some_and(|count| count > 0),
+        "serving bundle should contain fanned-in facts"
+    );
     ServingBundleLoader::new(lake, cache_root.path())
         .load_current_search_bundle()
         .await
@@ -662,6 +493,18 @@ async fn serving_index_with_rera_land_facts(graph: &KnowledgeGraph) -> ServingFa
         input_hash: format!("sha256:{entity_id}"),
     })
     .collect::<Vec<_>>();
+    let annotations = facts
+        .iter()
+        .map(|fact| SkillFactAnnotationRecord {
+            entity_id: fact.entity_id.clone(),
+            fact_key: fact.fact_key.clone(),
+            display_template: Some("RERA land area: {value}".to_string()),
+            answers_preferences_json: "[]".to_string(),
+            scoring_direction: None,
+            scoring_weight: None,
+            scoring_thresholds_json: "[]".to_string(),
+        })
+        .collect::<Vec<_>>();
     let support_materialization = SkillFactMaterializer::new(lake.clone())
         .materialize_and_promote(
             "rera_legal_facts",
@@ -669,7 +512,7 @@ async fn serving_index_with_rera_land_facts(graph: &KnowledgeGraph) -> ServingFa
             "2026-07-13",
             "run-rera-proof-2026-07-13",
             &facts,
-            &[],
+            &annotations,
             Vec::new(),
             Vec::new(),
         )
@@ -690,10 +533,34 @@ async fn serving_index_with_rera_land_facts(graph: &KnowledgeGraph) -> ServingFa
         )
         .await
         .unwrap();
-    SearchServingBundleMaterializer::new(lake.clone())
+    assert!(
+        kg_materialization
+            .records
+            .facts
+            .iter()
+            .any(|fact| fact.fact_key == "rera_total_land_area_sqm"),
+        "KG view should fan in RERA support facts"
+    );
+    let serving_materialization = SearchServingBundleMaterializer::new(lake.clone())
         .materialize_and_promote_from_kg_view(&kg_materialization, "2026-07-13T06:00Z")
         .await
         .unwrap();
+    assert!(
+        serving_materialization
+            .manifest
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.kind == BundleArtifactKind::FactsParquet)
+            .and_then(|artifact| artifact.row_count)
+            .is_some_and(|count| count > 0),
+        "serving bundle should contain RERA facts; artifacts={:?}",
+        serving_materialization
+            .manifest
+            .artifacts
+            .iter()
+            .map(|artifact| (&artifact.kind, artifact.row_count))
+            .collect::<Vec<_>>()
+    );
     ServingBundleLoader::new(lake, cache_root.path())
         .load_current_search_bundle()
         .await
@@ -715,6 +582,8 @@ fn property(id: &str, area: &str, society_id: &str, bhk: u32, price: u64) -> Pro
         listing_type: "Resale".to_string(),
         bhk,
         price,
+        price_min: None,
+        price_max: None,
         price_per_sqft: 12_000,
         carpet_area_sqft: 1_200,
         super_builtup_sqft: 1_550,

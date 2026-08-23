@@ -6,6 +6,17 @@ on:
   pull_request:
 
 jobs:
+  search-hardcoding-audit:
+    name: Search Hardcoding Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m unittest tests/test_search_hardcoding_audit.py tests/test_search_quality_benchmark.py
+      - run: python3 scripts/audit_search_hardcoding.py --mode production-search --gate
+
   backend-check:
     name: Backend Check
     runs-on: ubuntu-latest

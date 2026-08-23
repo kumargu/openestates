@@ -14,7 +14,12 @@ import type {
   SearchResultItem,
 } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
-import { searchResultReasonLabels, type MatchResult } from "../lib/search.ts";
+import { primaryProofFocus } from "../lib/proof-focus.ts";
+import {
+  searchResultsAnnouncement,
+  searchResultReasonLabels,
+  type MatchResult,
+} from "../lib/search.ts";
 import { PageState } from "../components/PageState.tsx";
 import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
 import { addRecentSearch } from "../lib/recent-searches.ts";
@@ -245,12 +250,6 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
     onResultsReady?.();
   }, [onResultsReady, query, status]);
 
-  const setQueryPreservingView = (nextQuery: string) => {
-    const nextParams = new URLSearchParams();
-    if (nextQuery) nextParams.set("q", nextQuery);
-    setSearchParams(nextParams);
-  };
-
   // When there's a search query, call the backend search API.
   // When there's no query, load all properties.
   // The API layer owns the development fixture fallback when the backend is down.
@@ -306,14 +305,7 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
 
   const matchResults: { property: PropertyCardType; match?: MatchResult; explanation?: MatchExplanation }[] = useMemo(() => {
     if (useBackendResults && searchResponse) {
-      const focus = searchResponse.focus;
-      const cards = focus
-        ? [
-            ...focus.focus_results,
-            ...(focus.sibling_configs ?? []),
-            ...(focus.more_homes ?? []),
-          ]
-        : searchResponse.results;
+      const cards = searchResponse.resultSets.flatMap((set) => set.results);
       return cards.map((r) => ({
         property: r as PropertyCardType,
         match: {
@@ -336,33 +328,28 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
   }, [matchResults, properties]);
 
   const universeResults: SearchResultItem[] = useMemo(() => {
-    if (useBackendResults && searchResponse) return searchResponse.results;
+    if (useBackendResults && searchResponse) {
+      return searchResponse.resultSets.flatMap((set) => set.results);
+    }
     if (hasQuery) return [];
     return filtered.map((property) => ({
       ...property,
       match_score: 0,
       match_label: "Browse",
       match_reason: "In catalog",
+      match_tier: "supported",
     }));
   }, [hasQuery, useBackendResults, searchResponse, filtered]);
 
   const propertyIds = useMemo(() => {
-    if (useBackendResults && searchResponse?.focus) {
-      const focus = searchResponse.focus;
-      return [
-        ...focus.focus_results.map((result) => result.id),
-        ...(focus.sibling_configs ?? []).map((result) => result.id),
-        ...(focus.more_homes ?? []).map((result) => result.id),
-      ];
-    }
     return universeResults.map((result) => result.id);
   }, [useBackendResults, searchResponse, universeResults]);
   const { byId: evidenceById } = useEvidenceBatch(propertyIds, propertyIds.length > 0);
 
-  const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.area_context : null;
-  const totalCount = useBackendResults ? searchResponse.total_results : hasQuery ? 0 : filtered.length;
-  const intent = useBackendResults ? searchResponse.intent : null;
-  const searchGuidance = useBackendResults ? searchResponse.search_guidance : null;
+  const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.areaContext ?? null : null;
+  const totalCount = useBackendResults ? searchResponse.totalMatches : hasQuery ? 0 : filtered.length;
+  const returnedCount = totalCount;
+  const searchGuidance = useBackendResults ? searchResponse.searchGuidance : undefined;
   const containerClass = "inline-results-shell";
 
   if (status === "loading") return (
@@ -394,14 +381,11 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
     );
   }
 
-  const hardConstraints = intent?.hard_constraints ?? [];
-  const hardConstraintLabels = hardConstraints.map((constraint) => constraint.raw_text);
-
   const helmetTitle = query
     ? `${query} — Explore | OpenEstates`
     : "Explore | OpenEstates";
   const helmetDescription = query
-    ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} matching "${query}"${intent?.area ? ` in ${intent.area}` : ""}${hardConstraintLabels.length ? `. Constraints: ${hardConstraintLabels.join(", ")}` : ""}${intent?.preferences?.length ? `. Preferences: ${intent.preferences.join(", ")}` : ""}.`
+    ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} matching "${query}".`
     : `Browse ${totalCount} proof-backed homes on OpenEstates.`;
 
   const renderTile = (result: SearchResultItem) => (
@@ -409,10 +393,9 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
       property={result}
       onQuickView={setPanelPropertyId}
       matchLabels={hasQuery ? searchResultReasonLabels(result) : []}
-      proofFocus={result.proof_focuses?.find((focus) => focus.surfaceId === "around_this_home")}
+      proofFocus={primaryProofFocus(result, query)}
     />
   );
-
   return (
     <div className={containerClass}>
       <Helmet>
@@ -427,7 +410,11 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
       {/* Accessible live region — announces result count to screen readers */}
       <div aria-live="polite" className="sr-only">
         {query
-          ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} found for "${query}".`
+          ? searchResultsAnnouncement(
+            query,
+            totalCount,
+            returnedCount,
+          )
           : `Showing ${totalCount} ${totalCount === 1 ? "property" : "properties"}.`}
       </div>
 
@@ -436,33 +423,22 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
 
       {matchResults.length === 0 && query && !waitingForSearchResults && (
         <div className="empty-state">
-          <h2>{searchGuidance?.title ?? `No properties match "${query}"`}</h2>
-          <p>{searchGuidance?.message ?? "Try broadening your search or explore one of these suggestions."}</p>
-          <div className="empty-state-chips">
-            {searchGuidance?.suggestions?.map((suggestion) => (
-              <button key={suggestion} className="empty-state-chip" onClick={() => setQueryPreservingView(suggestion)}>
-                {suggestion}
-              </button>
-            ))}
-            {!searchGuidance && intent?.area && (
-              <button className="empty-state-chip" onClick={() => setQueryPreservingView(intent.area!)}>
-                Just {intent.area}
-              </button>
-            )}
-            {!searchGuidance && intent?.bhk && (
-              <button className="empty-state-chip" onClick={() => {
-                const without = query.replace(/\d+\s*bhk/i, "").trim();
-                if (without) setQueryPreservingView(without);
-              }}>
-                Without BHK filter
-              </button>
-            )}
-            {!searchGuidance && ["3BHK Whitefield under 2Cr", "Family-friendly Sarjapur", "Near metro Bellandur"].map((s) => (
-              <button key={s} className="empty-state-chip" onClick={() => setQueryPreservingView(s)}>
-                {s}
-              </button>
-            ))}
-          </div>
+          <h2>{searchGuidance?.title ?? "No homes match this search."}</h2>
+          {searchGuidance?.message && <p>{searchGuidance.message}</p>}
+          {searchGuidance && searchGuidance.suggestions.length > 0 && (
+            <div className="empty-state-chips">
+              {searchGuidance.suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  className="empty-state-chip"
+                  onClick={() => setSearchParams({ q: suggestion })}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             type="button"
             className="inline-results-clear"
@@ -490,9 +466,9 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
             </div>
           ))}
         </div>
-      ) : useBackendResults && searchResponse?.focus ? (
+      ) : useBackendResults && searchResponse ? (
         <SearchFocusBoard
-          focus={searchResponse.focus}
+          resultSets={searchResponse.resultSets}
           renderResult={renderTile}
         />
       ) : (

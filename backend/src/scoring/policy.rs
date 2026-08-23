@@ -36,6 +36,17 @@ pub enum ScoringMethod {
     RiskLowerIsBetter,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BestEffortRankingTier {
+    ExplicitIntent,
+    NamedPlaceDistance,
+    LexicalRelevance,
+    ReviewQuality,
+    MajorAccess,
+    EvidenceQuality,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MissingDataPolicy {
     #[serde(default = "default_missing_behavior")]
@@ -117,18 +128,6 @@ pub struct ScoringPolicyFile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConstraintRelaxationPolicy {
-    #[serde(default = "default_constraint_relaxation_target_result_count")]
-    pub target_result_count: usize,
-    #[serde(default = "default_constraint_relaxation_order")]
-    pub order: Vec<String>,
-    #[serde(default = "default_budget_relaxation_multipliers")]
-    pub budget_multipliers: Vec<f64>,
-    #[serde(default = "default_area_relaxation_radii_km")]
-    pub area_radii_km: Vec<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AreaTrackerPolicy {
     pub min_listing_count: usize,
     pub ready_possession_statuses: Vec<String>,
@@ -144,17 +143,6 @@ pub struct AreaTrackerDemandPolicy {
     pub evidence_gap_cap: f32,
     pub listing_count_normalizer: f32,
     pub listing_count_cap: f32,
-}
-
-impl Default for ConstraintRelaxationPolicy {
-    fn default() -> Self {
-        Self {
-            target_result_count: default_constraint_relaxation_target_result_count(),
-            order: default_constraint_relaxation_order(),
-            budget_multipliers: default_budget_relaxation_multipliers(),
-            area_radii_km: default_area_relaxation_radii_km(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,8 +161,6 @@ pub struct SearchRankingPolicy {
     pub positive_evidence_floor_ratio: f64,
     #[serde(default = "default_no_positive_evidence_score_multiplier")]
     pub no_positive_evidence_score_multiplier: f64,
-    #[serde(default)]
-    pub constraint_relaxation: ConstraintRelaxationPolicy,
     #[serde(default = "default_nearby_area_score_penalty")]
     pub nearby_area_score_penalty: f64,
     #[serde(default = "default_graph_area_score_penalty")]
@@ -193,6 +179,10 @@ pub struct SearchRankingPolicy {
     pub named_place_zero_score_km: f64,
     #[serde(default = "default_named_place_score_weight")]
     pub named_place_score_weight: f64,
+    #[serde(default = "default_named_place_candidate_limit")]
+    pub named_place_candidate_limit: usize,
+    #[serde(default = "default_named_place_relative_distance_multiplier")]
+    pub named_place_relative_distance_multiplier: f64,
     #[serde(default = "default_named_place_distinctive_token_max_place_count")]
     pub named_place_distinctive_token_max_place_count: usize,
     #[serde(default = "default_named_place_distinctive_token_max_place_ratio")]
@@ -209,6 +199,14 @@ pub struct SearchRankingPolicy {
     pub review_count_weight: f64,
     #[serde(default = "default_review_count_log_divisor")]
     pub review_count_log_divisor: f64,
+    #[serde(default = "default_search_result_limit")]
+    pub result_limit: usize,
+    #[serde(default = "default_best_effort_ranking_tiers")]
+    pub best_effort_ranking_tiers: Vec<BestEffortRankingTier>,
+    #[serde(default)]
+    pub best_effort_access_fact_keys: Vec<String>,
+    #[serde(default = "default_max_consecutive_results_per_society")]
+    pub max_consecutive_results_per_society: usize,
     #[serde(default = "default_ranked_focus_min_match_score")]
     pub ranked_focus_min_match_score: f64,
     #[serde(default = "default_min_score_with_positive_evidence")]
@@ -233,7 +231,6 @@ impl Default for SearchRankingPolicy {
             broad_local_recall_min_extra: default_broad_local_recall_min_extra(),
             positive_evidence_floor_ratio: default_positive_evidence_floor_ratio(),
             no_positive_evidence_score_multiplier: default_no_positive_evidence_score_multiplier(),
-            constraint_relaxation: ConstraintRelaxationPolicy::default(),
             nearby_area_score_penalty: default_nearby_area_score_penalty(),
             graph_area_score_penalty: default_graph_area_score_penalty(),
             geo_distance_fact_keys: Vec::new(),
@@ -243,6 +240,9 @@ impl Default for SearchRankingPolicy {
             named_place_full_score_km: default_named_place_full_score_km(),
             named_place_zero_score_km: default_named_place_zero_score_km(),
             named_place_score_weight: default_named_place_score_weight(),
+            named_place_candidate_limit: default_named_place_candidate_limit(),
+            named_place_relative_distance_multiplier:
+                default_named_place_relative_distance_multiplier(),
             named_place_distinctive_token_max_place_count:
                 default_named_place_distinctive_token_max_place_count(),
             named_place_distinctive_token_max_place_ratio:
@@ -254,6 +254,10 @@ impl Default for SearchRankingPolicy {
             review_rating_weight: default_review_rating_weight(),
             review_count_weight: default_review_count_weight(),
             review_count_log_divisor: default_review_count_log_divisor(),
+            result_limit: default_search_result_limit(),
+            best_effort_ranking_tiers: default_best_effort_ranking_tiers(),
+            best_effort_access_fact_keys: Vec::new(),
+            max_consecutive_results_per_society: default_max_consecutive_results_per_society(),
             ranked_focus_min_match_score: default_ranked_focus_min_match_score(),
             min_score_with_positive_evidence: default_min_score_with_positive_evidence(),
             max_score_with_positive_evidence: default_max_score_with_positive_evidence(),
@@ -588,7 +592,6 @@ fn text_safety_score(text: &str) -> f64 {
 
 fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
     validate_area_tracker(&policy.area_tracker)?;
-    validate_constraint_relaxation(&policy.search_ranking.constraint_relaxation)?;
     if !policy
         .search_ranking
         .ranked_focus_min_match_score
@@ -604,6 +607,30 @@ fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
     {
         return Err(DagConfigError::InvalidConfig(
             "named-place token policies must be configured".to_string(),
+        ));
+    }
+    if policy.search_ranking.named_place_candidate_limit == 0
+        || !policy
+            .search_ranking
+            .named_place_relative_distance_multiplier
+            .is_finite()
+        || policy
+            .search_ranking
+            .named_place_relative_distance_multiplier
+            < 1.0
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "named-place recall requires a positive candidate limit and relative distance multiplier >= 1"
+                .to_string(),
+        ));
+    }
+    if policy.search_ranking.result_limit == 0
+        || policy.search_ranking.best_effort_ranking_tiers.is_empty()
+        || policy.search_ranking.max_consecutive_results_per_society == 0
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "search ranking requires a result limit, ranking tiers, and diversity limit"
+                .to_string(),
         ));
     }
     let signal_ids = policy
@@ -674,56 +701,6 @@ fn validate_area_tracker(policy: &AreaTrackerPolicy) -> Result<(), DagConfigErro
     Ok(())
 }
 
-fn validate_constraint_relaxation(
-    policy: &ConstraintRelaxationPolicy,
-) -> Result<(), DagConfigError> {
-    if policy.target_result_count == 0 {
-        return Err(DagConfigError::InvalidConfig(
-            "constraint relaxation target result count must be greater than zero".to_string(),
-        ));
-    }
-    let supported_steps = ["budget_tolerance", "budget_cap", "bhk", "area_radius"];
-    let mut seen = BTreeSet::new();
-    for step in &policy.order {
-        if !supported_steps.contains(&step.as_str()) {
-            return Err(DagConfigError::InvalidConfig(format!(
-                "unsupported constraint relaxation step {step}"
-            )));
-        }
-        if !seen.insert(step.as_str()) {
-            return Err(DagConfigError::InvalidConfig(format!(
-                "duplicate constraint relaxation step {step}"
-            )));
-        }
-    }
-    if policy
-        .budget_multipliers
-        .iter()
-        .any(|multiplier| !multiplier.is_finite() || *multiplier <= 1.0)
-    {
-        return Err(DagConfigError::InvalidConfig(
-            "constraint relaxation budget multipliers must be finite and greater than 1"
-                .to_string(),
-        ));
-    }
-    if policy.area_radii_km.is_empty()
-        || policy
-            .area_radii_km
-            .iter()
-            .any(|radius| !radius.is_finite() || *radius <= 0.0)
-        || policy
-            .area_radii_km
-            .windows(2)
-            .any(|window| window[0] >= window[1])
-    {
-        return Err(DagConfigError::InvalidConfig(
-            "constraint relaxation area radii must be finite, positive, and strictly increasing"
-                .to_string(),
-        ));
-    }
-    Ok(())
-}
-
 fn default_true() -> bool {
     true
 }
@@ -757,21 +734,6 @@ fn default_positive_evidence_floor_ratio() -> f64 {
 fn default_no_positive_evidence_score_multiplier() -> f64 {
     0.40
 }
-fn default_constraint_relaxation_order() -> Vec<String> {
-    ["budget_tolerance", "budget_cap", "area_radius"]
-        .into_iter()
-        .map(str::to_string)
-        .collect()
-}
-fn default_constraint_relaxation_target_result_count() -> usize {
-    3
-}
-fn default_budget_relaxation_multipliers() -> Vec<f64> {
-    vec![1.10, 1.25, 1.50]
-}
-fn default_area_relaxation_radii_km() -> Vec<f64> {
-    vec![2.0, 5.0, 10.0]
-}
 fn default_nearby_area_score_penalty() -> f64 {
     -0.35
 }
@@ -796,6 +758,12 @@ fn default_named_place_zero_score_km() -> f64 {
 fn default_named_place_score_weight() -> f64 {
     2.0
 }
+fn default_named_place_candidate_limit() -> usize {
+    128
+}
+fn default_named_place_relative_distance_multiplier() -> f64 {
+    2.0
+}
 fn default_named_place_distinctive_token_max_place_count() -> usize {
     3
 }
@@ -813,6 +781,22 @@ fn default_review_count_weight() -> f64 {
 }
 fn default_review_count_log_divisor() -> f64 {
     8.0
+}
+fn default_search_result_limit() -> usize {
+    32
+}
+fn default_best_effort_ranking_tiers() -> Vec<BestEffortRankingTier> {
+    vec![
+        BestEffortRankingTier::ExplicitIntent,
+        BestEffortRankingTier::NamedPlaceDistance,
+        BestEffortRankingTier::LexicalRelevance,
+        BestEffortRankingTier::ReviewQuality,
+        BestEffortRankingTier::MajorAccess,
+        BestEffortRankingTier::EvidenceQuality,
+    ]
+}
+fn default_max_consecutive_results_per_society() -> usize {
+    1
 }
 fn default_ranked_focus_min_match_score() -> f64 {
     0.35
@@ -845,20 +829,25 @@ mod tests {
         assert!(policy.missing_data.never_zero_fill);
         assert_eq!(policy.area_tracker.min_listing_count, 2);
         assert_eq!(policy.search_ranking.ranked_focus_min_match_score, 0.35);
+        assert_eq!(policy.search_ranking.result_limit, 32);
         assert_eq!(
-            policy.search_ranking.constraint_relaxation.order,
-            ["budget_tolerance", "budget_cap", "area_radius"]
+            policy.search_ranking.best_effort_ranking_tiers,
+            [
+                BestEffortRankingTier::ExplicitIntent,
+                BestEffortRankingTier::NamedPlaceDistance,
+                BestEffortRankingTier::LexicalRelevance,
+                BestEffortRankingTier::ReviewQuality,
+                BestEffortRankingTier::MajorAccess,
+                BestEffortRankingTier::EvidenceQuality,
+            ]
         );
         assert_eq!(
-            policy.search_ranking.constraint_relaxation.area_radii_km,
-            [2.0, 5.0, 10.0]
-        );
-        assert_eq!(
-            policy
-                .search_ranking
-                .constraint_relaxation
-                .target_result_count,
-            3
+            policy.search_ranking.best_effort_access_fact_keys,
+            [
+                "nearby_metro_stations",
+                "nearby_tech_parks",
+                "access.metro_good"
+            ]
         );
     }
 

@@ -4,13 +4,7 @@ import { propertyDetailPath } from "../../lib/api.ts";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
 import { SaveHeartButton } from "../SaveHeartButton.tsx";
 import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
-
-function formatPrice(price: number): string {
-  if (!hasKnownNumber(price)) return "Price unavailable";
-  if (price >= 10_000_000) return `₹${(price / 10_000_000).toFixed(1)} Cr`;
-  if (price >= 100_000) return `₹${(price / 100_000).toFixed(1)} L`;
-  return `₹${price.toLocaleString("en-IN")}`;
-}
+import { formatListingPrice } from "../../lib/listing-price.ts";
 
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -137,7 +131,7 @@ export function LivingEvidenceTile({
           <p className="catalog-card__meta">{metaParts.join(" · ")}</p>
           <div className="catalog-card__foot">
             <span className="catalog-card__price">
-              {formatPrice(property.price)}
+              {formatListingPrice(property)}
             </span>
             {hasKnownNumber(property.google_rating) ? (
               <span className="catalog-card__rating">

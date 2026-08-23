@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -32,6 +32,17 @@ pub struct UiSurfaceConfig {
     pub primary_entity: Option<String>,
     #[serde(default)]
     pub scene: Option<UiSurfaceSceneConfig>,
+    #[serde(default, rename = "comparisonDimensions")]
+    pub comparison_dimensions: Vec<UiComparisonDimensionConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiComparisonDimensionConfig {
+    pub key: String,
+    pub label: String,
+    #[serde(rename = "valueKey")]
+    pub value_key: String,
+    pub format: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -130,6 +141,25 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
             return Err(DagConfigError::InvalidConfig(
                 "ui_surfaces contains a blank surface id".to_string(),
             ));
+        }
+        let mut comparison_dimension_keys = HashSet::new();
+        for dimension in &surface.comparison_dimensions {
+            if dimension.key.trim().is_empty()
+                || dimension.label.trim().is_empty()
+                || dimension.value_key.trim().is_empty()
+                || dimension.format.trim().is_empty()
+            {
+                return Err(DagConfigError::InvalidConfig(format!(
+                    "surface {} contains an incomplete comparison dimension",
+                    surface.id
+                )));
+            }
+            if !comparison_dimension_keys.insert(dimension.key.as_str()) {
+                return Err(DagConfigError::InvalidConfig(format!(
+                    "surface {} repeats comparison dimension {}",
+                    surface.id, dimension.key
+                )));
+            }
         }
         let Some(scene) = surface.scene.as_ref() else {
             continue;
@@ -236,5 +266,18 @@ mod tests {
                 .iter()
                 .all(|layer| layer.relation_class == "risk_externality"));
         }
+    }
+
+    #[test]
+    fn short_compare_dimensions_come_from_ui_config() {
+        let config = load_ui_surfaces().expect("ui_surfaces.json should load");
+        let compare = config
+            .surfaces
+            .iter()
+            .find(|surface| surface.id == "property_short_compare")
+            .expect("property_short_compare surface exists");
+
+        assert_eq!(compare.comparison_dimensions.len(), 4);
+        assert_eq!(compare.comparison_dimensions[0].label, "Price");
     }
 }
