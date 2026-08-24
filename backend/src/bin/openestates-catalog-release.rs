@@ -993,11 +993,15 @@ async fn extend_catalog_serving(
                     high_watermark: candidate_record.materialization_id.to_string(),
                 },
             ],
-            vec![
-                base_release.derived_assets.kg_materialization_id,
-                base_record.materialization_id,
-                candidate_record.materialization_id,
-            ],
+            // The merged bundle is the new serving commit point. Its two
+            // input bundles remain immutable source watermarks, but cannot be
+            // direct parents: doing so creates multiple global
+            // search_serving_bundle materializations in one promotion
+            // lineage. Nor should a scoped candidate's upstream assets become
+            // current globally. The validated base KG remains the sole direct
+            // runtime lineage parent; copied candidate rows are revalidated by
+            // the serving materializer and catalog gates.
+            vec![base_release.derived_assets.kg_materialization_id],
             MaterializationId::new(),
         )
         .await
