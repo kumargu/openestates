@@ -287,16 +287,17 @@ export function HomePlanPage() {
   const defaultYear = defaultPlanFocusYear(projection, inputs.holdingPeriodYears);
   const activeYear = previewYear ?? pinnedYear ?? defaultYear;
   const verdict = buildMonthlyPlanVerdict(projection, activeYear);
-  const whisperTheme = projection.extraEmisPerYear > 0
+  const perspectiveYear = pinnedYear ?? defaultYear;
+  const perspectiveVerdict = buildMonthlyPlanVerdict(projection, perspectiveYear);
+  const perspectiveTheme = projection.extraEmisPerYear > 0
     ? "prepay"
-    : verdict.buyWins
+    : perspectiveVerdict.buyWins
       ? "buy"
       : "rent";
-  const whisperSignature = [
-    whisperTheme,
-    verdict.activeYear,
+  const perspectiveSignature = [
+    perspectiveTheme,
+    perspectiveYear,
     projection.loanFreeYear ?? "open",
-    Math.round(verdict.advantage),
   ].join(":");
   // Drafts capture what the buyer changed, so they are written on edit only.
   const persistEdit = (nextInputs: PlanInputs, nextExtraEmisPerYear: number) => {
@@ -350,10 +351,7 @@ export function HomePlanPage() {
       <div className="home-plan-body">
         <div className="home-plan-main">
           <div className="home-plan-canvas">
-            <VerdictBlock
-              verdict={verdict}
-              aside={<PlanWhisper key={whisperSignature} theme={whisperTheme} />}
-            />
+            <VerdictBlock verdict={verdict} />
 
             <PlanAssumptionRail
               inputs={inputs}
@@ -370,6 +368,12 @@ export function HomePlanPage() {
                 activeYear={verdict.activeYear}
                 onPreviewYearChange={setPreviewYear}
                 onPinYear={setPinnedYear}
+              />
+              <PlanWhisper
+                key={perspectiveSignature}
+                theme={perspectiveTheme}
+                activeYear={perspectiveYear}
+                loanFreeYear={projection.loanFreeYear}
               />
             </section>
           </div>

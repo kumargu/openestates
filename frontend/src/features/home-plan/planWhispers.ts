@@ -1,53 +1,60 @@
 export type PlanWhisperTheme = "balanced" | "buy" | "rent" | "prepay";
 
 const NEUTRAL_WHISPERS = [
-  "It was never just numbers. It's numbers plus how you sleep at night.",
-  "Every good decision here is really a bet on your next ten years.",
-  "There's no wrong answer. There's only the one that fits your life.",
-  "The right answer changes the day your life does.",
-  "A house is a decision. A home is everything after it.",
+  "The spreadsheet calls it close. Your life gets the casting vote.",
+  "Same starting capital. Different ways to lose sleep.",
+  "The right answer changes when your life does.",
 ] as const;
 
 const RENT_WHISPERS = [
-  "Renting + investing quietly beats a lot of mortgages. Nobody posts about it.",
-  "Rent buys you the option to leave. That's worth something too.",
-  "Renting isn't throwing money away. You're paying to not fix the geyser at 2am.",
-  "Liquidity is a feature you only appreciate when you need cash fast.",
-  "Nithin Kamath built India's largest brokerage and rented his home for years.",
-  "Mark Zuckerberg rented for years after Facebook's IPO. Optionality has fans in high places.",
+  "The landlord owns the walls. You own the exit.",
+  "The geyser remains someone else's 2 a.m. problem.",
+  "Liquidity is boring right up until you need it.",
+  "SIPs are boring. So are seatbelts. Both can be useful.",
 ] as const;
 
 const BUY_WHISPERS = [
-  "Owning feels like arriving. Renting feels like passing through.",
-  "Equity builds slowly. Liquidity builds quietly. You need a little of both.",
+  "The keys are yours. The maintenance WhatsApp group is complimentary.",
   "The dream is the house. The fine print is the maintenance.",
-  "Warren Buffett still lives in the Omaha house he bought in 1958.",
-  "Some things a spreadsheet can't price. A place that's actually yours is one of them.",
-  "Ghar toh ghar hota hai. Until the EMI reminds you it's also a loan.",
-  "My parents measured settled in square feet. Fair enough.",
+  "The spreadsheet ends at net worth. Staying put does not.",
+  "Ghar toh ghar hota hai. The EMI remains unconvinced.",
 ] as const;
 
 const PREPAY_WHISPERS = [
-  "EMI is forced saving. Rent is optionality. Pick your discipline.",
-  "An EMI you can't feel is safe. One you can feel runs your calendar.",
+  "Extra EMIs now. Fewer calendar reminders later.",
   "Prepay when the surplus is real, not aspirational.",
-  "The best loan is the one that ends before you stop earning.",
-  "Freedom from EMI is a raise you give yourself.",
-  "Extra EMIs today are tomorrow's peace of mind, if you can afford the tradeoff.",
-  "Property is patient money. Make sure you're patient too.",
+  "An EMI you can barely feel is the polite kind.",
+  "Property is patient money. Make sure you are patient too.",
 ] as const;
 
-const INVESTING_WHISPERS = [
-  "SIPs are boring. Boring is underrated.",
-  "The market doesn't care about your possession date.",
-  "Time in the market beats timing the market, and timing the property market.",
-  "The best return is often the mistake you didn't make.",
-  "Compounding rewards patience the way real estate rewards location.",
-] as const;
+const LOAN_FREE_WHISPER = "Your EMI has officially left the group chat.";
+
+type PlanWhisperContext = {
+  theme: PlanWhisperTheme;
+  activeYear: number;
+  loanFreeYear: number | null;
+};
 
 export function planWhispersFor(theme: PlanWhisperTheme): readonly string[] {
   if (theme === "prepay") return [...PREPAY_WHISPERS, ...NEUTRAL_WHISPERS];
-  if (theme === "rent") return [...RENT_WHISPERS, ...INVESTING_WHISPERS, ...NEUTRAL_WHISPERS];
+  if (theme === "rent") return [...RENT_WHISPERS, ...NEUTRAL_WHISPERS];
   if (theme === "buy") return [...BUY_WHISPERS, ...NEUTRAL_WHISPERS];
-  return [...NEUTRAL_WHISPERS, ...BUY_WHISPERS, ...RENT_WHISPERS, ...INVESTING_WHISPERS];
+  return [...NEUTRAL_WHISPERS, ...BUY_WHISPERS, ...RENT_WHISPERS];
+}
+
+export function planWhispersForContext({
+  theme,
+  activeYear,
+  loanFreeYear,
+}: PlanWhisperContext): readonly string[] {
+  const whispers = planWhispersFor(theme);
+  const start = Math.max(0, Math.round(activeYear)) % whispers.length;
+  const ordered = [...whispers.slice(start), ...whispers.slice(0, start)];
+  return loanFreeYear !== null && activeYear >= loanFreeYear
+    ? [LOAN_FREE_WHISPER, ...ordered]
+    : ordered;
+}
+
+export function planWhisperFor(context: PlanWhisperContext): string {
+  return planWhispersForContext(context)[0] ?? NEUTRAL_WHISPERS[0];
 }
