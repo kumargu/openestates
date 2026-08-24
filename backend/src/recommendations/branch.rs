@@ -71,7 +71,7 @@ pub struct RecommendationBranch {
     pub magnitude: f32,
 }
 
-pub const RECOMMENDATION_ENGINE_VERSION: &str = "recommendations-v1";
+pub const RECOMMENDATION_ENGINE_VERSION: &str = "recommendations-v2";
 
 /// Clamp a raw pull value into a visible 0.25..1.0 band so no branch sits on the
 /// anchor and none escapes the compass ring.

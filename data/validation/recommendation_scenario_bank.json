@@ -1,0 +1,196 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-24",
+  "description": "Frozen property-to-property recommendation scenarios. Synthetic Bengaluru-shaped inventory proves recall, evidence-aware lenses, tradeoffs, diversity, and deterministic behavior without user history.",
+  "notes": [
+    "All names and facts are controlled test instances, never production ontology or parser aliases.",
+    "Every scenario gates the normal Rust contract test.",
+    "Spatial recall, society diversity, and deterministic ties were promoted after their black-box admissions passed."
+  ],
+  "cases": [
+    {
+      "id": "REC-001",
+      "category": "cold_start_property_to_property",
+      "admission": "current_contract",
+      "purpose": "An anonymous buyer opening one normal 3BHK gets several receipt-backed alternatives without click history.",
+      "area_median_ppsf": 13500,
+      "anchor": {"id":"anchor-cold","society":"Anchor Court","area":"East Bengaluru","bhk":3,"price":22500000,"ppsf":13636,"builder":"Anchor Builders"},
+      "candidates": [
+        {"id":"cold-value","society":"Value Grove","area":"East Bengaluru","bhk":3,"price":19000000,"ppsf":11500,"builder":"Value Builders"},
+        {"id":"cold-proof","society":"Receipt Heights","area":"East Bengaluru","bhk":3,"price":22600000,"ppsf":13700,"builder":"Proof Builders"},
+        {"id":"cold-access","society":"Connected Court","area":"East Bengaluru","bhk":3,"price":22000000,"ppsf":13300,"builder":"Access Builders"},
+        {"id":"cold-safe","society":"Delivered Square","area":"East Bengaluru","bhk":3,"price":22400000,"ppsf":13500,"builder":"Safe Builders"},
+        {"id":"cold-unlistable","society":"Empty Listing","area":"East Bengaluru","bhk":0,"price":0,"ppsf":0,"builder":""}
+      ],
+      "facts": [
+        {"property_id":"cold-proof","key":"rera_registration_id","value":"PRM/KA/RERA/fixture","source":"RERA"},
+        {"property_id":"cold-proof","key":"google_rating","value":4.5,"source":"Google"},
+        {"property_id":"cold-proof","key":"nearby_schools","value":"Fixture School (0.8 km)","source":"OpenStreetMap"},
+        {"property_id":"cold-access","key":"nearby_metro_stations","value":"Fixture Metro (0.7 km)","source":"OpenStreetMap"},
+        {"property_id":"cold-access","key":"nearby_tech_parks","value":"Fixture Tech Park (1.2 km)","source":"OpenStreetMap"},
+        {"property_id":"cold-safe","key":"home_state","value":"delivered","source":"RERA"},
+        {"property_id":"cold-safe","key":"legal.oc_status","value":"approved","source":"RERA"}
+      ],
+      "expectation": {"minimum_items":3,"unique_property_ids":true,"exclude_anchor":true,"forbidden_properties":["cold-unlistable"]}
+    },
+    {
+      "id": "REC-002",
+      "category": "lens_specific_alternatives",
+      "admission": "current_contract",
+      "purpose": "Each configured lens chooses the home with a specific, observed advantage instead of a generic similarity score.",
+      "area_median_ppsf": 13500,
+      "anchor": {"id":"anchor-lenses","society":"Baseline Residency","area":"East Bengaluru","bhk":3,"price":22500000,"ppsf":13636,"builder":"Baseline Builders"},
+      "candidates": [
+        {"id":"lens-value","society":"Value Specialist","area":"East Bengaluru","bhk":3,"price":19000000,"ppsf":11000,"builder":"Value Builders"},
+        {"id":"lens-proof","society":"Proof Specialist","area":"East Bengaluru","bhk":3,"price":22500000,"ppsf":13600,"builder":"Proof Builders"},
+        {"id":"lens-access","society":"Access Specialist","area":"East Bengaluru","bhk":3,"price":22400000,"ppsf":13550,"builder":"Access Builders"},
+        {"id":"lens-safety","society":"Safety Specialist","area":"East Bengaluru","bhk":3,"price":22600000,"ppsf":13700,"builder":"Safety Builders"},
+        {"id":"lens-living","society":"Living Specialist","area":"East Bengaluru","bhk":3,"price":22300000,"ppsf":13500,"builder":"Living Builders"}
+      ],
+      "facts": [
+        {"property_id":"lens-proof","key":"rera_registration_id","value":"PRM/KA/RERA/proof","source":"RERA"},
+        {"property_id":"lens-proof","key":"google_rating","value":4.6,"source":"Google"},
+        {"property_id":"lens-proof","key":"nearby_schools","value":"Fixture School (0.9 km)","source":"OpenStreetMap"},
+        {"property_id":"lens-proof","key":"home_state","value":"delivered","source":"Builder"},
+        {"property_id":"lens-access","key":"nearby_metro_stations","value":"Fixture Metro (0.5 km)","source":"OpenStreetMap"},
+        {"property_id":"lens-access","key":"nearby_tech_parks","value":"Fixture Tech Park (1.0 km)","source":"OpenStreetMap"},
+        {"property_id":"lens-access","key":"nearby_hospitals","value":"Fixture Hospital (1.1 km)","source":"OpenStreetMap"},
+        {"property_id":"lens-safety","key":"home_state","value":"delivered","source":"RERA"},
+        {"property_id":"lens-safety","key":"legal.oc_status","value":"approved","source":"RERA"},
+        {"property_id":"lens-living","key":"positive.maintenance_quality","value":"good","source":"Google"},
+        {"property_id":"lens-living","key":"positive.greenery","value":"good","source":"Google"},
+        {"property_id":"lens-living","key":"operating.water_supply_good","value":true,"source":"Resident"}
+      ],
+      "expectation": {
+        "minimum_items":5,
+        "unique_property_ids":true,
+        "exact_branch_properties":{"better_value":"lens-value","stronger_proof":"lens-proof","easier_access":"lens-access","safer_timeline":"lens-safety","better_living_fit":"lens-living"}
+      }
+    },
+    {
+      "id": "REC-003",
+      "category": "missing_evidence",
+      "admission": "current_contract",
+      "purpose": "A home with no access evidence cannot win the access lens merely because missing values resemble a low score.",
+      "area_median_ppsf": 13500,
+      "anchor": {"id":"anchor-missing","society":"Evidence Baseline","area":"East Bengaluru","bhk":3,"price":22000000,"ppsf":13500,"builder":"Baseline Builders"},
+      "candidates": [
+        {"id":"missing-access","society":"Unmeasured Access","area":"East Bengaluru","bhk":3,"price":21900000,"ppsf":13450,"builder":"Unknown Builders"},
+        {"id":"proven-access","society":"Measured Access","area":"East Bengaluru","bhk":3,"price":22100000,"ppsf":13550,"builder":"Measured Builders"}
+      ],
+      "facts": [
+        {"property_id":"anchor-missing","key":"rera_registration_id","value":"PRM/KA/RERA/baseline","source":"RERA"},
+        {"property_id":"anchor-missing","key":"google_rating","value":4.2,"source":"Google"},
+        {"property_id":"anchor-missing","key":"home_state","value":"delivered","source":"Builder"},
+        {"property_id":"anchor-missing","key":"rera_completion_date","value":"2024-01-01","source":"RERA"},
+        {"property_id":"proven-access","key":"nearby_metro_stations","value":"Fixture Metro (0.6 km)","source":"OpenStreetMap"},
+        {"property_id":"proven-access","key":"nearby_tech_parks","value":"Fixture Tech Park (1.4 km)","source":"OpenStreetMap"},
+        {"property_id":"proven-access","key":"nearby_hospitals","value":"Fixture Hospital (1.0 km)","source":"OpenStreetMap"},
+        {"property_id":"proven-access","key":"access.metro_good","value":true,"source":"OpenStreetMap"}
+      ],
+      "expectation": {"exact_branch_properties":{"easier_access":"proven-access"},"branch_must_not_use":{"easier_access":"missing-access"}}
+    },
+    {
+      "id": "REC-004",
+      "category": "explicit_tradeoff",
+      "admission": "current_contract",
+      "purpose": "A stronger-proof alternative discloses its materially higher price per square foot.",
+      "area_median_ppsf": 13500,
+      "anchor": {"id":"anchor-tradeoff","society":"Fair Price Homes","area":"East Bengaluru","bhk":3,"price":22000000,"ppsf":13500,"builder":"Fair Builders"},
+      "candidates": [
+        {"id":"proof-premium","society":"Verified Premium","area":"East Bengaluru","bhk":3,"price":24500000,"ppsf":15000,"builder":"Verified Builders"},
+        {"id":"value-backup","society":"Value Backup","area":"East Bengaluru","bhk":3,"price":19000000,"ppsf":11000,"builder":"Value Builders"}
+      ],
+      "facts": [
+        {"property_id":"proof-premium","key":"rera_registration_id","value":"PRM/KA/RERA/premium","source":"RERA"},
+        {"property_id":"proof-premium","key":"google_rating","value":4.7,"source":"Google"},
+        {"property_id":"proof-premium","key":"nearby_schools","value":"Fixture School (0.7 km)","source":"OpenStreetMap"},
+        {"property_id":"proof-premium","key":"home_state","value":"delivered","source":"Builder"}
+      ],
+      "expectation": {"exact_branch_properties":{"stronger_proof":"proof-premium"},"tradeoff_contains":{"stronger_proof":"higher per sqft"}}
+    },
+    {
+      "id": "REC-005",
+      "category": "society_diversity_and_deduplication",
+      "admission": "current_contract",
+      "purpose": "Two listings from one project do not crowd out a genuinely different project, and one multichannel property appears once.",
+      "area_median_ppsf": 13500,
+      "anchor": {"id":"anchor-diversity","society":"Anchor Diversity","area":"East Bengaluru","bhk":3,"price":22500000,"ppsf":13600,"builder":"Anchor Builders"},
+      "candidates": [
+        {"id":"twin-value","society":"Twin Towers","area":"East Bengaluru","bhk":3,"price":18500000,"ppsf":10800,"builder":"Twin Builders"},
+        {"id":"twin-proof","society":"Twin Towers","area":"East Bengaluru","bhk":3,"price":22000000,"ppsf":13400,"builder":"Twin Builders"},
+        {"id":"garden-access","society":"Garden Court","area":"East Bengaluru","bhk":3,"price":22100000,"ppsf":13500,"builder":"Garden Builders"}
+      ],
+      "facts": [
+        {"property_id":"twin-proof","key":"rera_registration_id","value":"PRM/KA/RERA/twin","source":"RERA"},
+        {"property_id":"twin-proof","key":"google_rating","value":4.6,"source":"Google"},
+        {"property_id":"garden-access","key":"nearby_metro_stations","value":"Fixture Metro (0.8 km)","source":"OpenStreetMap"}
+      ],
+      "expectation": {"minimum_items":2,"unique_property_ids":true,"max_properties_per_society":1}
+    },
+    {
+      "id": "REC-006",
+      "category": "serving_graph_recall",
+      "admission": "current_contract",
+      "purpose": "A non-lexical, differently priced home is recalled because both projects share a receipt-backed nearby transit node.",
+      "area_median_ppsf": 13500,
+      "anchor": {"id":"anchor-graph","society":"Graph Anchor","area":"Old East","bhk":3,"price":22000000,"ppsf":13500,"builder":"Anchor Builders"},
+      "candidates": [{"id":"graph-neighbor","society":"Transit Neighbor","area":"New North","bhk":3,"price":32000000,"ppsf":19000,"builder":"Other Builders"}],
+      "facts": [{"property_id":"graph-neighbor","key":"nearby_metro_stations","value":"Shared Transit (0.9 km)","source":"OpenStreetMap"}],
+      "edges": [
+        {"from_property_id":"anchor-graph","edge_type":"near_transit","to_entity_id":"place:shared-transit"},
+        {"from_property_id":"graph-neighbor","edge_type":"near_transit","to_entity_id":"place:shared-transit"}
+      ],
+      "expectation": {"required_properties":["graph-neighbor"],"required_channels":{"graph-neighbor":["shared_graph_neighbor"]}}
+    },
+    {
+      "id": "REC-007",
+      "category": "spatial_geo_recall",
+      "admission": "current_contract",
+      "purpose": "A physically nearby project is eligible even when scalar and graph recall channels do not overlap.",
+      "area_median_ppsf": 13500,
+      "anchor": {"id":"anchor-geo","society":"Geo Anchor","area":"Old East","bhk":3,"price":22000000,"ppsf":13500,"builder":"Anchor Builders","latitude":12.9716,"longitude":77.5946},
+      "candidates": [{"id":"geo-neighbor","society":"Nearby Coordinates","area":"New North","bhk":3,"price":32000000,"ppsf":19000,"builder":"Other Builders","latitude":12.9770,"longitude":77.5960}],
+      "facts": [{"property_id":"geo-neighbor","key":"nearby_public_parks","value":"Fixture Park (0.4 km)","source":"OpenStreetMap"}],
+      "expectation": {"required_properties":["geo-neighbor"],"required_channels":{"geo-neighbor":["spatial_nearby"]}}
+    },
+    {
+      "id": "REC-008",
+      "category": "deterministic_tie_breaking",
+      "admission": "current_contract",
+      "purpose": "Equal candidates produce the same lexicographic winner and output order regardless of input order.",
+      "area_median_ppsf": 13500,
+      "anchor": {"id":"anchor-tie","society":"Tie Anchor","area":"East Bengaluru","bhk":3,"price":22500000,"ppsf":13600,"builder":"Anchor Builders"},
+      "candidates": [
+        {"id":"tie-alpha","society":"Alpha Equal","area":"East Bengaluru","bhk":3,"price":19000000,"ppsf":11000,"builder":"Equal Builders"},
+        {"id":"tie-beta","society":"Beta Equal","area":"East Bengaluru","bhk":3,"price":19000000,"ppsf":11000,"builder":"Equal Builders"},
+        {"id":"tie-proof","society":"Proof Equal","area":"East Bengaluru","bhk":3,"price":22500000,"ppsf":13600,"builder":"Proof Builders"}
+      ],
+      "facts": [{"property_id":"tie-proof","key":"rera_registration_id","value":"PRM/KA/RERA/tie","source":"RERA"}],
+      "expectation": {"exact_branch_properties":{"better_value":"tie-alpha"},"repeat_with_reversed_inventory":true}
+    },
+    {
+      "id": "REC-009",
+      "category": "empty_eligible_pool",
+      "admission": "current_contract",
+      "purpose": "An anchor with no listable alternatives returns a calm empty set rather than itself or fabricated inventory.",
+      "area_median_ppsf": 13500,
+      "anchor": {"id":"anchor-empty","society":"Only Home","area":"East Bengaluru","bhk":3,"price":22000000,"ppsf":13500,"builder":"Only Builders"},
+      "candidates": [{"id":"empty-shell","society":"Empty Shell","area":"East Bengaluru","bhk":0,"price":0,"ppsf":0,"builder":""}],
+      "expectation": {"exact_item_count":0,"exclude_anchor":true}
+    },
+    {
+      "id": "REC-010",
+      "category": "configured_property_type_compatibility",
+      "admission": "current_contract",
+      "purpose": "Configured aliases for residential apartment projects interoperate without admitting a materially different villa product type.",
+      "area_median_ppsf": 13500,
+      "anchor": {"id":"anchor-group-housing","society":"Group Housing Anchor","area":"East Bengaluru","bhk":3,"price":22000000,"ppsf":13500,"builder":"Anchor Builders","property_type":"Residential/Group Housing"},
+      "candidates": [
+        {"id":"mixed-home","society":"Mixed Home","area":"East Bengaluru","bhk":3,"price":19000000,"ppsf":11000,"builder":"Mixed Builders","property_type":"Mixed Development"},
+        {"id":"villa-home","society":"Villa Home","area":"East Bengaluru","bhk":3,"price":18000000,"ppsf":10000,"builder":"Villa Builders","property_type":"Villa"}
+      ],
+      "expectation": {"required_properties":["mixed-home"],"forbidden_properties":["villa-home"]}
+    }
+  ]
+}

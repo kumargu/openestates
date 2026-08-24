@@ -104,6 +104,77 @@ pub struct RecommendationBranchPolicy {
     pub min_delta: f64,
     pub headline: String,
     pub lens: String,
+    #[serde(default)]
+    pub priority: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationRecallPolicy {
+    pub candidate_limit: usize,
+    pub branch_limit: usize,
+    pub target_branch_count: usize,
+    pub eligibility: RecommendationEligibilityPolicy,
+    #[serde(default)]
+    pub channels: Vec<RecommendationRecallChannelPolicy>,
+    pub fallback_branch: RecommendationFallbackBranchPolicy,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationEligibilityPolicy {
+    pub require_same_bhk: bool,
+    pub require_same_listing_type: bool,
+    pub require_same_property_type: bool,
+    #[serde(default)]
+    pub compatible_property_type_groups: Vec<RecommendationPropertyTypeGroup>,
+    pub exclude_anchor_society: bool,
+    pub max_properties_per_society: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationPropertyTypeGroup {
+    pub id: String,
+    pub values: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecommendationRecallOperator {
+    SameArea,
+    PriceBand,
+    SameBuilder,
+    SharedGraphNeighbor,
+    SpatialRadius,
+    Lexical,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationRecallChannelPolicy {
+    pub id: String,
+    pub operator: RecommendationRecallOperator,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_true")]
+    pub can_recall: bool,
+    pub score: f64,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub min_ratio: Option<f64>,
+    #[serde(default)]
+    pub max_ratio: Option<f64>,
+    #[serde(default)]
+    pub max_distance_km: Option<f64>,
+    #[serde(default)]
+    pub edge_types: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationFallbackBranchPolicy {
+    pub enabled: bool,
+    pub id: String,
+    pub headline: String,
+    pub lens: String,
+    pub max_items: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,6 +194,7 @@ pub struct ScoringPolicyFile {
     pub signals: Vec<ScoringSignalPolicy>,
     #[serde(default)]
     pub surfaces: ScoringSurfaces,
+    pub recommendation_recall: RecommendationRecallPolicy,
     #[serde(default)]
     pub recommendation_branches: Vec<RecommendationBranchPolicy>,
 }
@@ -592,6 +664,7 @@ fn text_safety_score(text: &str) -> f64 {
 
 fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
     validate_area_tracker(&policy.area_tracker)?;
+    validate_recommendation_policy(policy)?;
     if !policy
         .search_ranking
         .ranked_focus_min_match_score
@@ -671,6 +744,153 @@ fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
         }
     }
     Ok(())
+}
+
+fn validate_recommendation_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
+    let recall = &policy.recommendation_recall;
+    if recall.candidate_limit == 0
+        || recall.branch_limit == 0
+        || recall.target_branch_count == 0
+        || recall.target_branch_count > recall.branch_limit
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "recommendation recall requires positive candidate/branch limits and a target not greater than the branch limit"
+                .to_string(),
+        ));
+    }
+    if recall.eligibility.max_properties_per_society == 0 {
+        return Err(DagConfigError::InvalidConfig(
+            "recommendation eligibility max_properties_per_society must be positive".to_string(),
+        ));
+    }
+    let mut property_type_group_ids = BTreeSet::new();
+    let mut property_type_values = BTreeSet::new();
+    for group in &recall.eligibility.compatible_property_type_groups {
+        if group.id.trim().is_empty() || !property_type_group_ids.insert(group.id.as_str()) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "recommendation property type group id {:?} is empty or duplicated",
+                group.id
+            )));
+        }
+        if group.values.len() < 2 {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "recommendation property type group {} requires at least two values",
+                group.id
+            )));
+        }
+        for value in &group.values {
+            let normalized = normalize_policy_value(value);
+            if normalized.is_empty() || !property_type_values.insert(normalized) {
+                return Err(DagConfigError::InvalidConfig(format!(
+                    "recommendation property type group {} contains an empty or duplicated value {:?}",
+                    group.id, value
+                )));
+            }
+        }
+    }
+    if recall.fallback_branch.enabled && recall.fallback_branch.max_items == 0 {
+        return Err(DagConfigError::InvalidConfig(
+            "enabled recommendation fallback requires max_items greater than zero".to_string(),
+        ));
+    }
+
+    let allowed_lenses = ["proof", "value", "trust", "commute"];
+    if !allowed_lenses.contains(&recall.fallback_branch.lens.as_str()) {
+        return Err(DagConfigError::InvalidConfig(format!(
+            "recommendation fallback has unsupported lens {}",
+            recall.fallback_branch.lens
+        )));
+    }
+
+    let mut channel_ids = BTreeSet::new();
+    let mut enabled_recall_channels = 0usize;
+    for channel in &recall.channels {
+        if channel.id.trim().is_empty() || !channel_ids.insert(channel.id.as_str()) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "recommendation recall channel id {:?} is empty or duplicated",
+                channel.id
+            )));
+        }
+        if !channel.score.is_finite() || !(0.0..=1.0).contains(&channel.score) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "recommendation recall channel {} score must be within 0..1",
+                channel.id
+            )));
+        }
+        if channel.limit.is_some_and(|limit| limit == 0) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "recommendation recall channel {} limit must be positive",
+                channel.id
+            )));
+        }
+        if channel.enabled && channel.can_recall {
+            enabled_recall_channels += 1;
+        }
+        match channel.operator {
+            RecommendationRecallOperator::PriceBand => {
+                let min = channel.min_ratio.unwrap_or(0.0);
+                let max = channel.max_ratio.unwrap_or(0.0);
+                if !min.is_finite() || !max.is_finite() || min <= 0.0 || max < min {
+                    return Err(DagConfigError::InvalidConfig(format!(
+                        "recommendation price-band channel {} requires 0 < min_ratio <= max_ratio",
+                        channel.id
+                    )));
+                }
+            }
+            RecommendationRecallOperator::SharedGraphNeighbor => {
+                if channel.edge_types.is_empty() {
+                    return Err(DagConfigError::InvalidConfig(format!(
+                        "recommendation graph channel {} requires edge_types",
+                        channel.id
+                    )));
+                }
+            }
+            RecommendationRecallOperator::SpatialRadius => {
+                if channel
+                    .max_distance_km
+                    .is_none_or(|distance| !distance.is_finite() || distance <= 0.0)
+                {
+                    return Err(DagConfigError::InvalidConfig(format!(
+                        "recommendation spatial channel {} requires a positive max_distance_km",
+                        channel.id
+                    )));
+                }
+            }
+            RecommendationRecallOperator::SameArea
+            | RecommendationRecallOperator::SameBuilder
+            | RecommendationRecallOperator::Lexical => {}
+        }
+    }
+    if enabled_recall_channels == 0 {
+        return Err(DagConfigError::InvalidConfig(
+            "recommendation recall requires at least one enabled candidate-generating channel"
+                .to_string(),
+        ));
+    }
+
+    for branch in &policy.recommendation_branches {
+        if !allowed_lenses.contains(&branch.lens.as_str()) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "recommendation branch {} has unsupported lens {}",
+                branch.id, branch.lens
+            )));
+        }
+        if !branch.min_delta.is_finite() || !(0.0..=1.0).contains(&branch.min_delta) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "recommendation branch {} min_delta must be within 0..1",
+                branch.id
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn normalize_policy_value(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .flat_map(|character| character.to_lowercase())
+        .collect()
 }
 
 fn validate_area_tracker(policy: &AreaTrackerPolicy) -> Result<(), DagConfigError> {

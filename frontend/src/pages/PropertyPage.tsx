@@ -20,6 +20,10 @@ import {
   getPropertySurface,
   parseProofFocusParam,
 } from "../lib/api.ts";
+import {
+  recommendationShelfItems,
+  type RecommendationShelfItem,
+} from "../lib/recommendations.ts";
 import { PageState } from "../components/PageState.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
@@ -94,10 +98,6 @@ function PropertySearchMatch({
       )}
     </section>
   );
-}
-
-function comparablePrice(price: number): number {
-  return hasKnownNumber(price) ? price : Number.MAX_SAFE_INTEGER;
 }
 
 function societyKey(
@@ -195,106 +195,6 @@ function propertyToCard(data: PropertyDetailResponse): PropertyCard {
   };
 }
 
-type RankedRecommendationItem =
-  | {
-      kind: "branch";
-      id: string;
-      property: PropertyCard;
-      branch: RecommendationResponse["items"][number];
-    }
-  | { kind: "nearby"; id: string; property: PropertyCard };
-
-function reviewStrength(property: PropertyCard): number {
-  const rating = property.google_rating ?? 0;
-  const reviewCount = property.google_review_count ?? 0;
-  if (rating <= 0 || reviewCount <= 0) return 0;
-  return rating * 100 + Math.log10(reviewCount + 1) * 12;
-}
-
-function rankedRecommendationItems(
-  branches: RecommendationResponse["items"],
-  nearby: PropertyCard[],
-): RankedRecommendationItem[] {
-  const usedIds = new Set(branches.map((branch) => branch.property.id));
-  const branchItems: RankedRecommendationItem[] = branches.map((branch) => ({
-    kind: "branch",
-    id: `${branch.branch_id}-${branch.property.id}`,
-    property: branch.property,
-    branch,
-  }));
-  const nearbyItems: RankedRecommendationItem[] = nearby
-    .filter((property) => !usedIds.has(property.id))
-    .map((property) => ({
-      kind: "nearby",
-      id: property.id,
-      property,
-    }));
-
-  return [...branchItems, ...nearbyItems]
-    .sort((left, right) => {
-      const reviewDelta =
-        reviewStrength(right.property) - reviewStrength(left.property);
-      if (Math.abs(reviewDelta) > 0.001) return reviewDelta;
-      const branchDelta =
-        (right.kind === "branch" ? right.branch.magnitude : 0) -
-        (left.kind === "branch" ? left.branch.magnitude : 0);
-      if (Math.abs(branchDelta) > 0.001) return branchDelta;
-      return (
-        comparablePrice(left.property.price) -
-        comparablePrice(right.property.price)
-      );
-    })
-    .slice(0, 8);
-}
-
-function recommendationShelfItems(
-  primaryItems: RankedRecommendationItem[],
-  properties: PropertyCard[],
-  currentProperty: PropertyCard,
-  excludedIds: Set<string>,
-): RankedRecommendationItem[] {
-  const fallbackItems: RankedRecommendationItem[] = properties
-    .map((property) => ({
-      kind: "nearby",
-      id: `nearby-${property.id}`,
-      property,
-    } as const))
-    .sort((left, right) => {
-      const areaDelta =
-        Number(right.property.area === currentProperty.area) -
-        Number(left.property.area === currentProperty.area);
-      if (areaDelta !== 0) return areaDelta;
-      const reviewDelta =
-        reviewStrength(right.property) - reviewStrength(left.property);
-      if (Math.abs(reviewDelta) > 0.001) return reviewDelta;
-      return comparablePrice(left.property.price) -
-        comparablePrice(right.property.price);
-    });
-  const usedIds = new Set([currentProperty.id, ...excludedIds]);
-  const usedSocieties = new Set([
-    societyKey(currentProperty) || currentProperty.title.trim().toLowerCase(),
-  ]);
-  const items: RankedRecommendationItem[] = [];
-
-  for (const item of [...primaryItems, ...fallbackItems]) {
-    const property = item.property;
-    const key = societyKey(property) || property.title.trim().toLowerCase();
-    if (
-      usedIds.has(property.id)
-      || usedSocieties.has(key)
-      || (!property.hero_image && !property.society_name)
-    ) {
-      continue;
-    }
-    usedIds.add(property.id);
-    usedSocieties.add(key);
-    items.push(item);
-    if (items.length === 4) break;
-  }
-
-  return items;
-}
-
 function compactRecommendationArea(area: string): string {
   const parts = area.split(",").map((part) => part.trim()).filter(Boolean);
   if (area.length <= 32 || parts.length < 2) return area;
@@ -305,7 +205,7 @@ function NearbyHomeCard({
   item,
   sceneIndex,
 }: {
-  item: RankedRecommendationItem;
+  item: RecommendationShelfItem;
   sceneIndex: number;
 }) {
   const property = item.property;
@@ -362,7 +262,7 @@ function NearbyHomesRail({
   items,
   status,
 }: {
-  items: RankedRecommendationItem[];
+  items: RecommendationShelfItem[];
   status: RecommendationStatus;
 }) {
   if (items.length === 0 && status !== "pending") return null;
@@ -646,21 +546,16 @@ function PropertyPageBody({
   const showNearbyPlate = hasAroundThisHomePlate(aroundThisHomeContext);
   const recommendationBranches =
     recommendations?.items ?? data.recommendation_branches ?? [];
-  const recommendationItems = rankedRecommendationItems(
-    recommendationBranches,
-    data.similar_properties,
-  );
   const currentCard = propertyToCard(data);
   const marketPropertyMap = new Map<string, PropertyCard>();
   for (const property of [
     currentCard,
     ...allProperties,
     ...data.similar_properties,
-    ...recommendationItems.map((item) => item.property),
+    ...recommendationBranches.map((branch) => branch.property),
   ]) {
     marketPropertyMap.set(property.id, property);
   }
-  const marketProperties = [...marketPropertyMap.values()];
   const displayTitle = p.title.trim();
   const story = projectPropertyStory(data);
   const proofSourceUrl = proofFocus
@@ -698,8 +593,7 @@ function PropertyPageBody({
   );
   const comparisonIds = new Set(savedComparisons.map((home) => home.id));
   const moreNearbyItems = recommendationShelfItems(
-    recommendationItems,
-    marketProperties,
+    recommendationBranches,
     currentCard,
     comparisonIds,
   );
