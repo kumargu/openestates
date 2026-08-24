@@ -635,7 +635,10 @@ function readRawState(): NotebookState {
     if (!raw) return EMPTY;
     const parsed = JSON.parse(raw) as Partial<NotebookState>;
     const propertyIds = Array.isArray(parsed.propertyIds) ? parsed.propertyIds.filter(Boolean) : [];
-    const compareIds = Array.isArray(parsed.compareIds) ? parsed.compareIds.filter(Boolean) : [];
+    const compareIds = Array.isArray(parsed.compareIds)
+      ? [...new Set(parsed.compareIds.map((id) => id.trim()).filter(Boolean))]
+        .slice(0, MAX_COMPARE_FROM_NOTEBOOK)
+      : [];
     const hiddenCompareLabels = Array.isArray(parsed.hiddenCompareLabels)
       ? parsed.hiddenCompareLabels.filter((item): item is NotebookLabelId => typeof item === "string")
       : [];
@@ -690,9 +693,7 @@ export function readNotebook(): NotebookState {
   return {
     ...state,
     propertyIds,
-    compareIds: state.compareIds
-      .filter((id) => propertyIds.includes(id))
-      .slice(0, MAX_COMPARE_FROM_NOTEBOOK),
+    compareIds: [...new Set(state.compareIds)].slice(0, MAX_COMPARE_FROM_NOTEBOOK),
   };
 }
 
@@ -703,8 +704,7 @@ export function writeNotebook(state: Partial<NotebookState>): NotebookState {
     propertyIds: [...new Set(completed.propertyIds)],
     documents: completed.documents,
     notes: completed.notes.slice(0, MAX_NOTEBOOK_NOTES),
-    compareIds: completed.compareIds
-      .filter((id) => completed.propertyIds.includes(id))
+    compareIds: [...new Set(completed.compareIds.map((id) => id.trim()).filter(Boolean))]
       .slice(0, MAX_COMPARE_FROM_NOTEBOOK),
     hiddenCompareLabels: [...new Set(completed.hiddenCompareLabels ?? [])],
   };
@@ -1116,6 +1116,11 @@ export function toggleNotebookCompareId(propertyId: string): NotebookState {
       ? currentIds
       : [...currentIds, propertyId];
   return writeNotebook({ ...withProp, compareIds });
+}
+
+export function setNotebookCompareIds(propertyIds: string[]): NotebookState {
+  const state = readNotebook();
+  return writeNotebook({ ...state, compareIds: propertyIds });
 }
 
 export function hideNotebookCompareLabel(label: NotebookLabelId): NotebookState {

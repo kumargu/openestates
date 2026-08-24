@@ -37,6 +37,7 @@ const {
   hideNotebookCompareLabel,
   readNotebook,
   showNotebookCompareLabel,
+  setNotebookCompareIds,
   toggleNotebookCompareId,
   updateNotebookNote,
   upsertContextualNote,
@@ -112,6 +113,17 @@ test("compare selection is explicit and does not rewrite saved homes", () => {
   assert.deepEqual(state.propertyIds, ["saved-home", "noted-home"]);
   assert.deepEqual(state.compareIds, ["saved-home"]);
   assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "saved-home,noted-home");
+});
+
+test("a deep-linked comparison becomes active without saving every home", () => {
+  storage.clear();
+  storage.setItem(SHORTLIST_STORAGE_KEY, "saved-home");
+
+  const state = setNotebookCompareIds(["saved-home", "recommended-home"]);
+
+  assert.deepEqual(state.compareIds, ["saved-home", "recommended-home"]);
+  assert.deepEqual(state.propertyIds, ["saved-home"]);
+  assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "saved-home");
 });
 
 test("removing a shortlisted home clears compare state without deleting buyer notes", () => {

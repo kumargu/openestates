@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  activeWorkspaceCompareIds,
   activeWorkspaceView,
   workspaceBuyVsRentHref,
   workspaceCompareHref,
@@ -120,6 +121,17 @@ test("compare links discard focus outside the compared homes", () => {
   assert.equal(
     workspaceCompareHref(["home-one", "home-two"], "home-three"),
     "/workspace/compare?ids=home-one%2Chome-two",
+  );
+});
+
+test("one active comparison selection is shared by URL and workspace state", () => {
+  assert.deepEqual(
+    activeWorkspaceCompareIds(["linked-home", "second-home"], ["saved-home"]),
+    ["linked-home", "second-home"],
+  );
+  assert.deepEqual(
+    activeWorkspaceCompareIds([], ["saved-home", "second-home", "saved-home"]),
+    ["saved-home", "second-home"],
   );
 });
 

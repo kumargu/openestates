@@ -1,5 +1,7 @@
 import type { NavigationMode } from "./navigationContext.ts";
 
+const MAX_ACTIVE_COMPARE_HOMES = 4;
+
 export type WorkspaceView = "browse" | "home" | "notebook" | "compare" | "rera" | "plan";
 
 export type WorkspaceNavItem = {
@@ -84,12 +86,25 @@ export function shouldShowWorkspaceSidebar(
 }
 
 export function workspaceCompareHref(ids: string[], focusId?: string): string {
-  const uniqueIds = [...new Set(ids.map((id) => id.trim()).filter(Boolean))].slice(0, 4);
+  const uniqueIds = activeWorkspaceCompareIds(ids, []);
   if (uniqueIds.length < 2) return "/workspace/compare";
   const params = new URLSearchParams();
   params.set("ids", uniqueIds.join(","));
   if (focusId && uniqueIds.includes(focusId)) params.set("focus", focusId);
   return `/workspace/compare?${params.toString()}`;
+}
+
+/**
+ * Resolve the one active comparison set shared by deep links and local workspace state.
+ * A URL selection wins when present; otherwise the buyer's persisted selection is used.
+ */
+export function activeWorkspaceCompareIds(
+  requestedIds: string[],
+  persistedIds: string[],
+): string[] {
+  const source = requestedIds.length > 0 ? requestedIds : persistedIds;
+  return [...new Set(source.map((id) => id.trim()).filter(Boolean))]
+    .slice(0, MAX_ACTIVE_COMPARE_HOMES);
 }
 
 export function workspaceBuyVsRentHref(propertyId?: string | null): string {
