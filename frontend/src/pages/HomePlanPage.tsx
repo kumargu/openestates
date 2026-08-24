@@ -268,6 +268,7 @@ export function HomePlanPage() {
           compareHref={compareHref}
           buyVsRentHref={buyVsRentHref}
           compareCount={compareIds.length}
+          contextDisplay="mobile-only"
           context={homeOptions.length > 0 ? (
             <WorkspacePropertySwitcher
               selectedId={homeOptions.some((home) => home.id === id) ? id : undefined}
@@ -336,6 +337,7 @@ export function HomePlanPage() {
         compareHref={compareHref}
         buyVsRentHref={workspaceBuyVsRentHref(id)}
         compareCount={compareIds.length}
+        contextDisplay="mobile-only"
         context={(
           <WorkspacePropertySwitcher
             selectedId={id}

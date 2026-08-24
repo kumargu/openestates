@@ -9,6 +9,7 @@ type WorkspaceHeaderProps = {
   buyVsRentHref: string;
   compareCount?: number;
   context?: ReactNode;
+  contextDisplay?: "always" | "mobile-only";
 };
 
 export function WorkspaceHeader({
@@ -17,6 +18,7 @@ export function WorkspaceHeader({
   buyVsRentHref,
   compareCount = 0,
   context,
+  contextDisplay = "always",
 }: WorkspaceHeaderProps) {
   return (
     <header className="workspace-header">
@@ -47,7 +49,11 @@ export function WorkspaceHeader({
           </Link>
         </nav>
       </div>
-      {context && <div className="workspace-header__context">{context}</div>}
+      {context && (
+        <div className={`workspace-header__context workspace-header__context--${contextDisplay}`}>
+          {context}
+        </div>
+      )}
     </header>
   );
 }

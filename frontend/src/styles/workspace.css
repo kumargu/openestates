@@ -124,6 +124,10 @@
   border-top: 1px solid rgba(38, 35, 32, 0.055);
 }
 
+.workspace-header__context--mobile-only {
+  display: none;
+}
+
 .workspace-home-switcher {
   position: relative;
   display: flex;
@@ -2372,6 +2376,10 @@
     display: block;
     max-width: 100%;
     font-size: 0.58rem;
+  }
+
+  .workspace-header__context--mobile-only {
+    display: flex;
   }
 
   .compare-range-chart {
