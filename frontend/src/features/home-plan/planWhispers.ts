@@ -42,14 +42,19 @@ export function planWhispersFor(theme: PlanWhisperTheme): readonly string[] {
   return [...NEUTRAL_WHISPERS, ...BUY_WHISPERS, ...RENT_WHISPERS];
 }
 
-export function planWhisperFor({
+export function planWhispersForContext({
   theme,
   activeYear,
   loanFreeYear,
-}: PlanWhisperContext): string {
-  if (loanFreeYear !== null && activeYear >= loanFreeYear) {
-    return LOAN_FREE_WHISPER;
-  }
+}: PlanWhisperContext): readonly string[] {
   const whispers = planWhispersFor(theme);
-  return whispers[Math.max(0, Math.round(activeYear)) % whispers.length] ?? NEUTRAL_WHISPERS[0];
+  const start = Math.max(0, Math.round(activeYear)) % whispers.length;
+  const ordered = [...whispers.slice(start), ...whispers.slice(0, start)];
+  return loanFreeYear !== null && activeYear >= loanFreeYear
+    ? [LOAN_FREE_WHISPER, ...ordered]
+    : ordered;
+}
+
+export function planWhisperFor(context: PlanWhisperContext): string {
+  return planWhispersForContext(context)[0] ?? NEUTRAL_WHISPERS[0];
 }

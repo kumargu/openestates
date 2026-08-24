@@ -543,7 +543,7 @@
   font-size: clamp(0.82rem, 0.77rem + 0.2vw, 0.94rem);
   font-style: italic;
   line-height: 1.45;
-  animation: home-plan-perspective-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: home-plan-perspective-in 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes home-plan-perspective-in {
