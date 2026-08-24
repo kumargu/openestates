@@ -7,13 +7,13 @@ import { getProperty, getPropertyRera } from "../lib/api.ts";
 import {
   claimValueText,
   buildReraReportViewModel,
-  claimsForSelector,
   displayFactsForSection,
   formatReraDate,
   httpUrl,
   orderReraDocuments,
   orderReraRegulatoryEvents,
   previewReraRegulatoryEvents,
+  projectReraInventoryChart,
   regulatoryCoverageNote,
   regulatoryEventPresentation,
   selectReraPlanPreviews,
@@ -140,7 +140,6 @@ function ReraDecisionSummary({ model }: { model: ReraReportViewModel }) {
             </div>
             <strong>{fact.value}</strong>
             {fact.detail && <p>{fact.detail}</p>}
-            {fact.sourceUrl && <a href={fact.sourceUrl} target="_blank" rel="noreferrer">Source</a>}
           </article>
         ))}
       </div>
@@ -155,7 +154,6 @@ function RegistrationList({ model }: { model: ReraReportViewModel }) {
         <div className="rera-compact-state">
           <strong>Registration match unresolved</strong>
           <span>The available record does not identify an exact registration.</span>
-          {model.registryUrl && <a href={model.registryUrl} target="_blank" rel="noreferrer">Check registry</a>}
         </div>
       </Section>
     );
@@ -181,7 +179,6 @@ function RegistrationList({ model }: { model: ReraReportViewModel }) {
               <div><dt>Declared homes</dt><dd>{registration.units ?? "Not in record"}</dd></div>
               <div><dt>Current completion</dt><dd>{registration.completion ? formatReraDate(registration.completion) : "Not in record"}</dd></div>
             </dl>
-            {registration.sourceUrl && <a href={registration.sourceUrl} target="_blank" rel="noreferrer">Open registration <span aria-hidden="true">↗</span></a>}
           </article>
         ))}
       </div>
@@ -211,7 +208,6 @@ function DeliveryAndProgress({ model }: { model: ReraReportViewModel }) {
                     <small>{item.label}</small>
                     <strong>{formatReraDate(item.value)}</strong>
                     {registrationScope(item.registrationId) && <small>{registrationScope(item.registrationId)}</small>}
-                    {item.sourceUrl && <a href={item.sourceUrl} target="_blank" rel="noreferrer">Source</a>}
                   </div>
                 </li>
               ))}
@@ -232,7 +228,6 @@ function DeliveryAndProgress({ model }: { model: ReraReportViewModel }) {
                     {index === 0 && <span>Latest</span>}
                     <time dateTime={filing.filedAt}>{formatReraDate(filing.filedAt)}</time>
                     {registrationScope(filing.registrationId) && <small>{registrationScope(filing.registrationId)}</small>}
-                    {filing.sourceUrl && <a href={filing.sourceUrl} target="_blank" rel="noreferrer">Source</a>}
                   </div>
                   <dl>
                     <div><dt>Booked</dt><dd>{filing.bookedUnits?.toLocaleString("en-IN") ?? "—"}</dd></div>
@@ -406,11 +401,6 @@ function RegulatoryRecord({ report }: { report: ReraEvidenceReportResponse }) {
                   </blockquote>
                 )}
               </div>
-              {presentation.source && (
-                <a href={presentation.source.source_url} target="_blank" rel="noreferrer">
-                  {presentation.actionLabel}
-                </a>
-              )}
             </li>
           );
         })}
@@ -439,65 +429,44 @@ function Inventory({
   section?: ReraReportSurfaceSection;
   evidence: ReraEvidenceProjection;
 }) {
-  const [page, setPage] = useState(0);
   if (!section) return null;
-  const entities = evidence.entities.filter((entity) => entity.entity_type === "inventory_configuration");
-  const valueSelectors = section.selectors.filter(({ key }) => (
-    key.startsWith("claim:")
-    && entities.some((entity) => claimsForSelector(evidence.claims, key, entity.entity_id).length > 0)
-  ));
-  const rows = new Map<string, { entity: (typeof entities)[number]; claims: ReraEvidenceClaim[] }>();
-  for (const entity of entities) {
-    const claims = evidence.claims.filter((claim) => claim.subject.entity_id === entity.entity_id);
-    const values = valueSelectors.map((selector) => {
-      const claim = claimsForSelector(claims, selector.key)[0];
-      return claim ? claimValueText(claim.value, selector.format) : "—";
-    });
-    const normalizedLabel = (entity.label ?? "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "");
-    rows.set(`${normalizedLabel}:${values.join("|")}`, { entity, claims });
-  }
-  if (rows.size === 0) return null;
-  const orderedRows = [...rows.values()];
-  const pageSize = section.items_per_page ?? 6;
-  const pageCount = Math.max(1, Math.ceil(orderedRows.length / pageSize));
-  const safePage = Math.min(page, pageCount - 1);
-  const visibleRows = orderedRows.slice(safePage * pageSize, (safePage + 1) * pageSize);
+  const rows = projectReraInventoryChart(section, evidence);
+  if (rows.length === 0) return null;
   return (
     <Section id="inventory" title="Homes and carpet area">
-      <div className="rera-table-wrap" role="region" aria-label="Homes and carpet area" tabIndex={0}>
-        <table className="rera-table">
-          <thead>
-            <tr>
-              <th>Configuration</th>
-              {valueSelectors.map((selector) => <th key={selector.key}>{selector.label}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {visibleRows.map(({ entity, claims: rowClaims }) => {
-              return (
-                <tr key={entity.entity_id}>
-                  <th scope="row">{entity.label ?? "Filed configuration"}</th>
-                  {valueSelectors.map((selector) => {
-                    const claim = claimsForSelector(rowClaims, selector.key)[0];
-                    return <td data-label={selector.label} key={selector.key}>{claim ? claimValueText(claim.value, selector.format) : "—"}</td>;
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      {pageCount > 1 && (
-        <div className="rera-pagination" aria-label="Homes and carpet area pages">
-          <span>{safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, orderedRows.length)} of {orderedRows.length}</span>
-          <div>
-            <button type="button" disabled={safePage === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}>Previous</button>
-            <button type="button" disabled={safePage === pageCount - 1} onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}>Next</button>
-          </div>
+      <div className="rera-inventory-chart" role="table">
+        <div className="rera-inventory-chart__header" role="row">
+          <span role="columnheader">Configuration</span>
+          <span role="columnheader">Homes</span>
+          <span role="columnheader">Avg carpet / home</span>
         </div>
-      )}
+        <div role="rowgroup">
+          {rows.map((row) => (
+            <div className="rera-inventory-chart__row" role="row" key={row.id}>
+              <strong role="rowheader">{row.label}</strong>
+              <div className="rera-inventory-chart__measure is-homes" role="cell">
+                <b className="rera-inventory-chart__mobile-label" aria-hidden="true">Homes</b>
+                <svg viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true">
+                  <rect className="rera-inventory-chart__track" width="100" height="6" rx="3" />
+                  <path className="rera-inventory-chart__grid" d="M25 0V6 M50 0V6 M75 0V6" />
+                  <rect className="rera-inventory-chart__bar" width={row.homesPercent} height="6" rx="3" />
+                </svg>
+                <span>{row.homesDisplay}</span>
+              </div>
+              <div className="rera-inventory-chart__measure is-area" role="cell">
+                <b className="rera-inventory-chart__mobile-label" aria-hidden="true">Avg carpet</b>
+                <svg viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true">
+                  <rect className="rera-inventory-chart__track" width="100" height="6" rx="3" />
+                  <path className="rera-inventory-chart__grid" d="M25 0V6 M50 0V6 M75 0V6" />
+                  <rect className="rera-inventory-chart__bar" width={row.carpetAreaPerHomePercent} height="6" rx="3" />
+                </svg>
+                <span>{row.carpetAreaPerHomeDisplay}</span>
+                {row.carpetAreaLabel?.toLowerCase().startsWith("filed") && <small>Filed</small>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </Section>
   );
 }
@@ -526,27 +495,19 @@ function BuilderRecord({ portfolio }: { portfolio?: BuilderPortfolio }) {
   return (
     <Section id="builder" title={`Other projects by ${portfolio.builder_name}`}>
       <ol className="rera-builder-index">
-        {visibleProjects.map((project) => {
-          const registryUrl = httpUrl(project.rera_portal_url);
-          return (
-            <li key={`${project.property_id}:${project.rera_number ?? project.project_name}`}>
-              <div className="rera-builder-index__identity">
-                <Link to={`/property/${encodeURIComponent(project.property_id)}`}>{project.project_name}</Link>
-                <span>{project.area}</span>
-                {project.rera_number && <small>{project.rera_number}</small>}
-              </div>
-              <dl>
-                <div><dt>Current target</dt><dd>{formatMonth(project.completion_date)}</dd></div>
-                <div><dt>Record state</dt><dd>{builderProjectState(project)}</dd></div>
-              </dl>
-              {registryUrl && (
-                <div className="rera-builder-index__actions">
-                  <a href={registryUrl} target="_blank" rel="noreferrer">Registry <span aria-hidden="true">↗</span></a>
-                </div>
-              )}
-            </li>
-          );
-        })}
+        {visibleProjects.map((project) => (
+          <li key={`${project.property_id}:${project.rera_number ?? project.project_name}`}>
+            <div className="rera-builder-index__identity">
+              <Link to={`/property/${encodeURIComponent(project.property_id)}`}>{project.project_name}</Link>
+              <span>{project.area}</span>
+              {project.rera_number && <small>{project.rera_number}</small>}
+            </div>
+            <dl>
+              <div><dt>Current target</dt><dd>{formatMonth(project.completion_date)}</dd></div>
+              <div><dt>Record state</dt><dd>{builderProjectState(project)}</dd></div>
+            </dl>
+          </li>
+        ))}
       </ol>
       {otherProjects.length > previewLimit && (
         <button
@@ -565,11 +526,9 @@ function BuilderRecord({ portfolio }: { portfolio?: BuilderPortfolio }) {
 function Complaints({
   complaints,
   fallback,
-  sourceUrl,
 }: {
   complaints: ReraBuyerComplaintSummary[];
   fallback?: ReraBuyerFactSection;
-  sourceUrl?: string;
 }) {
   if (complaints.length === 0 && !fallback?.facts.length) return null;
   return (
@@ -619,7 +578,6 @@ function Complaints({
       ) : (
         <BuyerFactList facts={fallback?.facts ?? []} />
       )}
-      {sourceUrl && <a className="rera-section-source" href={sourceUrl} target="_blank" rel="noreferrer">Open authority record <span aria-hidden="true">↗</span></a>}
     </Section>
   );
 }
@@ -633,7 +591,6 @@ type PlanPreviewItem = {
   id: string;
   label: string;
   previewUrl: string;
-  sourceUrl: string | undefined;
   page: number | undefined;
   detail: string | undefined;
 };
@@ -659,7 +616,6 @@ function Plans({
           id: siteOverview.artifact_id,
           label: siteOverview.label,
           previewUrl: planPreviewUrl(siteOverview.preview_url)!,
-          sourceUrl: httpUrl(siteOverview.source_url) ?? httpUrl(plans?.source_url) ?? undefined,
           page: siteOverview.page,
           detail: undefined,
         }
@@ -675,7 +631,6 @@ function Plans({
         id: plan.artifact_id,
         label: plan.title,
         previewUrl,
-        sourceUrl: httpUrl(plan.source_url) ?? httpUrl(plans?.source_url) ?? undefined,
         page: plan.page,
         detail: areas || undefined,
       };
@@ -687,7 +642,6 @@ function Plans({
         id: plan.artifact_id,
         label: plan.label,
         previewUrl,
-        sourceUrl: httpUrl(plan.source_url) ?? httpUrl(plans?.source_url) ?? undefined,
         page: plan.page,
         detail: undefined,
       };
@@ -764,7 +718,6 @@ function Plans({
                 )}
               </div>
               <div className="rera-plan-lightbox-actions">
-                {activePreview.sourceUrl && <a href={activePreview.sourceUrl} target="_blank" rel="noreferrer">Open source</a>}
                 <a href={activePreview.previewUrl} download>Download image</a>
                 <button
                   ref={closeButtonRef}
@@ -825,7 +778,7 @@ function ReraDocumentGroup({
       <ul>
         {visibleItems.map((document) => (
           <li key={`${document.id}:${document.url}`}>
-            <a href={document.url} target="_blank" rel="noreferrer">{document.label}</a>
+            <span>{document.label}</span>
           </li>
         ))}
       </ul>
@@ -1021,7 +974,6 @@ function ReraReportContent({ id }: { id: string }) {
         <section className="rera-empty">
           <h2>RERA record unavailable</h2>
           <p>No matched filing is available for this property.</p>
-          {model.registryUrl && <a href={model.registryUrl} target="_blank" rel="noreferrer">Check official registry</a>}
         </section>
       ) : (
         <>
@@ -1054,7 +1006,6 @@ function ReraReportContent({ id }: { id: string }) {
           <Complaints
             complaints={buyer?.complaints ?? []}
             fallback={sectionById(factSections, "complaints")}
-            sourceUrl={model.registryUrl}
           />
           <Declarations
             report={report}

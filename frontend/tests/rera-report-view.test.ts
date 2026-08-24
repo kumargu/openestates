@@ -8,6 +8,7 @@ import {
   orderReraDocuments,
   orderReraRegulatoryEvents,
   previewReraRegulatoryEvents,
+  projectReraInventoryChart,
   regulatoryCoverageNote,
   regulatoryEventPresentation,
   selectReraPlanPreviews,
@@ -111,8 +112,114 @@ test("RERA display facts omit incomplete label-only values", () => {
 
 test("RERA values retain units without deriving per-home carpet area", () => {
   assert.equal(claimValueText({ type: "number", data: 53728 }, "square_metres"), "53,728 m²");
+  assert.equal(
+    claimValueText({ type: "number", data: 53728 }, "square_feet_from_square_metres"),
+    "5,78,323 sq ft",
+  );
   assert.equal(claimValueText({ type: "boolean", data: false }), "No");
   assert.equal(httpUrl("javascript:alert(1)"), null);
+});
+
+const INVENTORY_SECTION: ReraReportSurfaceSection = {
+  id: "inventory",
+  title: "Homes and carpet area",
+  renderer: "dual_bar_chart",
+  selectors: [
+    { key: "entity:inventory_configuration", label: "Configuration" },
+    { key: "claim:inventory_homes", label: "Homes", format: "integer" },
+    { key: "claim:inventory_total_area", label: "Total carpet area", format: "square_feet_from_square_metres" },
+    { key: "claim:inventory_filed_area", label: "Filed carpet area", format: "square_feet_from_square_metres" },
+  ],
+  preview_kinds: [],
+  empty_behavior: "omit",
+};
+
+function inventoryClaim(
+  entityId: string,
+  predicate: string,
+  value: number,
+  id = `${entityId}:${predicate}`,
+): ReraEvidenceClaim {
+  return {
+    ...CLAIM,
+    claim_id: id,
+    subject: { entity_id: entityId, entity_type: "inventory_configuration" },
+    predicate,
+    value: { type: "number", data: value },
+  };
+}
+
+test("RERA inventory chart scales homes and carpet area independently", () => {
+  const entities = Array.from({ length: 18 }, (_, index) => ({
+    entity_id: `inventory:${index + 1}`,
+    entity_type: "inventory_configuration",
+    label: index === 0 ? "1 BHK" : `${index + 1} BHK type`,
+  }));
+  const claims = entities.flatMap((entity, index) => [
+    inventoryClaim(entity.entity_id, "inventory_homes", index === 0 ? 8 : (index + 1) * 20),
+    inventoryClaim(entity.entity_id, "inventory_total_area", index === 0 ? 271 : (index + 1) * 1000),
+  ]);
+  const rows = projectReraInventoryChart(INVENTORY_SECTION, { ...EVIDENCE, entities, claims });
+
+  assert.equal(rows.length, 18);
+  assert.equal(rows.at(-1)?.homesPercent, 100);
+  assert.equal(rows.at(-1)?.carpetAreaPerHomePercent, 100);
+  assert.equal(rows[0].homesDisplay, "8");
+  assert.equal(rows[0].carpetAreaPerHomeDisplay, "365 sq ft");
+  assert.ok(rows[0].homesPercent < rows[0].carpetAreaPerHomePercent);
+});
+
+test("RERA inventory chart falls back to filed area and retains missing values", () => {
+  const entities = [
+    { entity_id: "inventory:filed", entity_type: "inventory_configuration", label: "4 BHK" },
+    { entity_id: "inventory:missing", entity_type: "inventory_configuration", label: "Studio" },
+  ];
+  const rows = projectReraInventoryChart(INVENTORY_SECTION, {
+    ...EVIDENCE,
+    entities,
+    claims: [
+      inventoryClaim("inventory:filed", "inventory_homes", 31),
+      inventoryClaim("inventory:filed", "inventory_filed_area", 4661),
+      inventoryClaim("inventory:missing", "inventory_homes", 0),
+    ],
+  });
+
+  assert.equal(rows[0].carpetAreaLabel, "Filed carpet area");
+  assert.equal(rows[0].carpetAreaPerHomeDisplay, "1,618 sq ft");
+  assert.equal(rows[1].homesDisplay, "0");
+  assert.equal(rows[1].homesPercent, 0);
+  assert.equal(rows[1].carpetAreaPerHomeDisplay, "—");
+});
+
+test("RERA inventory chart omits area-only rows that cannot produce a per-home value", () => {
+  const entity = { entity_id: "inventory:area-only", entity_type: "inventory_configuration", label: "3 BHK" };
+  const rows = projectReraInventoryChart(INVENTORY_SECTION, {
+    ...EVIDENCE,
+    entities: [entity],
+    claims: [inventoryClaim(entity.entity_id, "inventory_total_area", 1200)],
+  });
+
+  assert.deepEqual(rows, []);
+});
+
+test("RERA inventory chart preserves distinct repeated filings and coalesces exact duplicates", () => {
+  const entities = [
+    { entity_id: "inventory:first", entity_type: "inventory_configuration", label: "2 BHK" },
+    { entity_id: "inventory:duplicate", entity_type: "inventory_configuration", label: "2-bhk" },
+    { entity_id: "inventory:distinct", entity_type: "inventory_configuration", label: "2 BHK" },
+  ];
+  const claims = [
+    inventoryClaim("inventory:first", "inventory_homes", 20),
+    inventoryClaim("inventory:first", "inventory_total_area", 1000),
+    inventoryClaim("inventory:duplicate", "inventory_homes", 20),
+    inventoryClaim("inventory:duplicate", "inventory_total_area", 1000),
+    inventoryClaim("inventory:distinct", "inventory_homes", 30),
+    inventoryClaim("inventory:distinct", "inventory_total_area", 1400),
+  ];
+  const rows = projectReraInventoryChart(INVENTORY_SECTION, { ...EVIDENCE, entities, claims });
+
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map(({ homes }) => homes), [20, 30]);
 });
 
 test("RERA plan previews reject brochures carried by an older bundle", () => {

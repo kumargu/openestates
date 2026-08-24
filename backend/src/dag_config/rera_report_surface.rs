@@ -261,7 +261,13 @@ fn validate_rera_report_surface(config: &ReraReportSurfaceFile) -> Result<(), Da
         }
         if !matches!(
             section.renderer.as_str(),
-            "fact_list" | "timeline" | "series" | "table" | "documents" | "regulatory_record"
+            "fact_list"
+                | "timeline"
+                | "series"
+                | "table"
+                | "dual_bar_chart"
+                | "documents"
+                | "regulatory_record"
         ) {
             return Err(DagConfigError::InvalidConfig(format!(
                 "RERA report section {} has unsupported renderer {}",

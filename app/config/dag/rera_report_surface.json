@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 9,
   "description": "Buyer-journey RERA report with a high-confidence, source-attributed regulatory chronology. Only accepted public evidence enters the report.",
   "coverage_note": "High Court proceedings are outside this release.",
   "regulatory_event_order": [
@@ -169,16 +169,13 @@
       "id": "inventory",
       "title": "Homes and carpet area",
       "rank": 3,
-      "renderer": "table",
+      "renderer": "dual_bar_chart",
       "selectors": [
         { "key": "entity:inventory_configuration", "label": "Configuration" },
         { "key": "claim:declared_inventory_unit_count", "label": "Homes", "format": "integer" },
-        { "key": "claim:declared_inventory_total_carpet_area", "label": "Total carpet area", "format": "square_metres" },
-        { "key": "claim:declared_inventory_filed_carpet_area", "label": "Filed carpet area", "format": "square_metres" },
-        { "key": "claim:declared_inventory_total_balcony_verandah_area", "label": "Total balcony area", "format": "square_metres" },
-        { "key": "claim:declared_inventory_filed_balcony_verandah_area", "label": "Filed balcony area", "format": "square_metres" }
+        { "key": "claim:declared_inventory_total_carpet_area", "label": "Total carpet area", "format": "square_feet_from_square_metres" },
+        { "key": "claim:declared_inventory_filed_carpet_area", "label": "Filed carpet area", "format": "square_feet_from_square_metres" }
       ],
-      "items_per_page": 6,
       "empty_behavior": "omit",
       "key_prefixes": ["declared_inventory_"],
       "fact_keys": ["available_configurations"]

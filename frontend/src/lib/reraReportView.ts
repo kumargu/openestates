@@ -14,6 +14,8 @@ import type {
   ReraReportSurfaceSection,
 } from "./types.ts";
 
+const SQUARE_FEET_PER_SQUARE_METRE = 10.763910416709722;
+
 export type ReraModuleState =
   | "available"
   | "partial"
@@ -177,6 +179,18 @@ export type ReraDisplayFact = {
   claims: ReraEvidenceClaim[];
 };
 
+export type ReraInventoryChartRow = {
+  id: string;
+  label: string;
+  homes?: number;
+  homesDisplay: string;
+  homesPercent: number;
+  carpetAreaPerHome?: number;
+  carpetAreaPerHomeDisplay: string;
+  carpetAreaPerHomePercent: number;
+  carpetAreaLabel?: string;
+};
+
 export function knownText(value?: string | null): string | null {
   const normalized = value?.trim();
   if (!normalized) return null;
@@ -242,12 +256,103 @@ export function claimsForSelector(
 export function claimValueText(value: ReraEvidenceClaimValue, format?: string): string {
   if (value.type === "boolean") return value.data ? "Yes" : "No";
   if (value.type === "number") {
+    if (format === "square_feet_from_square_metres") {
+      const squareFeet = Math.round(value.data * SQUARE_FEET_PER_SQUARE_METRE);
+      return `${squareFeet.toLocaleString("en-IN")} sq ft`;
+    }
     const number = value.data.toLocaleString("en-IN", { maximumFractionDigits: 2 });
     return format === "square_metres" ? `${number} m²` : number;
   }
   if (value.type === "money") return `${value.data.currency} ${value.data.amount}`;
   if (value.type === "entity_ref") return value.data.entity_id;
   return value.data;
+}
+
+function numericClaimValue(claim?: ReraEvidenceClaim): number | undefined {
+  if (
+    claim?.value.type !== "number"
+    || !Number.isFinite(claim.value.data)
+    || claim.value.data < 0
+  ) return undefined;
+  return claim.value.data;
+}
+
+/**
+ * Projects configured inventory selectors into two independently scaled measures.
+ * The first claim selector is the count; later selectors are ordered total-area
+ * fallbacks. Per-home carpet area is derived only when both values are valid.
+ */
+export function projectReraInventoryChart(
+  section: ReraReportSurfaceSection,
+  evidence: ReraEvidenceProjection,
+): ReraInventoryChartRow[] {
+  const entities = evidence.entities.filter((entity) => entity.entity_type === "inventory_configuration");
+  const valueSelectors = section.selectors.filter(({ key }) => key.startsWith("claim:"));
+  const [homesSelector, ...carpetAreaSelectors] = valueSelectors;
+  if (!homesSelector) return [];
+
+  const uniqueRows = new Map<string, {
+    id: string;
+    label: string;
+    claims: ReraEvidenceClaim[];
+  }>();
+  for (const entity of entities) {
+    const claims = evidence.claims.filter((claim) => claim.subject.entity_id === entity.entity_id);
+    const values = valueSelectors.map((selector) => {
+      const claim = claimsForSelector(claims, selector.key)[0];
+      return claim ? claimValueText(claim.value, selector.format) : "—";
+    });
+    const normalizedLabel = (entity.label ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+    uniqueRows.set(`${normalizedLabel}:${values.join("|")}`, {
+      id: entity.entity_id,
+      label: entity.label ?? "Filed configuration",
+      claims,
+    });
+  }
+
+  const rows = [...uniqueRows.values()].map((row) => {
+    const homesClaim = claimsForSelector(row.claims, homesSelector.key)[0];
+    const carpetAreaSelection = carpetAreaSelectors
+      .map((selector) => ({
+        selector,
+        claim: claimsForSelector(row.claims, selector.key)[0],
+      }))
+      .find(({ claim }) => numericClaimValue(claim) !== undefined);
+    const homes = numericClaimValue(homesClaim);
+    const carpetArea = numericClaimValue(carpetAreaSelection?.claim);
+    const carpetAreaPerHome = homes !== undefined && homes > 0 && carpetArea !== undefined
+      ? carpetArea / homes
+      : undefined;
+    return {
+      ...row,
+      homes,
+      homesDisplay: homesClaim ? claimValueText(homesClaim.value, homesSelector.format) : "—",
+      homesPercent: 0,
+      carpetAreaPerHome,
+      carpetAreaPerHomeDisplay: carpetAreaPerHome !== undefined && carpetAreaSelection
+        ? claimValueText(
+          { type: "number", data: carpetAreaPerHome },
+          carpetAreaSelection.selector.format,
+        )
+        : "—",
+      carpetAreaPerHomePercent: 0,
+      carpetAreaLabel: carpetAreaSelection?.selector.label,
+    };
+  }).filter(({ homes }) => homes !== undefined);
+  const maxHomes = Math.max(0, ...rows.map(({ homes }) => homes ?? 0));
+  const maxCarpetAreaPerHome = Math.max(
+    0,
+    ...rows.map(({ carpetAreaPerHome }) => carpetAreaPerHome ?? 0),
+  );
+  return rows.map((row) => ({
+    ...row,
+    homesPercent: maxHomes > 0 && row.homes !== undefined ? (row.homes / maxHomes) * 100 : 0,
+    carpetAreaPerHomePercent: maxCarpetAreaPerHome > 0 && row.carpetAreaPerHome !== undefined
+      ? (row.carpetAreaPerHome / maxCarpetAreaPerHome) * 100
+      : 0,
+  }));
 }
 
 export function assertionLabel(mode: ReraEvidenceClaim["assertion_mode"]): string {
