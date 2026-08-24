@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildReraReportViewModel,
   claimValueText,
   displayFactsForSection,
   httpUrl,
@@ -17,6 +18,7 @@ import type {
   ReraBuyerDocument,
   ReraEvidenceClaim,
   ReraEvidenceProjection,
+  ReraEvidenceReportResponse,
   ReraReportSurfaceSection,
 } from "../src/lib/types.ts";
 
@@ -214,4 +216,127 @@ test("RERA regulatory event exposes one contextual action with exact quote suppo
     presentation.supportingEvidence?.supporting_quote,
     "The Authority records the project-specific finding.",
   );
+});
+
+function reportFixture(
+  overrides: Partial<ReraEvidenceReportResponse> = {},
+): ReraEvidenceReportResponse {
+  return {
+    availability: "available",
+    evidence: EVIDENCE,
+    surface: {
+      version: 1,
+      coverage_note: "Archive not checked.",
+      regulatory_event_order: [],
+      sections: [],
+    },
+    buyer_report: {
+      registry_url: "https://rera.example/project",
+      fact_sections: [
+        {
+          id: "registration",
+          title: "Registration",
+          facts: [
+            { key: "rera_number", label: "Registration number", value: "PRM/KA/ONE", learned_at: "2026-08-10" },
+            { key: "rera_status", label: "Status", value: "APPROVED", learned_at: "2026-08-10" },
+          ],
+        },
+        {
+          id: "schedule",
+          title: "Schedule",
+          facts: [
+            { key: "rera_original_completion_date", label: "Original completion", value: "2025-01-01", learned_at: "2026-08-10" },
+            { key: "rera_completion_date", label: "Current completion", value: "2027-01-01", learned_at: "2026-08-10" },
+            { key: "rera_delay_months", label: "Schedule movement", value: "24 months", learned_at: "2026-08-10" },
+          ],
+        },
+      ],
+      complaints: [{
+        scope: "promoter",
+        total: 8,
+        open: 1,
+        disposed: 7,
+        rows_parsed: 8,
+        status_counts_complete: true,
+        theme_counts: {},
+      }],
+      documents: [],
+    },
+    ...overrides,
+  };
+}
+
+test("RERA adaptive model keeps registrations phase-specific", () => {
+  const secondClaim = {
+    ...CLAIM,
+    claim_id: "claim:two",
+    subject: { entity_id: "registration:two", entity_type: "registration" },
+    value: { type: "text" as const, data: "PRM/KA/RERA/TWO" },
+  };
+  const report = reportFixture({
+    evidence: {
+      ...EVIDENCE,
+      registration_ids: ["registration:one", "registration:two"],
+      entities: [
+        { entity_id: "registration:one", entity_type: "registration", label: "Phase 1" },
+        { entity_id: "registration:two", entity_type: "registration", label: "Tower B" },
+      ],
+      claims: [
+        CLAIM,
+        { ...CLAIM, claim_id: "completion:one", predicate: "proposed_completion_date", value: { type: "date", data: "2026-01-01" } },
+        secondClaim,
+        { ...secondClaim, claim_id: "completion:two", predicate: "proposed_completion_date", value: { type: "date", data: "2028-01-01" } },
+      ],
+    },
+  });
+
+  const model = buildReraReportViewModel(report, new Date("2026-08-24"));
+  assert.deepEqual(model.registrations.map(({ scope, number, completion }) => ({ scope, number, completion })), [
+    { scope: "Phase 1", number: "PRM/KA/RERA/TEST", completion: "2026-01-01" },
+    { scope: "Tower B", number: "PRM/KA/RERA/TWO", completion: "2028-01-01" },
+  ]);
+  assert.equal(model.summary[1].value, "Not in record");
+  assert.deepEqual(model.delivery, []);
+});
+
+test("RERA adaptive model retains useful fallback data without claiming a canonical match", () => {
+  const report = reportFixture({
+    availability: "partial",
+    evidence: { ...EVIDENCE, registration_ids: [], claims: [], generated_at: "2026-08-10" },
+  });
+  const model = buildReraReportViewModel(report, new Date("2026-08-24"));
+
+  assert.equal(model.state, "partial");
+  assert.equal(model.registrations.length, 1);
+  assert.equal(model.registrations[0].number, "PRM/KA/ONE");
+  assert.equal(model.registrations[0].state, "partial");
+  assert.equal(model.summary[0].state, "partial");
+  assert.equal(model.coverage.find((item) => item.id === "completion_certificate")?.state, "not_applicable");
+});
+
+test("RERA adaptive model exposes missing, stale, and conflicting states", () => {
+  const missing = buildReraReportViewModel(reportFixture({
+    availability: "unavailable",
+    evidence: { ...EVIDENCE, registration_ids: [], claims: [] },
+    buyer_report: undefined,
+  }));
+  assert.equal(missing.state, "missing");
+  assert.equal(missing.summary.find((item) => item.id === "registrations")?.state, "missing");
+
+  const stale = buildReraReportViewModel(reportFixture({
+    evidence: {
+      ...EVIDENCE,
+      regulatory_coverage: [{ source: "K-RERA", checked_at: "2025-01-01", status: "stale" }],
+    },
+  }));
+  assert.equal(stale.state, "stale");
+
+  const conflicting = buildReraReportViewModel(reportFixture({
+    evidence: {
+      ...EVIDENCE,
+      regulatory_coverage: [{ source: "K-RERA", checked_at: "2026-08-10", status: "conflicting" }],
+    },
+  }));
+  assert.equal(conflicting.state, "conflicting");
+  assert.equal(conflicting.summary.find((item) => item.id === "completion")?.state, "available");
 });

@@ -178,6 +178,7 @@
         { "key": "claim:declared_inventory_total_balcony_verandah_area", "label": "Total balcony area", "format": "square_metres" },
         { "key": "claim:declared_inventory_filed_balcony_verandah_area", "label": "Filed balcony area", "format": "square_metres" }
       ],
+      "items_per_page": 6,
       "empty_behavior": "omit",
       "key_prefixes": ["declared_inventory_"],
       "fact_keys": ["available_configurations"]
