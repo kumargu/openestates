@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  filmstripWindowIndices,
   nextStoryFrameIndex,
   primaryStoryFactKeys,
   projectPropertyStory,
@@ -245,6 +246,28 @@ test("official record teaser projects only known registration and document facts
         confidence: 1,
         groupId: "documents",
         placement: "audit",
+      }, {
+        key: "floor_plan_available",
+        label: "Floor plan available",
+        severity: "positive",
+        scope: "project",
+        visualId: "layout",
+        valueText: "0",
+        priority: 24,
+        confidence: 1,
+        groupId: "documents",
+        placement: "audit",
+      }, {
+        key: "document_page_count",
+        label: "Application record",
+        severity: "info",
+        scope: "project",
+        visualId: "legal",
+        valueText: "12 pages",
+        priority: 20,
+        confidence: 1,
+        groupId: "documents",
+        placement: "audit",
       }],
     }],
   };
@@ -262,9 +285,18 @@ test("official record teaser projects only known registration and document facts
     {
       key: "sanction_plan_available",
       label: "Sanction plan available",
-      value: "1",
+      value: "Available",
+    },
+    {
+      key: "document_page_count",
+      label: "Application record",
+      value: "12 pages",
     },
   ]);
+  assert.equal(
+    cards.flatMap((card) => card.facts).some((fact) => fact.value === "0"),
+    false,
+  );
   assert.equal(
     cards.flatMap((card) => card.facts).some(
       (fact) => fact.label === "1 parking/home",
@@ -319,13 +351,26 @@ test("short compare projects current home plus two distinct peers and handoff", 
     society_name: "Peer C",
     kg_entity_refs: undefined,
   };
+  const duplicatePeerB = {
+    ...peerB,
+    id: "peer-b-sibling",
+  };
   detail.similar_properties = [peerA];
+  const firstVisit = projectPropertyStory(detail, {
+    recommendationProperties: [peerB, duplicatePeerB, peerC],
+  });
+  assert.deepEqual(
+    firstVisit.comparisons.map((home) => home.id),
+    [detail.property.id, "peer-b", "peer-c"],
+  );
+
   const story = projectPropertyStory(detail, {
-    comparisonProperties: [peerB, peerC],
+    comparisonProperties: [peerA],
+    recommendationProperties: [peerB, peerC],
   });
   assert.deepEqual(
     story.comparisons.map((home) => home.id),
-    [detail.property.id, "peer-b", "peer-c"],
+    [detail.property.id, "peer-a", "peer-b"],
   );
   assert.deepEqual(
     story.comparisons.map((home) => home.isCurrent),
@@ -334,7 +379,7 @@ test("short compare projects current home plus two distinct peers and handoff", 
   assert.equal(
     story.compareHref,
     `/workspace/compare?ids=${encodeURIComponent(
-      `${detail.property.id},peer-b,peer-c`,
+      `${detail.property.id},peer-a,peer-b`,
     )}&focus=${encodeURIComponent(detail.property.id)}`,
   );
 
@@ -344,6 +389,23 @@ test("short compare projects current home plus two distinct peers and handoff", 
   assert.equal(
     sparseCompare.decks.some((deck) => deck.kind === "compare"),
     false,
+  );
+});
+
+test("resolved surface-scene maps drive the production story deck", () => {
+  const detail = richDetail();
+  detail.map_context = null;
+
+  const withoutResolvedSurface = projectPropertyStory(detail);
+  const withResolvedSurface = projectPropertyStory(detail, {
+    mapAvailable: true,
+  });
+
+  assert.equal(withoutResolvedSurface.map.available, false);
+  assert.equal(withResolvedSurface.map.available, true);
+  assert.equal(
+    withResolvedSurface.decks.some((deck) => deck.kind === "map"),
+    true,
   );
 });
 
@@ -474,4 +536,13 @@ test("filmstrip offsets wrap adjacent frames without edge jumps", () => {
   assert.equal(wrappedFilmstripOffset(0, 6, 7), 1);
   assert.equal(wrappedFilmstripOffset(4, 0, 7), -3);
   assert.equal(wrappedFilmstripOffset(0, 0, 1), 0);
+});
+
+test("filmstrip mounting stays on the active and adjacent window", () => {
+  assert.deepEqual(filmstripWindowIndices(0, 0), []);
+  assert.deepEqual(filmstripWindowIndices(1, 0), [0]);
+  assert.deepEqual(filmstripWindowIndices(2, 0), [0, 1]);
+  assert.deepEqual(filmstripWindowIndices(7, 0), [0, 1, 6]);
+  assert.deepEqual(filmstripWindowIndices(7, 3), [3, 4, 2]);
+  assert.deepEqual(filmstripWindowIndices(6, 4), [4, 5, 3]);
 });

@@ -5,6 +5,7 @@ import {
   clearDiscoveryContext,
   consumeDiscoveryReturn,
   navigationMode,
+  propertyExploreHref,
   requestDiscoveryReturn,
   writeDiscoveryContext,
 } from "../src/lib/navigationContext.ts";
@@ -75,4 +76,16 @@ test("starting Explore fresh forgets an old query and return position", () => {
   clearDiscoveryContext();
 
   assert.equal(consumeDiscoveryReturn(url), null);
+});
+
+test("property exploration preserves search context or falls back to area", () => {
+  assert.equal(
+    propertyExploreHref("Whitefield", "/?q=quiet+3bhk&sort=proof"),
+    "/?q=quiet+3bhk&sort=proof",
+  );
+  assert.equal(
+    propertyExploreHref("  Whitefield, Bengaluru  ", "/"),
+    "/?q=Whitefield%2C+Bengaluru",
+  );
+  assert.equal(propertyExploreHref(" ", "/"), "/");
 });

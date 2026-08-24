@@ -13,6 +13,7 @@ import { NOTEBOOK_COMMANDS, type NotebookCommand } from "./notebookCommands.ts";
 
 export const NOTEBOOK_STORAGE_KEY = "openestates:buyer-notebook-v2";
 export const NOTEBOOK_CHANGED_EVENT = "openestates:notebook-changed";
+const NOTED_SHORTLIST_MIGRATION_KEY = "openestates:noted-shortlist-migration:v1";
 export const MAX_NOTEBOOK_NOTES = 200;
 export const MAX_COMPARE_FROM_NOTEBOOK = 4;
 export const MAX_LABELS_PER_NOTE = 4;
@@ -628,6 +629,27 @@ function normalizeDocuments(raw: unknown): Record<string, NotebookDocument> {
   return documents;
 }
 
+function documentHasMeaningfulNote(document: NotebookDocument | undefined): boolean {
+  return document?.blocks.some((block) =>
+    block.type !== "paragraph" || block.text.trim().length > 0
+  ) ?? false;
+}
+
+function migrateNotedPropertiesToShortlist(
+  state: NotebookState,
+  shortlist: string[],
+): string[] {
+  if (window.localStorage.getItem(NOTED_SHORTLIST_MIGRATION_KEY) === "1") {
+    return shortlist;
+  }
+  const notedPropertyIds = Object.values(state.documents)
+    .filter(documentHasMeaningfulNote)
+    .map((document) => document.propertyId);
+  const nextShortlist = writeShortlistIds([...notedPropertyIds, ...shortlist]);
+  window.localStorage.setItem(NOTED_SHORTLIST_MIGRATION_KEY, "1");
+  return nextShortlist;
+}
+
 function readRawState(): NotebookState {
   try {
     const raw = window.localStorage.getItem(NOTEBOOK_STORAGE_KEY)
@@ -635,7 +657,10 @@ function readRawState(): NotebookState {
     if (!raw) return EMPTY;
     const parsed = JSON.parse(raw) as Partial<NotebookState>;
     const propertyIds = Array.isArray(parsed.propertyIds) ? parsed.propertyIds.filter(Boolean) : [];
-    const compareIds = Array.isArray(parsed.compareIds) ? parsed.compareIds.filter(Boolean) : [];
+    const compareIds = Array.isArray(parsed.compareIds)
+      ? [...new Set(parsed.compareIds.map((id) => id.trim()).filter(Boolean))]
+        .slice(0, MAX_COMPARE_FROM_NOTEBOOK)
+      : [];
     const hiddenCompareLabels = Array.isArray(parsed.hiddenCompareLabels)
       ? parsed.hiddenCompareLabels.filter((item): item is NotebookLabelId => typeof item === "string")
       : [];
@@ -684,27 +709,25 @@ function completeState(state: Partial<NotebookState>): NotebookState {
 
 export function readNotebook(): NotebookState {
   const state = readRawState();
-  const shortlist = readShortlistIds();
+  const shortlist = migrateNotedPropertiesToShortlist(state, readShortlistIds());
   const propertyIds = [...new Set([...shortlist, ...state.propertyIds])];
   if (shortlist.length === 0 && propertyIds.length === state.propertyIds.length) return state;
   return {
     ...state,
     propertyIds,
-    compareIds: state.compareIds
-      .filter((id) => propertyIds.includes(id))
-      .slice(0, MAX_COMPARE_FROM_NOTEBOOK),
+    compareIds: [...new Set(state.compareIds)].slice(0, MAX_COMPARE_FROM_NOTEBOOK),
   };
 }
 
 export function writeNotebook(state: Partial<NotebookState>): NotebookState {
+  const previous = readRawState();
   const completed = completeState(state);
   const next: NotebookState = {
     version: NOTEBOOK_SCHEMA_VERSION,
     propertyIds: [...new Set(completed.propertyIds)],
     documents: completed.documents,
     notes: completed.notes.slice(0, MAX_NOTEBOOK_NOTES),
-    compareIds: completed.compareIds
-      .filter((id) => completed.propertyIds.includes(id))
+    compareIds: [...new Set(completed.compareIds.map((id) => id.trim()).filter(Boolean))]
       .slice(0, MAX_COMPARE_FROM_NOTEBOOK),
     hiddenCompareLabels: [...new Set(completed.hiddenCompareLabels ?? [])],
   };
@@ -715,6 +738,15 @@ export function writeNotebook(state: Partial<NotebookState>): NotebookState {
     compareIds: next.compareIds,
     hiddenCompareLabels: next.hiddenCompareLabels,
   }));
+  const newlyNotedPropertyIds = Object.values(next.documents)
+    .filter((document) =>
+      documentHasMeaningfulNote(document)
+      && !documentHasMeaningfulNote(previous.documents[document.propertyId])
+    )
+    .map((document) => document.propertyId);
+  if (newlyNotedPropertyIds.length > 0) {
+    writeShortlistIds([...newlyNotedPropertyIds, ...readShortlistIds()]);
+  }
   emit(next);
   return next;
 }
@@ -1116,6 +1148,11 @@ export function toggleNotebookCompareId(propertyId: string): NotebookState {
       ? currentIds
       : [...currentIds, propertyId];
   return writeNotebook({ ...withProp, compareIds });
+}
+
+export function setNotebookCompareIds(propertyIds: string[]): NotebookState {
+  const state = readNotebook();
+  return writeNotebook({ ...state, compareIds: propertyIds });
 }
 
 export function hideNotebookCompareLabel(label: NotebookLabelId): NotebookState {

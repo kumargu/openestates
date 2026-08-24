@@ -14,6 +14,7 @@ import {
   removeNotebookNote,
   removeNotebookNoteLabel,
   removeNotebookProperty,
+  setNotebookCompareIds,
   setNotebookNoteLabels,
   showNotebookCompareLabel,
   toggleCatalogNote,
@@ -110,6 +111,10 @@ export function useNotebook() {
     setState(toggleNotebookCompareId(propertyId));
   }, []);
 
+  const setCompareIds = useCallback((propertyIds: string[]) => {
+    setState(setNotebookCompareIds(propertyIds));
+  }, []);
+
   const hideCompareLabel = useCallback((label: NotebookLabelId) => {
     setState(hideNotebookCompareLabel(label));
   }, []);
@@ -151,6 +156,7 @@ export function useNotebook() {
     addNoteLabel,
     removeNoteLabel,
     toggleCompare,
+    setCompareIds,
     hideCompareLabel,
     showCompareLabel,
     removeProperty,

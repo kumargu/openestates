@@ -368,18 +368,18 @@
 }
 
 .property-filmstrip.property-filmstrip--cinematic-brisk {
-  --filmstrip-motion-duration: 6.4s;
-  --filmstrip-transition-duration: 1.2s;
+  --filmstrip-motion-duration: 4.8s;
+  --filmstrip-transition-duration: 900ms;
 }
 
 .property-filmstrip.property-filmstrip--cinematic-brisk.story-speed--half {
-  --filmstrip-motion-duration: 12.8s;
-  --filmstrip-transition-duration: 2.4s;
+  --filmstrip-motion-duration: 9.6s;
+  --filmstrip-transition-duration: 1.8s;
 }
 
 .property-filmstrip.property-filmstrip--cinematic-brisk.story-speed--double {
-  --filmstrip-motion-duration: 3.2s;
-  --filmstrip-transition-duration: 600ms;
+  --filmstrip-motion-duration: 2.4s;
+  --filmstrip-transition-duration: 450ms;
 }
 
 .property-filmstrip--stage .property-filmstrip__card {

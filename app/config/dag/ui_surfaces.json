@@ -547,7 +547,7 @@
     },
     {
       "id": "property_short_compare",
-      "title": "Saved homes. Same facts.",
+      "title": "Compare homes",
       "components": [
         "PropertyShortCompare"
       ],
@@ -555,8 +555,9 @@
       "comparisonDimensions": [
         { "key": "price", "label": "Price", "valueKey": "price", "format": "inr_short" },
         { "key": "configuration", "label": "Home", "valueKey": "bhk", "format": "bhk" },
-        { "key": "size", "label": "Area", "valueKey": "sizeLabel", "format": "text" },
-        { "key": "status", "label": "Status", "valueKey": "status", "format": "text" }
+        { "key": "size", "label": "Size", "valueKey": "sizeLabel", "format": "text" },
+        { "key": "status", "label": "Status", "valueKey": "status", "format": "text" },
+        { "key": "google_rating", "label": "Rating", "valueKey": "googleRating", "format": "rating" }
       ]
     }
   ],

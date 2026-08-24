@@ -4740,28 +4740,21 @@ button.oe-label-pill:focus-visible {
   background: #ede8e2;
 }
 
-.property-nearby-card__image img {
+.property-nearby-card__image img,
+.property-nearby-card__image .image-placeholder {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.property-nearby-card__image img {
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .property-nearby-card a:hover .property-nearby-card__image img,
 .property-nearby-card a:focus-visible .property-nearby-card__image img {
   transform: scale(1.02);
-}
-
-.property-nearby-card__image > span {
-  display: grid;
-  height: 100%;
-  place-items: center;
-  padding: 0.8rem;
-  color: var(--color-text-secondary);
-  font-size: 0.82rem;
-  font-weight: 760;
-  text-align: center;
 }
 
 .property-nearby-card strong {
@@ -4788,13 +4781,6 @@ button.oe-label-pill:focus-visible {
   color: var(--color-text);
   font-size: 1rem;
   font-weight: 800;
-}
-
-.property-nearby-skeleton {
-  display: block;
-  aspect-ratio: 4 / 3;
-  border-radius: 12px;
-  background: linear-gradient(90deg, #f1eee9, #faf8f5, #f1eee9);
 }
 
 .property-nearby-rail__all {

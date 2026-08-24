@@ -84,6 +84,7 @@ export function PropertyStoryLabPage() {
     () =>
       projectPropertyStory(detail, {
         media,
+        mapAvailable: hasAroundThisHomePlate(detail.map_context ?? null),
         motionTheme: theme === "auto" ? undefined : theme,
       }),
     [detail, media, theme],
@@ -93,7 +94,7 @@ export function PropertyStoryLabPage() {
     : deck === "arrival"
       ? story.arrival.frames.length
       : 0;
-  const mapAvailable = hasAroundThisHomePlate(detail.map_context ?? null);
+  const mapAvailable = story.map.available;
   const reviewsAvailable = story.reviews.state !== "missing";
   const recordAvailable = story.recordCards.length > 0;
   const compareAvailable =
@@ -514,4 +515,3 @@ function LabSelect({
     </label>
   );
 }
-

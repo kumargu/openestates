@@ -8,6 +8,7 @@ import {
 } from "react";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
 import {
+  filmstripWindowIndices,
   nextStoryFrameIndex,
   selectStoryMotionTheme,
   shouldAutoAdvanceStory,
@@ -21,7 +22,7 @@ import "../../styles/property-filmstrip.css";
 
 const CINEMATIC_STAGE_DURATION_MS = {
   standard: 7_800,
-  brisk: 6_400,
+  brisk: 4_800,
 } as const;
 
 export type StoryPlaybackSpeed = 0.5 | 1 | 2;
@@ -126,6 +127,13 @@ export function PropertyFilmstrip({
   const safeActive =
     frames.length > 0 ? Math.max(0, Math.floor(active)) % frames.length : 0;
   const activeFrame = frames[safeActive];
+  const mountedFrameIndices = filmstripWindowIndices(
+    frames.length,
+    safeActive,
+  );
+  const nextFrameIndex = frames.length > 1
+    ? (safeActive + 1) % frames.length
+    : safeActive;
   const playing = playback?.playing ?? internalPlaying;
   const speed = playback?.speed ?? 1;
   const reducedMotion =
@@ -305,9 +313,12 @@ export function PropertyFilmstrip({
       onKeyDown={handleKeyDown}
     >
       <div className="property-filmstrip__track">
-        {frames.map((frame, index) => {
+        {mountedFrameIndices.map((index) => {
+          const frame = frames[index];
+          if (!frame) return null;
           const offset = wrappedFilmstripOffset(index, safeActive, frames.length);
           const activeCard = offset === 0;
+          const preloadCard = activeCard || index === nextFrameIndex;
           return (
             <figure
               key={frame.id}
@@ -322,9 +333,13 @@ export function PropertyFilmstrip({
               <ImageWithFallback
                 src={frame.url}
                 alt={activeCard ? `${ariaLabel}: ${frame.label}` : ""}
-                loading={priority && activeCard ? "eager" : "lazy"}
+                loading={priority && preloadCard ? "eager" : "lazy"}
                 decoding="async"
-                fetchPriority={priority && activeCard ? "high" : "low"}
+                fetchPriority={priority && activeCard
+                  ? "high"
+                  : priority && preloadCard
+                    ? "auto"
+                    : "low"}
                 onReady={() => {
                   setReadyFrameIds((current) => {
                     if (current.has(frame.id)) return current;

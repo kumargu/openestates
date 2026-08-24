@@ -10,11 +10,9 @@ import type {
   PropertyDetailResponse,
   ProofFocus,
   RecommendationResponse,
-  RecommendationStatus,
   SurfaceSceneResponse,
 } from "../lib/types.ts";
 import {
-  getProperties,
   getProperty,
   getPropertyRecommendations,
   getPropertySurface,
@@ -43,14 +41,12 @@ import { PropertyShortCompare } from "../components/property/PropertyShortCompar
 import { propertySceneImageAt } from "../lib/propertyScene.ts";
 import {
   projectPropertyStory,
-  projectStoryComparison,
-  type StoryComparison,
 } from "../lib/propertyStory.ts";
 import { readShortlistIds } from "../lib/compare.ts";
 import { formatGoogleRating } from "../lib/reviewFormatting.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
-import { workspaceCompareHref } from "../lib/workspaceNav.ts";
+import { propertyExploreHref } from "../lib/navigationContext.ts";
 import { formatListingPrice } from "../lib/listing-price.ts";
 import {
   initialPropertySurfaceId,
@@ -61,6 +57,8 @@ import {
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
+
+const MAX_EXPLICIT_COMPARISON_CANDIDATES = 4;
 
 function focusedEvidenceSource(data: PropertyDetailResponse, focus: ProofFocus) {
   for (const section of data.evidence?.sections ?? []) {
@@ -98,60 +96,6 @@ function PropertySearchMatch({
       )}
     </section>
   );
-}
-
-function societyKey(
-  property: Pick<PropertyCard, "kg_entity_refs" | "society_name">,
-): string {
-  return (
-    property.kg_entity_refs?.society_entity_id ||
-    property.society_name.trim().toLowerCase()
-  );
-}
-
-function savedComparisonHomes(
-  requestedIds: string[],
-  propertiesById: Map<string, PropertyCard>,
-  currentPropertyId: string,
-): StoryComparison[] {
-  const orderedIds = requestedIds.includes(currentPropertyId)
-    ? [
-        currentPropertyId,
-        ...requestedIds.filter((propertyId) => propertyId !== currentPropertyId),
-      ]
-    : requestedIds;
-  const usedSocieties = new Set<string>();
-  const homes: StoryComparison[] = [];
-
-  for (const propertyId of orderedIds) {
-    const property = propertiesById.get(propertyId);
-    if (!property) continue;
-    const key = societyKey(property) || property.title.trim().toLocaleLowerCase();
-    if (usedSocieties.has(key)) continue;
-    usedSocieties.add(key);
-    homes.push(projectStoryComparison(property, currentPropertyId));
-    if (homes.length === 4) break;
-  }
-
-  return homes;
-}
-
-function distinctSocietyIds(
-  requestedIds: string[],
-  propertiesById: Map<string, PropertyCard>,
-): string[] {
-  const usedSocieties = new Set<string>();
-  const ids: string[] = [];
-  for (const propertyId of requestedIds) {
-    const property = propertiesById.get(propertyId);
-    if (!property) continue;
-    const key = societyKey(property) || property.title.trim().toLocaleLowerCase();
-    if (usedSocieties.has(key)) continue;
-    usedSocieties.add(key);
-    ids.push(propertyId);
-    if (ids.length === 4) break;
-  }
-  return ids;
 }
 
 function propertyToCard(data: PropertyDetailResponse): PropertyCard {
@@ -223,27 +167,17 @@ function NearbyHomeCard({
     : area;
   const price = formatListingPrice(property);
   const rating = formatGoogleRating(property.google_rating);
-  const accessibleLabel = [
-    title,
-    note.replace(" · ", ", "),
-    price,
-    rating ? `Google ${rating}` : null,
-  ].filter(Boolean).join(", ");
 
   return (
     <article className="property-nearby-card">
-      <Link to={`/property/${property.id}`} aria-label={accessibleLabel}>
+      <Link to={`/property/${property.id}`}>
         <span className="property-nearby-card__image">
-          {image ? (
-            <ImageWithFallback
-              src={image}
-              alt=""
-              loading="lazy"
-              fetchPriority="low"
-            />
-          ) : (
-            <span>{property.society_name || property.title}</span>
-          )}
+          <ImageWithFallback
+            src={image}
+            alt=""
+            loading="lazy"
+            fetchPriority="low"
+          />
         </span>
         <em>
           {price}
@@ -260,12 +194,12 @@ function NearbyHomeCard({
 
 function NearbyHomesRail({
   items,
-  status,
+  exploreHref,
 }: {
   items: RecommendationShelfItem[];
-  status: RecommendationStatus;
+  exploreHref: string;
 }) {
-  if (items.length === 0 && status !== "pending") return null;
+  if (items.length === 0) return null;
 
   return (
     <section
@@ -274,24 +208,16 @@ function NearbyHomesRail({
       aria-labelledby="property-nearby-title"
     >
       <div className="property-section-line">
-        <h2 id="property-nearby-title">More homes to compare</h2>
+        <h2 id="property-nearby-title">More homes</h2>
       </div>
       <div className="property-nearby-rail__scroller">
-        {status === "pending" && items.length === 0 && (
-          <>
-            <span className="property-nearby-skeleton" />
-            <span className="property-nearby-skeleton" />
-            <span className="property-nearby-skeleton" />
-            <span className="property-nearby-skeleton" />
-          </>
-        )}
         {items.map((item, index) => (
           <NearbyHomeCard key={item.id} item={item} sceneIndex={index} />
         ))}
       </div>
       <Link
         className="property-nearby-rail__all"
-        to="/"
+        to={exploreHref}
       >
         Explore all homes
       </Link>
@@ -375,15 +301,28 @@ function PropertyPageBody({
     [focusParam],
   );
   const { compareIds } = useNotebook();
+  const shortlistKey = typeof window === "undefined"
+    ? ""
+    : readShortlistIds().join("\u001f");
+  const explicitComparisonKey = useMemo(() => {
+    const selectedIds = compareIds.length > 0
+      ? compareIds
+      : shortlistKey.split("\u001f").filter(Boolean);
+    return [...new Set(selectedIds)]
+      .filter((propertyId) => propertyId !== id)
+      .slice(0, MAX_EXPLICIT_COMPARISON_CANDIDATES)
+      .join("\u001f");
+  }, [compareIds, id, shortlistKey]);
   const [storyPlaying, setStoryPlaying] = useState(true);
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
   const [recommendations, setRecommendations] =
     useState<RecommendationResponse | null>(null);
   const [aroundThisHomeScene, setAroundThisHomeScene] =
     useState<SurfaceSceneResponse | null>(null);
-  const [allProperties, setAllProperties] = useState<PropertyCard[]>([]);
-  const [recommendationStatus, setRecommendationStatus] =
-    useState<RecommendationStatus>("pending");
+  const [comparisonResolution, setComparisonResolution] = useState<{
+    key: string;
+    properties: PropertyCard[];
+  }>({ key: "", properties: [] });
   const [status, setStatus] = useState<
     "loading" | "error" | "not_found" | "ok"
   >("loading");
@@ -416,12 +355,10 @@ function PropertyPageBody({
       .then((response) => {
         if (cancelled) return;
         setRecommendations(response);
-        setRecommendationStatus(response.status);
       })
       .catch(() => {
         if (cancelled) return;
         setRecommendations(null);
-        setRecommendationStatus("unavailable");
       });
 
     return () => {
@@ -452,6 +389,30 @@ function PropertyPageBody({
   }, [data?.property?.id, proofFocus]);
 
   useEffect(() => {
+    const propertyId = data?.property?.id;
+    const requestedIds = explicitComparisonKey.split("\u001f").filter(Boolean);
+    if (!propertyId || requestedIds.length === 0) return undefined;
+
+    const controller = new AbortController();
+    void Promise.allSettled(
+      requestedIds.map((requestedId) =>
+        getProperty(requestedId, { signal: controller.signal })
+      ),
+    ).then((results) => {
+      if (controller.signal.aborted) return;
+      setComparisonResolution({
+        key: explicitComparisonKey,
+        properties: results.flatMap((result) =>
+          result.status === "fulfilled"
+            ? [propertyToCard(result.value)]
+            : []),
+      });
+    });
+
+    return () => controller.abort();
+  }, [data?.property?.id, explicitComparisonKey]);
+
+  useEffect(() => {
     if (status !== "ok" || !proofFocus?.targetId) return undefined;
     let secondFrame = 0;
     const firstFrame = window.requestAnimationFrame(() => {
@@ -467,22 +428,6 @@ function PropertyPageBody({
       if (secondFrame) window.cancelAnimationFrame(secondFrame);
     };
   }, [status, data?.property?.id, proofFocus, aroundThisHomeScene]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    getProperties()
-      .then((properties) => {
-        if (!cancelled) setAllProperties(properties);
-      })
-      .catch(() => {
-        if (!cancelled) setAllProperties([]);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   if (status === "loading")
     return (
@@ -547,17 +492,18 @@ function PropertyPageBody({
   const recommendationBranches =
     recommendations?.items ?? data.recommendation_branches ?? [];
   const currentCard = propertyToCard(data);
-  const marketPropertyMap = new Map<string, PropertyCard>();
-  for (const property of [
-    currentCard,
-    ...allProperties,
-    ...data.similar_properties,
-    ...recommendationBranches.map((branch) => branch.property),
-  ]) {
-    marketPropertyMap.set(property.id, property);
-  }
+  const explicitComparisonProperties = comparisonResolution.key
+      === explicitComparisonKey
+    ? comparisonResolution.properties
+    : [];
   const displayTitle = p.title.trim();
-  const story = projectPropertyStory(data);
+  const story = projectPropertyStory(data, {
+    mapAvailable: showNearbyPlate,
+    comparisonProperties: explicitComparisonProperties,
+    recommendationProperties: recommendationBranches.map(
+      (branch) => branch.property,
+    ),
+  });
   const proofSourceUrl = proofFocus
     ? focusedEvidenceSource(data, proofFocus)
     : undefined;
@@ -571,32 +517,13 @@ function PropertyPageBody({
     "resident-voice",
     proofSourceUrl,
   );
-  const savedIds = readShortlistIds();
-  const requestedCompareIds = compareIds.length > 0 ? compareIds : savedIds;
-  const availableCompareIds = compareIds.length > 0
-    ? requestedCompareIds
-        .filter((propertyId) => marketPropertyMap.has(propertyId))
-        .slice(0, 4)
-    : distinctSocietyIds(requestedCompareIds, marketPropertyMap);
-  const selectedCompareIds = [
-    p.id,
-    ...availableCompareIds.filter((propertyId) => propertyId !== p.id),
-  ].slice(0, 4);
-  const savedComparisons = savedComparisonHomes(
-    selectedCompareIds,
-    marketPropertyMap,
-    p.id,
-  );
-  const savedCompareHref = workspaceCompareHref(
-    selectedCompareIds,
-    p.id,
-  );
-  const comparisonIds = new Set(savedComparisons.map((home) => home.id));
+  const comparisonIds = new Set(story.comparisons.map((home) => home.id));
   const moreNearbyItems = recommendationShelfItems(
     recommendationBranches,
     currentCard,
     comparisonIds,
   );
+  const exploreHref = propertyExploreHref(p.area);
 
   return (
     <div className="property-decision-page property-story-page">
@@ -648,7 +575,7 @@ function PropertyPageBody({
       <main className="property-clean-flow">
         <PropertySearchMatch data={data} focus={proofFocus} />
 
-        {showNearbyPlate && aroundThisHomeContext && (
+        {story.map.available && aroundThisHomeContext && (
           <section
             id="around-this-home"
             className="property-map-section"
@@ -685,13 +612,13 @@ function PropertyPageBody({
         />
 
         <PropertyShortCompare
-          homes={savedComparisons}
-          compareHref={savedCompareHref}
+          homes={story.comparisons}
+          compareHref={story.compareHref}
         />
 
         <NearbyHomesRail
           items={moreNearbyItems}
-          status={recommendationStatus}
+          exploreHref={exploreHref}
         />
       </main>
 

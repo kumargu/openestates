@@ -257,9 +257,8 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.story-lab__viewport--mobile .property-short-compare__table-wrap {
+.story-lab__viewport--mobile .property-short-compare__homes {
   width: calc(100% + 1rem);
-  border-right: 0;
 }
 
 .story-lab__viewport--mobile .property-short-compare__handoff {

@@ -23,6 +23,7 @@ import {
 } from "../lib/notebook.ts";
 import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
 import {
+  activeWorkspaceCompareIds,
   workspaceBuyVsRentHref,
   workspaceCompareHref,
   workspaceFocusedHomeId,
@@ -144,6 +145,7 @@ export function WorkspacePage() {
     notes,
     propertyIds,
     compareIds,
+    setCompareIds,
     toggleCompare,
     addHandwritten,
     addCommandBlock,
@@ -186,9 +188,7 @@ export function WorkspacePage() {
     [searchParams],
   );
   const activeCompareIds = useMemo(
-    () => requestedCompareIds.length > 0
-      ? requestedCompareIds
-      : compareIds.slice(0, MAX_WORKSPACE_COMPARE_HOMES),
+    () => activeWorkspaceCompareIds(requestedCompareIds, compareIds),
     [compareIds, requestedCompareIds],
   );
   const selectedHomes = useMemo(
@@ -240,6 +240,13 @@ export function WorkspacePage() {
   }
 
   useEffect(() => {
+    if (mode !== "compare" || requestedCompareIds.length === 0) return;
+    const selectionChanged = activeCompareIds.length !== compareIds.length
+      || activeCompareIds.some((id, index) => id !== compareIds[index]);
+    if (selectionChanged) setCompareIds(activeCompareIds);
+  }, [activeCompareIds, compareIds, mode, requestedCompareIds.length, setCompareIds]);
+
+  useEffect(() => {
     if (mode !== "compare") return undefined;
     if (selectedHomes.length < 2) return undefined;
 
@@ -267,9 +274,7 @@ export function WorkspacePage() {
   function removeCompareHomes(propertyIdsToRemove: string[]) {
     const removeSet = new Set(propertyIdsToRemove);
     const nextIds = activeCompareIds.filter((id) => !removeSet.has(id));
-    for (const id of propertyIdsToRemove) {
-      if (compareIds.includes(id)) toggleCompare(id);
-    }
+    setCompareIds(nextIds);
 
     const next = new URLSearchParams(searchParams);
     if (nextIds.length > 0) {

@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getProperties } from "../../lib/api.ts";
+import { useNotebook } from "../../hooks/useNotebook.ts";
 import {
   FOCUS_STORAGE_KEY,
   parseShortlistIds,
@@ -26,6 +27,7 @@ import {
 } from "../../lib/navigationContext.ts";
 import {
   activeWorkspaceView,
+  activeWorkspaceCompareIds,
   shouldShowWorkspaceSidebar,
   workspaceFocusedHomeId,
 } from "../../lib/workspaceNav.ts";
@@ -69,6 +71,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const [collapsed, setCollapsed] = useState(() =>
     window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true"
   );
+  const { compareIds } = useNotebook();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -160,6 +163,10 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     properties.map((property) => property.id),
   );
   const compareFocusIds = queryIds.filter((id) => availablePropertyIds.has(id));
+  const activeCompareIds = activeWorkspaceCompareIds(
+    activeView === "compare" ? queryIds : [],
+    compareIds,
+  );
   const storedFocus = window.localStorage.getItem(FOCUS_STORAGE_KEY);
   const workspaceFocusedId = workspaceFocusedHomeId(
     queryFocus,
@@ -273,6 +280,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       {showSidebar ? (
         <WorkspaceSidebar
           homes={sidebarHomes}
+          compareIds={activeCompareIds}
           focusedId={focusedId}
           activeView={activeView}
           collapsed={effectiveSidebarCollapsed}

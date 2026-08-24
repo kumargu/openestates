@@ -37,12 +37,14 @@ const {
   hideNotebookCompareLabel,
   readNotebook,
   showNotebookCompareLabel,
+  setNotebookCompareIds,
   toggleNotebookCompareId,
   updateNotebookNote,
   upsertContextualNote,
 } = await import("../src/lib/notebook.ts");
 const {
   SHORTLIST_STORAGE_KEY,
+  writeShortlistIds,
 } = await import("../src/lib/compare.ts");
 
 test("workspace state includes saved homes even before notes exist", () => {
@@ -96,6 +98,7 @@ test("v2 notebook storage migrates to v3 ordered documents without losing compar
   assert.deepEqual(state.compareIds, ["home-1"]);
   assert.deepEqual(state.hiddenCompareLabels, ["schools"]);
   assert.deepEqual(state.notes.map((note) => note.id), ["note-1", "plan-1"]);
+  assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "home-1");
 });
 
 test("compare selection is explicit and does not rewrite saved homes", () => {
@@ -112,6 +115,17 @@ test("compare selection is explicit and does not rewrite saved homes", () => {
   assert.deepEqual(state.propertyIds, ["saved-home", "noted-home"]);
   assert.deepEqual(state.compareIds, ["saved-home"]);
   assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "saved-home,noted-home");
+});
+
+test("a deep-linked comparison becomes active without saving every home", () => {
+  storage.clear();
+  storage.setItem(SHORTLIST_STORAGE_KEY, "saved-home");
+
+  const state = setNotebookCompareIds(["saved-home", "recommended-home"]);
+
+  assert.deepEqual(state.compareIds, ["saved-home", "recommended-home"]);
+  assert.deepEqual(state.propertyIds, ["saved-home"]);
+  assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "saved-home");
 });
 
 test("removing a shortlisted home clears compare state without deleting buyer notes", () => {
@@ -226,6 +240,7 @@ test("map notes retain property, feature, layer, distance, source, and label con
 
   assert.ok(created);
   assert.deepEqual(created.propertyIds, ["home-1"]);
+  assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "home-1");
   assert.equal(created.notes.length, 1);
   assert.equal(created.notes[0].catalogKey, "nearby:home-1:schools:place-school");
   assert.equal(created.notes[0].title, "Green School");
@@ -247,6 +262,28 @@ test("map notes retain property, feature, layer, distance, source, and label con
   assert.ok(updated);
   assert.equal(updated.notes.length, 1);
   assert.equal(updated.notes[0].selectionText, "Visit during pickup time.");
+
+  writeShortlistIds([]);
+  upsertContextualNote({
+    propertyId: "home-1",
+    catalogKey: "nearby:home-1:schools:place-school",
+    title: "Green School",
+    text: "Keep this note, but leave the home removed.",
+    labels: ["schools"],
+  });
+  assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "");
+});
+
+test("an empty notebook row waits until the buyer writes before saving the home", () => {
+  storage.clear();
+
+  const draft = addNotebookParagraphAfter({ propertyId: "home-1" });
+  const blockId = draft.documents["home-1"].blocks[0]?.id;
+  assert.ok(blockId);
+  assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "");
+
+  updateNotebookNote(blockId, { title: "Check traffic after school pickup." });
+  assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "home-1");
 });
 
 test("slash command blocks append and remain editable", () => {

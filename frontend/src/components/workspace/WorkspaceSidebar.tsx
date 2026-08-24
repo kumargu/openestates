@@ -19,6 +19,7 @@ type WorkspaceIconName =
 
 type WorkspaceSidebarProps = {
   homes: PropertyCard[];
+  compareIds: string[];
   focusedId: string;
   activeView: WorkspaceView;
   collapsed: boolean;
@@ -114,6 +115,7 @@ function homeStateHint(home: PropertyCard): string | null {
 
 export function WorkspaceSidebar({
   homes,
+  compareIds,
   focusedId,
   activeView,
   collapsed,
@@ -128,7 +130,7 @@ export function WorkspaceSidebar({
   const navItems = workspaceNavItems(focusedId, activeView, {
     mode,
     discoveryHref,
-    compareIds: homes.map((home) => home.id),
+    compareIds,
   });
   const [showAllHomes, setShowAllHomes] = useState(false);
   const { notes } = useNotebook();
