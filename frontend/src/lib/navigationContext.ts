@@ -58,6 +58,17 @@ export function discoveryReturnHref(): string {
   return readDiscoveryContext()?.url ?? "/";
 }
 
+export function propertyExploreHref(
+  area: string,
+  rememberedHref = discoveryReturnHref(),
+): string {
+  if (rememberedHref !== "/") return rememberedHref;
+  const query = area.trim();
+  if (!query) return "/";
+  const params = new URLSearchParams({ q: query });
+  return `/?${params.toString()}`;
+}
+
 export function requestDiscoveryReturn(url: string): void {
   if (typeof window === "undefined") return;
   const context = readDiscoveryContext();

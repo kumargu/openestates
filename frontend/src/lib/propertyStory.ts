@@ -3,6 +3,7 @@ import { hasAroundThisHomePlate } from "./nearbyPlateProjection.ts";
 import { visibleEvidenceSections } from "./evidence.ts";
 import { workspaceCompareHref } from "./workspaceNav.ts";
 import type {
+  DecisionLabel,
   PropertyCard,
   PropertyDetailResponse,
 } from "./types.ts";
@@ -163,7 +164,9 @@ export type PropertyStoryModel = {
 export type PropertyStoryProjectionOptions = {
   media?: StoryMediaFrameInput[];
   motionTheme?: StoryMotionTheme;
+  mapAvailable?: boolean;
   comparisonProperties?: PropertyCard[];
+  recommendationProperties?: PropertyCard[];
 };
 
 export type StoryMotionDefinition = {
@@ -449,13 +452,13 @@ function projectRecordCards(
   for (const label of documentLabels) {
     if (label.groupId !== "documents" || !label.label.trim()) continue;
     if (usedFactKeys.has(label.key)) continue;
+    const value = documentFactValue(label);
+    if (!value) continue;
     usedFactKeys.add(label.key);
     documentFacts.push({
       key: label.key,
       label: label.label.trim(),
-      value: label.valueText?.trim()
-        ? label.valueText.trim()
-        : "Found",
+      value,
     });
     if (documentFacts.length >= 3) break;
   }
@@ -471,6 +474,23 @@ function projectRecordCards(
     });
   }
   return cards;
+}
+
+function documentFactValue(label: DecisionLabel): string | undefined {
+  const text = label.valueText?.trim();
+  if (!text) return "Found";
+
+  const normalized = text.toLocaleLowerCase("en-IN");
+  const presenceFact = /(?:available|present|found)$/i.test(label.key)
+    || /\b(?:available|present|found)\b/i.test(label.label);
+  if (["0", "false", "no"].includes(normalized)) return undefined;
+  if (["1", "true", "yes"].includes(normalized)) {
+    return presenceFact ? "Available" : "Found";
+  }
+  if (/^\d+(?:\.0+)?$/.test(normalized) && presenceFact) {
+    return "Available";
+  }
+  return text;
 }
 
 export function projectStoryComparison(
@@ -507,6 +527,7 @@ export function projectStoryComparison(
 function projectComparisons(
   data: PropertyDetailResponse,
   comparisonProperties: PropertyCard[] = [],
+  recommendationProperties: PropertyCard[] = [],
 ): { homes: StoryComparison[]; href?: string } {
   const currentSocietyName = data.society?.name.trim() || undefined;
   const current: StoryComparison = {
@@ -530,6 +551,7 @@ function projectComparisons(
   };
   const candidates = [
     ...comparisonProperties,
+    ...recommendationProperties,
     ...(data.recommendation_branches ?? []).map((branch) => branch.property),
     ...data.similar_properties,
   ];
@@ -673,10 +695,15 @@ export function projectPropertyStory(
   const arrival = projectArrival(data);
   const reviews = projectReviews(data);
   const recordCards = projectRecordCards(data);
-  const compare = projectComparisons(data, options.comparisonProperties);
+  const compare = projectComparisons(
+    data,
+    options.comparisonProperties,
+    options.recommendationProperties,
+  );
   const comparisons = compare.homes;
   const map = {
-    available: hasAroundThisHomePlate(data.map_context ?? null),
+    available: options.mapAvailable
+      ?? hasAroundThisHomePlate(data.map_context ?? null),
   };
   const motionSeed = stableStoryHash(data.property.id);
   const motionTheme = selectStoryMotionTheme({
@@ -751,6 +778,19 @@ export function wrappedFilmstripOffset(
   if (offset > midpoint) offset -= total;
   if (offset < -midpoint) offset += total;
   return Math.max(-3, Math.min(3, offset));
+}
+
+export function filmstripWindowIndices(
+  frameCount: number,
+  activeIndex: number,
+): number[] {
+  if (frameCount <= 0) return [];
+  const active = ((Math.floor(activeIndex) % frameCount) + frameCount)
+    % frameCount;
+  if (frameCount === 1) return [active];
+  const next = (active + 1) % frameCount;
+  const previous = (active - 1 + frameCount) % frameCount;
+  return [...new Set([active, next, previous])];
 }
 
 export function shouldAutoAdvanceStory(input: {
