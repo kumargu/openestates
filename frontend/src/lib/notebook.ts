@@ -13,6 +13,7 @@ import { NOTEBOOK_COMMANDS, type NotebookCommand } from "./notebookCommands.ts";
 
 export const NOTEBOOK_STORAGE_KEY = "openestates:buyer-notebook-v2";
 export const NOTEBOOK_CHANGED_EVENT = "openestates:notebook-changed";
+const NOTED_SHORTLIST_MIGRATION_KEY = "openestates:noted-shortlist-migration:v1";
 export const MAX_NOTEBOOK_NOTES = 200;
 export const MAX_COMPARE_FROM_NOTEBOOK = 4;
 export const MAX_LABELS_PER_NOTE = 4;
@@ -628,6 +629,27 @@ function normalizeDocuments(raw: unknown): Record<string, NotebookDocument> {
   return documents;
 }
 
+function documentHasMeaningfulNote(document: NotebookDocument | undefined): boolean {
+  return document?.blocks.some((block) =>
+    block.type !== "paragraph" || block.text.trim().length > 0
+  ) ?? false;
+}
+
+function migrateNotedPropertiesToShortlist(
+  state: NotebookState,
+  shortlist: string[],
+): string[] {
+  if (window.localStorage.getItem(NOTED_SHORTLIST_MIGRATION_KEY) === "1") {
+    return shortlist;
+  }
+  const notedPropertyIds = Object.values(state.documents)
+    .filter(documentHasMeaningfulNote)
+    .map((document) => document.propertyId);
+  const nextShortlist = writeShortlistIds([...notedPropertyIds, ...shortlist]);
+  window.localStorage.setItem(NOTED_SHORTLIST_MIGRATION_KEY, "1");
+  return nextShortlist;
+}
+
 function readRawState(): NotebookState {
   try {
     const raw = window.localStorage.getItem(NOTEBOOK_STORAGE_KEY)
@@ -687,7 +709,7 @@ function completeState(state: Partial<NotebookState>): NotebookState {
 
 export function readNotebook(): NotebookState {
   const state = readRawState();
-  const shortlist = readShortlistIds();
+  const shortlist = migrateNotedPropertiesToShortlist(state, readShortlistIds());
   const propertyIds = [...new Set([...shortlist, ...state.propertyIds])];
   if (shortlist.length === 0 && propertyIds.length === state.propertyIds.length) return state;
   return {
@@ -698,6 +720,7 @@ export function readNotebook(): NotebookState {
 }
 
 export function writeNotebook(state: Partial<NotebookState>): NotebookState {
+  const previous = readRawState();
   const completed = completeState(state);
   const next: NotebookState = {
     version: NOTEBOOK_SCHEMA_VERSION,
@@ -715,6 +738,15 @@ export function writeNotebook(state: Partial<NotebookState>): NotebookState {
     compareIds: next.compareIds,
     hiddenCompareLabels: next.hiddenCompareLabels,
   }));
+  const newlyNotedPropertyIds = Object.values(next.documents)
+    .filter((document) =>
+      documentHasMeaningfulNote(document)
+      && !documentHasMeaningfulNote(previous.documents[document.propertyId])
+    )
+    .map((document) => document.propertyId);
+  if (newlyNotedPropertyIds.length > 0) {
+    writeShortlistIds([...newlyNotedPropertyIds, ...readShortlistIds()]);
+  }
   emit(next);
   return next;
 }
