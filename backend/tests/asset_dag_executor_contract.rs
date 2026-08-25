@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
-use std::time::Instant;
 
 use arc_swap::ArcSwap;
 use arrow::array::{Array, StringArray};
@@ -766,8 +765,10 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     );
     let (search_event_tx, _search_event_rx) = tokio::sync::mpsc::channel(8);
     let state = Arc::new(AppState {
+        execution: backend::security::ExecutionLanes::current(),
         search_runtime: ArcSwap::from_pointee(search_runtime),
         search_cache: SearchResponseCache::new(8),
+        property_catalog_cache: tokio::sync::Mutex::new(None),
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),
         properties: RwLock::new(properties),
@@ -782,7 +783,8 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         project_root: root.path().to_path_buf(),
         process_started_at: chrono::Utc::now(),
         interest_counter: AtomicU64::new(0),
-        interest_rate_limiter: RwLock::new((Instant::now(), 0)),
+        interest_write_lock: tokio::sync::Mutex::new(()),
+        asset_run_active: AtomicBool::new(false),
     });
     let response = search_properties(
         State(state),
@@ -791,6 +793,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         }),
     )
     .await
+    .expect("search compute should be admitted")
     .0;
     assert_eq!(response.query, query);
     assert_eq!(response.total_matches, 1);

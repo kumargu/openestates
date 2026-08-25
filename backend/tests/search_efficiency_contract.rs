@@ -662,9 +662,6 @@ async fn search_cache_hit_still_carries_log_metadata() {
             assert_eq!(cached_event.query, event.query);
             assert_eq!(cached_event.results_returned, event.results_returned);
         }
-        SearchLogMessage::PersistEnrichmentGaps(_) => {
-            panic!("expected search-event metadata")
-        }
     }
 }
 

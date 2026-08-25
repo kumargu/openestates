@@ -1,9 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
 use axum::body::{to_bytes, Body};
+use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
 use backend::api::build_app_router;
 use backend::data_loader::load_app_state;
@@ -58,6 +60,7 @@ async fn promoted_bundle_recommendations_preserve_trust_invariants() {
             .oneshot(
                 Request::builder()
                     .uri(format!("/api/properties/{anchor_id}/recommendations"))
+                    .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41000))))
                     .body(Body::empty())
                     .expect("recommendation request is valid"),
             )

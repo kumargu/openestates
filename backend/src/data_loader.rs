@@ -1,8 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, OnceLock};
-use std::time::Instant;
 
 use arc_swap::ArcSwap;
 use tokio::sync::mpsc;
@@ -20,6 +19,7 @@ use crate::knowledge::node::NodeType;
 use crate::models::area_profile::{PriceRange, RedditSignals};
 use crate::models::{AreaProfile, Property, Society};
 use crate::search::SearchIndex;
+use crate::security::ExecutionLanes;
 use crate::serving::{
     LoadedServingBundle, ServingBundleLoader, ServingEntityFactRows, ServingEntityRecord,
     ServingFactIndex,
@@ -45,6 +45,13 @@ pub type RuntimeServingSnapshot = SearchRuntimeSnapshot;
 /// The promoted serving bundle is the canonical request-path data source.
 /// Legacy `data/knowledge` JSON is intentionally not loaded into runtime state.
 pub async fn load_app_state(project_root: &Path) -> AppState {
+    load_app_state_with_execution(project_root, ExecutionLanes::current()).await
+}
+
+pub async fn load_app_state_with_execution(
+    project_root: &Path,
+    execution: ExecutionLanes,
+) -> AppState {
     let serving_bundle = load_serving_bundle(project_root)
         .await
         .unwrap_or_else(|err| panic!("Serving bundle startup contract failed: {err}"));
@@ -91,11 +98,13 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     let map_overlays = crate::routes::map_overlays::load_city_map_overlays(project_root);
     let knowledge = Arc::new(RwLock::new(graph));
     let (search_event_tx, search_event_rx) = mpsc::channel(search_log_queue_capacity_from_env());
-    spawn_search_log_worker(knowledge.clone(), search_event_rx);
+    spawn_search_log_worker(&execution, knowledge.clone(), search_event_rx);
 
     AppState {
+        execution,
         search_runtime: ArcSwap::from_pointee(search_runtime),
         search_cache: SearchResponseCache::from_env(),
+        property_catalog_cache: tokio::sync::Mutex::new(None),
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),
         properties: RwLock::new(properties),
@@ -110,7 +119,8 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         project_root: project_root.to_path_buf(),
         process_started_at: chrono::Utc::now(),
         interest_counter: AtomicU64::new(0),
-        interest_rate_limiter: RwLock::new((Instant::now(), 0)),
+        interest_write_lock: tokio::sync::Mutex::new(()),
+        asset_run_active: AtomicBool::new(false),
     }
 }
 

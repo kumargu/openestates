@@ -186,6 +186,6 @@
       "Gate B — retired seed-backed approach road DAG assets; keep future road facts source-backed",
       "Gate C — EntityContext composer + GET /api/properties/{id}/context + EntityContextCard"
     ],
-    "build_order": "Gate A (surface truth) → Gate B (road/place lake) → Gate C (EntityContext API). See docs/phase_final_handoff.md"
+    "build_order": "Gate A (surface truth) → Gate B (road/place lake) → Gate C (EntityContext API)"
   }
 }

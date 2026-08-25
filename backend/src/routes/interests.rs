@@ -1,6 +1,5 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use axum::extract::{Path as AxumPath, State};
 use axum::http::StatusCode;
@@ -8,12 +7,10 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::models::{Interest, InterestCount, InterestResponse};
+use crate::security::interest_storage::{
+    interest_append_fits, interest_storage_bytes, validate_interest_fields,
+};
 use crate::state::AppState;
-
-/// Max interest submissions per rate-limit window (60 seconds).
-const RATE_LIMIT_MAX: u32 = 60;
-/// Rate-limit window duration.
-const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 
 #[derive(Deserialize)]
 pub struct InterestRequest {
@@ -44,23 +41,23 @@ pub async fn express_interest(
         ));
     }
 
-    // --- Rate limiting (global, not per-IP) ---
-    {
-        let mut limiter = state.interest_rate_limiter.write().await;
-        let now = Instant::now();
-        if now.duration_since(limiter.0) > RATE_LIMIT_WINDOW {
-            // Reset window
-            *limiter = (now, 1);
-        } else if limiter.1 >= RATE_LIMIT_MAX {
-            return Err((
-                StatusCode::TOO_MANY_REQUESTS,
-                Json(InterestError {
-                    error: "rate limit exceeded — try again shortly".to_string(),
-                }),
-            ));
-        } else {
-            limiter.1 += 1;
-        }
+    let buyer_name = req
+        .buyer_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let buyer_contact = req
+        .buyer_contact
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Err(error) = validate_interest_fields(buyer_name, buyer_contact) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(InterestError {
+                error: error.to_string(),
+            }),
+        ));
     }
 
     // Validate property exists
@@ -85,46 +82,37 @@ pub async fn express_interest(
     let interest = Interest {
         id: interest_id.clone(),
         property_id: property_id.clone(),
-        buyer_name: req
-            .buyer_name
-            .as_deref()
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(String::from),
-        buyer_contact: req
-            .buyer_contact
-            .as_deref()
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(String::from),
+        buyer_name: buyer_name.map(String::from),
+        buyer_contact: buyer_contact.map(String::from),
         created_at: now.to_rfc3339(),
     };
 
-    // Persist to data/interests/{property_id}.jsonl (append-only)
-    let interests_dir = state.project_root.join("data").join("interests");
-    if let Err(e) = tokio::fs::create_dir_all(&interests_dir).await {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(InterestError {
-                error: format!("failed to create interests directory: {}", e),
-            }),
-        ));
-    }
-
-    let file_path = interests_dir.join(format!("{}.jsonl", property_id));
     let line = match serde_json::to_string(&interest) {
         Ok(j) => format!("{}\n", j),
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(InterestError {
-                    error: format!("failed to serialize interest: {}", e),
-                }),
-            ));
-        }
+        Err(_) => return Err(interest_storage_unavailable()),
     };
 
-    // Append to JSONL file
+    // Serialize capacity accounting with the append so concurrent requests
+    // cannot race past the per-file or deployment-wide storage ceilings.
+    let _write_guard = state.interest_write_lock.lock().await;
+    let interests_dir = state.project_root.join("data").join("interests");
+    if tokio::fs::create_dir_all(&interests_dir).await.is_err() {
+        return Err(interest_storage_unavailable());
+    }
+    let file_path = interests_dir.join(format!("{}.jsonl", property_id));
+    let file_bytes = match tokio::fs::metadata(&file_path).await {
+        Ok(metadata) => metadata.len(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
+        Err(_) => return Err(interest_storage_unavailable()),
+    };
+    let storage_bytes = match interest_storage_bytes(&interests_dir).await {
+        Ok(bytes) => bytes,
+        Err(_) => return Err(interest_storage_unavailable()),
+    };
+    if !interest_append_fits(file_bytes, storage_bytes, line.len()) {
+        return Err(interest_storage_unavailable());
+    }
+
     use tokio::io::AsyncWriteExt;
     let mut file = match tokio::fs::OpenOptions::new()
         .create(true)
@@ -133,23 +121,11 @@ pub async fn express_interest(
         .await
     {
         Ok(f) => f,
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(InterestError {
-                    error: format!("failed to open interests file: {}", e),
-                }),
-            ));
-        }
+        Err(_) => return Err(interest_storage_unavailable()),
     };
 
-    if let Err(e) = file.write_all(line.as_bytes()).await {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(InterestError {
-                error: format!("failed to write interest: {}", e),
-            }),
-        ));
+    if file.write_all(line.as_bytes()).await.is_err() {
+        return Err(interest_storage_unavailable());
     }
 
     Ok((
@@ -160,6 +136,15 @@ pub async fn express_interest(
             property_id,
         }),
     ))
+}
+
+fn interest_storage_unavailable() -> (StatusCode, Json<InterestError>) {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(InterestError {
+            error: "interest storage is temporarily unavailable".to_string(),
+        }),
+    )
 }
 
 /// GET /api/properties/{id}/interests/count — get interest count for a property.
@@ -186,9 +171,7 @@ pub async fn get_interest_count(
         .join("interests")
         .join(format!("{}.jsonl", id));
 
-    // NOTE: Reads JSONL on every GET. Acceptable at current scale (single-digit
-    // interests per property). Scaling path: maintain an in-memory counter map
-    // updated on write, with periodic JSONL reconciliation.
+    // Reads a file whose size is bounded by the interest storage policy.
     let count = crate::utils::count_lines(&file_path).await;
 
     Ok(Json(InterestCount {

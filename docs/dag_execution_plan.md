@@ -458,7 +458,7 @@ match preference {
 2. `reddit_theme_classifier` + `reddit_resident_facts` → `concern_taxonomy` fact_keys
 3. POC import (`reddit_poc_import`) loads 15 societies when crawl is skipped
 4. Crawl policy disabled by default; empty-input path emits POC facts
-5. `enrichment_gaps.json` logging from search + `enrichment_priority.py` stub
+5. Search-demand persistence was retired; rebuild it later on a bounded logging store
 6. `audit_reddit_compliance.py` for silver/serving Parquet checks
 
 **Acceptance:**
@@ -611,9 +611,6 @@ Full checklist: `app/config/coverage.json` → `graph_ui_readiness`.
 data/validation/coverage_report.json
   - entity_type × fact_key × source_type → count, %
 
-data/validation/enrichment_gaps.json
-  - entity_id × missing_fact_key × search_demand_score
-
 data/validation/resolution_audit.json
   - superseded facts, conflicts, low-confidence winners
 ```
@@ -659,7 +656,8 @@ data/validation/resolution_audit.json
 
 ## 10. Immediate next actions
 
-**Phases 0–6 complete.** See [`phase_6_handoff.md`](./phase_6_handoff.md) for full roadmap.
+**Phases 0–6 complete.** Current work is tracked through executable contracts,
+config manifests, and the active runbooks retained in this directory.
 
 1. **Phase 8′:** discovery receipt copy; search tile chips from config
 2. **Phase 9a:** road/place enrichment + approach road visuals → lake
@@ -670,7 +668,6 @@ data/validation/resolution_audit.json
 ## 11. References
 
 - [`docs/dag_convergence_design.md`](./dag_convergence_design.md) — architecture
-- [`docs/livability_brief_plan.md`](./livability_brief_plan.md) — brief composer (already shipped Phase 1)
 - [`backend/src/lake/keys.rs`](../backend/src/lake/keys.rs) — S3-compatible key rules
 - [`backend/src/serving/parquet.rs`](../backend/src/serving/parquet.rs) — serving table schema
 - [GitHub issue #2](https://github.com/kumargu/openestates/issues/2) — concern taxonomy research
