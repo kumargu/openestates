@@ -5,7 +5,7 @@ Runs 20 curated queries against the live backend, captures full responses,
 runs automated checks, and outputs a structured evaluation report.
 
 Usage:
-    python3 -m pipeline.eval_search [--base-url http://localhost:4000] [--output docs/eval_search_v1.md]
+    python3 -m pipeline.eval_search [--base-url http://localhost:4000] [--output tmp/eval_search_v1.md]
 """
 
 import json
@@ -446,7 +446,7 @@ def build_markdown_report(eval_results: list[dict], run_at: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Search evaluation script")
     parser.add_argument("--base-url", default=BASE_URL_DEFAULT)
-    parser.add_argument("--output", default="docs/eval_search_v1.md")
+    parser.add_argument("--output", default="tmp/eval_search_v1.md")
     parser.add_argument("--json-output", help="Also write raw JSON to this path")
     args = parser.parse_args()
 

@@ -445,13 +445,11 @@ You are explicitly allowed to clean up and remove dead code. When removing somet
 - Any orphan frontend components with no route or import.
 - TODO comments older than 2 weeks — either do them or delete them.
 
-See `docs/cleanup_plan.md` for the full plan.
-
 ---
 
 ## 11. Architecture Reference
 
-Full design in `docs/architecture_v2.md`. Key layout:
+Day-to-day architecture:
 
 ```
 frontend/               React web app (Vite, port 5173)
@@ -475,9 +473,8 @@ app/config/dag/         Control-plane: ontology, assets, leaves, policies
 app/config/bootstrap/   Bootstrap policies only — no entity instances
 data/lake/              DAG assets and promoted serving bundles (Parquet)
 data/cache/             Pipeline skill result cache
-docs/                   Architecture, cleanup plan, blueprints
-.claude/skills/        OpenEstates workflow skills
-days/                   Day spec files
+docs/                   Active architecture and operational runbooks only
+.claude/skills/         Current OpenEstates workflow skills
 ```
 
 Read `app/config/dag/manifest.json` before editing any DAG config file.
@@ -492,11 +489,6 @@ Read the matching skill file **before** starting any task that falls under it:
 |-------|------|---------|
 | Coding Practices | `.claude/skills/coding-practices.md` | Quality bar, patterns, testing, latency budgets |
 | UI Critic | `.claude/skills/ui-critic.md` | Human UI review: sticky-note chrome, clutter, buyer copy, same-page modes |
-| Add Crawler | `.claude/skills/add-crawler.md` | Add a new data source to the pipeline |
-| Add API Endpoint | `.claude/skills/add-api-endpoint.md` | Add a new Rust API endpoint end-to-end |
-| Data Enrichment | `.claude/skills/data-enrichment.md` | Run AI enrichment on entities |
-| Debug Pipeline | `.claude/skills/debug-pipeline.md` | Debug pipeline failures |
-| Run Scoring | `.claude/skills/run-scoring.md` | Run and modify the scoring engine |
 
 ---
 

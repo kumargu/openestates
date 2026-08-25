@@ -6,8 +6,9 @@ three separate jobs: recall enough plausible homes, prove why any home is
 ranked, and explain missing evidence honestly. FastEmbed and vector recall are
 not part of the current runtime.
 
-The implementation roadmap lives in `docs/search_engine_roadmap.md`; the active
-ontology cleanup plan lives in `docs/search_ontology_refactor_plan.md`.
+The operating rules in `AGENTS.md`, the frozen query bank, and the search
+contracts are authoritative. Historical roadmaps and one-off audit notes are
+deliberately not kept in the repository.
 
 ## Current Reset
 

@@ -656,7 +656,8 @@ data/validation/resolution_audit.json
 
 ## 10. Immediate next actions
 
-**Phases 0–6 complete.** See [`phase_6_handoff.md`](./phase_6_handoff.md) for full roadmap.
+**Phases 0–6 complete.** Current work is tracked through executable contracts,
+config manifests, and the active runbooks retained in this directory.
 
 1. **Phase 8′:** discovery receipt copy; search tile chips from config
 2. **Phase 9a:** road/place enrichment + approach road visuals → lake
@@ -667,7 +668,6 @@ data/validation/resolution_audit.json
 ## 11. References
 
 - [`docs/dag_convergence_design.md`](./dag_convergence_design.md) — architecture
-- [`docs/livability_brief_plan.md`](./livability_brief_plan.md) — brief composer (already shipped Phase 1)
 - [`backend/src/lake/keys.rs`](../backend/src/lake/keys.rs) — S3-compatible key rules
 - [`backend/src/serving/parquet.rs`](../backend/src/serving/parquet.rs) — serving table schema
 - [GitHub issue #2](https://github.com/kumargu/openestates/issues/2) — concern taxonomy research
