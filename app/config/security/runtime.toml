@@ -1,0 +1,73 @@
+# OpenEstates single-process launch tuning.
+#
+# These are operational policy knobs, not product/search vocabulary. Changes are
+# loaded and validated at backend startup so limits can be tuned without
+# changing Rust control flow.
+
+[runtime]
+http_worker_threads = 4
+internal_worker_threads = 2
+customer_compute_worker_threads = 1
+customer_compute_limit = 2
+customer_compute_queue_timeout_ms = 1500
+
+[search_cache]
+capacity = 1024
+max_bytes = 134217728
+log_queue_capacity = 1024
+event_history = 1000
+
+[requests]
+public_timeout_ms = 3000
+global_concurrency = 64
+search_concurrency = 8
+read_concurrency = 16
+catalog_concurrency = 2
+max_request_target_bytes = 8192
+max_search_query_bytes = 2048
+batch_body_bytes = 65536
+interest_body_bytes = 16384
+admin_body_bytes = 65536
+
+[rate_limits.read]
+period_ms = 500
+burst = 120
+
+[rate_limits.search]
+period_ms = 1000
+burst = 16
+
+[rate_limits.batch]
+period_ms = 1000
+burst = 30
+
+[rate_limits.interest]
+period_ms = 30000
+burst = 5
+
+[rate_limits.admin]
+period_ms = 1000
+burst = 20
+
+[media]
+stream_concurrency = 64
+
+[admin]
+max_source_entities = 64
+max_source_entity_bytes = 256
+max_partition_parts = 16
+max_field_bytes = 256
+default_source_timeout_seconds = 1800
+max_source_timeout_seconds = 7200
+max_asset_run_log_bytes = 16777216
+
+[retention]
+serving_cache_versions = 8
+asset_log_files = 20
+
+[interest_storage]
+max_name_chars = 120
+max_contact_chars = 320
+max_record_bytes = 1024
+max_property_file_bytes = 262144
+max_total_bytes = 33554432

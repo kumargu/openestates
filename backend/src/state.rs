@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
@@ -12,18 +12,17 @@ use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 use crate::discovery::DiscoveryConfig;
-use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::KnowledgeGraph;
 use crate::knowledge::SearchEvent;
 use crate::models::{AreaProfile, Property, Society};
 use crate::recommendations::RecommendationResponse;
 use crate::scoring::scoring_policy;
 use crate::search::{SearchIndex, SearchResponse};
+use crate::security::security_tuning;
+use crate::security::ExecutionLanes;
 use crate::serving::LoadedServingBundle;
 
 pub const SEARCH_ENGINE_VERSION: &str = "openestates-search-runtime-v2";
-const DEFAULT_SEARCH_CACHE_CAPACITY: usize = 1024;
-const DEFAULT_SEARCH_LOG_QUEUE_CAPACITY: usize = 1024;
 
 pub struct SearchRuntimeSnapshot {
     pub bundle: Arc<LoadedServingBundle>,
@@ -101,37 +100,201 @@ pub struct CachedSearchOutput {
 }
 
 pub struct SearchResponseCache {
-    inner: tokio::sync::Mutex<LruCache<SearchCacheKey, CachedSearchOutput>>,
+    inner: Arc<std::sync::Mutex<SearchCacheState>>,
+}
+
+struct SearchCacheState {
+    entries: LruCache<SearchCacheKey, WeightedSearchOutput>,
+    resident_bytes: usize,
+    max_bytes: usize,
+    max_in_flight: usize,
+    in_flight: HashMap<SearchCacheKey, InFlightSearch>,
+    next_reservation_id: u64,
+}
+
+struct InFlightSearch {
+    sender: tokio::sync::watch::Sender<Option<CachedSearchOutput>>,
+    reservation_id: u64,
+}
+
+struct WeightedSearchOutput {
+    output: CachedSearchOutput,
+    weight_bytes: usize,
+}
+
+pub enum SearchCacheLookup {
+    Hit(CachedSearchOutput),
+    Leader(SearchCacheReservation),
+    Waiter(tokio::sync::watch::Receiver<Option<CachedSearchOutput>>),
+    Overloaded,
+}
+
+pub struct SearchCacheReservation {
+    inner: Arc<std::sync::Mutex<SearchCacheState>>,
+    key: SearchCacheKey,
+    reservation_id: u64,
+    completed: bool,
 }
 
 impl SearchResponseCache {
     pub fn from_env() -> Self {
-        let capacity = std::env::var("OPENESTATES_SEARCH_CACHE_CAPACITY")
-            .ok()
-            .and_then(|value| value.parse::<usize>().ok())
-            .filter(|value| *value > 0)
-            .unwrap_or(DEFAULT_SEARCH_CACHE_CAPACITY);
-        Self::new(capacity)
+        let tuning = &security_tuning().search_cache;
+        Self::new_with_budget(tuning.capacity, tuning.max_bytes)
     }
 
     pub fn new(capacity: usize) -> Self {
+        Self::new_with_budget(capacity, security_tuning().search_cache.max_bytes)
+    }
+
+    pub fn new_with_budget(capacity: usize, max_bytes: usize) -> Self {
         let capacity = NonZeroUsize::new(capacity.max(1)).expect("capacity is non-zero");
         Self {
-            inner: tokio::sync::Mutex::new(LruCache::new(capacity)),
+            inner: Arc::new(std::sync::Mutex::new(SearchCacheState {
+                entries: LruCache::new(capacity),
+                resident_bytes: 0,
+                max_bytes: max_bytes.max(1),
+                max_in_flight: security_tuning().requests.search_concurrency,
+                in_flight: HashMap::new(),
+                next_reservation_id: 0,
+            })),
         }
     }
 
     pub async fn get(&self, key: &SearchCacheKey) -> Option<CachedSearchOutput> {
-        self.inner.lock().await.get(key).cloned()
+        self.inner
+            .lock()
+            .expect("search cache lock poisoned")
+            .entries
+            .get(key)
+            .map(|entry| entry.output.clone())
     }
 
     pub async fn put(&self, key: SearchCacheKey, output: CachedSearchOutput) {
-        self.inner.lock().await.put(key, output);
+        let weight_bytes = cached_search_weight_bytes(&output);
+        let mut state = self.inner.lock().expect("search cache lock poisoned");
+        insert_search_cache_entry(&mut state, key, output, weight_bytes);
+    }
+
+    pub async fn lookup_or_reserve(&self, key: &SearchCacheKey) -> SearchCacheLookup {
+        let mut state = self.inner.lock().expect("search cache lock poisoned");
+        if let Some(entry) = state.entries.get(key) {
+            return SearchCacheLookup::Hit(entry.output.clone());
+        }
+        if let Some(in_flight) = state.in_flight.get(key) {
+            return SearchCacheLookup::Waiter(in_flight.sender.subscribe());
+        }
+        if state.in_flight.len() >= state.max_in_flight {
+            return SearchCacheLookup::Overloaded;
+        }
+
+        let (sender, _receiver) = tokio::sync::watch::channel(None);
+        state.next_reservation_id = state.next_reservation_id.wrapping_add(1);
+        let reservation_id = state.next_reservation_id;
+        state.in_flight.insert(
+            key.clone(),
+            InFlightSearch {
+                sender,
+                reservation_id,
+            },
+        );
+        SearchCacheLookup::Leader(SearchCacheReservation {
+            inner: self.inner.clone(),
+            key: key.clone(),
+            reservation_id,
+            completed: false,
+        })
     }
 
     pub async fn clear(&self) {
-        self.inner.lock().await.clear();
+        let mut state = self.inner.lock().expect("search cache lock poisoned");
+        state.entries.clear();
+        state.resident_bytes = 0;
+        state.in_flight.clear();
     }
+
+    #[cfg(test)]
+    async fn resident_bytes(&self) -> usize {
+        self.inner
+            .lock()
+            .expect("search cache lock poisoned")
+            .resident_bytes
+    }
+}
+
+impl SearchCacheReservation {
+    pub async fn complete(mut self, output: CachedSearchOutput) {
+        let weight_bytes = cached_search_weight_bytes(&output);
+        let mut state = self.inner.lock().expect("search cache lock poisoned");
+        let is_current = state
+            .in_flight
+            .get(&self.key)
+            .is_some_and(|in_flight| in_flight.reservation_id == self.reservation_id);
+        if is_current {
+            let in_flight = state
+                .in_flight
+                .remove(&self.key)
+                .expect("current reservation exists");
+            insert_search_cache_entry(&mut state, self.key.clone(), output.clone(), weight_bytes);
+            let _ = in_flight.sender.send(Some(output));
+        }
+        self.completed = true;
+    }
+}
+
+impl Drop for SearchCacheReservation {
+    fn drop(&mut self) {
+        if self.completed {
+            return;
+        }
+        let Ok(mut state) = self.inner.lock() else {
+            return;
+        };
+        if state
+            .in_flight
+            .get(&self.key)
+            .is_some_and(|in_flight| in_flight.reservation_id == self.reservation_id)
+        {
+            state.in_flight.remove(&self.key);
+        }
+    }
+}
+
+fn insert_search_cache_entry(
+    state: &mut SearchCacheState,
+    key: SearchCacheKey,
+    output: CachedSearchOutput,
+    weight_bytes: usize,
+) {
+    if weight_bytes > state.max_bytes {
+        return;
+    }
+
+    if let Some(replaced) = state.entries.pop(&key) {
+        state.resident_bytes = state.resident_bytes.saturating_sub(replaced.weight_bytes);
+    }
+    while state.resident_bytes.saturating_add(weight_bytes) > state.max_bytes {
+        let Some((_key, evicted)) = state.entries.pop_lru() else {
+            break;
+        };
+        state.resident_bytes = state.resident_bytes.saturating_sub(evicted.weight_bytes);
+    }
+
+    let entry = WeightedSearchOutput {
+        output,
+        weight_bytes,
+    };
+    if let Some((_key, evicted)) = state.entries.push(key, entry) {
+        state.resident_bytes = state.resident_bytes.saturating_sub(evicted.weight_bytes);
+    }
+    state.resident_bytes = state.resident_bytes.saturating_add(weight_bytes);
+}
+
+/// Serialized response bytes dominate these entries. Doubling that exact size
+/// conservatively covers the live Rust object graph and small logging metadata.
+fn cached_search_weight_bytes(output: &CachedSearchOutput) -> usize {
+    serde_json::to_vec(output.response.as_ref())
+        .map(|bytes| bytes.len().saturating_mul(2).saturating_add(1024))
+        .unwrap_or(usize::MAX)
 }
 
 fn normalize_search_query(query: &str) -> String {
@@ -145,141 +308,41 @@ fn normalize_search_query(query: &str) -> String {
 #[derive(Clone)]
 pub enum SearchLogMessage {
     SearchEvent(SearchEvent),
-    PersistEnrichmentGaps(EnrichmentGapPersistence),
-}
-
-#[derive(Clone)]
-pub struct EnrichmentGapPersistence {
-    pub gaps: Vec<EnrichmentGap>,
-    pub query: String,
-    pub intent: crate::search::intent::SearchIntent,
-    pub results_returned: usize,
-    pub top_candidate_society_ids: Vec<String>,
 }
 
 pub fn search_log_queue_capacity_from_env() -> usize {
-    std::env::var("OPENESTATES_SEARCH_LOG_QUEUE_CAPACITY")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .filter(|value| *value > 0)
-        .unwrap_or(DEFAULT_SEARCH_LOG_QUEUE_CAPACITY)
+    security_tuning().search_cache.log_queue_capacity
 }
 
 pub fn spawn_search_log_worker(
+    execution: &ExecutionLanes,
     knowledge: Arc<RwLock<KnowledgeGraph>>,
     mut rx: mpsc::Receiver<SearchLogMessage>,
 ) {
-    tokio::spawn(async move {
+    execution.spawn_internal(async move {
         while let Some(message) = rx.recv().await {
             match message {
                 SearchLogMessage::SearchEvent(event) => {
                     let mut graph = knowledge.write().await;
-                    graph.log_search(event);
-                }
-                SearchLogMessage::PersistEnrichmentGaps(payload) => {
-                    tokio::task::spawn_blocking(move || persist_enrichment_gaps(payload));
+                    graph.log_search(event, security_tuning().search_cache.event_history);
                 }
             }
         }
     });
 }
 
-fn persist_enrichment_gaps(payload: EnrichmentGapPersistence) {
-    if payload.gaps.is_empty() {
-        return;
-    }
-
-    let path = enrichment_gaps_output_path();
-    let mut entries: Vec<serde_json::Value> = if path.exists() {
-        std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|payload| serde_json::from_str(&payload).ok())
-            .unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-
-    let recorded_at = Utc::now().to_rfc3339();
-    let query_categories = query_gap_categories(&payload.intent);
-    for gap in payload.gaps {
-        entries.push(serde_json::json!({
-            "entity_id": gap.entity_id,
-            "missing_fact": gap.missing_fact,
-            "reason": gap.reason,
-            "query": payload.query,
-            "query_categories": &query_categories,
-            "top_candidate_society_ids": &payload.top_candidate_society_ids,
-            "results_returned": payload.results_returned,
-            "intent_area": payload.intent.area.as_deref(),
-            "intent_bhk": payload.intent.bhk,
-            "intent_budget_max": payload.intent.budget_max,
-            "recorded_at": recorded_at,
-        }));
-    }
-
-    if entries.len() > 500 {
-        let start = entries.len() - 500;
-        entries = entries.split_off(start);
-    }
-
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    if let Ok(payload) = serde_json::to_string_pretty(&entries) {
-        let _ = std::fs::write(path, payload);
-    }
-}
-
-fn query_gap_categories(intent: &crate::search::intent::SearchIntent) -> Vec<String> {
-    let mut categories = Vec::new();
-
-    for constraint in &intent.hard_constraints {
-        push_unique_string(
-            &mut categories,
-            format!("hard_constraint:{}", constraint.field),
-        );
-    }
-    for preference in &intent.positive_preferences {
-        push_unique_string(&mut categories, format!("positive:{}", preference.raw_text));
-    }
-    for preference in &intent.negative_preferences {
-        push_unique_string(&mut categories, format!("negative:{}", preference.raw_text));
-    }
-    for inventory_type in &intent.unsupported_inventory_types {
-        push_unique_string(
-            &mut categories,
-            format!("unsupported_inventory:{inventory_type}"),
-        );
-    }
-    if let Some(archetype) = &intent.buyer_archetype {
-        push_unique_string(&mut categories, format!("buyer_archetype:{archetype:?}"));
-    }
-
-    if categories.is_empty() {
-        categories.push("general".to_string());
-    }
-    categories
-}
-
-fn push_unique_string(values: &mut Vec<String>, value: String) {
-    if !values.iter().any(|existing| existing == &value) {
-        values.push(value);
-    }
-}
-
-fn enrichment_gaps_output_path() -> PathBuf {
-    if let Ok(path) = std::env::var("OPENESTATES_ENRICHMENT_GAPS_PATH") {
-        return PathBuf::from(path);
-    }
-    PathBuf::from("data/validation/enrichment_gaps.json")
-}
-
 pub struct AppState {
+    /// Explicit execution lanes keep customer request coordination isolated
+    /// from CPU-heavy ranking and internal/background work.
+    pub execution: ExecutionLanes,
     /// Immutable search-serving snapshot. /api/search loads one Arc from here at
     /// request start and never observes mixed bundle/index/property state.
     pub search_runtime: ArcSwap<SearchRuntimeSnapshot>,
     /// Bounded optimization cache for non-debug search responses.
     pub search_cache: SearchResponseCache,
+    /// One serialized full-catalog response per active runtime version. This
+    /// prevents repeated anonymous reads from rebuilding and serializing ~1 MiB.
+    pub property_catalog_cache: tokio::sync::Mutex<Option<(String, bytes::Bytes)>>,
     /// Bounded best-effort side-effect queue for search logging.
     pub search_event_tx: mpsc::Sender<SearchLogMessage>,
     /// Best-effort count of search log side effects dropped because the bounded queue was full.
@@ -307,9 +370,10 @@ pub struct AppState {
     pub process_started_at: DateTime<Utc>,
     /// Monotonic counter for generating collision-free interest IDs.
     pub interest_counter: AtomicU64,
-    /// Global rate limiter for POST /api/interests: (window_start, count_in_window).
-    /// Resets every 60 seconds. Max 60 requests per window.
-    pub interest_rate_limiter: RwLock<(std::time::Instant, u32)>,
+    /// Serializes bounded interest-file accounting and appends.
+    pub interest_write_lock: tokio::sync::Mutex<()>,
+    /// Prevents authenticated admin requests from spawning overlapping asset runs.
+    pub asset_run_active: AtomicBool,
 }
 
 impl AppState {
@@ -365,5 +429,77 @@ mod tests {
 
         cache.clear().await;
         assert!(cache.get(&south_key).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn search_cache_evicts_to_its_byte_budget_and_rejects_oversized_entries() {
+        let cache = SearchResponseCache::new_with_budget(8, 3_000);
+        let first_key = SearchCacheKey::new("first", &version_key("bundle"));
+        let second_key = SearchCacheKey::new("second", &version_key("bundle"));
+        cache
+            .put(first_key.clone(), zero_result_output(&"a".repeat(500)))
+            .await;
+        cache
+            .put(second_key.clone(), zero_result_output(&"b".repeat(500)))
+            .await;
+
+        assert!(cache.resident_bytes().await <= 3_000);
+        assert!(cache.get(&first_key).await.is_none());
+        assert!(cache.get(&second_key).await.is_some());
+
+        let oversized_key = SearchCacheKey::new("oversized", &version_key("bundle"));
+        cache
+            .put(
+                oversized_key.clone(),
+                zero_result_output(&"x".repeat(2_000)),
+            )
+            .await;
+        assert!(cache.get(&oversized_key).await.is_none());
+        assert!(cache.resident_bytes().await <= 3_000);
+    }
+
+    #[tokio::test]
+    async fn search_cache_coalesces_duplicate_cold_queries() {
+        let cache = SearchResponseCache::new(8);
+        let key = SearchCacheKey::new("same query", &version_key("bundle"));
+        let reservation = match cache.lookup_or_reserve(&key).await {
+            SearchCacheLookup::Leader(reservation) => reservation,
+            _ => panic!("first cold query should lead"),
+        };
+        let mut waiter = match cache.lookup_or_reserve(&key).await {
+            SearchCacheLookup::Waiter(waiter) => waiter,
+            _ => panic!("duplicate cold query should wait for its leader"),
+        };
+
+        reservation.complete(zero_result_output("same query")).await;
+        let shared = waiter
+            .wait_for(Option::is_some)
+            .await
+            .expect("leader publishes its result");
+        assert_eq!(
+            shared.as_ref().unwrap().response.query,
+            "same query".to_string()
+        );
+    }
+
+    #[tokio::test]
+    async fn dropping_a_search_reservation_cancels_waiters_and_allows_retry() {
+        let cache = SearchResponseCache::new(8);
+        let key = SearchCacheKey::new("cancelled query", &version_key("bundle"));
+        let reservation = match cache.lookup_or_reserve(&key).await {
+            SearchCacheLookup::Leader(reservation) => reservation,
+            _ => panic!("first query should lead"),
+        };
+        let mut waiter = match cache.lookup_or_reserve(&key).await {
+            SearchCacheLookup::Waiter(waiter) => waiter,
+            _ => panic!("duplicate query should wait"),
+        };
+
+        drop(reservation);
+        assert!(waiter.changed().await.is_err());
+        assert!(matches!(
+            cache.lookup_or_reserve(&key).await,
+            SearchCacheLookup::Leader(_)
+        ));
     }
 }

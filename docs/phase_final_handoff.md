@@ -88,7 +88,7 @@ Ops     — scale / S3 / crawl             ongoing     ← not on critical path
 
 - S3 lake cutover when bundle promote works locally
 - Reddit isolated worker → delete `reddit_poc_import`
-- `enrichment_gaps.json` → crawl prioritization
+- Search-demand logging and crawl prioritization are deferred until a bounded store exists
 - Delete `data/intelligence/` (already empty)
 - Remove embedded asset graph in `registry.rs`
 

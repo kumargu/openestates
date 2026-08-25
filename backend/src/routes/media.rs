@@ -29,14 +29,17 @@ use axum::extract::{Extension, Path};
 use axum::http::header::{CACHE_CONTROL, CONTENT_LENGTH, CONTENT_TYPE, ETAG, IF_NONE_MATCH};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
+use futures_util::StreamExt;
 
 use crate::lake::{LakeKey, LakeStore};
+use crate::security::MediaStreamAdmission;
 
 const IMMUTABLE_CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
 const DEFAULT_CACHE_CONTROL: &str = "public, max-age=3600";
 
 pub async fn get_media(
     Extension(lake): Extension<LakeStore>,
+    Extension(admission): Extension<MediaStreamAdmission>,
     Path(path): Path<String>,
     headers: HeaderMap,
 ) -> Response {
@@ -66,6 +69,9 @@ pub async fn get_media(
         );
     }
 
+    let Some(stream_permit) = admission.try_acquire() else {
+        return text_response(StatusCode::SERVICE_UNAVAILABLE, "media server is busy");
+    };
     let object = match lake.get_stream(&key).await {
         Ok(object) => object,
         Err(error) if error.is_not_found() => {
@@ -78,9 +84,13 @@ pub async fn get_media(
     };
     let object_etag = object.e_tag.clone();
     let etag = expected_etag.as_deref().or(object_etag.as_deref());
+    let guarded_stream = object.stream.map(move |item| {
+        let _hold_permit_for_stream_lifetime = &stream_permit;
+        item
+    });
     response_with_headers(
         StatusCode::OK,
-        Body::from_stream(object.stream),
+        Body::from_stream(guarded_stream),
         cache_control,
         etag,
         Some(content_type(&path)),
@@ -232,7 +242,8 @@ mod tests {
         .unwrap();
         let app = Router::new()
             .route("/media/{*path}", get(get_media))
-            .layer(Extension(lake));
+            .layer(Extension(lake))
+            .layer(Extension(MediaStreamAdmission::new(4)));
 
         let response = app
             .clone()
@@ -261,5 +272,54 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+    }
+
+    #[tokio::test]
+    async fn media_permit_is_held_until_the_response_body_is_dropped() {
+        let lake = LakeStore::from_object_store(std::sync::Arc::new(
+            object_store::memory::InMemory::new(),
+        ));
+        lake.put_bytes(&LakeKey::new("media/test.bin").unwrap(), vec![1, 2, 3])
+            .await
+            .unwrap();
+        let app = Router::new()
+            .route("/media/{*path}", get(get_media))
+            .layer(Extension(lake))
+            .layer(Extension(MediaStreamAdmission::new(1)));
+
+        let first = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/media/test.bin")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        let overloaded = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/media/test.bin")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(overloaded.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        drop(first);
+        let admitted = app
+            .oneshot(
+                Request::builder()
+                    .uri("/media/test.bin")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(admitted.status(), StatusCode::OK);
     }
 }

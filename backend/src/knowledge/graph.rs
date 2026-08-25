@@ -27,7 +27,7 @@ pub struct KnowledgeGraph {
     #[serde(skip)]
     nodes_by_type: HashMap<NodeType, Vec<NodeId>>,
 
-    /// Search event log (append-only)
+    /// Bounded in-memory search event log.
     pub search_log: Vec<SearchEvent>,
 
     /// Enrichment queue
@@ -188,16 +188,11 @@ impl KnowledgeGraph {
 
     // --- Search event logging ---
 
-    /// Maximum number of search events to keep in memory.
-    /// Older events are still persisted to JSONL on disk.
-    const MAX_SEARCH_LOG: usize = 500;
-
-    pub fn log_search(&mut self, event: SearchEvent) {
+    pub fn log_search(&mut self, event: SearchEvent, max_history: usize) {
         self.search_log.push(event);
         // Trim oldest entries to prevent unbounded memory growth.
-        // The full history lives in the JSONL files on disk.
-        if self.search_log.len() > Self::MAX_SEARCH_LOG {
-            let drain_count = self.search_log.len() - Self::MAX_SEARCH_LOG;
+        if self.search_log.len() > max_history {
+            let drain_count = self.search_log.len() - max_history;
             self.search_log.drain(..drain_count);
         }
     }

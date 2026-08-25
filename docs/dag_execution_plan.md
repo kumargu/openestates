@@ -458,7 +458,7 @@ match preference {
 2. `reddit_theme_classifier` + `reddit_resident_facts` → `concern_taxonomy` fact_keys
 3. POC import (`reddit_poc_import`) loads 15 societies when crawl is skipped
 4. Crawl policy disabled by default; empty-input path emits POC facts
-5. `enrichment_gaps.json` logging from search + `enrichment_priority.py` stub
+5. Search-demand persistence was retired; rebuild it later on a bounded logging store
 6. `audit_reddit_compliance.py` for silver/serving Parquet checks
 
 **Acceptance:**
@@ -610,9 +610,6 @@ Full checklist: `app/config/coverage.json` → `graph_ui_readiness`.
 ```text
 data/validation/coverage_report.json
   - entity_type × fact_key × source_type → count, %
-
-data/validation/enrichment_gaps.json
-  - entity_id × missing_fact_key × search_demand_score
 
 data/validation/resolution_audit.json
   - superseded facts, conflicts, low-confidence winners

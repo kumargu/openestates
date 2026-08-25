@@ -1,9 +1,12 @@
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
+use axum::body::Body;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{header, HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::Json;
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
 use crate::assets::{
@@ -56,23 +59,56 @@ use super::enrichment::{
 use super::property_map::property_map_context_from_surface_scene;
 
 /// GET /api/properties — returns UI-ready property cards.
-pub async fn list_properties(State(state): State<Arc<AppState>>) -> Json<Vec<PropertyCard>> {
-    let serving_bundle = state.serving_bundle.read().await.clone();
-    let graph = state.knowledge.read().await;
-    let properties = state.properties.read().await;
-    let societies = state.societies.read().await;
-    let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
+pub async fn list_properties(State(state): State<Arc<AppState>>) -> Result<Response, StatusCode> {
+    let runtime = state.search_runtime.load_full();
+    let version = format!(
+        "{}:{}:{}",
+        runtime.version_key.serving_bundle_version,
+        runtime.version_key.scoring_policy_version,
+        runtime.version_key.search_engine_version
+    );
+    let mut cache = state.property_catalog_cache.lock().await;
+    if let Some((cached_version, bytes)) = cache.as_ref() {
+        if cached_version == &version {
+            return Ok(serialized_catalog_response(bytes.clone()));
+        }
+    }
 
-    let cards: Vec<PropertyCard> = properties
-        .iter()
-        .filter(|property| property.is_listable())
-        .map(|p| {
-            let card = enrich_property_card(p, &societies, &graph);
-            overlay_serving_google_reviews(card, &p.society_id, serving_facts)
+    let graph = state.knowledge.read().await.clone();
+    let bytes = state
+        .execution
+        .run_customer_compute(move || {
+            let serving_facts = &runtime.bundle.fact_index;
+            let cards: Vec<PropertyCard> = runtime
+                .properties
+                .iter()
+                .filter(|property| property.is_listable())
+                .map(|property| {
+                    let card = enrich_property_card(property, &runtime.societies, &graph);
+                    overlay_serving_google_reviews(card, &property.society_id, Some(serving_facts))
+                })
+                .collect();
+            serde_json::to_vec(&cards)
         })
-        .collect();
+        .await
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?
+        .map(Bytes::from)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    *cache = Some((version, bytes.clone()));
+    Ok(serialized_catalog_response(bytes))
+}
 
-    Json(cards)
+fn serialized_catalog_response(bytes: Bytes) -> Response {
+    let mut response = Body::from(bytes).into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=60"),
+    );
+    response
 }
 
 #[derive(Serialize)]
@@ -2474,9 +2510,12 @@ pub async fn get_property(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<PropertyDetail>, (StatusCode, Json<ErrorResponse>)> {
-    let serving_bundle = state.serving_bundle.read().await.clone();
-    let properties = state.properties.read().await;
-    let property = find_property_by_request_id(&properties, &id)
+    // Use the immutable serving snapshot so no async lock guard survives the
+    // interest-file read later in this handler.
+    let runtime = state.search_runtime.load_full();
+    let serving_bundle = Some(runtime.bundle.clone());
+    let properties = &runtime.properties;
+    let property = find_property_by_request_id(properties, &id)
         .cloned()
         .ok_or_else(|| {
             (
@@ -2495,9 +2534,9 @@ pub async fn get_property(
         ));
     }
 
-    let graph = state.knowledge.read().await;
-    let areas = state.areas.read().await;
-    let societies = state.societies.read().await;
+    let graph = state.knowledge.read().await.clone();
+    let areas = &runtime.areas;
+    let societies = &runtime.societies;
 
     // Enrich society from KG
     let society_key = super::enrichment::to_slug(&property.society_id);
@@ -2547,7 +2586,7 @@ pub async fn get_property(
                     && !seen.contains(&p.id)
             }) {
                 seen.insert(prop.id.clone());
-                let card = enrich_property_card(prop, &societies, &graph);
+                let card = enrich_property_card(prop, societies, &graph);
                 similar.push(overlay_serving_google_reviews(
                     card,
                     &prop.society_id,
@@ -2572,7 +2611,7 @@ pub async fn get_property(
             area_props.sort_by_key(|p| p.price_per_sqft.abs_diff(property.price_per_sqft.max(1)));
             for prop in area_props.into_iter().take(6 - similar.len()) {
                 seen.insert(prop.id.clone());
-                let card = enrich_property_card(prop, &societies, &graph);
+                let card = enrich_property_card(prop, societies, &graph);
                 similar.push(overlay_serving_google_reviews(
                     card,
                     &prop.society_id,
@@ -2703,7 +2742,7 @@ pub async fn get_property(
     let builder_trust = extract_builder_trust(&graph, &property.society_id);
     let builder_portfolio = build_builder_portfolio(
         &graph,
-        &properties,
+        properties,
         &property,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
     );

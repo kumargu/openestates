@@ -67,8 +67,8 @@ Phase 9b  New sources, S3 cutover, scale crawl                (ongoing)
 
 ### 6.4 Enrichment flywheel (minimal)
 
-- On search with missing evidence, log `entity_id × fact_key` gaps (extend `preference_coverage` or `enrichment_gaps.json`)
-- `enrichment_targets.json` already exists — wire **one** path: search demand → priority list for `openestates-enrich` (stub OK if CLI not ready)
+- Search-demand gap persistence is deferred until it has a bounded operational store.
+- `enrichment_targets.json` remains the offline control plane; do not write demand logs from requests.
 
 ### 6.5 Acceptance
 
@@ -141,7 +141,7 @@ Phase 5 absorbed most of Phase 8 (evidence sections, constellation, no `SECTION_
 
 - `registered_transactions` adapter stub → real
 - S3 cutover (`OPENESTATES_LAKE_URL=s3://...`)
-- `entity_selector` + crawl tier prioritization from `enrichment_gaps.json`
+- bounded search-demand logging + crawl tier prioritization
 - Delete `data/intelligence/` when empty
 - Remove embedded asset graph default in `registry.rs` when JSON parity proven
 

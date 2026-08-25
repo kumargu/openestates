@@ -2,9 +2,9 @@
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
-use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use axum::extract::{Query, State};
@@ -13,6 +13,7 @@ use axum::response::IntoResponse;
 use axum::Json;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
 use crate::assets::{
@@ -20,12 +21,14 @@ use crate::assets::{
 };
 use crate::data_loader;
 use crate::lake::LakeStoreLocation;
+use crate::security::admin_run::{release_asset_run, try_reserve_asset_run};
+use crate::security::require_admin;
+use crate::security::retention::prune_asset_run_logs;
+use crate::security::security_tuning;
 use crate::serving::LoadedServingBundle;
 use crate::state::AppState;
 
 const DEFAULT_SUBREDDIT: &str = "BangaloreRealEstates";
-
-type AdminError = (StatusCode, Json<serde_json::Value>);
 
 /// GET /api/admin/data-health
 ///
@@ -60,8 +63,6 @@ pub async fn data_health(
                 "poc_import_path": "data/validation/reddit_poc_society_signals.json",
             },
             "preference_coverage_path": "data/validation/preference_coverage.json",
-            "enrichment_gaps_path": "data/validation/enrichment_gaps.json",
-            "enrichment_priority_path": "data/validation/enrichment_priority_queue.json",
         })
     });
 
@@ -86,18 +87,24 @@ pub async fn reload_serving_bundle(
         return err.into_response();
     }
 
-    match data_loader::load_serving_bundle(&state.project_root).await {
-        Ok(Some(bundle)) => {
-            let snapshot = data_loader::runtime_snapshot_from_serving_bundle(bundle);
+    let project_root = state.project_root.clone();
+    let load_result = state
+        .execution
+        .run_internal(async move {
+            data_loader::load_serving_bundle(&project_root)
+                .await
+                .map(|bundle| bundle.map(data_loader::runtime_snapshot_from_serving_bundle))
+        })
+        .await;
+
+    match load_result {
+        Ok(Ok(Some(snapshot))) => {
             let summary = serving_bundle_summary(&snapshot.bundle);
             let legacy_bundle = snapshot.bundle.clone();
             let legacy_properties = snapshot.properties.to_vec();
             let legacy_societies = snapshot.societies.to_vec();
             let legacy_areas = snapshot.areas.to_vec();
             let legacy_search_index = snapshot.search_index.clone();
-
-            state.search_runtime.store(Arc::new(snapshot));
-            state.search_cache.clear().await;
 
             let mut current_bundle = state.serving_bundle.write().await;
             let mut properties = state.properties.write().await;
@@ -111,6 +118,11 @@ pub async fn reload_serving_bundle(
             *areas = legacy_areas;
             *search_index = legacy_search_index;
             state.recommendation_cache.write().await.clear();
+            *state.property_catalog_cache.lock().await = None;
+            state.search_cache.clear().await;
+            // Publish the immutable runtime last while legacy writers are held,
+            // so new readers cannot observe a half-applied reload.
+            state.search_runtime.store(Arc::new(snapshot));
 
             Json(serde_json::json!({
                 "status": "reloaded",
@@ -118,16 +130,23 @@ pub async fn reload_serving_bundle(
             }))
             .into_response()
         }
-        Ok(None) => (
+        Ok(Ok(None)) => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({
                 "error": "no promoted serving bundle found; current runtime state was left unchanged"
             })),
         )
             .into_response(),
-        Err(error) => (
+        Ok(Err(error)) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": error })),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": format!("internal reload task failed: {error}")
+            })),
         )
             .into_response(),
     }
@@ -216,51 +235,63 @@ pub async fn trigger_asset_run(
         }
     };
 
-    let log_file = match open_log_file(&launch.log_path) {
-        Ok(file) => file,
-        Err(error) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": error.to_string() })),
-            )
-                .into_response()
-        }
-    };
-    let log_file_for_stdout = match log_file.try_clone() {
-        Ok(file) => file,
-        Err(error) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": error.to_string() })),
-            )
-                .into_response()
-        }
-    };
-
-    let mut command = Command::new(&launch.program);
-    command
-        .args(&launch.args)
-        .current_dir(&state.project_root)
-        .stdout(Stdio::from(log_file_for_stdout))
-        .stderr(Stdio::from(log_file));
-    for (key, value) in &launch.env {
-        command.env(key, value);
+    if !try_reserve_asset_run(&state.asset_run_active) {
+        return (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "error": "an asset run is already active" })),
+        )
+            .into_response();
     }
 
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(error) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": error.to_string() })),
-            )
-                .into_response()
-        }
-    };
-    let pid = child.id();
+    if let Err(error) = prepare_log_file(&launch.log_path) {
+        release_asset_run(&state.asset_run_active);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": error.to_string() })),
+        )
+            .into_response();
+    }
+    if let Some(log_dir) = launch.log_path.parent() {
+        prune_asset_run_logs(log_dir, Some(&launch.log_path));
+    }
+
     let request_id = launch.request_id.clone();
-    tokio::spawn(async move {
-        match child.wait().await {
+    let response_request_id = launch.request_id.clone();
+    let response_version = launch.version.clone();
+    let response_partition = launch.partition.parts().to_vec();
+    let response_log_path = launch.log_path.clone();
+    let log_path = launch.log_path.clone();
+    let project_root = state.project_root.clone();
+    let run_state = state.clone();
+    let (spawn_tx, spawn_rx) = tokio::sync::oneshot::channel();
+    state.execution.spawn_internal(async move {
+        let mut command = Command::new(&launch.program);
+        command
+            .args(&launch.args)
+            .current_dir(project_root)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        for (key, value) in &launch.env {
+            command.env(key, value);
+        }
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                let _ = spawn_tx.send(Err(error.to_string()));
+                release_asset_run(&run_state.asset_run_active);
+                return;
+            }
+        };
+        let pid = child.id();
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        let _ = spawn_tx.send(Ok(pid));
+        let written = Arc::new(AtomicU64::new(0));
+        let stdout_drain = drain_child_output(stdout, log_path.clone(), written.clone());
+        let stderr_drain = drain_child_output(stderr, log_path, written);
+        let (status, _, _) = tokio::join!(child.wait(), stdout_drain, stderr_drain);
+        match status {
             Ok(status) if status.success() => {
                 eprintln!("asset DAG run {request_id} finished; pid={pid:?}");
             }
@@ -271,33 +302,40 @@ pub async fn trigger_asset_run(
                 eprintln!("asset DAG run {request_id} wait failed; pid={pid:?}; error={error}");
             }
         }
+        release_asset_run(&run_state.asset_run_active);
     });
+
+    let pid = match spawn_rx.await {
+        Ok(Ok(pid)) => pid,
+        Ok(Err(error)) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": error })),
+            )
+                .into_response()
+        }
+        Err(error) => {
+            release_asset_run(&state.asset_run_active);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("internal asset launcher stopped: {error}")
+                })),
+            )
+                .into_response();
+        }
+    };
 
     Json(serde_json::json!({
         "status": "accepted",
-        "request_id": launch.request_id,
+        "request_id": response_request_id,
         "pid": pid,
-        "version": launch.version,
-        "partition": launch.partition.parts(),
-        "log_path": launch.log_path,
+        "version": response_version,
+        "partition": response_partition,
+        "log_path": response_log_path,
         "poll": "/api/admin/asset-runs/current",
     }))
     .into_response()
-}
-
-fn require_admin(headers: &HeaderMap) -> Result<(), AdminError> {
-    let expected = std::env::var("ADMIN_TOKEN").unwrap_or_else(|_| "dev".to_string());
-    let provided = headers
-        .get("x-admin-token")
-        .and_then(|value| value.to_str().ok());
-    if provided == Some(expected.as_str()) {
-        Ok(())
-    } else {
-        Err((
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({ "error": "invalid or missing admin token" })),
-        ))
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -328,6 +366,7 @@ struct AssetRunLaunch {
 
 impl AssetRunLaunch {
     fn from_request(project_root: &Path, request: TriggerAssetRunRequest) -> Result<Self, String> {
+        validate_trigger_request(&request)?;
         let partition = partition_from_request(&request);
         let now = Utc::now();
         let version = request.version.unwrap_or_else(|| {
@@ -358,7 +397,10 @@ impl AssetRunLaunch {
         args.push(OsString::from("pipeline.collect_asset_sources"));
         args.push(OsString::from("--source-timeout-seconds"));
         args.push(OsString::from(
-            request.source_timeout_seconds.unwrap_or(1800).to_string(),
+            request
+                .source_timeout_seconds
+                .unwrap_or(security_tuning().admin.default_source_timeout_seconds)
+                .to_string(),
         ));
         for source_entity in request.source_entities {
             let source_entity = source_entity.trim();
@@ -417,11 +459,115 @@ fn asset_runner_program(project_root: &Path) -> (PathBuf, Vec<OsString>) {
     )
 }
 
-fn open_log_file(path: &Path) -> std::io::Result<std::fs::File> {
+fn prepare_log_file(path: &Path) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    OpenOptions::new().create(true).append(true).open(path)
+    std::fs::File::create(path).map(drop)
+}
+
+async fn drain_child_output<R>(reader: Option<R>, log_path: PathBuf, written: Arc<AtomicU64>)
+where
+    R: AsyncRead + Unpin,
+{
+    let Some(mut reader) = reader else {
+        return;
+    };
+    let mut log = tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)
+        .await
+        .ok();
+    let mut buffer = [0_u8; 8 * 1024];
+    loop {
+        let count = match reader.read(&mut buffer).await {
+            Ok(0) | Err(_) => break,
+            Ok(count) => count,
+        };
+        let reserved = reserve_log_bytes(&written, count as u64) as usize;
+        if reserved == 0 {
+            continue;
+        }
+        if let Some(file) = log.as_mut() {
+            if file.write_all(&buffer[..reserved]).await.is_err() {
+                log = None;
+            }
+        }
+    }
+}
+
+fn reserve_log_bytes(written: &AtomicU64, requested: u64) -> u64 {
+    loop {
+        let current = written.load(Ordering::Relaxed);
+        let available = security_tuning()
+            .admin
+            .max_asset_run_log_bytes
+            .saturating_sub(current);
+        let reserved = requested.min(available);
+        if reserved == 0 {
+            return 0;
+        }
+        if written
+            .compare_exchange_weak(
+                current,
+                current + reserved,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            )
+            .is_ok()
+        {
+            return reserved;
+        }
+    }
+}
+
+fn validate_trigger_request(request: &TriggerAssetRunRequest) -> Result<(), String> {
+    let tuning = &security_tuning().admin;
+    if request.source_entities.len() > tuning.max_source_entities {
+        return Err(format!(
+            "source_entities supports at most {} values",
+            tuning.max_source_entities
+        ));
+    }
+    if request.partition.len() > tuning.max_partition_parts {
+        return Err(format!(
+            "partition supports at most {} values",
+            tuning.max_partition_parts
+        ));
+    }
+    if let Some(timeout) = request.source_timeout_seconds {
+        if timeout == 0 || timeout > tuning.max_source_timeout_seconds {
+            return Err(format!(
+                "source_timeout_seconds must be between 1 and {}",
+                tuning.max_source_timeout_seconds
+            ));
+        }
+    }
+    if let Some(version) = request.version.as_deref() {
+        validate_admin_field("version", version, tuning.max_field_bytes)?;
+    }
+    for (key, value) in &request.partition {
+        validate_admin_field("partition key", key, tuning.max_field_bytes)?;
+        validate_admin_field("partition value", value, tuning.max_field_bytes)?;
+    }
+    for entity in &request.source_entities {
+        validate_admin_field("source entity", entity, tuning.max_source_entity_bytes)?;
+    }
+    Ok(())
+}
+
+fn validate_admin_field(label: &str, value: &str, max_bytes: usize) -> Result<(), String> {
+    if value.trim().is_empty() {
+        return Err(format!("{label} cannot be empty"));
+    }
+    if value.len() > max_bytes {
+        return Err(format!("{label} cannot exceed {max_bytes} bytes"));
+    }
+    if value.chars().any(char::is_control) {
+        return Err(format!("{label} cannot contain control characters"));
+    }
+    Ok(())
 }
 
 fn default_skip_reddit() -> bool {
@@ -587,5 +733,34 @@ mod tests {
             .env
             .iter()
             .any(|(key, value)| key == "OPENESTATES_SKIP_REDDIT" && value == "1"));
+    }
+
+    #[test]
+    fn launch_rejects_unbounded_admin_inputs() {
+        let tuning = &security_tuning().admin;
+        let excessive_timeout = TriggerAssetRunRequest {
+            source_timeout_seconds: Some(tuning.max_source_timeout_seconds + 1),
+            ..TriggerAssetRunRequest::default()
+        };
+        assert!(
+            AssetRunLaunch::from_request(Path::new("/tmp/openestates"), excessive_timeout).is_err()
+        );
+
+        let too_many_entities = TriggerAssetRunRequest {
+            source_entities: (0..=tuning.max_source_entities)
+                .map(|index| format!("society:{index}"))
+                .collect(),
+            ..TriggerAssetRunRequest::default()
+        };
+        assert!(
+            AssetRunLaunch::from_request(Path::new("/tmp/openestates"), too_many_entities).is_err()
+        );
+    }
+
+    #[test]
+    fn asset_log_budget_is_shared_and_strict() {
+        let written = AtomicU64::new(security_tuning().admin.max_asset_run_log_bytes - 2);
+        assert_eq!(reserve_log_bytes(&written, 8), 2);
+        assert_eq!(reserve_log_bytes(&written, 1), 0);
     }
 }

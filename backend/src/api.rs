@@ -5,12 +5,12 @@ use axum::extract::State;
 use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
 use serde::Serialize;
-use tower_http::cors::{Any, CorsLayer};
 
 use crate::lake::{LakeStore, LakeStoreLocation};
 use crate::recommendations::RECOMMENDATION_ENGINE_VERSION;
 use crate::routes;
 use crate::scoring::scoring_policy;
+use crate::security::{MediaStreamAdmission, SecurityPolicy};
 use crate::state::AppState;
 
 #[derive(Serialize)]
@@ -51,79 +51,107 @@ pub fn build_app_router(state: Arc<AppState>, project_root: &Path) -> Router {
 }
 
 pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Router {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let security = SecurityPolicy::from_env(&state.execution);
+    let read_routes = security.protect_public_reads(
+        Router::new()
+            .route("/", get(health))
+            .route("/api/health", get(health))
+            .route("/media/{*path}", get(routes::media::get_media))
+            .route(
+                "/api/properties/{id}",
+                get(routes::properties::get_property),
+            )
+            .route(
+                "/api/properties/{id}/evidence",
+                get(routes::properties::get_property_evidence),
+            )
+            .route(
+                "/api/properties/{id}/rera",
+                get(routes::properties::get_property_rera),
+            )
+            .route(
+                "/api/properties/{id}/recommendations",
+                get(routes::properties::get_property_recommendations),
+            )
+            .route(
+                "/api/properties/{id}/surfaces/{surface_id}",
+                get(routes::surfaces::get_property_surface),
+            )
+            .route(
+                "/api/properties/{id}/surfaces",
+                get(routes::surfaces::list_property_surfaces),
+            )
+            .route("/api/areas", get(routes::areas::list_areas))
+            .route("/api/areas/tracker", get(routes::areas::area_tracker))
+            .route("/api/areas/{id}", get(routes::areas::get_area))
+            .route("/api/shortlist", get(routes::shortlist::get_shortlist))
+            .route("/api/discovery", get(routes::discovery::discovery_home))
+            .route(
+                "/api/societies/search",
+                get(routes::societies::search_societies),
+            )
+            .route("/api/societies/{slug}", get(routes::societies::get_society))
+            .route(
+                "/api/properties/{id}/interests/count",
+                get(routes::interests::get_interest_count),
+            )
+            .route("/api/sitemap.xml", get(routes::sitemap::sitemap_xml)),
+    );
 
-    Router::new()
-        .route("/", get(health))
-        .route("/api/health", get(health))
-        .route("/media/{*path}", get(routes::media::get_media))
-        .route("/api/properties", get(routes::properties::list_properties))
-        .route(
-            "/api/properties/{id}",
-            get(routes::properties::get_property),
+    let catalog_routes = security.protect_catalog(
+        Router::new().route("/api/properties", get(routes::properties::list_properties)),
+    );
+
+    let search_routes = Router::new().route(
+        "/api/search",
+        security.protect_search(get(routes::search::search_properties)),
+    );
+
+    let batch_routes = security.protect_batch_reads(
+        Router::new()
+            .route(
+                "/api/properties/surfaces/batch",
+                post(routes::surfaces::get_property_surfaces_batch),
+            )
+            .route(
+                "/api/properties/evidence/batch",
+                post(routes::properties::get_property_evidence_batch),
+            ),
+    );
+
+    let interest_routes = security.protect_interest_writes(
+        Router::new().route("/api/interests", post(routes::interests::express_interest)),
+    );
+
+    let admin_routes = security.protect_admin(
+        Router::new()
+            .route("/api/admin/data-health", get(routes::admin::data_health))
+            .route(
+                "/api/admin/serving-bundle/reload",
+                post(routes::admin::reload_serving_bundle),
+            )
+            .route(
+                "/api/admin/asset-runs/current",
+                get(routes::admin::current_asset_run),
+            )
+            .route(
+                "/api/admin/asset-runs",
+                post(routes::admin::trigger_asset_run),
+            ),
+    );
+
+    security
+        .protect_application(
+            Router::new()
+                .merge(read_routes)
+                .merge(catalog_routes)
+                .merge(search_routes)
+                .merge(batch_routes)
+                .merge(interest_routes)
+                .merge(admin_routes)
+                .fallback(|| async { axum::http::StatusCode::NOT_FOUND }),
         )
-        .route(
-            "/api/properties/{id}/evidence",
-            get(routes::properties::get_property_evidence),
-        )
-        .route(
-            "/api/properties/{id}/rera",
-            get(routes::properties::get_property_rera),
-        )
-        .route(
-            "/api/properties/{id}/recommendations",
-            get(routes::properties::get_property_recommendations),
-        )
-        .route(
-            "/api/properties/{id}/surfaces/{surface_id}",
-            get(routes::surfaces::get_property_surface),
-        )
-        .route(
-            "/api/properties/{id}/surfaces",
-            get(routes::surfaces::list_property_surfaces),
-        )
-        .route(
-            "/api/properties/surfaces/batch",
-            post(routes::surfaces::get_property_surfaces_batch),
-        )
-        .route(
-            "/api/properties/evidence/batch",
-            post(routes::properties::get_property_evidence_batch),
-        )
-        .route("/api/areas", get(routes::areas::list_areas))
-        .route("/api/areas/tracker", get(routes::areas::area_tracker))
-        .route("/api/areas/{id}", get(routes::areas::get_area))
-        .route("/api/shortlist", get(routes::shortlist::get_shortlist))
-        .route("/api/discovery", get(routes::discovery::discovery_home))
-        .route("/api/search", get(routes::search::search_properties))
-        .route(
-            "/api/societies/search",
-            get(routes::societies::search_societies),
-        )
-        .route("/api/societies/{slug}", get(routes::societies::get_society))
-        .route("/api/interests", post(routes::interests::express_interest))
-        .route(
-            "/api/properties/{id}/interests/count",
-            get(routes::interests::get_interest_count),
-        )
-        .route("/api/sitemap.xml", get(routes::sitemap::sitemap_xml))
-        .route("/api/admin/data-health", get(routes::admin::data_health))
-        .route(
-            "/api/admin/serving-bundle/reload",
-            post(routes::admin::reload_serving_bundle),
-        )
-        .route(
-            "/api/admin/asset-runs/current",
-            get(routes::admin::current_asset_run),
-        )
-        .route(
-            "/api/admin/asset-runs",
-            post(routes::admin::trigger_asset_run),
-        )
-        .layer(cors)
         .layer(Extension(lake))
+        .layer(Extension(MediaStreamAdmission::from_env()))
         .with_state(state)
 }

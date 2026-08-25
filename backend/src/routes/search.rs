@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use axum::extract::{Query, State};
+use axum::http::StatusCode;
 use axum::Json;
 use serde::Deserialize;
 
@@ -14,7 +15,8 @@ use crate::search::{
     SearchEvidenceGap, SearchResponse, SearchResultCard, SearchResultSet, SourcedClaim,
 };
 use crate::state::{
-    AppState, CachedSearchOutput, EnrichmentGapPersistence, SearchCacheKey, SearchLogMessage,
+    AppState, CachedSearchOutput, SearchCacheKey, SearchCacheLookup, SearchLogMessage,
+    SearchRuntimeSnapshot,
 };
 
 use super::enrichment::society_node_id;
@@ -31,22 +33,23 @@ pub struct SearchQuery {
 pub async fn search_properties(
     State(state): State<Arc<AppState>>,
     Query(params): Query<SearchQuery>,
-) -> Json<SearchResponse> {
+) -> Result<Json<SearchResponse>, StatusCode> {
     let query = params.q.unwrap_or_default();
 
     if query.trim().is_empty() {
-        return Json(SearchResponse {
+        return Ok(Json(SearchResponse {
             query,
             result_sets: Vec::new(),
             total_matches: 0,
             area_context: None,
             state: "no_matches".to_string(),
             search_guidance: None,
-        });
+        }));
     }
 
+    let snapshot = state.search_runtime.load_full();
     if let Some(guarded) = guard_search_query(&query) {
-        if guarded_search_has_local_recall(&state, &query, &guarded).await {
+        if guarded_search_has_local_recall(&snapshot, &query, &guarded) {
             // A loaded project/society name can look like a bare noun phrase to
             // the guardrail. If deterministic local recall has a concrete
             // candidate, let ranking handle the query instead of rejecting it.
@@ -59,41 +62,80 @@ pub async fn search_properties(
             });
             enqueue_search_log(&state, SearchLogMessage::SearchEvent(event));
 
-            return Json(SearchResponse {
+            return Ok(Json(SearchResponse {
                 query,
                 result_sets: Vec::new(),
                 total_matches: 0,
                 area_context: None,
                 state: "no_matches".to_string(),
                 search_guidance: Some(guarded.guidance),
-            });
+            }));
         }
     }
 
-    let snapshot = state.search_runtime.load_full();
     let cache_key = SearchCacheKey::new(&query, &snapshot.version_key);
-    if let Some(cached) = state.search_cache.get(&cache_key).await {
-        for message in rebase_cached_log_messages(cached.log_messages, &query) {
-            enqueue_search_log(&state, message);
+    let reservation = loop {
+        match state.search_cache.lookup_or_reserve(&cache_key).await {
+            SearchCacheLookup::Hit(cached) => {
+                enqueue_cached_search_logs(&state, &cached, &query);
+                return Ok(Json(rebase_cached_response(
+                    cached.response.as_ref(),
+                    &query,
+                )));
+            }
+            SearchCacheLookup::Waiter(mut receiver) => {
+                match receiver.wait_for(Option::is_some).await {
+                    Ok(cached) => {
+                        let cached = cached.as_ref().expect("watch predicate requires a value");
+                        enqueue_cached_search_logs(&state, cached, &query);
+                        return Ok(Json(rebase_cached_response(
+                            cached.response.as_ref(),
+                            &query,
+                        )));
+                    }
+                    Err(_) => continue,
+                }
+            }
+            SearchCacheLookup::Leader(reservation) => break reservation,
+            SearchCacheLookup::Overloaded => return Err(StatusCode::SERVICE_UNAVAILABLE),
         }
-        return Json(rebase_cached_response(cached.response.as_ref(), &query));
-    }
-
-    let serving_facts = Some(&snapshot.bundle.fact_index);
-    let engine_output = {
-        let graph = state.knowledge.read().await;
-
-        SearchEngine {
-            properties: &snapshot.properties,
-            search_index: &snapshot.search_index,
-            serving_bundle: Some(snapshot.bundle.as_ref()),
-            society_names: &snapshot.society_names,
-            property_by_id: Some(&snapshot.property_by_id),
-            societies: &snapshot.societies,
-            graph: Some(&graph),
-        }
-        .search(&query)
     };
+
+    let graph = state.knowledge.read().await.clone();
+    let work_query = query.clone();
+    let computed = match state
+        .execution
+        .run_customer_compute(move || compute_search(snapshot, graph, work_query))
+        .await
+    {
+        Ok(output) => output,
+        Err(_) => return Err(StatusCode::SERVICE_UNAVAILABLE),
+    };
+    for message in computed.log_messages.clone() {
+        enqueue_search_log(&state, message);
+    }
+    let response = computed.response.as_ref().clone();
+    reservation.complete(computed).await;
+
+    Ok(Json(response))
+}
+
+fn compute_search(
+    snapshot: Arc<SearchRuntimeSnapshot>,
+    graph: KnowledgeGraph,
+    query: String,
+) -> CachedSearchOutput {
+    let serving_facts = Some(&snapshot.bundle.fact_index);
+    let engine_output = SearchEngine {
+        properties: &snapshot.properties,
+        search_index: &snapshot.search_index,
+        serving_bundle: Some(snapshot.bundle.as_ref()),
+        society_names: &snapshot.society_names,
+        property_by_id: Some(&snapshot.property_by_id),
+        societies: &snapshot.societies,
+        graph: Some(&graph),
+    }
+    .search(&query);
     let parsed_intent = engine_output.intent;
     let results = engine_output.results;
     let result_sets = engine_output.result_sets;
@@ -112,8 +154,7 @@ pub async fn search_properties(
     let evidence_claims = result_evidence_claims(&results);
 
     // --- Extract knowledge context from the graph ---
-    let graph = state.knowledge.read().await;
-    let (_knowledge_context, graph_nodes_hit, enrichment_gaps, gap_candidate_society_ids) = {
+    let (_knowledge_context, graph_nodes_hit, enrichment_gaps) = {
         let mut matched_society_ids: Vec<String> = Vec::new();
         for result in &results {
             if let Some(society_id) = snapshot
@@ -141,35 +182,13 @@ pub async fn search_properties(
             &mut enrichment_gaps,
             &search_evidence_gaps,
         );
-        (
-            knowledge_context,
-            graph_nodes_hit,
-            enrichment_gaps,
-            matched_society_ids,
-        )
+        (knowledge_context, graph_nodes_hit, enrichment_gaps)
     };
-    drop(graph);
-
     // --- Log search event ---
     let mut event = SearchEvent::new(query.clone(), parsed_intent.clone(), results_returned);
     event.graph_nodes_hit = graph_nodes_hit;
     event.enrichment_gaps = enrichment_gaps.clone();
-    let mut log_messages = vec![SearchLogMessage::SearchEvent(event)];
-    if !enrichment_gaps.is_empty() {
-        log_messages.push(SearchLogMessage::PersistEnrichmentGaps(
-            EnrichmentGapPersistence {
-                gaps: enrichment_gaps.clone(),
-                query: query.clone(),
-                intent: parsed_intent.clone(),
-                results_returned,
-                top_candidate_society_ids: gap_candidate_society_ids.clone(),
-            },
-        ));
-    }
-    for message in log_messages.clone() {
-        enqueue_search_log(&state, message);
-    }
-
+    let log_messages = vec![SearchLogMessage::SearchEvent(event)];
     let total_matches = unique_result_count(&result_sets);
     let response = SearchResponse {
         query,
@@ -183,18 +202,16 @@ pub async fn search_properties(
         },
         search_guidance: (total_matches == 0).then(no_results_guidance),
     };
-    state
-        .search_cache
-        .put(
-            cache_key,
-            CachedSearchOutput {
-                response: Arc::new(response.clone()),
-                log_messages,
-            },
-        )
-        .await;
+    CachedSearchOutput {
+        response: Arc::new(response),
+        log_messages,
+    }
+}
 
-    Json(response)
+fn enqueue_cached_search_logs(state: &AppState, cached: &CachedSearchOutput, query: &str) {
+    for message in rebase_cached_log_messages(cached.log_messages.clone(), query) {
+        enqueue_search_log(state, message);
+    }
 }
 
 fn unique_result_count(result_sets: &[SearchResultSet]) -> usize {
@@ -268,10 +285,6 @@ fn rebase_cached_log_messages(
                 event.query = query.to_string();
                 event.timestamp = chrono::Utc::now();
                 SearchLogMessage::SearchEvent(event)
-            }
-            SearchLogMessage::PersistEnrichmentGaps(mut payload) => {
-                payload.query = query.to_string();
-                SearchLogMessage::PersistEnrichmentGaps(payload)
             }
         })
         .collect()
@@ -714,7 +727,7 @@ mod tests {
     }
 
     #[test]
-    fn search_evidence_gaps_are_persisted_and_available_only_for_debug_context() {
+    fn search_evidence_gaps_are_recorded_only_in_debug_context() {
         let mut context = KnowledgeContext {
             claims: Vec::new(),
             nodes_consulted: 0,
@@ -780,16 +793,7 @@ mod tests {
             state: "no_matches".to_string(),
             search_guidance: None,
         };
-        let messages = vec![
-            SearchLogMessage::SearchEvent(event),
-            SearchLogMessage::PersistEnrichmentGaps(EnrichmentGapPersistence {
-                gaps: Vec::new(),
-                query: "3bhk whitefield".to_string(),
-                intent,
-                results_returned: 2,
-                top_candidate_society_ids: Vec::new(),
-            }),
-        ];
+        let messages = vec![SearchLogMessage::SearchEvent(event)];
 
         let rebased_response = rebase_cached_response(&response, "  3BHK   Whitefield  ");
         let rebased_messages = rebase_cached_log_messages(messages, "  3BHK   Whitefield  ");
@@ -803,18 +807,8 @@ mod tests {
                     "cache-hit log event should get a fresh timestamp"
                 );
             }
-            SearchLogMessage::PersistEnrichmentGaps(_) => {
-                panic!("first message should remain search event")
-            }
         }
-        match &rebased_messages[1] {
-            SearchLogMessage::PersistEnrichmentGaps(payload) => {
-                assert_eq!(payload.query, "  3BHK   Whitefield  ");
-            }
-            SearchLogMessage::SearchEvent(_) => {
-                panic!("second message should remain enrichment-gap payload")
-            }
-        }
+        assert_eq!(rebased_messages.len(), 1);
     }
 
     #[test]
@@ -1107,8 +1101,8 @@ mod tests {
     }
 }
 
-async fn guarded_search_has_local_recall(
-    state: &AppState,
+fn guarded_search_has_local_recall(
+    snapshot: &SearchRuntimeSnapshot,
     query: &str,
     guarded: &crate::search::guard::GuardedSearch,
 ) -> bool {
@@ -1119,7 +1113,6 @@ async fn guarded_search_has_local_recall(
         return false;
     }
 
-    let snapshot = state.search_runtime.load_full();
     let compiled = crate::search::CompiledQuery::from_text(query);
     !snapshot
         .search_index

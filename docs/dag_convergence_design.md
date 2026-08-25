@@ -433,7 +433,7 @@ Delete `legacy_preference_score` only after:
 
 - `manifests/assets/{asset_id}/.../materializations/{id}.json`
 - `data/validation/coverage_report.json` — % entities with fact_key X by source
-- `data/validation/enrichment_gaps.json` — queued missing facts from search demand
+- Search-demand gap persistence is deferred until it has a bounded operational store
 
 ---
 
