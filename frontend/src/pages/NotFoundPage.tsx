@@ -3,12 +3,13 @@
  */
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
+import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 
 export function NotFoundPage() {
   return (
     <div className="page-container" style={{ maxWidth: "600px" }}>
       <Helmet>
-        <title>Page not found | OpenEstates</title>
+        <title>Page not found | {PUBLIC_BRAND_NAME}</title>
       </Helmet>
       <div
         style={{

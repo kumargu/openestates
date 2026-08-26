@@ -325,7 +325,8 @@ mod tests {
             .find(|surface| surface.id == "property_short_compare")
             .expect("property_short_compare surface exists");
 
-        assert_eq!(compare.comparison_dimensions.len(), 4);
+        assert_eq!(compare.comparison_dimensions.len(), 5);
         assert_eq!(compare.comparison_dimensions[0].label, "Price");
+        assert_eq!(compare.comparison_dimensions[4].label, "Rating");
     }
 }

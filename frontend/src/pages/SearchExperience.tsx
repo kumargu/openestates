@@ -14,6 +14,7 @@ import type {
   SearchResultItem,
 } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
+import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import { primaryProofFocus } from "../lib/proof-focus.ts";
 import {
   searchResultsAnnouncement,
@@ -240,6 +241,7 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
   const [searchFailed, setSearchFailed] = useState(false);
   const [panelPropertyId, setPanelPropertyId] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
@@ -258,6 +260,7 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
 
     queueMicrotask(() => {
       if (cancelled) return;
+      setStatus("loading");
       setSearchResponse(null);
       setSearchFailed(false);
     });
@@ -290,7 +293,7 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
     return () => {
       cancelled = true;
     };
-  }, [query, onSearchCommit]);
+  }, [query, onSearchCommit, retryKey]);
 
   const hasQuery = query.trim().length > 0;
   const useBackendResults = hasQuery && searchResponse !== null && !searchFailed;
@@ -343,7 +346,7 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
 
   const propertyIds = useMemo(() => {
     return universeResults.map((result) => result.id);
-  }, [useBackendResults, searchResponse, universeResults]);
+  }, [universeResults]);
   const { byId: evidenceById } = useEvidenceBatch(propertyIds, propertyIds.length > 0);
 
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.areaContext ?? null : null;
@@ -376,17 +379,21 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
   if (status === "error") {
     return (
       <div className={containerClass}>
-        <PageState variant="error" context="results" />
+        <PageState
+          variant="error"
+          context="results"
+          onRetry={() => setRetryKey((current) => current + 1)}
+        />
       </div>
     );
   }
 
   const helmetTitle = query
-    ? `${query} — Explore | OpenEstates`
-    : "Explore | OpenEstates";
+    ? `${query} — Explore | ${PUBLIC_BRAND_NAME}`
+    : `Explore | ${PUBLIC_BRAND_NAME}`;
   const helmetDescription = query
     ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} matching "${query}".`
-    : `Browse ${totalCount} proof-backed homes on OpenEstates.`;
+    : `Browse ${totalCount} proof-backed homes on ${PUBLIC_BRAND_NAME}.`;
 
   const renderTile = (result: SearchResultItem) => (
     <LivingEvidenceTile
@@ -404,7 +411,7 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
         <meta property="og:title" content={helmetTitle} />
         <meta property="og:description" content={helmetDescription} />
         <meta property="og:type" content="website" />
-        <meta property="og:site_name" content="OpenEstates" />
+        <meta property="og:site_name" content={PUBLIC_BRAND_NAME} />
       </Helmet>
 
       {/* Accessible live region — announces result count to screen readers */}

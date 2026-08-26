@@ -2,11 +2,16 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 
 import { Helmet } from "react-helmet-async";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../hooks/useNotebook.ts";
-import { FOCUS_STORAGE_KEY, readShortlistIds } from "../lib/compare.ts";
+import {
+  completeSettledValues,
+  FOCUS_STORAGE_KEY,
+  readShortlistIds,
+} from "../lib/compare.ts";
 import { SocietyComparisonMatrix } from "../components/compare/SocietyComparisonMatrix.tsx";
 import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
 import { LabelPill } from "../components/ui/LabelPill.tsx";
 import { getProperties, getProperty } from "../lib/api.ts";
+import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import {
   matchingNotebookCommands,
   slashQuery,
@@ -164,6 +169,7 @@ export function WorkspacePage() {
     status: "idle",
     details: [],
   });
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -177,7 +183,7 @@ export function WorkspacePage() {
         setCatalogStatus("error");
       });
     return () => controller.abort();
-  }, []);
+  }, [retryKey]);
 
   const byId = useMemo(
     () => new Map(homes.map((home) => [home.id, home])),
@@ -256,20 +262,16 @@ export function WorkspacePage() {
     )
       .then((results) => {
         if (controller.signal.aborted) return;
-        const details = results
-          .filter((result): result is PromiseFulfilledResult<PropertyDetailResponse> =>
-            result.status === "fulfilled"
-          )
-          .map((result) => result.value);
-        setCompareState({ key: compareKey, status: "ready", details });
-      })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setCompareState({ key: compareKey, status: "error", details: [] });
+        const details = completeSettledValues(results, selectedHomes.length);
+        setCompareState({
+          key: compareKey,
+          status: details ? "ready" : "error",
+          details: details ?? [],
+        });
       });
 
     return () => controller.abort();
-  }, [compareKey, mode, selectedHomes]);
+  }, [compareKey, mode, retryKey, selectedHomes]);
 
   function removeCompareHomes(propertyIdsToRemove: string[]) {
     const removeSet = new Set(propertyIdsToRemove);
@@ -292,7 +294,7 @@ export function WorkspacePage() {
   return (
     <div className="notion-page workspace-document">
       <Helmet>
-        <title>Workspace | OpenEstates</title>
+        <title>Workspace | {PUBLIC_BRAND_NAME}</title>
         <meta name="robots" content="noindex" />
       </Helmet>
 
@@ -311,6 +313,11 @@ export function WorkspacePage() {
           details={compareState.key === compareKey ? compareState.details : []}
           status={compareViewStatus}
           onRemoveHome={removeCompareHomes}
+          onRetry={() => {
+            setCatalogStatus("loading");
+            setCompareState({ key: compareKey, status: "loading", details: [] });
+            setRetryKey((current) => current + 1);
+          }}
         />
       ) : propertyIds.length === 0 ? (
         <div className="notion-empty">
@@ -346,12 +353,14 @@ function CompareWorkspaceView({
   details,
   status,
   onRemoveHome,
+  onRetry,
 }: {
   selectedHomes: PropertyCard[];
   catalog: PropertyCard[];
   details: PropertyDetailResponse[];
   status: CompareStatus;
   onRemoveHome: (propertyIds: string[]) => void;
+  onRetry: () => void;
 }) {
   if (status === "loading") {
     return (
@@ -367,10 +376,12 @@ function CompareWorkspaceView({
   if (status === "error") {
     return (
       <section className="workspace-compare-empty">
-        <span>Compare</span>
         <h2>Comparison is unavailable.</h2>
-        <p>Property details could not be loaded for this comparison.</p>
-        <Link to="/workspace">Back to notes</Link>
+        <p>Live property data is temporarily unavailable.</p>
+        <div className="workspace-compare-empty__actions">
+          <button type="button" onClick={onRetry}>Retry</button>
+          <Link to="/workspace">Back to notes</Link>
+        </div>
       </section>
     );
   }

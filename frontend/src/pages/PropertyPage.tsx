@@ -29,6 +29,7 @@ import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnc
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { useNotebook } from "../hooks/useNotebook.ts";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
+import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
 import { PropertyReraTeaser } from "../components/property/PropertyReraTeaser.tsx";
 import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
@@ -53,6 +54,7 @@ import {
   propertyProofMatch,
   propertySceneProofFocus,
 } from "../lib/proof-focus.ts";
+import { backendUrl, publicSiteUrl } from "../lib/runtimeConfig.ts";
 
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -238,7 +240,7 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
       sizeDescription,
       `in ${p.area}, ${p.city}`,
     ].filter(Boolean).join(", "),
-    url: `https://openestates.in/property/${p.id}`,
+    url: publicSiteUrl(`/property/${encodeURIComponent(p.id)}`),
     offers: {
       "@type": "Offer",
       price: p.price,
@@ -261,7 +263,7 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
     };
   }
   if (p.hero_image) {
-    jsonLd.image = p.hero_image;
+    jsonLd.image = backendUrl(p.hero_image);
   }
   return jsonLd;
 }
@@ -326,6 +328,7 @@ function PropertyPageBody({
   const [status, setStatus] = useState<
     "loading" | "error" | "not_found" | "ok"
   >("loading");
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -344,7 +347,7 @@ function PropertyPageBody({
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, retryKey]);
 
   useEffect(() => {
     const propertyId = data?.property?.id;
@@ -460,14 +463,24 @@ function PropertyPageBody({
       />
     );
   if (status === "error")
-    return <PageState variant="error" context="property" />;
+    return (
+      <PageState
+        variant="error"
+        context="property"
+        onRetry={() => {
+          setData(null);
+          setStatus("loading");
+          setRetryKey((current) => current + 1);
+        }}
+      />
+    );
   if (!data) return null;
 
   const { property: p, society } = data;
 
   const pageTitle = hasKnownNumber(p.bhk)
-    ? `${p.title} — ${p.bhk} BHK in ${p.area} | OpenEstates`
-    : `${p.title} in ${p.area} | OpenEstates`;
+    ? `${p.title} — ${p.bhk} BHK in ${p.area} | ${PUBLIC_BRAND_NAME}`
+    : `${p.title} in ${p.area} | ${PUBLIC_BRAND_NAME}`;
   const pricePerSqftLabel = hasKnownNumber(p.price_per_sqft)
     ? `${p.price_per_sqft.toLocaleString("en-IN")} /sqft`
     : null;
@@ -484,6 +497,8 @@ function PropertyPageBody({
   ]
     .filter(Boolean)
     .join(". ");
+  const canonicalUrl = publicSiteUrl(`/property/${encodeURIComponent(p.id)}`);
+  const socialImageUrl = p.hero_image ? backendUrl(p.hero_image) : null;
   const aroundThisHomeContext = propertyMapContextFromSurfaceScene(
     aroundThisHomeScene,
     data.map_context,
@@ -533,8 +548,10 @@ function PropertyPageBody({
         <meta property="og:title" content={pageTitle} />
         <meta property="og:description" content={pageDescription} />
         <meta property="og:type" content="website" />
-        <meta property="og:site_name" content="OpenEstates" />
-        {p.hero_image && <meta property="og:image" content={p.hero_image} />}
+        <meta property="og:site_name" content={PUBLIC_BRAND_NAME} />
+        <meta property="og:url" content={canonicalUrl} />
+        <link rel="canonical" href={canonicalUrl} />
+        {socialImageUrl && <meta property="og:image" content={socialImageUrl} />}
         <script type="application/ld+json">
           {JSON.stringify(buildPropertyJsonLd(p))}
         </script>

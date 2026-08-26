@@ -14,6 +14,7 @@ import {
 } from "../components/property/PropertySceneCard.tsx";
 import { PropertyShortCompare } from "../components/property/PropertyShortCompare.tsx";
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
+import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import {
   nextStoryFrameIndex,
   projectPropertyStory,
@@ -125,7 +126,7 @@ export function PropertyStoryLabPage() {
   return (
     <div className="story-lab">
       <Helmet>
-        <title>Property Story Lab — OpenEstates</title>
+        <title>Property Story Lab — {PUBLIC_BRAND_NAME}</title>
       </Helmet>
 
       <header className="story-lab__header">

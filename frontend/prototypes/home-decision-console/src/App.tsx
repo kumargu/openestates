@@ -225,7 +225,7 @@ export function App() {
   return (
     <div className="dashboard-shell">
       <header className="dashboard-header">
-        <div className="dashboard-brand"><span><Icon name="home" /></span><strong>OpenEstates</strong></div>
+        <div className="dashboard-brand"><span><Icon name="home" /></span><strong>80feet</strong></div>
         <div className="dashboard-property"><small>Home plan</small><strong>3 BHK · Whitefield · ₹1.50 Cr</strong></div>
         <div className="dashboard-actions"><button onClick={() => setDetailsOpen(true)}><Icon name="tune" />Details</button><button className={`save-button ${saved ? "saved" : ""}`} onClick={() => setSaved((current) => !current)}><Icon name="save" />{saved ? "Saved" : "Save"}</button></div>
       </header>

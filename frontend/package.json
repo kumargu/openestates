@@ -3,13 +3,17 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "node ./node_modules/vite/bin/vite.js",
     "build": "tsc -b && node ./node_modules/vite/bin/vite.js build",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings=0",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:smoke": "node --experimental-strip-types --test tests/*.smoke.test.ts",
-    "smoke": "npm run build && npm run test:smoke",
+    "verify:dist": "node scripts/verify-dist.mjs",
+    "smoke": "npm run build && npm run verify:dist && npm run test:smoke",
     "preview": "node ./node_modules/vite/bin/vite.js preview"
   },
   "dependencies": {

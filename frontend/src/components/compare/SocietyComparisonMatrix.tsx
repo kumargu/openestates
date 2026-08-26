@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../../hooks/useNotebook.ts";
 import { LabelPill } from "../ui/LabelPill.tsx";
 import { floorPlanForBhk, type FloorPlanComparePlan } from "../../lib/floor-plan-compare.ts";
+import { backendUrl } from "../../lib/runtimeConfig.ts";
 import { buildTaggedMatrixRows } from "../../lib/comparisonMatrix.ts";
 import {
   labelDef,
@@ -587,7 +588,7 @@ function FloorPlanCompareStrip({
             <div className="compare-floor-plan__image">
               {row.plan ? (
                 <img
-                  src={row.plan.previewUrl}
+                  src={backendUrl(row.plan.previewUrl)}
                   alt={`${row.column.name} ${row.plan.configurationType ?? `${activeBhk} BHK`} floor plan`}
                 />
               ) : (

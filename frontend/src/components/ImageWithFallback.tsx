@@ -1,4 +1,5 @@
 import { useState, type SyntheticEvent } from "react";
+import { backendUrl } from "../lib/runtimeConfig.ts";
 
 export function ImageWithFallback({
   src,
@@ -20,9 +21,10 @@ export function ImageWithFallback({
   onError?: () => void;
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const resolvedSrc = src ? backendUrl(src) : null;
 
-  const isPlaceholder = !src || src.startsWith("placeholder://");
-  const failed = Boolean(src && failedSrc === src);
+  const isPlaceholder = !resolvedSrc || resolvedSrc.startsWith("placeholder://");
+  const failed = Boolean(resolvedSrc && failedSrc === resolvedSrc);
 
   const handleLoad = (event: SyntheticEvent<HTMLImageElement>) => {
     if (!onReady) return;
@@ -56,7 +58,7 @@ export function ImageWithFallback({
 
   return (
     <img
-      src={src}
+      src={resolvedSrc}
       alt={alt}
       className={className}
       loading={loading}
@@ -64,7 +66,7 @@ export function ImageWithFallback({
       fetchPriority={fetchPriority}
       onLoad={handleLoad}
       onError={() => {
-        setFailedSrc(src);
+        setFailedSrc(resolvedSrc);
         onError?.();
       }}
     />

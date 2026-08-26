@@ -5,8 +5,9 @@ import { getAreaTracker, getProperties } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { LandingStoryStage } from "../components/LandingStoryStage.tsx";
-import { OpenEstatesMark } from "../components/brand/OpenEstatesMark.tsx";
+import { BrandMark } from "../components/brand/BrandMark.tsx";
 import { consumeDiscoveryReturn } from "../lib/navigationContext.ts";
+import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 
 const SEARCH_SUGGESTIONS = [
   { label: "Quiet near schools", query: "Quiet family home near good schools" },
@@ -59,10 +60,10 @@ function HomeClosingFooter() {
       <div className="home-closing__inner">
         <div className="home-closing__brand">
           <span aria-hidden="true">
-            <OpenEstatesMark size={30} />
+            <BrandMark size={30} />
           </span>
           <div>
-            <strong>OpenEstates</strong>
+            <strong>{PUBLIC_BRAND_NAME}</strong>
             <span>Fewer homes. Better reasons.</span>
           </div>
         </div>
@@ -83,6 +84,7 @@ export function HomePage() {
   const [areaTracker, setAreaTracker] = useState<AreaTrackerResponse | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [propertiesLoading, setPropertiesLoading] = useState(true);
+  const [retryKey, setRetryKey] = useState(0);
   const [query, setQuery] = useState(activeSearchQuery);
   const [recents, setRecents] = useState<string[]>(() => getRecentSearches());
   const [searchFocused, setSearchFocused] = useState(false);
@@ -123,7 +125,7 @@ export function HomePage() {
       cancelled = true;
       controller.abort();
     };
-  }, []);
+  }, [retryKey]);
 
   useEffect(() => {
     setQuery(activeSearchQuery);
@@ -262,10 +264,14 @@ export function HomePage() {
               <line x1="12" y1="9" x2="12" y2="13" />
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
-            <span>Market data temporarily unavailable. Search still works.</span>
+            <span>Live property data is temporarily unavailable.</span>
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                setLoadError(false);
+                setPropertiesLoading(true);
+                setRetryKey((current) => current + 1);
+              }}
               className="home-error-banner__retry"
             >
               Retry

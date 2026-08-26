@@ -5,6 +5,16 @@ export const FOCUS_STORAGE_KEY = "openestates:workspace-focused-home";
 export const MAX_SHORTLIST_HOMES = 10;
 export const SHORTLIST_CHANGED_EVENT = "openestates:shortlist-changed";
 
+export function completeSettledValues<T>(
+  results: PromiseSettledResult<T>[],
+  expectedCount: number,
+): T[] | null {
+  const values = results.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : []
+  );
+  return values.length === expectedCount ? values : null;
+}
+
 function societyIdentity(property: PropertyCard): string {
   return property.society_name?.trim().toLocaleLowerCase()
     || property.title.trim().toLocaleLowerCase();

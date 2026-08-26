@@ -1,15 +1,17 @@
-type OpenEstatesMarkProps = {
+import { PUBLIC_BRAND_NAME } from "../../lib/brand.ts";
+
+type BrandMarkProps = {
   size?: number;
   className?: string;
   title?: string;
 };
 
-/** Clay door mark — product logo for sidebar, favicon, and chrome. */
-export function OpenEstatesMark({
+/** Clay door mark used in buyer-facing product chrome. */
+export function BrandMark({
   size = 28,
   className,
-  title = "OpenEstates",
-}: OpenEstatesMarkProps) {
+  title = PUBLIC_BRAND_NAME,
+}: BrandMarkProps) {
   return (
     <svg
       className={className}
@@ -19,9 +21,9 @@ export function OpenEstatesMark({
       role="img"
       aria-label={title}
     >
-      <rect width="64" height="64" rx="14" fill="currentColor" className="oe-mark__tile" />
+      <rect width="64" height="64" rx="14" fill="currentColor" className="brand-mark__tile" />
       <g
-        className="oe-mark__door"
+        className="brand-mark__door"
         fill="none"
         stroke="#fff"
         strokeWidth="2.6"

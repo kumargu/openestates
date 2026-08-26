@@ -30,6 +30,20 @@ struct Candidate {
     channels: Vec<RecallChannelHit>,
 }
 
+struct BranchBuildContext<'a> {
+    current: &'a Property,
+    current_snapshot: EvidenceSnapshot,
+    current_score: &'a CandidateScore,
+    candidates: &'a [Candidate],
+    eligibility: &'a RecommendationEligibilityPolicy,
+}
+
+struct BranchBuildState<'a> {
+    used_ids: &'a mut HashSet<String>,
+    society_counts: &'a mut HashMap<String, usize>,
+    branches: &'a mut Vec<RecommendationBranch>,
+}
+
 pub struct RecommendationBranchInputs<'a> {
     pub current: &'a Property,
     pub current_evidence: &'a PropertyEvidenceResponse,
@@ -84,17 +98,17 @@ pub fn build_recommendation_branches(
             recall_policy.eligibility.max_properties_per_society,
         );
     }
+    let branch_context = BranchBuildContext {
+        current,
+        current_snapshot,
+        current_score: &current_score,
+        candidates: &candidates,
+        eligibility: &recall_policy.eligibility,
+    };
     for branch_policy in ordered_branch_policies(&policy.recommendation_branches) {
-        if let Some(branch) = pick_policy_branch(
-            branch_policy,
-            current,
-            current_snapshot,
-            &current_score,
-            &candidates,
-            &used_ids,
-            &society_counts,
-            &recall_policy.eligibility,
-        ) {
+        if let Some(branch) =
+            pick_policy_branch(branch_policy, &branch_context, &used_ids, &society_counts)
+        {
             used_ids.insert(branch.property.id.clone());
             *society_counts
                 .entry(society_key_from_card(&branch.property))
@@ -104,16 +118,15 @@ pub fn build_recommendation_branches(
     }
 
     if recall_policy.fallback_branch.enabled && branches.len() < recall_policy.target_branch_count {
+        let mut branch_state = BranchBuildState {
+            used_ids: &mut used_ids,
+            society_counts: &mut society_counts,
+            branches: &mut branches,
+        };
         fill_with_similar_tradeoffs(
-            current,
-            current_snapshot,
-            &current_score,
-            &candidates,
-            &mut used_ids,
-            &mut society_counts,
-            &mut branches,
+            &branch_context,
+            &mut branch_state,
             &recall_policy.fallback_branch,
-            &recall_policy.eligibility,
             recall_policy.target_branch_count,
         );
     }
@@ -486,19 +499,18 @@ fn property_ids_for_tantivy_hit(
 
 fn pick_policy_branch(
     branch_policy: &RecommendationBranchPolicy,
-    current: &Property,
-    current_snapshot: EvidenceSnapshot,
-    current_score: &CandidateScore,
-    candidates: &[Candidate],
+    context: &BranchBuildContext<'_>,
     used_ids: &HashSet<String>,
     society_counts: &HashMap<String, usize>,
-    eligibility: &RecommendationEligibilityPolicy,
 ) -> Option<RecommendationBranch> {
-    let current_signal = signal_score(current_score, &branch_policy.primary_signal);
-    let best = candidates
+    let current_signal = signal_score(context.current_score, &branch_policy.primary_signal);
+    let best = context
+        .candidates
         .iter()
         .filter(|candidate| !used_ids.contains(&candidate.property.id))
-        .filter(|candidate| candidate_society_available(candidate, society_counts, eligibility))
+        .filter(|candidate| {
+            candidate_society_available(candidate, society_counts, context.eligibility)
+        })
         .filter_map(|candidate| {
             let candidate_signal = signal_score(&candidate.score, &branch_policy.primary_signal)?;
             if candidate_signal.availability != FactAvailability::Observed {
@@ -538,34 +550,31 @@ fn pick_policy_branch(
         property: candidate.card.clone(),
         contrast: contrast_for_signal(
             &branch_policy.primary_signal,
-            current,
+            context.current,
             &candidate.property,
             current_signal,
             candidate_signal,
         ),
-        tradeoff: tradeoff_for_candidate(current, current_score, candidate),
-        evidence_delta: delta_from_snapshots(current_snapshot, candidate.snapshot),
+        tradeoff: tradeoff_for_candidate(context.current, context.current_score, candidate),
+        evidence_delta: delta_from_snapshots(context.current_snapshot, candidate.snapshot),
         channels: candidate.channels.clone(),
         magnitude: compass_magnitude((delta / branch_policy.min_delta.max(0.01) / 2.0) as f32),
     })
 }
 
 fn fill_with_similar_tradeoffs(
-    current: &Property,
-    current_snapshot: EvidenceSnapshot,
-    current_score: &CandidateScore,
-    candidates: &[Candidate],
-    used_ids: &mut HashSet<String>,
-    society_counts: &mut HashMap<String, usize>,
-    branches: &mut Vec<RecommendationBranch>,
+    context: &BranchBuildContext<'_>,
+    state: &mut BranchBuildState<'_>,
     fallback_policy: &RecommendationFallbackBranchPolicy,
-    eligibility: &RecommendationEligibilityPolicy,
     target_branch_count: usize,
 ) {
-    let mut remaining = candidates
+    let mut remaining = context
+        .candidates
         .iter()
-        .filter(|candidate| !used_ids.contains(&candidate.property.id))
-        .filter(|candidate| candidate_society_available(candidate, society_counts, eligibility))
+        .filter(|candidate| !state.used_ids.contains(&candidate.property.id))
+        .filter(|candidate| {
+            candidate_society_available(candidate, state.society_counts, context.eligibility)
+        })
         .collect::<Vec<_>>();
     remaining.sort_by(|left, right| {
         channel_strength(&right.channels)
@@ -582,25 +591,26 @@ fn fill_with_similar_tradeoffs(
     });
 
     for candidate in remaining.into_iter().take(fallback_policy.max_items) {
-        if !candidate_society_available(candidate, society_counts, eligibility) {
+        if !candidate_society_available(candidate, state.society_counts, context.eligibility) {
             continue;
         }
-        used_ids.insert(candidate.property.id.clone());
-        *society_counts
+        state.used_ids.insert(candidate.property.id.clone());
+        *state
+            .society_counts
             .entry(society_key(&candidate.property))
             .or_default() += 1;
-        branches.push(RecommendationBranch {
+        state.branches.push(RecommendationBranch {
             branch_id: fallback_policy.id.clone(),
             lens: BranchLens::from_policy_lens(&fallback_policy.lens),
             headline: fallback_policy.headline.clone(),
             property: candidate.card.clone(),
-            contrast: best_available_contrast(current, current_score, candidate),
-            tradeoff: tradeoff_for_candidate(current, current_score, candidate),
-            evidence_delta: delta_from_snapshots(current_snapshot, candidate.snapshot),
+            contrast: best_available_contrast(context.current, context.current_score, candidate),
+            tradeoff: tradeoff_for_candidate(context.current, context.current_score, candidate),
+            evidence_delta: delta_from_snapshots(context.current_snapshot, candidate.snapshot),
             channels: candidate.channels.clone(),
             magnitude: compass_magnitude(channel_strength(&candidate.channels) as f32 / 2.0),
         });
-        if branches.len() >= target_branch_count {
+        if state.branches.len() >= target_branch_count {
             break;
         }
     }

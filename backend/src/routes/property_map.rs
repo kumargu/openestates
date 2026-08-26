@@ -27,6 +27,7 @@ use crate::surfaces::{SceneGeometry, SurfaceSceneResponse};
 use super::enrichment::society_node_id;
 
 const AROUND_THIS_HOME_SURFACE_ID: &str = "around_this_home";
+const BUYER_SOURCE_FALLBACK: &str = "80feet";
 const DEFAULT_MAP_LAYER_CAP: usize = 3;
 const METRO_MAP_RADIUS_KM: f64 = 10.0;
 const METRO_MAP_STATION_CAP: usize = 8;
@@ -264,7 +265,7 @@ pub fn property_map_context_from_surface_scene(
                 source_url: receipt.and_then(|receipt| receipt.source_url.clone()),
                 source_type: receipt
                     .map(|receipt| receipt.source_type.clone())
-                    .unwrap_or_else(|| "OpenEstates".to_string()),
+                    .unwrap_or_else(|| BUYER_SOURCE_FALLBACK.to_string()),
                 sort_priority: 0,
             })
         })
@@ -293,7 +294,7 @@ pub fn property_map_context_from_surface_scene(
                 coordinates,
                 source_type: receipt
                     .map(|receipt| receipt.source_type.clone())
-                    .unwrap_or_else(|| "OpenEstates".to_string()),
+                    .unwrap_or_else(|| BUYER_SOURCE_FALLBACK.to_string()),
                 source_url: receipt.and_then(|receipt| receipt.source_url.clone()),
             })
         })
@@ -842,7 +843,7 @@ fn map_linked_place_pin(
         lines: Vec::new(),
         source_url: linked_fact.source_url.clone(),
         source_type: if linked_fact.source_type.trim().is_empty() {
-            "OpenEstates".to_string()
+            BUYER_SOURCE_FALLBACK.to_string()
         } else {
             linked_fact.source_type.clone()
         },

@@ -199,7 +199,7 @@
     "unsupported_inventory": {
       "mode": "unsupported_inventory",
       "title": "That inventory is outside the current search.",
-      "message": "OpenEstates is currently tuned for apartments, not {inventory}. I can still help compare apartment options by area, budget, commute, legal risk, water risk, or livability.",
+      "message": "80feet is currently tuned for apartments, not {inventory}. I can still help compare apartment options by area, budget, commute, legal risk, water risk, or livability.",
       "suggestions": [
         "Apartment near metro under 1.5Cr",
         "Family-friendly 3BHK with low legal risk",

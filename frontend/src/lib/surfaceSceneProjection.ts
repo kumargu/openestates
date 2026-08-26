@@ -8,6 +8,7 @@ import type {
   SceneReceipt,
   SurfaceSceneResponse,
 } from "./types.ts";
+import { PUBLIC_BRAND_NAME } from "./brand.ts";
 
 export function propertyMapContextFromSurfaceScene(
   scene: SurfaceSceneResponse | null | undefined,
@@ -122,7 +123,7 @@ function mapPlacePinFromFeature(
     rating: feature.metrics?.rating,
     review_count: feature.metrics?.reviewCount,
     source_url: receipt?.sourceUrl,
-    source_type: receipt?.sourceType ?? "OpenEstates",
+    source_type: receipt?.sourceType ?? PUBLIC_BRAND_NAME,
   };
 }
 
@@ -146,7 +147,7 @@ function mapLineFromFeature(
     details: feature.details,
     kind: feature.kind,
     coordinates,
-    source_type: receipt?.sourceType ?? "OpenEstates",
+    source_type: receipt?.sourceType ?? PUBLIC_BRAND_NAME,
     source_url: receipt?.sourceUrl,
   };
 }

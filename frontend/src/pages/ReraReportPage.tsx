@@ -4,6 +4,8 @@ import { Link, useParams } from "react-router-dom";
 import { PageState } from "../components/PageState.tsx";
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { getProperty, getPropertyRera } from "../lib/api.ts";
+import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
+import { backendUrl } from "../lib/runtimeConfig.ts";
 import {
   claimValueText,
   buildReraReportViewModel,
@@ -41,7 +43,7 @@ import type {
 type LoadState =
   | { status: "loading" }
   | { status: "ready"; detail: PropertyDetailResponse; report: ReraEvidenceReportResponse }
-  | { status: "error"; message: string };
+  | { status: "error" };
 
 function sectionById(
   sections: ReraBuyerFactSection[] | undefined,
@@ -583,7 +585,7 @@ function Complaints({
 }
 
 function planPreviewUrl(value?: string): string | null {
-  if (value?.startsWith("/media/")) return value;
+  if (value?.startsWith("/media/")) return backendUrl(value);
   return httpUrl(value);
 }
 
@@ -933,20 +935,29 @@ export function ReraReportPage() {
 
 function ReraReportContent({ id }: { id: string }) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let active = true;
     Promise.all([getProperty(id), getPropertyRera(id)])
       .then(([detail, report]) => active && setState({ status: "ready", detail, report }))
-      .catch((error: unknown) => active && setState({
-        status: "error",
-        message: error instanceof Error ? error.message : "RERA record could not be loaded.",
-      }));
+      .catch(() => active && setState({ status: "error" }));
     return () => { active = false; };
-  }, [id]);
+  }, [id, retryKey]);
 
   if (state.status === "loading") return <PageState variant="loading" context="property" />;
-  if (state.status === "error") return <PageState variant="error" context="property" message={state.message} />;
+  if (state.status === "error") {
+    return (
+      <PageState
+        variant="error"
+        context="property"
+        onRetry={() => {
+          setState({ status: "loading" });
+          setRetryKey((current) => current + 1);
+        }}
+      />
+    );
+  }
 
   const { detail, report } = state;
   const property = detail.property;
@@ -960,7 +971,7 @@ function ReraReportContent({ id }: { id: string }) {
   return (
     <main className="page-container-wide rera-report-page">
       <Helmet>
-        <title>{title} RERA - OpenEstates</title>
+        <title>{title} RERA | {PUBLIC_BRAND_NAME}</title>
         <meta name="description" content={`Filed project details for ${title}.`} />
       </Helmet>
       <ReraRecordHeader

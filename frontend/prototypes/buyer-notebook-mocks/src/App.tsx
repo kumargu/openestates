@@ -48,7 +48,7 @@ export function App() {
     <div className="shell">
       <header className="chrome">
         <div className="chrome__brand">
-          <strong>OpenEstates</strong>
+          <strong>80feet</strong>
           <span>Buyer notebook · connected mocks</span>
         </div>
         <nav className="chrome__nav" aria-label="Journey pages">

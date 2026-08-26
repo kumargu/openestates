@@ -19,6 +19,8 @@ import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { OfflineToast } from "./components/OfflineToast.tsx";
 import { NotebookToast } from "./components/notebook/NotebookToast.tsx";
 import { WorkspaceFrame } from "./components/workspace/WorkspaceFrame.tsx";
+import { PUBLIC_BRAND_NAME } from "./lib/brand.ts";
+import { publicSiteUrl } from "./lib/runtimeConfig.ts";
 
 const HomePage = lazy(() => import("./pages/HomePage.tsx").then(m => ({ default: m.HomePage })));
 const PropertyPage = lazy(() => import("./pages/PropertyPage.tsx").then(m => ({ default: m.PropertyPage })));
@@ -72,12 +74,14 @@ export function App() {
   return (
     <HelmetProvider>
       <Helmet>
-        <title>OpenEstates — Transparent Property Discovery</title>
+        <title>{PUBLIC_BRAND_NAME} — Transparent Property Discovery</title>
         <meta name="description" content="Property discovery that explains why, not just what. Every listing comes with context, evidence, and tradeoffs you can verify." />
-        <meta property="og:title" content="OpenEstates — Transparent Property Discovery" />
+        <meta property="og:title" content={`${PUBLIC_BRAND_NAME} — Transparent Property Discovery`} />
         <meta property="og:description" content="Property discovery that explains why, not just what. Every listing comes with context, evidence, and tradeoffs you can verify." />
         <meta property="og:type" content="website" />
-        <meta property="og:site_name" content="OpenEstates" />
+        <meta property="og:site_name" content={PUBLIC_BRAND_NAME} />
+        <meta property="og:url" content={publicSiteUrl("/")} />
+        <link rel="canonical" href={publicSiteUrl("/")} />
       </Helmet>
       <BrowserRouter>
         <a href="#main-content" className="skip-link">Skip to main content</a>
