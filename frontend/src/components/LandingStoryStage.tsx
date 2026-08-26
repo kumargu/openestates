@@ -5,6 +5,7 @@ import { LivingEvidenceTile } from "./evidence/LivingEvidenceTile.tsx";
 import { RailPageControls } from "./RailPageControls.tsx";
 import { useFittedRailPage } from "../hooks/useFittedRailPage.ts";
 import { propertyDetailPath, searchProperties } from "../lib/api.ts";
+import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import { composeLandingSearchRails } from "../lib/landing-search-rails.ts";
 import { primaryProofFocus } from "../lib/proof-focus.ts";
 import { searchResultReasonLabels } from "../lib/search.ts";
@@ -548,7 +549,7 @@ export function LandingStoryStage({
   return (
     <section
       className="landing-stage"
-      aria-label="How OpenEstates works"
+      aria-label={`How ${PUBLIC_BRAND_NAME} works`}
       data-reduced-motion={controller.isReducedMotion ? "true" : "false"}
     >
       <FeaturedSuggestions

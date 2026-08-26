@@ -10,8 +10,11 @@ fn main() {
         .parent()
         .expect("backend must be inside project root")
         .to_path_buf();
-    backend::local_env::load_project_env(&project_root);
+    let loaded_env_file = backend::local_env::load_project_env(&project_root)
+        .unwrap_or_else(|error| panic!("environment configuration failed: {error}"));
     backend::dag_config::set_project_dag_root(&project_root);
+    let public_site_origin = backend::routes::sitemap::configured_site_origin()
+        .unwrap_or_else(|error| panic!("public site configuration failed: {error}"));
 
     let internal_runtime = tokio::runtime::Builder::new_multi_thread()
         .thread_name("openestates-internal")
@@ -48,7 +51,7 @@ fn main() {
     let active_cache_dir = state.search_runtime.load().bundle.cache_dir.clone();
     let retention_execution = state.execution.clone();
     let bind_address =
-        std::env::var("OPENESTATES_API_ADDR").unwrap_or_else(|_| "0.0.0.0:4000".to_string());
+        std::env::var("OPENESTATES_API_ADDR").unwrap_or_else(|_| "127.0.0.1:4000".to_string());
 
     let app = backend::api::build_app_router(state, &project_root);
 
@@ -68,6 +71,10 @@ fn main() {
     println!("  POST /api/interests");
     println!("  GET /api/properties/{{id}}/interests/count");
     println!("  GET  /api/sitemap.xml");
+    println!("Public site origin: {public_site_origin}");
+    if let Some(path) = loaded_env_file {
+        println!("Environment file: {}", path.display());
+    }
     println!("  POST /api/admin/serving-bundle/reload");
     println!("  GET  /api/admin/asset-runs/current");
     println!("  POST /api/admin/asset-runs");

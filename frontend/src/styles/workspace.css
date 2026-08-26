@@ -2545,6 +2545,21 @@
   }
 }
 
+.workspace-compare-empty__actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.workspace-compare-empty__actions button {
+  background: none;
+  border: 0;
+  color: var(--color-action);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .workspace-shell,
   .compare-workspace,

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getProperties, getProperty } from "../lib/api.ts";
+import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
 import { WorkspacePropertySwitcher } from "../components/workspace/WorkspacePropertySwitcher.tsx";
@@ -113,6 +114,7 @@ export function HomePlanPage() {
   const [extraEmisPerYear, setExtraEmisPerYear] = useState(
     DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear,
   );
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -171,7 +173,7 @@ export function HomePlanPage() {
         setStatus(message.includes("404") ? "not_found" : "error");
       });
     return () => { active = false; };
-  }, [id]);
+  }, [id, retryKey]);
 
   const projection = useMemo(
     () => inputs ? calculateProjection(inputs, extraEmisPerYear) : null,
@@ -252,15 +254,26 @@ export function HomePlanPage() {
     ) : (
       <section className="home-plan-empty">
         <h1>We couldn’t open this plan.</h1>
-        <p>Try again in a moment, or continue with another home in your workspace.</p>
-        <Link to="/workspace">Back to workspace</Link>
+        <p>Live property data is temporarily unavailable.</p>
+        <div className="home-plan-empty__actions">
+          <button
+            type="button"
+            onClick={() => {
+              setStatus("loading");
+              setRetryKey((current) => current + 1);
+            }}
+          >
+            Retry
+          </button>
+          <Link to="/workspace">Back to workspace</Link>
+        </div>
       </section>
     );
 
     return (
       <div className="home-plan-shell home-plan-shell--workspace">
         <Helmet>
-          <title>{BUY_VS_RENT.pageTitle} | OpenEstates</title>
+          <title>{BUY_VS_RENT.pageTitle} | {PUBLIC_BRAND_NAME}</title>
           <meta name="robots" content="noindex" />
         </Helmet>
         <WorkspaceHeader
@@ -329,7 +342,7 @@ export function HomePlanPage() {
   return (
     <div className="home-plan-shell home-plan-shell--workspace">
       <Helmet>
-        <title>{property.title} — {BUY_VS_RENT.pageTitle} | OpenEstates</title>
+        <title>{property.title} — {BUY_VS_RENT.pageTitle} | {PUBLIC_BRAND_NAME}</title>
         <meta name="description" content={`Compare renting with buying ${property.title} over time.`} />
       </Helmet>
 

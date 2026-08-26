@@ -24,7 +24,7 @@ export function App() {
     <div className="gallery">
       <header className="gallery__chrome">
         <div className="gallery__brand">
-          <strong>OpenEstates</strong>
+          <strong>80feet</strong>
           <span>Collections UI mocks</span>
         </div>
         <nav className="gallery__nav" aria-label="Mock directions">

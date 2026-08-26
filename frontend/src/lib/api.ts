@@ -20,18 +20,20 @@ import {
   filterListableProperties,
   isListableProperty,
 } from "./property-filters.ts";
+import { API_ORIGIN } from "./runtimeConfig.ts";
 
 const META_ENV = (import.meta as ImportMeta & {
   env?: Record<string, string | boolean | undefined>;
 }).env ?? {};
-const API_BASE = typeof META_ENV.VITE_API_BASE === "string"
-  ? META_ENV.VITE_API_BASE
-  : "";
 const ENABLE_DEV_FIXTURES = META_ENV.VITE_USE_FIXTURE_API === "true";
 const inFlightSearches = new Map<string, Promise<SearchResponse>>();
+const DEFAULT_API_TIMEOUT_MS = 4_000;
+const GET_ATTEMPT_COUNT = 2;
+const GET_RETRY_DELAY_MS = 200;
 
 type ApiFetchOptions = {
   signal?: AbortSignal;
+  timeoutMs?: number;
 };
 
 function getDevFixture<T>(path: string): T | null {
@@ -44,10 +46,33 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
+function requestSignal(options: ApiFetchOptions): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(
+    options.timeoutMs ?? DEFAULT_API_TIMEOUT_MS,
+  );
+  return options.signal
+    ? AbortSignal.any([options.signal, timeoutSignal])
+    : timeoutSignal;
+}
+
+function isRetryable(error: unknown): boolean {
+  return error instanceof TypeError
+    || (error instanceof DOMException && error.name === "TimeoutError")
+    || (error instanceof Error && error.message.startsWith("API 5"));
+}
+
+function retryDelay(): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, GET_RETRY_DELAY_MS));
+}
+
 async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
-  try {
-    const res = await fetch(`${API_BASE}${path}`, { signal: options.signal });
-    if (!res.ok) {
+  for (let attempt = 0; attempt < GET_ATTEMPT_COUNT; attempt += 1) {
+    try {
+      const res = await fetch(`${API_ORIGIN}${path}`, {
+        signal: requestSignal(options),
+      });
+      if (res.ok) return res.json();
+
       const fixture = getDevFixture<T>(path);
       if (fixture !== null) return fixture;
 
@@ -55,21 +80,24 @@ async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promis
       throw new Error(
         `API ${res.status}: ${text || res.statusText}`
       );
+    } catch (error) {
+      if (isAbortError(error) || options.signal?.aborted) throw error;
+      const fixture = getDevFixture<T>(path);
+      if (fixture !== null) return fixture;
+      const canRetry = attempt + 1 < GET_ATTEMPT_COUNT && isRetryable(error);
+      if (!canRetry) throw error;
+      await retryDelay();
     }
-    return res.json();
-  } catch (error) {
-    if (isAbortError(error)) throw error;
-    const fixture = getDevFixture<T>(path);
-    if (fixture !== null) return fixture;
-    throw error;
   }
+  throw new Error("API request failed");
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${API_ORIGIN}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: requestSignal({}),
   });
   if (!res.ok) {
     const fixture = getDevFixture<T>(path);

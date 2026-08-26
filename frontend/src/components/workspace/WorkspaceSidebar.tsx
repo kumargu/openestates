@@ -6,8 +6,9 @@ import {
   workspaceNavItems,
   type WorkspaceView,
 } from "../../lib/workspaceNav.ts";
-import { OpenEstatesMark } from "../brand/OpenEstatesMark.tsx";
+import { BrandMark } from "../brand/BrandMark.tsx";
 import { requestDiscoveryReturn } from "../../lib/navigationContext.ts";
+import { PUBLIC_BRAND_NAME } from "../../lib/brand.ts";
 
 type WorkspaceIconName =
   | "browse"
@@ -153,9 +154,9 @@ export function WorkspaceSidebar({
       className={`workspace-sidebar workspace-sidebar--${mode}${collapsed ? " workspace-sidebar--collapsed" : ""}${reduced ? " workspace-sidebar--reduced" : ""}`}
     >
       <div className="workspace-sidebar__brand-row">
-        <Link to="/" className="workspace-sidebar__brand" aria-label="OpenEstates home">
-          <OpenEstatesMark size={28} className="workspace-sidebar__mark" />
-          {!collapsed && <strong>OpenEstates</strong>}
+        <Link to="/" className="workspace-sidebar__brand" aria-label={`${PUBLIC_BRAND_NAME} home`}>
+          <BrandMark size={28} className="workspace-sidebar__mark" />
+          {!collapsed && <strong>{PUBLIC_BRAND_NAME}</strong>}
         </Link>
       </div>
 

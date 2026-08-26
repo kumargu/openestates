@@ -1,4 +1,5 @@
 import { initialPropertySceneUrls } from "./propertyScene.ts";
+import { backendUrl } from "./runtimeConfig.ts";
 import { hasAroundThisHomePlate } from "./nearbyPlateProjection.ts";
 import { visibleEvidenceSections } from "./evidence.ts";
 import { workspaceCompareHref } from "./workspaceNav.ts";
@@ -330,13 +331,13 @@ function projectMedia(
   const galleryUrls = initialPropertySceneUrls({
     heroImage: data.property.hero_image,
     images: data.property.images,
-  });
+  }).map(backendUrl);
   const suppliedByUrl = new Map(inputs?.map((frame) => [frame.url, frame]));
   const urls = inputs
     ? initialPropertySceneUrls({
         heroImage: inputs[0]?.url,
         images: inputs.slice(1).map((frame) => frame.url),
-      })
+      }).map(backendUrl)
     : galleryUrls;
 
   const frames = urls.slice(0, 7).map((url, index) => {
@@ -372,7 +373,7 @@ function projectArrival(data: PropertyDetailResponse): StoryArrivalModel {
           id: `arrival-${stableStoryHash(
             `${strip.kind}:${frame.image_url}:${frame.label}:${index}`,
           ).toString(16)}`,
-          url: frame.image_url.trim(),
+          url: backendUrl(frame.image_url.trim()),
           label: frame.label.trim(),
           distanceFromGateM:
             Number.isFinite(frame.distance_from_gate_m)

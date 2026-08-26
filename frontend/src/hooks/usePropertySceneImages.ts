@@ -15,6 +15,7 @@
  */
 import { useMemo } from "react";
 import { initialPropertySceneUrls } from "../lib/propertyScene.ts";
+import { backendUrl } from "../lib/runtimeConfig.ts";
 
 type Input = {
   heroImage?: string | null;
@@ -27,7 +28,7 @@ export function usePropertySceneImages(input: Input) {
       initialPropertySceneUrls({
         heroImage: input.heroImage,
         images: input.images,
-      }),
+      }).map(backendUrl),
     [input.heroImage, input.images],
   );
 

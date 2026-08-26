@@ -72,12 +72,28 @@
   line-height: 1.55;
 }
 
-.home-plan-empty a {
+.home-plan-empty a,
+.home-plan-empty button {
   display: inline-flex;
-  margin-top: 1.2rem;
+  align-items: center;
+  background: transparent;
+  border: 0;
   color: var(--plan-cool-deep);
+  cursor: pointer;
+  font: inherit;
   font-size: 0.78rem;
   font-weight: 720;
+  padding: 0;
+}
+
+.home-plan-empty > a {
+  margin-top: 1.2rem;
+}
+
+.home-plan-empty__actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.2rem;
 }
 
 .home-plan-shell button,
