@@ -1,0 +1,26 @@
+Create a wide, high-fidelity OpenEstates clarified-aerial product view for Total Environment — Pursuit of a Radical Rhapsody in Hoodi, Bangalore.
+
+REFERENCE ROLE
+The supplied reference image is the composition and product-design benchmark. Preserve its useful visual logic: a broad oblique aerial context, the lake at right, Hoodi/Whitefield urban fabric, elevated metro and station, muted nearby massing, approximately seven separate slender organic towers, sparse labels, and the OpenEstates Real / Clarified / Compare interface. Do not merely copy pixels and do not treat the reference geometry as surveyed truth.
+
+SCENE
+Show the society as a clarified architectural model integrated into a believable aerial neighbourhood. A large lake occupies the right foreground. Dense but subdued Hoodi/Whitefield urban context surrounds the site. An elevated metro viaduct and Hoodi Metro station appear in the upper-right distance. Unrelated nearby buildings use neutral low-detail grey massing so the project remains visually distinct without erasing its surroundings.
+
+PROJECT MODEL
+Show approximately seven separate, slender residential towers following the lakeside campus edge. Each tower has a rounded, organic or clover-like footprint, warm earthy concrete façades, curved balconies, and landscaped roof geometry. Include lower lakeside residential blocks, internal gardens, paths, clubhouse-scale structures and open green space. Keep all towers grounded, separate and plausibly scaled. Never merge them into three enormous connected buildings.
+
+CAMERA AND RENDERING
+Use a 16:9 landscape canvas and a broad elevated oblique camera. Preserve substantial neighbourhood context. Use sophisticated semi-realistic architectural rendering integrated into the aerial scene: clearer than photogrammetry, restrained and believable, not a fantasy masterplan and not a glossy isolated resort advertisement. Use soft warm daylight, light atmospheric haze and restrained shadows.
+
+OPENESTATES PRODUCT UI
+Add a translucent dark header with “OpenEstates” at upper left, “Pursuit of a Radical Rhapsody” centered, and a small menu icon at upper right. Add a compact lower-left legend for “Project model” and “Nearby massing”. Add a centered bottom segmented control containing “Real”, “Clarified”, and “Compare”, with “Clarified” selected.
+
+ANNOTATIONS
+Use only a few sparse dark labels with thin leader lines: “Tower 1”, “Tower 3”, “Tower 7”, “Hoodi Metro”, and “Lake”. Do not add other labels.
+
+TRUTHFULNESS
+This is an illustrative clarified model. Do not claim exact boundaries, parcel measurements, surveyed geometry, exact tower placement, or verified construction status.
+
+AVOID
+Three giant connected towers; isolated resort-campus framing; excessive labels; repeated cloned buildings; floating structures; roads through buildings; arbitrary parcel boundaries; fake factual panels; fantasy skyline; over-saturated marketing gloss; watermark-like footer text; or claims of survey accuracy.
+
