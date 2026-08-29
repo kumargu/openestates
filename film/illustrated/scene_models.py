@@ -150,6 +150,7 @@ class SceneBuilding:
     role: str
     source: EvidenceSource
     confidence: float
+    inner_rings: tuple[tuple[tuple[float, float], ...], ...] = ()
     height_m: float | None = None
     floors: int | None = None
     height_source: dict[str, Any] | None = None
@@ -161,6 +162,11 @@ class SceneBuilding:
             raise SceneContractError("building_footprint_too_small")
         for point in self.footprint:
             _validate_coordinate(point)
+        for ring in self.inner_rings:
+            if len(ring) < 3:
+                raise SceneContractError("building_inner_ring_too_small")
+            for point in ring:
+                _validate_coordinate(point)
         if not 0 <= self.confidence <= 1:
             raise SceneContractError("invalid_building_confidence")
         if self.height_m is not None and (

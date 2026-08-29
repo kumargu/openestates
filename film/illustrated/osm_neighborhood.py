@@ -169,6 +169,47 @@ def _ring(
     return points
 
 
+def _way_refs(way: ET.Element) -> list[str]:
+    return [
+        reference
+        for node in way.findall("nd")
+        if (reference := node.attrib.get("ref")) is not None
+    ]
+
+
+def _joined_rings(
+    ways: list[ET.Element],
+    nodes: dict[str, tuple[float, float]],
+) -> tuple[tuple[tuple[float, float], ...], ...]:
+    """Join ordered OSM relation members into closed polygon rings."""
+    chains = [_way_refs(way) for way in ways]
+    chains = [chain for chain in chains if len(chain) >= 2]
+    rings: list[tuple[tuple[float, float], ...]] = []
+    while chains:
+        chain = chains.pop(0)
+        while chain[0] != chain[-1]:
+            match_index = next(
+                (
+                    index
+                    for index, candidate in enumerate(chains)
+                    if chain[-1] in {candidate[0], candidate[-1]}
+                ),
+                None,
+            )
+            if match_index is None:
+                break
+            candidate = chains.pop(match_index)
+            if candidate[-1] == chain[-1]:
+                candidate.reverse()
+            chain.extend(candidate[1:])
+        points = tuple(nodes[reference] for reference in chain if reference in nodes)
+        if len(points) > 1 and points[0] == points[-1]:
+            points = points[:-1]
+        if len(points) >= 3:
+            rings.append(points)
+    return tuple(rings)
+
+
 def _number(value: str | None) -> float | None:
     if value is None:
         return None
@@ -177,6 +218,77 @@ def _number(value: str | None) -> float | None:
         return None
     parsed = float(match.group(1))
     return parsed if math.isfinite(parsed) and parsed > 0 else None
+
+
+def _height_metres(value: str | None) -> float | None:
+    if value is None:
+        return None
+    match = re.match(
+        r"^\s*(\d+(?:\.\d+)?)\s*(m|metres?|meters?|ft|feet|foot|'|cm)?\s*$",
+        value,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return None
+    parsed = float(match.group(1))
+    unit = (match.group(2) or "m").lower()
+    if unit in {"ft", "feet", "foot", "'"}:
+        parsed *= 0.3048
+    elif unit == "cm":
+        parsed /= 100
+    return parsed if math.isfinite(parsed) and parsed > 0 else None
+
+
+def _orientation(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    point: tuple[float, float],
+) -> float:
+    return (end[1] - start[1]) * (point[0] - start[0]) - (
+        end[0] - start[0]
+    ) * (point[1] - start[1])
+
+
+def _segments_intersect(
+    left_start: tuple[float, float],
+    left_end: tuple[float, float],
+    right_start: tuple[float, float],
+    right_end: tuple[float, float],
+) -> bool:
+    if (
+        max(left_start[0], left_end[0]) < min(right_start[0], right_end[0])
+        or max(right_start[0], right_end[0]) < min(left_start[0], left_end[0])
+        or max(left_start[1], left_end[1]) < min(right_start[1], right_end[1])
+        or max(right_start[1], right_end[1]) < min(left_start[1], left_end[1])
+    ):
+        return False
+    left_a = _orientation(left_start, left_end, right_start)
+    left_b = _orientation(left_start, left_end, right_end)
+    right_a = _orientation(right_start, right_end, left_start)
+    right_b = _orientation(right_start, right_end, left_end)
+    return (left_a <= 0 <= left_b or left_b <= 0 <= left_a) and (
+        right_a <= 0 <= right_b or right_b <= 0 <= right_a
+    )
+
+
+def _polygons_intersect(
+    left: tuple[tuple[float, float], ...],
+    right: tuple[tuple[float, float], ...],
+) -> bool:
+    if any(_point_in_polygon(point, right) for point in left):
+        return True
+    if any(_point_in_polygon(point, left) for point in right):
+        return True
+    return any(
+        _segments_intersect(
+            left[index],
+            left[(index + 1) % len(left)],
+            right[other_index],
+            right[(other_index + 1) % len(right)],
+        )
+        for index in range(len(left))
+        for other_index in range(len(right))
+    )
 
 
 def _floors(tags: dict[str, str]) -> int | None:
@@ -188,7 +300,7 @@ def _building_height(
     tags: dict[str, str],
     source_ref: str,
 ) -> tuple[float, int | None, dict[str, object]]:
-    explicit_height = _number(tags.get("height"))
+    explicit_height = _height_metres(tags.get("height"))
     floors = _floors(tags)
     if explicit_height is not None:
         return explicit_height, floors, {
@@ -253,6 +365,12 @@ def parse_osm_neighborhood(
     observed_at = retrieved_at or _snapshot_time(root)
     buildings: list[SceneBuilding] = []
     features: list[SceneFeature] = []
+    ways_by_id = {
+        way.attrib["id"]: way
+        for way in root.findall("way")
+        if "id" in way.attrib
+    }
+    relation_member_way_ids: set[str] = set()
 
     bounds = root.find("bounds")
     if bounds is not None:
@@ -308,9 +426,69 @@ def parse_osm_neighborhood(
             )
         )
 
+    for relation in root.findall("relation"):
+        relation_id = relation.attrib.get("id")
+        tags = _tags(relation)
+        if (
+            relation_id is None
+            or tags.get("type") != "multipolygon"
+            or "building" not in tags
+        ):
+            continue
+        members = [
+            member
+            for member in relation.findall("member")
+            if member.attrib.get("type") == "way"
+        ]
+        relation_member_way_ids.update(
+            reference
+            for member in members
+            if (reference := member.attrib.get("ref")) is not None
+        )
+        outer_ways = [
+            ways_by_id[reference]
+            for member in members
+            if member.attrib.get("role") in {None, "", "outer"}
+            and (reference := member.attrib.get("ref")) in ways_by_id
+        ]
+        inner_ways = [
+            ways_by_id[reference]
+            for member in members
+            if member.attrib.get("role") == "inner"
+            and (reference := member.attrib.get("ref")) in ways_by_id
+        ]
+        outer_rings = _joined_rings(outer_ways, nodes)
+        inner_rings = _joined_rings(inner_ways, nodes)
+        source_ref = f"relation/{relation_id}"
+        source = _source(source_ref, query_url, observed_at)
+        height_m, floors, height_source = _building_height(tags, source_ref)
+        for ring_index, outer_ring in enumerate(outer_rings):
+            holes = tuple(
+                inner_ring
+                for inner_ring in inner_rings
+                if _point_in_polygon(inner_ring[0], outer_ring)
+            )
+            buildings.append(
+                SceneBuilding(
+                    building_id=f"osm-relation-{relation_id}-{ring_index}",
+                    footprint=outer_ring,
+                    inner_rings=holes,
+                    role=(
+                        "subject"
+                        if _polygons_intersect(outer_ring, boundary)
+                        else "context"
+                    ),
+                    source=source,
+                    confidence=0.9 if floors is not None or tags.get("height") else 0.75,
+                    height_m=height_m,
+                    floors=floors,
+                    height_source=height_source,
+                )
+            )
+
     for way in root.findall("way"):
         way_id = way.attrib.get("id")
-        if way_id is None:
+        if way_id is None or way_id in relation_member_way_ids:
             continue
         tags = _tags(way)
         points = _ring(way, nodes)
@@ -318,16 +496,12 @@ def parse_osm_neighborhood(
         source = _source(source_ref, query_url, observed_at)
 
         if "building" in tags and len(points) >= 3:
-            center = (
-                sum(point[0] for point in points) / len(points),
-                sum(point[1] for point in points) / len(points),
-            )
             height_m, floors, height_source = _building_height(tags, source_ref)
             buildings.append(
                 SceneBuilding(
                     building_id=f"osm-way-{way_id}",
                     footprint=points,
-                    role="subject" if _point_in_polygon(center, boundary) else "context",
+                    role="subject" if _polygons_intersect(points, boundary) else "context",
                     source=source,
                     confidence=0.9 if floors is not None else 0.75,
                     height_m=height_m,

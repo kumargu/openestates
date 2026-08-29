@@ -95,6 +95,44 @@ class StructuralPlateTest(unittest.TestCase):
             )
         )
 
+    def test_height_units_and_boundary_intersection_are_normalized(self) -> None:
+        payload = OSM_XML.replace(
+            b'<tag k="building:levels" v="12"/>',
+            b'<tag k="height" v="30 ft"/>',
+        ).replace(
+            b'lat="12.9800" lon="77.7400"',
+            b'lat="12.9790" lon="77.7400"',
+        )
+        neighborhood = parse_osm_neighborhood(
+            payload,
+            BOUNDARY,
+            "https://example.com/osm",
+        )
+        self.assertAlmostEqual(neighborhood.buildings[0].height_m or 0, 9.144)
+        self.assertEqual(neighborhood.buildings[0].role, "subject")
+
+    def test_building_multipolygon_preserves_inner_rings(self) -> None:
+        payload = OSM_XML.replace(
+            b'<tag k="building" v="apartments"/>\n    <tag k="building:levels" v="12"/>',
+            b'',
+        ).replace(
+            b'</osm>',
+            b'''<node id="11" lat="12.9803" lon="77.7403"/>
+  <node id="12" lat="12.9803" lon="77.7407"/>
+  <node id="13" lat="12.9807" lon="77.7407"/>
+  <node id="14" lat="12.9807" lon="77.7403"/>
+  <way id="11"><nd ref="11"/><nd ref="12"/><nd ref="13"/><nd ref="14"/><nd ref="11"/></way>
+  <relation id="30">
+    <member type="way" ref="10" role="outer"/>
+    <member type="way" ref="11" role="inner"/>
+    <tag k="type" v="multipolygon"/><tag k="building" v="apartments"/>
+    <tag k="building:levels" v="12"/>
+  </relation></osm>''',
+        )
+        neighborhood = parse_osm_neighborhood(payload, BOUNDARY, "https://example.com/osm")
+        self.assertEqual(len(neighborhood.buildings), 1)
+        self.assertEqual(len(neighborhood.buildings[0].inner_rings), 1)
+
     def test_offline_request_uses_cached_osm_without_network(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             cache_path = Path(directory) / "snapshot.osm"

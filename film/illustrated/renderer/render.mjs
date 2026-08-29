@@ -31,7 +31,21 @@ function project(scene, point) {
   return [east, north];
 }
 
-function shape(scene, ring) {
+function path(scene, ring) {
+  const p = new THREE.Path();
+  const projected = ring.map((point) => {
+    const [east, north] = project(scene, point);
+    return [east, -north];
+  });
+  projected.forEach(([east, north], index) => {
+    if (index === 0) p.moveTo(east, north);
+    else p.lineTo(east, north);
+  });
+  p.closePath();
+  return p;
+}
+
+function shape(scene, ring, innerRings = []) {
   const s = new THREE.Shape();
   // ShapeGeometry uses XY and is then rotated onto XZ. Negating north here
   // keeps polygon world-Z aligned with lines, points, and camera coordinates.
@@ -49,6 +63,9 @@ function shape(scene, ring) {
     else s.lineTo(east, north);
   });
   s.closePath();
+  for (const innerRing of innerRings) {
+    s.holes.push(path(scene, innerRing));
+  }
   return s;
 }
 
@@ -185,7 +202,12 @@ function buildObjects(scene, semanticColors) {
   });
   for (const building of scene.buildings) {
     const height = building.height_m || (building.floors ? building.floors * 3 : 10);
-    const extrude = new THREE.ExtrudeGeometry(shape(scene, building.footprint), {
+    const buildingShape = shape(
+      scene,
+      building.footprint,
+      building.inner_rings,
+    );
+    const extrude = new THREE.ExtrudeGeometry(buildingShape, {
       depth: height,
       bevelEnabled: false,
     });
