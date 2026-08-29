@@ -1,0 +1,15 @@
+{
+  "name": "openestates-illustrated-renderer",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Offline deterministic Three.js control-pass renderer for illustrated property films.",
+  "scripts": {
+    "test": "node --test semantic_colors.test.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.62.1",
+    "pngjs": "^7.0.0",
+    "three": "0.160.0"
+  }
+}
