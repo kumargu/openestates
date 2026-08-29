@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openestates.in/schemas/structural_plate_request.schema.json",
+  "title": "Structural plate render request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "property_id",
+    "boundary",
+    "boundary_source",
+    "camera"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "property_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "boundary": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/geo_point"
+      }
+    },
+    "boundary_source": {
+      "$ref": "#/$defs/evidence_source"
+    },
+    "camera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "camera_id",
+        "eye",
+        "target",
+        "vertical_fov_degrees",
+        "image_width",
+        "image_height",
+        "derivation"
+      ],
+      "properties": {
+        "camera_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eye": {
+          "$ref": "#/$defs/camera_point"
+        },
+        "target": {
+          "$ref": "#/$defs/camera_point"
+        },
+        "vertical_fov_degrees": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 180
+        },
+        "image_width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        },
+        "image_height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        },
+        "derivation": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "geo_point": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        }
+      ],
+      "items": false
+    },
+    "camera_point": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "items": false
+    },
+    "evidence_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_kind",
+        "source_url",
+        "license",
+        "attribution",
+        "retrieved_at"
+      ],
+      "properties": {
+        "source_kind": {
+          "type": "string",
+          "enum": [
+            "osm_open_data",
+            "reviewed_boundary"
+          ]
+        },
+        "source_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attribution": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retrieved_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_ref": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
