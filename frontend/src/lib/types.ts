@@ -468,11 +468,15 @@ export type MapPresentation = "immersive_3d" | "readable_2d";
 
 export type MapLayerExperience = {
   kind: string;
+  tourMode?: "center_out_and_back" | "end_to_end";
   distanceEachDirectionM: number;
   waypointSpacingM: number;
+  overviewDwellMs?: number;
   dwellMs: number;
   curveDwellMs: number;
   sideRoadDwellMs: number;
+  lookTowardAnchor?: boolean;
+  anchorDwellMs?: number;
   cameraAltitudeM: number;
   cameraRangeM: number;
   cameraTilt: number;

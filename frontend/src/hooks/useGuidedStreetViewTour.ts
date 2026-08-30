@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { loadGoogleStreetViewLibrary } from "../lib/googleMaps3d.ts";
 import type { MapLayerExperience } from "../lib/types.ts";
-import type { CorridorTourWaypoint } from "../lib/arrivalMapProjection.ts";
+import type {
+  CorridorTourMode,
+  CorridorTourWaypoint,
+} from "../lib/arrivalMapProjection.ts";
 
 type StreetViewLink = {
   heading: number;
@@ -77,10 +80,17 @@ export function shouldReorientStreetView(currentHeading: number, nextHeading: nu
   return headingDistance(currentHeading, nextHeading) >= CURVE_THRESHOLD_DEGREES;
 }
 
-export function streetViewPlayback(frames: StreetViewFrame[]): StreetViewFrame[] {
+export function streetViewPlayback(
+  frames: StreetViewFrame[],
+  tourMode: CorridorTourMode = "center_out_and_back",
+): StreetViewFrame[] {
   if (frames.length === 0) return [];
   const sorted = frames.slice().sort((left, right) =>
     left.waypoint.offsetM - right.waypoint.offsetM);
+  if (tourMode === "end_to_end") {
+    return sorted.filter((frame, index) =>
+      index === 0 || frame.pano !== sorted[index - 1].pano);
+  }
   const center = sorted.reduce((nearest, frame) =>
     Math.abs(frame.waypoint.offsetM) < Math.abs(nearest.waypoint.offsetM)
       ? frame
@@ -122,6 +132,17 @@ function waitFor(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
+export function streetViewAnchorHeading(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number },
+): number {
+  const latitudeScale = 110_570;
+  const longitudeScale = 111_320 * Math.cos((from.latitude * Math.PI) / 180);
+  const east = (to.longitude - from.longitude) * longitudeScale;
+  const north = (to.latitude - from.latitude) * latitudeScale;
+  return normalizeHeading(Math.atan2(east, north) * 180 / Math.PI);
+}
+
 async function loadFrames(
   library: StreetViewLibrary,
   waypoints: CorridorTourWaypoint[],
@@ -147,6 +168,7 @@ async function loadFrames(
 
 type GuidedStreetViewTourOptions = {
   active: boolean;
+  anchor: { latitude: number; longitude: number };
   containerRef: RefObject<HTMLDivElement | null>;
   experience: MapLayerExperience | null;
   waypoints: CorridorTourWaypoint[];
@@ -154,6 +176,7 @@ type GuidedStreetViewTourOptions = {
 
 export function useGuidedStreetViewTour({
   active,
+  anchor,
   containerRef,
   experience,
   waypoints,
@@ -161,6 +184,8 @@ export function useGuidedStreetViewTour({
   const panoramaRef = useRef<StreetViewPanorama | null>(null);
   const tourRunRef = useRef(0);
   const [ready, setReady] = useState(false);
+  const anchorLatitude = anchor.latitude;
+  const anchorLongitude = anchor.longitude;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -196,7 +221,8 @@ export function useGuidedStreetViewTour({
       waitFor(experience.transitionMs),
     ]).then(([{ frames, library }]) => {
       if (tourRunRef.current !== runId || frames.length === 0) return;
-      const playback = streetViewPlayback(frames);
+      const tourMode = experience.tourMode ?? "center_out_and_back";
+      const playback = streetViewPlayback(frames, tourMode);
       const first = playback[0];
       if (!first) return;
       const panorama = new library.StreetViewPanorama(container, {
@@ -220,6 +246,12 @@ export function useGuidedStreetViewTour({
 
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       const seenJunctions = new Set<string>();
+      const anchorFrame = experience.lookTowardAnchor
+        ? playback.reduce((nearest, frame) =>
+          Math.abs(frame.waypoint.offsetM) < Math.abs(nearest.waypoint.offsetM)
+            ? frame
+            : nearest)
+        : null;
       let cameraHeading = first.waypoint.heading;
       void (async () => {
         for (let index = 0; index < playback.length; index += 1) {
@@ -239,6 +271,27 @@ export function useGuidedStreetViewTour({
             cameraHeading = roadHeading;
           }
 
+          if (
+            anchorFrame?.pano === frame.pano
+            && experience.anchorDwellMs
+          ) {
+            await waitFor(Math.round(experience.dwellMs / 2));
+            if (tourRunRef.current !== runId) return;
+            panorama.setPov({
+              heading: streetViewAnchorHeading(frame.waypoint, {
+                latitude: anchorLatitude,
+                longitude: anchorLongitude,
+              }),
+              pitch: 0,
+            });
+            await waitFor(experience.anchorDwellMs);
+            if (tourRunRef.current !== runId) return;
+            panorama.setPov({ heading: roadHeading, pitch: 0 });
+            cameraHeading = roadHeading;
+            await waitFor(Math.round(experience.dwellMs / 2));
+            continue;
+          }
+
           const curve = next
             ? headingDistance(frame.waypoint.heading, next.waypoint.heading)
               >= CURVE_THRESHOLD_DEGREES
@@ -250,7 +303,11 @@ export function useGuidedStreetViewTour({
           await waitFor(curve || turnaround ? experience.curveDwellMs : experience.dwellMs);
           if (tourRunRef.current !== runId) return;
 
-          if (frame.links.length >= 3 && !seenJunctions.has(frame.pano)) {
+          if (
+            tourMode !== "end_to_end"
+            && frame.links.length >= 3
+            && !seenJunctions.has(frame.pano)
+          ) {
             const sideHeading = sideRoadHeading(frame.links, frame.waypoint.heading);
             if (sideHeading !== null) {
               seenJunctions.add(frame.pano);
@@ -282,7 +339,14 @@ export function useGuidedStreetViewTour({
       panoramaRef.current = null;
       container.replaceChildren();
     };
-  }, [active, containerRef, experience, waypoints]);
+  }, [
+    active,
+    anchorLatitude,
+    anchorLongitude,
+    containerRef,
+    experience,
+    waypoints,
+  ]);
 
   return active && ready;
 }

@@ -134,10 +134,17 @@ export function PropertyArrivalMap({ context }: Props) {
     if (activeView !== "approach" || activeCameraMode !== "home") return undefined;
     const timeout = window.setTimeout(
       () => setCameraMode("evidence"),
-      roadExperience?.dwellMs ?? DEFAULT_APPROACH_DWELL_MS,
+      roadExperience?.overviewDwellMs
+        ?? roadExperience?.dwellMs
+        ?? DEFAULT_APPROACH_DWELL_MS,
     );
     return () => window.clearTimeout(timeout);
-  }, [activeCameraMode, activeView, roadExperience?.dwellMs]);
+  }, [
+    activeCameraMode,
+    activeView,
+    roadExperience?.dwellMs,
+    roadExperience?.overviewDwellMs,
+  ]);
 
   useEffect(() => {
     if (!expanded) return undefined;

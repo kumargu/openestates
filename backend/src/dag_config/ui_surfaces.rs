@@ -120,11 +120,19 @@ pub struct UiSurfaceLayerRule {
 #[serde(rename_all = "camelCase")]
 pub struct UiSurfaceLayerExperienceConfig {
     pub kind: String,
+    #[serde(default)]
+    pub tour_mode: Option<String>,
     pub distance_each_direction_m: u32,
     pub waypoint_spacing_m: u32,
+    #[serde(default)]
+    pub overview_dwell_ms: Option<u32>,
     pub dwell_ms: u32,
     pub curve_dwell_ms: u32,
     pub side_road_dwell_ms: u32,
+    #[serde(default)]
+    pub look_toward_anchor: bool,
+    #[serde(default)]
+    pub anchor_dwell_ms: Option<u32>,
     pub camera_altitude_m: f64,
     pub camera_range_m: f64,
     pub camera_tilt: f64,
@@ -272,12 +280,20 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
             }
             if let Some(experience) = layer.experience.as_ref() {
                 let finite_positive = |value: f64| value.is_finite() && value > 0.0;
+                let valid_tour_mode = experience
+                    .tour_mode
+                    .as_deref()
+                    .is_none_or(|mode| matches!(mode, "center_out_and_back" | "end_to_end"));
                 if experience.kind.trim().is_empty()
+                    || !valid_tour_mode
                     || experience.distance_each_direction_m == 0
                     || experience.waypoint_spacing_m == 0
+                    || experience.overview_dwell_ms == Some(0)
                     || experience.dwell_ms == 0
                     || experience.curve_dwell_ms == 0
                     || experience.side_road_dwell_ms == 0
+                    || experience.anchor_dwell_ms == Some(0)
+                    || (experience.look_toward_anchor && experience.anchor_dwell_ms.is_none())
                     || experience.transition_ms == 0
                     || !finite_positive(experience.camera_altitude_m)
                     || !finite_positive(experience.camera_range_m)
@@ -388,7 +404,14 @@ mod tests {
         );
         let experience = approach_road.experience.as_ref().expect("road experience");
         assert_eq!(experience.kind, "street_view_tour");
-        assert_eq!(experience.distance_each_direction_m, 300);
+        assert_eq!(experience.tour_mode.as_deref(), Some("end_to_end"));
+        assert_eq!(experience.distance_each_direction_m, 350);
+        assert_eq!(experience.waypoint_spacing_m, 65);
+        assert_eq!(experience.overview_dwell_ms, Some(1800));
+        assert_eq!(experience.dwell_ms, 3200);
+        assert!(experience.look_toward_anchor);
+        assert_eq!(experience.anchor_dwell_ms, Some(5000));
+        assert_eq!(experience.transition_ms, 4200);
     }
 
     #[test]

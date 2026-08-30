@@ -18,6 +18,8 @@ export type CorridorTourWaypoint = CorridorCameraFocus & {
   offsetM: number;
 };
 
+export type CorridorTourMode = "center_out_and_back" | "end_to_end";
+
 type CorridorProjection = CorridorCameraFocus & {
   coordinates: [number, number][];
   segmentLengthsM: number[];
@@ -154,20 +156,13 @@ export function corridorTourWaypoints(
   home: { latitude: number; longitude: number },
   distanceEachDirectionM: number,
   waypointSpacingM: number,
+  tourMode: CorridorTourMode = "center_out_and_back",
 ): CorridorTourWaypoint[] {
   const projection = nearestCorridorProjection(lines, home);
   if (!projection || distanceEachDirectionM <= 0 || waypointSpacingM <= 0) return [];
-  const offsets = new Set<number>([0]);
-  for (
-    let distance = waypointSpacingM;
-    distance < distanceEachDirectionM;
-    distance += waypointSpacingM
-  ) {
-    offsets.add(distance);
-    offsets.add(-distance);
-  }
-  offsets.add(distanceEachDirectionM);
-  offsets.add(-distanceEachDirectionM);
+  const offsets = tourMode === "end_to_end"
+    ? fullCorridorOffsets(projection, waypointSpacingM)
+    : boundedCorridorOffsets(distanceEachDirectionM, waypointSpacingM);
 
   return [...offsets]
     .sort((left, right) => left - right)
@@ -185,6 +180,45 @@ export function corridorTourWaypoints(
     })
     .filter((waypoint, index, waypoints) => index === 0
       || Math.abs(waypoint.offsetM - waypoints[index - 1].offsetM) >= 1);
+}
+
+function boundedCorridorOffsets(
+  distanceEachDirectionM: number,
+  waypointSpacingM: number,
+): Set<number> {
+  const offsets = new Set<number>([0]);
+  for (
+    let distance = waypointSpacingM;
+    distance < distanceEachDirectionM;
+    distance += waypointSpacingM
+  ) {
+    offsets.add(distance);
+    offsets.add(-distance);
+  }
+  offsets.add(distanceEachDirectionM);
+  offsets.add(-distanceEachDirectionM);
+  return offsets;
+}
+
+function fullCorridorOffsets(
+  projection: CorridorProjection,
+  waypointSpacingM: number,
+): Set<number> {
+  const endpointOffsets = [
+    (0 - projection.distanceAlongM) / projection.directionSign,
+    (projection.totalDistanceM - projection.distanceAlongM) / projection.directionSign,
+  ].sort((left, right) => left - right);
+  const startOffset = endpointOffsets[0] ?? 0;
+  const endOffset = endpointOffsets[1] ?? 0;
+  const offsets = new Set<number>([startOffset, 0, endOffset]);
+  for (
+    let offset = startOffset + waypointSpacingM;
+    offset < endOffset;
+    offset += waypointSpacingM
+  ) {
+    offsets.add(offset);
+  }
+  return offsets;
 }
 
 function nearestCorridorProjection(

@@ -393,9 +393,6 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       : null,
     [accessLines, homeLatitude, homeLongitude, roadTourActive],
   );
-  const cameraCenter = roadFocus ?? cameraCenterForMode(cameraMode, home, viewport);
-  const cameraLatitude = cameraCenter.latitude;
-  const cameraLongitude = cameraCenter.longitude;
   const roadWaypoints = useMemo(
     () => roadFocus && roadExperience
       ? corridorTourWaypoints(
@@ -403,12 +400,20 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         { latitude: homeLatitude, longitude: homeLongitude },
         roadExperience.distanceEachDirectionM,
         roadExperience.waypointSpacingM,
+        roadExperience.tourMode,
       )
       : [],
     [accessLines, homeLatitude, homeLongitude, roadExperience, roadFocus],
   );
+  const roadLandingFocus = roadExperience?.tourMode === "end_to_end"
+    ? roadWaypoints[0] ?? roadFocus
+    : roadFocus;
+  const cameraCenter = roadLandingFocus ?? cameraCenterForMode(cameraMode, home, viewport);
+  const cameraLatitude = cameraCenter.latitude;
+  const cameraLongitude = cameraCenter.longitude;
   const streetViewReady = useGuidedStreetViewTour({
-    active: Boolean(roadFocus),
+    active: Boolean(roadLandingFocus),
+    anchor: { latitude: homeLatitude, longitude: homeLongitude },
     containerRef: streetViewContainerRef,
     experience: roadExperience,
     waypoints: roadWaypoints,
@@ -475,23 +480,23 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     const map = mapRef.current;
     if (!map || !ready || terrainElevationRef.current === null) return;
     const evidenceFocused = cameraMode === "evidence";
-    const range = roadFocus && roadExperience
+    const range = roadLandingFocus && roadExperience
       ? roadExperience.cameraRangeM
       : evidenceFocused
       ? evidenceCameraRange(viewport.radiusKm)
       : HOME_PORTRAIT_RANGE_M;
-    const tilt = roadFocus && roadExperience
+    const tilt = roadLandingFocus && roadExperience
       ? roadExperience.cameraTilt
       : evidenceFocused
       ? evidenceCameraTilt(viewport.radiusKm)
       : HOME_PORTRAIT_TILT;
-    const heading = roadFocus?.heading ?? DEFAULT_HEADING;
+    const heading = roadLandingFocus?.heading ?? DEFAULT_HEADING;
     const moveId = cameraMoveRef.current + 1;
     cameraMoveRef.current = moveId;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const durationMillis = reducedMotion
       ? 0
-      : roadFocus && roadExperience
+      : roadLandingFocus && roadExperience
       ? roadExperience.transitionMs
       : evidenceFocused
       ? EVIDENCE_CAMERA_DURATION_MS
@@ -499,8 +504,8 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     void loadGoogleTerrainElevation(cameraLatitude, cameraLongitude)
       .then((terrainElevation) => {
         if (cameraMoveRef.current !== moveId || mapRef.current !== map) return;
-        const camera = roadFocus && roadExperience
-          ? roadCamera(roadFocus, terrainElevation, roadExperience)
+        const camera = roadLandingFocus && roadExperience
+          ? roadCamera(roadLandingFocus, terrainElevation, roadExperience)
           : targetCamera(
             cameraLatitude,
             cameraLongitude,
@@ -511,7 +516,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           );
         return map.flyCameraTo({ endCamera: camera, durationMillis })
           .then(() => {
-            if (cameraMoveRef.current === moveId && !roadFocus) {
+            if (cameraMoveRef.current === moveId && !roadLandingFocus) {
               settleCameraFraming(map, camera);
             }
           });
@@ -528,7 +533,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     accessLines,
     ready,
     roadExperience,
-    roadFocus,
+    roadLandingFocus,
     roadTourActive,
     viewport.radiusKm,
   ]);
