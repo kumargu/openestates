@@ -26,6 +26,7 @@ import {
   shouldReorientStreetView,
   sideRoadHeading,
   streetViewAnchorHeading,
+  streetViewAnchorFrame,
   streetViewPlayback,
   type StreetViewFrame,
 } from "../src/hooks/useGuidedStreetViewTour.ts";
@@ -217,10 +218,11 @@ test("approach-road camera targets the nearest road segment and looks along it",
   assert.equal(waypoints.some((waypoint) => waypoint.offsetM === -150), true);
   assert.ok(waypoints.every((waypoint) => waypoint.heading > 10 && waypoint.heading < 20));
 
-  const fullRoad = corridorTourWaypoints([road], home, 150, 60, "end_to_end");
+  const fullRoad = corridorTourWaypoints([road], home, 150, 60, "end_to_end", [35]);
   assert.ok(Math.abs(fullRoad[0].latitude - 12.98) < 0.0001);
   assert.ok(Math.abs(fullRoad.at(-1)!.latitude - 12.984) < 0.0001);
   assert.equal(fullRoad.some((waypoint) => waypoint.offsetM === 0), true);
+  assert.equal(fullRoad.some((waypoint) => waypoint.offsetM === 35), true);
 });
 
 test("guided road playback covers both directions and returns to its start", () => {
@@ -262,6 +264,23 @@ test("end-to-end road playback passes the gate once without reversing", () => {
     { latitude: 12.982, longitude: 77.742 },
   );
   assert.ok(gateHeading > 260 && gateHeading < 280);
+});
+
+test("guided road playback can pause just beyond the gate", () => {
+  const frames = [-60, 0, 30, 60].map((offsetM) => ({
+    links: [],
+    pano: `pano-${offsetM}`,
+    waypoint: {
+      latitude: 12.982,
+      longitude: 77.7435,
+      heading: 15,
+      offsetM,
+    },
+  } satisfies StreetViewFrame));
+
+  assert.equal(streetViewAnchorFrame(frames)?.waypoint.offsetM, 0);
+  assert.equal(streetViewAnchorFrame(frames, 35)?.waypoint.offsetM, 30);
+  assert.equal(streetViewAnchorFrame([], 35), null);
 });
 
 test("guided road playback recognizes a side-road view", () => {

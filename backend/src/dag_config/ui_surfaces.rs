@@ -133,6 +133,10 @@ pub struct UiSurfaceLayerExperienceConfig {
     pub look_toward_anchor: bool,
     #[serde(default)]
     pub anchor_dwell_ms: Option<u32>,
+    #[serde(default)]
+    pub anchor_look_ahead_m: Option<u32>,
+    #[serde(default)]
+    pub anchor_pitch: Option<f64>,
     pub camera_altitude_m: f64,
     pub camera_range_m: f64,
     pub camera_tilt: f64,
@@ -294,6 +298,9 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                     || experience.side_road_dwell_ms == 0
                     || experience.anchor_dwell_ms == Some(0)
                     || (experience.look_toward_anchor && experience.anchor_dwell_ms.is_none())
+                    || experience
+                        .anchor_pitch
+                        .is_some_and(|pitch| !pitch.is_finite() || !(-90.0..=90.0).contains(&pitch))
                     || experience.transition_ms == 0
                     || !finite_positive(experience.camera_altitude_m)
                     || !finite_positive(experience.camera_range_m)
@@ -408,9 +415,12 @@ mod tests {
         assert_eq!(experience.distance_each_direction_m, 350);
         assert_eq!(experience.waypoint_spacing_m, 65);
         assert_eq!(experience.overview_dwell_ms, Some(1800));
-        assert_eq!(experience.dwell_ms, 3200);
+        assert_eq!(experience.dwell_ms, 2500);
+        assert_eq!(experience.curve_dwell_ms, 4200);
         assert!(experience.look_toward_anchor);
         assert_eq!(experience.anchor_dwell_ms, Some(5000));
+        assert_eq!(experience.anchor_look_ahead_m, Some(35));
+        assert_eq!(experience.anchor_pitch, Some(6.0));
         assert_eq!(experience.transition_ms, 4200);
     }
 

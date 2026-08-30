@@ -477,6 +477,8 @@ export type MapLayerExperience = {
   sideRoadDwellMs: number;
   lookTowardAnchor?: boolean;
   anchorDwellMs?: number;
+  anchorLookAheadM?: number;
+  anchorPitch?: number;
   cameraAltitudeM: number;
   cameraRangeM: number;
   cameraTilt: number;

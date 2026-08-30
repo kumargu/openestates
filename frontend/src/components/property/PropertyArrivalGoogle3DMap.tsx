@@ -401,6 +401,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         roadExperience.distanceEachDirectionM,
         roadExperience.waypointSpacingM,
         roadExperience.tourMode,
+        roadExperience.anchorLookAheadM === undefined
+          ? []
+          : [roadExperience.anchorLookAheadM],
       )
       : [],
     [accessLines, homeLatitude, homeLongitude, roadExperience, roadFocus],

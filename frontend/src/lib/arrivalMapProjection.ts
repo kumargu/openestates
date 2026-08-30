@@ -157,12 +157,14 @@ export function corridorTourWaypoints(
   distanceEachDirectionM: number,
   waypointSpacingM: number,
   tourMode: CorridorTourMode = "center_out_and_back",
+  additionalOffsetsM: number[] = [],
 ): CorridorTourWaypoint[] {
   const projection = nearestCorridorProjection(lines, home);
   if (!projection || distanceEachDirectionM <= 0 || waypointSpacingM <= 0) return [];
   const offsets = tourMode === "end_to_end"
     ? fullCorridorOffsets(projection, waypointSpacingM)
     : boundedCorridorOffsets(distanceEachDirectionM, waypointSpacingM);
+  additionalOffsetsM.forEach((offsetM) => offsets.add(offsetM));
 
   return [...offsets]
     .sort((left, right) => left - right)

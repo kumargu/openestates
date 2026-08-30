@@ -143,6 +143,18 @@ export function streetViewAnchorHeading(
   return normalizeHeading(Math.atan2(east, north) * 180 / Math.PI);
 }
 
+export function streetViewAnchorFrame(
+  frames: StreetViewFrame[],
+  lookAheadM = 0,
+): StreetViewFrame | null {
+  if (frames.length === 0) return null;
+  return frames.reduce((nearest, frame) =>
+    Math.abs(frame.waypoint.offsetM - lookAheadM)
+      < Math.abs(nearest.waypoint.offsetM - lookAheadM)
+      ? frame
+      : nearest);
+}
+
 async function loadFrames(
   library: StreetViewLibrary,
   waypoints: CorridorTourWaypoint[],
@@ -247,10 +259,7 @@ export function useGuidedStreetViewTour({
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       const seenJunctions = new Set<string>();
       const anchorFrame = experience.lookTowardAnchor
-        ? playback.reduce((nearest, frame) =>
-          Math.abs(frame.waypoint.offsetM) < Math.abs(nearest.waypoint.offsetM)
-            ? frame
-            : nearest)
+        ? streetViewAnchorFrame(playback, experience.anchorLookAheadM)
         : null;
       let cameraHeading = first.waypoint.heading;
       void (async () => {
@@ -282,7 +291,7 @@ export function useGuidedStreetViewTour({
                 latitude: anchorLatitude,
                 longitude: anchorLongitude,
               }),
-              pitch: 0,
+              pitch: experience.anchorPitch ?? 0,
             });
             await waitFor(experience.anchorDwellMs);
             if (tourRunRef.current !== runId) return;
