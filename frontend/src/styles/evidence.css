@@ -873,6 +873,179 @@
   padding: 0.45rem 0.85rem;
 }
 
+.nearby-map-marker {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nearby-map-marker__visual {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  border-radius: 50%;
+  background: #5d6874;
+  box-shadow: 0 2px 8px rgba(35, 31, 28, 0.16);
+  transition: width 140ms ease, height 140ms ease, background-color 140ms ease;
+}
+
+.nearby-map-marker svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nearby-map-marker--home {
+  color: var(--color-cool-deep, #3f5c8a);
+}
+
+.nearby-map-marker--home svg {
+  width: 31px;
+  height: 39px;
+  overflow: visible;
+  filter: drop-shadow(0 2px 4px rgba(35, 31, 28, 0.2));
+}
+
+.nearby-map-marker--home svg path {
+  fill: rgba(255, 255, 255, 0.98);
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
+
+.nearby-map-marker--home svg circle {
+  fill: currentColor;
+  stroke: #fff;
+  stroke-width: 1.2;
+}
+
+.nearby-map-marker--red_flags .nearby-map-marker__visual {
+  background: #b2303d;
+}
+
+.nearby-map-marker--place.is-selected .nearby-map-marker__visual {
+  width: 36px;
+  height: 36px;
+  border-width: 3px;
+  background: #c45c26;
+  box-shadow: 0 0 0 2px rgba(196, 92, 38, 0.3), 0 3px 10px rgba(35, 31, 28, 0.2);
+}
+
+.nearby-map-marker--cluster .nearby-map-marker__visual {
+  width: 34px;
+  height: 34px;
+  background: rgba(42, 42, 42, 0.9);
+}
+
+.nearby-map-marker:focus-visible .nearby-map-marker__visual {
+  outline: 3px solid rgba(196, 92, 38, 0.45);
+  outline-offset: 2px;
+}
+
+.nearby-map-metro-badge {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid #fff;
+  border-radius: 9px;
+  background: #526d91;
+  color: #fff;
+  pointer-events: none;
+  box-shadow: 0 2px 9px rgba(35, 31, 28, 0.2);
+}
+
+.nearby-map-metro-badge svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nearby-map-metro-badge--purple { background: #7651a8; }
+.nearby-map-metro-badge--green { background: #2f8a58; }
+.nearby-map-metro-badge--yellow { background: #c69e00; color: #251f0d; }
+.nearby-map-metro-badge--pink { background: #d85d8d; }
+.nearby-map-metro-badge--blue { background: #397fb5; }
+.nearby-map-metro-badge--orange { background: #d87932; }
+
+.nearby-map-popup .maplibregl-popup-content {
+  padding: 0;
+  border: 1px solid rgba(35, 31, 28, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(35, 31, 28, 0.16);
+}
+
+.nearby-map-popup__body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  max-width: 240px;
+  padding: 0.55rem 0.6rem;
+  color: var(--color-text-primary, #2a2623);
+}
+
+.nearby-map-popup__copy {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.nearby-map-popup__body strong {
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.nearby-map-popup__body span {
+  color: var(--color-text-muted, #888);
+  font-size: 0.64rem;
+  line-height: 1.3;
+}
+
+.nearby-map-popup__pin {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 1.45rem;
+  height: 1.45rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(38, 35, 32, 0.05);
+  color: #6b625a;
+  cursor: pointer;
+}
+
+.nearby-map-popup__pin:hover,
+.nearby-map-popup__pin.is-filled {
+  color: #2f4f72;
+  background: rgba(91, 127, 176, 0.14);
+}
+
+.nearby-map-popup__pin:focus-visible {
+  outline: 3px solid rgba(196, 92, 38, 0.38);
+  outline-offset: 2px;
+}
+
 .nearby-map-popover {
   display: grid;
   grid-template-columns: minmax(0, auto) 28px;
@@ -953,6 +1126,11 @@
 
 .nearby-map-popover__note[aria-pressed="true"] {
   background: rgba(91, 127, 176, 0.16);
+}
+
+.nearby-map .maplibregl-ctrl-attrib {
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 0.58rem;
 }
 
 .nearby-map-selection {
@@ -1115,6 +1293,10 @@
     top: 0.6rem;
     left: 0.6rem;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nearby-map-marker__visual { transition: none; }
 }
 
 @media (max-width: 720px) {

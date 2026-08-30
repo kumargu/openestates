@@ -20,11 +20,13 @@ import {
   availableLayers,
   buildNumberedPlaces,
   buildPlateViewport,
+  cameraModeForStorySelection,
   clusterClosePlaces,
   compactPlaceLabel,
   filterPlacesByScale,
   layerLabel,
   linesForLayer,
+  mapPresentationForStory,
   metroLinesNearEvidence,
   metroStationsAroundHome,
   nearestComparisonHomes,
@@ -49,10 +51,10 @@ import { useNotebook } from "../../hooks/useNotebook.ts";
 
 const loadAroundThisHomeMap = async (presentation: MapPresentation) => {
   const module = presentation === "readable_2d"
-    ? await import("./AroundThisHomeGoogle2DMap.tsx")
+    ? await import("./AroundThisHomeMap.tsx")
     : await import("./AroundThisHomeGoogle3DMap.tsx");
-  const component = "AroundThisHomeGoogle2DMap" in module
-    ? module.AroundThisHomeGoogle2DMap
+  const component = "AroundThisHomeMap" in module
+    ? module.AroundThisHomeMap
     : module.AroundThisHomeGoogle3DMap;
   return { default: component };
 };
@@ -286,7 +288,9 @@ function AroundThisHomePlateInner({
   const [openedClusterId, setOpenedClusterId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [cameraMode, setCameraMode] = useState<NearbyCameraMode>(() =>
-    focusedStory ? "evidence" : "home");
+    focusedStory
+      ? cameraModeForStorySelection(focusedStory, context.layers ?? [])
+      : "home");
   const [selectionDismissed, setSelectionDismissed] = useState(false);
 
   useEffect(() => {
@@ -346,21 +350,22 @@ function AroundThisHomePlateInner({
   const layerExperience = story.kind === "layer"
     ? context.layers?.find((layer) => layer.id === story.layer)?.experience
     : undefined;
+  useEffect(() => {
+    if (!terrainCorridor || cameraMode !== "home") return undefined;
+    const delayMs = layerExperience?.dwellMs ?? 3_600;
+    const timeout = window.setTimeout(() => setCameraMode("evidence"), delayMs);
+    return () => window.clearTimeout(timeout);
+  }, [cameraMode, layerExperience?.dwellMs, terrainCorridor]);
   const activeRedFlagLines = useMemo(
     () => redFlagsFocused ? activeStoryLines : [],
     [activeStoryLines, redFlagsFocused],
   );
   const waterFocused = story.kind === "water";
-  const mapPresentation: MapPresentation = cameraMode === "home"
-    ? "immersive_3d"
-    : waterFocused
-    ? "readable_2d"
-    : searchMatchesFocused
-    ? "immersive_3d"
-    : story.kind === "layer"
-    ? context.layers?.find((layer) => layer.id === story.layer)?.mapPresentation
-      ?? "immersive_3d"
-    : "immersive_3d";
+  const mapPresentation: MapPresentation = mapPresentationForStory(
+    story,
+    cameraMode,
+    context.layers ?? [],
+  );
   const activeMetroLines = useMemo(
     () => context.metro_lines ?? [],
     [context.metro_lines],
@@ -473,12 +478,22 @@ function AroundThisHomePlateInner({
 
   function selectStory(next: PlateStory) {
     setStory(next);
-    setCameraMode("evidence");
+    setCameraMode(cameraModeForStorySelection(next, context.layers ?? []));
     setSelectedId(null);
     setSelectedLineId(null);
     setOpenedClusterId(null);
     setSelectionDismissed(false);
     setScale(scaleForStory(next, focus, context.places));
+  }
+
+  function returnToOverview() {
+    setStory(defaultStory);
+    setCameraMode("home");
+    setSelectedId(null);
+    setSelectedLineId(null);
+    setOpenedClusterId(null);
+    setSelectionDismissed(false);
+    setScale(scaleForStory(defaultStory, focus, context.places));
   }
 
   function selectCluster(cluster: PlaceCluster) {
@@ -596,10 +611,10 @@ function AroundThisHomePlateInner({
                     latitude: home.latitude,
                     longitude: home.longitude,
                     name: context.home.name,
-                    boundary: context.home.boundary,
+                    boundary: terrainCorridor ? context.home.boundary : undefined,
                   }}
-                  places={mapPresentation === "readable_2d" ? numbered : singles}
-                  clusters={mapPresentation === "readable_2d" ? [] : clusters}
+                  places={singles}
+                  clusters={clusters}
                   selectedId={selected?.id ?? null}
                   viewport={viewport}
                   metroLines={visibleMetroLines}
@@ -625,7 +640,7 @@ function AroundThisHomePlateInner({
                   onSelectAccessLine={selectAccessLine}
                   onSelectRedFlagLine={selectRedFlagLine}
                   onRememberPlace={rememberPlace}
-                  onBackToHome={() => setCameraMode("home")}
+                  onBackToHome={returnToOverview}
                   onToggleExpanded={() => setExpanded((current) => !current)}
                 />
               </NearbyMapBoundary>

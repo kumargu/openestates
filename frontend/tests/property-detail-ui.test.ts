@@ -7,6 +7,7 @@ import {
 } from "../src/lib/api.ts";
 import {
   availableLayers,
+  cameraModeForStorySelection,
   clusterClosePlaces,
   corridorCameraFocus,
   corridorTourWaypoints,
@@ -14,6 +15,7 @@ import {
   hasAroundThisHomePlate,
   layerLabel,
   linesForLayer,
+  mapPresentationForStory,
   metroStationsAroundHome,
   placeMatchesProofFocus,
   scaleForStory,
@@ -131,6 +133,28 @@ test("generic map layers expose their projected line geometry", () => {
 
   assert.deepEqual(linesForLayer(context, "approach_road"), [road]);
   assert.deepEqual(linesForLayer(context, "schools"), []);
+});
+
+test("neighborhood map keeps overview in 2D and reserves 3D for explicit stories", () => {
+  const layers = [
+    { id: "metro", label: "Metro", mapPresentation: "immersive_3d" as const },
+    {
+      id: "approach_road",
+      label: "Approach road",
+      renderKind: "terrain_corridor",
+      mapPresentation: "immersive_3d" as const,
+    },
+    { id: "hospitals", label: "Hospitals", mapPresentation: "readable_2d" as const },
+  ];
+  const metro = { kind: "layer", layer: "metro" } as const;
+  const approachRoad = { kind: "layer", layer: "approach_road" } as const;
+  const hospitals = { kind: "layer", layer: "hospitals" } as const;
+
+  assert.equal(mapPresentationForStory(metro, "home", layers), "readable_2d");
+  assert.equal(mapPresentationForStory(metro, "evidence", layers), "immersive_3d");
+  assert.equal(mapPresentationForStory(approachRoad, "home", layers), "immersive_3d");
+  assert.equal(mapPresentationForStory(hospitals, "evidence", layers), "readable_2d");
+  assert.equal(cameraModeForStorySelection(approachRoad, layers), "home");
 });
 
 test("approach-road camera targets the nearest road segment and looks along it", () => {

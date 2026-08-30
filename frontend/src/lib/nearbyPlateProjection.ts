@@ -1,6 +1,8 @@
 import type {
+  MapLayerMeta,
   MapOverlayLine,
   MapComparisonHome,
+  MapPresentation,
   MapPlacePin,
   PropertyMapContext,
   ProofFocus,
@@ -13,7 +15,32 @@ export type PlateStory =
   | { kind: "matches" }
   | { kind: "water" };
 
+export function cameraModeForStorySelection(
+  story: PlateStory,
+  layers: MapLayerMeta[],
+): NearbyCameraMode {
+  if (story.kind !== "layer") return "evidence";
+  const layer = layers.find((candidate) => candidate.id === story.layer);
+  return layer?.renderKind === "terrain_corridor" ? "home" : "evidence";
+}
+
+export function mapPresentationForStory(
+  story: PlateStory,
+  cameraMode: NearbyCameraMode,
+  layers: MapLayerMeta[],
+): MapPresentation {
+  if (story.kind === "matches") return "immersive_3d";
+  if (story.kind === "water") return "readable_2d";
+  const layer = layers.find((candidate) => candidate.id === story.layer);
+  if (layer?.renderKind === "terrain_corridor") return "immersive_3d";
+  if (cameraMode === "home") return "readable_2d";
+  return layer?.mapPresentation ?? "readable_2d";
+}
+
 export const PLATE_MAX_MAP_LABEL_LENGTH = 22;
+
+/** Quiet OpenStreetMap-backed overview; immersive evidence remains on Google 3D. */
+export const NEARBY_MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 
 const NEARBY_RADIUS_STEPS_KM = [0.35, 0.5, 0.8, 1.2, 1.8, 2.5] as const;
 const AREA_RADIUS_STEPS_KM = [3, 5, 8, 10, 15] as const;

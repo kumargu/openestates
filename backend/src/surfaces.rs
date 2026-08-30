@@ -676,7 +676,7 @@ fn features_for_layer(
                                 anchor_coords,
                             )
                         } else {
-                            (anchor_coords, CoordinateQuality::Exact)
+                            (None, CoordinateQuality::Missing)
                         };
                     FactFeatureSource {
                         fact,
@@ -757,7 +757,7 @@ fn feature_candidate_from_fact(
         .and_then(|url| place_index.by_source_url.get(url))
         .or_else(|| place_from_edges(&parsed.name, edge_places));
     let place_coordinates = place.and_then(|place| place.coordinates);
-    let coordinates = place_coordinates.or(source.coordinates).or(anchor_coords)?;
+    let coordinates = place_coordinates.or(source.coordinates);
     let label = place
         .map(|place| place.label.clone())
         .filter(|label| !label.trim().is_empty())
@@ -771,14 +771,12 @@ fn feature_candidate_from_fact(
     let geometry = source
         .geometry
         .clone()
-        .unwrap_or_else(|| point_geometry(coordinates));
+        .or_else(|| coordinates.map(point_geometry))?;
     let distance_m = parsed.distance_km.map(km_to_meters).or_else(|| {
+        let (latitude, longitude) = coordinates?;
         let (anchor_lat, anchor_lng) = anchor_coords?;
         Some(km_to_meters(haversine_km(
-            anchor_lat,
-            anchor_lng,
-            coordinates.0,
-            coordinates.1,
+            anchor_lat, anchor_lng, latitude, longitude,
         )))
     });
     let rating = place.and_then(|place| place.rating).or(parsed.rating);
@@ -857,11 +855,11 @@ fn edge_target_entity_ids(
 
 fn edge_target_feature_coordinates(
     target_coords: Option<(f64, f64)>,
-    anchor_coords: Option<(f64, f64)>,
+    _anchor_coords: Option<(f64, f64)>,
 ) -> (Option<(f64, f64)>, CoordinateQuality) {
     match target_coords {
         Some(coords) => (Some(coords), CoordinateQuality::Exact),
-        None => (anchor_coords, CoordinateQuality::Approximate),
+        None => (None, CoordinateQuality::Missing),
     }
 }
 
@@ -2451,15 +2449,66 @@ mod tests {
     }
 
     #[test]
-    fn edge_target_coordinate_fallback_marks_anchor_as_approximate() {
+    fn unresolved_edge_target_does_not_inherit_anchor_coordinates() {
         assert_eq!(
             edge_target_feature_coordinates(Some((12.9, 77.7)), Some((12.98, 77.75))),
             (Some((12.9, 77.7)), CoordinateQuality::Exact)
         );
         assert_eq!(
             edge_target_feature_coordinates(None, Some((12.98, 77.75))),
-            (Some((12.98, 77.75)), CoordinateQuality::Approximate)
+            (None, CoordinateQuality::Missing)
         );
+    }
+
+    #[test]
+    fn unresolved_nearby_place_with_distance_is_not_projected_at_home() {
+        let fact = serving_fact(
+            "society:one",
+            "nearby_hospitals",
+            FactValue::Text("Aster Hospital (1.2 km, 4.7 rating)".to_string()),
+            Some("https://maps.google.com/?cid=unresolved"),
+        );
+        let layer = UiSurfaceLayerRule {
+            id: "hospitals".to_string(),
+            label: "Hospitals".to_string(),
+            fact_keys: vec!["nearby_hospitals".to_string()],
+            feature_labels: HashMap::new(),
+            edge_types: Vec::new(),
+            linked_entity_fact_keys: Vec::new(),
+            sort_priority_fact_keys: Vec::new(),
+            family: "access".to_string(),
+            relation_class: "access".to_string(),
+            render_kind: "pin".to_string(),
+            map_presentation: None,
+            experience: None,
+            icon: Some("hospital".to_string()),
+            sort: Some("distance".to_string()),
+            max_items: Some(3),
+            expanded_max_items: None,
+            spread_min_distance_km: None,
+            show_review_metrics: None,
+            include_name_markers: Vec::new(),
+            include_related_society_facts: false,
+            enabled_by_default: true,
+            rank: Some(1),
+        };
+
+        let candidate = feature_candidate_from_fact(
+            &layer,
+            FactFeatureSource {
+                fact: &fact,
+                entity_id: None,
+                coordinates: None,
+                geometry: None,
+                coordinate_quality: CoordinateQuality::Missing,
+                index: 0,
+            },
+            Some((12.98, 77.75)),
+            &ScenePlaceIndex::default(),
+            &[],
+        );
+
+        assert!(candidate.is_none());
     }
 
     fn serving_fact(
