@@ -1,5 +1,6 @@
 import type {
   MapOverlayLine,
+  MapComparisonHome,
   MapPlacePin,
   PropertyMapContext,
   ProofFocus,
@@ -9,6 +10,7 @@ export type PlateScaleMode = "nearby" | "area";
 export type NearbyCameraMode = "home" | "evidence";
 export type PlateStory =
   | { kind: "layer"; layer: string }
+  | { kind: "matches" }
   | { kind: "water" };
 
 export const PLATE_MAX_MAP_LABEL_LENGTH = 22;
@@ -56,6 +58,12 @@ export type PlateViewport = {
   radiusKm: number;
   zoom: number;
   paddingFactor: number;
+};
+
+type MapViewportPoint = {
+  latitude: number;
+  longitude: number;
+  distance_km?: number;
 };
 
 export type CorridorCameraFocus = {
@@ -320,7 +328,7 @@ function distanceKm(
   return Math.hypot(dLat, dLng);
 }
 
-function coordinatesForPlaces(places: NumberedPlace[]): [number, number][] {
+function coordinatesForPlaces(places: MapViewportPoint[]): [number, number][] {
   return places.map((place) => [place.longitude, place.latitude]);
 }
 
@@ -375,7 +383,7 @@ export function placesForStory(
   context: PropertyMapContext,
   story: PlateStory,
 ): MapPlacePin[] {
-  if (story.kind === "water") {
+  if (story.kind === "water" || story.kind === "matches") {
     return [];
   }
 
@@ -415,7 +423,7 @@ export function scaleForStory(
   focus?: ProofFocus | null,
   focusedPlaces: MapPlacePin[] = [],
 ): PlateScaleMode {
-  if (story.kind === "water") return "area";
+  if (story.kind === "water" || story.kind === "matches") return "area";
   if (focus && story.layer === focus.layerId) {
     const focusDistanceKm = typeof focus.distanceM === "number"
       ? focus.distanceM / 1000
@@ -432,6 +440,30 @@ export function scaleForStory(
     return "area";
   }
   return "nearby";
+}
+
+export function nearestComparisonHomes(
+  home: { latitude: number; longitude: number },
+  candidates: MapComparisonHome[],
+  limit = 4,
+): MapComparisonHome[] {
+  return candidates
+    .filter((candidate) => candidate.id
+      && Number.isFinite(candidate.latitude)
+      && Number.isFinite(candidate.longitude))
+    .map((candidate, index) => ({
+      candidate,
+      index,
+      distance: distanceKm(
+        home.latitude,
+        home.longitude,
+        candidate.latitude,
+        candidate.longitude,
+      ),
+    }))
+    .sort((left, right) => left.distance - right.distance || left.index - right.index)
+    .slice(0, Math.max(0, limit))
+    .map(({ candidate }) => candidate);
 }
 
 export function metroStationsAroundHome(
@@ -527,7 +559,7 @@ function includeFocusedPlaces(
 }
 
 export function chooseRadiusKm(
-  places: MapPlacePin[],
+  places: MapViewportPoint[],
   scale: PlateScaleMode,
   home?: { latitude: number; longitude: number },
   overlayCoordinates: [number, number][] = [],
@@ -647,7 +679,7 @@ export function clusterClosePlaces(
 
 export function buildPlateViewport(
   home: { latitude: number; longitude: number },
-  places: NumberedPlace[],
+  places: MapViewportPoint[],
   scale: PlateScaleMode,
   metroLines: MapOverlayLine[] = [],
   extraOverlayLines: MapOverlayLine[] = [],

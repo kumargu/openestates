@@ -1,3 +1,5 @@
+import type { ProofFocus, SearchResultItem } from "./types.ts";
+
 export type NavigationMode = "landing" | "discovery" | "property-context" | "workspace";
 
 export type DiscoveryContext = {
@@ -8,6 +10,21 @@ export type DiscoveryContext = {
 
 const DISCOVERY_STORAGE_KEY = "openestates:last-discovery:v1";
 const DISCOVERY_RETURN_INTENT_KEY = "openestates:discovery-return-intent:v1";
+const DISCOVERY_MAP_CONTEXT_KEY = "openestates:discovery-map-context:v1";
+const DISCOVERY_MAP_CANDIDATE_LIMIT = 24;
+
+export type DiscoveryMapCandidate = {
+  id: string;
+  propertyIds: string[];
+  societyName: string;
+  proofFocus?: ProofFocus;
+};
+
+export type DiscoveryMapContext = {
+  version: 1;
+  query: string;
+  candidates: DiscoveryMapCandidate[];
+};
 
 export function navigationMode(pathname: string, search = ""): NavigationMode {
   if (pathname.startsWith("/workspace") || pathname === "/notebook" || pathname === "/compare") {
@@ -85,6 +102,74 @@ export function clearDiscoveryContext(): void {
   if (typeof window === "undefined") return;
   window.sessionStorage.removeItem(DISCOVERY_STORAGE_KEY);
   window.sessionStorage.removeItem(DISCOVERY_RETURN_INTENT_KEY);
+  window.sessionStorage.removeItem(DISCOVERY_MAP_CONTEXT_KEY);
+}
+
+export function writeDiscoveryMapContext(
+  query: string,
+  results: SearchResultItem[],
+  focusForResult: (result: SearchResultItem) => ProofFocus | undefined =
+    (result) => result.proof_focuses?.[0],
+): void {
+  if (typeof window === "undefined" || !query.trim()) return;
+  const societies = new Map<string, DiscoveryMapCandidate>();
+  const candidates: DiscoveryMapCandidate[] = [];
+  for (const result of results) {
+    const societyName = result.society_name.trim() || result.title.trim();
+    const societyKey = result.kg_entity_refs?.society_entity_id
+      || societyName.toLocaleLowerCase("en-IN");
+    if (!societyName) continue;
+    const existing = societies.get(societyKey);
+    if (existing) {
+      if (!existing.propertyIds.includes(result.id)) existing.propertyIds.push(result.id);
+      continue;
+    }
+    const candidate: DiscoveryMapCandidate = {
+      id: result.id,
+      propertyIds: [result.id],
+      societyName,
+      proofFocus: focusForResult(result),
+    };
+    societies.set(societyKey, candidate);
+    candidates.push(candidate);
+    if (candidates.length === DISCOVERY_MAP_CANDIDATE_LIMIT) break;
+  }
+  window.sessionStorage.setItem(DISCOVERY_MAP_CONTEXT_KEY, JSON.stringify({
+    version: 1,
+    query: query.trim(),
+    candidates,
+  } satisfies DiscoveryMapContext));
+}
+
+export function readDiscoveryMapContext(): DiscoveryMapContext | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed: unknown = JSON.parse(
+      window.sessionStorage.getItem(DISCOVERY_MAP_CONTEXT_KEY) ?? "null",
+    );
+    if (!parsed || typeof parsed !== "object") return null;
+    const candidate = parsed as Partial<DiscoveryMapContext>;
+    if (
+      candidate.version !== 1
+      || typeof candidate.query !== "string"
+      || !candidate.query.trim()
+      || !Array.isArray(candidate.candidates)
+    ) return null;
+    const candidates = candidate.candidates.filter(
+      (item): item is DiscoveryMapCandidate => Boolean(
+        item
+        && typeof item.id === "string"
+        && item.id.trim()
+        && Array.isArray(item.propertyIds)
+        && item.propertyIds.every((id) => typeof id === "string" && id.trim())
+        && typeof item.societyName === "string"
+        && item.societyName.trim(),
+      ),
+    );
+    return { version: 1, query: candidate.query.trim(), candidates };
+  } catch {
+    return null;
+  }
 }
 
 export function consumeDiscoveryReturn(url: string): number | null {

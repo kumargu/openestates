@@ -431,6 +431,15 @@ export type MapOverlayPolygon = {
   source_type: string;
 };
 
+export type MapComparisonHome = {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  href: string;
+  boundary?: MapOverlayPolygon;
+};
+
 export type PropertyMapContext = {
   home: MapHomeAnchor;
   layers?: MapLayerMeta[];

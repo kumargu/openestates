@@ -28,6 +28,7 @@ import { LivingEvidenceTile } from "../components/evidence/LivingEvidenceTile.ts
 import { SearchFocusBoard } from "../components/evidence/SearchFocusBoard.tsx";
 import { UniverseBoard } from "../components/evidence/UniverseBoard.tsx";
 import { useEvidenceBatch } from "../hooks/useEvidenceBatch.ts";
+import { writeDiscoveryMapContext } from "../lib/navigationContext.ts";
 
 /* ---------- Area Context Bar ---------- */
 
@@ -348,6 +349,15 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
     return universeResults.map((result) => result.id);
   }, [universeResults]);
   const { byId: evidenceById } = useEvidenceBatch(propertyIds, propertyIds.length > 0);
+
+  useEffect(() => {
+    if (!hasQuery || waitingForSearchResults) return;
+    writeDiscoveryMapContext(
+      query,
+      universeResults,
+      (result) => primaryProofFocus(result, query),
+    );
+  }, [hasQuery, query, universeResults, waitingForSearchResults]);
 
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.areaContext ?? null : null;
   const totalCount = useBackendResults ? searchResponse.totalMatches : hasQuery ? 0 : filtered.length;

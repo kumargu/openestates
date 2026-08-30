@@ -6,9 +6,12 @@ import {
   consumeDiscoveryReturn,
   navigationMode,
   propertyExploreHref,
+  readDiscoveryMapContext,
   requestDiscoveryReturn,
   writeDiscoveryContext,
+  writeDiscoveryMapContext,
 } from "../src/lib/navigationContext.ts";
+import type { SearchResultItem } from "../src/lib/types.ts";
 
 const sessionValues = new Map<string, string>();
 Object.defineProperty(globalThis, "window", {
@@ -88,4 +91,50 @@ test("property exploration preserves search context or falls back to area", () =
     "/?q=Whitefield%2C+Bengaluru",
   );
   assert.equal(propertyExploreHref(" ", "/"), "/");
+});
+
+test("map context keeps ranked search societies without duplicate configurations", () => {
+  sessionValues.clear();
+  const result = (id: string, societyId: string, societyName: string): SearchResultItem => ({
+    id,
+    kg_entity_refs: {
+      property_entity_id: `property:${id}`,
+      society_entity_id: societyId,
+      source_entity_ids: [],
+    },
+    title: societyName,
+    area: "Whitefield",
+    price: 20_000_000,
+    price_per_sqft: 12_000,
+    bhk: 3,
+    sqft: 1_600,
+    society_name: societyName,
+    builder_name: "Builder",
+    hero_image: null,
+    transparency_tags: [],
+    description_summary: "",
+    possession_status: "Ready",
+    metro_distance_mins: 10,
+    floor: 4,
+    total_floors: 18,
+    facing: "East",
+    match_score: 0.8,
+    match_label: "Strong match",
+    match_reason: "Near school",
+    match_tier: "exact",
+  });
+  writeDiscoveryMapContext("quiet 3bhk", [
+    result("one", "society:a", "Alpha"),
+    result("two", "society:a", "Alpha"),
+    result("three", "society:b", "Beta"),
+  ]);
+
+  assert.deepEqual(readDiscoveryMapContext(), {
+    version: 1,
+    query: "quiet 3bhk",
+    candidates: [
+      { id: "one", propertyIds: ["one", "two"], societyName: "Alpha" },
+      { id: "three", propertyIds: ["three"], societyName: "Beta" },
+    ],
+  });
 });

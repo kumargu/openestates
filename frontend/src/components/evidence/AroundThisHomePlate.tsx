@@ -1,6 +1,7 @@
 import {
   Component,
   createRef,
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -8,7 +9,9 @@ import {
   type ErrorInfo,
   type ReactNode,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import type {
+  MapComparisonHome,
   MapOverlayLine,
   MapPresentation,
   PropertyMapContext,
@@ -24,6 +27,7 @@ import {
   linesForLayer,
   metroLinesNearEvidence,
   metroStationsAroundHome,
+  nearestComparisonHomes,
   placeMatchesProofFocus,
   placesForStory,
   resolveHomeAnchor,
@@ -34,7 +38,7 @@ import {
   type PlateStory,
   type PlaceCluster,
 } from "../../lib/nearbyPlateProjection.ts";
-import { SoftNearbyIcon } from "../ui/SoftIcons.tsx";
+import { SoftHomeStateIcon, SoftNearbyIcon } from "../ui/SoftIcons.tsx";
 import type { AroundThisHomeMapProps } from "./AroundThisHomeGoogle3DMap.tsx";
 import { labelsForNearbyPlace, labelsForRedFlagLine } from "../../lib/notebook.ts";
 import {
@@ -143,12 +147,14 @@ class NearbyMapBoundary extends Component<
 type AroundThisHomePlateProps = {
   propertyId: string;
   context: PropertyMapContext;
+  searchMatches?: MapComparisonHome[];
 };
 
 type AroundThisHomePlateInnerProps = {
   propertyId: string;
   context: PropertyMapContext;
   layers: string[];
+  searchMatches: MapComparisonHome[];
 };
 
 const DEFAULT_WATER_SCOPE_RADIUS_KM = 3;
@@ -215,7 +221,11 @@ function accessLineSelection(
   };
 }
 
-export function AroundThisHomePlate({ propertyId, context }: AroundThisHomePlateProps) {
+export function AroundThisHomePlate({
+  propertyId,
+  context,
+  searchMatches = [],
+}: AroundThisHomePlateProps) {
   const layers = useMemo(() => availableLayers(context), [context]);
   const focus = context.proof_focus;
   const focusKey = focus
@@ -236,6 +246,7 @@ export function AroundThisHomePlate({ propertyId, context }: AroundThisHomePlate
       propertyId={propertyId}
       context={context}
       layers={layers}
+      searchMatches={searchMatches}
     />
   );
 }
@@ -244,9 +255,11 @@ function AroundThisHomePlateInner({
   propertyId,
   context,
   layers,
+  searchMatches,
 }: AroundThisHomePlateInnerProps) {
+  const navigate = useNavigate();
   const { notes, toggleFact } = useNotebook();
-  const home = resolveHomeAnchor(context);
+  const home = useMemo(() => resolveHomeAnchor(context), [context]);
   const focus = context.proof_focus;
   const focusedStory = useMemo(
     () => focus && layers.includes(focus.layerId)
@@ -309,6 +322,18 @@ function AroundThisHomePlateInner({
     return clusterClosePlaces(numbered, scale);
   }, [numbered, openedClusterId, scale]);
 
+  const comparisonHomes = useMemo(
+    () => home
+      ? nearestComparisonHomes(home, searchMatches)
+      : [],
+    [home, searchMatches],
+  );
+  const openComparisonHome = useCallback(
+    (candidate: MapComparisonHome) => navigate(candidate.href),
+    [navigate],
+  );
+
+  const searchMatchesFocused = story.kind === "matches";
   const metroFocused = story.kind === "layer" && story.layer === "metro";
   const redFlagsFocused = story.kind === "layer" && story.layer === "red_flags";
   const activeStoryLines = useMemo(
@@ -330,6 +355,8 @@ function AroundThisHomePlateInner({
     ? "immersive_3d"
     : waterFocused
     ? "readable_2d"
+    : searchMatchesFocused
+    ? "immersive_3d"
     : story.kind === "layer"
     ? context.layers?.find((layer) => layer.id === story.layer)?.mapPresentation
       ?? "immersive_3d"
@@ -370,15 +397,21 @@ function AroundThisHomePlateInner({
         paddingFactor: 0.24,
       };
     }
+    const viewportPlaces = searchMatchesFocused
+      ? comparisonHomes.map((candidate) => ({
+        latitude: candidate.latitude,
+        longitude: candidate.longitude,
+      }))
+      : numbered;
     return buildPlateViewport(
       home,
-      numbered,
+      viewportPlaces,
       scale,
       visibleMetroLines,
       [...activeAccessLines, ...activeRedFlagLines],
       focus,
     );
-  }, [activeAccessLines, activeRedFlagLines, context.water?.scope_radius_km, focus, home, numbered, scale, visibleMetroLines, waterFocused]);
+  }, [activeAccessLines, activeRedFlagLines, comparisonHomes, context.water?.scope_radius_km, focus, home, numbered, scale, searchMatchesFocused, visibleMetroLines, waterFocused]);
 
   const selected = numbered.find((place) => place.id === selectedId) ?? focusedPlace ?? null;
   const selectedLine = activeAccessLines.find((line) => line.id === selectedLineId)
@@ -527,6 +560,17 @@ function AroundThisHomePlateInner({
                 </button>
               );
             })}
+            {comparisonHomes.length > 0 && (
+              <button
+                type="button"
+                className={`nearby-plate__chip nearby-plate__chip--matches${searchMatchesFocused ? " is-active" : ""}`}
+                aria-pressed={searchMatchesFocused}
+                onClick={() => selectStory({ kind: "matches" })}
+              >
+                <SoftHomeStateIcon size={26} />
+                <span>Matches</span>
+              </button>
+            )}
             {context.water && (
             <button
               type="button"
@@ -571,9 +615,13 @@ function AroundThisHomePlateInner({
                   terrainCorridor={terrainCorridor}
                   layerExperience={layerExperience}
                   mapPresentation={mapPresentation}
+                  comparisonHomes={searchMatchesFocused && cameraMode === "evidence"
+                    ? comparisonHomes
+                    : []}
                   pinnedPlaceIds={pinnedPlaceIds}
                   onSelectCluster={selectCluster}
                   onSelectPlace={selectPlace}
+                  onSelectComparisonHome={openComparisonHome}
                   onSelectAccessLine={selectAccessLine}
                   onSelectRedFlagLine={selectRedFlagLine}
                   onRememberPlace={rememberPlace}
