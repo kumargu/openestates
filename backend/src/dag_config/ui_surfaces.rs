@@ -338,36 +338,53 @@ mod tests {
             .expect("around_this_home surface exists");
         let scene = around.scene.as_ref().expect("scene rules exist");
         assert_eq!(scene.anchor.entity_ref, "society");
-        assert_eq!(
-            scene.anchor.boundary_fact_key.as_deref(),
-            Some("society.boundary_geojson")
-        );
+        assert_eq!(scene.anchor.boundary_fact_key, None);
         let metro = scene
             .layers
             .iter()
             .find(|layer| layer.id == "metro")
             .expect("metro layer exists");
         assert_eq!(metro.fact_keys, ["nearby_metro_stations"]);
-        assert_eq!(metro.map_presentation.as_deref(), Some("immersive_3d"));
+        assert_eq!(metro.map_presentation, None);
         assert!(metro.linked_entity_fact_keys.is_empty());
+        assert!(scene.layers.iter().all(|layer| layer.id != "approach_road"));
         assert!(around
             .leaf_keys
             .iter()
             .all(|key| key != "transit_access_route" && key != "transit_access_route_entity"));
 
-        let approach_road = scene
+        let arrival = config
+            .surfaces
+            .iter()
+            .find(|surface| surface.id == "arrival_story")
+            .expect("arrival_story surface exists");
+        let arrival_scene = arrival.scene.as_ref().expect("arrival scene rules exist");
+        assert_eq!(
+            arrival_scene.anchor.boundary_fact_key.as_deref(),
+            Some("society.boundary_geojson")
+        );
+        let arrival_metro = arrival_scene
+            .layers
+            .iter()
+            .find(|layer| layer.id == "metro")
+            .expect("arrival metro layer exists");
+        assert_eq!(
+            arrival_metro.map_presentation.as_deref(),
+            Some("immersive_3d")
+        );
+        let approach_road = arrival_scene
             .layers
             .iter()
             .find(|layer| layer.id == "approach_road")
             .expect("approach road layer exists");
         assert_eq!(approach_road.render_kind, "terrain_corridor");
         assert_eq!(
-            scene
+            arrival_scene
                 .layers
                 .iter()
-                .find(|layer| layer.id == "schools")
+                .find(|layer| layer.id == "approach_road")
                 .and_then(|layer| layer.map_presentation.as_deref()),
-            Some("readable_2d")
+            Some("immersive_3d")
         );
         let experience = approach_road.experience.as_ref().expect("road experience");
         assert_eq!(experience.kind, "street_view_tour");

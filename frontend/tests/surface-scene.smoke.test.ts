@@ -11,7 +11,7 @@ import {
 import { propertyMapContextFromSurfaceScene } from "../src/lib/surfaceSceneProjection.ts";
 import type { SurfaceSceneResponse } from "../src/lib/types.ts";
 
-test("surface scene payload can drive the around-this-home plate", () => {
+test("around-this-home and arrival scenes stay isolated", () => {
   const scene: SurfaceSceneResponse = {
     contractVersion: 1,
     surfaceId: "around_this_home",
@@ -175,15 +175,48 @@ test("surface scene payload can drive the around-this-home plate", () => {
     gaps: [],
   };
 
-  const context = propertyMapContextFromSurfaceScene(scene);
+  const aroundScene: SurfaceSceneResponse = {
+    ...scene,
+    layers: scene.layers.filter((layer) => layer.id !== "approach_road"),
+    features: scene.features.filter((feature) => feature.layerId !== "approach_road"),
+    receipts: scene.receipts.filter((receipt) => receipt.factKey !== "approach_road"),
+  };
+  const arrivalScene: SurfaceSceneResponse = {
+    ...scene,
+    surfaceId: "arrival_story",
+    anchor: {
+      ...scene.anchor,
+      boundary: {
+        geometry: {
+          type: "Polygon",
+          coordinates: [[
+            [77.74, 12.97],
+            [77.76, 12.97],
+            [77.76, 12.99],
+            [77.74, 12.97],
+          ]],
+        },
+        sourceType: "OpenStreetMap",
+        confidence: 0.78,
+      },
+    },
+    layers: scene.layers.filter((layer) => layer.id !== "schools"),
+    features: scene.features.filter((feature) => feature.layerId !== "schools"),
+    receipts: scene.receipts.filter((receipt) => receipt.factKey !== "nearby_schools"),
+  };
+
+  const context = propertyMapContextFromSurfaceScene(aroundScene);
+  const arrivalContext = propertyMapContextFromSurfaceScene(arrivalScene);
   assert.ok(context);
+  assert.ok(arrivalContext);
   assert.equal(hasAroundThisHomePlate(context), true);
   assert.deepEqual(availableLayers(context), ["metro", "schools"]);
-  assert.equal(context.access_lines?.length, 0);
-  assert.deepEqual(context.layer_lines?.metro, []);
-  assert.equal(context.layer_lines?.approach_road?.[0]?.name, "ECC Road");
+  assert.equal(context.home.boundary, undefined);
+  assert.equal(context.layer_lines?.approach_road, undefined);
+  assert.equal(arrivalContext.home.boundary?.source_type, "OpenStreetMap");
+  assert.equal(arrivalContext.layer_lines?.approach_road?.[0]?.name, "ECC Road");
   assert.equal(
-    context.layers?.find((layer) => layer.id === "approach_road")?.renderKind,
+    arrivalContext.layers?.find((layer) => layer.id === "approach_road")?.renderKind,
     "terrain_corridor",
   );
   assert.equal(

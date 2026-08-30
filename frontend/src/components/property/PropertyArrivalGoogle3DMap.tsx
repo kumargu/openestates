@@ -340,7 +340,7 @@ function createPlacePopoverContent(
   return content;
 }
 
-export function AroundThisHomeGoogle3DMap(props: ArrivalGoogle3DMapProps) {
+export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const {
     home,
     places,
@@ -447,7 +447,7 @@ export function AroundThisHomeGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       })
       .catch((error: unknown) => {
         if (import.meta.env.DEV) {
-          console.warn("[AroundThisHomeGoogle3DMap] Google 3D failed to load", error);
+          console.warn("[PropertyArrivalGoogle3DMap] Google 3D failed to load", error);
         }
         if (!cancelled) {
           setLoadError(error instanceof Error ? error : new Error("google_maps_3d_unavailable"));
@@ -518,7 +518,7 @@ export function AroundThisHomeGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       })
       .catch((error: unknown) => {
         if (import.meta.env.DEV) {
-          console.warn("[AroundThisHomeGoogle3DMap] Terrain-safe camera move failed", error);
+          console.warn("[PropertyArrivalGoogle3DMap] Terrain-safe camera move failed", error);
         }
       });
   }, [

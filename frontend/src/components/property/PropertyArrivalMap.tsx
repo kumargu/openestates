@@ -22,8 +22,8 @@ import {
 } from "../../lib/arrivalMapProjection.ts";
 
 const ArrivalGoogle3DMap = lazy(async () => {
-  const module = await import("../evidence/AroundThisHomeGoogle3DMap.tsx");
-  return { default: module.AroundThisHomeGoogle3DMap };
+  const module = await import("./PropertyArrivalGoogle3DMap.tsx");
+  return { default: module.PropertyArrivalGoogle3DMap };
 });
 
 type ArrivalView = "society" | "metro" | "approach";

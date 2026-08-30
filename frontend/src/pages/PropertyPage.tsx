@@ -61,6 +61,7 @@ function hasKnownNumber(value: number | null | undefined): value is number {
 }
 
 const MAX_EXPLICIT_COMPARISON_CANDIDATES = 4;
+const ARRIVAL_STORY_SURFACE_ID = "arrival_story";
 
 function focusedEvidenceSource(data: PropertyDetailResponse, focus: ProofFocus) {
   for (const section of data.evidence?.sections ?? []) {
@@ -321,6 +322,8 @@ function PropertyPageBody({
     useState<RecommendationResponse | null>(null);
   const [aroundThisHomeScene, setAroundThisHomeScene] =
     useState<SurfaceSceneResponse | null>(null);
+  const [arrivalScene, setArrivalScene] =
+    useState<SurfaceSceneResponse | null>(null);
   const [comparisonResolution, setComparisonResolution] = useState<{
     key: string;
     properties: PropertyCard[];
@@ -393,6 +396,24 @@ function PropertyPageBody({
 
   useEffect(() => {
     const propertyId = data?.property?.id;
+    if (!propertyId) return;
+    let cancelled = false;
+
+    getPropertySurface(propertyId, ARRIVAL_STORY_SURFACE_ID)
+      .then((scene) => {
+        if (!cancelled) setArrivalScene(scene);
+      })
+      .catch(() => {
+        if (!cancelled) setArrivalScene(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.property?.id]);
+
+  useEffect(() => {
+    const propertyId = data?.property?.id;
     const requestedIds = explicitComparisonKey.split("\u001f").filter(Boolean);
     if (!propertyId || requestedIds.length === 0) return undefined;
 
@@ -430,7 +451,7 @@ function PropertyPageBody({
       window.cancelAnimationFrame(firstFrame);
       if (secondFrame) window.cancelAnimationFrame(secondFrame);
     };
-  }, [status, data?.property?.id, proofFocus, aroundThisHomeScene]);
+  }, [status, data?.property?.id, proofFocus, aroundThisHomeScene, arrivalScene]);
 
   if (status === "loading")
     return (
@@ -501,6 +522,10 @@ function PropertyPageBody({
   const socialImageUrl = p.hero_image ? backendUrl(p.hero_image) : null;
   const aroundThisHomeContext = propertyMapContextFromSurfaceScene(
     aroundThisHomeScene,
+    data.map_context,
+  );
+  const arrivalContext = propertyMapContextFromSurfaceScene(
+    arrivalScene,
     data.map_context,
   );
   const showNearbyPlate = hasAroundThisHomePlate(aroundThisHomeContext);
@@ -610,7 +635,7 @@ function PropertyPageBody({
           propertyId={p.id}
           title={story.identity.title}
           frames={story.arrival.frames}
-          mapContext={aroundThisHomeContext}
+          mapContext={arrivalContext}
           playback={{
             playing: storyPlaying,
             onPlayingChange: setStoryPlaying,

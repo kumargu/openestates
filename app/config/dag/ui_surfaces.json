@@ -9,8 +9,6 @@
       "leaf_keys": [
         "nearby_schools",
         "nearby_metro_stations",
-        "approach_road",
-        "approach_road_entity",
         "nearby_hospitals",
         "nearby_fitness",
         "nearby_tech_parks",
@@ -37,6 +35,199 @@
       "proofHandoff": {
         "kind": "scene",
         "targetId": "around-this-home"
+      },
+      "scene": {
+        "anchor": { "entityRef": "society" },
+        "layers": [
+          {
+            "id": "metro",
+            "label": "Metro",
+            "factKeys": ["nearby_metro_stations"],
+            "edgeTypes": ["near_place"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "pin",
+            "icon": "train",
+            "sort": "distance",
+            "maxItems": 2,
+            "enabledByDefault": true,
+            "rank": 1
+          },
+          {
+            "id": "schools",
+            "label": "Schools",
+            "factKeys": ["nearby_schools"],
+            "edgeTypes": ["near_place"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "pin",
+            "icon": "graduation-cap",
+            "sort": "reviews",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.2,
+            "enabledByDefault": true,
+            "rank": 2
+          },
+          {
+            "id": "hospitals",
+            "label": "Hospitals",
+            "factKeys": ["nearby_hospitals"],
+            "edgeTypes": ["near_place"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "pin",
+            "icon": "hospital",
+            "sort": "reviews",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.2,
+            "includeNameMarkers": ["hospital", "hospitals", "medical", "clinic", "health", "maternity"],
+            "enabledByDefault": true,
+            "rank": 3
+          },
+          {
+            "id": "tech",
+            "label": "Tech parks",
+            "factKeys": ["nearby_tech_parks"],
+            "edgeTypes": ["near_place"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "pin",
+            "icon": "briefcase-business",
+            "sort": "distance",
+            "maxItems": 20,
+            "expandedMaxItems": 20,
+            "spreadMinDistanceKm": 2.0,
+            "includeNameMarkers": ["tech park", "technology park", "business park", "tech forest", "office park", "it park", "itpb"],
+            "includeRelatedSocietyFacts": true,
+            "enabledByDefault": true,
+            "rank": 4
+          },
+          {
+            "id": "fitness",
+            "label": "Fitness",
+            "factKeys": ["nearby_fitness"],
+            "edgeTypes": ["near_place"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "pin",
+            "icon": "dumbbell",
+            "sort": "reviews",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.0,
+            "includeNameMarkers": ["cult", "cult.fit"],
+            "enabledByDefault": false,
+            "rank": 5
+          },
+          {
+            "id": "parks",
+            "label": "Parks",
+            "factKeys": ["nearby_public_parks"],
+            "edgeTypes": ["near_place"],
+            "family": "environment",
+            "relationClass": "context",
+            "renderKind": "pin",
+            "icon": "trees",
+            "sort": "reviews",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.0,
+            "enabledByDefault": false,
+            "rank": 6
+          },
+          {
+            "id": "lakes",
+            "label": "Lakes",
+            "factKeys": ["nearby_lakes", "lake_within_250m"],
+            "edgeTypes": ["near_place"],
+            "family": "environment",
+            "relationClass": "context",
+            "renderKind": "pin",
+            "icon": "waves",
+            "sort": "distance",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.0,
+            "enabledByDefault": false,
+            "rank": 7
+          },
+          {
+            "id": "breweries",
+            "label": "Breweries",
+            "factKeys": ["nearby_breweries"],
+            "edgeTypes": ["near_place"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "pin",
+            "icon": "beer",
+            "sort": "reviews",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.0,
+            "includeNameMarkers": ["brewery", "brewing", "biergarten", "beer garden"],
+            "enabledByDefault": false,
+            "rank": 8
+          },
+          {
+            "id": "red_flags",
+            "label": "Red flags",
+            "factKeys": [
+              "nearby_graveyards",
+              "high_voltage_transmission_line_nearby",
+              "stormwater_drain_nearby"
+            ],
+            "featureLabels": {
+              "high_voltage_transmission_line_nearby": "Transmission line",
+              "stormwater_drain_nearby": "Stormwater drain"
+            },
+            "linkedEntityFactKeys": [
+              "high_voltage_transmission_line_place_entity",
+              "stormwater_drain_place_entity"
+            ],
+            "family": "risk",
+            "relationClass": "risk_externality",
+            "renderKind": "pin",
+            "icon": "flag",
+            "sortPriorityFactKeys": [
+              "high_voltage_transmission_line_nearby",
+              "stormwater_drain_nearby",
+              "nearby_graveyards"
+            ],
+            "sort": "distance",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.0,
+            "showReviewMetrics": false,
+            "includeRelatedSocietyFacts": true,
+            "enabledByDefault": true,
+            "rank": 9
+          }
+        ]
+      }
+    },
+    {
+      "id": "arrival_story",
+      "title": "The way in",
+      "kicker": "Arrival",
+      "leaf_keys": [
+        "nearby_metro_stations",
+        "approach_road",
+        "approach_road_entity",
+        "society.boundary_geojson"
+      ],
+      "traversal": [
+        "property -> in_society -> society",
+        "society -> served_by_road -> road_segment"
+      ],
+      "components": [
+        "PropertyArrivalFilm"
+      ],
+      "primary_entity": "society",
+      "proofHandoff": {
+        "kind": "scene",
+        "targetId": "remote-arrival"
       },
       "scene": {
         "anchor": {
@@ -89,165 +280,6 @@
             "maxItems": 1,
             "enabledByDefault": true,
             "rank": 2
-          },
-          {
-            "id": "schools",
-            "label": "Schools",
-            "factKeys": ["nearby_schools"],
-            "edgeTypes": ["near_place"],
-            "family": "access",
-            "relationClass": "access",
-            "renderKind": "pin",
-            "mapPresentation": "readable_2d",
-            "icon": "graduation-cap",
-            "sort": "reviews",
-            "maxItems": 5,
-            "expandedMaxItems": 8,
-            "spreadMinDistanceKm": 1.2,
-            "enabledByDefault": true,
-            "rank": 3
-          },
-          {
-            "id": "hospitals",
-            "label": "Hospitals",
-            "factKeys": ["nearby_hospitals"],
-            "edgeTypes": ["near_place"],
-            "family": "access",
-            "relationClass": "access",
-            "renderKind": "pin",
-            "mapPresentation": "readable_2d",
-            "icon": "hospital",
-            "sort": "reviews",
-            "maxItems": 5,
-            "expandedMaxItems": 8,
-            "spreadMinDistanceKm": 1.2,
-            "includeNameMarkers": ["hospital", "hospitals", "medical", "clinic", "health", "maternity"],
-            "enabledByDefault": true,
-            "rank": 4
-          },
-          {
-            "id": "tech",
-            "label": "Tech parks",
-            "factKeys": ["nearby_tech_parks"],
-            "edgeTypes": ["near_place"],
-            "family": "access",
-            "relationClass": "access",
-            "renderKind": "pin",
-            "mapPresentation": "readable_2d",
-            "icon": "briefcase-business",
-            "sort": "distance",
-            "maxItems": 20,
-            "expandedMaxItems": 20,
-            "spreadMinDistanceKm": 2.0,
-            "includeNameMarkers": ["tech park", "technology park", "business park", "tech forest", "office park", "it park", "itpb"],
-            "includeRelatedSocietyFacts": true,
-            "enabledByDefault": true,
-            "rank": 5
-          },
-          {
-            "id": "fitness",
-            "label": "Fitness",
-            "factKeys": ["nearby_fitness"],
-            "edgeTypes": ["near_place"],
-            "family": "access",
-            "relationClass": "access",
-            "renderKind": "pin",
-            "mapPresentation": "readable_2d",
-            "icon": "dumbbell",
-            "sort": "reviews",
-            "maxItems": 5,
-            "expandedMaxItems": 8,
-            "spreadMinDistanceKm": 1.0,
-            "includeNameMarkers": ["cult", "cult.fit"],
-            "enabledByDefault": false,
-            "rank": 6
-          },
-          {
-            "id": "parks",
-            "label": "Parks",
-            "factKeys": ["nearby_public_parks"],
-            "edgeTypes": ["near_place"],
-            "family": "environment",
-            "relationClass": "context",
-            "renderKind": "pin",
-            "mapPresentation": "readable_2d",
-            "icon": "trees",
-            "sort": "reviews",
-            "maxItems": 5,
-            "expandedMaxItems": 8,
-            "spreadMinDistanceKm": 1.0,
-            "enabledByDefault": false,
-            "rank": 7
-          },
-          {
-            "id": "lakes",
-            "label": "Lakes",
-            "factKeys": ["nearby_lakes", "lake_within_250m"],
-            "edgeTypes": ["near_place"],
-            "family": "environment",
-            "relationClass": "context",
-            "renderKind": "pin",
-            "mapPresentation": "readable_2d",
-            "icon": "waves",
-            "sort": "distance",
-            "maxItems": 5,
-            "expandedMaxItems": 8,
-            "spreadMinDistanceKm": 1.0,
-            "enabledByDefault": false,
-            "rank": 8
-          },
-          {
-            "id": "breweries",
-            "label": "Breweries",
-            "factKeys": ["nearby_breweries"],
-            "edgeTypes": ["near_place"],
-            "family": "access",
-            "relationClass": "access",
-            "renderKind": "pin",
-            "mapPresentation": "readable_2d",
-            "icon": "beer",
-            "sort": "reviews",
-            "maxItems": 5,
-            "expandedMaxItems": 8,
-            "spreadMinDistanceKm": 1.0,
-            "includeNameMarkers": ["brewery", "brewing", "biergarten", "beer garden"],
-            "enabledByDefault": false,
-            "rank": 9
-          },
-          {
-            "id": "red_flags",
-            "label": "Red flags",
-            "factKeys": [
-              "nearby_graveyards",
-              "high_voltage_transmission_line_nearby",
-              "stormwater_drain_nearby"
-            ],
-            "featureLabels": {
-              "high_voltage_transmission_line_nearby": "Transmission line",
-              "stormwater_drain_nearby": "Stormwater drain"
-            },
-            "linkedEntityFactKeys": [
-              "high_voltage_transmission_line_place_entity",
-              "stormwater_drain_place_entity"
-            ],
-            "family": "risk",
-            "relationClass": "risk_externality",
-            "renderKind": "pin",
-            "mapPresentation": "readable_2d",
-            "icon": "flag",
-            "sortPriorityFactKeys": [
-              "high_voltage_transmission_line_nearby",
-              "stormwater_drain_nearby",
-              "nearby_graveyards"
-            ],
-            "sort": "distance",
-            "maxItems": 5,
-            "expandedMaxItems": 8,
-            "spreadMinDistanceKm": 1.0,
-            "showReviewMetrics": false,
-            "includeRelatedSocietyFacts": true,
-            "enabledByDefault": true,
-            "rank": 10
           }
         ]
       }
@@ -606,5 +638,5 @@
       ]
     }
   ],
-  "surface_count": 9
+  "surface_count": 10
 }
