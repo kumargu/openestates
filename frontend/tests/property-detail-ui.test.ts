@@ -7,19 +7,20 @@ import {
 } from "../src/lib/api.ts";
 import {
   availableLayers,
-  cameraModeForStorySelection,
   clusterClosePlaces,
-  corridorCameraFocus,
-  corridorTourWaypoints,
   filterPlacesByScale,
   hasAroundThisHomePlate,
   layerLabel,
-  linesForLayer,
-  mapPresentationForStory,
   metroStationsAroundHome,
   placeMatchesProofFocus,
   scaleForStory,
 } from "../src/lib/nearbyPlateProjection.ts";
+import {
+  arrivalEvidenceViewport,
+  corridorCameraFocus,
+  corridorTourWaypoints,
+  hasArrivalMap,
+} from "../src/lib/arrivalMapProjection.ts";
 import { mapMarkerPinOptions } from "../src/lib/mapMarkerVisual.ts";
 import {
   shouldReorientStreetView,
@@ -119,7 +120,21 @@ test("around-this-home accepts places, water, or metro evidence", () => {
   }), true);
 });
 
-test("generic map layers expose their projected line geometry", () => {
+test("around-this-home keeps mainline visibility semantics", () => {
+  const road = {
+    id: "ecc-road",
+    name: "ECC Road",
+    coordinates: [[77.73, 12.98], [77.74, 12.99]] as [number, number][],
+    source_type: "OpenStreetMap",
+  };
+  assert.equal(hasAroundThisHomePlate({
+    ...emptyMapContext,
+    access_lines: [road],
+    layer_lines: { approach_road: [road] },
+  }), false);
+});
+
+test("the arrival tile owns society and guided-road 3D evidence", () => {
   const road = {
     id: "ecc-road",
     name: "ECC Road",
@@ -128,33 +143,49 @@ test("generic map layers expose their projected line geometry", () => {
   };
   const context: PropertyMapContext = {
     ...emptyMapContext,
-    layer_lines: { approach_road: [road] },
-  };
-
-  assert.deepEqual(linesForLayer(context, "approach_road"), [road]);
-  assert.deepEqual(linesForLayer(context, "schools"), []);
-});
-
-test("neighborhood map keeps overview in 2D and reserves 3D for explicit stories", () => {
-  const layers = [
-    { id: "metro", label: "Metro", mapPresentation: "immersive_3d" as const },
-    {
+    home: {
+      ...emptyMapContext.home,
+      latitude: 12.98,
+      longitude: 77.74,
+    },
+    layers: [{
       id: "approach_road",
       label: "Approach road",
       renderKind: "terrain_corridor",
-      mapPresentation: "immersive_3d" as const,
-    },
-    { id: "hospitals", label: "Hospitals", mapPresentation: "readable_2d" as const },
-  ];
-  const metro = { kind: "layer", layer: "metro" } as const;
-  const approachRoad = { kind: "layer", layer: "approach_road" } as const;
-  const hospitals = { kind: "layer", layer: "hospitals" } as const;
+      experience: {
+        kind: "street_view_tour",
+        distanceEachDirectionM: 300,
+        waypointSpacingM: 60,
+        dwellMs: 3_600,
+        curveDwellMs: 2_400,
+        sideRoadDwellMs: 2_400,
+        cameraAltitudeM: 8,
+        cameraRangeM: 30,
+        cameraTilt: 82,
+        cameraFov: 52,
+        streetViewZoom: 1,
+        transitionMs: 1_000,
+      },
+    }],
+    layer_lines: { approach_road: [road] },
+  };
 
-  assert.equal(mapPresentationForStory(metro, "home", layers), "readable_2d");
-  assert.equal(mapPresentationForStory(metro, "evidence", layers), "immersive_3d");
-  assert.equal(mapPresentationForStory(approachRoad, "home", layers), "immersive_3d");
-  assert.equal(mapPresentationForStory(hospitals, "evidence", layers), "readable_2d");
-  assert.equal(cameraModeForStorySelection(approachRoad, layers), "home");
+  assert.equal(hasArrivalMap(context), true);
+  assert.equal(hasAroundThisHomePlate(context), false);
+});
+
+test("arrival metro framing shifts from the society toward its evidence", () => {
+  const home = { latitude: 12.98, longitude: 77.74 };
+  const viewport = arrivalEvidenceViewport(home, [], [{
+    id: "purple",
+    name: "Purple Line",
+    coordinates: [[77.75, 12.99], [77.76, 13]],
+    source_type: "OpenStreetMap",
+  }]);
+
+  assert.ok(viewport.center.latitude > home.latitude);
+  assert.ok(viewport.center.longitude > home.longitude);
+  assert.ok(viewport.radiusKm >= 0.7);
 });
 
 test("approach-road camera targets the nearest road segment and looks along it", () => {
@@ -247,7 +278,7 @@ test("map marker visuals distinguish categories and focus", () => {
       source_type: "Google",
     },
   ], "nearby");
-  assert.equal(clustered.clusters[0]?.icon, "graduation-cap");
+  assert.equal(clustered.clusters[0]?.layer, "schools");
 });
 
 test("surface scene projects to existing around-this-home plate shape", () => {

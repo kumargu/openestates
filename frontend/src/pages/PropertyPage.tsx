@@ -8,7 +8,6 @@ import { Helmet } from "react-helmet-async";
 import type {
   PropertyCard,
   PropertyDetailResponse,
-  MapComparisonHome,
   ProofFocus,
   RecommendationResponse,
   SurfaceSceneResponse,
@@ -17,9 +16,7 @@ import {
   getProperty,
   getPropertyRecommendations,
   getPropertySurface,
-  getPropertySurfacesBatch,
   parseProofFocusParam,
-  propertyDetailPath,
 } from "../lib/api.ts";
 import {
   recommendationShelfItems,
@@ -50,10 +47,7 @@ import { readShortlistIds } from "../lib/compare.ts";
 import { formatGoogleRating } from "../lib/reviewFormatting.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
-import {
-  propertyExploreHref,
-  readDiscoveryMapContext,
-} from "../lib/navigationContext.ts";
+import { propertyExploreHref } from "../lib/navigationContext.ts";
 import { formatListingPrice } from "../lib/listing-price.ts";
 import {
   initialPropertySurfaceId,
@@ -327,7 +321,6 @@ function PropertyPageBody({
     useState<RecommendationResponse | null>(null);
   const [aroundThisHomeScene, setAroundThisHomeScene] =
     useState<SurfaceSceneResponse | null>(null);
-  const [searchMapHomes, setSearchMapHomes] = useState<MapComparisonHome[]>([]);
   const [comparisonResolution, setComparisonResolution] = useState<{
     key: string;
     properties: PropertyCard[];
@@ -336,21 +329,6 @@ function PropertyPageBody({
     "loading" | "error" | "not_found" | "ok"
   >("loading");
   const [retryKey, setRetryKey] = useState(0);
-  const discoveryMapContext = useMemo(
-    () => id ? readDiscoveryMapContext() : null,
-    [id],
-  );
-  const discoveryCandidates = useMemo(
-    () => discoveryMapContext?.candidates.some((candidate) => candidate.propertyIds.includes(id))
-      ? discoveryMapContext.candidates
-        .filter((candidate) => !candidate.propertyIds.includes(id))
-        .slice(0, 7)
-      : [],
-    [discoveryMapContext, id],
-  );
-  const discoveryCandidateKey = discoveryCandidates
-    .map((candidate) => candidate.id)
-    .join("\u001f");
 
   useEffect(() => {
     let cancelled = false;
@@ -412,43 +390,6 @@ function PropertyPageBody({
       cancelled = true;
     };
   }, [data?.property?.id, proofFocus]);
-
-  useEffect(() => {
-    const propertyIds = discoveryCandidateKey.split("\u001f").filter(Boolean);
-    if (propertyIds.length === 0) return undefined;
-    let cancelled = false;
-    void getPropertySurfacesBatch(propertyIds, ["around_this_home"])
-      .then((response) => {
-        if (cancelled) return;
-        const candidatesById = new Map(
-          discoveryCandidates.map((candidate) => [candidate.id, candidate]),
-        );
-        const homes = response.items.flatMap((item): MapComparisonHome[] => {
-          const candidate = candidatesById.get(item.propertyId);
-          const scene = item.scenes.find((entry) => entry.surfaceId === "around_this_home");
-          if (!candidate || !scene) return [];
-          const context = propertyMapContextFromSurfaceScene(scene);
-          const latitude = context?.home.latitude;
-          const longitude = context?.home.longitude;
-          if (typeof latitude !== "number" || typeof longitude !== "number") return [];
-          return [{
-            id: candidate.id,
-            name: candidate.societyName,
-            latitude,
-            longitude,
-            boundary: context?.home.boundary,
-            href: propertyDetailPath(candidate.id, candidate.proofFocus),
-          }];
-        });
-        setSearchMapHomes(homes);
-      })
-      .catch(() => {
-        if (!cancelled) setSearchMapHomes([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [discoveryCandidateKey, discoveryCandidates]);
 
   useEffect(() => {
     const propertyId = data?.property?.id;
@@ -661,7 +602,6 @@ function PropertyPageBody({
             <AroundThisHomePlate
               propertyId={id}
               context={aroundThisHomeContext}
-              searchMatches={searchMapHomes}
             />
           </section>
         )}
@@ -670,6 +610,7 @@ function PropertyPageBody({
           propertyId={p.id}
           title={story.identity.title}
           frames={story.arrival.frames}
+          mapContext={aroundThisHomeContext}
           playback={{
             playing: storyPlaying,
             onPlayingChange: setStoryPlaying,

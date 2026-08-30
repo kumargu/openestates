@@ -8,14 +8,11 @@ import { mapMarkerPinOptions } from "../../lib/mapMarkerVisual.ts";
 import { useGuidedStreetViewTour } from "../../hooks/useGuidedStreetViewTour.ts";
 import type {
   MapLayerExperience,
-  MapComparisonHome,
-  MapPresentation,
   MapOverlayLine,
   MapOverlayPolygon,
   MapWaterContext,
 } from "../../lib/types.ts";
 import type {
-  NearbyCameraMode,
   NumberedPlace,
   PlaceCluster,
   PlateViewport,
@@ -24,10 +21,11 @@ import {
   cameraCenterForMode,
   corridorCameraFocus,
   corridorTourWaypoints,
-} from "../../lib/nearbyPlateProjection.ts";
+  type ArrivalCameraMode,
+} from "../../lib/arrivalMapProjection.ts";
 import { NOTEBOOK_SAVE_ICON_PATH } from "../notebook/NotebookSaveIcon.tsx";
 
-export type AroundThisHomeMapProps = {
+export type ArrivalGoogle3DMapProps = {
   home: {
     latitude: number;
     longitude: number;
@@ -47,19 +45,17 @@ export type AroundThisHomeMapProps = {
   water?: MapWaterContext | null;
   waterTint: boolean;
   expanded: boolean;
-  cameraMode: NearbyCameraMode;
+  cameraMode: ArrivalCameraMode;
   terrainCorridor: boolean;
   layerExperience?: MapLayerExperience;
-  mapPresentation: MapPresentation;
-  comparisonHomes?: MapComparisonHome[];
   pinnedPlaceIds?: string[];
   onSelectCluster: (cluster: PlaceCluster) => void;
   onSelectPlace: (place: NumberedPlace) => void;
-  onSelectComparisonHome?: (home: MapComparisonHome) => void;
   onSelectAccessLine: (id: string) => void;
   onSelectRedFlagLine: (id: string) => void;
   onRememberPlace?: (place: NumberedPlace) => void;
   onBackToHome: () => void;
+  showBackToHome?: boolean;
   onToggleExpanded: () => void;
 };
 
@@ -344,7 +340,7 @@ function createPlacePopoverContent(
   return content;
 }
 
-export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
+export function AroundThisHomeGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const {
     home,
     places,
@@ -365,12 +361,11 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     pinnedPlaceIds = [],
     onSelectCluster,
     onSelectPlace,
-    comparisonHomes = [],
-    onSelectComparisonHome,
     onSelectAccessLine,
     onSelectRedFlagLine,
     onRememberPlace,
     onBackToHome,
+    showBackToHome = true,
     onToggleExpanded,
   } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -389,7 +384,6 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     ? layerExperience
     : null;
   const roadTourActive = terrainCorridor && cameraMode === "evidence";
-  const comparisonMode = comparisonHomes.length > 0;
   const roadFocus = useMemo(
     () => roadTourActive
       ? corridorCameraFocus(accessLines, {
@@ -565,7 +559,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     for (const child of childrenRef.current) child.remove();
     const nextChildren: Map3DChild[] = [];
 
-    if ((cameraMode === "home" || comparisonMode) && home.boundary) {
+    if (cameraMode === "home" && home.boundary) {
       addPolygon(
         map,
         library,
@@ -666,33 +660,6 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
       nextChildren.push(homeMarker);
     }
 
-    for (const comparisonHome of comparisonHomes) {
-      if (comparisonHome.boundary) {
-        addPolygon(
-          map,
-          library,
-          comparisonHome.boundary,
-          { fill: "#d6a63a29", stroke: "#f8df9de6" },
-          nextChildren,
-        );
-      }
-      const marker = new library.Marker3DInteractiveElement({
-        altitudeMode: "CLAMP_TO_GROUND",
-        collisionBehavior: "REQUIRED",
-        drawsWhenOccluded: true,
-        extruded: true,
-        label: comparisonHome.name,
-        position: { lat: comparisonHome.latitude, lng: comparisonHome.longitude },
-        title: comparisonHome.name,
-      });
-      marker.append(new markerLibrary.PinElement(mapMarkerPinOptions("home", "active")));
-      if (onSelectComparisonHome) {
-        marker.addEventListener("gmp-click", () => onSelectComparisonHome(comparisonHome));
-      }
-      map.append(marker);
-      nextChildren.push(marker);
-    }
-
     for (const cluster of clusters) {
       const marker = new library.Marker3DInteractiveElement({
         altitudeMode: "CLAMP_TO_GROUND",
@@ -700,7 +667,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
         position: { lat: cluster.latitude, lng: cluster.longitude },
         title: `${cluster.count} nearby places`,
       });
-      const clusterPin = mapMarkerPinOptions(cluster.icon, "active");
+      const clusterPin = mapMarkerPinOptions(cluster.layer, "active");
       marker.append(new markerLibrary.PinElement({
         ...clusterPin,
         glyphSrc: undefined,
@@ -755,8 +722,6 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     clusters,
     greenPatches,
     cameraMode,
-    comparisonMode,
-    comparisonHomes,
     home.boundary,
     home.latitude,
     home.longitude,
@@ -765,7 +730,6 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     metroLines,
     onSelectAccessLine,
     onSelectCluster,
-    onSelectComparisonHome,
     onSelectPlace,
     onSelectRedFlagLine,
     onRememberPlace,
@@ -811,7 +775,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
         <div className="nearby-map__road-title">{accessLines[0].name}</div>
       )}
       <div className="nearby-map__actions">
-        {cameraMode === "evidence" && (
+        {showBackToHome && cameraMode === "evidence" && (
           <button type="button" onClick={backToHome}>Back to home</button>
         )}
         <button type="button" onClick={toggleExpanded}>

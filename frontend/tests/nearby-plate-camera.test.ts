@@ -3,10 +3,12 @@ import test from "node:test";
 
 import {
   buildNumberedPlaces,
-  buildPlateViewport,
-  cameraCenterForMode,
-  metroLinesNearEvidence,
 } from "../src/lib/nearbyPlateProjection.ts";
+import {
+  arrivalEvidenceViewport,
+  cameraCenterForMode,
+  metroLinesNearArrival,
+} from "../src/lib/arrivalMapProjection.ts";
 import type { MapOverlayLine, MapPlacePin } from "../src/lib/types.ts";
 
 const home = { latitude: 12.9819914, longitude: 77.7421819 };
@@ -55,7 +57,7 @@ test("metro framing keeps the local corridor and drops far Purple Line segments"
     line("east-far", [[77.758, 12.996], [77.768, 13.004]]),
   ];
 
-  const visible = metroLinesNearEvidence(home, places, lines);
+  const visible = metroLinesNearArrival(home, places, lines);
 
   assert.deepEqual(
     new Set(visible.map(({ id }) => id)),
@@ -63,28 +65,16 @@ test("metro framing keeps the local corridor and drops far Purple Line segments"
   );
 });
 
-test("evidence viewport shifts toward the station and retains the full access route", () => {
+test("arrival viewport shifts toward the Metro evidence", () => {
   const places = buildNumberedPlaces([metroPlace]);
   const metro = [line("home-station", [
     [77.7399579, 12.9875824],
     [77.7470097, 12.9856238],
   ])];
-  const access = [{
-    id: "ecc-road-to-metro",
-    name: "ECC Road → Kadugodi Tree Park",
-    kind: "access_route",
-    coordinates: [
-      [home.longitude, home.latitude],
-      [77.7445, 12.983],
-      [77.7502, 12.986],
-    ] as [number, number][],
-    source_type: "OpenStreetMap",
-  }];
-
-  const viewport = buildPlateViewport(home, places, "nearby", metro, access);
+  const viewport = arrivalEvidenceViewport(home, places, metro);
 
   assert.ok(viewport.center.longitude > home.longitude);
-  assert.ok(viewport.center.longitude < access[0].coordinates.at(-1)![0]);
+  assert.ok(viewport.center.longitude < metro[0].coordinates.at(-1)![0]);
   assert.ok(viewport.center.latitude > home.latitude);
-  assert.ok(viewport.radiusKm >= 0.8);
+  assert.ok(viewport.radiusKm >= 0.7);
 });

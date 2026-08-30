@@ -11,8 +11,29 @@ import { NOTEBOOK_SAVE_ICON_PATH } from "../notebook/NotebookSaveIcon.tsx";
 import {
   NEARBY_MAP_STYLE,
   type NumberedPlace,
+  type PlaceCluster,
+  type PlateViewport,
 } from "../../lib/nearbyPlateProjection.ts";
-import type { AroundThisHomeMapProps } from "./AroundThisHomeGoogle3DMap.tsx";
+
+export type AroundThisHomeMapProps = {
+  home: { latitude: number; longitude: number; name: string };
+  places: NumberedPlace[];
+  clusters: PlaceCluster[];
+  selectedId: string | null;
+  viewport: PlateViewport;
+  metroLines: MapOverlayLine[];
+  redFlagLines: MapOverlayLine[];
+  showMetroLines: boolean;
+  water?: MapWaterContext | null;
+  waterTint: boolean;
+  expanded: boolean;
+  pinnedPlaceIds?: string[];
+  onSelectPlace: (id: string) => void;
+  onSelectCluster: (cluster: PlaceCluster) => void;
+  onSelectRedFlagLine: (id: string) => void;
+  onRememberPlace?: (place: NumberedPlace) => void;
+  onToggleExpanded: () => void;
+};
 
 function markerEl(
   kind: "home" | "place" | "cluster",
@@ -817,7 +838,7 @@ export function AroundThisHomeMap({
       element.addEventListener("blur", hidePreview);
       element.addEventListener("click", (event) => {
         event.stopPropagation();
-        onSelectPlaceRef.current(place);
+        onSelectPlaceRef.current(place.id);
       });
       const marker = new maplibregl.Marker({ element, anchor: "center" })
         .setLngLat([place.longitude, place.latitude])

@@ -8,6 +8,9 @@ import {
   type PropertyFilmstripFrame,
   type StoryScenePlayback,
 } from "./PropertyFilmstrip.tsx";
+import type { PropertyMapContext } from "../../lib/types.ts";
+import { hasArrivalMap } from "../../lib/arrivalMapProjection.ts";
+import { PropertyArrivalMap } from "./PropertyArrivalMap.tsx";
 import "../../styles/property-arrival.css";
 
 type Props = {
@@ -16,6 +19,7 @@ type Props = {
   frames: StoryArrivalFrame[];
   playback?: StoryScenePlayback;
   cinematicMotion?: boolean;
+  mapContext?: PropertyMapContext | null;
 };
 
 const ARRIVAL_CLOSE_DISTANCE_M = 50;
@@ -78,6 +82,7 @@ export function PropertyArrivalFilm({
   frames,
   playback,
   cinematicMotion = true,
+  mapContext,
 }: Props) {
   const distinctFrames = useMemo(() => distinctArrivalFrames(frames), [frames]);
   const frameKey = distinctFrames.map((frame) => frame.id).join("|");
@@ -108,7 +113,8 @@ export function PropertyArrivalFilm({
     [distinctFrames],
   );
 
-  if (filmstripFrames.length === 0 || usableFrameCount === 0) return null;
+  const mapAvailable = hasArrivalMap(mapContext);
+  if (!mapAvailable && (filmstripFrames.length === 0 || usableFrameCount === 0)) return null;
 
   return (
     <section
@@ -120,17 +126,21 @@ export function PropertyArrivalFilm({
         <span>Arrival</span>
         <h2 id="property-arrival-title">The way in.</h2>
       </header>
-      <PropertyFilmstrip
-        ariaLabel={`Approach to ${title}`}
-        frames={filmstripFrames}
-        motionSeed={stableStoryHash(`${propertyId}:arrival`)}
-        playback={playback}
-        presentation="stage"
-        cinematicMotion={cinematicMotion}
-        cinematicPace="brisk"
-        showPlaybackControl
-        onUsableFramesChange={syncAvailability}
-      />
+      {mapAvailable && mapContext ? (
+        <PropertyArrivalMap context={mapContext} />
+      ) : (
+        <PropertyFilmstrip
+          ariaLabel={`Approach to ${title}`}
+          frames={filmstripFrames}
+          motionSeed={stableStoryHash(`${propertyId}:arrival`)}
+          playback={playback}
+          presentation="stage"
+          cinematicMotion={cinematicMotion}
+          cinematicPace="brisk"
+          showPlaybackControl
+          onUsableFramesChange={syncAvailability}
+        />
+      )}
     </section>
   );
 }

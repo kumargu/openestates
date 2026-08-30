@@ -1,53 +1,24 @@
 import type {
-  MapLayerMeta,
   MapOverlayLine,
-  MapComparisonHome,
-  MapPresentation,
   MapPlacePin,
   PropertyMapContext,
   ProofFocus,
 } from "./types.ts";
 
 export type PlateScaleMode = "nearby" | "area";
-export type NearbyCameraMode = "home" | "evidence";
 export type PlateStory =
   | { kind: "layer"; layer: string }
-  | { kind: "matches" }
   | { kind: "water" };
-
-export function cameraModeForStorySelection(
-  story: PlateStory,
-  layers: MapLayerMeta[],
-): NearbyCameraMode {
-  if (story.kind !== "layer") return "evidence";
-  const layer = layers.find((candidate) => candidate.id === story.layer);
-  return layer?.renderKind === "terrain_corridor" ? "home" : "evidence";
-}
-
-export function mapPresentationForStory(
-  story: PlateStory,
-  cameraMode: NearbyCameraMode,
-  layers: MapLayerMeta[],
-): MapPresentation {
-  if (story.kind === "matches") return "immersive_3d";
-  if (story.kind === "water") return "readable_2d";
-  const layer = layers.find((candidate) => candidate.id === story.layer);
-  if (layer?.renderKind === "terrain_corridor") return "immersive_3d";
-  if (cameraMode === "home") return "readable_2d";
-  return layer?.mapPresentation ?? "readable_2d";
-}
 
 export const PLATE_MAX_MAP_LABEL_LENGTH = 22;
 
-/** Quiet OpenStreetMap-backed overview; immersive evidence remains on Google 3D. */
+/** Muted OSM basemap — no API key. */
 export const NEARBY_MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 
 const NEARBY_RADIUS_STEPS_KM = [0.35, 0.5, 0.8, 1.2, 1.8, 2.5] as const;
 const AREA_RADIUS_STEPS_KM = [3, 5, 8, 10, 15] as const;
 const CLUSTER_GAP_KM_NEARBY = 0.08;
 const CLUSTER_GAP_KM_AREA = 0.35;
-const LOCAL_METRO_CORRIDOR_BUFFER_KM = 0.9;
-const LOCAL_METRO_MAX_SEGMENTS = 3;
 /** Keep markers inside the canvas, not glued to the ring edge. */
 const VIEWPORT_PADDING = 1.45;
 
@@ -57,7 +28,6 @@ export function hasAroundThisHomePlate(context?: PropertyMapContext | null): boo
       context.places.length > 0
       || context.water
       || (context.metro_lines?.length ?? 0) > 0
-      || (context.access_lines?.length ?? 0) > 0
       || (context.red_flag_lines?.length ?? 0) > 0
     ),
   );
@@ -75,7 +45,6 @@ export type PlaceCluster = {
   latitude: number;
   longitude: number;
   count: number;
-  icon?: string;
   placeIds: string[];
   layer: string;
 };
@@ -86,188 +55,6 @@ export type PlateViewport = {
   zoom: number;
   paddingFactor: number;
 };
-
-type MapViewportPoint = {
-  latitude: number;
-  longitude: number;
-  distance_km?: number;
-};
-
-export type CorridorCameraFocus = {
-  latitude: number;
-  longitude: number;
-  heading: number;
-};
-
-export type CorridorTourWaypoint = CorridorCameraFocus & {
-  offsetM: number;
-};
-
-export function cameraCenterForMode(
-  mode: NearbyCameraMode,
-  home: { latitude: number; longitude: number },
-  viewport: PlateViewport,
-): { latitude: number; longitude: number } {
-  return mode === "evidence" ? viewport.center : home;
-}
-
-export function corridorCameraFocus(
-  lines: MapOverlayLine[],
-  home: { latitude: number; longitude: number },
-): CorridorCameraFocus | null {
-  const projection = nearestCorridorProjection(lines, home);
-  if (!projection) return null;
-  return {
-    latitude: projection.latitude,
-    longitude: projection.longitude,
-    heading: projection.heading,
-  };
-}
-
-export function corridorTourWaypoints(
-  lines: MapOverlayLine[],
-  home: { latitude: number; longitude: number },
-  distanceEachDirectionM: number,
-  waypointSpacingM: number,
-): CorridorTourWaypoint[] {
-  const projection = nearestCorridorProjection(lines, home);
-  if (!projection || distanceEachDirectionM <= 0 || waypointSpacingM <= 0) return [];
-  const offsets = new Set<number>([0]);
-  for (
-    let distance = waypointSpacingM;
-    distance < distanceEachDirectionM;
-    distance += waypointSpacingM
-  ) {
-    offsets.add(distance);
-    offsets.add(-distance);
-  }
-  offsets.add(distanceEachDirectionM);
-  offsets.add(-distanceEachDirectionM);
-
-  return [...offsets]
-    .sort((left, right) => left - right)
-    .map((offsetM) => {
-      const targetDistance = clamp(
-        projection.distanceAlongM + offsetM * projection.directionSign,
-        0,
-        projection.totalDistanceM,
-      );
-      const point = pointAlongCorridor(projection, targetDistance);
-      return {
-        ...point,
-        offsetM: (targetDistance - projection.distanceAlongM) / projection.directionSign,
-      };
-    })
-    .filter((waypoint, index, waypoints) => index === 0
-      || Math.abs(waypoint.offsetM - waypoints[index - 1].offsetM) >= 1);
-}
-
-type CorridorProjection = CorridorCameraFocus & {
-  coordinates: [number, number][];
-  segmentLengthsM: number[];
-  distanceAlongM: number;
-  totalDistanceM: number;
-  directionSign: 1 | -1;
-  longitudeMeters: number;
-  latitudeMeters: number;
-};
-
-function nearestCorridorProjection(
-  lines: MapOverlayLine[],
-  home: { latitude: number; longitude: number },
-): CorridorProjection | null {
-  const longitudeMeters = 111_320 * Math.cos((home.latitude * Math.PI) / 180);
-  const latitudeMeters = 110_570;
-  let nearest:
-    | CorridorProjection & { distance: number }
-    | null = null;
-
-  for (const line of lines) {
-    const segmentLengthsM = line.coordinates.slice(1).map(([longitude, latitude], index) => {
-      const [previousLongitude, previousLatitude] = line.coordinates[index];
-      return Math.hypot(
-        (longitude - previousLongitude) * longitudeMeters,
-        (latitude - previousLatitude) * latitudeMeters,
-      );
-    });
-    let distanceBeforeM = 0;
-    for (let index = 1; index < line.coordinates.length; index += 1) {
-      const [startLongitude, startLatitude] = line.coordinates[index - 1];
-      const [endLongitude, endLatitude] = line.coordinates[index];
-      const startX = (startLongitude - home.longitude) * longitudeMeters;
-      const startY = (startLatitude - home.latitude) * latitudeMeters;
-      const endX = (endLongitude - home.longitude) * longitudeMeters;
-      const endY = (endLatitude - home.latitude) * latitudeMeters;
-      const dx = endX - startX;
-      const dy = endY - startY;
-      const lengthSquared = dx * dx + dy * dy;
-      if (lengthSquared === 0) continue;
-
-      const progress = clamp(
-        -(startX * dx + startY * dy) / lengthSquared,
-        0,
-        1,
-      );
-      const x = startX + progress * dx;
-      const y = startY + progress * dy;
-      const distance = Math.hypot(x, y);
-      if (!nearest || distance < nearest.distance) {
-        const bearing = normalizeHeading(Math.atan2(dx, dy) * 180 / Math.PI);
-        const directionSign = bearing >= 180 ? -1 : 1;
-        nearest = {
-          latitude: home.latitude + y / latitudeMeters,
-          longitude: home.longitude + x / longitudeMeters,
-          distance,
-          heading: directionSign === 1 ? bearing : normalizeHeading(bearing + 180),
-          coordinates: line.coordinates,
-          segmentLengthsM,
-          distanceAlongM: distanceBeforeM + progress * Math.sqrt(lengthSquared),
-          totalDistanceM: segmentLengthsM.reduce((sum, length) => sum + length, 0),
-          directionSign,
-          longitudeMeters,
-          latitudeMeters,
-        };
-      }
-      distanceBeforeM += segmentLengthsM[index - 1] ?? 0;
-    }
-  }
-  return nearest;
-}
-
-function pointAlongCorridor(
-  corridor: CorridorProjection,
-  distanceAlongM: number,
-): CorridorCameraFocus {
-  let distanceBeforeM = 0;
-  for (let index = 1; index < corridor.coordinates.length; index += 1) {
-    const segmentLengthM = corridor.segmentLengthsM[index - 1] ?? 0;
-    const segmentEndM = distanceBeforeM + segmentLengthM;
-    if (distanceAlongM <= segmentEndM || index === corridor.coordinates.length - 1) {
-      const progress = segmentLengthM > 0
-        ? clamp((distanceAlongM - distanceBeforeM) / segmentLengthM, 0, 1)
-        : 0;
-      const [startLongitude, startLatitude] = corridor.coordinates[index - 1];
-      const [endLongitude, endLatitude] = corridor.coordinates[index];
-      const bearing = normalizeHeading(Math.atan2(
-        (endLongitude - startLongitude) * corridor.longitudeMeters,
-        (endLatitude - startLatitude) * corridor.latitudeMeters,
-      ) * 180 / Math.PI);
-      return {
-        latitude: startLatitude + (endLatitude - startLatitude) * progress,
-        longitude: startLongitude + (endLongitude - startLongitude) * progress,
-        heading: corridor.directionSign === 1
-          ? bearing
-          : normalizeHeading(bearing + 180),
-      };
-    }
-    distanceBeforeM = segmentEndM;
-  }
-  return corridor;
-}
-
-function normalizeHeading(heading: number): number {
-  return (heading % 360 + 360) % 360;
-}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -355,77 +142,15 @@ function distanceKm(
   return Math.hypot(dLat, dLng);
 }
 
-function coordinatesForPlaces(places: MapViewportPoint[]): [number, number][] {
-  return places.map((place) => [place.longitude, place.latitude]);
-}
-
-function boundsCenter(
-  coordinates: [number, number][],
-): { latitude: number; longitude: number } {
-  const longitudes = coordinates.map(([longitude]) => longitude);
-  const latitudes = coordinates.map(([, latitude]) => latitude);
-  return {
-    latitude: (Math.min(...latitudes) + Math.max(...latitudes)) / 2,
-    longitude: (Math.min(...longitudes) + Math.max(...longitudes)) / 2,
-  };
-}
-
-export function metroLinesNearEvidence(
-  home: { latitude: number; longitude: number },
-  places: NumberedPlace[],
-  metroLines: MapOverlayLine[],
-  accessLines: MapOverlayLine[] = [],
-): MapOverlayLine[] {
-  if (metroLines.length <= LOCAL_METRO_MAX_SEGMENTS) return metroLines;
-
-  const anchors: [number, number][] = [
-    [home.longitude, home.latitude],
-    ...coordinatesForPlaces(places),
-    ...accessLines.flatMap((line) => line.coordinates),
-  ];
-  const scored = metroLines
-    .map((line) => ({
-      line,
-      distanceKm: Math.min(
-        ...line.coordinates.flatMap(([longitude, latitude]) =>
-          anchors.map(([anchorLongitude, anchorLatitude]) => distanceKm(
-            latitude,
-            longitude,
-            anchorLatitude,
-            anchorLongitude,
-          ))),
-      ),
-    }))
-    .sort((left, right) => left.distanceKm - right.distanceKm);
-  const nearestDistanceKm = scored[0]?.distanceKm ?? 0;
-
-  return scored
-    .filter(({ distanceKm: lineDistanceKm }) =>
-      lineDistanceKm <= nearestDistanceKm + LOCAL_METRO_CORRIDOR_BUFFER_KM)
-    .slice(0, LOCAL_METRO_MAX_SEGMENTS)
-    .map(({ line }) => line);
-}
-
 export function placesForStory(
   context: PropertyMapContext,
   story: PlateStory,
 ): MapPlacePin[] {
-  if (story.kind === "water" || story.kind === "matches") {
+  if (story.kind === "water") {
     return [];
   }
 
   return context.places.filter((place) => place.layer === story.layer);
-}
-
-export function linesForLayer(
-  context: PropertyMapContext,
-  layer: string,
-): MapOverlayLine[] {
-  const projected = context.layer_lines?.[layer];
-  if (projected) return projected;
-  if (layer === "metro") return context.access_lines ?? [];
-  if (layer === "red_flags") return context.red_flag_lines ?? [];
-  return [];
 }
 
 export function filterPlacesByScale(
@@ -450,7 +175,7 @@ export function scaleForStory(
   focus?: ProofFocus | null,
   focusedPlaces: MapPlacePin[] = [],
 ): PlateScaleMode {
-  if (story.kind === "water" || story.kind === "matches") return "area";
+  if (story.kind === "water") return "area";
   if (focus && story.layer === focus.layerId) {
     const focusDistanceKm = typeof focus.distanceM === "number"
       ? focus.distanceM / 1000
@@ -463,34 +188,10 @@ export function scaleForStory(
       return "area";
     }
   }
-  if (story.kind === "layer" && (story.layer === "tech" || story.layer === "red_flags")) {
+  if (story.kind === "layer" && (story.layer === "metro" || story.layer === "tech" || story.layer === "red_flags")) {
     return "area";
   }
   return "nearby";
-}
-
-export function nearestComparisonHomes(
-  home: { latitude: number; longitude: number },
-  candidates: MapComparisonHome[],
-  limit = 4,
-): MapComparisonHome[] {
-  return candidates
-    .filter((candidate) => candidate.id
-      && Number.isFinite(candidate.latitude)
-      && Number.isFinite(candidate.longitude))
-    .map((candidate, index) => ({
-      candidate,
-      index,
-      distance: distanceKm(
-        home.latitude,
-        home.longitude,
-        candidate.latitude,
-        candidate.longitude,
-      ),
-    }))
-    .sort((left, right) => left.distance - right.distance || left.index - right.index)
-    .slice(0, Math.max(0, limit))
-    .map(({ candidate }) => candidate);
 }
 
 export function metroStationsAroundHome(
@@ -586,7 +287,7 @@ function includeFocusedPlaces(
 }
 
 export function chooseRadiusKm(
-  places: MapViewportPoint[],
+  places: MapPlacePin[],
   scale: PlateScaleMode,
   home?: { latitude: number; longitude: number },
   overlayCoordinates: [number, number][] = [],
@@ -695,7 +396,6 @@ export function clusterClosePlaces(
       latitude,
       longitude,
       count: group.length,
-      icon: group[0]?.icon,
       placeIds: group.map((item) => item.id),
       layer: group[0]?.layer ?? "schools",
     });
@@ -706,25 +406,29 @@ export function clusterClosePlaces(
 
 export function buildPlateViewport(
   home: { latitude: number; longitude: number },
-  places: MapViewportPoint[],
+  places: NumberedPlace[],
   scale: PlateScaleMode,
   metroLines: MapOverlayLine[] = [],
+  metroExtent: "full" | "nearest" = "full",
   extraOverlayLines: MapOverlayLine[] = [],
   focus?: ProofFocus | null,
 ): PlateViewport {
-  const overlayCoordinates = [
+  let overlayCoordinates = [
     ...metroLines.flatMap((line) => line.coordinates),
     ...extraOverlayLines.flatMap((line) => line.coordinates),
   ];
-  const framingCoordinates: [number, number][] = [
-    [home.longitude, home.latitude],
-    ...coordinatesForPlaces(places),
-    ...overlayCoordinates,
-  ];
-  const center = boundsCenter(framingCoordinates);
-  const radiusKm = chooseRadiusKm(places, scale, center, framingCoordinates, focus);
+  if (metroExtent === "nearest" && overlayCoordinates.length > 1) {
+    overlayCoordinates = [
+      overlayCoordinates.reduce((nearest, candidate) =>
+        distanceKm(home.latitude, home.longitude, candidate[1], candidate[0])
+          < distanceKm(home.latitude, home.longitude, nearest[1], nearest[0])
+          ? candidate
+          : nearest),
+    ];
+  }
+  const radiusKm = chooseRadiusKm(places, scale, home, overlayCoordinates, focus);
   return {
-    center,
+    center: home,
     radiusKm,
     zoom: zoomForRadiusKm(radiusKm),
     paddingFactor: clamp(0.18 + radiusKm * 0.02, 0.18, 0.28),
@@ -734,14 +438,8 @@ export function buildPlateViewport(
 export function availableLayers(context: PropertyMapContext): string[] {
   if (context.layers && context.layers.length > 0) {
     const present = new Set(context.places.map((place) => place.layer));
-    for (const [layer, lines] of Object.entries(context.layer_lines ?? {})) {
-      if (lines.length > 0) present.add(layer);
-    }
     if ((context.red_flag_lines?.length ?? 0) > 0) {
       present.add("red_flags");
-    }
-    if ((context.access_lines?.length ?? 0) > 0) {
-      present.add("metro");
     }
     return context.layers
       .filter((layer) => present.has(layer.id))
@@ -753,9 +451,6 @@ export function availableLayers(context: PropertyMapContext): string[] {
   }
   if ((context.red_flag_lines?.length ?? 0) > 0 && !layers.includes("red_flags")) {
     layers.push("red_flags");
-  }
-  if ((context.access_lines?.length ?? 0) > 0 && !layers.includes("metro")) {
-    layers.unshift("metro");
   }
   return layers;
 }

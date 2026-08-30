@@ -178,7 +178,7 @@ test("surface scene payload can drive the around-this-home plate", () => {
   const context = propertyMapContextFromSurfaceScene(scene);
   assert.ok(context);
   assert.equal(hasAroundThisHomePlate(context), true);
-  assert.deepEqual(availableLayers(context), ["metro", "approach_road", "schools"]);
+  assert.deepEqual(availableLayers(context), ["metro", "schools"]);
   assert.equal(context.access_lines?.length, 0);
   assert.deepEqual(context.layer_lines?.metro, []);
   assert.equal(context.layer_lines?.approach_road?.[0]?.name, "ECC Road");

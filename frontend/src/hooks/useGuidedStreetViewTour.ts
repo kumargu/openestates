@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { loadGoogleStreetViewLibrary } from "../lib/googleMaps3d.ts";
 import type { MapLayerExperience } from "../lib/types.ts";
-import type { CorridorTourWaypoint } from "../lib/nearbyPlateProjection.ts";
+import type { CorridorTourWaypoint } from "../lib/arrivalMapProjection.ts";
 
 type StreetViewLink = {
   heading: number;

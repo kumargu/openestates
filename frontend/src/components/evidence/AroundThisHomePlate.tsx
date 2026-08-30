@@ -1,7 +1,6 @@
 import {
   Component,
   createRef,
-  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -9,39 +8,27 @@ import {
   type ErrorInfo,
   type ReactNode,
 } from "react";
-import { useNavigate } from "react-router-dom";
-import type {
-  MapComparisonHome,
-  MapOverlayLine,
-  MapPresentation,
-  PropertyMapContext,
-} from "../../lib/types.ts";
+import type { MapOverlayLine, PropertyMapContext } from "../../lib/types.ts";
 import {
   availableLayers,
   buildNumberedPlaces,
   buildPlateViewport,
-  cameraModeForStorySelection,
   clusterClosePlaces,
   compactPlaceLabel,
   filterPlacesByScale,
   layerLabel,
-  linesForLayer,
-  mapPresentationForStory,
-  metroLinesNearEvidence,
   metroStationsAroundHome,
-  nearestComparisonHomes,
   placeMatchesProofFocus,
   placesForStory,
   resolveHomeAnchor,
   scaleForStory,
   zoomForRadiusKm,
-  type NearbyCameraMode,
   type PlateScaleMode,
   type PlateStory,
   type PlaceCluster,
 } from "../../lib/nearbyPlateProjection.ts";
-import { SoftHomeStateIcon, SoftNearbyIcon } from "../ui/SoftIcons.tsx";
-import type { AroundThisHomeMapProps } from "./AroundThisHomeGoogle3DMap.tsx";
+import { SoftNearbyIcon } from "../ui/SoftIcons.tsx";
+import type { AroundThisHomeMapProps } from "./AroundThisHomeMap.tsx";
 import { labelsForNearbyPlace, labelsForRedFlagLine } from "../../lib/notebook.ts";
 import {
   MapEvidenceTray,
@@ -49,14 +36,9 @@ import {
 } from "./MapEvidenceTray.tsx";
 import { useNotebook } from "../../hooks/useNotebook.ts";
 
-const loadAroundThisHomeMap = async (presentation: MapPresentation) => {
-  const module = presentation === "readable_2d"
-    ? await import("./AroundThisHomeMap.tsx")
-    : await import("./AroundThisHomeGoogle3DMap.tsx");
-  const component = "AroundThisHomeMap" in module
-    ? module.AroundThisHomeMap
-    : module.AroundThisHomeGoogle3DMap;
-  return { default: component };
+const loadAroundThisHomeMap = async () => {
+  const module = await import("./AroundThisHomeMap.tsx");
+  return { default: module.AroundThisHomeMap };
 };
 
 function RetryableAroundThisHomeMap({
@@ -68,7 +50,7 @@ function RetryableAroundThisHomeMap({
 
   useEffect(() => {
     let cancelled = false;
-    loadAroundThisHomeMap(props.mapPresentation)
+    loadAroundThisHomeMap()
       .then((module) => {
         if (!cancelled) setMapComponent(() => module.default);
       })
@@ -78,7 +60,7 @@ function RetryableAroundThisHomeMap({
     return () => {
       cancelled = true;
     };
-  }, [props.mapPresentation]);
+  }, []);
 
   if (loadError) throw loadError;
   if (!MapComponent) {
@@ -149,14 +131,12 @@ class NearbyMapBoundary extends Component<
 type AroundThisHomePlateProps = {
   propertyId: string;
   context: PropertyMapContext;
-  searchMatches?: MapComparisonHome[];
 };
 
 type AroundThisHomePlateInnerProps = {
   propertyId: string;
   context: PropertyMapContext;
   layers: string[];
-  searchMatches: MapComparisonHome[];
 };
 
 const DEFAULT_WATER_SCOPE_RADIUS_KM = 3;
@@ -202,32 +182,7 @@ function redFlagSelection(
   };
 }
 
-function accessLineSelection(
-  propertyId: string,
-  line: MapOverlayLine,
-  selectedLayerId: string,
-  selectedLayerLabel: string,
-): MapEvidenceSelection {
-  return {
-    id: `line:${line.id}`,
-    catalogKey: `nearby-line:${propertyId}:${selectedLayerLabel.toLowerCase()}:${line.id}`,
-    title: line.name,
-    layerLabel: selectedLayerLabel,
-    meta: [
-      typeof line.distance_km === "number" ? `${line.distance_km.toFixed(1)} km` : null,
-      ...(line.details ?? []),
-    ].filter((value): value is string => Boolean(value)),
-    sourceType: line.source_type,
-    sourceUrl: line.source_url,
-    labels: labelsForNearbyPlace(selectedLayerId, line.distance_km),
-  };
-}
-
-export function AroundThisHomePlate({
-  propertyId,
-  context,
-  searchMatches = [],
-}: AroundThisHomePlateProps) {
+export function AroundThisHomePlate({ propertyId, context }: AroundThisHomePlateProps) {
   const layers = useMemo(() => availableLayers(context), [context]);
   const focus = context.proof_focus;
   const focusKey = focus
@@ -248,7 +203,6 @@ export function AroundThisHomePlate({
       propertyId={propertyId}
       context={context}
       layers={layers}
-      searchMatches={searchMatches}
     />
   );
 }
@@ -257,11 +211,9 @@ function AroundThisHomePlateInner({
   propertyId,
   context,
   layers,
-  searchMatches,
 }: AroundThisHomePlateInnerProps) {
-  const navigate = useNavigate();
   const { notes, toggleFact } = useNotebook();
-  const home = useMemo(() => resolveHomeAnchor(context), [context]);
+  const home = resolveHomeAnchor(context);
   const focus = context.proof_focus;
   const focusedStory = useMemo(
     () => focus && layers.includes(focus.layerId)
@@ -278,19 +230,11 @@ function AroundThisHomePlateInner({
     focusedStory ?? defaultStory);
   const [selectedId, setSelectedId] = useState<string | null>(() => null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(() =>
-    focus?.featureId && [
-      ...Object.values(context.layer_lines ?? {}).flat(),
-      ...(context.access_lines ?? []),
-      ...(context.red_flag_lines ?? []),
-    ].some((line) => line.id === focus.featureId)
+    focus?.featureId && context.red_flag_lines?.some((line) => line.id === focus.featureId)
       ? focus.featureId
       : null);
   const [openedClusterId, setOpenedClusterId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
-  const [cameraMode, setCameraMode] = useState<NearbyCameraMode>(() =>
-    focusedStory
-      ? cameraModeForStorySelection(focusedStory, context.layers ?? [])
-      : "home");
   const [selectionDismissed, setSelectionDismissed] = useState(false);
 
   useEffect(() => {
@@ -326,63 +270,18 @@ function AroundThisHomePlateInner({
     return clusterClosePlaces(numbered, scale);
   }, [numbered, openedClusterId, scale]);
 
-  const comparisonHomes = useMemo(
-    () => home
-      ? nearestComparisonHomes(home, searchMatches)
-      : [],
-    [home, searchMatches],
-  );
-  const openComparisonHome = useCallback(
-    (candidate: MapComparisonHome) => navigate(candidate.href),
-    [navigate],
-  );
-
-  const searchMatchesFocused = story.kind === "matches";
   const metroFocused = story.kind === "layer" && story.layer === "metro";
   const redFlagsFocused = story.kind === "layer" && story.layer === "red_flags";
-  const activeStoryLines = useMemo(
-    () => story.kind === "layer" ? linesForLayer(context, story.layer) : [],
-    [context, story],
-  );
-  const terrainCorridor = story.kind === "layer"
-    && context.layers?.find((layer) => layer.id === story.layer)?.renderKind
-      === "terrain_corridor";
-  const layerExperience = story.kind === "layer"
-    ? context.layers?.find((layer) => layer.id === story.layer)?.experience
-    : undefined;
-  useEffect(() => {
-    if (!terrainCorridor || cameraMode !== "home") return undefined;
-    const delayMs = layerExperience?.dwellMs ?? 3_600;
-    const timeout = window.setTimeout(() => setCameraMode("evidence"), delayMs);
-    return () => window.clearTimeout(timeout);
-  }, [cameraMode, layerExperience?.dwellMs, terrainCorridor]);
   const activeRedFlagLines = useMemo(
-    () => redFlagsFocused ? activeStoryLines : [],
-    [activeStoryLines, redFlagsFocused],
+    () => redFlagsFocused ? context.red_flag_lines ?? [] : [],
+    [context.red_flag_lines, redFlagsFocused],
   );
   const waterFocused = story.kind === "water";
-  const mapPresentation: MapPresentation = mapPresentationForStory(
-    story,
-    cameraMode,
-    context.layers ?? [],
-  );
   const activeMetroLines = useMemo(
     () => context.metro_lines ?? [],
     [context.metro_lines],
   );
-  const activeAccessLines = useMemo(
-    () => story.kind === "layer" && story.layer !== "red_flags"
-      ? activeStoryLines
-      : [],
-    [activeStoryLines, story],
-  );
-  const visibleMetroLines = useMemo(
-    () => metroFocused && home
-      ? metroLinesNearEvidence(home, numbered, activeMetroLines, activeAccessLines)
-      : [],
-    [activeAccessLines, activeMetroLines, home, metroFocused, numbered],
-  );
-  const showMetroLines = visibleMetroLines.length > 0;
+  const showMetroLines = metroFocused && activeMetroLines.length > 0;
 
   const viewport = useMemo(() => {
     if (!home) {
@@ -402,30 +301,21 @@ function AroundThisHomePlateInner({
         paddingFactor: 0.24,
       };
     }
-    const viewportPlaces = searchMatchesFocused
-      ? comparisonHomes.map((candidate) => ({
-        latitude: candidate.latitude,
-        longitude: candidate.longitude,
-      }))
-      : numbered;
     return buildPlateViewport(
       home,
-      viewportPlaces,
-      scale,
-      visibleMetroLines,
-      [...activeAccessLines, ...activeRedFlagLines],
+      numbered,
+      showMetroLines ? "area" : scale,
+      showMetroLines ? activeMetroLines : [],
+      "nearest",
+      activeRedFlagLines,
       focus,
     );
-  }, [activeAccessLines, activeRedFlagLines, comparisonHomes, context.water?.scope_radius_km, focus, home, numbered, scale, searchMatchesFocused, visibleMetroLines, waterFocused]);
+  }, [activeMetroLines, activeRedFlagLines, context.water?.scope_radius_km, focus, home, numbered, scale, showMetroLines, waterFocused]);
 
   const selected = numbered.find((place) => place.id === selectedId) ?? focusedPlace ?? null;
-  const selectedLine = activeAccessLines.find((line) => line.id === selectedLineId)
-    ?? activeRedFlagLines.find((line) => line.id === selectedLineId)
+  const selectedLine = activeRedFlagLines.find((line) => line.id === selectedLineId)
     ?? (selected ? null : activeRedFlagLines[0])
     ?? null;
-  const selectedLineIsAccess = Boolean(
-    selectedLine && activeAccessLines.some((line) => line.id === selectedLine.id),
-  );
 
   const mapSelection = useMemo<MapEvidenceSelection | null>(() => {
     if (selectionDismissed) return null;
@@ -444,14 +334,7 @@ function AroundThisHomePlateInner({
       };
     }
     if (selectedLine) {
-      return selectedLineIsAccess
-        ? accessLineSelection(
-          propertyId,
-          selectedLine,
-          story.kind === "layer" ? story.layer : "nearby",
-          story.kind === "layer" ? layerLabel(story.layer, context) : "Nearby",
-        )
-        : redFlagSelection(propertyId, selectedLine);
+      return redFlagSelection(propertyId, selectedLine);
     }
     if (!selected) return null;
     return {
@@ -474,11 +357,10 @@ function AroundThisHomePlateInner({
       sourceUrl: selected.source_url,
       labels: labelsForNearbyPlace(selected.layer, selected.distance_km),
     };
-  }, [context, propertyId, selected, selectedLine, selectedLineIsAccess, selectionDismissed, story, waterFocused]);
+  }, [context, propertyId, selected, selectedLine, selectionDismissed, waterFocused]);
 
   function selectStory(next: PlateStory) {
     setStory(next);
-    setCameraMode(cameraModeForStorySelection(next, context.layers ?? []));
     setSelectedId(null);
     setSelectedLineId(null);
     setOpenedClusterId(null);
@@ -486,14 +368,10 @@ function AroundThisHomePlateInner({
     setScale(scaleForStory(next, focus, context.places));
   }
 
-  function returnToOverview() {
-    setStory(defaultStory);
-    setCameraMode("home");
-    setSelectedId(null);
+  function selectPlace(id: string) {
+    setSelectedId(id);
     setSelectedLineId(null);
-    setOpenedClusterId(null);
     setSelectionDismissed(false);
-    setScale(scaleForStory(defaultStory, focus, context.places));
   }
 
   function selectCluster(cluster: PlaceCluster) {
@@ -504,19 +382,7 @@ function AroundThisHomePlateInner({
     setSelectionDismissed(false);
   }
 
-  function selectPlace(place: (typeof numbered)[number]) {
-    setSelectedId(place.id);
-    setSelectedLineId(null);
-    setSelectionDismissed(false);
-  }
-
   function selectRedFlagLine(id: string) {
-    setSelectedLineId(id);
-    setSelectedId(null);
-    setSelectionDismissed(false);
-  }
-
-  function selectAccessLine(id: string) {
     setSelectedLineId(id);
     setSelectedId(null);
     setSelectionDismissed(false);
@@ -551,13 +417,13 @@ function AroundThisHomePlateInner({
       className={`nearby-plate${expanded ? " is-expanded" : ""}`}
       aria-labelledby="around-this-home-title"
     >
-      <header className="property-story-heading">
-        <span>Location</span>
-        <h2 id="around-this-home-title">Around this home.</h2>
-      </header>
-
       <div className="nearby-plate__story-layout">
         <aside className="nearby-plate__story-rail">
+          <header className="property-story-heading">
+            <span>Location</span>
+            <h2 id="around-this-home-title">Around this home.</h2>
+          </header>
+
           <div className="nearby-plate__layers" role="toolbar" aria-label="Map layers">
             {layers.map((layer) => {
               const on = story.kind === "layer" && story.layer === layer;
@@ -570,22 +436,11 @@ function AroundThisHomePlateInner({
                   aria-pressed={on}
                   onClick={() => selectStory({ kind: "layer", layer })}
                 >
-                  <SoftNearbyIcon kind={layer} size={26} />
+                  <SoftNearbyIcon kind={layer} />
                   <span>{label}</span>
                 </button>
               );
             })}
-            {comparisonHomes.length > 0 && (
-              <button
-                type="button"
-                className={`nearby-plate__chip nearby-plate__chip--matches${searchMatchesFocused ? " is-active" : ""}`}
-                aria-pressed={searchMatchesFocused}
-                onClick={() => selectStory({ kind: "matches" })}
-              >
-                <SoftHomeStateIcon size={26} />
-                <span>Matches</span>
-              </button>
-            )}
             {context.water && (
             <button
               type="button"
@@ -593,7 +448,7 @@ function AroundThisHomePlateInner({
                 aria-pressed={waterFocused}
                 onClick={() => selectStory({ kind: "water" })}
             >
-                <SoftNearbyIcon kind="water" size={26} />
+                <SoftNearbyIcon kind="water" />
                 <span>Water</span>
             </button>
             )}
@@ -604,43 +459,29 @@ function AroundThisHomePlateInner({
           <div className="nearby-plate__canvas">
             {canRenderMap && home ? (
               <NearbyMapBoundary
-                key={`${home.latitude.toFixed(5)}-${home.longitude.toFixed(5)}-${mapPresentation}`}
+                key={`${home.latitude.toFixed(5)}-${home.longitude.toFixed(5)}`}
               >
                 <RetryableAroundThisHomeMap
                   home={{
                     latitude: home.latitude,
                     longitude: home.longitude,
                     name: context.home.name,
-                    boundary: terrainCorridor ? context.home.boundary : undefined,
                   }}
                   places={singles}
                   clusters={clusters}
                   selectedId={selected?.id ?? null}
                   viewport={viewport}
-                  metroLines={visibleMetroLines}
-                  accessLines={activeAccessLines}
+                  metroLines={activeMetroLines}
                   redFlagLines={activeRedFlagLines}
-                  greenPatches={context.green_patches}
-                  lakes={context.lakes}
                   showMetroLines={showMetroLines}
                   water={context.water}
                   waterTint={showWater}
                   expanded={expanded}
-                  cameraMode={cameraMode}
-                  terrainCorridor={terrainCorridor}
-                  layerExperience={layerExperience}
-                  mapPresentation={mapPresentation}
-                  comparisonHomes={searchMatchesFocused && cameraMode === "evidence"
-                    ? comparisonHomes
-                    : []}
                   pinnedPlaceIds={pinnedPlaceIds}
-                  onSelectCluster={selectCluster}
                   onSelectPlace={selectPlace}
-                  onSelectComparisonHome={openComparisonHome}
-                  onSelectAccessLine={selectAccessLine}
+                  onSelectCluster={selectCluster}
                   onSelectRedFlagLine={selectRedFlagLine}
                   onRememberPlace={rememberPlace}
-                  onBackToHome={returnToOverview}
                   onToggleExpanded={() => setExpanded((current) => !current)}
                 />
               </NearbyMapBoundary>
