@@ -420,10 +420,6 @@ export function HomePlanPage() {
               inputs={inputs}
               extraEmisPerYear={extraEmisPerYear}
               repaymentStrategy={repaymentStrategy}
-              repaymentModel={repayment}
-              loanFreeYear={repayment.status === "repaid"
-                ? repayment.recurrentSchedule.at(-1)?.year ?? null
-                : null}
               onInputChange={updateInput}
               onExtraEmisChange={updateExtraEmisPerYear}
               onStrategyChange={updateRepaymentStrategy}

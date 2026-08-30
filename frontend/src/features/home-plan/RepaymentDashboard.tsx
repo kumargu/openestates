@@ -1,5 +1,10 @@
 import { useMemo, useState } from "react";
-import { formatCurrency, type PlanInputs } from "./model.ts";
+import {
+  formatCurrency,
+  formatLakhCurrency,
+  formatMonthlyCurrency,
+  type PlanInputs,
+} from "./model.ts";
 import type {
   OneOffExtraPaymentPoint,
   RepaymentDashboardModel,
@@ -82,48 +87,33 @@ function OutcomeStrip({
   const noExtras = model.extraEmisPerYear === 0;
   const becomesRepayable = model.baselinePayoffMonths == null
     && model.selectedPayoffMonths != null;
+  const action = `${model.extraEmisPerYear} extra payment${model.extraEmisPerYear === 1 ? "" : "s"}/year`;
+  const before = model.strategy === "finish_earlier"
+    ? durationLabel(model.baselinePayoffMonths)
+    : formatMonthlyCurrency(model.openingMonthlyEmi);
+  const after = model.strategy === "finish_earlier"
+    ? durationLabel(model.selectedPayoffMonths)
+    : formatMonthlyCurrency(model.firstRecalculatedMonthlyEmi);
+  const benefit = noExtras
+    ? "Choose extra payments above to compare a repayment plan."
+    : !model.comparisonAvailable
+      ? becomesRepayable
+        ? "The selected plan becomes repayable; lifetime interest is not comparable."
+        : "The loan does not close within the modelled horizon."
+      : model.strategy === "finish_earlier"
+        ? `Save ${durationLabel(model.monthsSaved)} and ${formatCurrency(model.interestSaved, true)} interest`
+        : `Reduce the monthly EMI by ${formatCurrency(lowerReduction)}/month and save ${formatCurrency(model.interestSaved, true)} interest`;
 
   return (
     <section className="home-plan-outcome-strip" aria-label="Selected repayment outcome">
-      <dl>
-        <div>
-          <dt>
-            {!model.comparisonAvailable
-              ? "Repayment result"
-              : model.strategy === "finish_earlier"
-                ? "Time saved"
-                : "EMI after first prepayment"}
-          </dt>
-          <dd>
-            {noExtras
-              ? "No change"
-              : !model.comparisonAvailable
-                ? becomesRepayable ? "Becomes repayable" : "Not repaid"
-              : model.strategy === "finish_earlier"
-                ? `${durationLabel(model.monthsSaved)} sooner`
-                : formatCurrency(model.firstRecalculatedMonthlyEmi, true)}
-          </dd>
-        </div>
-        <div>
-          <dt>Interest avoided</dt>
-          <dd>{model.comparisonAvailable ? formatCurrency(model.interestSaved, true) : "Not comparable"}</dd>
-        </div>
-        <div>
-          <dt>Selected payoff</dt>
-          <dd>{durationLabel(model.selectedPayoffMonths)}</dd>
-        </div>
-      </dl>
-      <p>
-        {noExtras
-          ? "Choose an annual prepayment above to compare it with the original loan."
-          : !model.comparisonAvailable
-            ? becomesRepayable
-              ? "Extra payments make this loan repayable; lifetime savings cannot be compared because the original EMI never closes."
-              : "At this EMI, the loan does not close within the modelled horizon."
-          : model.strategy === "finish_earlier"
-            ? `The scheduled EMI remains ${formatCurrency(model.openingMonthlyEmi)} while the payoff moves forward.`
-            : `Monthly commitment falls by ${formatCurrency(lowerReduction)} after the first prepayment; future extra payments fall with the recalculated EMI.`}
-      </p>
+      <span>Selected plan</span>
+      <strong>{action}</strong>
+      <div className="home-plan-outcome-strip__change" aria-label={`${before} changes to ${after}`}>
+        <b>{before}</b>
+        <span aria-hidden="true">→</span>
+        <b>{after}</b>
+      </div>
+      <p>{benefit}</p>
     </section>
   );
 }
@@ -184,8 +174,8 @@ function BalanceChart({
   return (
     <section className="home-plan-primary-chart">
       <ChartHeading
-        title="How the selected plan changes the loan balance"
-        conclusion="The full width remains the original loan horizon."
+        title="Loan balance over time"
+        conclusion="Original and selected plan across the original loan horizon."
       />
       <ScrubbableSvg
         width={PRIMARY_WIDTH}
@@ -321,10 +311,10 @@ function PaymentCompositionChart({
   return (
     <section className="home-plan-support-chart">
       <ChartHeading
-        title="What each year’s payment contains"
+        title="Where your payments go"
         conclusion={crossover == null
           ? "Interest remains larger than scheduled principal."
-          : `Scheduled principal exceeds interest from year ${crossover}.`}
+          : `Scheduled principal exceeds interest in year ${crossover}.`}
       />
       <ScrubbableSvg
         width={SUPPORT_WIDTH}
@@ -461,12 +451,12 @@ function TimingImpactChart({
   return (
     <section className="home-plan-support-chart">
       <ChartHeading
-        title="What one extra EMI achieves in each year"
+        title="Why early extra payments save more"
         conclusion={!model.comparisonAvailable
           ? "Lifetime interest impact is not comparable because the original EMI never repays the loan."
           : half == null
-          ? "Earlier prepayments avoid more lifetime interest."
-          : `Impact has halved by year ${half.year}; that is a comparison checkpoint, not an instruction to stop.`}
+          ? "Earlier extra payments avoid more lifetime interest."
+          : `Year ${half.year}: an extra payment saves half as much interest as in Year 1.`}
       />
       <ScrubbableSvg
         width={SUPPORT_WIDTH}
@@ -474,11 +464,11 @@ function TimingImpactChart({
         insets={SUPPORT_INSETS}
         pointCount={horizonYears + 1}
         activeIndex={activeYear}
-        label="Lifetime interest avoided by one extra EMI across the original loan horizon"
+        label="Lifetime interest avoided by one extra payment across the original loan horizon"
         valueText={!model.comparisonAvailable
           ? `Year ${activeYear}, lifetime interest comparison unavailable`
           : active.extraPaid > 0
-          ? `Year ${activeYear}, one extra EMI ${formatCurrency(active.extraPaid, true)}, ${formatCurrency(active.interestSaved, true)} lifetime interest avoided`
+          ? `Year ${activeYear}, one extra payment ${formatCurrency(active.extraPaid, true)}, ${formatCurrency(active.interestSaved, true)} lifetime interest avoided`
           : `Year ${activeYear}, no scheduled extra payment remains`}
         className="home-plan-timing-impact"
         indexFromPoint={(clientX, _clientY, bounds) => (
@@ -561,33 +551,9 @@ function TimingImpactChart({
 
 function MilestoneRail({
   model,
-  baselinePayoffMonths,
-  selectedPayoffMonths,
 }: {
   model: RepaymentDashboardModel;
-  baselinePayoffMonths: number | null;
-  selectedPayoffMonths: number | null;
 }) {
-  const samePayoff = selectedPayoffMonths != null
-    && selectedPayoffMonths === baselinePayoffMonths;
-  const planMilestones = baselinePayoffMonths == null && selectedPayoffMonths == null
-    ? [{
-      sort: Number.POSITIVE_INFINITY,
-      value: "Not repaid",
-      label: "Both plans at this EMI",
-    }]
-    : [
-      {
-        sort: selectedPayoffMonths == null ? Number.POSITIVE_INFINITY : selectedPayoffMonths / 12,
-        value: durationLabel(selectedPayoffMonths),
-        label: samePayoff ? "Both plans payoff" : "Selected payoff",
-      },
-      ...(samePayoff ? [] : [{
-        sort: baselinePayoffMonths == null ? Number.POSITIVE_INFINITY : baselinePayoffMonths / 12,
-        value: durationLabel(baselinePayoffMonths),
-        label: "Original payoff",
-      }]),
-    ];
   const milestones = [
     { sort: 1, value: "Year 1", label: "Interest-heavy period" },
     {
@@ -600,14 +566,13 @@ function MilestoneRail({
       value: model.markers.halfFirstYearImpactYear == null
         ? "—"
         : `Year ${model.markers.halfFirstYearImpactYear}`,
-      label: "Prepayment impact halves",
+      label: "Extra-payment impact has halved",
     },
-    ...planMilestones,
   ].sort((left, right) => left.sort - right.sort);
 
   return (
     <ol
-      className={`home-plan-milestone-rail home-plan-milestone-rail--${milestones.length}`}
+      className="home-plan-milestone-rail"
       aria-label="Loan milestones"
     >
       {milestones.map(({ value, label }) => (
@@ -620,37 +585,44 @@ function MilestoneRail({
   );
 }
 
-function CalculationDisclosure({
+function AssumptionsDisclosure({
+  inputs,
   model,
 }: {
+  inputs: PlanInputs;
   model: RepaymentDashboardModel;
 }) {
+  const loanAmount = inputs.propertyPriceLakh * 100_000 * (1 - inputs.downPaymentPercent / 100);
   return (
-    <details className="home-plan-calculation">
-      <summary>How the calculation works</summary>
-      <div>
-        <p>
-          Interest is calculated monthly on outstanding principal. Annual extra payments go
-          directly to principal; one extra EMI means the selected count multiplied by the
-          scheduled EMI in that year.
-        </p>
-        <code>EMI = P × r × (1 + r)ⁿ ÷ ((1 + r)ⁿ − 1)</code>
-        <p>
-          Here P is principal, r is the monthly interest rate and n is the remaining number
-          of monthly payments. At a zero interest rate, EMI is P ÷ n.
-        </p>
-        <p>
-          Finish earlier keeps the scheduled EMI constant and recalculates tenure. Lower EMI
-          keeps the original payoff date and recalculates the EMI, so future extra payments
-          also fall.
-        </p>
-        <p>
-          The diminishing-prepayment checkpoint is the first year in which one extra EMI
-          avoids no more than 50% of the lifetime interest avoided by the same payment in year
-          one. It is a deterministic comparison point, not advice to stop prepaying.
-          The {formatCurrency(model.interestSaved, true)} selected-plan saving comes from the
-          repayment schedule; Rent vs Buy market returns are projections, not guaranteed savings.
-        </p>
+    <details className="home-plan-assumptions">
+      <summary>How we estimated this</summary>
+      <div className="home-plan-assumptions__body">
+        <ul>
+          <li>
+            Modelled loan: {formatCurrency(loanAmount, true)} at {inputs.loanRate}% yearly interest.
+          </li>
+          <li>
+            Scheduled EMI: {formatMonthlyCurrency(model.openingMonthlyEmi)}, with interest
+            calculated monthly on the remaining balance.
+          </li>
+          <li>
+            Each extra payment equals one scheduled EMI—currently
+            {" "}{formatLakhCurrency(model.openingMonthlyEmi)}—and goes directly to principal.
+          </li>
+          <li>
+            {model.strategy === "finish_earlier"
+              ? "Finish earlier keeps the monthly EMI unchanged and brings the payoff date forward."
+              : "Lower EMI keeps the original payoff date and recalculates the monthly EMI after each extra payment."}
+          </li>
+          <li>
+            Under Lower EMI, later extra payments shrink with the recalculated EMI.
+          </li>
+          <li>
+            The half-impact marker is the first year an extra payment avoids 50% or less of
+            its Year-1 interest saving. It is a comparison point, not a recommendation to stop.
+          </li>
+          <li>Registration, taxes, loan fees and prepayment charges are excluded.</li>
+        </ul>
       </div>
     </details>
   );
@@ -694,8 +666,6 @@ export function RepaymentDashboard({
       />
       <MilestoneRail
         model={model}
-        baselinePayoffMonths={model.baselinePayoffMonths}
-        selectedPayoffMonths={model.selectedPayoffMonths}
       />
       <div className="home-plan-support-grid">
         <PaymentCompositionChart
@@ -713,7 +683,7 @@ export function RepaymentDashboard({
           onPinYear={setPinnedYear}
         />
       </div>
-      <CalculationDisclosure model={model} />
+      <AssumptionsDisclosure inputs={inputs} model={model} />
     </div>
   );
 }

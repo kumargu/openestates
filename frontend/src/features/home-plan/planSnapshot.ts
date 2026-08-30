@@ -37,8 +37,8 @@ function loanFreeText(projection: PlanProjection, horizonYears: number): string 
 }
 
 function extraEmiText(extraEmisPerYear: number): string {
-  if (extraEmisPerYear === 1) return "1 extra EMI/year";
-  return `${extraEmisPerYear} extra EMIs/year`;
+  if (extraEmisPerYear === 1) return "1 extra payment/year";
+  return `${extraEmisPerYear} extra payments/year`;
 }
 
 function stableIndex(value: string, count: number): number {

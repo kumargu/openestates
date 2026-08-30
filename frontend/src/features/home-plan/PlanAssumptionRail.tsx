@@ -1,7 +1,11 @@
-import { formatCurrency, type EditablePlanInput, type PlanInputs } from "./model.ts";
+import {
+  formatLakhCurrency,
+  formatMonthlyCurrency,
+  type EditablePlanInput,
+  type PlanInputs,
+} from "./model.ts";
 import { useState } from "react";
 import type { RepaymentStrategy } from "./financeEngine.ts";
-import type { RepaymentDashboardModel } from "./repaymentModel.ts";
 
 const LAKH = 100_000;
 const MONTHS_IN_YEAR = 12;
@@ -15,22 +19,11 @@ type PlanAssumptionRailProps = {
   inputs: PlanInputs;
   extraEmisPerYear: number;
   repaymentStrategy: RepaymentStrategy;
-  repaymentModel: RepaymentDashboardModel;
-  loanFreeYear: number | null;
   onInputChange: (key: EditablePlanInput, value: number) => void;
   onExtraEmisChange: (count: number) => void;
   onStrategyChange: (strategy: RepaymentStrategy) => void;
   onReset: () => void;
 };
-
-function durationLabel(months: number | null): string {
-  if (months == null) return "Not repaid";
-  const years = Math.floor(months / 12);
-  const remainder = months % 12;
-  if (years === 0) return `${remainder} mo`;
-  if (remainder === 0) return `${years}y`;
-  return `${years}y ${remainder}m`;
-}
 
 type InputSpec = {
   key: EditablePlanInput;
@@ -50,6 +43,7 @@ function PlanInput({
   prefix,
   suffix,
   note,
+  valueScale = 1,
   onChange,
 }: {
   label: string;
@@ -59,9 +53,12 @@ function PlanInput({
   prefix?: string;
   suffix: string;
   note: string;
+  valueScale?: number;
   onChange: (value: number) => void;
 }) {
-  const [draft, setDraft] = useState(String(value));
+  const displayValue = value / valueScale;
+  const displayText = valueScale === 100 ? displayValue.toFixed(2) : String(displayValue);
+  const [draft, setDraft] = useState(String(displayValue));
   const [editing, setEditing] = useState(false);
 
   function normalizeDraft(raw: string): string {
@@ -76,7 +73,8 @@ function PlanInput({
     if (!raw.trim()) return min;
     const next = Number(raw);
     if (!Number.isFinite(next)) return null;
-    const bounded = Math.max(min, next);
+    const scaled = next * valueScale;
+    const bounded = Math.max(min, scaled);
     return max === undefined ? bounded : Math.min(max, bounded);
   }
 
@@ -88,7 +86,7 @@ function PlanInput({
         <input
           type="text"
           inputMode="decimal"
-          value={editing ? draft : String(value)}
+          value={editing ? draft : displayText}
           onChange={(event) => {
             const nextDraft = normalizeDraft(event.target.value);
             setDraft(nextDraft);
@@ -97,14 +95,14 @@ function PlanInput({
           }}
           onFocus={(event) => {
             setEditing(true);
-            setDraft(String(value));
+            setDraft(String(displayValue));
             event.currentTarget.select();
           }}
           onBlur={(event) => {
             const next = parseInput(event.currentTarget.value);
             const committed = next ?? value;
             setEditing(false);
-            setDraft(String(committed));
+            setDraft(String(committed / valueScale));
             if (committed !== value) onChange(committed);
           }}
         />
@@ -119,8 +117,6 @@ export function PlanAssumptionRail({
   inputs,
   extraEmisPerYear,
   repaymentStrategy,
-  repaymentModel,
-  loanFreeYear,
   onInputChange,
   onExtraEmisChange,
   onStrategyChange,
@@ -128,30 +124,8 @@ export function PlanAssumptionRail({
 }: PlanAssumptionRailProps) {
   const principalThresholdThousands = monthlyInterestThresholdThousands(inputs);
   const emiNote = principalThresholdThousands > 0 && inputs.monthlyEmiThousands <= principalThresholdThousands
-    ? `Principal starts above ₹${principalThresholdThousands.toLocaleString("en-IN")}K / mo`
-    : loanFreeYear == null
-      ? "Loan stays open at this EMI"
-      : `Loan-free around year ${loanFreeYear}`;
-  const finishEarlier = repaymentModel.strategyComparison.find(
-    (point) => point.strategy === "finish_earlier",
-  );
-  const lowerEmi = repaymentModel.strategyComparison.find(
-    (point) => point.strategy === "lower_emi",
-  );
-  const finishSummary = extraEmisPerYear === 0
-    ? "Keep the scheduled EMI · no prepayment selected"
-    : finishEarlier?.payoffMonths == null
-      ? "Not repaid at this EMI"
-      : repaymentModel.comparisonAvailable
-        ? `Payoff in ${durationLabel(finishEarlier.payoffMonths)} · save ${formatCurrency(finishEarlier.interestSaved, true)}`
-        : `Payoff in ${durationLabel(finishEarlier.payoffMonths)} · original plan not repayable`;
-  const lowerSummary = extraEmisPerYear === 0
-    ? "Recalculate after a prepayment · none selected"
-    : lowerEmi?.payoffMonths == null
-      ? "Not repaid at this EMI"
-      : repaymentModel.comparisonAvailable
-        ? `${formatCurrency(lowerEmi.firstRecalculatedMonthlyEmi, true)} after first prepayment · save ${formatCurrency(lowerEmi.interestSaved, true)}`
-        : `${formatCurrency(lowerEmi.firstRecalculatedMonthlyEmi, true)} after first prepayment · original plan not repayable`;
+    ? `Must exceed ${formatMonthlyCurrency(principalThresholdThousands * 1_000)} to reduce principal`
+    : "Before extra payments";
   const financingInputs: InputSpec[] = [
     {
       key: "downPaymentPercent",
@@ -186,13 +160,14 @@ export function PlanAssumptionRail({
             label="Monthly EMI"
             min={inputs.downPaymentPercent === 100 ? 0 : 1}
             prefix="₹"
-            suffix="K / mo"
+            suffix="L/month"
             note={emiNote}
             value={inputs.monthlyEmiThousands}
+            valueScale={100}
             onChange={(value) => onInputChange("monthlyEmiThousands", value)}
           />
-          <div className="home-plan-inline-studio__extra" role="group" aria-label="Extra EMIs each year">
-            <span>Extra EMIs / year</span>
+          <div className="home-plan-inline-studio__extra" role="group" aria-label="Extra payments each year">
+            <span>Extra payments / year</span>
             <div>
               {[0, 1, 2, 3, 4, 6].map((count) => (
                 <button
@@ -206,6 +181,9 @@ export function PlanAssumptionRail({
                 </button>
               ))}
             </div>
+            <small>
+              Each equals one EMI: {formatLakhCurrency(inputs.monthlyEmiThousands * 1_000)}
+            </small>
           </div>
         </div>
 
@@ -216,7 +194,7 @@ export function PlanAssumptionRail({
         </div>
       </div>
       <div className="home-plan-setup-strategy">
-        <span>After each prepayment</span>
+        <span>Repayment objective</span>
         <div className="home-plan-setup-strategy__choices" role="group" aria-label="Repayment objective">
           <button
             type="button"
@@ -225,7 +203,7 @@ export function PlanAssumptionRail({
             onClick={() => onStrategyChange("finish_earlier")}
           >
             <strong>Finish earlier</strong>
-            <small>{finishSummary}</small>
+            <small>Keep the monthly EMI · shorten the loan</small>
           </button>
           <button
             type="button"
@@ -234,15 +212,9 @@ export function PlanAssumptionRail({
             onClick={() => onStrategyChange("lower_emi")}
           >
             <strong>Lower EMI</strong>
-            <small>{lowerSummary}</small>
+            <small>Keep the payoff date · reduce monthly commitment</small>
           </button>
         </div>
-        {repaymentStrategy === "lower_emi" && extraEmisPerYear > 0 ? (
-          <p>
-            Future extra-EMI amounts also fall because each extra payment uses that year’s
-            recalculated EMI.
-          </p>
-        ) : null}
       </div>
     </section>
   );
@@ -259,7 +231,7 @@ export function RentAssumptionRail({
     label: "Monthly rent",
     min: 0,
     prefix: "₹",
-    suffix: "K / mo",
+    suffix: "L/month",
     note: "Current rent",
   };
   const returnInput = {
@@ -278,6 +250,7 @@ export function RentAssumptionRail({
       <PlanInput
         {...rentInput}
         value={inputs.currentRentThousands}
+        valueScale={100}
         onChange={(value) => onInputChange("currentRentThousands", value)}
       />
       <div className="home-plan-sip-multiple">
@@ -298,7 +271,7 @@ export function RentAssumptionRail({
             </button>
           ))}
         </div>
-        <small>₹{inputs.monthlySipThousands.toLocaleString("en-IN")}K / mo</small>
+        <small>{formatMonthlyCurrency(inputs.monthlySipThousands * 1_000)}</small>
       </div>
       <details className="home-plan-rent-assumptions">
         <summary>Assumptions · {inputs.equityReturn}% SIP return</summary>

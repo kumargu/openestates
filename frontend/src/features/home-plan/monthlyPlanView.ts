@@ -21,8 +21,8 @@ function sentenceYearLabel(year: number): string {
 }
 
 function extraEmiLabel(extraEmisPerYear: number): string {
-  if (extraEmisPerYear === 1) return "1 extra EMI/year";
-  return `${extraEmisPerYear} extra EMIs/year`;
+  if (extraEmisPerYear === 1) return "1 extra payment/year";
+  return `${extraEmisPerYear} extra payments/year`;
 }
 
 function boundedYear(projection: PlanProjection, activeYear: number): number {

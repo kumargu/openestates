@@ -4,6 +4,7 @@ import {
   buildBaselinePlanInputs,
   calculateLoanJourney,
   calculateProjection,
+  formatMonthlyCurrency,
   hasPlannablePrice,
   type PlanInputs,
   updatePlanInput,
@@ -60,6 +61,11 @@ const ready = {
     dateSource: "not_applicable" as const,
   },
 };
+
+test("monthly currency uses precise Indian lakh notation", () => {
+  assert.equal(formatMonthlyCurrency(135_000), "₹1.35L/month");
+  assert.equal(formatMonthlyCurrency(55_000), "₹0.55L/month");
+});
 
 test("buyer and renter start with matching down-payment capital", () => {
   const projection = calculateProjection(ready);
@@ -165,7 +171,7 @@ test("plan snapshot captures monthly assumptions and inspected outcome", () => {
   assert.deepEqual(note.labels, ["finance", "emi", "price"]);
   assert.equal(note.title, "Waterford Estate plan, ₹1.8L EMI");
   assert.match(note.detail, /Waterford Estate/);
-  assert.match(note.detail, /3 extra EMIs\/year/);
+  assert.match(note.detail, /3 extra payments\/year/);
   assert.match(note.detail, /rent/i);
   assert.match(note.detail, /SIP/);
   assert.match(note.detail, /home.*projected near|home value reads near|home itself is projected near/i);
@@ -523,9 +529,9 @@ test("extra EMIs update payoff, total interest, snapshot, and top insight togeth
   assert.ok(prepaid.loanFreeYear! < base.loanFreeYear!);
   assert.ok(prepaid.totalInterest! < base.totalInterest!);
   assert.match(view.insight, /At 12 years, (buying|renting) leads by ₹/);
-  assert.match(view.insight, /3 extra EMIs\/year closes the loan/);
+  assert.match(view.insight, /3 extra payments\/year closes the loan/);
   assert.match(view.insight, /Total interest lands near/);
-  assert.match(note.detail, /3 extra EMIs\/year/);
+  assert.match(note.detail, /3 extra payments\/year/);
   assert.equal(note.catalogKey, "plan:home-1:current");
 });
 
@@ -652,7 +658,7 @@ test("default plan focus stays on the selected holding period", () => {
 
   assert.equal(focusYear, inputs.holdingPeriodYears);
   assert.match(view.timeLabel, new RegExp(`After ${inputs.holdingPeriodYears} years`));
-  assert.match(view.insight, /4 extra EMIs\/year closes the loan/);
+  assert.match(view.insight, /4 extra payments\/year closes the loan/);
 });
 
 test("default plan focus falls back to the graph horizon when payoff is outside the chart", () => {

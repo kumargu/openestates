@@ -403,3 +403,11 @@ export function formatCurrency(value: number, compact = false): string {
     maximumFractionDigits: 0,
   }).format(value);
 }
+
+export function formatLakhCurrency(value: number): string {
+  return `₹${(value / LAKH).toFixed(2)}L`;
+}
+
+export function formatMonthlyCurrency(value: number): string {
+  return `${formatLakhCurrency(value)}/month`;
+}
