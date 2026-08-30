@@ -115,7 +115,7 @@ export function PlanAssumptionRail({
     : loanFreeYear == null
       ? "Loan stays open at this EMI"
       : `Loan-free around year ${loanFreeYear}`;
-  const buyPathInputs: InputSpec[] = [
+  const financingInputs: InputSpec[] = [
     {
       key: "downPaymentPercent",
       label: "Down payment",
@@ -133,38 +133,11 @@ export function PlanAssumptionRail({
       note: "Bank rate",
     },
   ];
-  const rentPathInputs: InputSpec[] = [
-    {
-      key: "currentRentThousands",
-      label: "Monthly rent",
-      min: 0,
-      prefix: "₹",
-      suffix: "K / mo",
-      note: "Monthly housing cost",
-    },
-    {
-      key: "monthlySipThousands",
-      label: "Monthly SIP",
-      min: 0,
-      prefix: "₹",
-      suffix: "K / mo",
-      note: "Rent-path investment",
-    },
-    {
-      key: "equityReturn",
-      label: "SIP return",
-      min: 0,
-      max: 20,
-      suffix: "%",
-      note: "Expected yearly gain",
-    },
-  ];
-
   return (
-    <section className="home-plan-inline-studio" aria-label="Your monthly plan">
+    <section className="home-plan-inline-studio" aria-label="Loan repayment assumptions">
       <div className="home-plan-inline-studio__primary">
-        <div className="home-plan-inline-studio__buy" role="group" aria-label="Buy plan">
-          {buyPathInputs.map(({ key, ...input }) => (
+        <div className="home-plan-inline-studio__buy" role="group" aria-label="Loan plan">
+          {financingInputs.map(({ key, ...input }) => (
             <PlanInput
               key={key}
               {...input}
@@ -188,7 +161,7 @@ export function PlanAssumptionRail({
                 <button
                   type="button"
                   key={count}
-                  className={extraEmisPerYear === count ? "is-active" : ""}
+                  className={extraEmisPerYear === count ? "is-active" : undefined}
                   aria-pressed={extraEmisPerYear === count}
                   onClick={() => onExtraEmisChange(count)}
                 >
@@ -199,22 +172,60 @@ export function PlanAssumptionRail({
           </div>
         </div>
 
-        <div className="home-plan-inline-studio__divider" aria-hidden="true" />
-
-        <div className="home-plan-inline-studio__rent" role="group" aria-label="Rent plan">
-          {rentPathInputs.map(({ key, ...input }) => (
-            <PlanInput
-              key={key}
-              {...input}
-              value={inputs[key]}
-              onChange={(value) => onInputChange(key, value)}
-            />
-          ))}
+        <div className="home-plan-inline-studio__repay-actions">
           <button type="button" className="home-plan-inline-studio__reset" onClick={onReset}>
             Reset
           </button>
         </div>
       </div>
+    </section>
+  );
+}
+
+export function RentAssumptionRail({
+  inputs,
+  onInputChange,
+}: {
+  inputs: PlanInputs;
+  onInputChange: (key: EditablePlanInput, value: number) => void;
+}) {
+  const rentInputs: InputSpec[] = [
+    {
+      key: "currentRentThousands",
+      label: "Monthly rent",
+      min: 0,
+      prefix: "₹",
+      suffix: "K / mo",
+      note: "Current rent",
+    },
+    {
+      key: "monthlySipThousands",
+      label: "Monthly SIP",
+      min: 0,
+      prefix: "₹",
+      suffix: "K / mo",
+      note: "Rent-path investment",
+    },
+    {
+      key: "equityReturn",
+      label: "SIP return",
+      min: 0,
+      max: 20,
+      suffix: "%",
+      note: "Expected yearly gain",
+    },
+  ];
+
+  return (
+    <section className="home-plan-rent-controls" aria-label="Rent and investment assumptions">
+      {rentInputs.map(({ key, ...input }) => (
+        <PlanInput
+          key={key}
+          {...input}
+          value={inputs[key]}
+          onChange={(value) => onInputChange(key, value)}
+        />
+      ))}
     </section>
   );
 }

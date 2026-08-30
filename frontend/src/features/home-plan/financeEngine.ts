@@ -47,6 +47,11 @@ const LAKH = 100_000;
 const MONTHS_IN_YEAR = 12;
 
 export type RepaymentStrategy = "finish_earlier" | "lower_emi";
+export type LoanRepaymentStatus =
+  | "no_loan"
+  | "repaid"
+  | "insufficient_emi"
+  | "simulation_limit";
 
 export type LoanScheduleMonth = {
   month: number;
@@ -64,17 +69,21 @@ export type LoanSchedule = {
   months: LoanScheduleMonth[];
   openingMonthlyEmi: number;
   endingMonthlyEmi: number;
+  /** First extra payment. Later lower-EMI extras can be smaller. */
   annualPrepayment: number;
   baselinePayoffMonth: number | null;
   payoffMonth: number | null;
   totalInterest: number | null;
+  status: LoanRepaymentStatus;
 };
 
-type LoanScheduleOptions = {
+export type LoanScheduleOptions = {
   extraEmisPerYear?: number;
   strategy?: RepaymentStrategy;
-  /** Number of repayment years that receive the selected annual extra payment. */
-  extraPaymentsThroughYear?: number;
+  /** Restricts extras to one repayment year; omitted means every year. */
+  oneOffExtraPaymentYear?: number;
+  /** Starts recurring annual extras in this repayment year. */
+  extraEmisStartYear?: number;
 };
 
 type ConstructionPlan = {
@@ -198,8 +207,8 @@ export function monthsToPayoff(
 
 /**
  * Canonical monthly loan schedule used by repayment, interest and wealth views.
- * Extra payments are fixed multiples of the opening EMI so both strategies
- * compare the same rupee contribution.
+ * Each annual extra is a multiple of the EMI scheduled in that repayment year.
+ * This matters for lower-EMI plans: future extras fall with the re-amortised EMI.
  */
 export function buildLoanSchedule(
   inputs: PlanInputs,
@@ -211,6 +220,29 @@ export function buildLoanSchedule(
   if (!Number.isFinite(extraEmisPerYear) || extraEmisPerYear < 0 || !Number.isInteger(extraEmisPerYear)) {
     throw new RangeError("extraEmisPerYear must be a finite whole number >= 0");
   }
+  if (
+    options.oneOffExtraPaymentYear != null
+    && (
+      !Number.isFinite(options.oneOffExtraPaymentYear)
+      || options.oneOffExtraPaymentYear < 1
+      || !Number.isInteger(options.oneOffExtraPaymentYear)
+    )
+  ) {
+    throw new RangeError("oneOffExtraPaymentYear must be a finite whole number >= 1");
+  }
+  if (
+    options.extraEmisStartYear != null
+    && (
+      !Number.isFinite(options.extraEmisStartYear)
+      || options.extraEmisStartYear < 1
+      || !Number.isInteger(options.extraEmisStartYear)
+    )
+  ) {
+    throw new RangeError("extraEmisStartYear must be a finite whole number >= 1");
+  }
+  if (options.oneOffExtraPaymentYear != null && options.extraEmisStartYear != null) {
+    throw new RangeError("one-off and recurring-start timing cannot be combined");
+  }
   const strategy = options.strategy ?? "finish_earlier";
   const plan = constructionPlanFor(inputs, config);
   const builderSchedule = buildPaymentSchedule(inputs, config);
@@ -221,8 +253,12 @@ export function buildLoanSchedule(
   const baselinePayoffMonth = Number.isFinite(baselineRepaymentMonths)
     ? plan.possessionMonth + baselineRepaymentMonths
     : null;
-  const annualPrepayment = openingMonthlyEmi * extraEmisPerYear;
   const monthlyRate = inputs.loanRate / 100 / MONTHS_IN_YEAR;
+  const insufficientEmi = (
+    principal > config.simulation.closedBalanceRupees
+    && monthlyRate > 0
+    && openingMonthlyEmi <= principal * monthlyRate
+  );
   const maximumMonth = plan.possessionMonth + config.simulation.maximumLoanYears * MONTHS_IN_YEAR;
   const months: LoanScheduleMonth[] = [];
   let balance = 0;
@@ -247,15 +283,26 @@ export function buildLoanSchedule(
     if (hasPossession) {
       balance = Math.max(0, balance + interestPaid - scheduledPayment);
       const paymentYear = Math.ceil(paymentNumber / MONTHS_IN_YEAR);
-      const extraPaymentIsActive = options.extraPaymentsThroughYear == null
-        || paymentYear <= options.extraPaymentsThroughYear;
+      const extraPaymentIsActive = options.oneOffExtraPaymentYear == null
+        ? paymentYear >= (options.extraEmisStartYear ?? 1)
+        : paymentYear === options.oneOffExtraPaymentYear;
+      const scheduledAnnualExtra = currentMonthlyEmi * extraEmisPerYear;
+      const canPreserveBaselinePayoff = (
+        strategy !== "lower_emi"
+        || baselinePayoffMonth == null
+        || month + 1 < baselinePayoffMonth
+      );
       if (
         paymentNumber % MONTHS_IN_YEAR === 0
         && balance > config.simulation.closedBalanceRupees
-        && annualPrepayment > 0
+        && scheduledAnnualExtra > 0
         && extraPaymentIsActive
+        && canPreserveBaselinePayoff
       ) {
-        extraPaid = Math.min(balance, annualPrepayment);
+        const maximumExtra = strategy === "lower_emi"
+          ? Math.max(0, balance - config.simulation.closedBalanceRupees)
+          : balance;
+        extraPaid = Math.min(maximumExtra, scheduledAnnualExtra);
         balance -= extraPaid;
       }
     }
@@ -298,10 +345,17 @@ export function buildLoanSchedule(
     months,
     openingMonthlyEmi,
     endingMonthlyEmi: currentMonthlyEmi,
-    annualPrepayment,
+    annualPrepayment: months.find((month) => month.extraPaid > 0)?.extraPaid ?? 0,
     baselinePayoffMonth,
     payoffMonth,
     totalInterest: payoffMonth == null ? null : totalInterest,
+    status: principal <= config.simulation.closedBalanceRupees
+      ? "no_loan"
+      : payoffMonth != null
+        ? "repaid"
+        : insufficientEmi
+          ? "insufficient_emi"
+          : "simulation_limit",
   };
 }
 

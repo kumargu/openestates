@@ -530,7 +530,7 @@ test("extra EMIs update payoff, total interest, snapshot, and top insight togeth
   assert.equal(note.catalogKey, "plan:home-1:current");
 });
 
-test("repayment strategies compare the same extra-EMI rupees", () => {
+test("lower-EMI extras shrink from the same opening scheduled-EMI basis", () => {
   const extraEmisPerYear = 2;
   const finishEarlier = buildLoanSchedule(ready, {
     extraEmisPerYear,
@@ -546,26 +546,42 @@ test("repayment strategies compare the same extra-EMI rupees", () => {
   assert.ok(finishEarlier.payoffMonth! < finishEarlier.baselinePayoffMonth!);
   assert.equal(lowerEmi.payoffMonth, lowerEmi.baselinePayoffMonth);
   assert.ok(lowerEmi.endingMonthlyEmi < lowerEmi.openingMonthlyEmi);
+  const lowerExtras = lowerEmi.months.filter((month) => month.extraPaid > 0);
+  assert.ok(lowerExtras.length > 1);
+  assert.ok(lowerExtras[1].extraPaid < lowerExtras[0].extraPaid);
 });
 
-test("repayment dashboard exposes crossover and declining incremental impact", () => {
+test("repayment dashboard exposes recurrent, cadence, strategy and one-off series", () => {
   const dashboard = calculateRepaymentDashboard(ready, 2, "finish_earlier");
 
   assert.ok(dashboard.crossoverYear != null);
-  assert.ok(dashboard.repaymentYears.length > 1);
-  assert.ok(dashboard.prepaymentRun.length > 2);
+  assert.equal(dashboard.repaymentYears, dashboard.recurrentSchedule);
+  assert.deepEqual(
+    dashboard.prepaymentRun.map(({ throughYear, incrementalInterestSaved, ...point }) => {
+      assert.equal(throughYear, point.year);
+      assert.equal(incrementalInterestSaved, point.interestSaved);
+      return point;
+    }),
+    dashboard.oneOffExtraPaymentCurve,
+  );
+  assert.ok(dashboard.recurrentSchedule.length > 1);
+  assert.ok(dashboard.oneOffExtraPaymentCurve.length > 2);
+  assert.deepEqual(
+    dashboard.cadenceComparison.map((point) => point.extraEmisPerYear),
+    [0, 1, 2, 3, 4, 6],
+  );
+  assert.deepEqual(
+    dashboard.strategyComparison.map((point) => point.strategy),
+    ["finish_earlier", "lower_emi"],
+  );
   assert.ok(dashboard.interestSaved > 0);
   assert.ok(dashboard.monthsSaved > 0);
-  for (let index = 1; index < dashboard.prepaymentRun.length; index += 1) {
+  for (let index = 1; index < dashboard.oneOffExtraPaymentCurve.length; index += 1) {
     assert.ok(
-      dashboard.prepaymentRun[index].interestSaved
-      >= dashboard.prepaymentRun[index - 1].interestSaved,
+      dashboard.oneOffExtraPaymentCurve[index].interestSaved
+      <= dashboard.oneOffExtraPaymentCurve[index - 1].interestSaved + 0.01,
     );
   }
-  assert.ok(
-    dashboard.prepaymentRun.at(-1)!.incrementalInterestSaved
-    <= dashboard.prepaymentRun[1].incrementalInterestSaved,
-  );
 });
 
 test("lower-EMI dashboard trades recurring commitment for monthly room", () => {
@@ -578,7 +594,8 @@ test("lower-EMI dashboard trades recurring commitment for monthly room", () => {
   assert.ok(dashboard.firstRecalculatedMonthlyEmi > dashboard.endingMonthlyEmi);
   assert.ok(dashboard.endingMonthlyEmi < dashboard.openingMonthlyEmi);
   assert.ok(dashboard.interestSaved > 0);
-  assert.ok(dashboard.prepaymentRun.at(-1)!.monthlyEmiReduction > 0);
+  assert.ok(dashboard.strategyComparison.find((point) => point.strategy === "lower_emi")!
+    .endingMonthlyEmi < dashboard.openingMonthlyEmi);
 });
 
 test("lower-EMI re-amortisation handles a zero-interest loan", () => {
@@ -765,11 +782,177 @@ test("a fully cash purchase has no loan or EMI", () => {
 });
 
 test("payment and principal formulas are inverses", () => {
-  const principal = 11_000_000;
-  const payment = monthlyPayment(principal, 8.5, 20);
-  const restored = principalFromMonthlyPayment(payment, 8.5, 20);
+  for (const rate of [0, 4.5, 8.5, 12]) {
+    for (const years of [1, 15, 20, 30]) {
+      const principal = 11_000_000;
+      const payment = monthlyPayment(principal, rate, years);
+      const restored = principalFromMonthlyPayment(payment, rate, years);
+      assert.ok(Math.abs(restored - principal) < 1);
+    }
+  }
+});
 
-  assert.ok(Math.abs(restored - principal) < 1);
+test("zero-rate schedules conserve balance and repay without interest", () => {
+  const schedule = buildLoanSchedule({
+    ...ready,
+    loanRate: 0,
+    monthlyEmiThousands: 50,
+  });
+
+  assert.equal(schedule.status, "repaid");
+  assert.equal(schedule.totalInterest, 0);
+  for (const month of schedule.months) {
+    assert.ok(Math.abs(
+      month.openingBalance + month.interestPaid
+      - month.scheduledPayment - month.extraPaid - month.closingBalance,
+    ) < 0.01);
+  }
+});
+
+test("positive-rate schedules conserve balance through regular and extra payments", () => {
+  const schedule = buildLoanSchedule(ready, {
+    extraEmisPerYear: 4,
+    strategy: "finish_earlier",
+  });
+
+  for (const month of schedule.months) {
+    assert.ok(Math.abs(
+      month.openingBalance + month.interestPaid
+      - month.scheduledPayment - month.extraPaid - month.closingBalance,
+    ) < 0.01);
+  }
+});
+
+test("insufficient EMI is an explicit non-closing schedule", () => {
+  const schedule = buildLoanSchedule({
+    ...ready,
+    monthlyEmiThousands: 10,
+  });
+
+  assert.equal(schedule.status, "insufficient_emi");
+  assert.equal(schedule.payoffMonth, null);
+  assert.equal(schedule.totalInterest, null);
+  assert.ok(schedule.months.at(-1)!.closingBalance > schedule.months[0].openingBalance);
+});
+
+test("finish-earlier keeps EMI constant and shortens tenure", () => {
+  const schedule = buildLoanSchedule(ready, {
+    extraEmisPerYear: 3,
+    strategy: "finish_earlier",
+  });
+
+  assert.equal(schedule.status, "repaid");
+  assert.ok(schedule.payoffMonth! < schedule.baselinePayoffMonth!);
+  for (const month of schedule.months.filter((point) => point.paymentNumber > 0)) {
+    assert.equal(month.scheduledEmi, schedule.openingMonthlyEmi);
+  }
+});
+
+test("lower-EMI keeps baseline payoff and sizes every extra from that year's EMI", () => {
+  const cadence = 3;
+  const schedule = buildLoanSchedule(ready, {
+    extraEmisPerYear: cadence,
+    strategy: "lower_emi",
+  });
+  const extras = schedule.months.filter((month) => month.extraPaid > 0);
+
+  assert.equal(schedule.payoffMonth, schedule.baselinePayoffMonth);
+  assert.ok(extras.length > 2);
+  for (const month of extras) {
+    assert.ok(Math.abs(month.extraPaid - cadence * month.scheduledEmi) < 0.01);
+  }
+  for (let index = 1; index < extras.length; index += 1) {
+    assert.ok(extras[index].extraPaid < extras[index - 1].extraPaid);
+  }
+});
+
+test("one-off savings decline with delay and markers select first satisfying years", () => {
+  const dashboard = calculateRepaymentDashboard(ready, 2, "finish_earlier");
+  const curve = dashboard.oneOffExtraPaymentCurve;
+  for (let index = 1; index < curve.length; index += 1) {
+    assert.ok(curve[index].interestSaved <= curve[index - 1].interestSaved + 0.01);
+  }
+  for (const point of curve) {
+    const candidate = buildLoanSchedule(ready, {
+      extraEmisPerYear: 2,
+      strategy: "finish_earlier",
+      oneOffExtraPaymentYear: point.year,
+    });
+    assert.ok(candidate.months.filter((month) => month.extraPaid > 0).length <= 1);
+    assert.ok(Math.abs(
+      candidate.months.reduce((sum, month) => sum + month.extraPaid, 0) - point.extraPaid,
+    ) < 0.01);
+  }
+
+  const expectedHalfImpact = curve.find((point) => (
+    point.year > 1 && point.interestSaved <= curve[0].interestSaved / 2
+  ))?.year ?? null;
+  const expectedCrossover = dashboard.recurrentSchedule.find((point) => (
+    point.principalPaid >= point.interestPaid
+  ))?.year ?? null;
+  assert.equal(dashboard.markers.halfFirstYearImpactYear, expectedHalfImpact);
+  assert.equal(dashboard.markers.crossoverYear, expectedCrossover);
+});
+
+test("one-off timing remains useful when recurring extras are zero", () => {
+  const dashboard = calculateRepaymentDashboard(ready, 0, "finish_earlier");
+  assert.ok(dashboard.oneOffExtraPaymentCurve[0].interestSaved > 0);
+  assert.ok(dashboard.oneOffExtraPaymentCurve
+    .filter((point) => point.interestSaved > 0)
+    .every((point) => point.extraPaid > 0));
+});
+
+test("cadence-start curve delays the selected recurring extra-EMI plan", () => {
+  const dashboard = calculateRepaymentDashboard(ready, 2, "finish_earlier");
+  const curve = dashboard.cadenceStartCurve;
+  assert.ok(Math.abs(curve[0].interestSaved - dashboard.interestSaved) < 0.01);
+  for (let index = 1; index < curve.length; index += 1) {
+    assert.ok(curve[index].interestSaved <= curve[index - 1].interestSaved + 0.01);
+  }
+  const delayed = buildLoanSchedule(ready, {
+    extraEmisPerYear: 2,
+    strategy: "finish_earlier",
+    extraEmisStartYear: 3,
+  });
+  const extraYears = delayed.months
+    .filter((month) => month.extraPaid > 0)
+    .map((month) => Math.ceil(month.paymentNumber / 12));
+  assert.ok(extraYears.length > 1);
+  assert.equal(Math.min(...extraYears), 3);
+  assert.ok(extraYears.every((year) => year >= 3));
+});
+
+test("greater extra-EMI cadence never reduces interest savings", () => {
+  const dashboard = calculateRepaymentDashboard(ready, 2, "finish_earlier");
+  for (let index = 1; index < dashboard.cadenceComparison.length; index += 1) {
+    assert.ok(
+      dashboard.cadenceComparison[index].interestSaved + 0.01
+      >= dashboard.cadenceComparison[index - 1].interestSaved,
+    );
+  }
+});
+
+test("repayment extras never occur before possession", () => {
+  const inputs = {
+    ...ready,
+    construction: {
+      state: "under_construction" as const,
+      asOfDate: "2026-01-01",
+      startDate: "2025-01-01",
+      completionDate: "2028-01-01",
+      dateSource: "rera" as const,
+    },
+  };
+  const projection = calculateProjection(inputs, 4);
+  const schedule = buildLoanSchedule(inputs, {
+    extraEmisPerYear: 4,
+    strategy: "finish_earlier",
+  });
+
+  assert.ok(schedule.months.some((month) => month.extraPaid > 0));
+  assert.ok(schedule.months
+    .filter((month) => month.month < projection.possessionMonth)
+    .every((month) => month.extraPaid === 0));
 });
 
 test("negated completion statuses are not treated as ready", () => {

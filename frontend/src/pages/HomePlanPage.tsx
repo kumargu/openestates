@@ -12,11 +12,12 @@ import {
   workspaceCompareHref,
   workspacePlanReplacementId,
 } from "../lib/workspaceNav.ts";
-import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
+import {
+  PlanAssumptionRail,
+  RentAssumptionRail,
+} from "../features/home-plan/PlanAssumptionRail.tsx";
 import { PlanGraph } from "../features/home-plan/PlanGraph.tsx";
 import { RepaymentDashboard } from "../features/home-plan/RepaymentDashboard.tsx";
-import { PlanWhisper } from "../features/home-plan/PlanWhisper.tsx";
-import { VerdictBlock } from "../features/home-plan/VerdictBlock.tsx";
 import {
   buildBaselinePlanInputs,
   calculateProjection,
@@ -36,7 +37,6 @@ import {
   type RepaymentStrategy,
 } from "../features/home-plan/financeEngine.ts";
 import { calculateRepaymentDashboard } from "../features/home-plan/repaymentModel.ts";
-import { buildMonthlyPlanVerdict, defaultPlanFocusYear } from "../features/home-plan/monthlyPlanView.ts";
 import {
   canPersistPlanDraft,
   clearPlanDraft,
@@ -249,7 +249,7 @@ export function HomePlanPage() {
     ) : !id ? (
       <section className="home-plan-empty">
         <h1>Choose a home to plan.</h1>
-        <p>Rent vs buy uses the price and status of one home from your workspace.</p>
+        <p>Plan uses the price of one home from your workspace to model its loan.</p>
         <Link to="/">Explore</Link>
       </section>
     ) : status === "loading" || propertyIsChanging ? (
@@ -257,13 +257,13 @@ export function HomePlanPage() {
     ) : status === "not_found" ? (
       <section className="home-plan-empty">
         <h1>This home is no longer available.</h1>
-        <p>Add another home to your workspace and its rent vs buy plan will be ready here.</p>
+        <p>Add another home to your workspace to inspect its repayment plan.</p>
         <Link to="/">Explore</Link>
       </section>
     ) : status === "no_price" ? (
       <section className="home-plan-empty">
         <h1>We don’t have a price for this home yet.</h1>
-        <p>Rent vs buy starts from the asking price. Pick another home in your workspace to plan.</p>
+        <p>Loan planning starts from the asking price. Pick another home in your workspace.</p>
         <Link to="/">Explore</Link>
       </section>
     ) : (
@@ -312,21 +312,6 @@ export function HomePlanPage() {
 
   const property = propertyData.property;
   const baseline = buildBaselinePlanInputs(property.price, constructionProfileFor(propertyData));
-  const defaultYear = defaultPlanFocusYear(projection, inputs.holdingPeriodYears);
-  const activeYear = previewYear ?? pinnedYear ?? defaultYear;
-  const verdict = buildMonthlyPlanVerdict(projection, activeYear);
-  const perspectiveYear = pinnedYear ?? defaultYear;
-  const perspectiveVerdict = buildMonthlyPlanVerdict(projection, perspectiveYear);
-  const perspectiveTheme = projection.extraEmisPerYear > 0
-    ? "prepay"
-    : perspectiveVerdict.buyWins
-      ? "buy"
-      : "rent";
-  const perspectiveSignature = [
-    perspectiveTheme,
-    perspectiveYear,
-    projection.loanFreeYear ?? "open",
-  ].join(":");
   // Drafts capture what the buyer changed, so they are written on edit only.
   const persistEdit = (
     nextInputs: PlanInputs,
@@ -368,8 +353,8 @@ export function HomePlanPage() {
   return (
     <div className="home-plan-shell home-plan-shell--workspace">
       <Helmet>
-        <title>{property.title} — {BUY_VS_RENT.pageTitle} | {PUBLIC_BRAND_NAME}</title>
-        <meta name="description" content={`Compare renting with buying ${property.title} over time.`} />
+        <title>{property.title} — Plan | {PUBLIC_BRAND_NAME}</title>
+        <meta name="description" content={`Inspect repayment choices for ${property.title}.`} />
       </Helmet>
 
       <WorkspaceHeader
@@ -390,34 +375,39 @@ export function HomePlanPage() {
       <div className="home-plan-body">
         <div className="home-plan-main">
           <div className="home-plan-canvas">
-            <VerdictBlock verdict={verdict} />
-
-            <PlanAssumptionRail
-              inputs={inputs}
-              extraEmisPerYear={extraEmisPerYear}
-              loanFreeYear={projection.loanFreeYear}
-              onInputChange={updateInput}
-              onExtraEmisChange={updateExtraEmisPerYear}
-              onReset={resetInputs}
-            />
-
             <RepaymentDashboard
+              inputs={inputs}
               model={repayment}
               onStrategyChange={updateRepaymentStrategy}
+              controls={(
+                <PlanAssumptionRail
+                  inputs={inputs}
+                  extraEmisPerYear={extraEmisPerYear}
+                  loanFreeYear={repayment.status === "repaid"
+                    ? repayment.recurrentSchedule.at(-1)?.year ?? null
+                    : null}
+                  onInputChange={updateInput}
+                  onExtraEmisChange={updateExtraEmisPerYear}
+                  onReset={resetInputs}
+                />
+              )}
             />
 
-            <section className="home-plan-stage" aria-label="Projection over time">
+            <section className="home-plan-rent-section" aria-labelledby="home-plan-rent-title">
+              <header className="home-plan-chapter__heading">
+                <p id="home-plan-rent-title">Rent vs buy</p>
+              </header>
+              <RentAssumptionRail
+                inputs={inputs}
+                onInputChange={updateInput}
+              />
               <PlanGraph
                 projection={projection}
-                activeYear={verdict.activeYear}
+                activeYear={previewYear
+                  ?? pinnedYear
+                  ?? Math.min(inputs.holdingPeriodYears, projection.points.length - 1)}
                 onPreviewYearChange={setPreviewYear}
                 onPinYear={setPinnedYear}
-              />
-              <PlanWhisper
-                key={perspectiveSignature}
-                theme={perspectiveTheme}
-                activeYear={perspectiveYear}
-                loanFreeYear={projection.loanFreeYear}
               />
             </section>
           </div>
