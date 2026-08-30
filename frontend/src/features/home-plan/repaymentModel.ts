@@ -60,6 +60,8 @@ export type StrategyComparisonPoint = {
   strategy: RepaymentStrategy;
   interestSaved: number;
   monthsSaved: number;
+  payoffMonths: number | null;
+  firstRecalculatedMonthlyEmi: number;
   endingMonthlyEmi: number;
   totalExtraPaid: number;
 };
@@ -80,6 +82,10 @@ export type RepaymentDashboardModel = {
   annualPrepayment: number;
   interestSaved: number;
   monthsSaved: number;
+  comparisonAvailable: boolean;
+  baselinePayoffMonths: number | null;
+  selectedPayoffMonths: number | null;
+  baselineHorizonMonths: number;
   recurrentSchedule: RepaymentYearPoint[];
   oneOffExtraPaymentCurve: OneOffExtraPaymentPoint[];
   cadenceStartCurve: CadenceStartPoint[];
@@ -154,6 +160,13 @@ function totalExtraPaid(schedule: LoanSchedule): number {
   return schedule.months.reduce((sum, month) => sum + month.extraPaid, 0);
 }
 
+function firstRecalculatedEmi(schedule: LoanSchedule): number {
+  const firstExtraIndex = schedule.months.findIndex((month) => month.extraPaid > 0);
+  return firstExtraIndex >= 0
+    ? schedule.months[firstExtraIndex + 1]?.scheduledEmi ?? schedule.endingMonthlyEmi
+    : schedule.openingMonthlyEmi;
+}
+
 export function calculateRepaymentDashboard(
   inputs: PlanInputs,
   extraEmisPerYear: number,
@@ -173,7 +186,7 @@ export function calculateRepaymentDashboard(
   const oneOffExtraPaymentCurve: OneOffExtraPaymentPoint[] = [];
   // Timing is deliberately independent from the recurring plan: it asks what
   // one additional EMI achieves when paid in this year and nowhere else.
-  for (let year = 1; year <= maximumRunYears; year += 1) {
+  for (let year = 1; baseline.totalInterest != null && year <= maximumRunYears; year += 1) {
     const candidate = buildLoanSchedule(inputs, {
       extraEmisPerYear: 1,
       strategy,
@@ -245,15 +258,16 @@ export function calculateRepaymentDashboard(
         strategy: comparisonStrategy,
         interestSaved: interestSavedAgainst(baseline, candidate),
         monthsSaved: monthsSavedAgainst(baseline, candidate),
+        payoffMonths: candidate.payoffMonth == null
+          ? null
+          : candidate.months.at(-1)?.paymentNumber ?? null,
+        firstRecalculatedMonthlyEmi: firstRecalculatedEmi(candidate),
         endingMonthlyEmi: candidate.endingMonthlyEmi,
         totalExtraPaid: totalExtraPaid(candidate),
       };
     },
   );
-  const firstExtraIndex = selected.months.findIndex((month) => month.extraPaid > 0);
-  const firstRecalculatedMonthlyEmi = firstExtraIndex >= 0
-    ? selected.months[firstExtraIndex + 1]?.scheduledEmi ?? selected.endingMonthlyEmi
-    : selected.openingMonthlyEmi;
+  const firstRecalculatedMonthlyEmi = firstRecalculatedEmi(selected);
   const markers = {
     crossoverYear,
     halfFirstYearImpactYear: halfImpactYear,
@@ -275,6 +289,15 @@ export function calculateRepaymentDashboard(
     annualPrepayment: selected.annualPrepayment,
     interestSaved: interestSavedAgainst(baseline, selected),
     monthsSaved: monthsSavedAgainst(baseline, selected),
+    comparisonAvailable: baseline.payoffMonth != null && baseline.totalInterest != null,
+    baselinePayoffMonths: baseline.payoffMonth == null
+      ? null
+      : baseline.months.at(-1)?.paymentNumber ?? null,
+    selectedPayoffMonths: selected.payoffMonth == null
+      ? null
+      : selected.months.at(-1)?.paymentNumber ?? null,
+    baselineHorizonMonths: baseline.months.at(-1)?.paymentNumber
+      ?? config.simulation.maximumJourneyYears * MONTHS_IN_YEAR,
     recurrentSchedule,
     oneOffExtraPaymentCurve,
     cadenceStartCurve,

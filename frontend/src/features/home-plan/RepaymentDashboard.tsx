@@ -12,11 +12,10 @@ import {
 } from "./chartStories.ts";
 import {
   ChartHeading,
-  ChartReadout,
-  ReadoutValue,
   ScrubbableSvg,
 } from "./charts/ChartPrimitives.tsx";
 import {
+  areaPath,
   bandPath,
   chartTickIndexes,
   linearScale,
@@ -24,19 +23,30 @@ import {
   type ChartPoint,
 } from "./charts/chartGeometry.ts";
 
-const WIDTH = 900;
-const OVERVIEW_HEIGHT = 360;
-const FRAME_HEIGHT = 330;
-const OVERVIEW_INSETS = { top: 42, right: 76, bottom: 44, left: 70 };
-const FRAME_INSETS = { top: 40, right: 42, bottom: 44, left: 70 };
+const PRIMARY_WIDTH = 1_000;
+const PRIMARY_HEIGHT = 260;
+const SUPPORT_WIDTH = 560;
+const SUPPORT_HEIGHT = 250;
+const PRIMARY_INSETS = { top: 28, right: 78, bottom: 38, left: 70 };
+const SUPPORT_INSETS = { top: 30, right: 28, bottom: 38, left: 64 };
 
 type RepaymentDashboardProps = {
   inputs: PlanInputs;
   model: RepaymentDashboardModel;
-  onStrategyChange: (strategy: RepaymentDashboardModel["strategy"]) => void;
 };
 
-function durationLabel(months: number): string {
+type SharedYearValues = {
+  year: number;
+  interestPaid: number;
+  principalPaid: number;
+  extraPaid: number;
+  balance: number;
+  oneOffInterestSaved: number | null;
+  oneOffComparisonAvailable: boolean;
+};
+
+function durationLabel(months: number | null | undefined): string {
+  if (months == null) return "Not repaid";
   const years = Math.floor(months / 12);
   const remainder = months % 12;
   if (years === 0) return `${remainder} mo`;
@@ -44,585 +54,615 @@ function durationLabel(months: number): string {
   return `${years} yr ${remainder} mo`;
 }
 
-function loanTimeLabel(paymentMonth: number): string {
-  const years = Math.floor(paymentMonth / 12);
-  const months = paymentMonth % 12;
-  if (years === 0) return `Month ${Math.max(1, months)}`;
-  if (months === 0) return `Year ${years}`;
-  return `Year ${years}, month ${months}`;
-}
-
-function yearlyCheckpoints(points: MonthlyRepaymentPoint[]): MonthlyRepaymentPoint[] {
-  return points.filter((point, index) => (
-    point.paymentNumber % 12 === 0 || index === points.length - 1
-  ));
-}
-
-function checkpointIndex(points: MonthlyRepaymentPoint[], paymentMonth: number): number {
-  const index = points.findIndex((point) => point.paymentNumber >= paymentMonth);
-  return index < 0 ? Math.max(0, points.length - 1) : index;
-}
-
 function activeMonthlyPoint(
   points: MonthlyRepaymentPoint[],
   paymentMonth: number,
 ): MonthlyRepaymentPoint | undefined {
-  if (points.length === 0) return undefined;
+  if (points.length === 0 || paymentMonth > (points.at(-1)?.paymentNumber ?? 0)) return undefined;
   return points[Math.max(0, Math.min(paymentMonth - 1, points.length - 1))];
 }
 
 function balanceAt(points: MonthlyRepaymentPoint[], paymentMonth: number): number {
-  if (paymentMonth > (points.at(-1)?.paymentNumber ?? 0)) return 0;
   return activeMonthlyPoint(points, paymentMonth)?.closingBalance ?? 0;
 }
 
-function outcomeSentence(model: RepaymentDashboardModel): string {
-  if (model.extraEmisPerYear === 0) {
-    return `At ${formatCurrency(model.openingMonthlyEmi)} per month, this loan follows its original payoff path.`;
-  }
-  if (model.strategy === "finish_earlier") {
-    return `${model.extraEmisPerYear} extra EMI${model.extraEmisPerYear === 1 ? "" : "s"}/year makes you debt-free ${durationLabel(model.monthsSaved)} earlier and avoids ${formatCurrency(model.interestSaved, true)} of interest.`;
-  }
-  return `After the first annual prepayment, EMI falls from ${formatCurrency(model.openingMonthlyEmi)} to ${formatCurrency(model.firstRecalculatedMonthlyEmi)} and avoids ${formatCurrency(model.interestSaved, true)} of interest.`;
+function tickYears(horizonYears: number, count = 5): number[] {
+  return chartTickIndexes(horizonYears + 1, count);
 }
 
-function BalanceOverview({
+function loanYearFromPointer(
+  clientX: number,
+  bounds: DOMRect,
+  width: number,
+  x: ReturnType<typeof linearScale>,
+): number {
+  const svgX = (clientX - bounds.left) / Math.max(1, bounds.width) * width;
+  return Math.round(x.invert(svgX));
+}
+
+function OutcomeStrip({
+  model,
+}: {
+  model: RepaymentDashboardModel;
+}) {
+  const lowerReduction = Math.max(
+    0,
+    model.openingMonthlyEmi - model.firstRecalculatedMonthlyEmi,
+  );
+  const noExtras = model.extraEmisPerYear === 0;
+  const becomesRepayable = model.baselinePayoffMonths == null
+    && model.selectedPayoffMonths != null;
+
+  return (
+    <section className="home-plan-outcome-strip" aria-label="Selected repayment outcome">
+      <dl>
+        <div>
+          <dt>
+            {!model.comparisonAvailable
+              ? "Repayment result"
+              : model.strategy === "finish_earlier"
+                ? "Time saved"
+                : "EMI after first prepayment"}
+          </dt>
+          <dd>
+            {noExtras
+              ? "No change"
+              : !model.comparisonAvailable
+                ? becomesRepayable ? "Becomes repayable" : "Not repaid"
+              : model.strategy === "finish_earlier"
+                ? `${durationLabel(model.monthsSaved)} sooner`
+                : formatCurrency(model.firstRecalculatedMonthlyEmi, true)}
+          </dd>
+        </div>
+        <div>
+          <dt>Interest avoided</dt>
+          <dd>{model.comparisonAvailable ? formatCurrency(model.interestSaved, true) : "Not comparable"}</dd>
+        </div>
+        <div>
+          <dt>Selected payoff</dt>
+          <dd>{durationLabel(model.selectedPayoffMonths)}</dd>
+        </div>
+      </dl>
+      <p>
+        {noExtras
+          ? "Choose an annual prepayment above to compare it with the original loan."
+          : !model.comparisonAvailable
+            ? becomesRepayable
+              ? "Extra payments make this loan repayable; lifetime savings cannot be compared because the original EMI never closes."
+              : "At this EMI, the loan does not close within the modelled horizon."
+          : model.strategy === "finish_earlier"
+            ? `The scheduled EMI remains ${formatCurrency(model.openingMonthlyEmi)} while the payoff moves forward.`
+            : `Monthly commitment falls by ${formatCurrency(lowerReduction)} after the first prepayment; future extra payments fall with the recalculated EMI.`}
+      </p>
+    </section>
+  );
+}
+
+function BalanceChart({
   stories,
   model,
-  activePaymentMonth,
-  onPreviewPaymentMonth,
-  onPinPaymentMonth,
+  horizonMonths,
+  baselinePayoffMonths,
+  selectedPayoffMonths,
+  activeYear,
+  onPreviewYear,
+  onPinYear,
 }: {
   stories: RepaymentChartStories;
   model: RepaymentDashboardModel;
-  activePaymentMonth: number;
-  onPreviewPaymentMonth: (month: number | null) => void;
-  onPinPaymentMonth: (month: number) => void;
+  horizonMonths: number;
+  baselinePayoffMonths: number | null;
+  selectedPayoffMonths: number | null;
+  activeYear: number;
+  onPreviewYear: (year: number | null) => void;
+  onPinYear: (year: number) => void;
 }) {
   const baseline = stories.baselineMonthly;
   const selected = stories.selectedMonthly;
-  const baselinePayoff = baseline.at(-1);
-  const selectedPayoff = selected.at(-1);
-  const horizon = Math.max(
-    1,
-    baselinePayoff?.paymentNumber ?? 1,
-    selectedPayoff?.paymentNumber ?? 1,
-  );
+  const horizonYears = Math.max(1, Math.ceil(horizonMonths / 12));
   const checkpointMonths = [...new Set([
     1,
-    ...Array.from({ length: Math.ceil(horizon / 12) }, (_, index) => Math.min(horizon, (index + 1) * 12)),
-    baselinePayoff?.paymentNumber ?? horizon,
-    selectedPayoff?.paymentNumber ?? horizon,
+    ...Array.from({ length: horizonYears }, (_, index) => Math.min(horizonMonths, (index + 1) * 12)),
+    baselinePayoffMonths ?? horizonMonths,
+    selectedPayoffMonths ?? horizonMonths,
   ])].sort((left, right) => left - right);
   const maximumBalance = Math.max(
     1,
     ...baseline.map((point) => point.closingBalance),
     ...selected.map((point) => point.closingBalance),
   );
-  const plotBottom = OVERVIEW_HEIGHT - OVERVIEW_INSETS.bottom;
-  const x = linearScale([1, horizon], [OVERVIEW_INSETS.left, WIDTH - OVERVIEW_INSETS.right]);
-  const y = linearScale([0, maximumBalance * 1.04], [plotBottom, OVERVIEW_INSETS.top]);
+  const plotBottom = PRIMARY_HEIGHT - PRIMARY_INSETS.bottom;
+  const x = linearScale([0, horizonYears], [PRIMARY_INSETS.left, PRIMARY_WIDTH - PRIMARY_INSETS.right]);
+  const y = linearScale([0, maximumBalance * 1.04], [plotBottom, PRIMARY_INSETS.top]);
   const baselinePath = checkpointMonths.map((month) => ({
-    x: x.map(month),
+    x: x.map(month / 12),
     y: y.map(balanceAt(baseline, month)),
   }));
   const selectedPath = checkpointMonths.map((month) => ({
-    x: x.map(month),
+    x: x.map(month / 12),
     y: y.map(balanceAt(selected, month)),
   }));
   const selectedLinePath = selectedPath.filter((_, index) => (
-    checkpointMonths[index] <= (selectedPayoff?.paymentNumber ?? horizon)
+    selectedPayoffMonths == null || checkpointMonths[index] <= selectedPayoffMonths
   ));
-  const selectedYearly = yearlyCheckpoints(selected);
-  const activeIndex = checkpointIndex(selectedYearly, activePaymentMonth);
-  const active = selectedYearly[activeIndex];
-  const baselineActive = active ? balanceAt(baseline, active.paymentNumber) : 0;
-  const gaps = checkpointMonths.map((month) => ({
-    month,
-    gap: balanceAt(baseline, month) - balanceAt(selected, month),
-  }));
-  const largestGap = gaps.reduce((largest, point) => (
-    point.gap > largest.gap ? point : largest
-  ), gaps[0] ?? { month: 1, gap: 0 });
+  const activeMonth = Math.min(horizonMonths, Math.max(1, activeYear * 12));
+  const activeBalance = balanceAt(selected, activeMonth);
   const hasComparison = model.extraEmisPerYear > 0;
-  const samePayoff = baselinePayoff?.paymentNumber === selectedPayoff?.paymentNumber;
+  const samePayoff = baselinePayoffMonths != null
+    && baselinePayoffMonths === selectedPayoffMonths;
 
   return (
-    <section className="home-plan-frame home-plan-frame--outcome">
+    <section className="home-plan-primary-chart">
       <ChartHeading
-        title={outcomeSentence(model)}
-        conclusion={hasComparison
-          ? "Compare the selected plan with the same loan without annual prepayments."
-          : "Add annual extra EMIs above to compare a faster or lighter repayment path."}
+        title="How the selected plan changes the loan balance"
+        conclusion="The full width remains the original loan horizon."
       />
       <ScrubbableSvg
-        width={WIDTH}
-        height={OVERVIEW_HEIGHT}
-        insets={OVERVIEW_INSETS}
-        pointCount={selectedYearly.length}
-        activeIndex={activeIndex}
+        width={PRIMARY_WIDTH}
+        height={PRIMARY_HEIGHT}
+        insets={PRIMARY_INSETS}
+        pointCount={horizonYears + 1}
+        activeIndex={activeYear}
         label="Selected and original outstanding loan balance by year"
-        valueText={active
-          ? `${loanTimeLabel(active.paymentNumber)}, selected balance ${formatCurrency(active.closingBalance, true)}, without extras ${formatCurrency(baselineActive, true)}`
-          : undefined}
+        valueText={`Year ${activeYear}, selected balance ${formatCurrency(activeBalance, true)}`}
         className="home-plan-balance-overview"
-        indexFromPoint={(clientX, _clientY, bounds) => {
-          const svgX = (clientX - bounds.left) / Math.max(1, bounds.width) * WIDTH;
-          return checkpointIndex(selectedYearly, Math.round(x.invert(svgX)));
-        }}
-        onPreviewIndex={(index) => onPreviewPaymentMonth(
-          index == null ? null : selectedYearly[index].paymentNumber,
+        indexFromPoint={(clientX, _clientY, bounds) => (
+          loanYearFromPointer(clientX, bounds, PRIMARY_WIDTH, x)
         )}
-        onPinIndex={(index) => onPinPaymentMonth(selectedYearly[index].paymentNumber)}
+        onPreviewIndex={onPreviewYear}
+        onPinIndex={onPinYear}
       >
         {[0, maximumBalance / 2, maximumBalance].map((value) => (
           <g key={value} className="home-plan-value-guide" aria-hidden="true">
             <line
-              x1={OVERVIEW_INSETS.left}
-              x2={WIDTH - OVERVIEW_INSETS.right}
+              x1={PRIMARY_INSETS.left}
+              x2={PRIMARY_WIDTH - PRIMARY_INSETS.right}
               y1={y.map(value)}
               y2={y.map(value)}
             />
-            <text x={OVERVIEW_INSETS.left - 9} y={y.map(value) + 4}>
+            <text x={PRIMARY_INSETS.left - 9} y={y.map(value) + 4}>
               {formatCurrency(value, true)}
             </text>
           </g>
         ))}
         {hasComparison ? (
-          <path
-            d={bandPath(selectedPath, baselinePath)}
-            className="home-plan-balance-gap"
-          />
+          <path d={bandPath(selectedPath, baselinePath)} className="home-plan-balance-gap" />
         ) : null}
         <path d={smoothLinePath(baselinePath)} className="home-plan-curve is-baseline" />
         {hasComparison ? (
           <path d={smoothLinePath(selectedLinePath)} className="home-plan-curve is-selected" />
         ) : null}
-        {hasComparison && largestGap.gap > 0 ? (
+        {tickYears(horizonYears).map((year) => (
+          <text key={year} x={x.map(year)} y={PRIMARY_HEIGHT - 10} className="home-plan-chart-axis">
+            {year === 0 ? "Now" : `${year}y`}
+          </text>
+        ))}
+        {baselinePayoffMonths != null ? (
+          <g className="home-plan-payoff-marker is-baseline-payoff" aria-hidden="true">
+            <line
+              x1={x.map(baselinePayoffMonths / 12)}
+              x2={x.map(baselinePayoffMonths / 12)}
+              y1={PRIMARY_INSETS.top}
+              y2={plotBottom}
+            />
+            <text
+              x={x.map(baselinePayoffMonths / 12) - 5}
+              y={plotBottom - 8}
+              textAnchor="end"
+            >
+              {samePayoff ? "Both plans" : "Original payoff"}
+            </text>
+          </g>
+        ) : null}
+        {hasComparison && selectedPayoffMonths != null && !samePayoff ? (
+          <g className="home-plan-payoff-marker is-selected-payoff" aria-hidden="true">
+            <line
+              x1={x.map(selectedPayoffMonths / 12)}
+              x2={x.map(selectedPayoffMonths / 12)}
+              y1={PRIMARY_INSETS.top}
+              y2={plotBottom}
+            />
+            <circle cx={x.map(selectedPayoffMonths / 12)} cy={y.map(0)} r="4" />
+            <text
+              x={x.map(selectedPayoffMonths / 12) - 5}
+              y={plotBottom - 24}
+              textAnchor="end"
+            >
+              Selected payoff
+            </text>
+          </g>
+        ) : null}
+        {hasComparison ? (
           <text
-            x={x.map(largestGap.month)}
-            y={(y.map(balanceAt(baseline, largestGap.month)) + y.map(balanceAt(selected, largestGap.month))) / 2}
+            x={x.map(Math.max(1, Math.min(horizonYears - 1, Math.ceil((selectedPayoffMonths ?? horizonMonths) / 18))))}
+            y={y.map(maximumBalance * 0.28)}
             className="home-plan-gap-label"
           >
             Balance reduced
           </text>
         ) : null}
-        {chartTickIndexes(Math.ceil(horizon / 12) + 1, 5).map((index) => {
-          const month = Math.min(horizon, index * 12 || 1);
-          return (
-            <text key={index} x={x.map(month)} y={OVERVIEW_HEIGHT - 11} className="home-plan-chart-axis">
-              {index === 0 ? "Now" : `${index}y`}
-            </text>
-          );
-        })}
-        {baselinePayoff ? (
-          <g className="home-plan-payoff-marker is-baseline-payoff" aria-hidden="true">
-            <line
-              x1={x.map(baselinePayoff.paymentNumber)}
-              x2={x.map(baselinePayoff.paymentNumber)}
-              y1={OVERVIEW_INSETS.top}
-              y2={plotBottom}
-            />
-            <text
-              x={x.map(baselinePayoff.paymentNumber) - 5}
-              y={plotBottom - 9}
-              textAnchor="end"
-            >
-              {samePayoff ? "Both plans" : "Without extras"} · {durationLabel(baselinePayoff.paymentNumber)}
-            </text>
-          </g>
-        ) : null}
-        {hasComparison && selectedPayoff && !samePayoff ? (
-          <g className="home-plan-payoff-marker is-selected-payoff" aria-hidden="true">
-            <line
-              x1={x.map(selectedPayoff.paymentNumber)}
-              x2={x.map(selectedPayoff.paymentNumber)}
-              y1={OVERVIEW_INSETS.top}
-              y2={plotBottom}
-            />
-            <circle cx={x.map(selectedPayoff.paymentNumber)} cy={y.map(0)} r="4" />
-            <text
-              x={x.map(selectedPayoff.paymentNumber) - 5}
-              y={plotBottom - 26}
-              textAnchor="end"
-            >
-              Selected plan · {durationLabel(selectedPayoff.paymentNumber)}
-            </text>
-          </g>
-        ) : null}
-        {active ? (
-          <g className="home-plan-chart-cursor">
-            <line
-              x1={x.map(active.paymentNumber)}
-              x2={x.map(active.paymentNumber)}
-              y1={OVERVIEW_INSETS.top}
-              y2={plotBottom}
-            />
-            <circle cx={x.map(active.paymentNumber)} cy={y.map(active.closingBalance)} r="5" />
-            <text
-              x={x.map(active.paymentNumber) + (x.map(active.paymentNumber) > WIDTH - 190 ? -10 : 10)}
-              y={Math.max(OVERVIEW_INSETS.top + 12, y.map(active.closingBalance) - 10)}
-              textAnchor={x.map(active.paymentNumber) > WIDTH - 190 ? "end" : "start"}
-              className="home-plan-point-value"
-            >
-              {formatCurrency(active.closingBalance, true)}
-            </text>
-          </g>
-        ) : null}
+        <g className="home-plan-chart-cursor">
+          <line
+            x1={x.map(activeYear)}
+            x2={x.map(activeYear)}
+            y1={PRIMARY_INSETS.top}
+            y2={plotBottom}
+          />
+          <circle cx={x.map(activeYear)} cy={y.map(activeBalance)} r="4.5" />
+        </g>
       </ScrubbableSvg>
-      {active ? (
-        <ChartReadout columns={3}>
-          <ReadoutValue label="Point in loan" value={loanTimeLabel(active.paymentNumber)} />
-          <ReadoutValue label="Selected balance" value={formatCurrency(active.closingBalance, true)} />
-          <ReadoutValue label="Without extras" value={formatCurrency(baselineActive, true)} />
-        </ChartReadout>
-      ) : null}
     </section>
   );
+}
+
+function emptyRepaymentYear(year: number): RepaymentYearPoint {
+  return {
+    year,
+    scheduledMonthlyEmi: 0,
+    scheduledPaid: 0,
+    interestPaid: 0,
+    principalPaid: 0,
+    extraPaid: 0,
+    balance: 0,
+  };
 }
 
 function annualTotal(point: RepaymentYearPoint): number {
   return point.interestPaid + point.principalPaid + point.extraPaid;
 }
 
-function PaymentMechanics({
+function PaymentCompositionChart({
   model,
-  activePaymentMonth,
-  onPreviewPaymentMonth,
-  onPinPaymentMonth,
+  horizonYears,
+  activeYear,
+  onPreviewYear,
+  onPinYear,
 }: {
   model: RepaymentDashboardModel;
-  activePaymentMonth: number;
-  onPreviewPaymentMonth: (month: number | null) => void;
-  onPinPaymentMonth: (month: number) => void;
+  horizonYears: number;
+  activeYear: number;
+  onPreviewYear: (year: number | null) => void;
+  onPinYear: (year: number) => void;
 }) {
-  const points = model.recurrentSchedule.filter((point) => annualTotal(point) > 0);
-  const activeYear = Math.max(1, Math.ceil(activePaymentMonth / 12));
-  const requestedActiveIndex = points.findIndex((point) => point.year >= activeYear);
-  const activeIndex = requestedActiveIndex < 0 ? Math.max(0, points.length - 1) : requestedActiveIndex;
-  const active = points[activeIndex];
+  const points = Array.from({ length: horizonYears }, (_, index) => (
+    model.recurrentSchedule.find((point) => point.year === index + 1)
+      ?? emptyRepaymentYear(index + 1)
+  ));
+  const active = points[Math.max(0, Math.min(activeYear - 1, points.length - 1))];
   const maximum = Math.max(1, ...points.map(annualTotal));
-  const plotBottom = FRAME_HEIGHT - FRAME_INSETS.bottom;
-  const x = linearScale([1, Math.max(1, points.length)], [FRAME_INSETS.left, WIDTH - FRAME_INSETS.right]);
-  const y = linearScale([0, maximum * 1.08], [plotBottom, FRAME_INSETS.top]);
-  const plotWidth = WIDTH - FRAME_INSETS.left - FRAME_INSETS.right;
-  const barWidth = Math.min(34, plotWidth / Math.max(1, points.length) * 0.62);
-  const crossover = points.find((point) => point.principalPaid >= point.interestPaid);
+  const plotBottom = SUPPORT_HEIGHT - SUPPORT_INSETS.bottom;
+  const x = linearScale([0.5, horizonYears + 0.5], [SUPPORT_INSETS.left, SUPPORT_WIDTH - SUPPORT_INSETS.right]);
+  const y = linearScale([0, maximum * 1.08], [plotBottom, SUPPORT_INSETS.top]);
+  const plotWidth = SUPPORT_WIDTH - SUPPORT_INSETS.left - SUPPORT_INSETS.right;
+  const barWidth = Math.max(6, Math.min(20, plotWidth / Math.max(1, horizonYears) * 0.6));
+  const crossover = model.markers.crossoverYear;
 
   return (
-    <section className="home-plan-frame">
+    <section className="home-plan-support-chart">
       <ChartHeading
-        title={crossover
-          ? `From year ${crossover.year}, more of the scheduled EMI goes to principal than interest.`
-          : "Interest remains the larger part of the scheduled EMI."}
-        conclusion="Each annual column shows the actual rupees paid as interest, regular principal and extra principal."
+        title="What each year’s payment contains"
+        conclusion={crossover == null
+          ? "Interest remains larger than scheduled principal."
+          : `Scheduled principal exceeds interest from year ${crossover}.`}
       />
       <ScrubbableSvg
-        width={WIDTH}
-        height={FRAME_HEIGHT}
-        insets={FRAME_INSETS}
-        pointCount={points.length}
-        activeIndex={activeIndex}
-        label="Annual rupee payments split into interest, regular principal and extra principal"
-        valueText={active
-          ? `Year ${active.year}, ${formatCurrency(active.interestPaid, true)} interest, ${formatCurrency(active.principalPaid, true)} regular principal, ${formatCurrency(active.extraPaid, true)} extra principal`
-          : undefined}
+        width={SUPPORT_WIDTH}
+        height={SUPPORT_HEIGHT}
+        insets={SUPPORT_INSETS}
+        pointCount={horizonYears + 1}
+        activeIndex={activeYear}
+        label="Annual payment composition across the original loan horizon"
+        valueText={`Year ${activeYear}, ${formatCurrency(active.interestPaid, true)} interest, ${formatCurrency(active.principalPaid, true)} scheduled principal, ${formatCurrency(active.extraPaid, true)} extra principal`}
         className="home-plan-payment-mechanics"
-        onPreviewIndex={(index) => onPreviewPaymentMonth(
-          index == null ? null : points[index].year * 12,
+        indexFromPoint={(clientX, _clientY, bounds) => (
+          loanYearFromPointer(clientX, bounds, SUPPORT_WIDTH, x)
         )}
-        onPinIndex={(index) => onPinPaymentMonth(points[index].year * 12)}
+        onPreviewIndex={onPreviewYear}
+        onPinIndex={onPinYear}
       >
         {[0, maximum / 2, maximum].map((value) => (
           <g key={value} className="home-plan-value-guide" aria-hidden="true">
             <line
-              x1={FRAME_INSETS.left}
-              x2={WIDTH - FRAME_INSETS.right}
+              x1={SUPPORT_INSETS.left}
+              x2={SUPPORT_WIDTH - SUPPORT_INSETS.right}
               y1={y.map(value)}
               y2={y.map(value)}
             />
-            <text x={FRAME_INSETS.left - 9} y={y.map(value) + 4}>{formatCurrency(value, true)}</text>
+            <text x={SUPPORT_INSETS.left - 8} y={y.map(value) + 4}>
+              {formatCurrency(value, true)}
+            </text>
           </g>
         ))}
-        {points.map((point, index) => {
-          const columnX = x.map(point.year) - barWidth / 2;
+        {points.map((point) => {
           const principalTop = y.map(point.principalPaid);
           const interestTop = y.map(point.principalPaid + point.interestPaid);
           const totalTop = y.map(annualTotal(point));
           return (
             <g
               key={point.year}
-              className={`home-plan-amount-bar ${index === activeIndex ? "is-active" : ""}`}
+              className={`home-plan-amount-bar ${point.year === activeYear ? "is-active" : ""}`}
               aria-hidden="true"
             >
               <rect
                 className="is-principal"
-                x={columnX}
+                x={x.map(point.year) - barWidth / 2}
                 y={principalTop}
                 width={barWidth}
                 height={plotBottom - principalTop}
               />
               <rect
                 className="is-interest"
-                x={columnX}
+                x={x.map(point.year) - barWidth / 2}
                 y={interestTop}
                 width={barWidth}
                 height={principalTop - interestTop}
               />
               <rect
                 className="is-extra"
-                x={columnX}
+                x={x.map(point.year) - barWidth / 2}
                 y={totalTop}
                 width={barWidth}
                 height={interestTop - totalTop}
               />
-              <rect
-                className="is-outline"
-                x={columnX}
-                y={totalTop}
-                width={barWidth}
-                height={plotBottom - totalTop}
-              />
             </g>
           );
         })}
-        {chartTickIndexes(points.length, 6).map((index) => (
-          <text key={points[index].year} x={x.map(points[index].year)} y={FRAME_HEIGHT - 11} className="home-plan-chart-axis">
-            {points[index].year}y
+        {crossover != null ? (
+          <g className="home-plan-milestone-marker" aria-hidden="true">
+            <line
+              x1={x.map(crossover)}
+              x2={x.map(crossover)}
+              y1={SUPPORT_INSETS.top}
+              y2={plotBottom}
+            />
+            <text x={x.map(crossover)} y={SUPPORT_INSETS.top - 7}>Principal crossover</text>
+          </g>
+        ) : null}
+        {tickYears(horizonYears, 4).map((year) => (
+          <text key={year} x={x.map(Math.max(1, year))} y={SUPPORT_HEIGHT - 10} className="home-plan-chart-axis">
+            {year === 0 ? "1y" : `${year}y`}
           </text>
         ))}
       </ScrubbableSvg>
       <div className="home-plan-line-legend" aria-hidden="true">
         <span className="is-interest">Interest</span>
-        <span className="is-principal">Regular principal</span>
+        <span className="is-principal">Scheduled principal</span>
         <span className="is-extra">Extra principal</span>
       </div>
-      {active ? (
-        <ChartReadout columns={4}>
-          <ReadoutValue label="Year" value={String(active.year)} />
-          <ReadoutValue label="Interest" value={formatCurrency(active.interestPaid, true)} tone="interest" />
-          <ReadoutValue label="Regular principal" value={formatCurrency(active.principalPaid, true)} tone="principal" />
-          <ReadoutValue label="Extra principal" value={formatCurrency(active.extraPaid, true)} />
-        </ChartReadout>
-      ) : null}
     </section>
   );
 }
 
-function TimingImpact({
+function zeroImpactPoint(year: number): OneOffExtraPaymentPoint {
+  return {
+    year,
+    interestSaved: 0,
+    monthsSaved: 0,
+    monthlyEmiReduction: 0,
+    extraPaid: 0,
+  };
+}
+
+function TimingImpactChart({
   model,
-  activePaymentMonth,
-  onPreviewPaymentMonth,
-  onPinPaymentMonth,
+  horizonYears,
+  activeYear,
+  onPreviewYear,
+  onPinYear,
 }: {
   model: RepaymentDashboardModel;
-  activePaymentMonth: number;
-  onPreviewPaymentMonth: (month: number | null) => void;
-  onPinPaymentMonth: (month: number) => void;
+  horizonYears: number;
+  activeYear: number;
+  onPreviewYear: (year: number | null) => void;
+  onPinYear: (year: number) => void;
 }) {
   const points = model.oneOffExtraPaymentCurve;
-  const activeYear = Math.max(1, Math.ceil(activePaymentMonth / 12));
-  const requestedActiveIndex = points.findIndex((point) => point.year >= activeYear);
-  const activeIndex = requestedActiveIndex < 0 ? Math.max(0, points.length - 1) : requestedActiveIndex;
-  const active = points[activeIndex];
+  const active = points.find((point) => point.year === activeYear) ?? zeroImpactPoint(activeYear);
+  const first = points[0];
+  const final = points.at(-1);
+  const half = model.markers.halfFirstYearImpactYear == null
+    ? undefined
+    : points.find((point) => point.year === model.markers.halfFirstYearImpactYear);
   const maximum = Math.max(1, ...points.map((point) => point.interestSaved));
-  const plotBottom = FRAME_HEIGHT - FRAME_INSETS.bottom;
-  const maximumYear = Math.max(1, points.at(-1)?.year ?? 1);
-  const x = linearScale([1, maximumYear], [FRAME_INSETS.left, WIDTH - FRAME_INSETS.right]);
-  const y = linearScale([0, maximum * 1.12], [plotBottom, FRAME_INSETS.top]);
-  const halfYear = model.markers.halfFirstYearImpactYear;
-  const halfPoint = halfYear == null ? undefined : points.find((point) => point.year === halfYear);
-
-  const pointLabel = (point: OneOffExtraPaymentPoint) => (
-    `${point.year === 1 ? "Year 1" : "Half impact"} · ${formatCurrency(point.interestSaved, true)}`
-  );
+  const plotBottom = SUPPORT_HEIGHT - SUPPORT_INSETS.bottom;
+  const x = linearScale([0, horizonYears], [SUPPORT_INSETS.left, SUPPORT_WIDTH - SUPPORT_INSETS.right]);
+  const y = linearScale([0, maximum * 1.14], [plotBottom, SUPPORT_INSETS.top]);
+  const path: ChartPoint[] = points.map((point) => ({
+    x: x.map(point.year),
+    y: y.map(point.interestSaved),
+  }));
+  const highlighted = [...new Map(
+    [first, half, active.extraPaid > 0 ? active : undefined, final]
+      .filter((point): point is OneOffExtraPaymentPoint => point != null)
+      .map((point) => [point.year, point]),
+  ).values()];
 
   return (
-    <section className="home-plan-frame">
+    <section className="home-plan-support-chart">
       <ChartHeading
-        title={halfYear == null
-          ? "One extra EMI is most useful early in the loan."
-          : `One extra EMI loses half its interest-saving impact by year ${halfYear}.`}
-        conclusion="Every point tests one additional EMI in that year against the loan with no extras."
+        title="What one extra EMI achieves in each year"
+        conclusion={!model.comparisonAvailable
+          ? "Lifetime interest impact is not comparable because the original EMI never repays the loan."
+          : half == null
+          ? "Earlier prepayments avoid more lifetime interest."
+          : `Impact has halved by year ${half.year}; that is a comparison checkpoint, not an instruction to stop.`}
       />
       <ScrubbableSvg
-        width={WIDTH}
-        height={FRAME_HEIGHT}
-        insets={FRAME_INSETS}
-        pointCount={points.length}
-        activeIndex={activeIndex}
-        label="Interest avoided by paying one additional EMI in each possible year"
-        valueText={active
-          ? `Year ${active.year}, one extra EMI ${formatCurrency(active.extraPaid, true)}, ${formatCurrency(active.interestSaved, true)} interest avoided`
-          : undefined}
+        width={SUPPORT_WIDTH}
+        height={SUPPORT_HEIGHT}
+        insets={SUPPORT_INSETS}
+        pointCount={horizonYears + 1}
+        activeIndex={activeYear}
+        label="Lifetime interest avoided by one extra EMI across the original loan horizon"
+        valueText={!model.comparisonAvailable
+          ? `Year ${activeYear}, lifetime interest comparison unavailable`
+          : active.extraPaid > 0
+          ? `Year ${activeYear}, one extra EMI ${formatCurrency(active.extraPaid, true)}, ${formatCurrency(active.interestSaved, true)} lifetime interest avoided`
+          : `Year ${activeYear}, no scheduled extra payment remains`}
         className="home-plan-timing-impact"
-        onPreviewIndex={(index) => onPreviewPaymentMonth(index == null ? null : points[index].year * 12)}
-        onPinIndex={(index) => onPinPaymentMonth(points[index].year * 12)}
+        indexFromPoint={(clientX, _clientY, bounds) => (
+          loanYearFromPointer(clientX, bounds, SUPPORT_WIDTH, x)
+        )}
+        onPreviewIndex={onPreviewYear}
+        onPinIndex={onPinYear}
       >
-        {[0, maximum / 2, maximum].map((value) => (
+        {half ? (
+          <rect
+            x={x.map(0)}
+            y={SUPPORT_INSETS.top}
+            width={Math.max(0, x.map(half.year) - x.map(0))}
+            height={plotBottom - SUPPORT_INSETS.top}
+            className="home-plan-high-impact-window"
+          />
+        ) : null}
+        {(model.comparisonAvailable ? [0, maximum / 2, maximum] : []).map((value) => (
           <g key={value} className="home-plan-value-guide" aria-hidden="true">
             <line
-              x1={FRAME_INSETS.left}
-              x2={WIDTH - FRAME_INSETS.right}
+              x1={SUPPORT_INSETS.left}
+              x2={SUPPORT_WIDTH - SUPPORT_INSETS.right}
               y1={y.map(value)}
               y2={y.map(value)}
             />
-            <text x={FRAME_INSETS.left - 9} y={y.map(value) + 4}>{formatCurrency(value, true)}</text>
+            <text x={SUPPORT_INSETS.left - 8} y={y.map(value) + 4}>
+              {formatCurrency(value, true)}
+            </text>
           </g>
         ))}
-        {points.map((point, index) => (
-          <g
-            key={point.year}
-            className={`home-plan-lollipop ${index === activeIndex ? "is-active" : ""}`}
-            aria-hidden="true"
+        {points.length > 0 ? (
+          <>
+            <path d={areaPath(path, plotBottom)} className="home-plan-impact-area" />
+            <path d={smoothLinePath(path)} className="home-plan-curve is-timing" />
+          </>
+        ) : (
+          <text
+            x={(SUPPORT_INSETS.left + SUPPORT_WIDTH - SUPPORT_INSETS.right) / 2}
+            y={(SUPPORT_INSETS.top + plotBottom) / 2}
+            className="home-plan-chart-empty"
           >
-            <line
-              x1={x.map(point.year)}
-              x2={x.map(point.year)}
-              y1={y.map(0)}
-              y2={y.map(point.interestSaved)}
+            Lifetime comparison unavailable
+          </text>
+        )}
+        {highlighted.map((point) => (
+          <g key={point.year} className="home-plan-impact-point" aria-hidden="true">
+            <circle
+              cx={x.map(point.year)}
+              cy={y.map(point.interestSaved)}
+              r={point.year === activeYear ? 5.5 : 4}
             />
-            <circle cx={x.map(point.year)} cy={y.map(point.interestSaved)} r={index === activeIndex ? 6 : 4} />
+            {point === first || point === half || point === final ? (
+              <text
+                x={x.map(point.year)}
+                y={Math.max(SUPPORT_INSETS.top + 10, y.map(point.interestSaved) - 9)}
+                textAnchor={point === final ? "end" : point === first ? "start" : "middle"}
+              >
+                {point === first ? "Year 1" : point === half ? "Half impact" : "Final useful year"}
+              </text>
+            ) : null}
           </g>
         ))}
-        {points[0] ? (
-          <text
-            x={x.map(points[0].year) + 8}
-            y={y.map(points[0].interestSaved) - 9}
-            className="home-plan-impact-label"
-          >
-            {pointLabel(points[0])}
-          </text>
+        {model.comparisonAvailable && active.extraPaid === 0 ? (
+          <circle
+            cx={x.map(activeYear)}
+            cy={y.map(0)}
+            r="5"
+            className="home-plan-empty-impact-point"
+          />
         ) : null}
-        {halfPoint ? (
-          <text
-            x={x.map(halfPoint.year) + 8}
-            y={y.map(halfPoint.interestSaved) - 9}
-            className="home-plan-impact-label"
-          >
-            {pointLabel(halfPoint)}
-          </text>
-        ) : null}
-        {chartTickIndexes(points.length, 6).map((index) => (
-          <text key={points[index].year} x={x.map(points[index].year)} y={FRAME_HEIGHT - 11} className="home-plan-chart-axis">
-            {points[index].year}y
+        {tickYears(horizonYears, 4).map((year) => (
+          <text key={year} x={x.map(year)} y={SUPPORT_HEIGHT - 10} className="home-plan-chart-axis">
+            {year === 0 ? "Now" : `${year}y`}
           </text>
         ))}
       </ScrubbableSvg>
-      {active ? (
-        <ChartReadout columns={4}>
-          <ReadoutValue label="Timing" value={`Year ${active.year}`} />
-          <ReadoutValue label="One extra EMI" value={formatCurrency(active.extraPaid, true)} />
-          <ReadoutValue label="Interest avoided" value={formatCurrency(active.interestSaved, true)} />
-          <ReadoutValue
-            label={model.strategy === "finish_earlier" ? "Loan ends earlier" : "Monthly EMI falls"}
-            value={model.strategy === "finish_earlier"
-              ? durationLabel(active.monthsSaved)
-              : formatCurrency(active.monthlyEmiReduction)}
-          />
-        </ChartReadout>
-      ) : null}
     </section>
   );
 }
 
-function Sparkline({
-  points,
-  className,
+function MilestoneRail({
+  model,
+  baselinePayoffMonths,
+  selectedPayoffMonths,
 }: {
-  points: MonthlyRepaymentPoint[];
-  className: string;
+  model: RepaymentDashboardModel;
+  baselinePayoffMonths: number | null;
+  selectedPayoffMonths: number | null;
 }) {
-  const checkpoints = yearlyCheckpoints(points);
-  const width = 220;
-  const height = 58;
-  const maximumMonth = Math.max(1, checkpoints.at(-1)?.paymentNumber ?? 1);
-  const maximumEmi = Math.max(1, ...checkpoints.map((point) => point.scheduledEmi));
-  const x = linearScale([1, maximumMonth], [2, width - 2]);
-  const y = linearScale([0, maximumEmi], [height - 3, 3]);
-  const path: ChartPoint[] = checkpoints.map((point) => ({
-    x: x.map(point.paymentNumber),
-    y: y.map(point.scheduledEmi),
-  }));
+  const samePayoff = selectedPayoffMonths != null
+    && selectedPayoffMonths === baselinePayoffMonths;
+  const planMilestones = baselinePayoffMonths == null && selectedPayoffMonths == null
+    ? [{
+      sort: Number.POSITIVE_INFINITY,
+      value: "Not repaid",
+      label: "Both plans at this EMI",
+    }]
+    : [
+      {
+        sort: selectedPayoffMonths == null ? Number.POSITIVE_INFINITY : selectedPayoffMonths / 12,
+        value: durationLabel(selectedPayoffMonths),
+        label: samePayoff ? "Both plans payoff" : "Selected payoff",
+      },
+      ...(samePayoff ? [] : [{
+        sort: baselinePayoffMonths == null ? Number.POSITIVE_INFINITY : baselinePayoffMonths / 12,
+        value: durationLabel(baselinePayoffMonths),
+        label: "Original payoff",
+      }]),
+    ];
+  const milestones = [
+    { sort: 1, value: "Year 1", label: "Interest-heavy period" },
+    {
+      sort: model.markers.crossoverYear ?? Number.POSITIVE_INFINITY,
+      value: model.markers.crossoverYear == null ? "—" : `Year ${model.markers.crossoverYear}`,
+      label: "Principal crossover",
+    },
+    {
+      sort: model.markers.halfFirstYearImpactYear ?? Number.POSITIVE_INFINITY,
+      value: model.markers.halfFirstYearImpactYear == null
+        ? "—"
+        : `Year ${model.markers.halfFirstYearImpactYear}`,
+      label: "Prepayment impact halves",
+    },
+    ...planMilestones,
+  ].sort((left, right) => left.sort - right.sort);
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true" className="home-plan-strategy-sparkline">
-      <path d={smoothLinePath(path)} className={`home-plan-curve ${className}`} />
-    </svg>
+    <ol
+      className={`home-plan-milestone-rail home-plan-milestone-rail--${milestones.length}`}
+      aria-label="Loan milestones"
+    >
+      {milestones.map(({ value, label }) => (
+        <li key={label}>
+          <strong>{value}</strong>
+          <span>{label}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
-function firstRecalculatedEmi(points: MonthlyRepaymentPoint[]): number {
-  const extraIndex = points.findIndex((point) => point.extraPaid > 0);
-  if (extraIndex < 0) return points[0]?.scheduledEmi ?? 0;
-  return points[extraIndex + 1]?.scheduledEmi ?? points[extraIndex].scheduledEmi;
-}
-
-function StrategyCards({
-  stories,
-  model,
-  activePaymentMonth,
-  onSelect,
+function SharedYearReadout({
+  values,
 }: {
-  stories: RepaymentChartStories;
-  model: RepaymentDashboardModel;
-  activePaymentMonth: number;
-  onSelect: (strategy: RepaymentDashboardModel["strategy"]) => void;
+  values: SharedYearValues;
 }) {
-  const finishSummary = model.strategyComparison.find((point) => point.strategy === "finish_earlier");
-  const lowerSummary = model.strategyComparison.find((point) => point.strategy === "lower_emi");
-  const finishPayoff = stories.finishEarlierMonthly.at(-1)?.paymentNumber ?? 0;
-  const lowerPayoff = stories.lowerEmiMonthly.at(-1)?.paymentNumber ?? 0;
-  const lowerFirstEmi = firstRecalculatedEmi(stories.lowerEmiMonthly);
-  const lowerSelectedEmi = activeMonthlyPoint(stories.lowerEmiMonthly, activePaymentMonth)?.scheduledEmi
-    ?? lowerFirstEmi;
-  const hasExtras = model.extraEmisPerYear > 0;
-
   return (
-    <section className="home-plan-frame home-plan-frame--strategies">
-      <ChartHeading
-        title="Same prepayment rule, two repayment objectives."
-        conclusion={hasExtras
-          ? "Choose the outcome that fits your cash-flow priority."
-          : "Add an annual extra EMI above to see the objectives diverge."}
-      />
-      <div className="home-plan-strategy-cards">
-        <button
-          type="button"
-          className={model.strategy === "finish_earlier" ? "is-active" : undefined}
-          aria-pressed={model.strategy === "finish_earlier"}
-          onClick={() => onSelect("finish_earlier")}
-        >
-          <header>
-            <strong>Finish earlier</strong>
-            <span>Keep the scheduled EMI</span>
-          </header>
-          <Sparkline points={stories.finishEarlierMonthly} className="is-finish-earlier" />
-          <dl>
-            <div><dt>Scheduled EMI</dt><dd>{formatCurrency(model.openingMonthlyEmi)}</dd></div>
-            <div><dt>Payoff</dt><dd>{durationLabel(finishPayoff)}</dd></div>
-            <div><dt>Interest avoided</dt><dd>{formatCurrency(finishSummary?.interestSaved ?? 0, true)}</dd></div>
-            <div><dt>Primary benefit</dt><dd>{durationLabel(finishSummary?.monthsSaved ?? 0)} sooner</dd></div>
-          </dl>
-        </button>
-        <button
-          type="button"
-          className={model.strategy === "lower_emi" ? "is-active" : undefined}
-          aria-pressed={model.strategy === "lower_emi"}
-          onClick={() => onSelect("lower_emi")}
-        >
-          <header>
-            <strong>Lower EMI</strong>
-            <span>Keep the original payoff date</span>
-          </header>
-          <Sparkline points={stories.lowerEmiMonthly} className="is-lower-emi" />
-          <dl>
-            <div><dt>After first prepayment</dt><dd>{formatCurrency(lowerFirstEmi)}</dd></div>
-            <div><dt>At {loanTimeLabel(activePaymentMonth).toLowerCase()}</dt><dd>{formatCurrency(lowerSelectedEmi)}</dd></div>
-            <div><dt>Payoff</dt><dd>{durationLabel(lowerPayoff)}</dd></div>
-            <div><dt>Interest avoided</dt><dd>{formatCurrency(lowerSummary?.interestSaved ?? 0, true)}</dd></div>
-          </dl>
-        </button>
-      </div>
+    <section className="home-plan-shared-readout" aria-label={`Year ${values.year} details`}>
+      <strong>Year {values.year}</strong>
+      <dl>
+        <div><dt>Interest</dt><dd>{formatCurrency(values.interestPaid, true)}</dd></div>
+        <div><dt>Scheduled principal</dt><dd>{formatCurrency(values.principalPaid, true)}</dd></div>
+        <div><dt>Extra principal</dt><dd>{formatCurrency(values.extraPaid, true)}</dd></div>
+        <div><dt>Remaining balance</dt><dd>{formatCurrency(values.balance, true)}</dd></div>
+        <div>
+          <dt>One extra EMI avoids</dt>
+          <dd>
+            {!values.oneOffComparisonAvailable
+              ? "Not comparable"
+              : values.oneOffInterestSaved == null
+                ? "No payment remains"
+                : formatCurrency(values.oneOffInterestSaved, true)}
+          </dd>
+        </div>
+      </dl>
     </section>
   );
 }
@@ -649,9 +689,14 @@ function CalculationDisclosure({
         <p>
           Finish earlier keeps the scheduled EMI constant and recalculates tenure. Lower EMI
           keeps the original payoff date and recalculates the EMI, so future extra payments
-          also fall. The {formatCurrency(model.interestSaved, true)} loan-interest saving shown
-          above comes from the repayment schedule; Rent vs Buy market returns are projections,
-          not guaranteed savings.
+          also fall.
+        </p>
+        <p>
+          The diminishing-prepayment checkpoint is the first year in which one extra EMI
+          avoids no more than 50% of the lifetime interest avoided by the same payment in year
+          one. It is a deterministic comparison point, not advice to stop prepaying.
+          The {formatCurrency(model.interestSaved, true)} selected-plan saving comes from the
+          repayment schedule; Rent vs Buy market returns are projections, not guaranteed savings.
         </p>
       </div>
     </details>
@@ -661,16 +706,30 @@ function CalculationDisclosure({
 export function RepaymentDashboard({
   inputs,
   model,
-  onStrategyChange,
 }: RepaymentDashboardProps) {
   const stories = useMemo(() => buildRepaymentChartStories(inputs, model), [inputs, model]);
-  const [previewPaymentMonth, setPreviewPaymentMonth] = useState<number | null>(null);
-  const [pinnedPaymentMonth, setPinnedPaymentMonth] = useState(12);
-  const activePaymentMonth = previewPaymentMonth ?? pinnedPaymentMonth;
+  const horizonMonths = Math.max(12, model.baselineHorizonMonths);
+  const horizonYears = Math.max(1, Math.ceil(horizonMonths / 12));
+  const [previewYear, setPreviewYear] = useState<number | null>(null);
+  const [pinnedYear, setPinnedYear] = useState(1);
+  const activeYear = Math.max(1, Math.min(horizonYears, previewYear ?? pinnedYear));
+  const paymentYear = activeYear;
+  const annual = model.recurrentSchedule.find((point) => point.year === paymentYear)
+    ?? emptyRepaymentYear(paymentYear);
+  const oneOff = model.oneOffExtraPaymentCurve.find((point) => point.year === paymentYear);
+  const sharedValues: SharedYearValues = {
+    year: paymentYear,
+    interestPaid: annual.interestPaid,
+    principalPaid: annual.principalPaid,
+    extraPaid: annual.extraPaid,
+    balance: balanceAt(stories.selectedMonthly, paymentYear * 12),
+    oneOffInterestSaved: oneOff?.interestSaved ?? null,
+    oneOffComparisonAvailable: model.comparisonAvailable,
+  };
 
   if (stories.baselineMonthly.length === 0) {
     return (
-      <section className="home-plan-frame">
+      <section className="home-plan-primary-chart">
         <ChartHeading
           title="No loan is needed with this down payment."
           conclusion="Reduce the down payment above to model a repayment plan."
@@ -680,33 +739,41 @@ export function RepaymentDashboard({
   }
 
   return (
-    <div className="home-plan-journey">
-      <BalanceOverview
+    <div className="home-plan-dashboard">
+      <OutcomeStrip model={model} />
+      <BalanceChart
         key={`${inputs.downPaymentPercent}-${inputs.loanRate}-${inputs.monthlyEmiThousands}-${model.extraEmisPerYear}-${model.strategy}`}
         stories={stories}
         model={model}
-        activePaymentMonth={activePaymentMonth}
-        onPreviewPaymentMonth={setPreviewPaymentMonth}
-        onPinPaymentMonth={setPinnedPaymentMonth}
+        horizonMonths={horizonMonths}
+        baselinePayoffMonths={model.baselinePayoffMonths}
+        selectedPayoffMonths={model.selectedPayoffMonths}
+        activeYear={activeYear}
+        onPreviewYear={setPreviewYear}
+        onPinYear={setPinnedYear}
       />
-      <PaymentMechanics
+      <MilestoneRail
         model={model}
-        activePaymentMonth={activePaymentMonth}
-        onPreviewPaymentMonth={setPreviewPaymentMonth}
-        onPinPaymentMonth={setPinnedPaymentMonth}
+        baselinePayoffMonths={model.baselinePayoffMonths}
+        selectedPayoffMonths={model.selectedPayoffMonths}
       />
-      <TimingImpact
-        model={model}
-        activePaymentMonth={activePaymentMonth}
-        onPreviewPaymentMonth={setPreviewPaymentMonth}
-        onPinPaymentMonth={setPinnedPaymentMonth}
-      />
-      <StrategyCards
-        stories={stories}
-        model={model}
-        activePaymentMonth={activePaymentMonth}
-        onSelect={onStrategyChange}
-      />
+      <SharedYearReadout values={sharedValues} />
+      <div className="home-plan-support-grid">
+        <PaymentCompositionChart
+          model={model}
+          horizonYears={horizonYears}
+          activeYear={activeYear}
+          onPreviewYear={setPreviewYear}
+          onPinYear={setPinnedYear}
+        />
+        <TimingImpactChart
+          model={model}
+          horizonYears={horizonYears}
+          activeYear={activeYear}
+          onPreviewYear={setPreviewYear}
+          onPinYear={setPinnedYear}
+        />
+      </div>
       <CalculationDisclosure model={model} />
     </div>
   );

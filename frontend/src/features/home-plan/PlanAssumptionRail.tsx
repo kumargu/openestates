@@ -1,6 +1,7 @@
-import { type EditablePlanInput, type PlanInputs } from "./model.ts";
+import { formatCurrency, type EditablePlanInput, type PlanInputs } from "./model.ts";
 import { useState } from "react";
 import type { RepaymentStrategy } from "./financeEngine.ts";
+import type { RepaymentDashboardModel } from "./repaymentModel.ts";
 
 const LAKH = 100_000;
 const MONTHS_IN_YEAR = 12;
@@ -14,12 +15,22 @@ type PlanAssumptionRailProps = {
   inputs: PlanInputs;
   extraEmisPerYear: number;
   repaymentStrategy: RepaymentStrategy;
+  repaymentModel: RepaymentDashboardModel;
   loanFreeYear: number | null;
   onInputChange: (key: EditablePlanInput, value: number) => void;
   onExtraEmisChange: (count: number) => void;
   onStrategyChange: (strategy: RepaymentStrategy) => void;
   onReset: () => void;
 };
+
+function durationLabel(months: number | null): string {
+  if (months == null) return "Not repaid";
+  const years = Math.floor(months / 12);
+  const remainder = months % 12;
+  if (years === 0) return `${remainder} mo`;
+  if (remainder === 0) return `${years}y`;
+  return `${years}y ${remainder}m`;
+}
 
 type InputSpec = {
   key: EditablePlanInput;
@@ -108,6 +119,7 @@ export function PlanAssumptionRail({
   inputs,
   extraEmisPerYear,
   repaymentStrategy,
+  repaymentModel,
   loanFreeYear,
   onInputChange,
   onExtraEmisChange,
@@ -120,6 +132,26 @@ export function PlanAssumptionRail({
     : loanFreeYear == null
       ? "Loan stays open at this EMI"
       : `Loan-free around year ${loanFreeYear}`;
+  const finishEarlier = repaymentModel.strategyComparison.find(
+    (point) => point.strategy === "finish_earlier",
+  );
+  const lowerEmi = repaymentModel.strategyComparison.find(
+    (point) => point.strategy === "lower_emi",
+  );
+  const finishSummary = extraEmisPerYear === 0
+    ? "Keep the scheduled EMI · no prepayment selected"
+    : finishEarlier?.payoffMonths == null
+      ? "Not repaid at this EMI"
+      : repaymentModel.comparisonAvailable
+        ? `Payoff in ${durationLabel(finishEarlier.payoffMonths)} · save ${formatCurrency(finishEarlier.interestSaved, true)}`
+        : `Payoff in ${durationLabel(finishEarlier.payoffMonths)} · original plan not repayable`;
+  const lowerSummary = extraEmisPerYear === 0
+    ? "Recalculate after a prepayment · none selected"
+    : lowerEmi?.payoffMonths == null
+      ? "Not repaid at this EMI"
+      : repaymentModel.comparisonAvailable
+        ? `${formatCurrency(lowerEmi.firstRecalculatedMonthlyEmi, true)} after first prepayment · save ${formatCurrency(lowerEmi.interestSaved, true)}`
+        : `${formatCurrency(lowerEmi.firstRecalculatedMonthlyEmi, true)} after first prepayment · original plan not repayable`;
   const financingInputs: InputSpec[] = [
     {
       key: "downPaymentPercent",
@@ -193,7 +225,7 @@ export function PlanAssumptionRail({
             onClick={() => onStrategyChange("finish_earlier")}
           >
             <strong>Finish earlier</strong>
-            <small>Keep the scheduled EMI · become debt-free sooner</small>
+            <small>{finishSummary}</small>
           </button>
           <button
             type="button"
@@ -202,7 +234,7 @@ export function PlanAssumptionRail({
             onClick={() => onStrategyChange("lower_emi")}
           >
             <strong>Lower EMI</strong>
-            <small>Keep the original payoff date · reduce monthly commitment</small>
+            <small>{lowerSummary}</small>
           </button>
         </div>
         {repaymentStrategy === "lower_emi" && extraEmisPerYear > 0 ? (
@@ -268,11 +300,14 @@ export function RentAssumptionRail({
         </div>
         <small>₹{inputs.monthlySipThousands.toLocaleString("en-IN")}K / mo</small>
       </div>
-      <PlanInput
-        {...returnInput}
-        value={inputs.equityReturn}
-        onChange={(value) => onInputChange("equityReturn", value)}
-      />
+      <details className="home-plan-rent-assumptions">
+        <summary>Assumptions · {inputs.equityReturn}% SIP return</summary>
+        <PlanInput
+          {...returnInput}
+          value={inputs.equityReturn}
+          onChange={(value) => onInputChange("equityReturn", value)}
+        />
+      </details>
     </section>
   );
 }

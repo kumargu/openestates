@@ -420,6 +420,7 @@ export function HomePlanPage() {
               inputs={inputs}
               extraEmisPerYear={extraEmisPerYear}
               repaymentStrategy={repaymentStrategy}
+              repaymentModel={repayment}
               loanFreeYear={repayment.status === "repaid"
                 ? repayment.recurrentSchedule.at(-1)?.year ?? null
                 : null}
@@ -433,7 +434,6 @@ export function HomePlanPage() {
               <RepaymentDashboard
                 inputs={inputs}
                 model={repayment}
-                onStrategyChange={updateRepaymentStrategy}
               />
             ) : (
               <section className="home-plan-rent-mode" aria-label="Rent versus buy scenario">

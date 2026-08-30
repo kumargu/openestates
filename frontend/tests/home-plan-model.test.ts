@@ -597,6 +597,34 @@ test("lower-EMI dashboard trades recurring commitment for monthly room", () => {
     .endingMonthlyEmi < dashboard.openingMonthlyEmi);
 });
 
+test("repayment dashboard never turns a simulation horizon into a payoff", () => {
+  const dashboard = calculateRepaymentDashboard({
+    ...ready,
+    monthlyEmiThousands: 10,
+  }, 0, "finish_earlier");
+
+  assert.equal(dashboard.status, "insufficient_emi");
+  assert.equal(dashboard.baselinePayoffMonths, null);
+  assert.equal(dashboard.selectedPayoffMonths, null);
+  assert.ok(dashboard.baselineHorizonMonths > 0);
+  assert.ok(dashboard.strategyComparison.every((point) => point.payoffMonths == null));
+});
+
+test("repayment dashboard marks rescued loans as incomparable to a non-closing baseline", () => {
+  const dashboard = calculateRepaymentDashboard({
+    ...ready,
+    monthlyEmiThousands: 80,
+  }, 4, "finish_earlier");
+
+  assert.equal(dashboard.status, "repaid");
+  assert.equal(dashboard.baselinePayoffMonths, null);
+  assert.equal(dashboard.selectedPayoffMonths, 233);
+  assert.equal(dashboard.comparisonAvailable, false);
+  assert.equal(dashboard.interestSaved, 0);
+  assert.equal(dashboard.monthsSaved, 0);
+  assert.deepEqual(dashboard.oneOffExtraPaymentCurve, []);
+});
+
 test("lower-EMI re-amortisation handles a zero-interest loan", () => {
   const schedule = buildLoanSchedule({
     ...ready,
