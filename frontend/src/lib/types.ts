@@ -436,6 +436,7 @@ export type PropertyMapContext = {
   proof_focus?: ProofFocus;
   water?: MapWaterContext;
   metro_lines?: MapOverlayLine[];
+  access_lines?: MapOverlayLine[];
   red_flag_lines?: MapOverlayLine[];
   green_patches?: MapOverlayPolygon[];
   lakes?: MapOverlayPolygon[];

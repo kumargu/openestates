@@ -488,6 +488,18 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         AssetPartition::global(),
     );
     write_current(&materializations, &metro_station_facts).await;
+    let osm_transit_access_corridor_facts = materialization_in_partition(
+        "osm_transit_access_corridor_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            canonical.materialization_id.clone(),
+            metro_station_facts.materialization_id.clone(),
+        ],
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &osm_transit_access_corridor_facts).await;
     let osm_power_line_facts = materialization_in_partition(
         "osm_power_line_facts",
         AssetStage::Silver,
@@ -533,6 +545,7 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             home_state_facts.materialization_id.clone(),
             groundwater_facts.materialization_id.clone(),
             metro_station_facts.materialization_id.clone(),
+            osm_transit_access_corridor_facts.materialization_id.clone(),
             osm_power_line_facts.materialization_id.clone(),
             stormwater_drain_facts.materialization_id.clone(),
         ],

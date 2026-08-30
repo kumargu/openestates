@@ -17,6 +17,7 @@
     "fact_registry.json",
     "google_place_resolution.json",
     "nearby_place_categories.json",
+    "osm_access_corridors.json",
     "ontology.json",
     "resolution_policies.json",
     "rera_decision_labels.json",

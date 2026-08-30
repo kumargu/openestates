@@ -357,6 +357,21 @@
       }
     },
     {
+      "id": "osm_transit_access_corridor_facts",
+      "stage": "silver",
+      "description": "OpenStreetMap street-network routes from societies to operational transit stations, computed offline with route geometry and provenance.",
+      "dependencies": [
+        "canonical_society_nodes",
+        "bengaluru_metro_station_facts"
+      ],
+      "refresh": "monthly",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
       "id": "stormwater_drain_facts",
       "stage": "silver",
       "description": "Stormwater drain and Rajakaluve proximity facts with geometry for red-flag map overlays.",
@@ -385,6 +400,7 @@
         "home_state_signals",
         "society_groundwater_potential_facts",
         "bengaluru_metro_station_facts",
+        "osm_transit_access_corridor_facts",
         "osm_power_line_facts",
         "stormwater_drain_facts"
       ],
@@ -419,7 +435,8 @@
         "image_media_facts",
         "rera_project_plan_frames",
         "home_state_signals",
-        "bengaluru_metro_station_facts"
+        "bengaluru_metro_station_facts",
+        "osm_transit_access_corridor_facts"
       ]
     },
     {

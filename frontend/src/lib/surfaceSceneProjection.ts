@@ -30,7 +30,12 @@ export function propertyMapContextFromSurfaceScene(
     .filter((feature) => feature.layerId === "red_flags")
     .map((feature) => mapLineFromFeature(feature, receiptsById))
     .filter((line): line is MapOverlayLine => Boolean(line));
+  const accessLines = scene.features
+    .filter((feature) => feature.layerId === "metro")
+    .map((feature) => mapLineFromFeature(feature, receiptsById))
+    .filter((line): line is MapOverlayLine => Boolean(line));
 
+  const mergedAccessLines = mergeLines(accessLines, fallback?.access_lines ?? []);
   const mergedRedFlagLines = [
     ...redFlagLines,
     ...(fallback?.red_flag_lines ?? []).filter((line) =>
@@ -51,10 +56,18 @@ export function propertyMapContextFromSurfaceScene(
     proof_focus: scene.proofFocus,
     water: fallback?.water,
     metro_lines: fallback?.metro_lines,
+    access_lines: mergedAccessLines,
     red_flag_lines: mergedRedFlagLines,
     green_patches: fallback?.green_patches,
     lakes: fallback?.lakes,
   };
+}
+
+function mergeLines(primary: MapOverlayLine[], fallback: MapOverlayLine[]): MapOverlayLine[] {
+  return [
+    ...primary,
+    ...fallback.filter((line) => !primary.some((candidate) => candidate.id === line.id)),
+  ];
 }
 
 function mergedLayers(

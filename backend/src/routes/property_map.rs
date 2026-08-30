@@ -42,6 +42,8 @@ pub struct PropertyMapContext {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub metro_lines: Vec<crate::routes::map_overlays::MapOverlayLine>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub access_lines: Vec<crate::routes::map_overlays::MapOverlayLine>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub red_flag_lines: Vec<crate::routes::map_overlays::MapOverlayLine>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub green_patches: Vec<crate::routes::map_overlays::MapOverlayPolygon>,
@@ -220,6 +222,7 @@ pub fn build_property_map_context(
         places,
         water,
         metro_lines,
+        access_lines: Vec::new(),
         red_flag_lines: Vec::new(),
         green_patches,
         lakes,
@@ -270,37 +273,48 @@ pub fn property_map_context_from_surface_scene(
             })
         })
         .collect::<Vec<_>>();
+    let line_from_feature = |feature: &crate::surfaces::SceneFeature| {
+        let coordinates = line_coordinates(&feature.geometry)?;
+        let receipt = feature
+            .receipt_ids
+            .iter()
+            .find_map(|receipt_id| receipts_by_id.get(receipt_id.as_str()));
+        Some(crate::routes::map_overlays::MapOverlayLine {
+            id: feature.id.clone(),
+            name: feature.label.clone(),
+            label: feature.short_label.clone(),
+            distance_km: feature
+                .metrics
+                .as_ref()
+                .and_then(|metrics| metrics.distance_m)
+                .map(|distance_m| f64::from(distance_m) / 1000.0),
+            details: feature.details.clone(),
+            kind: feature.kind.clone(),
+            coordinates,
+            source_type: receipt
+                .map(|receipt| receipt.source_type.clone())
+                .unwrap_or_else(|| BUYER_SOURCE_FALLBACK.to_string()),
+            source_url: receipt.and_then(|receipt| receipt.source_url.clone()),
+        })
+    };
+    let access_lines = scene
+        .features
+        .iter()
+        .filter(|feature| feature.layer_id == "metro")
+        .filter_map(&line_from_feature)
+        .collect::<Vec<_>>();
     let red_flag_lines = scene
         .features
         .iter()
         .filter(|feature| feature.layer_id == "red_flags")
-        .filter_map(|feature| {
-            let coordinates = line_coordinates(&feature.geometry)?;
-            let receipt = feature
-                .receipt_ids
-                .iter()
-                .find_map(|receipt_id| receipts_by_id.get(receipt_id.as_str()));
-            Some(crate::routes::map_overlays::MapOverlayLine {
-                id: feature.id.clone(),
-                name: feature.label.clone(),
-                label: feature.short_label.clone(),
-                distance_km: feature
-                    .metrics
-                    .as_ref()
-                    .and_then(|metrics| metrics.distance_m)
-                    .map(|distance_m| f64::from(distance_m) / 1000.0),
-                details: feature.details.clone(),
-                kind: feature.kind.clone(),
-                coordinates,
-                source_type: receipt
-                    .map(|receipt| receipt.source_type.clone())
-                    .unwrap_or_else(|| BUYER_SOURCE_FALLBACK.to_string()),
-                source_url: receipt.and_then(|receipt| receipt.source_url.clone()),
-            })
-        })
+        .filter_map(line_from_feature)
         .collect::<Vec<_>>();
 
-    if places.is_empty() && red_flag_lines.is_empty() && home_coords.is_none() {
+    if places.is_empty()
+        && access_lines.is_empty()
+        && red_flag_lines.is_empty()
+        && home_coords.is_none()
+    {
         return None;
     }
 
@@ -315,6 +329,7 @@ pub fn property_map_context_from_surface_scene(
         places,
         water: None,
         metro_lines: Vec::new(),
+        access_lines,
         red_flag_lines,
         green_patches: Vec::new(),
         lakes: Vec::new(),
@@ -1440,7 +1455,7 @@ mod tests {
     }
 
     #[test]
-    fn map_context_projects_red_flag_lines_from_surface_scene() {
+    fn map_context_projects_evidence_lines_from_surface_scene() {
         let scene = SurfaceSceneResponse {
             contract_version: 1,
             surface_id: "around_this_home".to_string(),
@@ -1480,46 +1495,88 @@ mod tests {
                 shown_count: 1,
                 fill_state: FillState::Filled,
             }],
-            features: vec![SceneFeature {
-                id: "around_this_home:red_flags:line-one".to_string(),
-                entity_id: Some("place:osm-power-line:one".to_string()),
-                layer_id: "red_flags".to_string(),
-                kind: "place".to_string(),
-                label: "High voltage transmission line".to_string(),
-                short_label: Some("Transmission line".to_string()),
-                details: vec!["220 kV".to_string()],
-                geometry: SceneGeometry::LineString {
-                    coordinates: vec![[77.75, 12.98], [77.752, 12.982]],
+            features: vec![
+                SceneFeature {
+                    id: "around_this_home:red_flags:line-one".to_string(),
+                    entity_id: Some("place:osm-power-line:one".to_string()),
+                    layer_id: "red_flags".to_string(),
+                    kind: "place".to_string(),
+                    label: "High voltage transmission line".to_string(),
+                    short_label: Some("Transmission line".to_string()),
+                    details: vec!["220 kV".to_string()],
+                    geometry: SceneGeometry::LineString {
+                        coordinates: vec![[77.75, 12.98], [77.752, 12.982]],
+                    },
+                    coordinate_quality: CoordinateQuality::Exact,
+                    metrics: Some(SceneMetrics {
+                        distance_m: Some(94),
+                        travel_time_min: None,
+                        rating: None,
+                        review_count: None,
+                        severity: Some("high".to_string()),
+                    }),
+                    display: SceneFeatureDisplay {
+                        tone: DisplayTone::Risk,
+                        icon: Some("flag".to_string()),
+                        priority: 1,
+                    },
+                    confidence: 0.8,
+                    receipt_ids: vec!["receipt:line".to_string()],
                 },
-                coordinate_quality: CoordinateQuality::Exact,
-                metrics: Some(SceneMetrics {
-                    distance_m: Some(94),
-                    travel_time_min: None,
-                    rating: None,
-                    review_count: None,
-                    severity: Some("high".to_string()),
-                }),
-                display: SceneFeatureDisplay {
-                    tone: DisplayTone::Risk,
-                    icon: Some("flag".to_string()),
-                    priority: 1,
+                SceneFeature {
+                    id: "around_this_home:metro:access-one".to_string(),
+                    entity_id: Some("place:transit-access:one".to_string()),
+                    layer_id: "metro".to_string(),
+                    kind: "place".to_string(),
+                    label: "ECC Road → Kadugodi Tree Park".to_string(),
+                    short_label: None,
+                    details: Vec::new(),
+                    geometry: SceneGeometry::LineString {
+                        coordinates: vec![[77.7409, 12.9814], [77.7475, 12.9855]],
+                    },
+                    coordinate_quality: CoordinateQuality::Exact,
+                    metrics: Some(SceneMetrics {
+                        distance_m: Some(1_120),
+                        travel_time_min: None,
+                        rating: None,
+                        review_count: None,
+                        severity: None,
+                    }),
+                    display: SceneFeatureDisplay {
+                        tone: DisplayTone::Positive,
+                        icon: Some("train".to_string()),
+                        priority: 1,
+                    },
+                    confidence: 0.78,
+                    receipt_ids: vec!["receipt:access".to_string()],
                 },
-                confidence: 0.8,
-                receipt_ids: vec!["receipt:line".to_string()],
-            }],
+            ],
             relations: Vec::new(),
             callouts: Vec::new(),
-            receipts: vec![SceneReceipt {
-                id: "receipt:line".to_string(),
-                entity_id: "society:sample".to_string(),
-                fact_key: "high_voltage_transmission_line_nearby".to_string(),
-                claim: "way/1 (94 m, 220 kV)".to_string(),
-                source_type: "OpenStreetMap".to_string(),
-                source_url: Some("https://www.openstreetmap.org/way/1".to_string()),
-                learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
-                confidence: 0.8,
-                scope: Some("within 100 m".to_string()),
-            }],
+            receipts: vec![
+                SceneReceipt {
+                    id: "receipt:line".to_string(),
+                    entity_id: "society:sample".to_string(),
+                    fact_key: "high_voltage_transmission_line_nearby".to_string(),
+                    claim: "way/1 (94 m, 220 kV)".to_string(),
+                    source_type: "OpenStreetMap".to_string(),
+                    source_url: Some("https://www.openstreetmap.org/way/1".to_string()),
+                    learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+                    confidence: 0.8,
+                    scope: Some("within 100 m".to_string()),
+                },
+                SceneReceipt {
+                    id: "receipt:access".to_string(),
+                    entity_id: "society:sample".to_string(),
+                    fact_key: "transit_access_route".to_string(),
+                    claim: "ECC Road → Kadugodi Tree Park (1.1 km)".to_string(),
+                    source_type: "OpenStreetMap".to_string(),
+                    source_url: Some("https://www.openstreetmap.org/way/23213668".to_string()),
+                    learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+                    confidence: 0.78,
+                    scope: Some("within 1250 m".to_string()),
+                },
+            ],
             fill_rate: SceneFillRate {
                 filled_layers: 1,
                 partial_layers: 0,
@@ -1534,6 +1591,11 @@ mod tests {
         let context = property_map_context_from_surface_scene(&scene)
             .expect("line scene should still project to map context");
         assert!(context.places.is_empty());
+        assert_eq!(context.access_lines.len(), 1);
+        assert_eq!(
+            context.access_lines[0].name,
+            "ECC Road → Kadugodi Tree Park"
+        );
         assert_eq!(context.red_flag_lines.len(), 1);
         assert_eq!(
             context.red_flag_lines[0].coordinates,

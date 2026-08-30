@@ -9,6 +9,8 @@
       "leaf_keys": [
         "nearby_schools",
         "nearby_metro_stations",
+        "transit_access_route",
+        "transit_access_route_entity",
         "nearby_hospitals",
         "nearby_fitness",
         "nearby_tech_parks",
@@ -42,7 +44,9 @@
           {
             "id": "metro",
             "label": "Metro",
-            "factKeys": ["nearby_metro_stations"],
+            "factKeys": ["transit_access_route", "nearby_metro_stations"],
+            "linkedEntityFactKeys": ["transit_access_route_entity"],
+            "sortPriorityFactKeys": ["transit_access_route", "nearby_metro_stations"],
             "edgeTypes": ["near_place"],
             "family": "access",
             "relationClass": "access",

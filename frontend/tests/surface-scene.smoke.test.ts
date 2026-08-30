@@ -87,6 +87,22 @@ test("surface scene payload can drive the around-this-home plate", () => {
         confidence: 0.8,
         receiptIds: ["receipt:school"],
       },
+      {
+        id: "around_this_home:metro:access-route",
+        entityId: "place:transit-access:sample",
+        layerId: "metro",
+        kind: "place",
+        label: "ECC Road → Kadugodi Tree Park",
+        geometry: {
+          type: "LineString",
+          coordinates: [[77.7409, 12.9814], [77.7475, 12.9855]],
+        },
+        coordinateQuality: "exact",
+        metrics: { distanceM: 1120 },
+        display: { tone: "positive", icon: "train", priority: 1 },
+        confidence: 0.78,
+        receiptIds: ["receipt:access"],
+      },
     ],
     relations: [
       {
@@ -123,6 +139,17 @@ test("surface scene payload can drive the around-this-home plate", () => {
         confidence: 0.8,
         scope: "within 950 m",
       },
+      {
+        id: "receipt:access",
+        entityId: "society:sample",
+        factKey: "transit_access_route",
+        claim: "ECC Road → Kadugodi Tree Park (1.1 km)",
+        sourceType: "OpenStreetMap",
+        sourceUrl: "https://www.openstreetmap.org/way/23213668",
+        learnedAt: "2026-08-30T00:00:00Z",
+        confidence: 0.78,
+        scope: "within 1250 m",
+      },
     ],
     fillRate: {
       filledLayers: 2,
@@ -139,6 +166,8 @@ test("surface scene payload can drive the around-this-home plate", () => {
   assert.ok(context);
   assert.equal(hasAroundThisHomePlate(context), true);
   assert.deepEqual(availableLayers(context), ["metro", "schools"]);
+  assert.equal(context.access_lines?.length, 1);
+  assert.equal(context.access_lines?.[0].name, "ECC Road → Kadugodi Tree Park");
 
   const home = resolveHomeAnchor(context);
   assert.deepEqual(home, {

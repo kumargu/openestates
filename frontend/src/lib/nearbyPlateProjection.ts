@@ -6,19 +6,19 @@ import type {
 } from "./types.ts";
 
 export type PlateScaleMode = "nearby" | "area";
+export type NearbyCameraMode = "home" | "evidence";
 export type PlateStory =
   | { kind: "layer"; layer: string }
   | { kind: "water" };
 
 export const PLATE_MAX_MAP_LABEL_LENGTH = 22;
 
-/** Muted OSM basemap — no API key. */
-export const NEARBY_MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
-
 const NEARBY_RADIUS_STEPS_KM = [0.35, 0.5, 0.8, 1.2, 1.8, 2.5] as const;
 const AREA_RADIUS_STEPS_KM = [3, 5, 8, 10, 15] as const;
 const CLUSTER_GAP_KM_NEARBY = 0.08;
 const CLUSTER_GAP_KM_AREA = 0.35;
+const LOCAL_METRO_CORRIDOR_BUFFER_KM = 0.9;
+const LOCAL_METRO_MAX_SEGMENTS = 3;
 /** Keep markers inside the canvas, not glued to the ring edge. */
 const VIEWPORT_PADDING = 1.45;
 
@@ -28,6 +28,7 @@ export function hasAroundThisHomePlate(context?: PropertyMapContext | null): boo
       context.places.length > 0
       || context.water
       || (context.metro_lines?.length ?? 0) > 0
+      || (context.access_lines?.length ?? 0) > 0
       || (context.red_flag_lines?.length ?? 0) > 0
     ),
   );
@@ -55,6 +56,14 @@ export type PlateViewport = {
   zoom: number;
   paddingFactor: number;
 };
+
+export function cameraCenterForMode(
+  mode: NearbyCameraMode,
+  home: { latitude: number; longitude: number },
+  viewport: PlateViewport,
+): { latitude: number; longitude: number } {
+  return mode === "evidence" ? viewport.center : home;
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -142,6 +151,57 @@ function distanceKm(
   return Math.hypot(dLat, dLng);
 }
 
+function coordinatesForPlaces(places: NumberedPlace[]): [number, number][] {
+  return places.map((place) => [place.longitude, place.latitude]);
+}
+
+function boundsCenter(
+  coordinates: [number, number][],
+): { latitude: number; longitude: number } {
+  const longitudes = coordinates.map(([longitude]) => longitude);
+  const latitudes = coordinates.map(([, latitude]) => latitude);
+  return {
+    latitude: (Math.min(...latitudes) + Math.max(...latitudes)) / 2,
+    longitude: (Math.min(...longitudes) + Math.max(...longitudes)) / 2,
+  };
+}
+
+export function metroLinesNearEvidence(
+  home: { latitude: number; longitude: number },
+  places: NumberedPlace[],
+  metroLines: MapOverlayLine[],
+  accessLines: MapOverlayLine[] = [],
+): MapOverlayLine[] {
+  if (metroLines.length <= LOCAL_METRO_MAX_SEGMENTS) return metroLines;
+
+  const anchors: [number, number][] = [
+    [home.longitude, home.latitude],
+    ...coordinatesForPlaces(places),
+    ...accessLines.flatMap((line) => line.coordinates),
+  ];
+  const scored = metroLines
+    .map((line) => ({
+      line,
+      distanceKm: Math.min(
+        ...line.coordinates.flatMap(([longitude, latitude]) =>
+          anchors.map(([anchorLongitude, anchorLatitude]) => distanceKm(
+            latitude,
+            longitude,
+            anchorLatitude,
+            anchorLongitude,
+          ))),
+      ),
+    }))
+    .sort((left, right) => left.distanceKm - right.distanceKm);
+  const nearestDistanceKm = scored[0]?.distanceKm ?? 0;
+
+  return scored
+    .filter(({ distanceKm: lineDistanceKm }) =>
+      lineDistanceKm <= nearestDistanceKm + LOCAL_METRO_CORRIDOR_BUFFER_KM)
+    .slice(0, LOCAL_METRO_MAX_SEGMENTS)
+    .map(({ line }) => line);
+}
+
 export function placesForStory(
   context: PropertyMapContext,
   story: PlateStory,
@@ -188,7 +248,7 @@ export function scaleForStory(
       return "area";
     }
   }
-  if (story.kind === "layer" && (story.layer === "metro" || story.layer === "tech" || story.layer === "red_flags")) {
+  if (story.kind === "layer" && (story.layer === "tech" || story.layer === "red_flags")) {
     return "area";
   }
   return "nearby";
@@ -409,26 +469,22 @@ export function buildPlateViewport(
   places: NumberedPlace[],
   scale: PlateScaleMode,
   metroLines: MapOverlayLine[] = [],
-  metroExtent: "full" | "nearest" = "full",
   extraOverlayLines: MapOverlayLine[] = [],
   focus?: ProofFocus | null,
 ): PlateViewport {
-  let overlayCoordinates = [
+  const overlayCoordinates = [
     ...metroLines.flatMap((line) => line.coordinates),
     ...extraOverlayLines.flatMap((line) => line.coordinates),
   ];
-  if (metroExtent === "nearest" && overlayCoordinates.length > 1) {
-    overlayCoordinates = [
-      overlayCoordinates.reduce((nearest, candidate) =>
-        distanceKm(home.latitude, home.longitude, candidate[1], candidate[0])
-          < distanceKm(home.latitude, home.longitude, nearest[1], nearest[0])
-          ? candidate
-          : nearest),
-    ];
-  }
-  const radiusKm = chooseRadiusKm(places, scale, home, overlayCoordinates, focus);
+  const framingCoordinates: [number, number][] = [
+    [home.longitude, home.latitude],
+    ...coordinatesForPlaces(places),
+    ...overlayCoordinates,
+  ];
+  const center = boundsCenter(framingCoordinates);
+  const radiusKm = chooseRadiusKm(places, scale, center, framingCoordinates, focus);
   return {
-    center: home,
+    center,
     radiusKm,
     zoom: zoomForRadiusKm(radiusKm),
     paddingFactor: clamp(0.18 + radiusKm * 0.02, 0.18, 0.28),
@@ -441,6 +497,9 @@ export function availableLayers(context: PropertyMapContext): string[] {
     if ((context.red_flag_lines?.length ?? 0) > 0) {
       present.add("red_flags");
     }
+    if ((context.access_lines?.length ?? 0) > 0) {
+      present.add("metro");
+    }
     return context.layers
       .filter((layer) => present.has(layer.id))
       .map((layer) => layer.id);
@@ -451,6 +510,9 @@ export function availableLayers(context: PropertyMapContext): string[] {
   }
   if ((context.red_flag_lines?.length ?? 0) > 0 && !layers.includes("red_flags")) {
     layers.push("red_flags");
+  }
+  if ((context.access_lines?.length ?? 0) > 0 && !layers.includes("metro")) {
+    layers.unshift("metro");
   }
   return layers;
 }

@@ -16,6 +16,8 @@
     "multi_value_fact_keys": [
       "nearby_schools",
       "nearby_metro_stations",
+      "transit_access_route",
+      "transit_access_route_entity",
       "nearby_hospitals",
       "nearby_fitness",
       "nearby_tech_parks",
@@ -6862,6 +6864,151 @@
       }
     },
     {
+      "fact_key": "transit_access_route",
+      "bucket": "social_infra",
+      "label": "metro access route",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "metro access route",
+        "route to metro",
+        "approach road"
+      ],
+      "answers_preferences": [
+        "metro access",
+        "route to metro",
+        "approach road"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "metro access: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.8
+      }
+    },
+    {
+      "fact_key": "transit_access_route_entity",
+      "bucket": "social_infra",
+      "label": "metro access route map entity",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "metro access route",
+        "route geometry"
+      ],
+      "answers_preferences": [
+        "map route",
+        "route geometry"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "metro access route map entity: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "route.distance_m",
+      "bucket": "social_infra",
+      "label": "route distance",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "route distance: {value} m",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "route.mode",
+      "bucket": "social_infra",
+      "label": "route mode",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "route mode: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "route.destination_entity_id",
+      "bucket": "social_infra",
+      "label": "route destination",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "route destination: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "route.frontage_road_name",
+      "bucket": "social_infra",
+      "label": "frontage road",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [
+        "frontage road",
+        "approach road"
+      ],
+      "answers_preferences": [
+        "approach road"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "frontage road: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
       "fact_key": "high_voltage_transmission_line_nearby",
       "bucket": "externalities",
       "label": "high-voltage transmission line nearby",
@@ -7896,7 +8043,7 @@
       }
     }
   ],
-  "fact_count": 128,
+  "fact_count": 135,
   "excluded_search_fact_keys": [
     "google_review_cards",
     "google_review_snippets"

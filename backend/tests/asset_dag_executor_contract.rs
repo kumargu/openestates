@@ -10,25 +10,26 @@ use backend::assets::{
     default_openestates_registry, rera_legal_facts_input, AssetDagExecutionOptions,
     AssetDagExecutor, AssetDagExecutorError, AssetDefinition, AssetId, AssetMaterializationStore,
     AssetPartition, AssetRegistry, AssetRunAttempt, AssetRunManifestStore, AssetRunStepStatus,
-    AssetSourceInputs, AssetStage, CanonicalSocietyMaterializer, CostTier, DagRunStatus,
-    EnvironmentGroundwaterPotentialInput, EnvironmentGroundwaterPotentialZone,
-    EnvironmentRingPoint, ExternalImageObservationRecord, ExternalImagesWeeklyInput,
-    ExternalListingObservationRecord, ExternalListingsWeeklyInput, GoogleNearbyPlaceRecord,
-    GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
-    MaterializationId, MaterializationRecord, OsmPowerInfrastructureInput,
-    OsmPowerLineObservationRecord, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
-    RefreshCadence, ReraProjectPlanFramesInput, ReraProjectSnapshotRecord, ReraReceiptInput,
-    ReraReceiptKind, ReraReceiptSourceRecord, ReraReceiptsSourceInput, ReraRegistryMaterializer,
-    ReraRegistryMonthlyInput, ReraSourceRecordInput, ReraSourceRecordKind, ReraSourceRecordsInput,
-    SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord, SkillFactsInput,
-    SourceWatermark, StormwaterDrainObservationRecord, StormwaterDrainRiskInput, TrustTier,
-    APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
-    CANONICAL_SOCIETY_NODES_ASSET_ID, CURRENT_PROJECT_FACTS_ASSET_ID,
-    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
-    HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
-    RERA_CLAIMS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
-    RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
+    AssetSourceInputs, AssetStage, BengaluruMetroStationInput, BengaluruMetroStationsInput,
+    CanonicalSocietyMaterializer, CostTier, DagRunStatus, EnvironmentGroundwaterPotentialInput,
+    EnvironmentGroundwaterPotentialZone, EnvironmentRingPoint, ExternalImageObservationRecord,
+    ExternalImagesWeeklyInput, ExternalListingObservationRecord, ExternalListingsWeeklyInput,
+    GoogleNearbyPlaceRecord, GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord,
+    GooglePlacesWeeklyInput, MaterializationId, MaterializationRecord, OsmPowerInfrastructureInput,
+    OsmPowerLineObservationRecord, OsmTransitAccessCorridorsInput, RedditThreadSnapshotRecord,
+    RedditThreadsDailyInput, RefreshCadence, ReraProjectPlanFramesInput, ReraProjectSnapshotRecord,
+    ReraReceiptInput, ReraReceiptKind, ReraReceiptSourceRecord, ReraReceiptsSourceInput,
+    ReraRegistryMaterializer, ReraRegistryMonthlyInput, ReraSourceRecordInput,
+    ReraSourceRecordKind, ReraSourceRecordsInput, SkillFactAnnotationRecord, SkillFactMaterializer,
+    SkillFactRecord, SkillFactsInput, SourceWatermark, StormwaterDrainObservationRecord,
+    StormwaterDrainRiskInput, TrustTier, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
+    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    CURRENT_PROJECT_FACTS_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
+    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, RERA_CLAIMS_ASSET_ID,
+    RERA_LEGAL_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -276,14 +277,16 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
         GOOGLE_PLACES_WEEKLY_ASSET_ID,
         GOOGLE_REVIEW_FACTS_ASSET_ID,
+        backend::assets::BENGALURU_METRO_STATION_FACTS_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
         APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
+        backend::assets::OSM_TRANSIT_ACCESS_CORRIDOR_FACTS_ASSET_ID,
         CURRENT_PROJECT_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ];
-    assert_eq!(report.manifest.planned_count, expected_assets.len() + 1);
+    assert_eq!(report.manifest.planned_count, expected_assets.len());
     assert_eq!(report.executed_assets.len(), expected_assets.len());
     for id in expected_assets {
         assert!(report.executed_assets.contains(&asset_id(id)));
@@ -581,8 +584,8 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 25);
-    assert_eq!(report.executed_assets.len(), 24);
+    assert_eq!(report.manifest.planned_count, 26);
+    assert_eq!(report.executed_assets.len(), 26);
     for id in [
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
         EXTERNAL_LISTING_FACTS_ASSET_ID,
@@ -599,9 +602,11 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         HOME_STATE_SIGNALS_ASSET_ID,
         GOOGLE_PLACES_WEEKLY_ASSET_ID,
         GOOGLE_REVIEW_FACTS_ASSET_ID,
+        backend::assets::BENGALURU_METRO_STATION_FACTS_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
         APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
+        backend::assets::OSM_TRANSIT_ACCESS_CORRIDOR_FACTS_ASSET_ID,
         CURRENT_PROJECT_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
@@ -2281,7 +2286,31 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
             }],
             source_watermarks: Vec::new(),
         }),
-        bengaluru_metro_stations: None,
+        bengaluru_metro_stations: Some(BengaluruMetroStationsInput {
+            snapshot_date: "2026-07-13".to_string(),
+            source_url: "https://www.openstreetmap.org".to_string(),
+            stations: vec![BengaluruMetroStationInput {
+                station_id: "node/fixture-metro".to_string(),
+                name: "Fixture Metro".to_string(),
+                latitude: 12.97,
+                longitude: 77.75,
+                lines: vec!["Purple Line".to_string()],
+                network: Some("Namma Metro".to_string()),
+                operator: Some("BMRCL".to_string()),
+                operational_status: Some("operational".to_string()),
+                source_url: Some("https://www.openstreetmap.org/node/fixture-metro".to_string()),
+                source_tags: BTreeMap::new(),
+            }],
+            source_watermarks: Vec::new(),
+        }),
+        osm_transit_access_corridors: Some(OsmTransitAccessCorridorsInput {
+            snapshot_date: "2026-07-13".to_string(),
+            records: Vec::new(),
+            source_watermarks: vec![SourceWatermark {
+                source: "openstreetmap_transit_access_empty".to_string(),
+                high_watermark: "records=0".to_string(),
+            }],
+        }),
         osm_power_infrastructure: Some(OsmPowerInfrastructureInput {
             snapshot_date: "2026-07-13".to_string(),
             records: vec![OsmPowerLineObservationRecord {
