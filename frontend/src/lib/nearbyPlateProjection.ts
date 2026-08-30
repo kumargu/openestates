@@ -57,12 +57,71 @@ export type PlateViewport = {
   paddingFactor: number;
 };
 
+export type CorridorCameraFocus = {
+  latitude: number;
+  longitude: number;
+  heading: number;
+};
+
 export function cameraCenterForMode(
   mode: NearbyCameraMode,
   home: { latitude: number; longitude: number },
   viewport: PlateViewport,
 ): { latitude: number; longitude: number } {
   return mode === "evidence" ? viewport.center : home;
+}
+
+export function corridorCameraFocus(
+  lines: MapOverlayLine[],
+  home: { latitude: number; longitude: number },
+): CorridorCameraFocus | null {
+  const longitudeMeters = 111_320 * Math.cos((home.latitude * Math.PI) / 180);
+  const latitudeMeters = 110_570;
+  let nearest:
+    | { x: number; y: number; distance: number; heading: number }
+    | null = null;
+
+  for (const line of lines) {
+    for (let index = 1; index < line.coordinates.length; index += 1) {
+      const [startLongitude, startLatitude] = line.coordinates[index - 1];
+      const [endLongitude, endLatitude] = line.coordinates[index];
+      const startX = (startLongitude - home.longitude) * longitudeMeters;
+      const startY = (startLatitude - home.latitude) * latitudeMeters;
+      const endX = (endLongitude - home.longitude) * longitudeMeters;
+      const endY = (endLatitude - home.latitude) * latitudeMeters;
+      const dx = endX - startX;
+      const dy = endY - startY;
+      const lengthSquared = dx * dx + dy * dy;
+      if (lengthSquared === 0) continue;
+
+      const progress = clamp(
+        -(startX * dx + startY * dy) / lengthSquared,
+        0,
+        1,
+      );
+      const x = startX + progress * dx;
+      const y = startY + progress * dy;
+      const distance = Math.hypot(x, y);
+      if (nearest && nearest.distance <= distance) continue;
+
+      const bearing = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+      nearest = {
+        x,
+        y,
+        distance,
+        // A road can be encoded in either direction. Keep the camera orientation
+        // stable by choosing the north/east-facing direction of the same axis.
+        heading: bearing >= 180 ? bearing - 180 : bearing,
+      };
+    }
+  }
+
+  if (!nearest) return null;
+  return {
+    latitude: home.latitude + nearest.y / latitudeMeters,
+    longitude: home.longitude + nearest.x / longitudeMeters,
+    heading: nearest.heading,
+  };
 }
 
 function clamp(value: number, min: number, max: number): number {

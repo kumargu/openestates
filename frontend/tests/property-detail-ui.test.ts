@@ -7,6 +7,7 @@ import {
 } from "../src/lib/api.ts";
 import {
   availableLayers,
+  corridorCameraFocus,
   filterPlacesByScale,
   hasAroundThisHomePlate,
   layerLabel,
@@ -121,6 +122,27 @@ test("generic map layers expose their projected line geometry", () => {
 
   assert.deepEqual(linesForLayer(context, "approach_road"), [road]);
   assert.deepEqual(linesForLayer(context, "schools"), []);
+});
+
+test("approach-road camera targets the nearest road segment and looks along it", () => {
+  const focus = corridorCameraFocus([{
+    id: "ecc-road",
+    name: "ECC Road",
+    coordinates: [
+      [77.744, 12.984],
+      [77.7435, 12.982],
+      [77.743, 12.98],
+    ],
+    source_type: "OpenStreetMap",
+  }], {
+    latitude: 12.982,
+    longitude: 77.742,
+  });
+
+  assert.ok(focus);
+  assert.ok(Math.abs(focus.latitude - 12.98166) < 0.0001);
+  assert.ok(Math.abs(focus.longitude - 77.74341) < 0.0001);
+  assert.ok(focus.heading > 10 && focus.heading < 20);
 });
 
 test("surface scene projects to existing around-this-home plate shape", () => {

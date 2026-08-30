@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   loadGoogleMaps3dLibrary,
   loadGoogleTerrainElevation,
@@ -14,7 +14,10 @@ import type {
   PlaceCluster,
   PlateViewport,
 } from "../../lib/nearbyPlateProjection.ts";
-import { cameraCenterForMode } from "../../lib/nearbyPlateProjection.ts";
+import {
+  cameraCenterForMode,
+  corridorCameraFocus,
+} from "../../lib/nearbyPlateProjection.ts";
 import { NOTEBOOK_SAVE_ICON_PATH } from "../notebook/NotebookSaveIcon.tsx";
 
 export type AroundThisHomeMapProps = {
@@ -117,6 +120,8 @@ type Maps3DLibrary = {
 
 const HOME_PORTRAIT_RANGE_M = 700;
 const HOME_PORTRAIT_TILT = 48;
+const ROAD_FOCUS_RANGE_M = 320;
+const ROAD_FOCUS_TILT = 78;
 const EVIDENCE_MINIMUM_RANGE_M = 1_100;
 const EVIDENCE_CAMERA_DURATION_MS = 600;
 const HOME_CAMERA_DURATION_MS = 350;
@@ -146,22 +151,6 @@ function targetCamera(
     range,
     tilt,
   };
-}
-
-function corridorHeading(lines: MapOverlayLine[]): number {
-  const coordinates = lines.flatMap((line) => line.coordinates);
-  if (coordinates.length < 2) return DEFAULT_HEADING;
-  const longitudes = coordinates.map(([longitude]) => longitude);
-  const latitudes = coordinates.map(([, latitude]) => latitude);
-  const west = Math.min(...longitudes);
-  const east = Math.max(...longitudes);
-  const south = Math.min(...latitudes);
-  const north = Math.max(...latitudes);
-  const latitude = (south + north) / 2;
-  const eastMeters = (east - west) * 111_320 * Math.cos(latitude * Math.PI / 180);
-  const northMeters = (north - south) * 110_570;
-  const bearing = Math.atan2(eastMeters, northMeters) * 180 / Math.PI;
-  return (bearing + 360) % 360;
 }
 
 function settleCameraFraming(map: Map3DElement, camera: CameraOptions) {
@@ -338,7 +327,18 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
   const terrainElevationRef = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
-  const cameraCenter = cameraCenterForMode(cameraMode, home, viewport);
+  const homeLatitude = home.latitude;
+  const homeLongitude = home.longitude;
+  const roadFocus = useMemo(
+    () => terrainCorridor
+      ? corridorCameraFocus(accessLines, {
+        latitude: homeLatitude,
+        longitude: homeLongitude,
+      })
+      : null,
+    [accessLines, homeLatitude, homeLongitude, terrainCorridor],
+  );
+  const cameraCenter = roadFocus ?? cameraCenterForMode(cameraMode, home, viewport);
   const cameraLatitude = cameraCenter.latitude;
   const cameraLongitude = cameraCenter.longitude;
 
@@ -399,13 +399,17 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     const map = mapRef.current;
     if (!map || !ready || terrainElevationRef.current === null) return;
     const evidenceFocused = cameraMode === "evidence";
-    const range = evidenceFocused
+    const range = roadFocus
+      ? ROAD_FOCUS_RANGE_M
+      : evidenceFocused
       ? evidenceCameraRange(viewport.radiusKm)
       : HOME_PORTRAIT_RANGE_M;
-    const tilt = evidenceFocused
+    const tilt = roadFocus
+      ? ROAD_FOCUS_TILT
+      : evidenceFocused
       ? evidenceCameraTilt(viewport.radiusKm)
       : HOME_PORTRAIT_TILT;
-    const heading = terrainCorridor ? corridorHeading(accessLines) : DEFAULT_HEADING;
+    const heading = roadFocus?.heading ?? DEFAULT_HEADING;
     const moveId = cameraMoveRef.current + 1;
     cameraMoveRef.current = moveId;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -441,6 +445,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     cameraLongitude,
     accessLines,
     ready,
+    roadFocus,
     terrainCorridor,
     viewport.radiusKm,
   ]);
@@ -544,17 +549,19 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
       );
     }
 
-    const homeMarker = new library.Marker3DInteractiveElement({
-      altitudeMode: "CLAMP_TO_GROUND",
-      collisionBehavior: "REQUIRED",
-      drawsWhenOccluded: true,
-      extruded: true,
-      label: "This home",
-      position: { lat: home.latitude, lng: home.longitude },
-      title: home.name,
-    });
-    map.append(homeMarker);
-    nextChildren.push(homeMarker);
+    if (!terrainCorridor) {
+      const homeMarker = new library.Marker3DInteractiveElement({
+        altitudeMode: "CLAMP_TO_GROUND",
+        collisionBehavior: "REQUIRED",
+        drawsWhenOccluded: true,
+        extruded: true,
+        label: "This home",
+        position: { lat: home.latitude, lng: home.longitude },
+        title: home.name,
+      });
+      map.append(homeMarker);
+      nextChildren.push(homeMarker);
+    }
 
     for (const cluster of clusters) {
       const marker = new library.Marker3DInteractiveElement({
