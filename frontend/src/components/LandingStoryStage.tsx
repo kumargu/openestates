@@ -42,7 +42,7 @@ type LandingStoryStageProps = {
   properties: PropertyCard[];
   onSearch: (query: string) => void;
   searchQuery?: string;
-  onSearchReady?: () => void;
+  onSearchReady?: (resultCount?: number) => void;
 };
 
 function useDesktopStory(): boolean {
@@ -242,7 +242,7 @@ function LandingSearchResults({
   onReady,
 }: {
   query: string;
-  onReady?: () => void;
+  onReady?: (resultCount?: number) => void;
 }) {
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [failed, setFailed] = useState(false);
@@ -265,7 +265,7 @@ function LandingSearchResults({
 
   useEffect(() => {
     if (!response && !failed) return;
-    onReady?.();
+    onReady?.(response?.totalMatches);
   }, [failed, onReady, response]);
 
   if (failed) {
@@ -315,7 +315,7 @@ function FeaturedSuggestions({
   properties: PropertyCard[];
   onSearch: (query: string) => void;
   searchQuery?: string;
-  onSearchReady?: () => void;
+  onSearchReady?: (resultCount?: number) => void;
 }) {
   const [activeLensId, setActiveLensId] = useState<FeaturedLensId>("metro");
   const activeLens = FEATURED_LENSES.find((lens) => lens.id === activeLensId) ?? FEATURED_LENSES[0];

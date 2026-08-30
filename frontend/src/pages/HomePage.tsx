@@ -6,7 +6,10 @@ import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { LandingStoryStage } from "../components/LandingStoryStage.tsx";
 import { BrandMark } from "../components/brand/BrandMark.tsx";
-import { consumeDiscoveryReturn } from "../lib/navigationContext.ts";
+import {
+  consumeDiscoveryReturn,
+  writeDiscoveryResultCount,
+} from "../lib/navigationContext.ts";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 
 const SEARCH_SUGGESTIONS = [
@@ -161,8 +164,10 @@ export function HomePage() {
     commitSearch("", { settle: false });
   }, [commitSearch]);
 
-  const restoreDiscoveryPosition = useCallback(() => {
-    const scrollY = consumeDiscoveryReturn(`${window.location.pathname}${window.location.search}`);
+  const restoreDiscoveryPosition = useCallback((resultCount?: number) => {
+    const url = `${window.location.pathname}${window.location.search}`;
+    if (resultCount !== undefined) writeDiscoveryResultCount(url, resultCount);
+    const scrollY = consumeDiscoveryReturn(url);
     if (scrollY == null) return;
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {

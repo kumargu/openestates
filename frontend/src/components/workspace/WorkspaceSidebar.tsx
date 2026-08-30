@@ -11,6 +11,7 @@ import { requestDiscoveryReturn } from "../../lib/navigationContext.ts";
 import { PUBLIC_BRAND_NAME } from "../../lib/brand.ts";
 
 type WorkspaceIconName =
+  | "back"
   | "browse"
   | "listing"
   | "notebook"
@@ -27,6 +28,8 @@ type WorkspaceSidebarProps = {
   reduced: boolean;
   mode: "discovery" | "property-context" | "workspace";
   discoveryHref: string;
+  discoveryResultCount?: number;
+  hasDiscoveryContext: boolean;
   onToggle: () => void;
   onFocus: (propertyId: string) => void;
   onRemove: (propertyId: string) => void;
@@ -56,6 +59,14 @@ function WorkspaceIcon({
       <svg {...common}>
         <circle cx="12" cy="12" r="8" />
         <path d="m16 8-2.6 5.4L8 16l2.6-5.4Z" />
+      </svg>
+    );
+  }
+  if (name === "back") {
+    return (
+      <svg {...common}>
+        <path d="m14.5 6.5-5.5 5.5 5.5 5.5" />
+        <path d="M9 12h10" />
       </svg>
     );
   }
@@ -123,6 +134,8 @@ export function WorkspaceSidebar({
   reduced,
   mode,
   discoveryHref,
+  discoveryResultCount,
+  hasDiscoveryContext,
   onToggle,
   onFocus,
   onRemove,
@@ -131,6 +144,8 @@ export function WorkspaceSidebar({
   const navItems = workspaceNavItems(focusedId, activeView, {
     mode,
     discoveryHref,
+    discoveryResultCount,
+    hasDiscoveryContext,
     compareIds,
   });
   const [showAllHomes, setShowAllHomes] = useState(false);
@@ -162,6 +177,9 @@ export function WorkspaceSidebar({
 
       <nav className="workspace-sidebar__nav" aria-label={mode === "property-context" ? "Property navigation" : "Buyer workspace"}>
         {navItems.map((item) => {
+          const isDiscoveryReturn = mode === "property-context"
+            && hasDiscoveryContext
+            && item.view === "browse";
           const title = !item.available ? `${item.label} — save a home first` : undefined;
           const badge = item.view === "notebook" && noteCount > 0 ? noteCount : null;
           const body = (
@@ -191,7 +209,7 @@ export function WorkspaceSidebar({
             <Link
               key={item.label}
               to={item.to}
-              className={`workspace-sidebar__nav-item${item.active ? " is-active" : ""}`}
+              className={`workspace-sidebar__nav-item${item.active ? " is-active" : ""}${isDiscoveryReturn ? " workspace-sidebar__nav-item--discovery-return" : ""}`}
               aria-current={item.active ? "page" : undefined}
               title={title}
               onClick={() => {
