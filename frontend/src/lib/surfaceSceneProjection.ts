@@ -34,6 +34,7 @@ export function propertyMapContextFromSurfaceScene(
     .filter((feature) => feature.layerId === "metro")
     .map((feature) => mapLineFromFeature(feature, receiptsById))
     .filter((line): line is MapOverlayLine => Boolean(line));
+  const layerLines = mapLinesByLayer(scene, receiptsById);
 
   const mergedAccessLines = mergeLines(accessLines, fallback?.access_lines ?? []);
   const mergedRedFlagLines = [
@@ -41,6 +42,8 @@ export function propertyMapContextFromSurfaceScene(
     ...(fallback?.red_flag_lines ?? []).filter((line) =>
       !redFlagLines.some((candidate) => candidate.id === line.id)),
   ];
+  layerLines.metro = mergedAccessLines;
+  layerLines.red_flags = mergedRedFlagLines;
   const layers = mergedLayers(scene, fallback, mergedRedFlagLines);
 
   return {
@@ -58,9 +61,24 @@ export function propertyMapContextFromSurfaceScene(
     metro_lines: fallback?.metro_lines,
     access_lines: mergedAccessLines,
     red_flag_lines: mergedRedFlagLines,
+    layer_lines: layerLines,
     green_patches: fallback?.green_patches,
     lakes: fallback?.lakes,
   };
+}
+
+function mapLinesByLayer(
+  scene: SurfaceSceneResponse,
+  receiptsById: Map<string, SceneReceipt>,
+): Record<string, MapOverlayLine[]> {
+  const lines: Record<string, MapOverlayLine[]> = {};
+  for (const feature of scene.features) {
+    if (feature.geometry.type !== "LineString") continue;
+    const line = mapLineFromFeature(feature, receiptsById);
+    if (!line) continue;
+    (lines[feature.layerId] ??= []).push(line);
+  }
+  return lines;
 }
 
 function mergeLines(primary: MapOverlayLine[], fallback: MapOverlayLine[]): MapOverlayLine[] {
@@ -84,6 +102,7 @@ function mergedLayers(
     addLayer({
       id: layer.id,
       label: layer.label,
+      renderKind: layer.renderKind,
       rank: layer.rank,
       enabledByDefault: layer.enabledByDefault,
     });

@@ -17,6 +17,8 @@ import {
   compactPlaceLabel,
   filterPlacesByScale,
   layerLabel,
+  linesForLayer,
+  mapViewForStory,
   metroLinesNearEvidence,
   metroStationsAroundHome,
   placeMatchesProofFocus,
@@ -25,6 +27,7 @@ import {
   scaleForStory,
   zoomForRadiusKm,
   type NearbyCameraMode,
+  type NearbyMapView,
   type PlateScaleMode,
   type PlateStory,
   type PlaceCluster,
@@ -187,12 +190,13 @@ function redFlagSelection(
 function accessLineSelection(
   propertyId: string,
   line: MapOverlayLine,
+  selectedLayerLabel: string,
 ): MapEvidenceSelection {
   return {
     id: `line:${line.id}`,
-    catalogKey: `nearby-line:${propertyId}:metro:${line.id}`,
+    catalogKey: `nearby-line:${propertyId}:${selectedLayerLabel.toLowerCase()}:${line.id}`,
     title: line.name,
-    layerLabel: "Metro",
+    layerLabel: selectedLayerLabel,
     meta: [
       typeof line.distance_km === "number" ? `${line.distance_km.toFixed(1)} km` : null,
       ...(line.details ?? []),
@@ -252,6 +256,7 @@ function AroundThisHomePlateInner({
   const [selectedId, setSelectedId] = useState<string | null>(() => null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(() =>
     focus?.featureId && [
+      ...Object.values(context.layer_lines ?? {}).flat(),
       ...(context.access_lines ?? []),
       ...(context.red_flag_lines ?? []),
     ].some((line) => line.id === focus.featureId)
@@ -261,6 +266,8 @@ function AroundThisHomePlateInner({
   const [expanded, setExpanded] = useState(false);
   const [cameraMode, setCameraMode] = useState<NearbyCameraMode>(() =>
     focusedStory ? "evidence" : "home");
+  const [mapView, setMapView] = useState<NearbyMapView>(() =>
+    mapViewForStory(focusedStory ?? defaultStory, context));
   const [selectionDismissed, setSelectionDismissed] = useState(false);
 
   useEffect(() => {
@@ -298,9 +305,13 @@ function AroundThisHomePlateInner({
 
   const metroFocused = story.kind === "layer" && story.layer === "metro";
   const redFlagsFocused = story.kind === "layer" && story.layer === "red_flags";
+  const activeStoryLines = useMemo(
+    () => story.kind === "layer" ? linesForLayer(context, story.layer) : [],
+    [context, story],
+  );
   const activeRedFlagLines = useMemo(
-    () => redFlagsFocused ? context.red_flag_lines ?? [] : [],
-    [context.red_flag_lines, redFlagsFocused],
+    () => redFlagsFocused ? activeStoryLines : [],
+    [activeStoryLines, redFlagsFocused],
   );
   const waterFocused = story.kind === "water";
   const activeMetroLines = useMemo(
@@ -308,8 +319,10 @@ function AroundThisHomePlateInner({
     [context.metro_lines],
   );
   const activeAccessLines = useMemo(
-    () => metroFocused ? context.access_lines ?? [] : [],
-    [context.access_lines, metroFocused],
+    () => story.kind === "layer" && story.layer !== "red_flags"
+      ? activeStoryLines
+      : [],
+    [activeStoryLines, story],
   );
   const visibleMetroLines = useMemo(
     () => metroFocused && home
@@ -374,7 +387,9 @@ function AroundThisHomePlateInner({
     }
     if (selectedLine) {
       return selectedLineIsAccess
-        ? accessLineSelection(propertyId, selectedLine)
+        ? accessLineSelection(propertyId, selectedLine, story.kind === "layer"
+          ? layerLabel(story.layer, context)
+          : "Roads")
         : redFlagSelection(propertyId, selectedLine);
     }
     if (!selected) return null;
@@ -398,22 +413,17 @@ function AroundThisHomePlateInner({
       sourceUrl: selected.source_url,
       labels: labelsForNearbyPlace(selected.layer, selected.distance_km),
     };
-  }, [context, propertyId, selected, selectedLine, selectedLineIsAccess, selectionDismissed, waterFocused]);
+  }, [context, propertyId, selected, selectedLine, selectedLineIsAccess, selectionDismissed, story, waterFocused]);
 
   function selectStory(next: PlateStory) {
     setStory(next);
+    setMapView(mapViewForStory(next, context));
     setCameraMode("evidence");
     setSelectedId(null);
     setSelectedLineId(null);
     setOpenedClusterId(null);
     setSelectionDismissed(false);
     setScale(scaleForStory(next, focus, context.places));
-  }
-
-  function selectPlace(id: string) {
-    setSelectedId(id);
-    setSelectedLineId(null);
-    setSelectionDismissed(false);
   }
 
   function selectCluster(cluster: PlaceCluster) {
@@ -465,13 +475,13 @@ function AroundThisHomePlateInner({
       className={`nearby-plate${expanded ? " is-expanded" : ""}`}
       aria-labelledby="around-this-home-title"
     >
+      <header className="property-story-heading">
+        <span>Location</span>
+        <h2 id="around-this-home-title">Around this home.</h2>
+      </header>
+
       <div className="nearby-plate__story-layout">
         <aside className="nearby-plate__story-rail">
-          <header className="property-story-heading">
-            <span>Location</span>
-            <h2 id="around-this-home-title">Around this home.</h2>
-          </header>
-
           <div className="nearby-plate__layers" role="toolbar" aria-label="Map layers">
             {layers.map((layer) => {
               const on = story.kind === "layer" && story.layer === layer;
@@ -484,7 +494,7 @@ function AroundThisHomePlateInner({
                   aria-pressed={on}
                   onClick={() => selectStory({ kind: "layer", layer })}
                 >
-                  <SoftNearbyIcon kind={layer} />
+                  <SoftNearbyIcon kind={layer} size={26} />
                   <span>{label}</span>
                 </button>
               );
@@ -496,7 +506,7 @@ function AroundThisHomePlateInner({
                 aria-pressed={waterFocused}
                 onClick={() => selectStory({ kind: "water" })}
             >
-                <SoftNearbyIcon kind="water" />
+                <SoftNearbyIcon kind="water" size={26} />
                 <span>Water</span>
             </button>
             )}
@@ -529,13 +539,17 @@ function AroundThisHomePlateInner({
                   waterTint={showWater}
                   expanded={expanded}
                   cameraMode={cameraMode}
+                  mapView={mapView}
                   pinnedPlaceIds={pinnedPlaceIds}
-                  onSelectPlace={selectPlace}
                   onSelectCluster={selectCluster}
                   onSelectAccessLine={selectAccessLine}
                   onSelectRedFlagLine={selectRedFlagLine}
                   onRememberPlace={rememberPlace}
-                  onBackToHome={() => setCameraMode("home")}
+                  onMapViewChange={setMapView}
+                  onBackToHome={() => {
+                    setCameraMode("home");
+                    setMapView("3d");
+                  }}
                   onToggleExpanded={() => setExpanded((current) => !current)}
                 />
               </NearbyMapBoundary>

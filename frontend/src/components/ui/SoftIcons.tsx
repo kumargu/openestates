@@ -90,6 +90,16 @@ export function SoftMetroIcon(props: SoftIconProps) {
   );
 }
 
+/** Road access — two lanes with a quiet center line. */
+export function SoftRoadIcon(props: SoftIconProps) {
+  return (
+    <SoftBadge {...props} tone={props.tone ?? "slate"}>
+      <path d="M8 4.5 5.5 19.5M16 4.5l2.5 15" />
+      <path d="M12 5.5v3M12 11v3M12 16.5v2" />
+    </SoftBadge>
+  );
+}
+
 /** Schools — soft graduation cap. */
 export function SoftSchoolIcon(props: SoftIconProps) {
   return (
@@ -216,6 +226,8 @@ export function SoftNearbyIcon({
       return <SoftEssentialsIcon size={size} />;
     case "metro":
       return <SoftMetroIcon size={size} />;
+    case "roads":
+      return <SoftRoadIcon size={size} />;
     case "schools":
       return <SoftSchoolIcon size={size} />;
     case "hospitals":

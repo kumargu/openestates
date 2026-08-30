@@ -58,6 +58,21 @@
             "rank": 1
           },
           {
+            "id": "roads",
+            "label": "Roads",
+            "factKeys": ["transit_access_route"],
+            "linkedEntityFactKeys": ["transit_access_route_entity"],
+            "sortPriorityFactKeys": ["transit_access_route"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "road_analysis",
+            "icon": "road",
+            "sort": "distance",
+            "maxItems": 1,
+            "enabledByDefault": true,
+            "rank": 2
+          },
+          {
             "id": "schools",
             "label": "Schools",
             "factKeys": ["nearby_schools"],
@@ -71,7 +86,7 @@
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.2,
             "enabledByDefault": true,
-            "rank": 2
+            "rank": 3
           },
           {
             "id": "hospitals",
@@ -88,7 +103,7 @@
             "spreadMinDistanceKm": 1.2,
             "includeNameMarkers": ["hospital", "hospitals", "medical", "clinic", "health", "maternity"],
             "enabledByDefault": true,
-            "rank": 3
+            "rank": 4
           },
           {
             "id": "tech",
@@ -106,7 +121,7 @@
             "includeNameMarkers": ["tech park", "technology park", "business park", "tech forest", "office park", "it park", "itpb"],
             "includeRelatedSocietyFacts": true,
             "enabledByDefault": true,
-            "rank": 4
+            "rank": 5
           },
           {
             "id": "fitness",
@@ -123,7 +138,7 @@
             "spreadMinDistanceKm": 1.0,
             "includeNameMarkers": ["cult", "cult.fit"],
             "enabledByDefault": false,
-            "rank": 5
+            "rank": 6
           },
           {
             "id": "parks",
@@ -139,7 +154,7 @@
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.0,
             "enabledByDefault": false,
-            "rank": 6
+            "rank": 7
           },
           {
             "id": "lakes",
@@ -155,7 +170,7 @@
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.0,
             "enabledByDefault": false,
-            "rank": 7
+            "rank": 8
           },
           {
             "id": "breweries",
@@ -172,7 +187,7 @@
             "spreadMinDistanceKm": 1.0,
             "includeNameMarkers": ["brewery", "brewing", "biergarten", "beer garden"],
             "enabledByDefault": false,
-            "rank": 8
+            "rank": 9
           },
           {
             "id": "red_flags",
@@ -206,7 +221,7 @@
             "showReviewMetrics": false,
             "includeRelatedSocietyFacts": true,
             "enabledByDefault": true,
-            "rank": 9
+            "rank": 10
           }
         ]
       }

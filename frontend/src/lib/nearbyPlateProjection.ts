@@ -10,6 +10,7 @@ export type NearbyCameraMode = "home" | "evidence";
 export type PlateStory =
   | { kind: "layer"; layer: string }
   | { kind: "water" };
+export type NearbyMapView = "2d" | "3d";
 
 export const PLATE_MAX_MAP_LABEL_LENGTH = 22;
 
@@ -211,6 +212,26 @@ export function placesForStory(
   }
 
   return context.places.filter((place) => place.layer === story.layer);
+}
+
+export function mapViewForStory(
+  story: PlateStory,
+  context: Pick<PropertyMapContext, "layers">,
+): NearbyMapView {
+  if (story.kind !== "layer") return "3d";
+  const renderKind = context.layers?.find((layer) => layer.id === story.layer)?.renderKind;
+  return renderKind === "road_analysis" ? "2d" : "3d";
+}
+
+export function linesForLayer(
+  context: PropertyMapContext,
+  layer: string,
+): MapOverlayLine[] {
+  const projected = context.layer_lines?.[layer];
+  if (projected) return projected;
+  if (layer === "metro") return context.access_lines ?? [];
+  if (layer === "red_flags") return context.red_flag_lines ?? [];
+  return [];
 }
 
 export function filterPlacesByScale(
@@ -494,6 +515,9 @@ export function buildPlateViewport(
 export function availableLayers(context: PropertyMapContext): string[] {
   if (context.layers && context.layers.length > 0) {
     const present = new Set(context.places.map((place) => place.layer));
+    for (const [layer, lines] of Object.entries(context.layer_lines ?? {})) {
+      if (lines.length > 0) present.add(layer);
+    }
     if ((context.red_flag_lines?.length ?? 0) > 0) {
       present.add("red_flags");
     }

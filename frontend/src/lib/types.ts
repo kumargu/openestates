@@ -438,6 +438,7 @@ export type PropertyMapContext = {
   metro_lines?: MapOverlayLine[];
   access_lines?: MapOverlayLine[];
   red_flag_lines?: MapOverlayLine[];
+  layer_lines?: Record<string, MapOverlayLine[]>;
   green_patches?: MapOverlayPolygon[];
   lakes?: MapOverlayPolygon[];
 };
@@ -445,6 +446,7 @@ export type PropertyMapContext = {
 export type MapLayerMeta = {
   id: string;
   label: string;
+  renderKind?: string;
   rank?: number;
   enabledByDefault?: boolean;
 };

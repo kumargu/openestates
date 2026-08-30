@@ -48,13 +48,25 @@ test("surface scene payload can drive the around-this-home plate", () => {
         fillState: "filled",
       },
       {
+        id: "roads",
+        label: "Roads",
+        family: "access",
+        renderKind: "road_analysis",
+        relationClass: "access",
+        enabledByDefault: true,
+        rank: 2,
+        availableCount: 1,
+        shownCount: 1,
+        fillState: "filled",
+      },
+      {
         id: "schools",
         label: "Schools",
         family: "access",
         renderKind: "pin",
         relationClass: "access",
         enabledByDefault: true,
-        rank: 2,
+        rank: 3,
         availableCount: 1,
         shownCount: 1,
         fillState: "filled",
@@ -100,6 +112,22 @@ test("surface scene payload can drive the around-this-home plate", () => {
         coordinateQuality: "exact",
         metrics: { distanceM: 1120 },
         display: { tone: "positive", icon: "train", priority: 1 },
+        confidence: 0.78,
+        receiptIds: ["receipt:access"],
+      },
+      {
+        id: "around_this_home:roads:access-route",
+        entityId: "place:transit-access:sample",
+        layerId: "roads",
+        kind: "place",
+        label: "ECC Road → Kadugodi Tree Park",
+        geometry: {
+          type: "LineString",
+          coordinates: [[77.7409, 12.9814], [77.7475, 12.9855]],
+        },
+        coordinateQuality: "exact",
+        metrics: { distanceM: 1120 },
+        display: { tone: "positive", icon: "road", priority: 2 },
         confidence: 0.78,
         receiptIds: ["receipt:access"],
       },
@@ -165,9 +193,12 @@ test("surface scene payload can drive the around-this-home plate", () => {
   const context = propertyMapContextFromSurfaceScene(scene);
   assert.ok(context);
   assert.equal(hasAroundThisHomePlate(context), true);
-  assert.deepEqual(availableLayers(context), ["metro", "schools"]);
+  assert.deepEqual(availableLayers(context), ["metro", "roads", "schools"]);
   assert.equal(context.access_lines?.length, 1);
   assert.equal(context.access_lines?.[0].name, "ECC Road → Kadugodi Tree Park");
+  assert.deepEqual(context.layer_lines?.metro, context.access_lines);
+  assert.equal(context.layer_lines?.roads?.[0]?.name, "ECC Road → Kadugodi Tree Park");
+  assert.equal(context.layers?.find((layer) => layer.id === "roads")?.renderKind, "road_analysis");
 
   const home = resolveHomeAnchor(context);
   assert.deepEqual(home, {

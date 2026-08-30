@@ -794,6 +794,14 @@
   height: 100%;
 }
 
+.nearby-map__canvas.is-hidden {
+  display: none;
+}
+
+.nearby-map__canvas--google-2d {
+  background: #edf0eb;
+}
+
 .nearby-map.is-expanded {
   position: fixed;
   inset: 0;
@@ -812,6 +820,15 @@
   z-index: 3;
   display: flex;
   gap: 0.45rem;
+}
+
+.nearby-map__view-switch {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid rgba(35, 31, 28, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 3px 12px rgba(35, 31, 28, 0.08);
 }
 
 .nearby-map__actions button,
@@ -837,6 +854,62 @@
 
 .nearby-map__actions button {
   padding: 0.45rem 0.85rem;
+}
+
+.nearby-map__actions .nearby-map__view-switch button {
+  min-width: 42px;
+  min-height: 40px;
+  padding: 0.35rem 0.65rem;
+  border: 0;
+  background: transparent;
+}
+
+.nearby-map__actions .nearby-map__view-switch button[aria-pressed="true"] {
+  background: rgba(63, 92, 138, 0.12);
+  color: var(--color-cool-deep, #3f5c8a);
+}
+
+.nearby-map-popover {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 11rem;
+  max-width: 16rem;
+  padding: 0.15rem;
+  color: var(--color-text, #1a1a1a);
+  font-family: inherit;
+}
+
+.nearby-map-popover strong {
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.nearby-map-popover span {
+  color: var(--color-text-muted, #777);
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.nearby-map-popover__note {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  margin-top: 0.25rem;
+  padding: 0;
+  border: 1px solid rgba(91, 127, 176, 0.16);
+  border-radius: 999px;
+  background: rgba(91, 127, 176, 0.08);
+  color: var(--color-cool-deep, #3f5c8a);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.nearby-map-popover__note[aria-pressed="true"] {
+  background: rgba(91, 127, 176, 0.16);
 }
 
 .nearby-map-selection {
@@ -1331,11 +1404,15 @@
   margin: 0;
 }
 
+.nearby-plate > .property-story-heading {
+  margin-bottom: clamp(1.25rem, 2vw, 1.75rem);
+}
+
 .nearby-plate__story-layout {
   display: grid;
-  grid-template-columns: minmax(14rem, 0.34fr) minmax(0, 1fr);
+  grid-template-columns: minmax(9.75rem, 0.18fr) minmax(0, 1fr);
   align-items: stretch;
-  gap: clamp(1.25rem, 3vw, 2.5rem);
+  gap: clamp(0.9rem, 1.5vw, 1.4rem);
 }
 
 .nearby-plate__story-rail {
@@ -1357,7 +1434,7 @@
 
 .nearby-plate__story-rail .nearby-plate__chip {
   width: 100%;
-  min-height: 3.25rem;
+  min-height: 2.75rem;
   justify-content: flex-start;
   padding: 0.35rem 0.25rem;
   border: 0;

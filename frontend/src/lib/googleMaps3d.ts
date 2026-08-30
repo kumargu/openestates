@@ -1,4 +1,6 @@
-type MapsLibraryImporter = (library: "maps3d" | "elevation") => Promise<unknown>;
+type MapsLibraryImporter = (
+  library: "core" | "maps" | "maps3d" | "elevation",
+) => Promise<unknown>;
 
 type ElevationLibrary = {
   ElevationService: new () => {
@@ -74,6 +76,18 @@ export function loadGoogleMaps3dLibrary(): Promise<unknown> {
   });
 
   return googleMaps3dPromise;
+}
+
+export function loadGoogleMaps2dLibrary(): Promise<unknown> {
+  return loadGoogleMaps3dLibrary().then(() => {
+    const importer = (window as GoogleMapsWindow).google?.maps?.importLibrary;
+    if (!importer) throw new Error("google_maps_2d_import_unavailable");
+    return Promise.all([importer("maps"), importer("core")])
+      .then(([maps, core]) => ({
+        ...(maps as object),
+        ...(core as object),
+      }));
+  });
 }
 
 export function loadGoogleTerrainElevation(
