@@ -388,6 +388,7 @@ export type MapPlacePin = {
   feature_id?: string;
   place_entity_id?: string;
   layer: MapNearbyLayer | string;
+  icon?: string;
   name: string;
   latitude?: number;
   longitude?: number;

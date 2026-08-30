@@ -162,6 +162,7 @@ function mapPlacePinFromFeature(
     feature_id: feature.id,
     place_entity_id: feature.entityId,
     layer: feature.layerId,
+    icon: feature.display.icon,
     name: feature.label,
     latitude: coordinates.latitude,
     longitude: coordinates.longitude,

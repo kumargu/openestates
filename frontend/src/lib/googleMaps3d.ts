@@ -1,5 +1,5 @@
 type MapsLibraryImporter = (
-  library: "maps3d" | "elevation" | "streetView",
+  library: "maps3d" | "elevation" | "marker" | "streetView",
 ) => Promise<unknown>;
 
 type ElevationLibrary = {
@@ -23,6 +23,7 @@ const GOOGLE_MAPS_CALLBACK = "__openestatesGoogleMaps3dReady";
 const GOOGLE_MAPS_LOAD_TIMEOUT_MS = 12_000;
 
 let googleMaps3dPromise: Promise<unknown> | null = null;
+let googleMarkerPromise: Promise<unknown> | null = null;
 let googleStreetViewPromise: Promise<unknown> | null = null;
 const terrainElevationPromises = new Map<string, Promise<number>>();
 
@@ -90,6 +91,19 @@ export function loadGoogleStreetViewLibrary(): Promise<unknown> {
     throw error;
   });
   return googleStreetViewPromise;
+}
+
+export function loadGoogleMarkerLibrary(): Promise<unknown> {
+  if (googleMarkerPromise) return googleMarkerPromise;
+  googleMarkerPromise = loadGoogleMaps3dLibrary().then(() => {
+    const importer = (window as GoogleMapsWindow).google?.maps?.importLibrary;
+    if (!importer) throw new Error("google_maps_marker_import_unavailable");
+    return importer("marker");
+  }).catch((error: unknown) => {
+    googleMarkerPromise = null;
+    throw error;
+  });
+  return googleMarkerPromise;
 }
 
 export function loadGoogleTerrainElevation(

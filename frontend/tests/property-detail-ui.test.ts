@@ -7,6 +7,7 @@ import {
 } from "../src/lib/api.ts";
 import {
   availableLayers,
+  clusterClosePlaces,
   corridorCameraFocus,
   corridorTourWaypoints,
   filterPlacesByScale,
@@ -17,6 +18,7 @@ import {
   placeMatchesProofFocus,
   scaleForStory,
 } from "../src/lib/nearbyPlateProjection.ts";
+import { mapMarkerPinOptions } from "../src/lib/mapMarkerVisual.ts";
 import {
   shouldReorientStreetView,
   sideRoadHeading,
@@ -188,6 +190,42 @@ test("guided road playback recognizes a side-road view", () => {
   assert.equal(shouldReorientStreetView(15, 35), true);
 });
 
+test("map marker visuals distinguish categories and focus", () => {
+  const school = mapMarkerPinOptions("graduation-cap", "active");
+  const hospital = mapMarkerPinOptions("hospital", "active");
+  const selected = mapMarkerPinOptions("graduation-cap", "selected");
+  const subdued = mapMarkerPinOptions("graduation-cap", "subdued");
+
+  assert.notEqual(school.background, hospital.background);
+  assert.notEqual(school.glyphSrc, hospital.glyphSrc);
+  assert.ok(selected.scale > school.scale);
+  assert.ok(school.scale > subdued.scale);
+
+  const clustered = clusterClosePlaces([
+    {
+      id: "school-1",
+      number: 1,
+      layer: "schools",
+      icon: "graduation-cap",
+      name: "One School",
+      latitude: 12.98,
+      longitude: 77.75,
+      source_type: "Google",
+    },
+    {
+      id: "school-2",
+      number: 2,
+      layer: "schools",
+      icon: "graduation-cap",
+      name: "Two School",
+      latitude: 12.9801,
+      longitude: 77.7501,
+      source_type: "Google",
+    },
+  ], "nearby");
+  assert.equal(clustered.clusters[0]?.icon, "graduation-cap");
+});
+
 test("surface scene projects to existing around-this-home plate shape", () => {
   const scene: SurfaceSceneResponse = {
     contractVersion: 1,
@@ -230,7 +268,7 @@ test("surface scene projects to existing around-this-home plate shape", () => {
       geometry: { type: "Point", coordinates: [77.751, 12.981] },
       coordinateQuality: "exact",
       metrics: { distanceM: 650, rating: 4.2, reviewCount: 120 },
-      display: { tone: "positive", priority: 1 },
+      display: { tone: "positive", icon: "graduation-cap", priority: 1 },
       confidence: 0.8,
       receiptIds: ["receipt:school"],
     }],
@@ -263,6 +301,7 @@ test("surface scene projects to existing around-this-home plate shape", () => {
   assert.equal(context?.home.boundary?.coordinates.length, 4);
   assert.equal(context?.home.boundary?.source_type, "OpenStreetMap");
   assert.equal(context?.places[0]?.feature_id, "around_this_home:schools:place-school");
+  assert.equal(context?.places[0]?.icon, "graduation-cap");
   assert.equal(context?.places[0]?.distance_km, 0.65);
   assert.equal(context?.places[0]?.source_type, "Google");
   assert.equal(hasAroundThisHomePlate(context), true);

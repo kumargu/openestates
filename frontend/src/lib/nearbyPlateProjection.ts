@@ -46,6 +46,7 @@ export type PlaceCluster = {
   latitude: number;
   longitude: number;
   count: number;
+  icon?: string;
   placeIds: string[];
   layer: string;
 };
@@ -635,6 +636,7 @@ export function clusterClosePlaces(
       latitude,
       longitude,
       count: group.length,
+      icon: group[0]?.icon,
       placeIds: group.map((item) => item.id),
       layer: group[0]?.layer ?? "schools",
     });

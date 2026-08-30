@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   loadGoogleMaps3dLibrary,
+  loadGoogleMarkerLibrary,
   loadGoogleTerrainElevation,
 } from "../../lib/googleMaps3d.ts";
+import { mapMarkerPinOptions } from "../../lib/mapMarkerVisual.ts";
 import { useGuidedStreetViewTour } from "../../hooks/useGuidedStreetViewTour.ts";
 import type {
   MapLayerExperience,
@@ -129,6 +131,16 @@ type Maps3DLibrary = {
     strokeColor: string;
     strokeWidth: number;
   }) => Map3DChild;
+};
+
+type MarkerLibrary = {
+  PinElement: new (options: {
+    background?: string;
+    borderColor?: string;
+    glyphSrc?: string;
+    glyphText?: string;
+    scale?: number;
+  }) => HTMLElement;
 };
 
 const HOME_PORTRAIT_RANGE_M = 700;
@@ -356,6 +368,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
   const streetViewContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map3DElement | null>(null);
   const libraryRef = useRef<Maps3DLibrary | null>(null);
+  const markerLibraryRef = useRef<MarkerLibrary | null>(null);
   const childrenRef = useRef<Map3DChild[]>([]);
   const cameraMoveRef = useRef(0);
   const terrainElevationRef = useRef<number | null>(null);
@@ -401,11 +414,13 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     let cancelled = false;
     void Promise.all([
       loadGoogleMaps3dLibrary(),
+      loadGoogleMarkerLibrary(),
       loadGoogleTerrainElevation(home.latitude, home.longitude),
     ])
-      .then(([loaded, terrainElevation]) => {
+      .then(([loaded, loadedMarkerLibrary, terrainElevation]) => {
         if (cancelled || !containerRef.current) return;
         const library = loaded as Maps3DLibrary;
+        const markerLibrary = loadedMarkerLibrary as MarkerLibrary;
         terrainElevationRef.current = terrainElevation;
         const map = new library.Map3DElement({
           center: {
@@ -421,6 +436,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
           tilt: 0,
         });
         libraryRef.current = library;
+        markerLibraryRef.current = markerLibrary;
         mapRef.current = map;
         containerRef.current.replaceChildren(map);
         setReady(true);
@@ -441,6 +457,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
       mapRef.current?.remove();
       mapRef.current = null;
       libraryRef.current = null;
+      markerLibraryRef.current = null;
       terrainElevationRef.current = null;
     };
   }, [home.latitude, home.longitude]);
@@ -533,7 +550,8 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
   useEffect(() => {
     const map = mapRef.current;
     const library = libraryRef.current;
-    if (!ready || !map || !library) return;
+    const markerLibrary = markerLibraryRef.current;
+    if (!ready || !map || !library || !markerLibrary) return;
     for (const child of childrenRef.current) child.remove();
     const nextChildren: Map3DChild[] = [];
 
@@ -621,15 +639,19 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     }
 
     if (!roadTourActive) {
+      const homeIsContext = cameraMode === "evidence";
       const homeMarker = new library.Marker3DInteractiveElement({
         altitudeMode: "CLAMP_TO_GROUND",
-        collisionBehavior: "REQUIRED",
+        collisionBehavior: homeIsContext ? "OPTIONAL_AND_HIDES_LOWER_PRIORITY" : "REQUIRED",
         drawsWhenOccluded: true,
-        extruded: true,
-        label: "This home",
+        extruded: !homeIsContext,
+        label: homeIsContext ? undefined : "This home",
         position: { lat: home.latitude, lng: home.longitude },
         title: home.name,
       });
+      if (homeIsContext) {
+        homeMarker.append(new markerLibrary.PinElement(mapMarkerPinOptions("home", "subdued")));
+      }
       map.append(homeMarker);
       nextChildren.push(homeMarker);
     }
@@ -638,16 +660,26 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
       const marker = new library.Marker3DInteractiveElement({
         altitudeMode: "CLAMP_TO_GROUND",
         collisionBehavior: "REQUIRED",
-        label: `${cluster.count} places`,
         position: { lat: cluster.latitude, lng: cluster.longitude },
         title: `${cluster.count} nearby places`,
       });
+      const clusterPin = mapMarkerPinOptions(cluster.icon, "active");
+      marker.append(new markerLibrary.PinElement({
+        ...clusterPin,
+        glyphSrc: undefined,
+        glyphText: String(cluster.count),
+      }));
       marker.addEventListener("gmp-click", () => onSelectCluster(cluster));
       map.append(marker);
       nextChildren.push(marker);
     }
     let activePopover: Popover3DElement | null = null;
     for (const place of places) {
+      const emphasis = place.id === selectedId
+        ? "selected"
+        : selectedId
+        ? "subdued"
+        : "active";
       const popover = createPlacePopover(
         library,
         place,
@@ -665,6 +697,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
         position: { lat: place.latitude, lng: place.longitude },
         title: place.name,
       });
+      marker.append(new markerLibrary.PinElement(mapMarkerPinOptions(place.icon, emphasis)));
       marker.addEventListener("pointerenter", () => {
         if (activePopover && activePopover !== popover) activePopover.open = false;
         popover.open = true;
