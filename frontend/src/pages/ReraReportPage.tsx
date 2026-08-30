@@ -780,7 +780,7 @@ function ReraDocumentGroup({
       <ul>
         {visibleItems.map((document) => (
           <li key={`${document.id}:${document.url}`}>
-            <span>{document.label}</span>
+            <a href={document.url} target="_blank" rel="noreferrer">{document.label}</a>
           </li>
         ))}
       </ul>
