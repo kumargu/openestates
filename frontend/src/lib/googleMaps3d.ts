@@ -1,5 +1,5 @@
 type MapsLibraryImporter = (
-  library: "maps" | "maps3d" | "elevation" | "marker" | "streetView",
+  library: "core" | "maps" | "maps3d" | "elevation" | "marker" | "streetView",
 ) => Promise<unknown>;
 
 type ElevationLibrary = {
@@ -99,7 +99,12 @@ export function loadGoogleMaps2dLibrary(): Promise<unknown> {
   googleMaps2dPromise = loadGoogleMaps3dLibrary().then(() => {
     const importer = (window as GoogleMapsWindow).google?.maps?.importLibrary;
     if (!importer) throw new Error("google_maps_2d_import_unavailable");
-    return importer("maps");
+    return Promise.all([importer("maps"), importer("core")]).then(
+      ([mapsLibrary, coreLibrary]) => ({
+        ...(mapsLibrary as Record<string, unknown>),
+        ...(coreLibrary as Record<string, unknown>),
+      }),
+    );
   }).catch((error: unknown) => {
     googleMaps2dPromise = null;
     throw error;
