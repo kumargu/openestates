@@ -369,6 +369,29 @@
   color: var(--color-text);
 }
 
+.workspace-sidebar__nav-item--discovery-return {
+  margin-bottom: 0.25rem;
+  background: rgba(61, 79, 109, 0.09);
+  color: var(--color-cool-deep);
+  font-weight: 680;
+}
+
+.workspace-sidebar__nav-item--discovery-return:hover {
+  background: rgba(61, 79, 109, 0.14);
+  color: var(--color-cool-deep);
+}
+
+.workspace-sidebar__nav-item--discovery-return .workspace-sidebar__nav-icon {
+  color: var(--color-cool-deep);
+}
+
+.workspace-sidebar__nav-item--discovery-return .workspace-sidebar__nav-label {
+  overflow: visible;
+  line-height: 1.15;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .workspace-sidebar__nav-item.is-active {
   background: transparent;
   color: var(--color-cool-deep);
@@ -454,6 +477,10 @@
   font-size: 0.62rem;
   font-weight: 620;
   letter-spacing: -0.01em;
+}
+
+.workspace-sidebar--collapsed .workspace-sidebar__nav-item--discovery-return .workspace-sidebar__nav-label {
+  text-align: center;
 }
 
 .workspace-sidebar__shortlist {
