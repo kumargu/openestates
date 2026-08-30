@@ -181,6 +181,12 @@ def access_corridor_record(
         ),
         None,
     )
+    frontage_points = _way_points(payload, frontage_way_id)
+    frontage_distance_meters = (
+        sum(_distance_m(left, right) for left, right in zip(frontage_points, frontage_points[1:]))
+        if len(frontage_points) >= 2
+        else None
+    )
     source_way_id = frontage_way_id or (route_way_ids[0] if route_way_ids else None)
     source_way_url = (
         f"https://www.openstreetmap.org/way/{source_way_id}"
@@ -197,6 +203,22 @@ def access_corridor_record(
         "destination_latitude": destination[0],
         "destination_longitude": destination[1],
         "frontage_road_name": frontage_road,
+        "frontage_way_id": frontage_way_id,
+        "frontage_distance_meters": frontage_distance_meters,
+        "frontage_geometry_geojson": (
+            json.dumps(
+                {
+                    "type": "LineString",
+                    "coordinates": [
+                        [longitude, latitude] for latitude, longitude in frontage_points
+                    ],
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            if len(frontage_points) >= 2
+            else None
+        ),
         "road_names": route_names,
         "route_way_ids": [str(value) for value in route_way_ids],
         "distance_meters": distance_meters,
@@ -239,7 +261,13 @@ def _street_graph(
             coordinate = _coordinate(point) if isinstance(point, dict) else None
             if coordinate is not None:
                 points.append(coordinate)
-        road_name = _optional_string(tags.get("name"))
+        # Prefer OSM's buyer-facing short/alternate label when the canonical
+        # name is a spelled-out expansion (for example, "ECC Road").
+        road_name = (
+            _optional_string(tags.get("short_name"))
+            or _optional_string(tags.get("alt_name"))
+            or _optional_string(tags.get("name"))
+        )
         way_id = str(element.get("id") or "")
         for left, right in zip(points, points[1:]):
             if left == right:
@@ -252,6 +280,26 @@ def _street_graph(
             way_ids[(left, right)] = way_id
             way_ids[(right, left)] = way_id
     return graph, edge_names, way_ids
+
+
+def _way_points(payload: Dict[str, Any], way_id: Optional[str]) -> List[Coordinate]:
+    """Return the complete source-way geometry, not the routed subset using it."""
+
+    if not way_id:
+        return []
+    for element in payload.get("elements") or []:
+        if (
+            isinstance(element, dict)
+            and element.get("type") == "way"
+            and str(element.get("id") or "") == str(way_id)
+        ):
+            return [
+                coordinate
+                for point in element.get("geometry") or []
+                if isinstance(point, dict)
+                and (coordinate := _coordinate(point)) is not None
+            ]
+    return []
 
 
 def _shortest_path(

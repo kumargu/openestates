@@ -16,6 +16,12 @@ fn waterford_corridor() -> OsmTransitAccessCorridorRecord {
         destination_latitude: 12.9855,
         destination_longitude: 77.7475,
         frontage_road_name: Some("ECC Road".to_string()),
+        frontage_way_id: Some("23213668".to_string()),
+        frontage_distance_meters: Some(640.0),
+        frontage_geometry_geojson: Some(
+            r#"{"type":"LineString","coordinates":[[77.739,12.979],[77.742,12.982],[77.744,12.983]]}"#
+                .to_string(),
+        ),
         road_names: vec![
             "Ecumenical Christian Center Road".to_string(),
             "Whitefield Main Road".to_string(),
@@ -67,6 +73,19 @@ fn osm_access_facts_emit_a_linked_routed_corridor() {
     assert!(facts.facts.iter().any(|fact| {
         fact.fact_key == "route.frontage_road_name" && fact.value_json.contains("ECC Road")
     }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.entity_id == "society:prestige-waterford"
+            && fact.fact_key == "approach_road"
+            && fact.value_json.contains("ECC Road")
+    }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.fact_key == "approach_road_entity" && fact.value_json.contains("place:approach-road:")
+    }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.entity_id.starts_with("place:approach-road:")
+            && fact.fact_key == "geo.geometry_geojson"
+            && fact.value_json.contains("77.739")
+    }));
 
     let kg_records = KgViewRecords::from_graph_with_skill_facts(
         &KnowledgeGraph::new(),
@@ -76,6 +95,9 @@ fn osm_access_facts_emit_a_linked_routed_corridor() {
     .unwrap();
     assert!(kg_records.entities.iter().any(|entity| {
         entity.entity_id.starts_with("place:transit-access:") && entity.entity_type == "place"
+    }));
+    assert!(kg_records.entities.iter().any(|entity| {
+        entity.entity_id.starts_with("place:approach-road:") && entity.entity_type == "place"
     }));
 }
 

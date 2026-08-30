@@ -226,7 +226,7 @@ export function SoftNearbyIcon({
       return <SoftEssentialsIcon size={size} />;
     case "metro":
       return <SoftMetroIcon size={size} />;
-    case "roads":
+    case "approach_road":
       return <SoftRoadIcon size={size} />;
     case "schools":
       return <SoftSchoolIcon size={size} />;

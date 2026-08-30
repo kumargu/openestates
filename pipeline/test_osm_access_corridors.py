@@ -13,7 +13,7 @@ class OsmAccessCorridorTests(unittest.TestCase):
         subject = {
             "entity_id": "society:waterford",
             "name": "Waterford",
-            "address": "Waterford, ECC Road, Bengaluru",
+            "address": "Waterford, Whitefield, Bengaluru",
             "latitude": 12.9810,
             "longitude": 77.7410,
         }
@@ -32,6 +32,7 @@ class OsmAccessCorridorTests(unittest.TestCase):
                     "tags": {
                         "highway": "tertiary",
                         "name": "Ecumenical Christian Center Road",
+                        "alt_name": "ECC Road",
                     },
                     "geometry": [
                         {"lat": 12.9810, "lon": 77.7410},
@@ -63,7 +64,14 @@ class OsmAccessCorridorTests(unittest.TestCase):
 
         self.assertIsNotNone(record)
         self.assertEqual(record["frontage_road_name"], "ECC Road")
+        self.assertEqual(record["frontage_way_id"], "10")
         self.assertEqual(record["route_way_ids"], ["10", "11"])
+        frontage_geometry = json.loads(record["frontage_geometry_geojson"])
+        self.assertEqual(
+            frontage_geometry["coordinates"],
+            [[77.741, 12.981], [77.742, 12.982], [77.743, 12.983]],
+        )
+        self.assertGreater(record["frontage_distance_meters"], 0)
         geometry = json.loads(record["geometry_geojson"])
         self.assertEqual(geometry["type"], "LineString")
         self.assertEqual(geometry["coordinates"][0], [77.741, 12.981])

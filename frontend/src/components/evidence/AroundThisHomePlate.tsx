@@ -18,7 +18,6 @@ import {
   filterPlacesByScale,
   layerLabel,
   linesForLayer,
-  mapViewForStory,
   metroLinesNearEvidence,
   metroStationsAroundHome,
   placeMatchesProofFocus,
@@ -27,7 +26,6 @@ import {
   scaleForStory,
   zoomForRadiusKm,
   type NearbyCameraMode,
-  type NearbyMapView,
   type PlateScaleMode,
   type PlateStory,
   type PlaceCluster,
@@ -190,6 +188,7 @@ function redFlagSelection(
 function accessLineSelection(
   propertyId: string,
   line: MapOverlayLine,
+  selectedLayerId: string,
   selectedLayerLabel: string,
 ): MapEvidenceSelection {
   return {
@@ -203,7 +202,7 @@ function accessLineSelection(
     ].filter((value): value is string => Boolean(value)),
     sourceType: line.source_type,
     sourceUrl: line.source_url,
-    labels: labelsForNearbyPlace("metro", line.distance_km),
+    labels: labelsForNearbyPlace(selectedLayerId, line.distance_km),
   };
 }
 
@@ -266,8 +265,6 @@ function AroundThisHomePlateInner({
   const [expanded, setExpanded] = useState(false);
   const [cameraMode, setCameraMode] = useState<NearbyCameraMode>(() =>
     focusedStory ? "evidence" : "home");
-  const [mapView, setMapView] = useState<NearbyMapView>(() =>
-    mapViewForStory(focusedStory ?? defaultStory, context));
   const [selectionDismissed, setSelectionDismissed] = useState(false);
 
   useEffect(() => {
@@ -309,6 +306,9 @@ function AroundThisHomePlateInner({
     () => story.kind === "layer" ? linesForLayer(context, story.layer) : [],
     [context, story],
   );
+  const terrainCorridor = story.kind === "layer"
+    && context.layers?.find((layer) => layer.id === story.layer)?.renderKind
+      === "terrain_corridor";
   const activeRedFlagLines = useMemo(
     () => redFlagsFocused ? activeStoryLines : [],
     [activeStoryLines, redFlagsFocused],
@@ -387,9 +387,12 @@ function AroundThisHomePlateInner({
     }
     if (selectedLine) {
       return selectedLineIsAccess
-        ? accessLineSelection(propertyId, selectedLine, story.kind === "layer"
-          ? layerLabel(story.layer, context)
-          : "Roads")
+        ? accessLineSelection(
+          propertyId,
+          selectedLine,
+          story.kind === "layer" ? story.layer : "nearby",
+          story.kind === "layer" ? layerLabel(story.layer, context) : "Nearby",
+        )
         : redFlagSelection(propertyId, selectedLine);
     }
     if (!selected) return null;
@@ -417,7 +420,6 @@ function AroundThisHomePlateInner({
 
   function selectStory(next: PlateStory) {
     setStory(next);
-    setMapView(mapViewForStory(next, context));
     setCameraMode("evidence");
     setSelectedId(null);
     setSelectedLineId(null);
@@ -539,17 +541,13 @@ function AroundThisHomePlateInner({
                   waterTint={showWater}
                   expanded={expanded}
                   cameraMode={cameraMode}
-                  mapView={mapView}
+                  terrainCorridor={terrainCorridor}
                   pinnedPlaceIds={pinnedPlaceIds}
                   onSelectCluster={selectCluster}
                   onSelectAccessLine={selectAccessLine}
                   onSelectRedFlagLine={selectRedFlagLine}
                   onRememberPlace={rememberPlace}
-                  onMapViewChange={setMapView}
-                  onBackToHome={() => {
-                    setCameraMode("home");
-                    setMapView("3d");
-                  }}
+                  onBackToHome={() => setCameraMode("home")}
                   onToggleExpanded={() => setExpanded((current) => !current)}
                 />
               </NearbyMapBoundary>

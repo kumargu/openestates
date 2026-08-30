@@ -6864,6 +6864,60 @@
       }
     },
     {
+      "fact_key": "approach_road",
+      "bucket": "social_infra",
+      "label": "approach road",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "approach road",
+        "road outside the gate",
+        "frontage road"
+      ],
+      "answers_preferences": [
+        "approach road",
+        "road outside the gate"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "approach road: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.4
+      }
+    },
+    {
+      "fact_key": "approach_road_entity",
+      "bucket": "social_infra",
+      "label": "approach road map entity",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "approach road map",
+        "road geometry"
+      ],
+      "answers_preferences": [
+        "approach road map"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "approach road map entity: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
       "fact_key": "transit_access_route",
       "bucket": "social_infra",
       "label": "metro access route",
@@ -6874,13 +6928,11 @@
       ],
       "enrichment_terms": [
         "metro access route",
-        "route to metro",
-        "approach road"
+        "route to metro"
       ],
       "answers_preferences": [
         "metro access",
-        "route to metro",
-        "approach road"
+        "route to metro"
       ],
       "never_default": true,
       "source_types": [

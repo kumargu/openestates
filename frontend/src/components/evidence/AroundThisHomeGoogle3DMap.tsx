@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  loadGoogleMaps2dLibrary,
   loadGoogleMaps3dLibrary,
   loadGoogleTerrainElevation,
 } from "../../lib/googleMaps3d.ts";
@@ -11,7 +10,6 @@ import type {
 } from "../../lib/types.ts";
 import type {
   NearbyCameraMode,
-  NearbyMapView,
   NumberedPlace,
   PlaceCluster,
   PlateViewport,
@@ -35,13 +33,12 @@ export type AroundThisHomeMapProps = {
   waterTint: boolean;
   expanded: boolean;
   cameraMode: NearbyCameraMode;
-  mapView: NearbyMapView;
+  terrainCorridor: boolean;
   pinnedPlaceIds?: string[];
   onSelectCluster: (cluster: PlaceCluster) => void;
   onSelectAccessLine: (id: string) => void;
   onSelectRedFlagLine: (id: string) => void;
   onRememberPlace?: (place: NumberedPlace) => void;
-  onMapViewChange: (view: NearbyMapView) => void;
   onBackToHome: () => void;
   onToggleExpanded: () => void;
 };
@@ -118,70 +115,13 @@ type Maps3DLibrary = {
   }) => Map3DChild;
 };
 
-type Map2DPosition = {
-  lat: () => number;
-  lng: () => number;
-};
-
-type Map2DFeature = {
-  getProperty: (name: string) => unknown;
-};
-
-type Map2DDataEvent = {
-  feature: Map2DFeature;
-  latLng: Map2DPosition;
-};
-
-type Map2DListener = { remove: () => void };
-
-type Map2DElement = {
-  data: {
-    addGeoJson: (geoJson: object) => unknown[];
-    addListener: (
-      eventName: "click" | "mouseover",
-      listener: (event: Map2DDataEvent) => void,
-    ) => Map2DListener;
-    forEach: (callback: (feature: Map2DFeature) => void) => void;
-    remove: (feature: Map2DFeature) => void;
-    setStyle: (style: (feature: Map2DFeature) => object) => void;
-  };
-  setCenter: (center: { lat: number; lng: number }) => void;
-  setOptions: (options: { gestureHandling: "cooperative" | "greedy" }) => void;
-  setZoom: (zoom: number) => void;
-};
-
-type Map2DInfoWindow = {
-  close: () => void;
-  open: (options: { map: Map2DElement }) => void;
-  setContent: (content: HTMLElement) => void;
-  setPosition: (position: Map2DPosition | { lat: number; lng: number }) => void;
-};
-
-type Maps2DLibrary = {
-  InfoWindow: new (options?: { disableAutoPan?: boolean }) => Map2DInfoWindow;
-  Map: new (element: HTMLElement, options: object) => Map2DElement;
-  SymbolPath: { CIRCLE: number };
-};
-
 const HOME_PORTRAIT_RANGE_M = 700;
 const HOME_PORTRAIT_TILT = 48;
 const EVIDENCE_MINIMUM_RANGE_M = 1_100;
 const EVIDENCE_CAMERA_DURATION_MS = 600;
 const HOME_CAMERA_DURATION_MS = 350;
 const DEFAULT_HEADING = 210;
-const HOME_2D_ZOOM = 17;
 const EMPTY_POLYGONS: MapOverlayPolygon[] = [];
-
-const MUTED_ROAD_MAP_STYLES = [
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#edf0eb" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#d7d9d3" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#555c57" }] },
-  { featureType: "road", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#dce8e9" }] },
-] as const;
 
 function evidenceCameraRange(radiusKm: number): number {
   return Math.max(EVIDENCE_MINIMUM_RANGE_M, radiusKm * 900);
@@ -198,13 +138,30 @@ function targetCamera(
   elevation: number,
   range: number,
   tilt: number,
+  heading: number,
 ): CameraOptions {
   return {
     center: { lat: latitude, lng: longitude, altitude: elevation },
-    heading: DEFAULT_HEADING,
+    heading,
     range,
     tilt,
   };
+}
+
+function corridorHeading(lines: MapOverlayLine[]): number {
+  const coordinates = lines.flatMap((line) => line.coordinates);
+  if (coordinates.length < 2) return DEFAULT_HEADING;
+  const longitudes = coordinates.map(([longitude]) => longitude);
+  const latitudes = coordinates.map(([, latitude]) => latitude);
+  const west = Math.min(...longitudes);
+  const east = Math.max(...longitudes);
+  const south = Math.min(...latitudes);
+  const north = Math.max(...latitudes);
+  const latitude = (south + north) / 2;
+  const eastMeters = (east - west) * 111_320 * Math.cos(latitude * Math.PI / 180);
+  const northMeters = (north - south) * 110_570;
+  const bearing = Math.atan2(eastMeters, northMeters) * 180 / Math.PI;
+  return (bearing + 360) % 360;
 }
 
 function settleCameraFraming(map: Map3DElement, camera: CameraOptions) {
@@ -348,136 +305,6 @@ function createPlacePopoverContent(
   return content;
 }
 
-function createLinePopoverContent(line: MapOverlayLine): HTMLDivElement {
-  const content = document.createElement("div");
-  content.className = "nearby-map-popover";
-  const name = document.createElement("strong");
-  name.textContent = line.name;
-  content.append(name);
-  if (typeof line.distance_km === "number") {
-    const distance = document.createElement("span");
-    distance.textContent = `${line.distance_km.toFixed(1)} km`;
-    content.append(distance);
-  }
-  return content;
-}
-
-function lineFeature(line: MapOverlayLine, featureType: string): object {
-  return {
-    type: "Feature",
-    properties: {
-      featureId: line.id,
-      featureType,
-      name: line.name,
-    },
-    geometry: {
-      type: "LineString",
-      coordinates: line.coordinates,
-    },
-  };
-}
-
-function polygonFeature(polygon: MapOverlayPolygon, featureType: string): object {
-  return {
-    type: "Feature",
-    properties: { featureId: polygon.id, featureType, name: polygon.name },
-    geometry: { type: "Polygon", coordinates: [polygon.coordinates] },
-  };
-}
-
-function map2dGeoJson(
-  home: AroundThisHomeMapProps["home"],
-  places: NumberedPlace[],
-  clusters: PlaceCluster[],
-  accessLines: MapOverlayLine[],
-  metroLines: MapOverlayLine[],
-  redFlagLines: MapOverlayLine[],
-  greenPatches: MapOverlayPolygon[],
-  lakes: MapOverlayPolygon[],
-): object {
-  return {
-    type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        properties: { featureId: "home", featureType: "home", name: home.name },
-        geometry: { type: "Point", coordinates: [home.longitude, home.latitude] },
-      },
-      ...places.map((place) => ({
-        type: "Feature",
-        properties: { featureId: place.id, featureType: "place", name: place.name },
-        geometry: { type: "Point", coordinates: [place.longitude, place.latitude] },
-      })),
-      ...clusters.map((cluster) => ({
-        type: "Feature",
-        properties: {
-          featureId: cluster.id,
-          featureType: "cluster",
-          name: `${cluster.count} nearby places`,
-        },
-        geometry: { type: "Point", coordinates: [cluster.longitude, cluster.latitude] },
-      })),
-      ...accessLines.map((line) => lineFeature(line, "access")),
-      ...metroLines.map((line) => lineFeature(line, "metro")),
-      ...redFlagLines.map((line) => lineFeature(line, "redFlag")),
-      ...greenPatches.map((polygon) => polygonFeature(polygon, "green")),
-      ...lakes.map((polygon) => polygonFeature(polygon, "water")),
-    ],
-  };
-}
-
-function map2dStyle(feature: Map2DFeature, circlePath: number): object {
-  const type = feature.getProperty("featureType");
-  switch (type) {
-    case "access":
-      return { strokeColor: "#414743", strokeOpacity: 0.96, strokeWeight: 7, zIndex: 8 };
-    case "metro":
-      return { strokeColor: "#7651a8", strokeOpacity: 0.92, strokeWeight: 6, zIndex: 7 };
-    case "redFlag":
-      return { strokeColor: "#b83b49", strokeOpacity: 0.9, strokeWeight: 6, zIndex: 9 };
-    case "green":
-      return { fillColor: "#8aaf83", fillOpacity: 0.2, strokeColor: "#64815f", strokeWeight: 1 };
-    case "water":
-      return { fillColor: "#78adc0", fillOpacity: 0.22, strokeColor: "#4f8ba0", strokeWeight: 1 };
-    case "home":
-      return {
-        icon: {
-          path: circlePath,
-          fillColor: "#bc603c",
-          fillOpacity: 1,
-          scale: 8,
-          strokeColor: "#ffffff",
-          strokeWeight: 3,
-        },
-        zIndex: 12,
-      };
-    case "cluster":
-      return {
-        icon: {
-          path: circlePath,
-          fillColor: "#455f7a",
-          fillOpacity: 0.95,
-          scale: 9,
-          strokeColor: "#ffffff",
-          strokeWeight: 2,
-        },
-        zIndex: 11,
-      };
-    default:
-      return {
-        icon: {
-          path: circlePath,
-          fillColor: "#516f8d",
-          fillOpacity: 0.96,
-          scale: 6,
-          strokeColor: "#ffffff",
-          strokeWeight: 2,
-        },
-        zIndex: 10,
-      };
-  }
-}
-
 export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
   const {
     home,
@@ -494,28 +321,22 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     waterTint,
     expanded,
     cameraMode,
-    mapView,
+    terrainCorridor,
     pinnedPlaceIds = [],
     onSelectCluster,
     onSelectAccessLine,
     onSelectRedFlagLine,
     onRememberPlace,
-    onMapViewChange,
     onBackToHome,
     onToggleExpanded,
   } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const map2dContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map3DElement | null>(null);
-  const map2dRef = useRef<Map2DElement | null>(null);
-  const map2dLibraryRef = useRef<Maps2DLibrary | null>(null);
-  const map2dInfoWindowRef = useRef<Map2DInfoWindow | null>(null);
   const libraryRef = useRef<Maps3DLibrary | null>(null);
   const childrenRef = useRef<Map3DChild[]>([]);
   const cameraMoveRef = useRef(0);
   const terrainElevationRef = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
-  const [ready2d, setReady2d] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const cameraCenter = cameraCenterForMode(cameraMode, home, viewport);
   const cameraLatitude = cameraCenter.latitude;
@@ -584,6 +405,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     const tilt = evidenceFocused
       ? evidenceCameraTilt(viewport.radiusKm)
       : HOME_PORTRAIT_TILT;
+    const heading = terrainCorridor ? corridorHeading(accessLines) : DEFAULT_HEADING;
     const moveId = cameraMoveRef.current + 1;
     cameraMoveRef.current = moveId;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -601,6 +423,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
           terrainElevation,
           range,
           tilt,
+          heading,
         );
         return map.flyCameraTo({ endCamera: camera, durationMillis })
           .then(() => {
@@ -616,153 +439,10 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     cameraMode,
     cameraLatitude,
     cameraLongitude,
-    ready,
-    viewport.radiusKm,
-  ]);
-
-  useEffect(() => {
-    if (mapView !== "2d" || map2dRef.current) return undefined;
-    let cancelled = false;
-    const container = map2dContainerRef.current;
-    if (!container) return undefined;
-    void loadGoogleMaps2dLibrary()
-      .then((loaded) => {
-        if (cancelled) return;
-        const library = loaded as Maps2DLibrary;
-        const map = new library.Map(container, {
-          center: { lat: home.latitude, lng: home.longitude },
-          clickableIcons: false,
-          disableDefaultUI: true,
-          gestureHandling: "cooperative",
-          keyboardShortcuts: true,
-          styles: MUTED_ROAD_MAP_STYLES,
-          zoom: HOME_2D_ZOOM,
-          zoomControl: true,
-        });
-        map2dLibraryRef.current = library;
-        map2dRef.current = map;
-        map2dInfoWindowRef.current = new library.InfoWindow({ disableAutoPan: true });
-        setReady2d(true);
-      })
-      .catch((error: unknown) => {
-        if (import.meta.env.DEV) {
-          console.warn("[AroundThisHomeGoogle3DMap] Google 2D failed to load", error);
-        }
-        if (!cancelled) {
-          setLoadError(error instanceof Error ? error : new Error("google_maps_2d_unavailable"));
-        }
-      });
-    return () => {
-      cancelled = true;
-      map2dInfoWindowRef.current?.close();
-      const map = map2dRef.current;
-      if (map) {
-        const features: Map2DFeature[] = [];
-        map.data.forEach((feature) => features.push(feature));
-        for (const feature of features) map.data.remove(feature);
-      }
-      container.replaceChildren();
-      map2dInfoWindowRef.current = null;
-      map2dLibraryRef.current = null;
-      map2dRef.current = null;
-      setReady2d(false);
-    };
-  }, [home.latitude, home.longitude, mapView]);
-
-  useEffect(() => {
-    const map = map2dRef.current;
-    if (!map || !ready2d) return;
-    map.setCenter({ lat: cameraLatitude, lng: cameraLongitude });
-    map.setZoom(cameraMode === "home" ? HOME_2D_ZOOM : viewport.zoom);
-    map.setOptions({ gestureHandling: expanded ? "greedy" : "cooperative" });
-  }, [cameraLatitude, cameraLongitude, cameraMode, expanded, ready2d, viewport.zoom]);
-
-  useEffect(() => {
-    const map = map2dRef.current;
-    const library = map2dLibraryRef.current;
-    const infoWindow = map2dInfoWindowRef.current;
-    if (!map || !library || !infoWindow || !ready2d) return undefined;
-
-    const currentFeatures: Map2DFeature[] = [];
-    map.data.forEach((feature) => currentFeatures.push(feature));
-    for (const feature of currentFeatures) map.data.remove(feature);
-
-    const showGreenPatches = places.some((place) => place.layer === "parks");
-    map.data.addGeoJson(map2dGeoJson(
-      home,
-      places,
-      clusters,
-      accessLines,
-      showMetroLines ? metroLines : [],
-      redFlagLines,
-      showGreenPatches ? greenPatches : EMPTY_POLYGONS,
-      waterTint ? lakes : EMPTY_POLYGONS,
-    ));
-    map.data.setStyle((feature) => map2dStyle(feature, library.SymbolPath.CIRCLE));
-
-    const placesById = new Map(places.map((place) => [place.id, place]));
-    const clustersById = new Map(clusters.map((cluster) => [cluster.id, cluster]));
-    const accessLinesById = new Map(accessLines.map((line) => [line.id, line]));
-    const redFlagLinesById = new Map(redFlagLines.map((line) => [line.id, line]));
-
-    const showFeature = (event: Map2DDataEvent, select: boolean) => {
-      const featureId = String(event.feature.getProperty("featureId") ?? "");
-      const featureType = event.feature.getProperty("featureType");
-      const place = placesById.get(featureId);
-      if (place) {
-        infoWindow.setContent(createPlacePopoverContent(
-          place,
-          pinnedPlaceIds.includes(place.id),
-          onRememberPlace,
-        ));
-      } else {
-        const line = accessLinesById.get(featureId) ?? redFlagLinesById.get(featureId);
-        if (line) {
-          infoWindow.setContent(createLinePopoverContent(line));
-          if (select) {
-            if (featureType === "redFlag") onSelectRedFlagLine(line.id);
-            else onSelectAccessLine(line.id);
-          }
-        } else {
-          const name = String(event.feature.getProperty("name") ?? "");
-          if (!name || featureType === "home") return;
-          const content = document.createElement("div");
-          content.className = "nearby-map-popover";
-          const title = document.createElement("strong");
-          title.textContent = name;
-          content.append(title);
-          infoWindow.setContent(content);
-          const cluster = clustersById.get(featureId);
-          if (select && cluster) onSelectCluster(cluster);
-        }
-      }
-      infoWindow.setPosition(event.latLng);
-      infoWindow.open({ map });
-    };
-    const hoverListener = map.data.addListener("mouseover", (event) => showFeature(event, false));
-    const clickListener = map.data.addListener("click", (event) => showFeature(event, true));
-    return () => {
-      hoverListener.remove();
-      clickListener.remove();
-      infoWindow.close();
-    };
-  }, [
     accessLines,
-    clusters,
-    greenPatches,
-    home,
-    lakes,
-    metroLines,
-    onRememberPlace,
-    onSelectAccessLine,
-    onSelectCluster,
-    onSelectRedFlagLine,
-    pinnedPlaceIds,
-    places,
-    ready2d,
-    redFlagLines,
-    showMetroLines,
-    waterTint,
+    ready,
+    terrainCorridor,
+    viewport.radiusKm,
   ]);
 
   useEffect(() => {
@@ -798,20 +478,22 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
       addPolygon(map, library, lake, { fill: "#4f9fc42e", stroke: "#357fa7aa" }, nextChildren);
     }
     for (const line of accessLines) {
-      addLine(
-        map,
-        library,
-        line,
-        {
-          color: "#48443d",
-          width: 5,
-          outerColor: "#fffaf0e6",
-          outerWidth: 0.65,
-          drawsOccludedSegments: true,
-        },
-        () => onSelectAccessLine(line.id),
-        nextChildren,
-      );
+      if (!terrainCorridor) {
+        addLine(
+          map,
+          library,
+          line,
+          {
+            color: "#48443d",
+            width: 5,
+            outerColor: "#fffaf0e6",
+            outerWidth: 0.65,
+            drawsOccludedSegments: true,
+          },
+          () => onSelectAccessLine(line.id),
+          nextChildren,
+        );
+      }
       const labelPosition = lineLabelPosition(line);
       if (labelPosition) {
         const routeLabel = new library.Marker3DInteractiveElement({
@@ -886,6 +568,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
       map.append(marker);
       nextChildren.push(marker);
     }
+    let activePopover: Popover3DElement | null = null;
     for (const place of places) {
       const popover = createPlacePopover(
         library,
@@ -903,6 +586,11 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
         label: place.id === selectedId ? place.name : undefined,
         position: { lat: place.latitude, lng: place.longitude },
         title: place.name,
+      });
+      marker.addEventListener("pointerenter", () => {
+        if (activePopover && activePopover !== popover) activePopover.open = false;
+        popover.open = true;
+        activePopover = popover;
       });
       map.append(marker);
       map.append(popover);
@@ -929,13 +617,13 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     ready,
     selectedId,
     showMetroLines,
+    terrainCorridor,
     waterTint,
   ]);
 
   if (loadError) throw loadError;
 
   function backToHome() {
-    onMapViewChange("3d");
     onBackToHome();
   }
 
@@ -948,36 +636,14 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
       className={`nearby-map nearby-map--google${expanded ? " is-expanded" : ""}`}
       role="region"
       aria-label="Nearby evidence map"
-      aria-busy={mapView === "3d" ? !ready : !ready2d}
-      data-map-renderer={`google-${mapView}`}
+      aria-busy={!ready}
+      data-map-renderer="google-3d"
     >
       <div
         ref={containerRef}
-        className={`nearby-map__canvas nearby-map__canvas--google-3d${mapView === "2d" ? " is-hidden" : ""}`}
-        aria-hidden={mapView === "2d"}
-      />
-      <div
-        ref={map2dContainerRef}
-        className={`nearby-map__canvas nearby-map__canvas--google-2d${mapView === "3d" ? " is-hidden" : ""}`}
-        aria-hidden={mapView === "3d"}
+        className="nearby-map__canvas nearby-map__canvas--google-3d"
       />
       <div className="nearby-map__actions">
-        <div className="nearby-map__view-switch" role="group" aria-label="Map view">
-          <button
-            type="button"
-            aria-pressed={mapView === "3d"}
-            onClick={() => onMapViewChange("3d")}
-          >
-            3D
-          </button>
-          <button
-            type="button"
-            aria-pressed={mapView === "2d"}
-            onClick={() => onMapViewChange("2d")}
-          >
-            2D
-          </button>
-        </div>
         {cameraMode === "evidence" && (
           <button type="button" onClick={backToHome}>Back to home</button>
         )}

@@ -282,7 +282,24 @@ mod tests {
             .expect("around_this_home surface exists");
         let scene = around.scene.as_ref().expect("scene rules exist");
         assert_eq!(scene.anchor.entity_ref, "society");
-        assert!(scene.layers.iter().any(|layer| layer.id == "metro"));
+        let metro = scene
+            .layers
+            .iter()
+            .find(|layer| layer.id == "metro")
+            .expect("metro layer exists");
+        assert_eq!(metro.fact_keys, ["nearby_metro_stations"]);
+        assert!(metro.linked_entity_fact_keys.is_empty());
+        assert!(around
+            .leaf_keys
+            .iter()
+            .all(|key| key != "transit_access_route" && key != "transit_access_route_entity"));
+
+        let approach_road = scene
+            .layers
+            .iter()
+            .find(|layer| layer.id == "approach_road")
+            .expect("approach road layer exists");
+        assert_eq!(approach_road.render_kind, "terrain_corridor");
     }
 
     #[test]

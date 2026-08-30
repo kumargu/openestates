@@ -10,7 +10,6 @@ export type NearbyCameraMode = "home" | "evidence";
 export type PlateStory =
   | { kind: "layer"; layer: string }
   | { kind: "water" };
-export type NearbyMapView = "2d" | "3d";
 
 export const PLATE_MAX_MAP_LABEL_LENGTH = 22;
 
@@ -212,15 +211,6 @@ export function placesForStory(
   }
 
   return context.places.filter((place) => place.layer === story.layer);
-}
-
-export function mapViewForStory(
-  story: PlateStory,
-  context: Pick<PropertyMapContext, "layers">,
-): NearbyMapView {
-  if (story.kind !== "layer") return "3d";
-  const renderKind = context.layers?.find((layer) => layer.id === story.layer)?.renderKind;
-  return renderKind === "road_analysis" ? "2d" : "3d";
 }
 
 export function linesForLayer(

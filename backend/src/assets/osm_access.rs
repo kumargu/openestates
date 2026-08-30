@@ -44,6 +44,12 @@ pub struct OsmTransitAccessCorridorRecord {
     pub destination_longitude: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frontage_road_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frontage_way_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frontage_distance_meters: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frontage_geometry_geojson: Option<String>,
     #[serde(default)]
     pub road_names: Vec<String>,
     #[serde(default)]
@@ -64,6 +70,7 @@ pub struct OsmTransitAccessCorridorRecord {
 #[derive(Debug, Clone, Deserialize)]
 struct OsmAccessConfigFile {
     corridor: CorridorConfig,
+    approach_road: ApproachRoadConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -73,6 +80,12 @@ struct CorridorConfig {
     linked_entity_fact_key: String,
     linked_entity_display_label: String,
     route_mode: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ApproachRoadConfig {
+    summary_fact_key: String,
+    linked_entity_fact_key: String,
 }
 
 pub fn osm_transit_access_corridor_facts_input(
@@ -110,7 +123,7 @@ pub fn osm_transit_access_corridor_facts_input(
                 "{}: {{value}}",
                 config.corridor.summary_display_label
             )),
-            &["metro access", "station route", "approach road"],
+            &["metro access", "station route"],
             record,
             run_id,
         )?;
@@ -207,6 +220,14 @@ pub fn osm_transit_access_corridor_facts_input(
                 run_id,
             )?;
         }
+        push_approach_road_facts(
+            &mut facts,
+            &mut annotations,
+            &mut annotation_keys,
+            &config.approach_road,
+            record,
+            run_id,
+        )?;
     }
 
     facts.sort_by(|left, right| {
@@ -226,6 +247,116 @@ pub fn osm_transit_access_corridor_facts_input(
         fact_annotations: annotations,
         source_watermarks: input.source_watermarks.clone(),
     })
+}
+
+fn push_approach_road_facts(
+    facts: &mut Vec<SkillFactRecord>,
+    annotations: &mut Vec<SkillFactAnnotationRecord>,
+    annotation_keys: &mut BTreeSet<(String, String)>,
+    config: &ApproachRoadConfig,
+    record: &OsmTransitAccessCorridorRecord,
+    run_id: &str,
+) -> Result<(), OsmAccessAssetError> {
+    let Some(name) = record
+        .frontage_road_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(());
+    };
+    let Some(geometry) = record
+        .frontage_geometry_geojson
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(());
+    };
+    let road_key = record
+        .frontage_way_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(&record.corridor_id);
+    let road_entity_id = format!(
+        "place:approach-road:{}-{}",
+        slug(&record.entity_id),
+        slug(road_key),
+    );
+
+    for (entity_id, fact_key, value, template, preferences) in [
+        (
+            record.entity_id.as_str(),
+            config.summary_fact_key.as_str(),
+            FactValue::Text(name.to_string()),
+            "Approach road: {value}",
+            &["approach road", "road outside the gate"][..],
+        ),
+        (
+            record.entity_id.as_str(),
+            config.linked_entity_fact_key.as_str(),
+            FactValue::Text(road_entity_id.clone()),
+            "Approach road map entity: {value}",
+            &["approach road map", "road geometry"][..],
+        ),
+        (
+            road_entity_id.as_str(),
+            "place.name",
+            FactValue::Text(name.to_string()),
+            "Approach road: {value}",
+            &[][..],
+        ),
+        (
+            road_entity_id.as_str(),
+            "place.category",
+            FactValue::Text("approach_road".to_string()),
+            "Road category: {value}",
+            &[][..],
+        ),
+        (
+            road_entity_id.as_str(),
+            "place.types",
+            FactValue::Tags(vec!["road".to_string(), "approach_road".to_string()]),
+            "Road types: {value}",
+            &[][..],
+        ),
+        (
+            road_entity_id.as_str(),
+            "geo.latitude",
+            FactValue::Numeric(record.subject_latitude),
+            "Latitude: {value}",
+            &[][..],
+        ),
+        (
+            road_entity_id.as_str(),
+            "geo.longitude",
+            FactValue::Numeric(record.subject_longitude),
+            "Longitude: {value}",
+            &[][..],
+        ),
+        (
+            road_entity_id.as_str(),
+            "geo.geometry_geojson",
+            FactValue::Text(geometry.to_string()),
+            "Map geometry: {value}",
+            &[][..],
+        ),
+    ] {
+        push_fact(
+            facts,
+            annotations,
+            annotation_keys,
+            entity_id,
+            fact_key,
+            value,
+            Some(template.to_string()),
+            preferences,
+            record,
+            run_id,
+        )?;
+    }
+    Ok(())
 }
 
 pub async fn canonicalize_osm_transit_access_corridors_input(
@@ -372,6 +503,29 @@ fn validate_input(input: &OsmTransitAccessCorridorsInput) -> Result<(), OsmAcces
                 record.corridor_id
             )));
         }
+        if let Some(frontage_geometry) = record.frontage_geometry_geojson.as_deref() {
+            validate_geojson_geometry(frontage_geometry, None, None).map_err(|error| {
+                OsmAccessAssetError::InvalidInput(format!(
+                    "OSM approach road {} has invalid geometry: {error}",
+                    record.corridor_id
+                ))
+            })?;
+            if !is_route_line_geometry(frontage_geometry) {
+                return Err(OsmAccessAssetError::InvalidInput(format!(
+                    "OSM approach road {} must contain a LineString with at least two points",
+                    record.corridor_id
+                )));
+            }
+        }
+        if record
+            .frontage_distance_meters
+            .is_some_and(|distance| !distance.is_finite() || distance <= 0.0)
+        {
+            return Err(OsmAccessAssetError::InvalidInput(format!(
+                "OSM approach road {} has invalid length",
+                record.corridor_id
+            )));
+        }
     }
     Ok(())
 }
@@ -393,6 +547,12 @@ fn load_config() -> Result<OsmAccessConfigFile, OsmAccessAssetError> {
     if config.corridor.summary_fact_key.trim().is_empty()
         || config.corridor.linked_entity_fact_key.trim().is_empty()
         || config.corridor.route_mode.trim().is_empty()
+        || config.approach_road.summary_fact_key.trim().is_empty()
+        || config
+            .approach_road
+            .linked_entity_fact_key
+            .trim()
+            .is_empty()
     {
         return Err(OsmAccessAssetError::InvalidInput(
             "OSM access corridor config is incomplete".to_string(),

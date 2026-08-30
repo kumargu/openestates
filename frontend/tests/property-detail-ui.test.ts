@@ -11,7 +11,6 @@ import {
   hasAroundThisHomePlate,
   layerLabel,
   linesForLayer,
-  mapViewForStory,
   metroStationsAroundHome,
   placeMatchesProofFocus,
   scaleForStory,
@@ -108,20 +107,6 @@ test("around-this-home accepts places, water, or metro evidence", () => {
   }), true);
 });
 
-test("road analysis selects 2D while other map stories remain 3D", () => {
-  const context: PropertyMapContext = {
-    ...emptyMapContext,
-    layers: [
-      { id: "metro", label: "Metro", renderKind: "pin" },
-      { id: "roads", label: "Roads", renderKind: "road_analysis" },
-    ],
-  };
-
-  assert.equal(mapViewForStory({ kind: "layer", layer: "roads" }, context), "2d");
-  assert.equal(mapViewForStory({ kind: "layer", layer: "metro" }, context), "3d");
-  assert.equal(mapViewForStory({ kind: "water" }, context), "3d");
-});
-
 test("generic map layers expose their projected line geometry", () => {
   const road = {
     id: "ecc-road",
@@ -131,10 +116,10 @@ test("generic map layers expose their projected line geometry", () => {
   };
   const context: PropertyMapContext = {
     ...emptyMapContext,
-    layer_lines: { roads: [road] },
+    layer_lines: { approach_road: [road] },
   };
 
-  assert.deepEqual(linesForLayer(context, "roads"), [road]);
+  assert.deepEqual(linesForLayer(context, "approach_road"), [road]);
   assert.deepEqual(linesForLayer(context, "schools"), []);
 });
 

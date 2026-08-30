@@ -35,5 +35,9 @@
     "linked_entity_fact_key": "transit_access_route_entity",
     "linked_entity_display_label": "Metro access map route",
     "route_mode": "ground_access"
+  },
+  "approach_road": {
+    "summary_fact_key": "approach_road",
+    "linked_entity_fact_key": "approach_road_entity"
   }
 }

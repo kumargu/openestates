@@ -48,10 +48,10 @@ test("surface scene payload can drive the around-this-home plate", () => {
         fillState: "filled",
       },
       {
-        id: "roads",
-        label: "Roads",
+        id: "approach_road",
+        label: "Approach road",
         family: "access",
-        renderKind: "road_analysis",
+        renderKind: "terrain_corridor",
         relationClass: "access",
         enabledByDefault: true,
         rank: 2,
@@ -100,27 +100,11 @@ test("surface scene payload can drive the around-this-home plate", () => {
         receiptIds: ["receipt:school"],
       },
       {
-        id: "around_this_home:metro:access-route",
-        entityId: "place:transit-access:sample",
-        layerId: "metro",
+        id: "around_this_home:approach_road:ecc-road",
+        entityId: "place:approach-road:sample",
+        layerId: "approach_road",
         kind: "place",
-        label: "ECC Road → Kadugodi Tree Park",
-        geometry: {
-          type: "LineString",
-          coordinates: [[77.7409, 12.9814], [77.7475, 12.9855]],
-        },
-        coordinateQuality: "exact",
-        metrics: { distanceM: 1120 },
-        display: { tone: "positive", icon: "train", priority: 1 },
-        confidence: 0.78,
-        receiptIds: ["receipt:access"],
-      },
-      {
-        id: "around_this_home:roads:access-route",
-        entityId: "place:transit-access:sample",
-        layerId: "roads",
-        kind: "place",
-        label: "ECC Road → Kadugodi Tree Park",
+        label: "ECC Road",
         geometry: {
           type: "LineString",
           coordinates: [[77.7409, 12.9814], [77.7475, 12.9855]],
@@ -170,8 +154,8 @@ test("surface scene payload can drive the around-this-home plate", () => {
       {
         id: "receipt:access",
         entityId: "society:sample",
-        factKey: "transit_access_route",
-        claim: "ECC Road → Kadugodi Tree Park (1.1 km)",
+        factKey: "approach_road",
+        claim: "ECC Road",
         sourceType: "OpenStreetMap",
         sourceUrl: "https://www.openstreetmap.org/way/23213668",
         learnedAt: "2026-08-30T00:00:00Z",
@@ -193,12 +177,14 @@ test("surface scene payload can drive the around-this-home plate", () => {
   const context = propertyMapContextFromSurfaceScene(scene);
   assert.ok(context);
   assert.equal(hasAroundThisHomePlate(context), true);
-  assert.deepEqual(availableLayers(context), ["metro", "roads", "schools"]);
-  assert.equal(context.access_lines?.length, 1);
-  assert.equal(context.access_lines?.[0].name, "ECC Road → Kadugodi Tree Park");
-  assert.deepEqual(context.layer_lines?.metro, context.access_lines);
-  assert.equal(context.layer_lines?.roads?.[0]?.name, "ECC Road → Kadugodi Tree Park");
-  assert.equal(context.layers?.find((layer) => layer.id === "roads")?.renderKind, "road_analysis");
+  assert.deepEqual(availableLayers(context), ["metro", "approach_road", "schools"]);
+  assert.equal(context.access_lines?.length, 0);
+  assert.deepEqual(context.layer_lines?.metro, []);
+  assert.equal(context.layer_lines?.approach_road?.[0]?.name, "ECC Road");
+  assert.equal(
+    context.layers?.find((layer) => layer.id === "approach_road")?.renderKind,
+    "terrain_corridor",
+  );
 
   const home = resolveHomeAnchor(context);
   assert.deepEqual(home, {
