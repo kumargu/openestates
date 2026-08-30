@@ -118,6 +118,7 @@ function mergedLayers(
       id: layer.id,
       label: layer.label,
       renderKind: layer.renderKind,
+      mapPresentation: layer.mapPresentation,
       experience: layer.experience,
       rank: layer.rank,
       enabledByDefault: layer.enabledByDefault,

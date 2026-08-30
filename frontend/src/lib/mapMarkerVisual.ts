@@ -71,6 +71,7 @@ const EMPHASIS_SCALE: Record<MapMarkerEmphasis, number> = {
 };
 
 const glyphUrls = new Map<string, string>();
+const markerUrls = new Map<string, string>();
 
 function glyphUrl(path: string): string {
   const cached = glyphUrls.get(path);
@@ -92,4 +93,20 @@ export function mapMarkerPinOptions(
     glyphSrc: glyphUrl(theme.path),
     scale: EMPHASIS_SCALE[emphasis],
   };
+}
+
+export function mapMarkerIconUrl(
+  icon: string | undefined,
+  emphasis: MapMarkerEmphasis,
+): string {
+  const cacheKey = `${icon ?? "default"}:${emphasis}`;
+  const cached = markerUrls.get(cacheKey);
+  if (cached) return cached;
+  const theme = icon ? MARKER_THEMES[icon] ?? DEFAULT_MARKER_THEME : DEFAULT_MARKER_THEME;
+  const fill = emphasis === "subdued" ? "#e7e4de" : theme.background;
+  const border = emphasis === "selected" ? "#292723" : "#fffdf8";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="${fill}" stroke="${border}" stroke-width="2"/><g transform="translate(7 7) scale(.92)" fill="none" stroke="#292723" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${theme.path}</g></svg>`;
+  const url = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  markerUrls.set(cacheKey, url);
+  return url;
 }

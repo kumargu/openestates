@@ -8,6 +8,7 @@ import { mapMarkerPinOptions } from "../../lib/mapMarkerVisual.ts";
 import { useGuidedStreetViewTour } from "../../hooks/useGuidedStreetViewTour.ts";
 import type {
   MapLayerExperience,
+  MapPresentation,
   MapOverlayLine,
   MapOverlayPolygon,
   MapWaterContext,
@@ -48,8 +49,10 @@ export type AroundThisHomeMapProps = {
   cameraMode: NearbyCameraMode;
   terrainCorridor: boolean;
   layerExperience?: MapLayerExperience;
+  mapPresentation: MapPresentation;
   pinnedPlaceIds?: string[];
   onSelectCluster: (cluster: PlaceCluster) => void;
+  onSelectPlace: (place: NumberedPlace) => void;
   onSelectAccessLine: (id: string) => void;
   onSelectRedFlagLine: (id: string) => void;
   onRememberPlace?: (place: NumberedPlace) => void;
@@ -358,6 +361,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     layerExperience,
     pinnedPlaceIds = [],
     onSelectCluster,
+    onSelectPlace,
     onSelectAccessLine,
     onSelectRedFlagLine,
     onRememberPlace,
@@ -703,6 +707,10 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
         popover.open = true;
         activePopover = popover;
       });
+      marker.addEventListener("gmp-click", () => {
+        popover.open = false;
+        onSelectPlace(place);
+      });
       map.append(marker);
       map.append(popover);
       nextChildren.push(marker);
@@ -722,6 +730,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     metroLines,
     onSelectAccessLine,
     onSelectCluster,
+    onSelectPlace,
     onSelectRedFlagLine,
     onRememberPlace,
     pinnedPlaceIds,

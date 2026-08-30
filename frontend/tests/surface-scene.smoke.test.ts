@@ -64,6 +64,7 @@ test("surface scene payload can drive the around-this-home plate", () => {
         label: "Schools",
         family: "access",
         renderKind: "pin",
+        mapPresentation: "readable_2d",
         relationClass: "access",
         enabledByDefault: true,
         rank: 3,
@@ -184,6 +185,10 @@ test("surface scene payload can drive the around-this-home plate", () => {
   assert.equal(
     context.layers?.find((layer) => layer.id === "approach_road")?.renderKind,
     "terrain_corridor",
+  );
+  assert.equal(
+    context.layers?.find((layer) => layer.id === "schools")?.mapPresentation,
+    "readable_2d",
   );
 
   const home = resolveHomeAnchor(context);

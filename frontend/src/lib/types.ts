@@ -449,10 +449,13 @@ export type MapLayerMeta = {
   id: string;
   label: string;
   renderKind?: string;
+  mapPresentation?: MapPresentation;
   experience?: MapLayerExperience;
   rank?: number;
   enabledByDefault?: boolean;
 };
+
+export type MapPresentation = "immersive_3d" | "readable_2d";
 
 export type MapLayerExperience = {
   kind: string;
@@ -554,6 +557,7 @@ export type SceneLayer = {
   label: string;
   family: "access" | "risk" | "environment" | "market" | "context" | string;
   renderKind: "pin" | "line" | "polygon" | "corridor" | "evidence_list" | string;
+  mapPresentation?: MapPresentation;
   experience?: MapLayerExperience;
   relationClass: "access" | "risk_externality" | "context" | string;
   enabledByDefault: boolean;

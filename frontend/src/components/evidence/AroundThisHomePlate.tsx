@@ -8,7 +8,11 @@ import {
   type ErrorInfo,
   type ReactNode,
 } from "react";
-import type { MapOverlayLine, PropertyMapContext } from "../../lib/types.ts";
+import type {
+  MapOverlayLine,
+  MapPresentation,
+  PropertyMapContext,
+} from "../../lib/types.ts";
 import {
   availableLayers,
   buildNumberedPlaces,
@@ -39,9 +43,14 @@ import {
 } from "./MapEvidenceTray.tsx";
 import { useNotebook } from "../../hooks/useNotebook.ts";
 
-const loadAroundThisHomeMap = async () => {
-  const module = await import("./AroundThisHomeGoogle3DMap.tsx");
-  return { default: module.AroundThisHomeGoogle3DMap };
+const loadAroundThisHomeMap = async (presentation: MapPresentation) => {
+  const module = presentation === "readable_2d"
+    ? await import("./AroundThisHomeGoogle2DMap.tsx")
+    : await import("./AroundThisHomeGoogle3DMap.tsx");
+  const component = "AroundThisHomeGoogle2DMap" in module
+    ? module.AroundThisHomeGoogle2DMap
+    : module.AroundThisHomeGoogle3DMap;
+  return { default: component };
 };
 
 function RetryableAroundThisHomeMap({
@@ -53,7 +62,7 @@ function RetryableAroundThisHomeMap({
 
   useEffect(() => {
     let cancelled = false;
-    loadAroundThisHomeMap()
+    loadAroundThisHomeMap(props.mapPresentation)
       .then((module) => {
         if (!cancelled) setMapComponent(() => module.default);
       })
@@ -63,7 +72,7 @@ function RetryableAroundThisHomeMap({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [props.mapPresentation]);
 
   if (loadError) throw loadError;
   if (!MapComponent) {
@@ -317,6 +326,14 @@ function AroundThisHomePlateInner({
     [activeStoryLines, redFlagsFocused],
   );
   const waterFocused = story.kind === "water";
+  const mapPresentation: MapPresentation = cameraMode === "home"
+    ? "immersive_3d"
+    : waterFocused
+    ? "readable_2d"
+    : story.kind === "layer"
+    ? context.layers?.find((layer) => layer.id === story.layer)?.mapPresentation
+      ?? "immersive_3d"
+    : "immersive_3d";
   const activeMetroLines = useMemo(
     () => context.metro_lines ?? [],
     [context.metro_lines],
@@ -439,6 +456,12 @@ function AroundThisHomePlateInner({
     setSelectionDismissed(false);
   }
 
+  function selectPlace(place: (typeof numbered)[number]) {
+    setSelectedId(place.id);
+    setSelectedLineId(null);
+    setSelectionDismissed(false);
+  }
+
   function selectRedFlagLine(id: string) {
     setSelectedLineId(id);
     setSelectedId(null);
@@ -522,7 +545,7 @@ function AroundThisHomePlateInner({
           <div className="nearby-plate__canvas">
             {canRenderMap && home ? (
               <NearbyMapBoundary
-                key={`${home.latitude.toFixed(5)}-${home.longitude.toFixed(5)}`}
+                key={`${home.latitude.toFixed(5)}-${home.longitude.toFixed(5)}-${mapPresentation}`}
               >
                 <RetryableAroundThisHomeMap
                   home={{
@@ -531,8 +554,8 @@ function AroundThisHomePlateInner({
                     name: context.home.name,
                     boundary: context.home.boundary,
                   }}
-                  places={singles}
-                  clusters={clusters}
+                  places={mapPresentation === "readable_2d" ? numbered : singles}
+                  clusters={mapPresentation === "readable_2d" ? [] : clusters}
                   selectedId={selected?.id ?? null}
                   viewport={viewport}
                   metroLines={visibleMetroLines}
@@ -547,8 +570,10 @@ function AroundThisHomePlateInner({
                   cameraMode={cameraMode}
                   terrainCorridor={terrainCorridor}
                   layerExperience={layerExperience}
+                  mapPresentation={mapPresentation}
                   pinnedPlaceIds={pinnedPlaceIds}
                   onSelectCluster={selectCluster}
+                  onSelectPlace={selectPlace}
                   onSelectAccessLine={selectAccessLine}
                   onSelectRedFlagLine={selectRedFlagLine}
                   onRememberPlace={rememberPlace}

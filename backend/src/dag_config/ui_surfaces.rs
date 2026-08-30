@@ -90,6 +90,8 @@ pub struct UiSurfaceLayerRule {
     pub relation_class: String,
     #[serde(rename = "renderKind")]
     pub render_kind: String,
+    #[serde(default, rename = "mapPresentation")]
+    pub map_presentation: Option<String>,
     #[serde(default)]
     pub experience: Option<UiSurfaceLayerExperienceConfig>,
     #[serde(default)]
@@ -346,6 +348,7 @@ mod tests {
             .find(|layer| layer.id == "metro")
             .expect("metro layer exists");
         assert_eq!(metro.fact_keys, ["nearby_metro_stations"]);
+        assert_eq!(metro.map_presentation.as_deref(), Some("immersive_3d"));
         assert!(metro.linked_entity_fact_keys.is_empty());
         assert!(around
             .leaf_keys
@@ -358,6 +361,14 @@ mod tests {
             .find(|layer| layer.id == "approach_road")
             .expect("approach road layer exists");
         assert_eq!(approach_road.render_kind, "terrain_corridor");
+        assert_eq!(
+            scene
+                .layers
+                .iter()
+                .find(|layer| layer.id == "schools")
+                .and_then(|layer| layer.map_presentation.as_deref()),
+            Some("readable_2d")
+        );
         let experience = approach_road.experience.as_ref().expect("road experience");
         assert_eq!(experience.kind, "street_view_tour");
         assert_eq!(experience.distance_each_direction_m, 300);
