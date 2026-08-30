@@ -35,16 +35,6 @@ type RepaymentDashboardProps = {
   model: RepaymentDashboardModel;
 };
 
-type SharedYearValues = {
-  year: number;
-  interestPaid: number;
-  principalPaid: number;
-  extraPaid: number;
-  balance: number;
-  oneOffInterestSaved: number | null;
-  oneOffComparisonAvailable: boolean;
-};
-
 function durationLabel(months: number | null | undefined): string {
   if (months == null) return "Not repaid";
   const years = Math.floor(months / 12);
@@ -246,8 +236,8 @@ function BalanceChart({
               y2={plotBottom}
             />
             <text
-              x={x.map(baselinePayoffMonths / 12) - 5}
-              y={plotBottom - 8}
+              x={x.map(baselinePayoffMonths / 12) - 10}
+              y={plotBottom - 14}
               textAnchor="end"
             >
               {samePayoff ? "Both plans" : "Original payoff"}
@@ -264,22 +254,13 @@ function BalanceChart({
             />
             <circle cx={x.map(selectedPayoffMonths / 12)} cy={y.map(0)} r="4" />
             <text
-              x={x.map(selectedPayoffMonths / 12) - 5}
-              y={plotBottom - 24}
-              textAnchor="end"
+              x={x.map(selectedPayoffMonths / 12) + 10}
+              y={plotBottom - 14}
+              textAnchor="start"
             >
               Selected payoff
             </text>
           </g>
-        ) : null}
-        {hasComparison ? (
-          <text
-            x={x.map(Math.max(1, Math.min(horizonYears - 1, Math.ceil((selectedPayoffMonths ?? horizonMonths) / 18))))}
-            y={y.map(maximumBalance * 0.28)}
-            className="home-plan-gap-label"
-          >
-            Balance reduced
-          </text>
         ) : null}
         <g className="home-plan-chart-cursor">
           <line
@@ -552,7 +533,7 @@ function TimingImpactChart({
             {point === first || point === half || point === final ? (
               <text
                 x={x.map(point.year)}
-                y={Math.max(SUPPORT_INSETS.top + 10, y.map(point.interestSaved) - 9)}
+                y={Math.max(SUPPORT_INSETS.top + 11, y.map(point.interestSaved) - 14)}
                 textAnchor={point === final ? "end" : point === first ? "start" : "middle"}
               >
                 {point === first ? "Year 1" : point === half ? "Half impact" : "Final useful year"}
@@ -639,34 +620,6 @@ function MilestoneRail({
   );
 }
 
-function SharedYearReadout({
-  values,
-}: {
-  values: SharedYearValues;
-}) {
-  return (
-    <section className="home-plan-shared-readout" aria-label={`Year ${values.year} details`}>
-      <strong>Year {values.year}</strong>
-      <dl>
-        <div><dt>Interest</dt><dd>{formatCurrency(values.interestPaid, true)}</dd></div>
-        <div><dt>Scheduled principal</dt><dd>{formatCurrency(values.principalPaid, true)}</dd></div>
-        <div><dt>Extra principal</dt><dd>{formatCurrency(values.extraPaid, true)}</dd></div>
-        <div><dt>Remaining balance</dt><dd>{formatCurrency(values.balance, true)}</dd></div>
-        <div>
-          <dt>One extra EMI avoids</dt>
-          <dd>
-            {!values.oneOffComparisonAvailable
-              ? "Not comparable"
-              : values.oneOffInterestSaved == null
-                ? "No payment remains"
-                : formatCurrency(values.oneOffInterestSaved, true)}
-          </dd>
-        </div>
-      </dl>
-    </section>
-  );
-}
-
 function CalculationDisclosure({
   model,
 }: {
@@ -713,19 +666,6 @@ export function RepaymentDashboard({
   const [previewYear, setPreviewYear] = useState<number | null>(null);
   const [pinnedYear, setPinnedYear] = useState(1);
   const activeYear = Math.max(1, Math.min(horizonYears, previewYear ?? pinnedYear));
-  const paymentYear = activeYear;
-  const annual = model.recurrentSchedule.find((point) => point.year === paymentYear)
-    ?? emptyRepaymentYear(paymentYear);
-  const oneOff = model.oneOffExtraPaymentCurve.find((point) => point.year === paymentYear);
-  const sharedValues: SharedYearValues = {
-    year: paymentYear,
-    interestPaid: annual.interestPaid,
-    principalPaid: annual.principalPaid,
-    extraPaid: annual.extraPaid,
-    balance: balanceAt(stories.selectedMonthly, paymentYear * 12),
-    oneOffInterestSaved: oneOff?.interestSaved ?? null,
-    oneOffComparisonAvailable: model.comparisonAvailable,
-  };
 
   if (stories.baselineMonthly.length === 0) {
     return (
@@ -757,7 +697,6 @@ export function RepaymentDashboard({
         baselinePayoffMonths={model.baselinePayoffMonths}
         selectedPayoffMonths={model.selectedPayoffMonths}
       />
-      <SharedYearReadout values={sharedValues} />
       <div className="home-plan-support-grid">
         <PaymentCompositionChart
           model={model}

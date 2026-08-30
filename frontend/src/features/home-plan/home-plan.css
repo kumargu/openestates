@@ -337,8 +337,7 @@
   border-right: 0;
 }
 
-.home-plan-outcome-strip dt,
-.home-plan-shared-readout dt {
+.home-plan-outcome-strip dt {
   color: var(--plan-faint);
   font-size: 0.6rem;
   font-weight: 700;
@@ -424,34 +423,6 @@
   color: var(--plan-muted);
   font-size: 0.62rem;
   line-height: 1.3;
-}
-
-.home-plan-shared-readout {
-  display: grid;
-  grid-template-columns: 5rem minmax(0, 1fr);
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem 0;
-  border-block: 1px solid var(--plan-line);
-}
-
-.home-plan-shared-readout > strong {
-  font-size: 0.82rem;
-}
-
-.home-plan-shared-readout dl {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.8rem;
-  margin: 0;
-}
-
-.home-plan-shared-readout dd {
-  margin: 0.16rem 0 0;
-  color: var(--plan-ink);
-  font-size: 0.76rem;
-  font-weight: 680;
-  font-variant-numeric: tabular-nums;
 }
 
 .home-plan-journey {
@@ -580,17 +551,12 @@
   opacity: 0.7;
 }
 
-.home-plan-gap-label,
 .home-plan-point-value,
 .home-plan-impact-label {
   fill: var(--plan-muted);
   font-family: Inter, sans-serif;
   font-size: 10px;
   font-weight: 680;
-}
-
-.home-plan-gap-label {
-  text-anchor: middle;
 }
 
 .home-plan-payoff-marker line {
@@ -612,6 +578,10 @@
   font-family: Inter, sans-serif;
   font-size: 10px;
   font-weight: 680;
+  paint-order: stroke;
+  stroke: var(--plan-base);
+  stroke-linejoin: round;
+  stroke-width: 4px;
 }
 
 .home-plan-chart-cursor line {
@@ -671,6 +641,10 @@
   font-family: Inter, sans-serif;
   font-size: 9px;
   font-weight: 680;
+  paint-order: stroke;
+  stroke: var(--plan-base);
+  stroke-linejoin: round;
+  stroke-width: 4px;
   text-anchor: middle;
 }
 
@@ -1183,41 +1157,12 @@
     border-right: 0;
   }
 
-  .home-plan-shared-readout {
-    position: sticky;
-    z-index: 5;
-    top: calc(4rem + env(safe-area-inset-top));
-    bottom: auto;
-    grid-template-columns: 3.4rem minmax(0, 1fr);
-    gap: 0.65rem;
-    margin-inline: -0.4rem;
-    padding: 0.65rem 0.4rem;
-    background: color-mix(in srgb, var(--plan-base) 94%, transparent);
-    box-shadow: 0 -8px 18px rgba(56, 49, 42, 0.04);
-    backdrop-filter: blur(8px);
-  }
-
-  .home-plan-shared-readout dl {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(6.5rem, 1fr);
-    grid-template-columns: none;
-    gap: 0.7rem;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .home-plan-shared-readout dl::-webkit-scrollbar {
-    display: none;
-  }
-
   .home-plan-journey {
     gap: 3.4rem;
   }
 
   .home-plan-chart-axis,
   .home-plan-value-guide text,
-  .home-plan-gap-label,
   .home-plan-point-value,
   .home-plan-impact-label,
   .home-plan-payoff-marker text,
@@ -1227,10 +1172,12 @@
   }
 
   .home-plan-balance-overview .home-plan-chart-axis,
-  .home-plan-balance-overview .home-plan-value-guide text,
-  .home-plan-balance-overview .home-plan-payoff-marker text,
-  .home-plan-balance-overview .home-plan-gap-label {
+  .home-plan-balance-overview .home-plan-value-guide text {
     font-size: 30px;
+  }
+
+  .home-plan-balance-overview .home-plan-payoff-marker text {
+    display: none;
   }
 
   .home-plan-chart-readout--3,
