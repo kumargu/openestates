@@ -11,6 +11,7 @@ type ScrubbableSvgProps = {
   pointCount: number;
   activeIndex: number;
   label: string;
+  valueText?: string;
   className?: string;
   columns?: number;
   indexFromPoint?: (
@@ -30,6 +31,7 @@ export function ScrubbableSvg({
   pointCount,
   activeIndex,
   label,
+  valueText,
   className,
   columns = 1,
   indexFromPoint,
@@ -78,8 +80,13 @@ export function ScrubbableSvg({
     <svg
       className={`home-plan-chart ${className ?? ""}`}
       viewBox={`0 0 ${width} ${height}`}
-      role="img"
+      role="slider"
       aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={Math.max(0, pointCount - 1)}
+      aria-valuenow={activeIndex}
+      aria-valuetext={valueText}
+      aria-orientation="horizontal"
       tabIndex={0}
       onKeyDown={moveByKeyboard}
       onPointerMove={(event) => onPreviewIndex(indexFromPointer(event))}
@@ -116,8 +123,6 @@ export function ChartReadout({
   return (
     <dl
       className={`home-plan-chart-readout home-plan-chart-readout--${Math.max(2, Math.min(5, columns))}`}
-      aria-live="polite"
-      aria-atomic="true"
     >
       {children}
     </dl>

@@ -118,6 +118,7 @@ export function HomePlanPage() {
     DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear,
   );
   const [repaymentStrategy, setRepaymentStrategy] = useState<RepaymentStrategy>("finish_earlier");
+  const [planMode, setPlanMode] = useState<"repayment" | "rent-vs-buy">("repayment");
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
@@ -153,6 +154,7 @@ export function HomePlanPage() {
         setPropertyData(data);
         setPreviewYear(null);
         setPinnedYear(null);
+        setPlanMode("repayment");
         if (!hasPlannablePrice(data.property.price)) {
           setInputs(null);
           setExtraEmisPerYear(DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear);
@@ -323,7 +325,17 @@ export function HomePlanPage() {
   };
 
   const updateInput = (key: EditablePlanInput, value: number) => {
-    const next = updatePlanInput(inputs, key, value);
+    const sipMultiple = [1, 2, 3].find((multiple) => (
+      Math.abs(inputs.monthlySipThousands - inputs.monthlyEmiThousands * multiple) < 0.01
+    ));
+    const updated = updatePlanInput(inputs, key, value);
+    const next = sipMultiple != null
+      && (key === "monthlyEmiThousands" || key === "downPaymentPercent")
+      ? {
+        ...updated,
+        monthlySipThousands: updated.monthlyEmiThousands * sipMultiple,
+      }
+      : updated;
     setPreviewYear(null);
     setInputs(next);
     persistEdit(next, extraEmisPerYear, repaymentStrategy);
@@ -362,54 +374,84 @@ export function HomePlanPage() {
         compareHref={compareHref}
         buyVsRentHref={workspaceBuyVsRentHref(id)}
         compareCount={compareIds.length}
-        contextDisplay="mobile-only"
-        context={(
-          <WorkspacePropertySwitcher
-            selectedId={id}
-            homes={homeOptions}
-            onSelect={selectProperty}
-          />
-        )}
       />
 
       <div className="home-plan-body">
         <div className="home-plan-main">
           <div className="home-plan-canvas">
-            <RepaymentDashboard
+            <header className="home-plan-property-context">
+              <div>
+                <h1>
+                  {propertyData.society?.name?.trim() || property.title}
+                  <span> · {formatCurrency(property.price, true)} asking price</span>
+                </h1>
+                {homeOptions.length > 1 ? (
+                  <WorkspacePropertySwitcher
+                    selectedId={id}
+                    homes={homeOptions}
+                    onSelect={selectProperty}
+                    triggerLabel="Change home"
+                  />
+                ) : null}
+              </div>
+              <p>Modelled loan {formatCurrency(projection.loanAmount, true)}</p>
+            </header>
+
+            <nav className="home-plan-mode-tabs" aria-label="Plan view">
+              <button
+                type="button"
+                className={planMode === "repayment" ? "is-active" : undefined}
+                aria-current={planMode === "repayment" ? "page" : undefined}
+                onClick={() => setPlanMode("repayment")}
+              >
+                Repayment
+              </button>
+              <button
+                type="button"
+                className={planMode === "rent-vs-buy" ? "is-active" : undefined}
+                aria-current={planMode === "rent-vs-buy" ? "page" : undefined}
+                onClick={() => setPlanMode("rent-vs-buy")}
+              >
+                Rent vs Buy
+              </button>
+            </nav>
+
+            <PlanAssumptionRail
               inputs={inputs}
-              model={repayment}
+              extraEmisPerYear={extraEmisPerYear}
+              repaymentStrategy={repaymentStrategy}
+              loanFreeYear={repayment.status === "repaid"
+                ? repayment.recurrentSchedule.at(-1)?.year ?? null
+                : null}
+              onInputChange={updateInput}
+              onExtraEmisChange={updateExtraEmisPerYear}
               onStrategyChange={updateRepaymentStrategy}
-              controls={(
-                <PlanAssumptionRail
-                  inputs={inputs}
-                  extraEmisPerYear={extraEmisPerYear}
-                  loanFreeYear={repayment.status === "repaid"
-                    ? repayment.recurrentSchedule.at(-1)?.year ?? null
-                    : null}
-                  onInputChange={updateInput}
-                  onExtraEmisChange={updateExtraEmisPerYear}
-                  onReset={resetInputs}
-                />
-              )}
+              onReset={resetInputs}
             />
 
-            <section className="home-plan-rent-section" aria-labelledby="home-plan-rent-title">
-              <header className="home-plan-chapter__heading">
-                <p id="home-plan-rent-title">Rent vs buy</p>
-              </header>
-              <RentAssumptionRail
+            {planMode === "repayment" ? (
+              <RepaymentDashboard
                 inputs={inputs}
-                onInputChange={updateInput}
+                model={repayment}
+                onStrategyChange={updateRepaymentStrategy}
               />
-              <PlanGraph
-                projection={projection}
-                activeYear={previewYear
-                  ?? pinnedYear
-                  ?? Math.min(inputs.holdingPeriodYears, projection.points.length - 1)}
-                onPreviewYearChange={setPreviewYear}
-                onPinYear={setPinnedYear}
-              />
-            </section>
+            ) : (
+              <section className="home-plan-rent-mode" aria-label="Rent versus buy scenario">
+                <RentAssumptionRail
+                  inputs={inputs}
+                  onInputChange={updateInput}
+                />
+                <PlanGraph
+                  projection={projection}
+                  equityReturn={inputs.equityReturn}
+                  activeYear={previewYear
+                    ?? pinnedYear
+                    ?? Math.min(inputs.holdingPeriodYears, projection.points.length - 1)}
+                  onPreviewYearChange={setPreviewYear}
+                  onPinYear={setPinnedYear}
+                />
+              </section>
+            )}
           </div>
         </div>
       </div>

@@ -171,22 +171,23 @@ export function calculateRepaymentDashboard(
     );
   const maximumRunYears = Math.min(baselineYears, config.simulation.maximumJourneyYears);
   const oneOffExtraPaymentCurve: OneOffExtraPaymentPoint[] = [];
-  // Timing answers a stable question even when the recurring cadence is zero:
-  // what happens if one extra EMI is paid in this year and nowhere else?
-  const oneOffCadence = Math.max(1, extraEmisPerYear);
+  // Timing is deliberately independent from the recurring plan: it asks what
+  // one additional EMI achieves when paid in this year and nowhere else.
   for (let year = 1; year <= maximumRunYears; year += 1) {
     const candidate = buildLoanSchedule(inputs, {
-      extraEmisPerYear: oneOffCadence,
+      extraEmisPerYear: 1,
       strategy,
       oneOffExtraPaymentYear: year,
     }, config);
+    const extraPaid = totalExtraPaid(candidate);
+    if (extraPaid <= 0) continue;
     const interestSaved = interestSavedAgainst(baseline, candidate);
     oneOffExtraPaymentCurve.push({
       year,
       interestSaved,
       monthsSaved: monthsSavedAgainst(baseline, candidate),
       monthlyEmiReduction: Math.max(0, candidate.openingMonthlyEmi - candidate.endingMonthlyEmi),
-      extraPaid: totalExtraPaid(candidate),
+      extraPaid,
     });
   }
 

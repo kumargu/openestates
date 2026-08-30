@@ -190,10 +190,7 @@ test("baseline exposes monthly inputs", () => {
   assert.equal(inputs.downPaymentPercent, 20);
   assert.equal(inputs.monthlyEmiThousands, expectedEmi);
   assert.ok(inputs.currentRentThousands > 0);
-  assert.equal(
-    inputs.monthlySipThousands + inputs.currentRentThousands,
-    inputs.monthlyEmiThousands,
-  );
+  assert.equal(inputs.monthlySipThousands, inputs.monthlyEmiThousands);
   assert.equal(inputs.loanRate, 7.5);
   assert.equal(inputs.equityReturn, 10);
 });
@@ -292,14 +289,11 @@ test("baseline rejects homes without a price instead of inventing one", () => {
   assert.equal(buildBaselinePlanInputs(6_700_000).propertyPriceLakh, 67);
 });
 
-test("high-price baseline keeps a visible SIP while preserving EMI equals rent plus SIP", () => {
+test("high-price baseline starts Rent vs Buy at one EMI of monthly SIP", () => {
   const inputs = buildBaselinePlanInputs(33_100_000);
   const projection = calculateProjection(inputs);
 
-  assert.equal(
-    inputs.monthlySipThousands + inputs.currentRentThousands,
-    inputs.monthlyEmiThousands,
-  );
+  assert.equal(inputs.monthlySipThousands, inputs.monthlyEmiThousands);
   assert.ok(inputs.monthlySipThousands > 0);
   assert.ok(inputs.monthlyEmiThousands > inputs.currentRentThousands);
   assert.ok(projection.loanFreeYear !== null);
@@ -393,20 +387,25 @@ test("rising rent eats into the rent path's investing", () => {
 });
 
 test("break-even is reported only when buying actually overtakes renting", () => {
-  const buyAhead = calculateProjection(buildBaselinePlanInputs(15_100_000));
-  assert.ok(buyAhead.points[1].buyNetWorth >= buyAhead.points[1].rentNetWorth);
-  assert.equal(buyAhead.breakEvenYear, null);
-
-  // A large SIP puts renting ahead first, so a real crossover exists.
-  const rentAheadFirst = calculateProjection({
+  const projection = calculateProjection({
     ...ready,
     monthlyEmiThousands: 135,
     monthlySipThousands: 400,
     holdingPeriodYears: 20,
   });
-  const crossover = rentAheadFirst.breakEvenYear;
-  assert.ok(crossover === null || rentAheadFirst.points[crossover - 1].buyNetWorth
-    < rentAheadFirst.points[crossover - 1].rentNetWorth);
+  const crossover = projection.breakEvenYear;
+  if (crossover == null) {
+    assert.equal(projection.points.some((point, index) => (
+      index > 0
+      && projection.points[index - 1].buyNetWorth < projection.points[index - 1].rentNetWorth
+      && point.buyNetWorth >= point.rentNetWorth
+    )), false);
+  } else {
+    assert.ok(projection.points[crossover - 1].buyNetWorth
+      < projection.points[crossover - 1].rentNetWorth);
+    assert.ok(projection.points[crossover].buyNetWorth
+      >= projection.points[crossover].rentNetWorth);
+  }
 });
 
 test("a closed loan frees the EMI into the buyer's wealth", () => {
@@ -874,7 +873,7 @@ test("one-off savings decline with delay and markers select first satisfying yea
   }
   for (const point of curve) {
     const candidate = buildLoanSchedule(ready, {
-      extraEmisPerYear: 2,
+      extraEmisPerYear: 1,
       strategy: "finish_earlier",
       oneOffExtraPaymentYear: point.year,
     });

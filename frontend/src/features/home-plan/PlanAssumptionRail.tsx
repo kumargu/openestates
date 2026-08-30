@@ -1,5 +1,6 @@
 import { type EditablePlanInput, type PlanInputs } from "./model.ts";
 import { useState } from "react";
+import type { RepaymentStrategy } from "./financeEngine.ts";
 
 const LAKH = 100_000;
 const MONTHS_IN_YEAR = 12;
@@ -12,9 +13,11 @@ function monthlyInterestThresholdThousands(inputs: PlanInputs): number {
 type PlanAssumptionRailProps = {
   inputs: PlanInputs;
   extraEmisPerYear: number;
+  repaymentStrategy: RepaymentStrategy;
   loanFreeYear: number | null;
   onInputChange: (key: EditablePlanInput, value: number) => void;
   onExtraEmisChange: (count: number) => void;
+  onStrategyChange: (strategy: RepaymentStrategy) => void;
   onReset: () => void;
 };
 
@@ -104,9 +107,11 @@ function PlanInput({
 export function PlanAssumptionRail({
   inputs,
   extraEmisPerYear,
+  repaymentStrategy,
   loanFreeYear,
   onInputChange,
   onExtraEmisChange,
+  onStrategyChange,
   onReset,
 }: PlanAssumptionRailProps) {
   const principalThresholdThousands = monthlyInterestThresholdThousands(inputs);
@@ -174,9 +179,38 @@ export function PlanAssumptionRail({
 
         <div className="home-plan-inline-studio__repay-actions">
           <button type="button" className="home-plan-inline-studio__reset" onClick={onReset}>
-            Reset
+            Reset plan
           </button>
         </div>
+      </div>
+      <div className="home-plan-setup-strategy">
+        <span>After each prepayment</span>
+        <div className="home-plan-setup-strategy__choices" role="group" aria-label="Repayment objective">
+          <button
+            type="button"
+            className={repaymentStrategy === "finish_earlier" ? "is-active" : undefined}
+            aria-pressed={repaymentStrategy === "finish_earlier"}
+            onClick={() => onStrategyChange("finish_earlier")}
+          >
+            <strong>Finish earlier</strong>
+            <small>Keep the scheduled EMI · become debt-free sooner</small>
+          </button>
+          <button
+            type="button"
+            className={repaymentStrategy === "lower_emi" ? "is-active" : undefined}
+            aria-pressed={repaymentStrategy === "lower_emi"}
+            onClick={() => onStrategyChange("lower_emi")}
+          >
+            <strong>Lower EMI</strong>
+            <small>Keep the original payoff date · reduce monthly commitment</small>
+          </button>
+        </div>
+        {repaymentStrategy === "lower_emi" && extraEmisPerYear > 0 ? (
+          <p>
+            Future extra-EMI amounts also fall because each extra payment uses that year’s
+            recalculated EMI.
+          </p>
+        ) : null}
       </div>
     </section>
   );
@@ -189,43 +223,56 @@ export function RentAssumptionRail({
   inputs: PlanInputs;
   onInputChange: (key: EditablePlanInput, value: number) => void;
 }) {
-  const rentInputs: InputSpec[] = [
-    {
-      key: "currentRentThousands",
-      label: "Monthly rent",
-      min: 0,
-      prefix: "₹",
-      suffix: "K / mo",
-      note: "Current rent",
-    },
-    {
-      key: "monthlySipThousands",
-      label: "Monthly SIP",
-      min: 0,
-      prefix: "₹",
-      suffix: "K / mo",
-      note: "Rent-path investment",
-    },
-    {
-      key: "equityReturn",
-      label: "SIP return",
-      min: 0,
-      max: 20,
-      suffix: "%",
-      note: "Expected yearly gain",
-    },
-  ];
+  const rentInput = {
+    label: "Monthly rent",
+    min: 0,
+    prefix: "₹",
+    suffix: "K / mo",
+    note: "Current rent",
+  };
+  const returnInput = {
+    label: "SIP return",
+    min: 0,
+    max: 20,
+    suffix: "%",
+    note: "Expected yearly gain",
+  };
+  const selectedSipMultiple = [1, 2, 3].find((multiple) => (
+    Math.abs(inputs.monthlySipThousands - inputs.monthlyEmiThousands * multiple) < 0.01
+  ));
 
   return (
     <section className="home-plan-rent-controls" aria-label="Rent and investment assumptions">
-      {rentInputs.map(({ key, ...input }) => (
-        <PlanInput
-          key={key}
-          {...input}
-          value={inputs[key]}
-          onChange={(value) => onInputChange(key, value)}
-        />
-      ))}
+      <PlanInput
+        {...rentInput}
+        value={inputs.currentRentThousands}
+        onChange={(value) => onInputChange("currentRentThousands", value)}
+      />
+      <div className="home-plan-sip-multiple">
+        <span>Monthly SIP</span>
+        <div role="group" aria-label="Monthly SIP as a multiple of EMI">
+          {[1, 2, 3].map((multiple) => (
+            <button
+              type="button"
+              key={multiple}
+              className={selectedSipMultiple === multiple ? "is-active" : undefined}
+              aria-pressed={selectedSipMultiple === multiple}
+              onClick={() => onInputChange(
+                "monthlySipThousands",
+                inputs.monthlyEmiThousands * multiple,
+              )}
+            >
+              {multiple}× EMI
+            </button>
+          ))}
+        </div>
+        <small>₹{inputs.monthlySipThousands.toLocaleString("en-IN")}K / mo</small>
+      </div>
+      <PlanInput
+        {...returnInput}
+        value={inputs.equityReturn}
+        onChange={(value) => onInputChange("equityReturn", value)}
+      />
     </section>
   );
 }

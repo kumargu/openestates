@@ -19,6 +19,7 @@ const INSETS = { top: 30, right: 42, bottom: 42, left: 70 };
 
 type PlanGraphProps = {
   projection: PlanProjection;
+  equityReturn: number;
   activeYear: number;
   onPreviewYearChange: (year: number | null) => void;
   onPinYear: (year: number) => void;
@@ -30,6 +31,7 @@ function rateLabel(value: number): string {
 
 export function PlanGraph({
   projection,
+  equityReturn,
   activeYear,
   onPreviewYearChange,
   onPinYear,
@@ -55,8 +57,8 @@ export function PlanGraph({
   return (
     <section className="home-plan-story home-plan-rent-graph">
       <ChartHeading
-        title={`${buyLeads ? "Buying" : "Renting"} leads by ${formatCurrency(advantage, true)} in year ${boundedYear}`}
-        conclusion={`${rateLabel(projection.assumptions.homeAppreciationRate)} home appreciation · ${rateLabel(projection.assumptions.rentInflationRate)} yearly rent increase`}
+        title={`In this ${rateLabel(projection.assumptions.homeAppreciationRate)} appreciation / ${rateLabel(projection.assumptions.rentInflationRate)} rent growth / ${rateLabel(equityReturn)} SIP return scenario, ${buyLeads ? "buying" : "renting"} leads by ${formatCurrency(advantage, true)} in year ${boundedYear}.`}
+        conclusion="These are projected market outcomes, not guaranteed loan savings."
       />
       <ScrubbableSvg
         width={WIDTH}
@@ -65,6 +67,7 @@ export function PlanGraph({
         pointCount={points.length}
         activeIndex={boundedYear}
         label={`Projected buy and rent wealth over ${maximumYear} years`}
+        valueText={`Year ${boundedYear}, buy wealth ${formatCurrency(active.buyNetWorth, true)}, rent wealth ${formatCurrency(active.rentNetWorth, true)}`}
         className="home-plan-rent-vs-buy-chart"
         onPreviewIndex={onPreviewYearChange}
         onPinIndex={onPinYear}

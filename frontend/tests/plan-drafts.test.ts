@@ -77,6 +77,27 @@ test("version 3 drafts migrate to finish-earlier repayment", () => {
   assert.equal(readPlanDraft("home-1")?.repaymentStrategy, "finish_earlier");
 });
 
+test("version 4 drafts migrate SIP to the nearest explicit EMI multiple", () => {
+  values.clear();
+  const inputs = {
+    ...buildBaselinePlanInputs(20_000_000),
+    monthlyEmiThousands: 150,
+    monthlySipThousands: 260,
+  };
+  values.set(planDraftStorageKey("home-1"), JSON.stringify({
+    version: 4,
+    propertyId: "home-1",
+    inputs,
+    extraEmisPerYear: 2,
+    repaymentStrategy: "lower_emi",
+    updatedAt: Date.now(),
+  }));
+
+  const migrated = readPlanDraft("home-1");
+  assert.equal(migrated?.inputs.monthlySipThousands, 300);
+  assert.equal(migrated?.repaymentStrategy, "lower_emi");
+});
+
 test("reset clears the stored draft so defaults come back", () => {
   values.clear();
   writePlanDraft("home-1", { ...buildBaselinePlanInputs(20_000_000), monthlyEmiThousands: 250 }, 3);

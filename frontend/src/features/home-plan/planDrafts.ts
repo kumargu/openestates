@@ -6,9 +6,10 @@ const PLAN_DRAFT_STORAGE_PREFIX = "openestates:buy-vs-rent-draft:";
  * Version 1 autosaved the baseline on load, so a stored draft could not be told
  * apart from a default. Version 2 stores buyer edits only. Version 3 adds a
  * required down-payment assumption; older drafts are dropped so returning
- * buyers receive the complete financing model and current defaults.
+ * buyers receive the complete financing model and current defaults. Version 5
+ * makes Rent vs Buy SIP choices explicit 1× / 2× / 3× EMI multiples.
  */
-const PLAN_DRAFT_VERSION = 4;
+const PLAN_DRAFT_VERSION = 5;
 
 export type PropertyPlanDraft = {
   version: typeof PLAN_DRAFT_VERSION;
@@ -27,7 +28,7 @@ function normalizeDraft(value: unknown, propertyId: string): PropertyPlanDraft |
   if (typeof value !== "object" || value == null) return null;
   const candidate = value as Partial<PropertyPlanDraft>;
   if (
-    (candidate.version !== PLAN_DRAFT_VERSION && candidate.version !== 3)
+    ![PLAN_DRAFT_VERSION, 4, 3].includes(candidate.version ?? -1)
     || candidate.propertyId !== propertyId
     || candidate.inputs == null
   ) {
@@ -38,10 +39,23 @@ function normalizeDraft(value: unknown, propertyId: string): PropertyPlanDraft |
   }
 
   try {
+    const inputs = normalizePlanInputs(candidate.inputs);
+    const migratedSipMultiple = inputs.monthlyEmiThousands > 0
+      ? Math.max(
+        1,
+        Math.min(3, Math.round(inputs.monthlySipThousands / inputs.monthlyEmiThousands)),
+      )
+      : 1;
+    const migratedInputs = candidate.version === PLAN_DRAFT_VERSION
+      ? inputs
+      : {
+        ...inputs,
+        monthlySipThousands: inputs.monthlyEmiThousands * migratedSipMultiple,
+      };
     return {
       version: PLAN_DRAFT_VERSION,
       propertyId,
-      inputs: normalizePlanInputs(candidate.inputs),
+      inputs: migratedInputs,
       extraEmisPerYear: Math.max(0, Math.floor(candidate.extraEmisPerYear ?? 0)),
       repaymentStrategy: candidate.repaymentStrategy === "lower_emi"
         ? "lower_emi"

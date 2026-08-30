@@ -229,11 +229,9 @@ export function buildBaselinePlanInputs(
     ),
     config,
   );
-  // The rent path spends the same money: rent first, the rest invested.
-  const monthlySipThousands = Math.max(
-    0,
-    monthlyEmiThousands - estimatedRentThousands,
-  );
+  // Rent vs Buy starts with the simplest explicit SIP choice: 1× the EMI.
+  // Buyers can compare 1×, 2× or 3× without an unbounded investment input.
+  const monthlySipThousands = monthlyEmiThousands;
   return {
     propertyPriceLakh,
     downPaymentPercent: defaults.downPaymentPercent,
