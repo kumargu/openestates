@@ -160,21 +160,23 @@
   display: flex;
   align-items: baseline;
   gap: 0.14rem;
-  padding: 0.22rem 0.35rem;
-  border: 1px solid var(--plan-line);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--plan-base) 55%, transparent);
-  transition: border-color 160ms ease, background 160ms ease;
+  padding: 0.32rem 0.42rem 0.28rem;
+  border: 0;
+  border-bottom: 1px solid var(--plan-line-strong);
+  border-radius: 6px 6px 2px 2px;
+  background: color-mix(in srgb, var(--plan-soft) 58%, transparent);
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
 
 .home-plan-inline-input > div:hover {
-  border-color: var(--plan-line-strong);
-  background: var(--plan-base);
+  border-bottom-color: rgba(77, 115, 159, 0.45);
+  background: color-mix(in srgb, var(--plan-accent-soft) 54%, transparent);
 }
 
 .home-plan-inline-input > div:focus-within {
-  border-color: rgba(77, 115, 159, 0.62);
+  border-bottom-color: var(--plan-accent);
   background: var(--plan-base);
+  box-shadow: inset 0 -1px 0 var(--plan-accent);
 }
 
 .home-plan-inline-input input {
@@ -215,7 +217,12 @@
 .home-plan-inline-studio__extra > div {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  gap: 0.12rem;
+  width: fit-content;
+  padding: 0.16rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--plan-soft) 62%, transparent);
 }
 
 .home-plan-inline-studio__extra > small {
@@ -228,8 +235,8 @@
   min-width: 2rem;
   min-height: 2rem;
   padding: 0.42rem 0.62rem;
-  border: 1px solid var(--plan-line);
-  border-radius: 7px;
+  border: 0;
+  border-radius: 6px;
   color: var(--plan-muted);
   background: transparent;
   cursor: pointer;
@@ -239,9 +246,9 @@
 
 .home-plan-inline-studio__extra button:hover,
 .home-plan-inline-studio__extra button.is-active {
-  border-color: rgba(77, 115, 159, 0.4);
   color: var(--plan-ink);
-  background: var(--plan-accent-soft);
+  background: var(--plan-base);
+  box-shadow: 0 1px 3px rgba(49, 60, 70, 0.12);
 }
 
 .home-plan-inline-studio__repay-actions {
@@ -279,7 +286,11 @@
 .home-plan-setup-strategy__choices {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
+  gap: 0.18rem;
+  padding: 0.2rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--plan-soft) 62%, transparent);
 }
 
 .home-plan-setup-strategy__choices button {
@@ -287,8 +298,8 @@
   gap: 0.22rem;
   min-height: 3rem;
   padding: 0.5rem 0.7rem;
-  border: 1px solid var(--plan-line);
-  border-radius: 8px;
+  border: 0;
+  border-radius: 7px;
   color: var(--plan-muted);
   background: transparent;
   cursor: pointer;
@@ -296,9 +307,9 @@
 }
 
 .home-plan-setup-strategy__choices button.is-active {
-  border-color: rgba(77, 115, 159, 0.48);
   color: var(--plan-ink);
-  background: var(--plan-accent-soft);
+  background: var(--plan-base);
+  box-shadow: 0 1px 4px rgba(49, 60, 70, 0.13);
 }
 
 .home-plan-setup-strategy__choices strong {
