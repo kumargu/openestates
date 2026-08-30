@@ -1,4 +1,5 @@
 import { normalizePlanInputs, type PlanInputs } from "./model.ts";
+import type { RepaymentStrategy } from "./financeEngine.ts";
 
 const PLAN_DRAFT_STORAGE_PREFIX = "openestates:buy-vs-rent-draft:";
 /**
@@ -7,13 +8,14 @@ const PLAN_DRAFT_STORAGE_PREFIX = "openestates:buy-vs-rent-draft:";
  * required down-payment assumption; older drafts are dropped so returning
  * buyers receive the complete financing model and current defaults.
  */
-const PLAN_DRAFT_VERSION = 3;
+const PLAN_DRAFT_VERSION = 4;
 
 export type PropertyPlanDraft = {
   version: typeof PLAN_DRAFT_VERSION;
   propertyId: string;
   inputs: PlanInputs;
   extraEmisPerYear: number;
+  repaymentStrategy: RepaymentStrategy;
   updatedAt: number;
 };
 
@@ -25,7 +27,7 @@ function normalizeDraft(value: unknown, propertyId: string): PropertyPlanDraft |
   if (typeof value !== "object" || value == null) return null;
   const candidate = value as Partial<PropertyPlanDraft>;
   if (
-    candidate.version !== PLAN_DRAFT_VERSION
+    (candidate.version !== PLAN_DRAFT_VERSION && candidate.version !== 3)
     || candidate.propertyId !== propertyId
     || candidate.inputs == null
   ) {
@@ -41,6 +43,9 @@ function normalizeDraft(value: unknown, propertyId: string): PropertyPlanDraft |
       propertyId,
       inputs: normalizePlanInputs(candidate.inputs),
       extraEmisPerYear: Math.max(0, Math.floor(candidate.extraEmisPerYear ?? 0)),
+      repaymentStrategy: candidate.repaymentStrategy === "lower_emi"
+        ? "lower_emi"
+        : "finish_earlier",
       updatedAt: candidate.updatedAt ?? 0,
     };
   } catch {
@@ -62,12 +67,14 @@ export function writePlanDraft(
   propertyId: string,
   inputs: PlanInputs,
   extraEmisPerYear: number,
+  repaymentStrategy: RepaymentStrategy = "finish_earlier",
 ): PropertyPlanDraft {
   const draft: PropertyPlanDraft = {
     version: PLAN_DRAFT_VERSION,
     propertyId,
     inputs: normalizePlanInputs(inputs),
     extraEmisPerYear: Math.max(0, Math.floor(extraEmisPerYear)),
+    repaymentStrategy,
     updatedAt: Date.now(),
   };
   window.localStorage.setItem(planDraftStorageKey(propertyId), JSON.stringify(draft));

@@ -15,11 +15,13 @@ import {
 import { buildPlanSnapshotNote } from "../src/features/home-plan/planSnapshot.ts";
 import { buildMonthlyPlanVerdict, defaultPlanFocusYear } from "../src/features/home-plan/monthlyPlanView.ts";
 import {
+  buildLoanSchedule,
   isExplicitlyReadyStatus,
   monthlyPayment,
   principalFromMonthlyPayment,
   rentInMonth,
 } from "../src/features/home-plan/financeEngine.ts";
+import { calculateRepaymentDashboard } from "../src/features/home-plan/repaymentModel.ts";
 
 const BASE_INPUTS: PlanInputs = {
   propertyPriceLakh: 150,
@@ -526,6 +528,72 @@ test("extra EMIs update payoff, total interest, snapshot, and top insight togeth
   assert.match(view.insight, /Total interest lands near/);
   assert.match(note.detail, /3 extra EMIs\/year/);
   assert.equal(note.catalogKey, "plan:home-1:current");
+});
+
+test("repayment strategies compare the same extra-EMI rupees", () => {
+  const extraEmisPerYear = 2;
+  const finishEarlier = buildLoanSchedule(ready, {
+    extraEmisPerYear,
+    strategy: "finish_earlier",
+  });
+  const lowerEmi = buildLoanSchedule(ready, {
+    extraEmisPerYear,
+    strategy: "lower_emi",
+  });
+
+  assert.equal(finishEarlier.annualPrepayment, ready.monthlyEmiThousands * 1_000 * extraEmisPerYear);
+  assert.equal(lowerEmi.annualPrepayment, finishEarlier.annualPrepayment);
+  assert.ok(finishEarlier.payoffMonth! < finishEarlier.baselinePayoffMonth!);
+  assert.equal(lowerEmi.payoffMonth, lowerEmi.baselinePayoffMonth);
+  assert.ok(lowerEmi.endingMonthlyEmi < lowerEmi.openingMonthlyEmi);
+});
+
+test("repayment dashboard exposes crossover and declining incremental impact", () => {
+  const dashboard = calculateRepaymentDashboard(ready, 2, "finish_earlier");
+
+  assert.ok(dashboard.crossoverYear != null);
+  assert.ok(dashboard.repaymentYears.length > 1);
+  assert.ok(dashboard.prepaymentRun.length > 2);
+  assert.ok(dashboard.interestSaved > 0);
+  assert.ok(dashboard.monthsSaved > 0);
+  for (let index = 1; index < dashboard.prepaymentRun.length; index += 1) {
+    assert.ok(
+      dashboard.prepaymentRun[index].interestSaved
+      >= dashboard.prepaymentRun[index - 1].interestSaved,
+    );
+  }
+  assert.ok(
+    dashboard.prepaymentRun.at(-1)!.incrementalInterestSaved
+    <= dashboard.prepaymentRun[1].incrementalInterestSaved,
+  );
+});
+
+test("lower-EMI dashboard trades recurring commitment for monthly room", () => {
+  const dashboard = calculateRepaymentDashboard(ready, 3, "lower_emi");
+
+  // A final fixed extra payment may settle the remaining balance; before that
+  // edge, every prepayment is re-amortised to the baseline payoff month.
+  assert.ok(dashboard.monthsSaved >= 0);
+  assert.ok(dashboard.firstRecalculatedMonthlyEmi < dashboard.openingMonthlyEmi);
+  assert.ok(dashboard.firstRecalculatedMonthlyEmi > dashboard.endingMonthlyEmi);
+  assert.ok(dashboard.endingMonthlyEmi < dashboard.openingMonthlyEmi);
+  assert.ok(dashboard.interestSaved > 0);
+  assert.ok(dashboard.prepaymentRun.at(-1)!.monthlyEmiReduction > 0);
+});
+
+test("lower-EMI re-amortisation handles a zero-interest loan", () => {
+  const schedule = buildLoanSchedule({
+    ...ready,
+    loanRate: 0,
+    monthlyEmiThousands: 50,
+  }, {
+    extraEmisPerYear: 2,
+    strategy: "lower_emi",
+  });
+
+  assert.ok(Number.isFinite(schedule.endingMonthlyEmi));
+  assert.ok(schedule.endingMonthlyEmi < schedule.openingMonthlyEmi);
+  assert.ok(schedule.payoffMonth! <= schedule.baselinePayoffMonth!);
 });
 
 test("default plan focus stays on the selected holding period", () => {

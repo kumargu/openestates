@@ -169,7 +169,7 @@
 
 .home-plan-inline-studio__primary {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.55fr) auto minmax(0, 1.1fr);
   align-items: end;
   gap: clamp(0.85rem, 2vw, 1.5rem);
   padding: 0.7rem 0.15rem;
@@ -1341,6 +1341,294 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Repayment dashboard ───────────────────────────────────────────────── */
+
+.home-plan-repayment {
+  display: grid;
+  gap: 1rem;
+  padding: 0.4rem 0.15rem 1.5rem;
+  border-bottom: 1px solid var(--plan-line);
+}
+
+.home-plan-repayment__header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+}
+
+.home-plan-repayment__header h2,
+.home-plan-repayment__panel h3 {
+  margin: 0;
+  color: var(--plan-ink);
+  letter-spacing: -0.025em;
+}
+
+.home-plan-repayment__header h2 {
+  font-size: clamp(1.25rem, 2.2vw, 1.55rem);
+}
+
+.home-plan-repayment__header p {
+  margin: 0.35rem 0 0;
+  color: var(--plan-cool-deep);
+  font-size: clamp(0.9rem, 1.5vw, 1.05rem);
+  font-weight: 680;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-plan-repayment__strategy {
+  display: grid;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+
+.home-plan-repayment__strategy > span {
+  color: var(--plan-faint);
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.home-plan-repayment__strategy > div {
+  display: flex;
+  gap: 0.2rem;
+  padding: 3px;
+  border: 1px solid var(--plan-line);
+  border-radius: 10px;
+  background: var(--plan-soft);
+}
+
+.home-plan-repayment__strategy button {
+  padding: 0.45rem 0.7rem;
+  border: 0;
+  border-radius: 7px;
+  color: var(--plan-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.home-plan-repayment__strategy button.is-active {
+  color: var(--plan-ink);
+  background: white;
+  box-shadow: 0 1px 5px rgba(31, 24, 20, 0.08);
+}
+
+.home-plan-repayment__panel {
+  min-width: 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--plan-line);
+}
+
+.home-plan-repayment__panel h3 {
+  font-size: 0.82rem;
+  font-weight: 680;
+}
+
+.home-plan-repayment__panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem 1.5rem;
+}
+
+.home-plan-repayment__legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 0.35rem 0.75rem;
+  color: var(--plan-faint);
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.home-plan-repayment__legend span::before {
+  content: "";
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.3rem;
+  border-radius: 2px;
+  vertical-align: -0.05rem;
+  background: currentColor;
+}
+
+.home-plan-repayment__legend .is-interest { color: #c4893a; }
+.home-plan-repayment__legend .is-principal { color: var(--plan-cool); }
+.home-plan-repayment__legend .is-extra { color: var(--plan-buy); }
+.home-plan-repayment__legend .is-balance { color: var(--plan-ink); }
+
+.home-plan-repayment__legend .is-balance::before {
+  width: 0.8rem;
+  height: 2px;
+  border-radius: 99px;
+}
+
+.home-plan-repayment__mix-chart,
+.home-plan-repayment__impact-chart {
+  display: block;
+  width: 100%;
+  overflow: visible;
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+
+.home-plan-repayment__mix-chart {
+  height: clamp(220px, 34vw, 280px);
+}
+
+.home-plan-repayment__impact-chart {
+  height: clamp(140px, 21vw, 180px);
+}
+
+.home-plan-repayment__grid {
+  stroke: rgba(50, 38, 30, 0.075);
+  stroke-dasharray: 2 7;
+  vector-effect: non-scaling-stroke;
+}
+
+.home-plan-repayment__bar-interest { fill: rgba(196, 137, 58, 0.7); }
+.home-plan-repayment__bar-principal { fill: rgba(91, 127, 176, 0.78); }
+.home-plan-repayment__bar-extra { fill: rgba(201, 107, 79, 0.82); }
+
+.home-plan-repayment__balance-line,
+.home-plan-repayment__impact-line {
+  fill: none;
+  stroke: var(--plan-ink);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.home-plan-repayment__impact-line {
+  stroke: var(--plan-cool-deep);
+}
+
+.home-plan-repayment__impact-area {
+  fill: var(--plan-cool-soft);
+  stroke: none;
+}
+
+.home-plan-repayment__marker line,
+.home-plan-repayment__cursor line {
+  stroke: var(--plan-line-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.home-plan-repayment__marker text {
+  fill: var(--plan-faint);
+  font-size: 9px;
+  font-weight: 650;
+  text-anchor: middle;
+}
+
+.home-plan-repayment__cursor circle {
+  fill: white;
+  stroke: var(--plan-cool-deep);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.home-plan-repayment__axis-label {
+  fill: var(--plan-faint);
+  font-size: 9px;
+  text-anchor: middle;
+}
+
+.home-plan-repayment__readout {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--plan-line);
+}
+
+.home-plan-repayment__readout div {
+  min-width: 0;
+}
+
+.home-plan-repayment__readout dt {
+  color: var(--plan-faint);
+  font-size: 0.62rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.home-plan-repayment__readout dd {
+  margin: 0.2rem 0 0;
+  color: var(--plan-ink);
+  font-size: 0.82rem;
+  font-weight: 680;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-plan-repayment__impact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(0.9rem, 2vw, 1.5rem);
+}
+
+.home-plan-repayment__impact-readout,
+.home-plan-repayment__empty {
+  margin: 0;
+  color: var(--plan-muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-plan-repayment__impact-readout strong {
+  color: var(--plan-ink);
+}
+
+.home-plan-repayment__empty {
+  padding: 1rem 0;
+  border-top: 1px solid var(--plan-line);
+}
+
+.home-plan-repayment__formula {
+  border-top: 1px solid var(--plan-line);
+  color: var(--plan-muted);
+  font-size: 0.72rem;
+}
+
+.home-plan-repayment__formula summary {
+  width: fit-content;
+  padding-top: 0.8rem;
+  color: var(--plan-muted);
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.home-plan-repayment__formula > div {
+  display: grid;
+  gap: 0.55rem;
+  max-width: 48rem;
+  padding-top: 0.7rem;
+}
+
+.home-plan-repayment__formula p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.home-plan-repayment__formula code {
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  color: var(--plan-ink);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
 /* ── Controls drawer ──────────────────────────────────────────────────── */
 
 .home-plan-range-control input {
@@ -1712,10 +2000,6 @@
     max-width: none;
   }
 
-  .home-plan-payoff__year-focus {
-    grid-template-columns: 1fr;
-  }
-
 }
 
 @media (max-width: 1200px) and (min-width: 641px) {
@@ -1804,38 +2088,38 @@
     grid-column: 1 / -1;
   }
 
-  .home-plan-payoff__seg {
-    grid-template-columns: repeat(6, minmax(58px, 1fr));
-    overflow-x: auto;
+  .home-plan-repayment__header {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .home-plan-payoff__lever {
+  .home-plan-repayment__strategy {
+    align-self: start;
+  }
+
+  .home-plan-repayment__impact-grid {
     grid-template-columns: 1fr;
-    gap: 0.45rem;
   }
 
-  .home-plan-payoff .home-plan-verdict__headline {
-    font-size: clamp(1.65rem, 8vw, 2.15rem);
+  .home-plan-repayment__panel-heading {
+    align-items: start;
+    flex-direction: column;
   }
 
-  .home-plan-payoff__chart {
-    height: 210px;
+  .home-plan-repayment__legend {
+    justify-content: start;
   }
 
-  .home-plan-payoff__year-readout dl {
-    grid-template-columns: 1fr;
-    gap: 0.45rem;
+  .home-plan-repayment__readout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .home-plan-payoff__year-readout dl > div {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.75rem;
+  .home-plan-repayment__marker text {
+    font-size: 16px;
   }
 
-  .home-plan-payoff__year-readout dd {
-    margin-top: 0;
+  .home-plan-repayment__axis-label {
+    font-size: 13px;
   }
 
   .home-plan-controls {
@@ -1862,6 +2146,8 @@
   .home-plan-graph-line,
   .home-plan-graph-end-label,
   .home-plan-graph-point,
+  .home-plan-repayment__balance-line,
+  .home-plan-repayment__impact-line,
   .home-plan-time-rail__fill,
   .home-plan-loading-pane > div {
     transition: none;

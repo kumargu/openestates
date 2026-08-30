@@ -27,13 +27,15 @@ test("Buy vs Rent drafts remain independent per property", () => {
   const first = { ...buildBaselinePlanInputs(20_000_000), monthlyEmiThousands: 175 };
   const second = { ...buildBaselinePlanInputs(30_000_000), monthlyEmiThousands: 240 };
 
-  writePlanDraft("home/one", first, 2);
+  writePlanDraft("home/one", first, 2, "lower_emi");
   writePlanDraft("home-two", second, 4);
 
   assert.equal(readPlanDraft("home/one")?.inputs.monthlyEmiThousands, 175);
   assert.equal(readPlanDraft("home/one")?.extraEmisPerYear, 2);
+  assert.equal(readPlanDraft("home/one")?.repaymentStrategy, "lower_emi");
   assert.equal(readPlanDraft("home-two")?.inputs.monthlyEmiThousands, 240);
   assert.equal(readPlanDraft("home-two")?.extraEmisPerYear, 4);
+  assert.equal(readPlanDraft("home-two")?.repaymentStrategy, "finish_earlier");
   assert.match(planDraftStorageKey("home/one"), /home%2Fone$/);
 });
 
@@ -60,6 +62,19 @@ test("drafts without the current down-payment model are dropped", () => {
   }));
 
   assert.equal(readPlanDraft("home-1"), null);
+});
+
+test("version 3 drafts migrate to finish-earlier repayment", () => {
+  values.clear();
+  values.set(planDraftStorageKey("home-1"), JSON.stringify({
+    version: 3,
+    propertyId: "home-1",
+    inputs: buildBaselinePlanInputs(20_000_000),
+    extraEmisPerYear: 2,
+    updatedAt: Date.now(),
+  }));
+
+  assert.equal(readPlanDraft("home-1")?.repaymentStrategy, "finish_earlier");
 });
 
 test("reset clears the stored draft so defaults come back", () => {

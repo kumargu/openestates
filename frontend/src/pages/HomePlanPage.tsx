@@ -14,6 +14,7 @@ import {
 } from "../lib/workspaceNav.ts";
 import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
 import { PlanGraph } from "../features/home-plan/PlanGraph.tsx";
+import { RepaymentDashboard } from "../features/home-plan/RepaymentDashboard.tsx";
 import { PlanWhisper } from "../features/home-plan/PlanWhisper.tsx";
 import { VerdictBlock } from "../features/home-plan/VerdictBlock.tsx";
 import {
@@ -32,7 +33,9 @@ import { DEFAULT_PLAN_MODEL_CONFIG } from "../features/home-plan/modelConfig.ts"
 import {
   isExplicitlyReadyStatus,
   parsePlanDate,
+  type RepaymentStrategy,
 } from "../features/home-plan/financeEngine.ts";
+import { calculateRepaymentDashboard } from "../features/home-plan/repaymentModel.ts";
 import { buildMonthlyPlanVerdict, defaultPlanFocusYear } from "../features/home-plan/monthlyPlanView.ts";
 import {
   canPersistPlanDraft,
@@ -114,6 +117,7 @@ export function HomePlanPage() {
   const [extraEmisPerYear, setExtraEmisPerYear] = useState(
     DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear,
   );
+  const [repaymentStrategy, setRepaymentStrategy] = useState<RepaymentStrategy>("finish_earlier");
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
@@ -152,6 +156,7 @@ export function HomePlanPage() {
         if (!hasPlannablePrice(data.property.price)) {
           setInputs(null);
           setExtraEmisPerYear(DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear);
+          setRepaymentStrategy("finish_earlier");
           setStatus("no_price");
           return;
         }
@@ -165,6 +170,7 @@ export function HomePlanPage() {
         setExtraEmisPerYear(
           draft?.extraEmisPerYear ?? DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear,
         );
+        setRepaymentStrategy(draft?.repaymentStrategy ?? "finish_earlier");
         setStatus("ready");
       })
       .catch((error: unknown) => {
@@ -176,8 +182,16 @@ export function HomePlanPage() {
   }, [id, retryKey]);
 
   const projection = useMemo(
-    () => inputs ? calculateProjection(inputs, extraEmisPerYear) : null,
-    [inputs, extraEmisPerYear],
+    () => inputs
+      ? calculateProjection(inputs, extraEmisPerYear, DEFAULT_PLAN_MODEL_CONFIG, repaymentStrategy)
+      : null,
+    [inputs, extraEmisPerYear, repaymentStrategy],
+  );
+  const repayment = useMemo(
+    () => inputs
+      ? calculateRepaymentDashboard(inputs, extraEmisPerYear, repaymentStrategy)
+      : null,
+    [inputs, extraEmisPerYear, repaymentStrategy],
   );
 
   const workspacePropertyIds = [...new Set([...(id ? [id] : []), ...propertyIds])];
@@ -225,6 +239,7 @@ export function HomePlanPage() {
     || propertyData?.property.id !== id
     || !inputs
     || !projection
+    || !repayment
   ) {
     const propertyIsChanging = Boolean(id)
       && status === "ready"
@@ -313,22 +328,32 @@ export function HomePlanPage() {
     projection.loanFreeYear ?? "open",
   ].join(":");
   // Drafts capture what the buyer changed, so they are written on edit only.
-  const persistEdit = (nextInputs: PlanInputs, nextExtraEmisPerYear: number) => {
+  const persistEdit = (
+    nextInputs: PlanInputs,
+    nextExtraEmisPerYear: number,
+    nextRepaymentStrategy: RepaymentStrategy,
+  ) => {
     if (!canPersistPlanDraft(id, propertyData.property.id, status)) return;
-    writePlanDraft(id, nextInputs, nextExtraEmisPerYear);
+    writePlanDraft(id, nextInputs, nextExtraEmisPerYear, nextRepaymentStrategy);
   };
 
   const updateInput = (key: EditablePlanInput, value: number) => {
     const next = updatePlanInput(inputs, key, value);
     setPreviewYear(null);
     setInputs(next);
-    persistEdit(next, extraEmisPerYear);
+    persistEdit(next, extraEmisPerYear, repaymentStrategy);
   };
 
   const updateExtraEmisPerYear = (count: number) => {
     setPreviewYear(null);
     setExtraEmisPerYear(count);
-    persistEdit(inputs, count);
+    persistEdit(inputs, count, repaymentStrategy);
+  };
+
+  const updateRepaymentStrategy = (strategy: RepaymentStrategy) => {
+    setPreviewYear(null);
+    setRepaymentStrategy(strategy);
+    persistEdit(inputs, extraEmisPerYear, strategy);
   };
 
   const resetInputs = () => {
@@ -336,6 +361,7 @@ export function HomePlanPage() {
     setPreviewYear(null);
     setPinnedYear(null);
     setExtraEmisPerYear(DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear);
+    setRepaymentStrategy("finish_earlier");
     clearPlanDraft(id);
   };
 
@@ -373,6 +399,11 @@ export function HomePlanPage() {
               onInputChange={updateInput}
               onExtraEmisChange={updateExtraEmisPerYear}
               onReset={resetInputs}
+            />
+
+            <RepaymentDashboard
+              model={repayment}
+              onStrategyChange={updateRepaymentStrategy}
             />
 
             <section className="home-plan-stage" aria-label="Projection over time">
