@@ -49,6 +49,17 @@ class OsmAccessCorridorTests(unittest.TestCase):
                         {"lat": 12.9830, "lon": 77.7440},
                     ],
                 },
+                {
+                    "type": "way",
+                    "id": 12,
+                    "tags": {"landuse": "residential", "name": "Waterford"},
+                    "geometry": [
+                        {"lat": 12.9805, "lon": 77.7405},
+                        {"lat": 12.9805, "lon": 77.7415},
+                        {"lat": 12.9815, "lon": 77.7415},
+                        {"lat": 12.9805, "lon": 77.7405},
+                    ],
+                },
             ]
         }
 
@@ -72,6 +83,11 @@ class OsmAccessCorridorTests(unittest.TestCase):
             [[77.741, 12.981], [77.742, 12.982], [77.743, 12.983]],
         )
         self.assertGreater(record["frontage_distance_meters"], 0)
+        self.assertEqual(record["boundary_name"], "Waterford")
+        self.assertEqual(record["boundary_way_id"], "12")
+        self.assertEqual(
+            json.loads(record["boundary_geometry_geojson"])["type"], "Polygon"
+        )
         geometry = json.loads(record["geometry_geojson"])
         self.assertEqual(geometry["type"], "LineString")
         self.assertEqual(geometry["coordinates"][0], [77.741, 12.981])
@@ -222,11 +238,15 @@ class OsmAccessCorridorTests(unittest.TestCase):
 
     def test_overpass_query_is_config_driven(self):
         query = access_roads_overpass_query(
-            (12.9, 77.5, 13.0, 77.6), ["primary", "residential"], 45
+            (12.9, 77.5, 13.0, 77.6),
+            ["primary", "residential"],
+            ["residential"],
+            45,
         )
 
         self.assertIn('[timeout:45]', query)
         self.assertIn("primary|residential", query)
+        self.assertIn('way["landuse"~"^(residential)$"]["name"]', query)
 
 
 if __name__ == "__main__":

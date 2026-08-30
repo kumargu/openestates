@@ -381,6 +381,7 @@ export type MapHomeAnchor = {
   area?: string;
   latitude?: number;
   longitude?: number;
+  boundary?: MapOverlayPolygon;
 };
 
 export type MapPlacePin = {
@@ -523,7 +524,15 @@ export type SceneAnchor = {
   label: string;
   area?: string;
   geometry?: SceneGeometry;
+  boundary?: SceneBoundary;
   coordinateQuality: SceneCoordinateQuality;
+};
+
+export type SceneBoundary = {
+  geometry: SceneGeometry;
+  sourceType: string;
+  sourceUrl?: string;
+  confidence: number;
 };
 
 export type SceneViewport = {

@@ -529,6 +529,7 @@ function AroundThisHomePlateInner({
                     latitude: home.latitude,
                     longitude: home.longitude,
                     name: context.home.name,
+                    boundary: context.home.boundary,
                   }}
                   places={singles}
                   clusters={clusters}

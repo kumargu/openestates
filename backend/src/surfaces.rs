@@ -49,7 +49,19 @@ pub struct SceneAnchor {
     pub area: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<SceneGeometry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub boundary: Option<SceneBoundary>,
     pub coordinate_quality: CoordinateQuality,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneBoundary {
+    pub geometry: SceneGeometry,
+    pub source_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+    pub confidence: f32,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -256,6 +268,16 @@ pub fn build_surface_scene_with_focus(
         _ => entity_refs.society_entity_id.clone(),
     };
     let anchor_coords = coordinates_for_entity(bundle, &anchor_entity_id);
+    let anchor_boundary = scene_config
+        .anchor
+        .boundary_fact_key
+        .as_deref()
+        .and_then(|fact_key| {
+            bundle
+                .fact_index
+                .entity(&anchor_entity_id)
+                .and_then(|rows| scene_boundary_from_rows(rows, fact_key))
+        });
     let anchor = SceneAnchor {
         entity_id: anchor_entity_id.clone(),
         label: society_name
@@ -264,6 +286,7 @@ pub fn build_surface_scene_with_focus(
             .to_string(),
         area: (!property.area.trim().is_empty()).then(|| property.area.clone()),
         geometry: anchor_coords.map(point_geometry),
+        boundary: anchor_boundary,
         coordinate_quality: anchor_coords
             .map(|_| CoordinateQuality::Exact)
             .unwrap_or(CoordinateQuality::Missing),
@@ -992,6 +1015,28 @@ fn scene_geometry_from_rows(rows: &ServingEntityFactRows) -> Option<SceneGeometr
         .next()
 }
 
+fn scene_boundary_from_rows(rows: &ServingEntityFactRows, fact_key: &str) -> Option<SceneBoundary> {
+    rows.facts
+        .iter()
+        .filter(|fact| fact.fact_key == fact_key)
+        .filter_map(|fact| {
+            let FactValue::Text(value) = &fact.value else {
+                return None;
+            };
+            let geometry = scene_geometry_from_geojson(value)?;
+            if !matches!(geometry, SceneGeometry::Polygon { .. }) {
+                return None;
+            }
+            Some(SceneBoundary {
+                geometry,
+                source_type: fact.source_type.clone(),
+                source_url: fact.source_url.clone(),
+                confidence: fact.confidence,
+            })
+        })
+        .next()
+}
+
 fn scene_geometry_from_geojson(value: &str) -> Option<SceneGeometry> {
     let parsed = value.parse::<GeoJson>().ok()?;
     match parsed {
@@ -1018,11 +1063,27 @@ fn scene_geometry_from_geojson_value(value: &GeoJsonValue) -> Option<SceneGeomet
                 _ => false,
             })
         }),
+        GeoJsonValue::Polygon(rings) => geojson_polygon(rings),
         GeoJsonValue::GeometryCollection(geometries) => geometries
             .iter()
             .find_map(|geometry| scene_geometry_from_geojson_value(&geometry.value)),
         _ => None,
     }
+}
+
+fn geojson_polygon(rings: &[Vec<Vec<f64>>]) -> Option<SceneGeometry> {
+    let coordinates = rings
+        .iter()
+        .map(|ring| {
+            ring.iter()
+                .map(|point| {
+                    geojson_point(point).map(|(latitude, longitude)| [longitude, latitude])
+                })
+                .collect::<Option<Vec<_>>>()
+        })
+        .collect::<Option<Vec<_>>>()?;
+    (!coordinates.is_empty() && coordinates.iter().all(|ring| ring.len() >= 4))
+        .then_some(SceneGeometry::Polygon { coordinates })
 }
 
 fn geojson_line_string(points: &[Vec<f64>]) -> Option<SceneGeometry> {
@@ -1633,6 +1694,7 @@ mod tests {
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
+                    boundary_fact_key: None,
                 },
                 layers: vec![UiSurfaceLayerRule {
                     id: "drains".to_string(),
@@ -1739,6 +1801,7 @@ mod tests {
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
+                    boundary_fact_key: None,
                 },
                 layers: vec![UiSurfaceLayerRule {
                     id: "red_flags".to_string(),
@@ -1839,6 +1902,7 @@ mod tests {
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
+                    boundary_fact_key: None,
                 },
                 layers: vec![UiSurfaceLayerRule {
                     id: "red_flags".to_string(),
@@ -1964,6 +2028,7 @@ mod tests {
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
+                    boundary_fact_key: None,
                 },
                 layers: vec![UiSurfaceLayerRule {
                     id: "tech".to_string(),
@@ -2083,6 +2148,7 @@ mod tests {
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
+                    boundary_fact_key: None,
                 },
                 layers: vec![UiSurfaceLayerRule {
                     id: "red_flags".to_string(),
@@ -2184,6 +2250,7 @@ mod tests {
             scene: Some(crate::dag_config::UiSurfaceSceneConfig {
                 anchor: crate::dag_config::UiSurfaceAnchorConfig {
                     entity_ref: "society".to_string(),
+                    boundary_fact_key: None,
                 },
                 layers: vec![UiSurfaceLayerRule {
                     id: "red_flags".to_string(),

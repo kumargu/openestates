@@ -53,6 +53,7 @@ export function propertyMapContextFromSurfaceScene(
       area: scene.anchor.area,
       latitude: anchorCoordinates?.latitude,
       longitude: anchorCoordinates?.longitude,
+      boundary: mapAnchorBoundary(scene) ?? fallback?.home.boundary,
     },
     layers,
     places,
@@ -64,6 +65,20 @@ export function propertyMapContextFromSurfaceScene(
     layer_lines: layerLines,
     green_patches: fallback?.green_patches,
     lakes: fallback?.lakes,
+  };
+}
+
+function mapAnchorBoundary(scene: SurfaceSceneResponse): PropertyMapContext["home"]["boundary"] {
+  const boundary = scene.anchor.boundary;
+  if (!boundary || boundary.geometry.type !== "Polygon") return undefined;
+  const coordinates = boundary.geometry.coordinates[0];
+  if (!coordinates || coordinates.length < 4) return undefined;
+  return {
+    id: `${scene.anchor.entityId}:boundary`,
+    name: scene.anchor.label,
+    kind: "society_boundary",
+    coordinates,
+    source_type: boundary.sourceType,
   };
 }
 

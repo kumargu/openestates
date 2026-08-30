@@ -24,7 +24,12 @@ import {
 import { NOTEBOOK_SAVE_ICON_PATH } from "../notebook/NotebookSaveIcon.tsx";
 
 export type AroundThisHomeMapProps = {
-  home: { latitude: number; longitude: number; name: string };
+  home: {
+    latitude: number;
+    longitude: number;
+    name: string;
+    boundary?: MapOverlayPolygon;
+  };
   places: NumberedPlace[];
   clusters: PlaceCluster[];
   selectedId: string | null;
@@ -532,6 +537,15 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     for (const child of childrenRef.current) child.remove();
     const nextChildren: Map3DChild[] = [];
 
+    if (cameraMode === "home" && home.boundary) {
+      addPolygon(
+        map,
+        library,
+        home.boundary,
+        { fill: "#f8f1df1f", stroke: "#fff7e3e6" },
+        nextChildren,
+      );
+    }
     const showGreenPatches = places.some((place) => place.layer === "parks");
     for (const patch of showGreenPatches ? greenPatches : EMPTY_POLYGONS) {
       addPolygon(map, library, patch, { fill: "#6e9d6e26", stroke: "#50795099" }, nextChildren);
@@ -666,6 +680,8 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     accessLines,
     clusters,
     greenPatches,
+    cameraMode,
+    home.boundary,
     home.latitude,
     home.longitude,
     home.name,

@@ -14,6 +14,7 @@
     "max_snap_distance_meters": 300.0,
     "allow_partial_subject_failures": false,
     "confidence": 0.78,
+    "boundary_landuse_values": ["residential"],
     "road_suffixes": ["Road", "Street", "Marg"],
     "highway_values": [
       "primary",
@@ -39,5 +40,8 @@
   "approach_road": {
     "summary_fact_key": "approach_road",
     "linked_entity_fact_key": "approach_road_entity"
+  },
+  "society_boundary": {
+    "geometry_fact_key": "society.boundary_geojson"
   }
 }

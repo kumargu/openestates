@@ -41,6 +41,7 @@ def collect_access_corridor_records(
     max_snap_distance = float(collector.get("max_snap_distance_meters") or 300.0)
     padding_meters = float(collector.get("bbox_padding_meters") or 450.0)
     highway_values = _string_list(collector.get("highway_values"))
+    boundary_landuse_values = _string_list(collector.get("boundary_landuse_values"))
     timeout_seconds = int(collector.get("query_timeout_seconds") or 60)
 
     for subject in subjects:
@@ -55,6 +56,7 @@ def collect_access_corridor_records(
         query = access_roads_overpass_query(
             _padded_bbox((subject, *station_candidates), padding_meters),
             highway_values,
+            boundary_landuse_values,
             timeout_seconds,
         )
         query_hashes.append(hashlib.sha256(query.encode("utf-8")).hexdigest())
@@ -106,6 +108,7 @@ def collect_access_corridor_records(
 def access_roads_overpass_query(
     bbox: Tuple[float, float, float, float],
     highway_values: List[str],
+    boundary_landuse_values: List[str],
     timeout_seconds: int,
 ) -> str:
     pattern = "|".join(sorted(set(highway_values))) or (
@@ -113,11 +116,19 @@ def access_roads_overpass_query(
         "service|living_street|pedestrian|footway|path|steps"
     )
     south, west, north, east = bbox
+    boundary_pattern = "|".join(sorted(set(boundary_landuse_values)))
+    boundary_query = (
+        f'  way["landuse"~"^({boundary_pattern})$"]["name"]'
+        f"({south:.7f},{west:.7f},{north:.7f},{east:.7f});\n"
+        if boundary_pattern
+        else ""
+    )
     return (
         f"[out:json][timeout:{timeout_seconds}];\n"
         "(\n"
         f'  way["highway"~"^({pattern})$"]'
         f"({south:.7f},{west:.7f},{north:.7f},{east:.7f});\n"
+        f"{boundary_query}"
         ");\n"
         "out tags geom;"
     )
@@ -182,6 +193,7 @@ def access_corridor_record(
         None,
     )
     frontage_points = _way_points(payload, frontage_way_id)
+    boundary = _society_boundary(payload, str(subject.get("name") or ""))
     frontage_distance_meters = (
         sum(_distance_m(left, right) for left, right in zip(frontage_points, frontage_points[1:]))
         if len(frontage_points) >= 2
@@ -219,6 +231,9 @@ def access_corridor_record(
             if len(frontage_points) >= 2
             else None
         ),
+        "boundary_name": boundary[1] if boundary else None,
+        "boundary_way_id": boundary[0] if boundary else None,
+        "boundary_geometry_geojson": boundary[2] if boundary else None,
         "road_names": route_names,
         "route_way_ids": [str(value) for value in route_way_ids],
         "distance_meters": distance_meters,
@@ -253,6 +268,8 @@ def _street_graph(
         if not isinstance(element, dict) or element.get("type") != "way":
             continue
         tags = element.get("tags") if isinstance(element.get("tags"), dict) else {}
+        if not tags.get("highway"):
+            continue
         if str(tags.get("access") or "").lower() in {"no"}:
             continue
         geometry = element.get("geometry") or []
@@ -280,6 +297,45 @@ def _street_graph(
             way_ids[(left, right)] = way_id
             way_ids[(right, left)] = way_id
     return graph, edge_names, way_ids
+
+
+def _society_boundary(
+    payload: Dict[str, Any], subject_name: str
+) -> Optional[Tuple[str, str, str]]:
+    normalized_subject = _normalized_name(subject_name)
+    if not normalized_subject:
+        return None
+    for element in payload.get("elements") or []:
+        if not isinstance(element, dict) or element.get("type") != "way":
+            continue
+        tags = element.get("tags") if isinstance(element.get("tags"), dict) else {}
+        name = _optional_string(tags.get("name"))
+        if not name or _normalized_name(name) != normalized_subject:
+            continue
+        points = [
+            coordinate
+            for point in element.get("geometry") or []
+            if isinstance(point, dict)
+            and (coordinate := _coordinate(point)) is not None
+        ]
+        if len(points) < 4 or points[0] != points[-1]:
+            continue
+        geometry = json.dumps(
+            {
+                "type": "Polygon",
+                "coordinates": [
+                    [[longitude, latitude] for latitude, longitude in points]
+                ],
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        return str(element.get("id") or ""), name, geometry
+    return None
+
+
+def _normalized_name(value: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", value.lower()))
 
 
 def _way_points(payload: Dict[str, Any], way_id: Optional[str]) -> List[Coordinate]:

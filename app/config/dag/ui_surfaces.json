@@ -39,7 +39,10 @@
         "targetId": "around-this-home"
       },
       "scene": {
-        "anchor": { "entityRef": "society" },
+        "anchor": {
+          "entityRef": "society",
+          "boundaryFactKey": "society.boundary_geojson"
+        },
         "layers": [
           {
             "id": "metro",
@@ -68,15 +71,15 @@
             "experience": {
               "kind": "street_view_tour",
               "distanceEachDirectionM": 300,
-              "waypointSpacingM": 60,
-              "dwellMs": 900,
-              "curveDwellMs": 1700,
-              "sideRoadDwellMs": 1400,
+              "waypointSpacingM": 100,
+              "dwellMs": 3600,
+              "curveDwellMs": 5600,
+              "sideRoadDwellMs": 5000,
               "cameraAltitudeM": 25,
               "cameraRangeM": 145,
               "cameraTilt": 80,
               "cameraFov": 38,
-              "streetViewZoom": 0.5,
+              "streetViewZoom": 0.8,
               "transitionMs": 700
             },
             "icon": "road",

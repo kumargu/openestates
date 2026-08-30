@@ -61,6 +61,8 @@ pub struct MapHomeAnchor {
     pub latitude: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub longitude: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub boundary: Option<crate::routes::map_overlays::MapOverlayPolygon>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -218,6 +220,7 @@ pub fn build_property_map_context(
             area: (!property.area.trim().is_empty()).then(|| property.area.clone()),
             latitude: overlay_home.map(|coords| coords.0),
             longitude: overlay_home.map(|coords| coords.1),
+            boundary: None,
         },
         places,
         water,
@@ -325,6 +328,18 @@ pub fn property_map_context_from_surface_scene(
             area: scene.anchor.area.clone(),
             latitude: home_coords.map(|coords| coords.0),
             longitude: home_coords.map(|coords| coords.1),
+            boundary: scene.anchor.boundary.as_ref().and_then(|boundary| {
+                polygon_coordinates(&boundary.geometry).map(|coordinates| {
+                    crate::routes::map_overlays::MapOverlayPolygon {
+                        id: format!("{}:boundary", scene.anchor.entity_id),
+                        name: scene.anchor.label.clone(),
+                        kind: "society_boundary".to_string(),
+                        coordinates,
+                        distance_km: None,
+                        source_type: boundary.source_type.clone(),
+                    }
+                })
+            }),
         },
         places,
         water: None,
@@ -357,6 +372,15 @@ fn line_coordinates(geometry: &SceneGeometry) -> Option<Vec<[f64; 2]>> {
                 .iter()
                 .all(|[longitude, latitude]| latitude.is_finite() && longitude.is_finite());
             (coordinates.len() >= 2 && valid).then(|| coordinates.clone())
+        }
+        _ => None,
+    }
+}
+
+fn polygon_coordinates(geometry: &SceneGeometry) -> Option<Vec<[f64; 2]>> {
+    match geometry {
+        SceneGeometry::Polygon { coordinates } => {
+            coordinates.first().filter(|ring| ring.len() >= 4).cloned()
         }
         _ => None,
     }
@@ -1268,9 +1292,9 @@ mod tests {
     use crate::models::KgEntityRefs;
     use crate::serving::ServingFactRecord;
     use crate::surfaces::{
-        CoordinateQuality, DisplayTone, FillState, SceneAnchor, SceneFeature, SceneFeatureDisplay,
-        SceneFillRate, SceneGeometry, SceneLayer, SceneMetrics, SceneReceipt, SceneViewport,
-        SurfaceSceneResponse,
+        CoordinateQuality, DisplayTone, FillState, SceneAnchor, SceneBoundary, SceneFeature,
+        SceneFeatureDisplay, SceneFillRate, SceneGeometry, SceneLayer, SceneMetrics, SceneReceipt,
+        SceneViewport, SurfaceSceneResponse,
     };
 
     fn fact(
@@ -1375,6 +1399,19 @@ mod tests {
                 geometry: Some(SceneGeometry::Point {
                     coordinates: [77.75, 12.98],
                 }),
+                boundary: Some(SceneBoundary {
+                    geometry: SceneGeometry::Polygon {
+                        coordinates: vec![vec![
+                            [77.74, 12.97],
+                            [77.76, 12.97],
+                            [77.76, 12.99],
+                            [77.74, 12.97],
+                        ]],
+                    },
+                    source_type: "OpenStreetMap".to_string(),
+                    source_url: Some("https://www.openstreetmap.org/way/1".to_string()),
+                    confidence: 0.78,
+                }),
                 coordinate_quality: CoordinateQuality::Exact,
             },
             viewport: SceneViewport {
@@ -1451,6 +1488,14 @@ mod tests {
             .expect("point scene should project to map context");
         assert_eq!(context.home.name, "Sample Society");
         assert_eq!(context.home.latitude, Some(12.98));
+        assert_eq!(
+            context
+                .home
+                .boundary
+                .as_ref()
+                .map(|boundary| boundary.coordinates.len()),
+            Some(4)
+        );
         assert_eq!(context.places[0].distance_km, Some(0.65));
         assert_eq!(context.places[0].source_type, "Google");
     }
@@ -1476,6 +1521,7 @@ mod tests {
                 geometry: Some(SceneGeometry::Point {
                     coordinates: [77.75, 12.98],
                 }),
+                boundary: None,
                 coordinate_quality: CoordinateQuality::Exact,
             },
             viewport: SceneViewport {

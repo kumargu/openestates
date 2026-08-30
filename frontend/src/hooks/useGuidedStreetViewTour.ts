@@ -73,6 +73,10 @@ function headingDistance(left: number, right: number): number {
   return Math.min(difference, 360 - difference);
 }
 
+export function shouldReorientStreetView(currentHeading: number, nextHeading: number): boolean {
+  return headingDistance(currentHeading, nextHeading) >= CURVE_THRESHOLD_DEGREES;
+}
+
 export function streetViewPlayback(frames: StreetViewFrame[]): StreetViewFrame[] {
   if (frames.length === 0) return [];
   const sorted = frames.slice().sort((left, right) =>
@@ -216,6 +220,7 @@ export function useGuidedStreetViewTour({
 
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       const seenJunctions = new Set<string>();
+      let cameraHeading = first.waypoint.heading;
       void (async () => {
         for (let index = 0; index < playback.length; index += 1) {
           if (tourRunRef.current !== runId) return;
@@ -229,7 +234,10 @@ export function useGuidedStreetViewTour({
             ? frame.waypoint.heading
             : normalizeHeading(frame.waypoint.heading + 180);
           panorama.setPano(frame.pano);
-          panorama.setPov({ heading: roadHeading, pitch: 0 });
+          if (shouldReorientStreetView(cameraHeading, roadHeading)) {
+            panorama.setPov({ heading: roadHeading, pitch: 0 });
+            cameraHeading = roadHeading;
+          }
 
           const curve = next
             ? headingDistance(frame.waypoint.heading, next.waypoint.heading)
@@ -250,6 +258,7 @@ export function useGuidedStreetViewTour({
               await waitFor(experience.sideRoadDwellMs);
               if (tourRunRef.current !== runId) return;
               panorama.setPov({ heading: roadHeading, pitch: 0 });
+              cameraHeading = roadHeading;
               await waitFor(Math.round(experience.dwellMs / 2));
             }
           }

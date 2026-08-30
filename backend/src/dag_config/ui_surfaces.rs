@@ -67,6 +67,8 @@ pub struct UiSurfaceSceneConfig {
 pub struct UiSurfaceAnchorConfig {
     #[serde(rename = "entityRef")]
     pub entity_ref: String,
+    #[serde(default, rename = "boundaryFactKey")]
+    pub boundary_fact_key: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -223,6 +225,17 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                 surface.id
             )));
         }
+        if scene
+            .anchor
+            .boundary_fact_key
+            .as_deref()
+            .is_some_and(|fact_key| fact_key.trim().is_empty())
+        {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "surface {} has a blank scene anchor boundaryFactKey",
+                surface.id
+            )));
+        }
         for layer in &scene.layers {
             if layer.id.trim().is_empty() {
                 return Err(DagConfigError::InvalidConfig(format!(
@@ -323,6 +336,10 @@ mod tests {
             .expect("around_this_home surface exists");
         let scene = around.scene.as_ref().expect("scene rules exist");
         assert_eq!(scene.anchor.entity_ref, "society");
+        assert_eq!(
+            scene.anchor.boundary_fact_key.as_deref(),
+            Some("society.boundary_geojson")
+        );
         let metro = scene
             .layers
             .iter()

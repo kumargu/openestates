@@ -22,6 +22,12 @@ fn waterford_corridor() -> OsmTransitAccessCorridorRecord {
             r#"{"type":"LineString","coordinates":[[77.739,12.979],[77.742,12.982],[77.744,12.983]]}"#
                 .to_string(),
         ),
+        boundary_name: Some("Prestige Waterford".to_string()),
+        boundary_way_id: Some("133630420".to_string()),
+        boundary_geometry_geojson: Some(
+            r#"{"type":"Polygon","coordinates":[[[77.740,12.980],[77.744,12.980],[77.744,12.983],[77.740,12.980]]]}"#
+                .to_string(),
+        ),
         road_names: vec![
             "Ecumenical Christian Center Road".to_string(),
             "Whitefield Main Road".to_string(),
@@ -64,6 +70,12 @@ fn osm_access_facts_emit_a_linked_routed_corridor() {
         fact.fact_key == "transit_access_route"
             && fact.value_json.contains("ECC Road → Kadugodi Tree Park")
             && fact.value_json.contains("1.1 km")
+    }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.entity_id == "society:prestige-waterford"
+            && fact.fact_key == "society.boundary_geojson"
+            && fact.value_json.contains("Polygon")
+            && fact.source_url.as_deref() == Some("https://www.openstreetmap.org/way/133630420")
     }));
     assert!(facts.facts.iter().any(|fact| {
         fact.fact_key == "geo.geometry_geojson"

@@ -18,6 +18,7 @@ import {
   scaleForStory,
 } from "../src/lib/nearbyPlateProjection.ts";
 import {
+  shouldReorientStreetView,
   sideRoadHeading,
   streetViewPlayback,
   type StreetViewFrame,
@@ -183,6 +184,8 @@ test("guided road playback recognizes a side-road view", () => {
     { heading: 105, pano: "side-road" },
     { heading: 195, pano: "backward" },
   ], 15), 105);
+  assert.equal(shouldReorientStreetView(15, 21), false);
+  assert.equal(shouldReorientStreetView(15, 35), true);
 });
 
 test("surface scene projects to existing around-this-home plate shape", () => {
@@ -200,6 +203,20 @@ test("surface scene projects to existing around-this-home plate shape", () => {
       label: "Test society",
       area: "Whitefield",
       geometry: { type: "Point", coordinates: [77.75, 12.98] },
+      boundary: {
+        geometry: {
+          type: "Polygon",
+          coordinates: [[
+            [77.74, 12.97],
+            [77.76, 12.97],
+            [77.76, 12.99],
+            [77.74, 12.97],
+          ]],
+        },
+        sourceType: "OpenStreetMap",
+        sourceUrl: "https://www.openstreetmap.org/way/1",
+        confidence: 0.78,
+      },
       coordinateQuality: "exact",
     },
     viewport: {},
@@ -243,6 +260,8 @@ test("surface scene projects to existing around-this-home plate shape", () => {
   const context = propertyMapContextFromSurfaceScene(scene);
   assert.equal(context?.home.name, "Test society");
   assert.equal(context?.home.latitude, 12.98);
+  assert.equal(context?.home.boundary?.coordinates.length, 4);
+  assert.equal(context?.home.boundary?.source_type, "OpenStreetMap");
   assert.equal(context?.places[0]?.feature_id, "around_this_home:schools:place-school");
   assert.equal(context?.places[0]?.distance_km, 0.65);
   assert.equal(context?.places[0]?.source_type, "Google");

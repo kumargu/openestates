@@ -50,6 +50,12 @@ pub struct OsmTransitAccessCorridorRecord {
     pub frontage_distance_meters: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frontage_geometry_geojson: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boundary_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boundary_way_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boundary_geometry_geojson: Option<String>,
     #[serde(default)]
     pub road_names: Vec<String>,
     #[serde(default)]
@@ -71,6 +77,7 @@ pub struct OsmTransitAccessCorridorRecord {
 struct OsmAccessConfigFile {
     corridor: CorridorConfig,
     approach_road: ApproachRoadConfig,
+    society_boundary: SocietyBoundaryConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -86,6 +93,11 @@ struct CorridorConfig {
 struct ApproachRoadConfig {
     summary_fact_key: String,
     linked_entity_fact_key: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct SocietyBoundaryConfig {
+    geometry_fact_key: String,
 }
 
 pub fn osm_transit_access_corridor_facts_input(
@@ -228,6 +240,14 @@ pub fn osm_transit_access_corridor_facts_input(
             record,
             run_id,
         )?;
+        push_society_boundary_fact(
+            &mut facts,
+            &mut annotations,
+            &mut annotation_keys,
+            &config.society_boundary,
+            record,
+            run_id,
+        )?;
     }
 
     facts.sort_by(|left, right| {
@@ -247,6 +267,43 @@ pub fn osm_transit_access_corridor_facts_input(
         fact_annotations: annotations,
         source_watermarks: input.source_watermarks.clone(),
     })
+}
+
+fn push_society_boundary_fact(
+    facts: &mut Vec<SkillFactRecord>,
+    annotations: &mut Vec<SkillFactAnnotationRecord>,
+    annotation_keys: &mut BTreeSet<(String, String)>,
+    config: &SocietyBoundaryConfig,
+    record: &OsmTransitAccessCorridorRecord,
+    run_id: &str,
+) -> Result<(), OsmAccessAssetError> {
+    let Some(geometry) = record
+        .boundary_geometry_geojson
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(());
+    };
+    let source_url = record
+        .boundary_way_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|way_id| format!("https://www.openstreetmap.org/way/{way_id}"));
+    push_fact_with_source(
+        facts,
+        annotations,
+        annotation_keys,
+        &record.entity_id,
+        &config.geometry_fact_key,
+        FactValue::Text(geometry.to_string()),
+        None,
+        &[],
+        record,
+        run_id,
+        source_url,
+    )
 }
 
 fn push_approach_road_facts(
@@ -388,6 +445,35 @@ fn push_fact(
     record: &OsmTransitAccessCorridorRecord,
     run_id: &str,
 ) -> Result<(), OsmAccessAssetError> {
+    push_fact_with_source(
+        facts,
+        annotations,
+        annotation_keys,
+        entity_id,
+        fact_key,
+        value,
+        display_template,
+        answers_preferences,
+        record,
+        run_id,
+        record.source_url.clone(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_fact_with_source(
+    facts: &mut Vec<SkillFactRecord>,
+    annotations: &mut Vec<SkillFactAnnotationRecord>,
+    annotation_keys: &mut BTreeSet<(String, String)>,
+    entity_id: &str,
+    fact_key: &str,
+    value: FactValue,
+    display_template: Option<String>,
+    answers_preferences: &[&str],
+    record: &OsmTransitAccessCorridorRecord,
+    run_id: &str,
+    source_url: Option<String>,
+) -> Result<(), OsmAccessAssetError> {
     let value_json = serde_json::to_string(&value)?;
     facts.push(SkillFactRecord {
         entity_id: entity_id.to_string(),
@@ -396,7 +482,7 @@ fn push_fact(
         value_json: value_json.clone(),
         confidence: record.confidence,
         source_type: "OpenStreetMap".to_string(),
-        source_url: record.source_url.clone(),
+        source_url,
         model: None,
         skill_id: Some(OSM_TRANSIT_ACCESS_CORRIDOR_FACTS_ASSET_ID.to_string()),
         triggered_by: Some(record.query.clone()),
@@ -517,6 +603,14 @@ fn validate_input(input: &OsmTransitAccessCorridorsInput) -> Result<(), OsmAcces
                 )));
             }
         }
+        if let Some(boundary_geometry) = record.boundary_geometry_geojson.as_deref() {
+            if !is_polygon_geometry(boundary_geometry) {
+                return Err(OsmAccessAssetError::InvalidInput(format!(
+                    "OSM society boundary {} must contain a valid closed Polygon",
+                    record.corridor_id
+                )));
+            }
+        }
         if record
             .frontage_distance_meters
             .is_some_and(|distance| !distance.is_finite() || distance <= 0.0)
@@ -542,6 +636,32 @@ fn is_route_line_geometry(value: &str) -> bool {
     matches!(geometry, Some(GeoJsonValue::LineString(points)) if points.len() >= 2)
 }
 
+fn is_polygon_geometry(value: &str) -> bool {
+    let Ok(parsed) = value.parse::<GeoJson>() else {
+        return false;
+    };
+    let geometry = match &parsed {
+        GeoJson::Geometry(geometry) => Some(&geometry.value),
+        GeoJson::Feature(feature) => feature.geometry.as_ref().map(|geometry| &geometry.value),
+        GeoJson::FeatureCollection(_) => None,
+    };
+    let Some(GeoJsonValue::Polygon(rings)) = geometry else {
+        return false;
+    };
+    !rings.is_empty()
+        && rings.iter().all(|ring| {
+            ring.len() >= 4
+                && ring.first() == ring.last()
+                && ring.iter().all(|point| {
+                    point.len() >= 2
+                        && point[0].is_finite()
+                        && point[1].is_finite()
+                        && (-180.0..=180.0).contains(&point[0])
+                        && (-90.0..=90.0).contains(&point[1])
+                })
+        })
+}
+
 fn load_config() -> Result<OsmAccessConfigFile, OsmAccessAssetError> {
     let config: OsmAccessConfigFile = load_json(&dag_root().join("osm_access_corridors.json"))?;
     if config.corridor.summary_fact_key.trim().is_empty()
@@ -553,6 +673,7 @@ fn load_config() -> Result<OsmAccessConfigFile, OsmAccessAssetError> {
             .linked_entity_fact_key
             .trim()
             .is_empty()
+        || config.society_boundary.geometry_fact_key.trim().is_empty()
     {
         return Err(OsmAccessAssetError::InvalidInput(
             "OSM access corridor config is incomplete".to_string(),
