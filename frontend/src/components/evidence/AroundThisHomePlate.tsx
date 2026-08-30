@@ -309,6 +309,9 @@ function AroundThisHomePlateInner({
   const terrainCorridor = story.kind === "layer"
     && context.layers?.find((layer) => layer.id === story.layer)?.renderKind
       === "terrain_corridor";
+  const layerExperience = story.kind === "layer"
+    ? context.layers?.find((layer) => layer.id === story.layer)?.experience
+    : undefined;
   const activeRedFlagLines = useMemo(
     () => redFlagsFocused ? activeStoryLines : [],
     [activeStoryLines, redFlagsFocused],
@@ -542,6 +545,7 @@ function AroundThisHomePlateInner({
                   expanded={expanded}
                   cameraMode={cameraMode}
                   terrainCorridor={terrainCorridor}
+                  layerExperience={layerExperience}
                   pinnedPlaceIds={pinnedPlaceIds}
                   onSelectCluster={selectCluster}
                   onSelectAccessLine={selectAccessLine}

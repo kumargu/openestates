@@ -89,6 +89,8 @@ pub struct UiSurfaceLayerRule {
     #[serde(rename = "renderKind")]
     pub render_kind: String,
     #[serde(default)]
+    pub experience: Option<UiSurfaceLayerExperienceConfig>,
+    #[serde(default)]
     pub icon: Option<String>,
     #[serde(default)]
     pub sort: Option<String>,
@@ -108,6 +110,23 @@ pub struct UiSurfaceLayerRule {
     pub enabled_by_default: bool,
     #[serde(default)]
     pub rank: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UiSurfaceLayerExperienceConfig {
+    pub kind: String,
+    pub distance_each_direction_m: u32,
+    pub waypoint_spacing_m: u32,
+    pub dwell_ms: u32,
+    pub curve_dwell_ms: u32,
+    pub side_road_dwell_ms: u32,
+    pub camera_altitude_m: f64,
+    pub camera_range_m: f64,
+    pub camera_tilt: f64,
+    pub camera_fov: f64,
+    pub street_view_zoom: f64,
+    pub transition_ms: u32,
 }
 
 fn default_enabled() -> bool {
@@ -236,6 +255,28 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                     surface.id, layer.id
                 )));
             }
+            if let Some(experience) = layer.experience.as_ref() {
+                let finite_positive = |value: f64| value.is_finite() && value > 0.0;
+                if experience.kind.trim().is_empty()
+                    || experience.distance_each_direction_m == 0
+                    || experience.waypoint_spacing_m == 0
+                    || experience.dwell_ms == 0
+                    || experience.curve_dwell_ms == 0
+                    || experience.side_road_dwell_ms == 0
+                    || experience.transition_ms == 0
+                    || !finite_positive(experience.camera_altitude_m)
+                    || !finite_positive(experience.camera_range_m)
+                    || !finite_positive(experience.camera_tilt)
+                    || !finite_positive(experience.camera_fov)
+                    || !experience.street_view_zoom.is_finite()
+                    || experience.street_view_zoom < 0.0
+                {
+                    return Err(DagConfigError::InvalidConfig(format!(
+                        "surface {} layer {} contains an invalid experience",
+                        surface.id, layer.id
+                    )));
+                }
+            }
             for fact_key in &layer.sort_priority_fact_keys {
                 if !layer.fact_keys.iter().any(|key| key == fact_key)
                     && !layer
@@ -300,6 +341,9 @@ mod tests {
             .find(|layer| layer.id == "approach_road")
             .expect("approach road layer exists");
         assert_eq!(approach_road.render_kind, "terrain_corridor");
+        let experience = approach_road.experience.as_ref().expect("road experience");
+        assert_eq!(experience.kind, "street_view_tour");
+        assert_eq!(experience.distance_each_direction_m, 300);
     }
 
     #[test]

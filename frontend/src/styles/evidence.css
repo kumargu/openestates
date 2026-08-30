@@ -794,6 +794,40 @@
   height: 100%;
 }
 
+.nearby-map__canvas--google-3d {
+  transition: opacity 360ms ease;
+}
+
+.nearby-map__canvas--google-3d.is-behind-street-view {
+  opacity: 0;
+}
+
+.nearby-map__canvas--street-view {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 360ms ease;
+}
+
+.nearby-map__canvas--street-view.is-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.nearby-map__road-title {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 3;
+  color: #fff;
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.78);
+}
+
 .nearby-map.is-expanded {
   position: fixed;
   inset: 0;

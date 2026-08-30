@@ -8,6 +8,7 @@ import {
 import {
   availableLayers,
   corridorCameraFocus,
+  corridorTourWaypoints,
   filterPlacesByScale,
   hasAroundThisHomePlate,
   layerLabel,
@@ -16,6 +17,11 @@ import {
   placeMatchesProofFocus,
   scaleForStory,
 } from "../src/lib/nearbyPlateProjection.ts";
+import {
+  sideRoadHeading,
+  streetViewPlayback,
+  type StreetViewFrame,
+} from "../src/hooks/useGuidedStreetViewTour.ts";
 import { resolveBuyerProjectStatus } from "../src/lib/projectStatus.ts";
 import {
   initialPropertySceneUrls,
@@ -125,7 +131,7 @@ test("generic map layers expose their projected line geometry", () => {
 });
 
 test("approach-road camera targets the nearest road segment and looks along it", () => {
-  const focus = corridorCameraFocus([{
+  const road = {
     id: "ecc-road",
     name: "ECC Road",
     coordinates: [
@@ -134,15 +140,49 @@ test("approach-road camera targets the nearest road segment and looks along it",
       [77.743, 12.98],
     ],
     source_type: "OpenStreetMap",
-  }], {
+  };
+  const home = {
     latitude: 12.982,
     longitude: 77.742,
-  });
+  };
+  const focus = corridorCameraFocus([road], home);
 
   assert.ok(focus);
   assert.ok(Math.abs(focus.latitude - 12.98166) < 0.0001);
   assert.ok(Math.abs(focus.longitude - 77.74341) < 0.0001);
   assert.ok(focus.heading > 10 && focus.heading < 20);
+
+  const waypoints = corridorTourWaypoints([road], home, 150, 60);
+  assert.equal(waypoints.some((waypoint) => waypoint.offsetM === 0), true);
+  assert.equal(waypoints.some((waypoint) => waypoint.offsetM === 150), true);
+  assert.equal(waypoints.some((waypoint) => waypoint.offsetM === -150), true);
+  assert.ok(waypoints.every((waypoint) => waypoint.heading > 10 && waypoint.heading < 20));
+});
+
+test("guided road playback covers both directions and returns to its start", () => {
+  const frames = [-120, -60, 0, 60, 120].map((offsetM) => ({
+    links: [],
+    pano: `pano-${offsetM}`,
+    waypoint: {
+      latitude: 12.98,
+      longitude: 77.74,
+      heading: 15,
+      offsetM,
+    },
+  } satisfies StreetViewFrame));
+
+  assert.deepEqual(
+    streetViewPlayback(frames).map((frame) => frame.waypoint.offsetM),
+    [0, 60, 120, 60, 0, -60, -120, -60, 0],
+  );
+});
+
+test("guided road playback recognizes a side-road view", () => {
+  assert.equal(sideRoadHeading([
+    { heading: 15, pano: "forward" },
+    { heading: 105, pano: "side-road" },
+    { heading: 195, pano: "backward" },
+  ], 15), 105);
 });
 
 test("surface scene projects to existing around-this-home plate shape", () => {

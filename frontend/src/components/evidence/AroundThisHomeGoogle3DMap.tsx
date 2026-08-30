@@ -3,7 +3,9 @@ import {
   loadGoogleMaps3dLibrary,
   loadGoogleTerrainElevation,
 } from "../../lib/googleMaps3d.ts";
+import { useGuidedStreetViewTour } from "../../hooks/useGuidedStreetViewTour.ts";
 import type {
+  MapLayerExperience,
   MapOverlayLine,
   MapOverlayPolygon,
   MapWaterContext,
@@ -17,6 +19,7 @@ import type {
 import {
   cameraCenterForMode,
   corridorCameraFocus,
+  corridorTourWaypoints,
 } from "../../lib/nearbyPlateProjection.ts";
 import { NOTEBOOK_SAVE_ICON_PATH } from "../notebook/NotebookSaveIcon.tsx";
 
@@ -37,6 +40,7 @@ export type AroundThisHomeMapProps = {
   expanded: boolean;
   cameraMode: NearbyCameraMode;
   terrainCorridor: boolean;
+  layerExperience?: MapLayerExperience;
   pinnedPlaceIds?: string[];
   onSelectCluster: (cluster: PlaceCluster) => void;
   onSelectAccessLine: (id: string) => void;
@@ -49,7 +53,9 @@ export type AroundThisHomeMapProps = {
 type LatLngAltitude = { lat: number; lng: number; altitude?: number };
 
 type CameraOptions = {
-  center: LatLngAltitude;
+  center?: LatLngAltitude;
+  cameraPosition?: LatLngAltitude;
+  fov?: number;
   heading: number;
   range: number;
   tilt: number;
@@ -57,6 +63,8 @@ type CameraOptions = {
 
 type Map3DElement = HTMLElement & {
   center: LatLngAltitude;
+  cameraPosition?: LatLngAltitude;
+  fov?: number;
   flyCameraTo: (options: {
     durationMillis: number;
     endCamera: CameraOptions;
@@ -120,8 +128,6 @@ type Maps3DLibrary = {
 
 const HOME_PORTRAIT_RANGE_M = 700;
 const HOME_PORTRAIT_TILT = 48;
-const ROAD_FOCUS_RANGE_M = 320;
-const ROAD_FOCUS_TILT = 78;
 const EVIDENCE_MINIMUM_RANGE_M = 1_100;
 const EVIDENCE_CAMERA_DURATION_MS = 600;
 const HOME_CAMERA_DURATION_MS = 350;
@@ -153,7 +159,28 @@ function targetCamera(
   };
 }
 
+function roadCamera(
+  focus: { latitude: number; longitude: number; heading: number },
+  terrainElevation: number,
+  experience: MapLayerExperience,
+): CameraOptions {
+  return {
+    cameraPosition: {
+      lat: focus.latitude,
+      lng: focus.longitude,
+      altitude: terrainElevation + experience.cameraAltitudeM,
+    },
+    fov: experience.cameraFov,
+    heading: focus.heading,
+    range: experience.cameraRangeM,
+    tilt: experience.cameraTilt,
+  };
+}
+
 function settleCameraFraming(map: Map3DElement, camera: CameraOptions) {
+  if (camera.center) map.center = camera.center;
+  if (camera.cameraPosition) map.cameraPosition = camera.cameraPosition;
+  if (camera.fov) map.fov = camera.fov;
   map.heading = camera.heading;
   map.range = camera.range;
   map.tilt = camera.tilt;
@@ -311,6 +338,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     expanded,
     cameraMode,
     terrainCorridor,
+    layerExperience,
     pinnedPlaceIds = [],
     onSelectCluster,
     onSelectAccessLine,
@@ -320,6 +348,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     onToggleExpanded,
   } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const streetViewContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map3DElement | null>(null);
   const libraryRef = useRef<Maps3DLibrary | null>(null);
   const childrenRef = useRef<Map3DChild[]>([]);
@@ -329,18 +358,39 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
   const [loadError, setLoadError] = useState<Error | null>(null);
   const homeLatitude = home.latitude;
   const homeLongitude = home.longitude;
+  const roadExperience = layerExperience?.kind === "street_view_tour"
+    ? layerExperience
+    : null;
+  const roadTourActive = terrainCorridor && cameraMode === "evidence";
   const roadFocus = useMemo(
-    () => terrainCorridor
+    () => roadTourActive
       ? corridorCameraFocus(accessLines, {
         latitude: homeLatitude,
         longitude: homeLongitude,
       })
       : null,
-    [accessLines, homeLatitude, homeLongitude, terrainCorridor],
+    [accessLines, homeLatitude, homeLongitude, roadTourActive],
   );
   const cameraCenter = roadFocus ?? cameraCenterForMode(cameraMode, home, viewport);
   const cameraLatitude = cameraCenter.latitude;
   const cameraLongitude = cameraCenter.longitude;
+  const roadWaypoints = useMemo(
+    () => roadFocus && roadExperience
+      ? corridorTourWaypoints(
+        accessLines,
+        { latitude: homeLatitude, longitude: homeLongitude },
+        roadExperience.distanceEachDirectionM,
+        roadExperience.waypointSpacingM,
+      )
+      : [],
+    [accessLines, homeLatitude, homeLongitude, roadExperience, roadFocus],
+  );
+  const streetViewReady = useGuidedStreetViewTour({
+    active: Boolean(roadFocus),
+    containerRef: streetViewContainerRef,
+    experience: roadExperience,
+    waypoints: roadWaypoints,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -399,13 +449,13 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     const map = mapRef.current;
     if (!map || !ready || terrainElevationRef.current === null) return;
     const evidenceFocused = cameraMode === "evidence";
-    const range = roadFocus
-      ? ROAD_FOCUS_RANGE_M
+    const range = roadFocus && roadExperience
+      ? roadExperience.cameraRangeM
       : evidenceFocused
       ? evidenceCameraRange(viewport.radiusKm)
       : HOME_PORTRAIT_RANGE_M;
-    const tilt = roadFocus
-      ? ROAD_FOCUS_TILT
+    const tilt = roadFocus && roadExperience
+      ? roadExperience.cameraTilt
       : evidenceFocused
       ? evidenceCameraTilt(viewport.radiusKm)
       : HOME_PORTRAIT_TILT;
@@ -415,23 +465,29 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const durationMillis = reducedMotion
       ? 0
+      : roadFocus && roadExperience
+      ? roadExperience.transitionMs
       : evidenceFocused
       ? EVIDENCE_CAMERA_DURATION_MS
       : HOME_CAMERA_DURATION_MS;
     void loadGoogleTerrainElevation(cameraLatitude, cameraLongitude)
       .then((terrainElevation) => {
         if (cameraMoveRef.current !== moveId || mapRef.current !== map) return;
-        const camera = targetCamera(
-          cameraLatitude,
-          cameraLongitude,
-          terrainElevation,
-          range,
-          tilt,
-          heading,
-        );
+        const camera = roadFocus && roadExperience
+          ? roadCamera(roadFocus, terrainElevation, roadExperience)
+          : targetCamera(
+            cameraLatitude,
+            cameraLongitude,
+            terrainElevation,
+            range,
+            tilt,
+            heading,
+          );
         return map.flyCameraTo({ endCamera: camera, durationMillis })
           .then(() => {
-            if (cameraMoveRef.current === moveId) settleCameraFraming(map, camera);
+            if (cameraMoveRef.current === moveId && !roadFocus) {
+              settleCameraFraming(map, camera);
+            }
           });
       })
       .catch((error: unknown) => {
@@ -445,8 +501,9 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     cameraLongitude,
     accessLines,
     ready,
+    roadExperience,
     roadFocus,
-    terrainCorridor,
+    roadTourActive,
     viewport.radiusKm,
   ]);
 
@@ -483,7 +540,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
       addPolygon(map, library, lake, { fill: "#4f9fc42e", stroke: "#357fa7aa" }, nextChildren);
     }
     for (const line of accessLines) {
-      if (!terrainCorridor) {
+      if (!roadTourActive) {
         addLine(
           map,
           library,
@@ -498,20 +555,20 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
           () => onSelectAccessLine(line.id),
           nextChildren,
         );
-      }
-      const labelPosition = lineLabelPosition(line);
-      if (labelPosition) {
-        const routeLabel = new library.Marker3DInteractiveElement({
-          altitudeMode: "CLAMP_TO_GROUND",
-          collisionBehavior: "REQUIRED",
-          drawsWhenOccluded: true,
-          label: line.name,
-          position: labelPosition,
-          title: line.name,
-        });
-        routeLabel.addEventListener("gmp-click", () => onSelectAccessLine(line.id));
-        map.append(routeLabel);
-        nextChildren.push(routeLabel);
+        const labelPosition = lineLabelPosition(line);
+        if (labelPosition) {
+          const routeLabel = new library.Marker3DInteractiveElement({
+            altitudeMode: "CLAMP_TO_GROUND",
+            collisionBehavior: "REQUIRED",
+            drawsWhenOccluded: true,
+            label: line.name,
+            position: labelPosition,
+            title: line.name,
+          });
+          routeLabel.addEventListener("gmp-click", () => onSelectAccessLine(line.id));
+          map.append(routeLabel);
+          nextChildren.push(routeLabel);
+        }
       }
     }
     if (showMetroLines) {
@@ -549,7 +606,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
       );
     }
 
-    if (!terrainCorridor) {
+    if (!roadTourActive) {
       const homeMarker = new library.Marker3DInteractiveElement({
         altitudeMode: "CLAMP_TO_GROUND",
         collisionBehavior: "REQUIRED",
@@ -624,7 +681,7 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
     ready,
     selectedId,
     showMetroLines,
-    terrainCorridor,
+    roadTourActive,
     waterTint,
   ]);
 
@@ -644,12 +701,21 @@ export function AroundThisHomeGoogle3DMap(props: AroundThisHomeMapProps) {
       role="region"
       aria-label="Nearby evidence map"
       aria-busy={!ready}
-      data-map-renderer="google-3d"
+      data-map-renderer={streetViewReady ? "google-street-view" : "google-3d"}
     >
       <div
         ref={containerRef}
-        className="nearby-map__canvas nearby-map__canvas--google-3d"
+        className={`nearby-map__canvas nearby-map__canvas--google-3d${streetViewReady ? " is-behind-street-view" : ""}`}
+        aria-hidden={streetViewReady}
       />
+      <div
+        ref={streetViewContainerRef}
+        className={`nearby-map__canvas nearby-map__canvas--street-view${streetViewReady ? " is-active" : ""}`}
+        aria-hidden={!streetViewReady}
+      />
+      {roadTourActive && accessLines[0]?.name && (
+        <div className="nearby-map__road-title">{accessLines[0].name}</div>
+      )}
       <div className="nearby-map__actions">
         {cameraMode === "evidence" && (
           <button type="button" onClick={backToHome}>Back to home</button>

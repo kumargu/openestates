@@ -4,7 +4,9 @@ use chrono::{DateTime, Utc};
 use geojson::{GeoJson, Value as GeoJsonValue};
 use serde::Serialize;
 
-use crate::dag_config::{CoordinateEntityScope, UiSurfaceConfig, UiSurfaceLayerRule};
+use crate::dag_config::{
+    CoordinateEntityScope, UiSurfaceConfig, UiSurfaceLayerExperienceConfig, UiSurfaceLayerRule,
+};
 use crate::knowledge::FactValue;
 use crate::models::{KgEntityRefs, Property};
 use crate::proof_focus::ProofFocus;
@@ -77,6 +79,8 @@ pub struct SceneLayer {
     pub label: String,
     pub family: String,
     pub render_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub experience: Option<UiSurfaceLayerExperienceConfig>,
     pub relation_class: String,
     pub enabled_by_default: bool,
     pub rank: u32,
@@ -401,6 +405,7 @@ pub fn build_surface_scene_with_focus(
             label: layer_rule.label.clone(),
             family: layer_rule.family.clone(),
             render_kind: layer_rule.render_kind.clone(),
+            experience: layer_rule.experience.clone(),
             relation_class: layer_rule.relation_class.clone(),
             enabled_by_default: layer_rule.enabled_by_default,
             rank: layer_rank,
@@ -1640,6 +1645,7 @@ mod tests {
                     family: "risk".to_string(),
                     relation_class: "risk_externality".to_string(),
                     render_kind: "line".to_string(),
+                    experience: None,
                     icon: None,
                     sort: None,
                     max_items: Some(2),
@@ -1750,6 +1756,7 @@ mod tests {
                     family: "risk".to_string(),
                     relation_class: "risk_externality".to_string(),
                     render_kind: "pin".to_string(),
+                    experience: None,
                     icon: Some("flag".to_string()),
                     sort: Some("distance".to_string()),
                     max_items: Some(1),
@@ -1849,6 +1856,7 @@ mod tests {
                     family: "risk".to_string(),
                     relation_class: "risk_externality".to_string(),
                     render_kind: "pin".to_string(),
+                    experience: None,
                     icon: Some("flag".to_string()),
                     sort: Some("distance".to_string()),
                     max_items: Some(1),
@@ -1968,6 +1976,7 @@ mod tests {
                     family: "access".to_string(),
                     relation_class: "access".to_string(),
                     render_kind: "pin".to_string(),
+                    experience: None,
                     icon: Some("briefcase-business".to_string()),
                     sort: Some("distance".to_string()),
                     max_items: Some(8),
@@ -2088,6 +2097,7 @@ mod tests {
                     family: "risk".to_string(),
                     relation_class: "risk_externality".to_string(),
                     render_kind: "line".to_string(),
+                    experience: None,
                     icon: Some("flag".to_string()),
                     sort: Some("distance".to_string()),
                     max_items: Some(5),
@@ -2186,6 +2196,7 @@ mod tests {
                     family: "risk".to_string(),
                     relation_class: "risk_externality".to_string(),
                     render_kind: "pin".to_string(),
+                    experience: None,
                     icon: Some("flag".to_string()),
                     sort: Some("distance".to_string()),
                     max_items: Some(5),
@@ -2277,6 +2288,7 @@ mod tests {
             family: "environment".to_string(),
             relation_class: "context".to_string(),
             render_kind: "evidence_list".to_string(),
+            experience: None,
             icon: None,
             sort: None,
             max_items: Some(1),
@@ -2304,6 +2316,7 @@ mod tests {
             family: "risk".to_string(),
             relation_class: "risk_externality".to_string(),
             render_kind: "evidence_list".to_string(),
+            experience: None,
             icon: None,
             sort: None,
             max_items: Some(2),

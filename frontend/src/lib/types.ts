@@ -447,8 +447,24 @@ export type MapLayerMeta = {
   id: string;
   label: string;
   renderKind?: string;
+  experience?: MapLayerExperience;
   rank?: number;
   enabledByDefault?: boolean;
+};
+
+export type MapLayerExperience = {
+  kind: string;
+  distanceEachDirectionM: number;
+  waypointSpacingM: number;
+  dwellMs: number;
+  curveDwellMs: number;
+  sideRoadDwellMs: number;
+  cameraAltitudeM: number;
+  cameraRangeM: number;
+  cameraTilt: number;
+  cameraFov: number;
+  streetViewZoom: number;
+  transitionMs: number;
 };
 
 export type SurfaceSceneResponse = {
@@ -528,6 +544,7 @@ export type SceneLayer = {
   label: string;
   family: "access" | "risk" | "environment" | "market" | "context" | string;
   renderKind: "pin" | "line" | "polygon" | "corridor" | "evidence_list" | string;
+  experience?: MapLayerExperience;
   relationClass: "access" | "risk_externality" | "context" | string;
   enabledByDefault: boolean;
   rank: number;

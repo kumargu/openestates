@@ -63,6 +63,10 @@ export type CorridorCameraFocus = {
   heading: number;
 };
 
+export type CorridorTourWaypoint = CorridorCameraFocus & {
+  offsetM: number;
+};
+
 export function cameraCenterForMode(
   mode: NearbyCameraMode,
   home: { latitude: number; longitude: number },
@@ -75,13 +79,82 @@ export function corridorCameraFocus(
   lines: MapOverlayLine[],
   home: { latitude: number; longitude: number },
 ): CorridorCameraFocus | null {
+  const projection = nearestCorridorProjection(lines, home);
+  if (!projection) return null;
+  return {
+    latitude: projection.latitude,
+    longitude: projection.longitude,
+    heading: projection.heading,
+  };
+}
+
+export function corridorTourWaypoints(
+  lines: MapOverlayLine[],
+  home: { latitude: number; longitude: number },
+  distanceEachDirectionM: number,
+  waypointSpacingM: number,
+): CorridorTourWaypoint[] {
+  const projection = nearestCorridorProjection(lines, home);
+  if (!projection || distanceEachDirectionM <= 0 || waypointSpacingM <= 0) return [];
+  const offsets = new Set<number>([0]);
+  for (
+    let distance = waypointSpacingM;
+    distance < distanceEachDirectionM;
+    distance += waypointSpacingM
+  ) {
+    offsets.add(distance);
+    offsets.add(-distance);
+  }
+  offsets.add(distanceEachDirectionM);
+  offsets.add(-distanceEachDirectionM);
+
+  return [...offsets]
+    .sort((left, right) => left - right)
+    .map((offsetM) => {
+      const targetDistance = clamp(
+        projection.distanceAlongM + offsetM * projection.directionSign,
+        0,
+        projection.totalDistanceM,
+      );
+      const point = pointAlongCorridor(projection, targetDistance);
+      return {
+        ...point,
+        offsetM: (targetDistance - projection.distanceAlongM) / projection.directionSign,
+      };
+    })
+    .filter((waypoint, index, waypoints) => index === 0
+      || Math.abs(waypoint.offsetM - waypoints[index - 1].offsetM) >= 1);
+}
+
+type CorridorProjection = CorridorCameraFocus & {
+  coordinates: [number, number][];
+  segmentLengthsM: number[];
+  distanceAlongM: number;
+  totalDistanceM: number;
+  directionSign: 1 | -1;
+  longitudeMeters: number;
+  latitudeMeters: number;
+};
+
+function nearestCorridorProjection(
+  lines: MapOverlayLine[],
+  home: { latitude: number; longitude: number },
+): CorridorProjection | null {
   const longitudeMeters = 111_320 * Math.cos((home.latitude * Math.PI) / 180);
   const latitudeMeters = 110_570;
   let nearest:
-    | { x: number; y: number; distance: number; heading: number }
+    | CorridorProjection & { distance: number }
     | null = null;
 
   for (const line of lines) {
+    const segmentLengthsM = line.coordinates.slice(1).map(([longitude, latitude], index) => {
+      const [previousLongitude, previousLatitude] = line.coordinates[index];
+      return Math.hypot(
+        (longitude - previousLongitude) * longitudeMeters,
+        (latitude - previousLatitude) * latitudeMeters,
+      );
+    });
+    let distanceBeforeM = 0;
     for (let index = 1; index < line.coordinates.length; index += 1) {
       const [startLongitude, startLatitude] = line.coordinates[index - 1];
       const [endLongitude, endLatitude] = line.coordinates[index];
@@ -102,26 +175,62 @@ export function corridorCameraFocus(
       const x = startX + progress * dx;
       const y = startY + progress * dy;
       const distance = Math.hypot(x, y);
-      if (nearest && nearest.distance <= distance) continue;
-
-      const bearing = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
-      nearest = {
-        x,
-        y,
-        distance,
-        // A road can be encoded in either direction. Keep the camera orientation
-        // stable by choosing the north/east-facing direction of the same axis.
-        heading: bearing >= 180 ? bearing - 180 : bearing,
-      };
+      if (!nearest || distance < nearest.distance) {
+        const bearing = normalizeHeading(Math.atan2(dx, dy) * 180 / Math.PI);
+        const directionSign = bearing >= 180 ? -1 : 1;
+        nearest = {
+          latitude: home.latitude + y / latitudeMeters,
+          longitude: home.longitude + x / longitudeMeters,
+          distance,
+          heading: directionSign === 1 ? bearing : normalizeHeading(bearing + 180),
+          coordinates: line.coordinates,
+          segmentLengthsM,
+          distanceAlongM: distanceBeforeM + progress * Math.sqrt(lengthSquared),
+          totalDistanceM: segmentLengthsM.reduce((sum, length) => sum + length, 0),
+          directionSign,
+          longitudeMeters,
+          latitudeMeters,
+        };
+      }
+      distanceBeforeM += segmentLengthsM[index - 1] ?? 0;
     }
   }
+  return nearest;
+}
 
-  if (!nearest) return null;
-  return {
-    latitude: home.latitude + nearest.y / latitudeMeters,
-    longitude: home.longitude + nearest.x / longitudeMeters,
-    heading: nearest.heading,
-  };
+function pointAlongCorridor(
+  corridor: CorridorProjection,
+  distanceAlongM: number,
+): CorridorCameraFocus {
+  let distanceBeforeM = 0;
+  for (let index = 1; index < corridor.coordinates.length; index += 1) {
+    const segmentLengthM = corridor.segmentLengthsM[index - 1] ?? 0;
+    const segmentEndM = distanceBeforeM + segmentLengthM;
+    if (distanceAlongM <= segmentEndM || index === corridor.coordinates.length - 1) {
+      const progress = segmentLengthM > 0
+        ? clamp((distanceAlongM - distanceBeforeM) / segmentLengthM, 0, 1)
+        : 0;
+      const [startLongitude, startLatitude] = corridor.coordinates[index - 1];
+      const [endLongitude, endLatitude] = corridor.coordinates[index];
+      const bearing = normalizeHeading(Math.atan2(
+        (endLongitude - startLongitude) * corridor.longitudeMeters,
+        (endLatitude - startLatitude) * corridor.latitudeMeters,
+      ) * 180 / Math.PI);
+      return {
+        latitude: startLatitude + (endLatitude - startLatitude) * progress,
+        longitude: startLongitude + (endLongitude - startLongitude) * progress,
+        heading: corridor.directionSign === 1
+          ? bearing
+          : normalizeHeading(bearing + 180),
+      };
+    }
+    distanceBeforeM = segmentEndM;
+  }
+  return corridor;
+}
+
+function normalizeHeading(heading: number): number {
+  return (heading % 360 + 360) % 360;
 }
 
 function clamp(value: number, min: number, max: number): number {
