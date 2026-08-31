@@ -244,7 +244,12 @@
         "finalHeading": 210,
         "rotationArcDegrees": 140,
         "boundaryPadding": 1.35,
-        "mobileBoundaryPadding": 1.6
+        "mobileBoundaryPadding": 1.6,
+        "missingBoundaryState": "Society boundary not mapped",
+        "googleUnavailableState": "Map unavailable",
+        "societyPlayLabel": "Play society reveal",
+        "searchContextLabel": "Also in your search",
+        "backToSocietyLabel": "Back to this society"
       },
       "layers": [
           {
@@ -303,6 +308,7 @@
             "relationClass": "access",
             "renderKind": "terrain_corridor",
             "mapPresentation": "immersive_3d",
+            "emptyState": "Approach road not mapped",
             "experience": {
               "kind": "street_view_tour",
               "tourMode": "end_to_end",

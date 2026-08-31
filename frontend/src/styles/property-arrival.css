@@ -50,6 +50,23 @@
   font-size: 0.78rem;
 }
 
+.property-arrival-map__society-play {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-cool-deep, #3f5c8a);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.property-arrival-map__society-play:focus-visible {
+  outline: 3px solid rgba(196, 92, 38, 0.38);
+  outline-offset: 3px;
+}
+
 .property-arrival-map__search-context {
   display: grid;
   gap: 0.45rem;

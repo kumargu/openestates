@@ -498,6 +498,11 @@ export type ArrivalSceneExperience = {
   rotationArcDegrees: number;
   boundaryPadding: number;
   mobileBoundaryPadding: number;
+  missingBoundaryState?: string;
+  googleUnavailableState?: string;
+  societyPlayLabel?: string;
+  searchContextLabel?: string;
+  backToSocietyLabel?: string;
 };
 
 export type MapLayerExperience = {

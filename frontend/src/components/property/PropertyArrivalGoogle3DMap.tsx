@@ -59,6 +59,7 @@ export type ArrivalGoogle3DMapProps = {
   secondarySocieties?: ArrivalSearchSociety[];
   selectedSecondarySocietyId?: string | null;
   onSelectSecondarySociety?: (societyId: string) => void;
+  onSocietyPlaybackCancelled?: () => void;
   pinnedPlaceIds?: string[];
   onSelectCluster: (cluster: PlaceCluster) => void;
   onSelectPlace: (place: NumberedPlace) => void;
@@ -377,6 +378,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     secondarySocieties = [],
     selectedSecondarySocietyId = null,
     onSelectSecondarySociety,
+    onSocietyPlaybackCancelled,
     pinnedPlaceIds = [],
     onSelectCluster,
     onSelectPlace,
@@ -679,6 +681,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     const cancelAutomaticCamera = () => {
       cameraMoveRef.current += 1;
       playbackController.cancel("settled");
+      if (!terrainCorridor && cameraMode === "home") onSocietyPlaybackCancelled?.();
     };
     const keyDown = (event: Event) => {
       if (event instanceof KeyboardEvent && event.key === "Escape") {
@@ -702,7 +705,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       map.removeEventListener("keydown", keyDown);
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
-  }, [playbackController, ready]);
+  }, [cameraMode, onSocietyPlaybackCancelled, playbackController, ready, terrainCorridor]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -740,8 +743,16 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         title: society.home.name,
       });
       marker.append(new markerLibrary.PinElement(mapMarkerPinOptions("home", "subdued")));
+      marker.tabIndex = 0;
+      marker.setAttribute("aria-label", society.home.name);
       if (onSelectSecondarySociety) {
         marker.addEventListener("gmp-click", () => onSelectSecondarySociety(society.societyId));
+        marker.addEventListener("keydown", (event) => {
+          if (event instanceof KeyboardEvent && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            onSelectSecondarySociety(society.societyId);
+          }
+        });
       }
       map.append(marker);
       nextChildren.push(marker);
@@ -880,6 +891,8 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         title: place.name,
       });
       marker.append(new markerLibrary.PinElement(mapMarkerPinOptions(place.icon, emphasis)));
+      marker.tabIndex = 0;
+      marker.setAttribute("aria-label", place.name);
       marker.addEventListener("pointerenter", () => {
         if (activePopover && activePopover !== popover) activePopover.open = false;
         popover.open = true;
@@ -888,6 +901,13 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       marker.addEventListener("gmp-click", () => {
         popover.open = false;
         onSelectPlace(place);
+      });
+      marker.addEventListener("keydown", (event) => {
+        if (event instanceof KeyboardEvent && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          popover.open = false;
+          onSelectPlace(place);
+        }
       });
       map.append(marker);
       map.append(popover);
@@ -953,10 +973,10 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         aria-hidden={!streetViewReady}
       />
       {roadTourActive && accessLines[0]?.name && (
-        <div className="nearby-map__road-title" aria-live="polite">
+        <div className="nearby-map__road-title">
           {accessLines[0].name}
           {roadTour.progress && ` · ${roadTour.progress.current}/${roadTour.progress.total}`}
-          {roadTour.status && ` · ${roadTour.status}`}
+          {roadTour.status && <span aria-live="polite"> · {roadTour.status}</span>}
         </div>
       )}
       {roadTourActive && streetViewReady && roadExperience && (

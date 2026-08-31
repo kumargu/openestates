@@ -54,6 +54,8 @@ test("road film targets 28 seconds and preserves endpoints, entrance, and contin
   const schedule = buildStreetViewSchedule(frames, experience, entrance);
 
   assert.equal(schedule.durationMs, 28_000);
+  assert.ok(schedule.durationMs >= experience.minimumDurationMs!);
+  assert.ok(schedule.durationMs <= experience.maximumDurationMs!);
   assert.equal(schedule.entries[0].frame.pano, "pano-0");
   assert.equal(schedule.entries.at(-1)?.frame.pano, "pano-35");
   assert.equal(schedule.entries[schedule.entranceIndex!].frame.pano, "pano-18");

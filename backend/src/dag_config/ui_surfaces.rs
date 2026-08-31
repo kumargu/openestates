@@ -76,6 +76,16 @@ pub struct UiSurfaceSceneExperienceConfig {
     pub rotation_arc_degrees: f64,
     pub boundary_padding: f64,
     pub mobile_boundary_padding: f64,
+    #[serde(default)]
+    pub missing_boundary_state: Option<String>,
+    #[serde(default)]
+    pub google_unavailable_state: Option<String>,
+    #[serde(default)]
+    pub society_play_label: Option<String>,
+    #[serde(default)]
+    pub search_context_label: Option<String>,
+    #[serde(default)]
+    pub back_to_society_label: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -500,6 +510,10 @@ mod tests {
         assert_eq!(scene_experience.final_range_m, 700.0);
         assert_eq!(scene_experience.final_tilt, 48.0);
         assert_eq!(scene_experience.final_heading, 210.0);
+        assert_eq!(
+            scene_experience.google_unavailable_state.as_deref(),
+            Some("Map unavailable")
+        );
         assert_eq!(
             arrival_scene.anchor.boundary_fact_key.as_deref(),
             Some("society.boundary_geojson")

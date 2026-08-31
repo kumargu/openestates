@@ -51,7 +51,7 @@ function compactPrice(price: number): string | null {
 }
 
 class ArrivalMapBoundary extends Component<
-  { children: ReactNode },
+  { children: ReactNode; unavailableLabel?: string },
   { failed: boolean }
 > {
   state = { failed: false };
@@ -81,7 +81,7 @@ class ArrivalMapBoundary extends Component<
           role="status"
           tabIndex={-1}
         >
-          Map unavailable
+          {this.props.unavailableLabel}
         </div>
       );
     }
@@ -90,7 +90,7 @@ class ArrivalMapBoundary extends Component<
 }
 
 export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Props) {
-  const { controller: playbackController } = useArrivalPlaybackController();
+  const { controller: playbackController, state: playbackState } = useArrivalPlaybackController();
   const [societyAutoPlay, setSocietyAutoPlay] = useState(true);
   const [approachAutoPlay, setApproachAutoPlay] = useState(true);
   const [selectedSearchSocietyId, setSelectedSearchSocietyId] = useState<string | null>(null);
@@ -154,6 +154,14 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
     : "home";
   const selectedSearchSociety = searchContextSocieties.find((candidate) =>
     candidate.societyId === selectedSearchSocietyId) ?? null;
+  const arrivalExperience = context.arrivalExperience;
+  const missingArrivalState = activeView === "society" && !context.home.boundary
+    ? arrivalExperience?.missingBoundaryState
+    : (activeView === "society" || activeView === "approach") && entrancePlaces.length === 0
+    ? entranceLayer?.emptyState
+    : activeView === "society" && roadLayer && roadLines.length === 0
+    ? roadLayer.emptyState
+    : null;
 
   useEffect(() => {
     if (activeView !== "approach" || activeCameraMode !== "home") return undefined;
@@ -232,12 +240,23 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
           </button>
         ))}
       </div>
-      {(activeView === "society" || activeView === "approach")
-        && entrancePlaces.length === 0
-        && entranceLayer?.emptyState && (
-        <p className="property-arrival-map__status">{entranceLayer.emptyState}</p>
+      {missingArrivalState && (
+        <p className="property-arrival-map__status">{missingArrivalState}</p>
       )}
-      <ArrivalMapBoundary>
+      {activeView === "society"
+        && (playbackState === "paused" || (!societyAutoPlay && playbackState === "settled"))
+        && arrivalExperience?.societyPlayLabel && (
+        <button
+          type="button"
+          className="property-arrival-map__society-play"
+          onClick={() => playbackState === "paused"
+            ? playbackController.resume()
+            : setSocietyAutoPlay(true)}
+        >
+          {arrivalExperience.societyPlayLabel}
+        </button>
+      )}
+      <ArrivalMapBoundary unavailableLabel={arrivalExperience?.googleUnavailableState}>
         <Suspense
           fallback={(
             <div
@@ -275,6 +294,7 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
               secondarySocieties={searchContextSocieties}
               selectedSecondarySocietyId={selectedSearchSocietyId}
               onSelectSecondarySociety={selectSearchSociety}
+              onSocietyPlaybackCancelled={() => setSocietyAutoPlay(false)}
               onSelectCluster={() => undefined}
               onSelectPlace={() => undefined}
               onSelectAccessLine={() => undefined}
@@ -309,6 +329,7 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
             secondarySocieties={searchContextSocieties}
             selectedSecondarySocietyId={selectedSearchSocietyId}
             onSelectSecondarySociety={selectSearchSociety}
+            onSocietyPlaybackCancelled={() => setSocietyAutoPlay(false)}
             onSelectCluster={() => undefined}
             onSelectPlace={() => undefined}
             onSelectAccessLine={() => undefined}
@@ -320,9 +341,9 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
           )}
         </Suspense>
       </ArrivalMapBoundary>
-      {searchContextSocieties.length > 0 && (
-        <aside className="property-arrival-map__search-context" aria-label="Also in your search">
-          <span>Also in your search</span>
+      {searchContextSocieties.length > 0 && arrivalExperience?.searchContextLabel && (
+        <aside className="property-arrival-map__search-context" aria-label={arrivalExperience.searchContextLabel}>
+          <span>{arrivalExperience.searchContextLabel}</span>
           <div>
             {searchContextSocieties.map((candidate) => (
               <button
@@ -347,12 +368,14 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
                   compactPrice(selectedSearchSociety.preview.price),
                 ].filter(Boolean).join(" · ")}
               </span>
-              <button
-                type="button"
-                onClick={() => setSelectedSearchSocietyId(null)}
-              >
-                Back to this society
-              </button>
+              {arrivalExperience.backToSocietyLabel && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedSearchSocietyId(null)}
+                >
+                  {arrivalExperience.backToSocietyLabel}
+                </button>
+              )}
             </div>
           )}
         </aside>
