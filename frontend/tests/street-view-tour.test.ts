@@ -26,7 +26,8 @@ const experience: MapLayerExperience = {
   targetDurationMs: 28_000,
   minimumDurationMs: 24_000,
   maximumDurationMs: 32_000,
-  minimumFrameDwellMs: 700,
+  minimumFrameDwellMs: 1_500,
+  panoramaCrossfadeMs: 280,
   entranceDwellMs: 3_000,
   maximumPanoramaGapM: 140,
 };
@@ -56,7 +57,7 @@ test("road film targets 28 seconds and preserves endpoints, entrance, and contin
   assert.equal(schedule.entries.at(-1)?.frame.pano, "pano-35");
   assert.equal(schedule.entries[schedule.entranceIndex!].frame.pano, "pano-18");
   assert.equal(schedule.entries[schedule.entranceIndex! + 1].frame.pano, "pano-19");
-  assert.ok(schedule.entries.length < frames.length);
+  assert.ok(schedule.entries.length <= 12);
 });
 
 test("road film keeps meaningful curves while downsampling ordinary frames", () => {

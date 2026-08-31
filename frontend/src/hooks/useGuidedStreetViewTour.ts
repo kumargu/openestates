@@ -45,25 +45,27 @@ type StreetViewPanorama = {
   setVisible: (visible: boolean) => void;
 };
 
+type StreetViewPanoramaOptions = {
+  addressControl: boolean;
+  clickToGo: boolean;
+  disableDefaultUI: boolean;
+  enableCloseButton: boolean;
+  fullscreenControl: boolean;
+  linksControl: boolean;
+  motionTracking: boolean;
+  panControl: boolean;
+  pano: string;
+  pov: { heading: number; pitch: number };
+  showRoadLabels: boolean;
+  visible: boolean;
+  zoom: number;
+  zoomControl: boolean;
+};
+
 type StreetViewLibrary = {
   StreetViewPanorama: new (
     container: HTMLElement,
-    options: {
-      addressControl: boolean;
-      clickToGo: boolean;
-      disableDefaultUI: boolean;
-      enableCloseButton: boolean;
-      fullscreenControl: boolean;
-      linksControl: boolean;
-      motionTracking: boolean;
-      panControl: boolean;
-      pano: string;
-      pov: { heading: number; pitch: number };
-      showRoadLabels: boolean;
-      visible: boolean;
-      zoom: number;
-      zoomControl: boolean;
-    },
+    options: StreetViewPanoramaOptions,
   ) => StreetViewPanorama;
   StreetViewPreference: { NEAREST: unknown };
   StreetViewService: new () => {
@@ -77,16 +79,30 @@ type StreetViewLibrary = {
   StreetViewSource: { OUTDOOR: unknown };
 };
 
-class GoogleStreetViewAdapter {
-  private readonly panorama: StreetViewPanorama;
+type StreetViewBufferSlot = {
+  pane: HTMLDivElement;
+  pano: string;
+  panorama: StreetViewPanorama;
+};
+
+export class GoogleStreetViewAdapter {
+  private activeSlot = 0;
+  private readonly crossfadeMs: number;
+  private readonly slots: [StreetViewBufferSlot, StreetViewBufferSlot];
+  private animations: Animation[] = [];
   private stopped = false;
 
-  constructor(panorama: StreetViewPanorama) {
-    this.panorama = panorama;
+  constructor(
+    slots: [StreetViewBufferSlot, StreetViewBufferSlot],
+    crossfadeMs: number,
+  ) {
+    this.slots = slots;
+    this.crossfadeMs = crossfadeMs;
   }
 
   stop(): void {
     this.stopped = true;
+    this.cancelAnimations();
   }
 
   resume(): void {
@@ -95,21 +111,100 @@ class GoogleStreetViewAdapter {
 
   setFrame(frame: StreetViewFrame, heading: number, pitch = 0): void {
     if (this.stopped) return;
-    this.panorama.setPano(frame.pano);
-    this.panorama.setPov({ heading, pitch });
+    this.preload(frame, heading, pitch);
+    this.showPreloaded(frame, heading, pitch);
   }
 
-  setPano(frame: StreetViewFrame): void {
-    if (!this.stopped) this.panorama.setPano(frame.pano);
+  preload(frame: StreetViewFrame, heading: number, pitch = 0): void {
+    if (this.stopped) return;
+    const slot = this.slots[this.inactiveSlot()];
+    if (slot.pano !== frame.pano) {
+      slot.pano = frame.pano;
+      slot.panorama.setPano(frame.pano);
+    }
+    slot.panorama.setPov({ heading, pitch });
+  }
+
+  showPreloaded(frame: StreetViewFrame, heading: number, pitch = 0): void {
+    if (this.stopped) return;
+    const current = this.slots[this.activeSlot];
+    if (current.pano === frame.pano) {
+      current.panorama.setPov({ heading, pitch });
+      return;
+    }
+    const nextSlotIndex = this.inactiveSlot();
+    const next = this.slots[nextSlotIndex];
+    if (next.pano !== frame.pano) {
+      next.pano = frame.pano;
+      next.panorama.setPano(frame.pano);
+    }
+    next.panorama.setPov({ heading, pitch });
+    this.cancelAnimations();
+    current.pane.classList.remove("is-active");
+    current.pane.setAttribute("aria-hidden", "true");
+    current.pane.inert = true;
+    next.pane.classList.add("is-active");
+    next.pane.setAttribute("aria-hidden", "false");
+    next.pane.inert = false;
+    this.activeSlot = nextSlotIndex;
+    if (
+      this.crossfadeMs <= 0
+      || typeof current.pane.animate !== "function"
+      || typeof next.pane.animate !== "function"
+    ) return;
+    this.animations = [
+      current.pane.animate(
+        [{ opacity: 1 }, { opacity: 0 }],
+        { duration: this.crossfadeMs, easing: "ease-out" },
+      ),
+      next.pane.animate(
+        [{ opacity: 0 }, { opacity: 1 }],
+        { duration: this.crossfadeMs, easing: "ease-out" },
+      ),
+    ];
   }
 
   setPov(heading: number, pitch = 0): void {
-    if (!this.stopped) this.panorama.setPov({ heading, pitch });
+    if (!this.stopped) {
+      this.slots[this.activeSlot].panorama.setPov({ heading, pitch });
+    }
   }
 
   hide(): void {
-    this.panorama.setVisible(false);
+    this.cancelAnimations();
+    for (const slot of this.slots) slot.panorama.setVisible(false);
   }
+
+  private inactiveSlot(): 0 | 1 {
+    return this.activeSlot === 0 ? 1 : 0;
+  }
+
+  private cancelAnimations(): void {
+    for (const animation of this.animations) animation.cancel();
+    this.animations = [];
+  }
+}
+
+function panoramaOptions(
+  frame: StreetViewFrame,
+  streetViewZoom: number,
+): StreetViewPanoramaOptions {
+  return {
+    addressControl: false,
+    clickToGo: true,
+    disableDefaultUI: true,
+    enableCloseButton: false,
+    fullscreenControl: false,
+    linksControl: true,
+    motionTracking: false,
+    panControl: false,
+    pano: frame.pano,
+    pov: { heading: frame.waypoint.heading, pitch: 0 },
+    showRoadLabels: false,
+    visible: true,
+    zoom: streetViewZoom,
+    zoomControl: false,
+  };
 }
 
 const SEARCH_RADIUS_M = 35;
@@ -225,23 +320,31 @@ export function useGuidedStreetViewTour({
           run.unavailable();
           return;
         }
-        const panorama = new library.StreetViewPanorama(container, {
-          addressControl: false,
-          clickToGo: true,
-          disableDefaultUI: true,
-          enableCloseButton: false,
-          fullscreenControl: false,
-          linksControl: true,
-          motionTracking: false,
-          panControl: false,
-          pano: first.pano,
-          pov: { heading: first.waypoint.heading, pitch: 0 },
-          showRoadLabels: false,
-          visible: true,
-          zoom: experience.streetViewZoom,
-          zoomControl: false,
-        });
-        const adapter = new GoogleStreetViewAdapter(panorama);
+        const second = schedule.entries[1]?.frame ?? first;
+        const firstPane = document.createElement("div");
+        firstPane.className = "nearby-map__street-view-buffer is-active";
+        firstPane.setAttribute("aria-hidden", "false");
+        firstPane.inert = false;
+        const secondPane = document.createElement("div");
+        secondPane.className = "nearby-map__street-view-buffer";
+        secondPane.setAttribute("aria-hidden", "true");
+        secondPane.inert = true;
+        container.replaceChildren(firstPane, secondPane);
+        const firstPanorama = new library.StreetViewPanorama(
+          firstPane,
+          panoramaOptions(first, experience.streetViewZoom),
+        );
+        const secondPanorama = new library.StreetViewPanorama(
+          secondPane,
+          panoramaOptions(second, experience.streetViewZoom),
+        );
+        const crossfadeMs = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? 0
+          : experience.panoramaCrossfadeMs ?? 0;
+        const adapter = new GoogleStreetViewAdapter([
+          { pane: firstPane, pano: first.pano, panorama: firstPanorama },
+          { pane: secondPane, pano: second.pano, panorama: secondPanorama },
+        ], crossfadeMs);
         adapterRef.current = adapter;
         scheduleRef.current = schedule;
         unregisterStopper = playbackController.registerStopper(() => adapter.stop());
@@ -265,8 +368,15 @@ export function useGuidedStreetViewTour({
           if (!run.isCurrent()) return;
           const entry = schedule.entries[index];
           const roadHeading = entry.frame.waypoint.heading;
-          adapter.setPano(entry.frame);
           let orientationDwellMs = 0;
+          if (index > 0) {
+            adapter.showPreloaded(entry.frame, cameraHeading);
+            const crossfadeDwellMs = Math.min(crossfadeMs, entry.dwellMs);
+            if (!await run.wait(crossfadeDwellMs)) return;
+            orientationDwellMs += crossfadeDwellMs;
+          }
+          const next = schedule.entries[index + 1];
+          if (next) adapter.preload(next.frame, next.frame.waypoint.heading);
           if (shouldReorientStreetView(cameraHeading, roadHeading)) {
             const headingSteps = easedHeadingSteps(cameraHeading, roadHeading);
             const stepDwellMs = Math.min(90, Math.floor(entry.dwellMs / 8));

@@ -526,6 +526,7 @@ export type MapLayerExperience = {
   minimumDurationMs?: number;
   maximumDurationMs?: number;
   minimumFrameDwellMs?: number;
+  panoramaCrossfadeMs?: number;
   entranceDwellMs?: number;
   maximumPanoramaGapM?: number;
   shortGapState?: string;

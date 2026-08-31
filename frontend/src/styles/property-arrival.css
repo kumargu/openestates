@@ -182,6 +182,18 @@
   pointer-events: auto;
 }
 
+.nearby-map__street-view-buffer {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nearby-map__street-view-buffer.is-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .nearby-map__road-title {
   position: absolute;
   top: 1rem;

@@ -180,6 +180,8 @@ pub struct UiSurfaceLayerExperienceConfig {
     #[serde(default)]
     pub minimum_frame_dwell_ms: Option<u32>,
     #[serde(default)]
+    pub panorama_crossfade_ms: Option<u32>,
+    #[serde(default)]
     pub entrance_dwell_ms: Option<u32>,
     #[serde(default)]
     pub maximum_panorama_gap_m: Option<u32>,
@@ -406,6 +408,7 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                     || experience.minimum_duration_ms == Some(0)
                     || experience.maximum_duration_ms == Some(0)
                     || experience.minimum_frame_dwell_ms == Some(0)
+                    || experience.panorama_crossfade_ms == Some(0)
                     || experience.entrance_dwell_ms == Some(0)
                     || experience.maximum_panorama_gap_m == Some(0)
                     || missing_playback_copy
@@ -610,6 +613,8 @@ mod tests {
         assert_eq!(experience.anchor_look_ahead_m, Some(35));
         assert_eq!(experience.anchor_pitch, Some(6.0));
         assert_eq!(experience.transition_ms, 4200);
+        assert_eq!(experience.minimum_frame_dwell_ms, Some(1500));
+        assert_eq!(experience.panorama_crossfade_ms, Some(280));
     }
 
     #[test]
