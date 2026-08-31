@@ -422,6 +422,10 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       ? { latitude: entrance.latitude, longitude: entrance.longitude }
       : null;
   }, [places]);
+  const societyInteriorAnchor = useMemo(
+    () => ({ latitude: homeLatitude, longitude: homeLongitude }),
+    [homeLatitude, homeLongitude],
+  );
   const roadWaypoints = useMemo(
     () => roadFocus && roadExperience
       ? corridorTourWaypoints(
@@ -457,6 +461,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     autoPlay: autoPlayApproach,
     containerRef: streetViewContainerRef,
     experience: roadExperience,
+    interiorAnchor: societyInteriorAnchor,
     onPlaybackCancelled,
     playbackController,
     waypoints: roadWaypoints,

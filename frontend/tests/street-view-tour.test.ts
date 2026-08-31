@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildStreetViewSchedule,
   easedHeadingSteps,
+  entranceCameraSequence,
   resolveStreetViewSequence,
   shortestHeadingDelta,
   type StreetViewFrame,
@@ -17,6 +18,9 @@ const experience: MapLayerExperience = {
   overviewDwellMs: 1_800,
   dwellMs: 2_500,
   anchorPitch: 6,
+  anchorInteriorPitch: 10,
+  anchorInteriorDwellMs: 2_000,
+  anchorPoseTransitionMs: 700,
   cameraAltitudeM: 25,
   cameraRangeM: 145,
   cameraTilt: 80,
@@ -28,7 +32,7 @@ const experience: MapLayerExperience = {
   maximumDurationMs: 32_000,
   minimumFrameDwellMs: 1_500,
   panoramaCrossfadeMs: 280,
-  entranceDwellMs: 3_000,
+  entranceDwellMs: 5_000,
   maximumPanoramaGapM: 140,
 };
 
@@ -86,6 +90,25 @@ test("gate pause follows the actual panorama position instead of a snapped reque
 
   assert.equal(schedule.entries[schedule.entranceIndex!].frame.pano, "pano-0");
   assert.equal(schedule.entries[schedule.entranceIndex! + 1].frame.pano, "pano-1");
+});
+
+test("gate pause turns inward without moving off the public panorama", () => {
+  const panoramaPosition = { latitude: 12.98, longitude: 77.74 };
+  const sequence = entranceCameraSequence(
+    panoramaPosition,
+    { latitude: 12.981, longitude: 77.74 },
+    { latitude: 12.98, longitude: 77.741 },
+    experience,
+  );
+
+  assert.equal(sequence.entrance.dwellMs, 2_300);
+  assert.equal(sequence.entrance.pitch, 6);
+  assert.ok(sequence.entrance.heading < 1 || sequence.entrance.heading > 359);
+  assert.equal(sequence.interior?.dwellMs, 2_000);
+  assert.equal(sequence.interior?.transitionMs, 700);
+  assert.equal(sequence.interior?.pitch, 10);
+  assert.ok((sequence.interior?.heading ?? 0) > 89);
+  assert.ok((sequence.interior?.heading ?? 0) < 91);
 });
 
 test("road film keeps meaningful curves while downsampling ordinary frames", () => {

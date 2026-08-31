@@ -516,6 +516,9 @@ export type MapLayerExperience = {
   dwellMs: number;
   anchorLookAheadM?: number;
   anchorPitch?: number;
+  anchorInteriorPitch?: number;
+  anchorInteriorDwellMs?: number;
+  anchorPoseTransitionMs?: number;
   cameraAltitudeM: number;
   cameraRangeM: number;
   cameraTilt: number;

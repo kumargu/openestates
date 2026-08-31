@@ -6,12 +6,16 @@ import {
   type RefObject,
 } from "react";
 import { loadGoogleStreetViewLibrary } from "../lib/googleMaps3d.ts";
-import type { ArrivalPlaybackController } from "../lib/arrivalPlayback.ts";
+import type {
+  ArrivalPlaybackController,
+  ArrivalPlaybackRun,
+} from "../lib/arrivalPlayback.ts";
 import type { MapLayerExperience } from "../lib/types.ts";
 import type { CorridorTourWaypoint } from "../lib/arrivalMapProjection.ts";
 import {
   buildStreetViewSchedule,
   easedHeadingSteps,
+  entranceCameraSequence,
   resolveStreetViewSequence,
   shouldReorientStreetView,
   streetViewAnchorHeading,
@@ -20,6 +24,7 @@ import {
   type StreetViewLink,
   type StreetViewResolution,
   type StreetViewSchedule,
+  type StreetViewCameraPose,
 } from "../lib/streetViewTour.ts";
 
 export {
@@ -188,6 +193,35 @@ export class GoogleStreetViewAdapter {
   }
 }
 
+const CAMERA_POSE_STEP_COUNT = 4;
+
+async function transitionCameraPose(
+  adapter: GoogleStreetViewAdapter,
+  run: ArrivalPlaybackRun,
+  from: StreetViewCameraPose,
+  to: StreetViewCameraPose,
+  durationMs: number,
+): Promise<boolean> {
+  if (durationMs <= 0) {
+    adapter.setPov(to.heading, to.pitch);
+    return true;
+  }
+  const headings = easedHeadingSteps(from.heading, to.heading, CAMERA_POSE_STEP_COUNT);
+  const stepDwellMs = Math.floor(durationMs / CAMERA_POSE_STEP_COUNT);
+  let remainderMs = durationMs - stepDwellMs * CAMERA_POSE_STEP_COUNT;
+  for (let index = 0; index < headings.length; index += 1) {
+    const progress = (index + 1) / CAMERA_POSE_STEP_COUNT;
+    adapter.setPov(
+      headings[index],
+      from.pitch + (to.pitch - from.pitch) * progress,
+    );
+    const extraMs = remainderMs > 0 ? 1 : 0;
+    remainderMs -= extraMs;
+    if (!await run.wait(stepDwellMs + extraMs)) return false;
+  }
+  return true;
+}
+
 function panoramaOptions(
   frame: StreetViewFrame,
   streetViewZoom: number,
@@ -248,6 +282,7 @@ type GuidedStreetViewTourOptions = {
   autoPlay: boolean;
   containerRef: RefObject<HTMLDivElement | null>;
   experience: MapLayerExperience | null;
+  interiorAnchor?: { latitude: number; longitude: number } | null;
   onPlaybackCancelled?: () => void;
   playbackController: ArrivalPlaybackController;
   waypoints: CorridorTourWaypoint[];
@@ -267,6 +302,7 @@ export function useGuidedStreetViewTour({
   autoPlay,
   containerRef,
   experience,
+  interiorAnchor,
   onPlaybackCancelled,
   playbackController,
   waypoints,
@@ -402,11 +438,27 @@ export function useGuidedStreetViewTour({
             const entranceDwellMs = experience.entranceDwellMs ?? 0;
             const approachDwellMs = Math.max(0, remainingDwellMs - entranceDwellMs);
             if (!await run.wait(Math.round(approachDwellMs / 2))) return;
-            adapter.setPov(
-              streetViewAnchorHeading(entry.frame.panoramaPosition, anchor),
-              experience.anchorPitch ?? 0,
+            const cameraSequence = entranceCameraSequence(
+              entry.frame.panoramaPosition,
+              anchor,
+              interiorAnchor,
+              experience,
             );
-            if (!await run.wait(entranceDwellMs)) return;
+            adapter.setPov(
+              cameraSequence.entrance.heading,
+              cameraSequence.entrance.pitch,
+            );
+            if (!await run.wait(cameraSequence.entrance.dwellMs)) return;
+            if (cameraSequence.interior) {
+              if (!await transitionCameraPose(
+                adapter,
+                run,
+                cameraSequence.entrance,
+                cameraSequence.interior,
+                cameraSequence.interior.transitionMs,
+              )) return;
+              if (!await run.wait(cameraSequence.interior.dwellMs)) return;
+            }
             adapter.setPov(roadHeading, 0);
             if (!await run.wait(Math.ceil(approachDwellMs / 2))) return;
           } else if (!await run.wait(remainingDwellMs)) return;
@@ -441,6 +493,7 @@ export function useGuidedStreetViewTour({
     anchor,
     containerRef,
     experience,
+    interiorAnchor,
     manualPlay,
     onPlaybackCancelled,
     playbackController,

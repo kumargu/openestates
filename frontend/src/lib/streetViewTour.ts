@@ -36,6 +36,16 @@ export type StreetViewSchedule = {
   entranceIndex: number | null;
 };
 
+export type StreetViewCameraPose = {
+  heading: number;
+  pitch: number;
+};
+
+export type EntranceCameraSequence = {
+  entrance: StreetViewCameraPose & { dwellMs: number };
+  interior: (StreetViewCameraPose & { dwellMs: number; transitionMs: number }) | null;
+};
+
 const CURVE_THRESHOLD_DEGREES = 12;
 
 export function normalizeHeading(heading: number): number {
@@ -51,6 +61,38 @@ export function easedHeadingSteps(from: number, to: number, stepCount = 3): numb
   const delta = shortestHeadingDelta(from, to);
   return Array.from({ length: stepCount }, (_, index) =>
     normalizeHeading(from + delta * ((index + 1) / stepCount)));
+}
+
+export function entranceCameraSequence(
+  panoramaPosition: { latitude: number; longitude: number },
+  entrance: { latitude: number; longitude: number },
+  interior: { latitude: number; longitude: number } | null | undefined,
+  experience: MapLayerExperience,
+): EntranceCameraSequence {
+  const totalDwellMs = experience.entranceDwellMs ?? 0;
+  const configuredInteriorDwellMs = interior ? experience.anchorInteriorDwellMs ?? 0 : 0;
+  const configuredTransitionMs = interior ? experience.anchorPoseTransitionMs ?? 0 : 0;
+  const interiorDwellMs = Math.min(configuredInteriorDwellMs, totalDwellMs);
+  const transitionMs = Math.min(
+    configuredTransitionMs,
+    Math.max(0, totalDwellMs - interiorDwellMs),
+  );
+  const entranceDwellMs = Math.max(0, totalDwellMs - interiorDwellMs - transitionMs);
+  return {
+    entrance: {
+      dwellMs: entranceDwellMs,
+      heading: streetViewAnchorHeading(panoramaPosition, entrance),
+      pitch: experience.anchorPitch ?? 0,
+    },
+    interior: interior && interiorDwellMs > 0
+      ? {
+        dwellMs: interiorDwellMs,
+        heading: streetViewAnchorHeading(panoramaPosition, interior),
+        pitch: experience.anchorInteriorPitch ?? experience.anchorPitch ?? 0,
+        transitionMs,
+      }
+      : null,
+  };
 }
 
 function headingDistance(left: number, right: number): number {

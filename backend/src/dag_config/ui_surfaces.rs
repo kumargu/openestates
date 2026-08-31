@@ -165,6 +165,12 @@ pub struct UiSurfaceLayerExperienceConfig {
     pub anchor_look_ahead_m: Option<u32>,
     #[serde(default)]
     pub anchor_pitch: Option<f64>,
+    #[serde(default)]
+    pub anchor_interior_pitch: Option<f64>,
+    #[serde(default)]
+    pub anchor_interior_dwell_ms: Option<u32>,
+    #[serde(default)]
+    pub anchor_pose_transition_ms: Option<u32>,
     pub camera_altitude_m: f64,
     pub camera_range_m: f64,
     pub camera_tilt: f64,
@@ -396,6 +402,22 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                 ]
                 .into_iter()
                 .any(|value| value.is_none_or(|label| label.trim().is_empty()));
+                let interior_pose_values = [
+                    experience.anchor_interior_pitch.is_some(),
+                    experience.anchor_interior_dwell_ms.is_some(),
+                    experience.anchor_pose_transition_ms.is_some(),
+                ];
+                let incomplete_interior_pose = interior_pose_values.iter().any(|value| *value)
+                    && interior_pose_values.iter().any(|value| !*value);
+                let interior_pose_exceeds_dwell = matches!(
+                    (
+                        experience.entrance_dwell_ms,
+                        experience.anchor_interior_dwell_ms,
+                        experience.anchor_pose_transition_ms,
+                    ),
+                    (Some(entrance), Some(interior), Some(transition))
+                        if interior.saturating_add(transition) >= entrance
+                );
                 if experience.kind.trim().is_empty()
                     || experience.waypoint_spacing_m == 0
                     || experience.overview_dwell_ms == Some(0)
@@ -403,6 +425,13 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                     || experience
                         .anchor_pitch
                         .is_some_and(|pitch| !pitch.is_finite() || !(-90.0..=90.0).contains(&pitch))
+                    || experience
+                        .anchor_interior_pitch
+                        .is_some_and(|pitch| !pitch.is_finite() || !(-90.0..=90.0).contains(&pitch))
+                    || experience.anchor_interior_dwell_ms == Some(0)
+                    || experience.anchor_pose_transition_ms == Some(0)
+                    || incomplete_interior_pose
+                    || interior_pose_exceeds_dwell
                     || experience.transition_ms == 0
                     || experience.target_duration_ms == Some(0)
                     || experience.minimum_duration_ms == Some(0)
@@ -612,7 +641,11 @@ mod tests {
         assert_eq!(experience.dwell_ms, 2500);
         assert_eq!(experience.anchor_look_ahead_m, Some(35));
         assert_eq!(experience.anchor_pitch, Some(6.0));
+        assert_eq!(experience.anchor_interior_pitch, Some(10.0));
+        assert_eq!(experience.anchor_interior_dwell_ms, Some(2000));
+        assert_eq!(experience.anchor_pose_transition_ms, Some(700));
         assert_eq!(experience.transition_ms, 4200);
+        assert_eq!(experience.entrance_dwell_ms, Some(5000));
         assert_eq!(experience.minimum_frame_dwell_ms, Some(1500));
         assert_eq!(experience.panorama_crossfade_ms, Some(280));
     }
