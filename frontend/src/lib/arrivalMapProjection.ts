@@ -22,7 +22,13 @@ export type CorridorCameraFocus = {
 };
 
 export type CorridorTourWaypoint = CorridorCameraFocus & {
+  anchorOffsetM?: number;
   offsetM: number;
+};
+
+export type CorridorTourWaypointOptions = {
+  anchor?: { latitude: number; longitude: number } | null;
+  anchorLookAheadM?: number;
 };
 
 export type SocietyCameraComposition = {
@@ -227,12 +233,23 @@ export function corridorTourWaypoints(
   lines: MapOverlayLine[],
   home: { latitude: number; longitude: number },
   waypointSpacingM: number,
-  additionalOffsetsM: number[] = [],
+  options: CorridorTourWaypointOptions = {},
 ): CorridorTourWaypoint[] {
   const projection = nearestCorridorProjection(lines, home);
   if (!projection || waypointSpacingM <= 0) return [];
   const offsets = fullCorridorOffsets(projection, waypointSpacingM);
-  additionalOffsetsM.forEach((offsetM) => offsets.add(offsetM));
+  const anchorProjection = options.anchor
+    ? pointProjectionOnCorridor(projection, options.anchor)
+    : null;
+  const anchorOffsetM = anchorProjection
+    ? anchorProjection.distanceAlongM - projection.distanceAlongM
+    : undefined;
+  if (anchorOffsetM !== undefined) {
+    addRequiredOffset(offsets, anchorOffsetM);
+    if (options.anchorLookAheadM !== undefined) {
+      addRequiredOffset(offsets, anchorOffsetM + options.anchorLookAheadM);
+    }
+  }
 
   return [...offsets]
     .sort((left, right) => left - right)
@@ -245,11 +262,53 @@ export function corridorTourWaypoints(
       const point = pointAlongCorridor(projection, targetDistance);
       return {
         ...point,
+        anchorOffsetM,
         offsetM: targetDistance - projection.distanceAlongM,
       };
     })
     .filter((waypoint, index, waypoints) => index === 0
       || Math.abs(waypoint.offsetM - waypoints[index - 1].offsetM) >= 1);
+}
+
+function addRequiredOffset(offsets: Set<number>, requiredOffsetM: number): void {
+  for (const offsetM of offsets) {
+    if (Math.abs(offsetM - requiredOffsetM) < 1) offsets.delete(offsetM);
+  }
+  offsets.add(requiredOffsetM);
+}
+
+function pointProjectionOnCorridor(
+  corridor: CorridorProjection,
+  point: { latitude: number; longitude: number },
+): { distanceAlongM: number; distanceM: number } | null {
+  let nearest: { distanceAlongM: number; distanceM: number } | null = null;
+  let distanceBeforeM = 0;
+  for (let index = 1; index < corridor.coordinates.length; index += 1) {
+    const [startLongitude, startLatitude] = corridor.coordinates[index - 1];
+    const [endLongitude, endLatitude] = corridor.coordinates[index];
+    const startX = (startLongitude - point.longitude) * corridor.longitudeMeters;
+    const startY = (startLatitude - point.latitude) * corridor.latitudeMeters;
+    const endX = (endLongitude - point.longitude) * corridor.longitudeMeters;
+    const endY = (endLatitude - point.latitude) * corridor.latitudeMeters;
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const lengthSquared = dx * dx + dy * dy;
+    const segmentLengthM = corridor.segmentLengthsM[index - 1] ?? 0;
+    if (lengthSquared === 0) {
+      distanceBeforeM += segmentLengthM;
+      continue;
+    }
+    const progress = clamp(-(startX * dx + startY * dy) / lengthSquared, 0, 1);
+    const distanceM = Math.hypot(startX + progress * dx, startY + progress * dy);
+    if (!nearest || distanceM < nearest.distanceM) {
+      nearest = {
+        distanceAlongM: distanceBeforeM + progress * segmentLengthM,
+        distanceM,
+      };
+    }
+    distanceBeforeM += segmentLengthM;
+  }
+  return nearest;
 }
 
 function fullCorridorOffsets(

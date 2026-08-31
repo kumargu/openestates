@@ -325,11 +325,21 @@ test("approach-road camera follows the sourced travel direction", () => {
   assert.ok(waypoints.at(-1)!.offsetM > 0);
   assert.ok(waypoints.every((waypoint) => waypoint.heading > 190 && waypoint.heading < 200));
 
-  const fullRoad = corridorTourWaypoints([road], home, 60, [35]);
+  const entrance = { latitude: 12.982, longitude: 77.7435 };
+  const fullRoad = corridorTourWaypoints([road], home, 60, {
+    anchor: entrance,
+    anchorLookAheadM: 35,
+  });
   assert.ok(Math.abs(fullRoad[0].latitude - 12.984) < 0.0001);
   assert.ok(Math.abs(fullRoad.at(-1)!.latitude - 12.98) < 0.0001);
   assert.equal(fullRoad.some((waypoint) => waypoint.offsetM === 0), true);
-  assert.equal(fullRoad.some((waypoint) => waypoint.offsetM === 35), true);
+  const gateWaypoint = fullRoad.find((waypoint) =>
+    Math.abs(waypoint.latitude - entrance.latitude) < 0.0001
+    && Math.abs(waypoint.longitude - entrance.longitude) < 0.0001);
+  assert.ok(gateWaypoint?.anchorOffsetM !== undefined);
+  assert.ok(Math.abs(gateWaypoint.offsetM - gateWaypoint.anchorOffsetM) < 0.1);
+  assert.equal(fullRoad.some((waypoint) =>
+    Math.abs(waypoint.offsetM - (gateWaypoint.anchorOffsetM! + 35)) < 0.1), true);
 });
 
 test("southbound one-way geometry never reverses for a compass preference", () => {
@@ -358,6 +368,7 @@ test("guided road playback always covers the corridor once", () => {
   const frames = [-120, -60, 0, 60, 120].map((offsetM) => ({
     links: [],
     pano: `pano-${offsetM}`,
+    panoramaPosition: { latitude: 12.98, longitude: 77.74 },
     waypoint: {
       latitude: 12.98,
       longitude: 77.74,
@@ -376,6 +387,7 @@ test("end-to-end road playback passes the gate once without reversing", () => {
   const frames = [120, -120, 0, 60, -60].map((offsetM) => ({
     links: [],
     pano: `pano-${offsetM}`,
+    panoramaPosition: { latitude: 12.982, longitude: 77.7435 },
     waypoint: {
       latitude: 12.982,
       longitude: 77.7435,

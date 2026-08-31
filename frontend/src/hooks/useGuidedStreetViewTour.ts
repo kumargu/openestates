@@ -35,7 +35,10 @@ export type { StreetViewFrame, StreetViewResolution, StreetViewSchedule };
 type StreetViewResponse = {
   data: {
     links?: StreetViewLink[];
-    location?: { pano?: string };
+    location?: {
+      latLng?: { lat: () => number; lng: () => number };
+      pano?: string;
+    };
   };
 };
 
@@ -223,8 +226,14 @@ async function loadResolutions(
         source: library.StreetViewSource.OUTDOOR,
       });
       const pano = response.data.location?.pano;
+      const latLng = response.data.location?.latLng;
+      const panoramaPosition = latLng
+        ? { latitude: latLng.lat(), longitude: latLng.lng() }
+        : null;
       return {
-        frame: pano ? { links: response.data.links ?? [], pano, waypoint } : null,
+        frame: pano && panoramaPosition
+          ? { links: response.data.links ?? [], pano, panoramaPosition, waypoint }
+          : null,
         waypoint,
       };
     } catch {
@@ -394,7 +403,7 @@ export function useGuidedStreetViewTour({
             const approachDwellMs = Math.max(0, remainingDwellMs - entranceDwellMs);
             if (!await run.wait(Math.round(approachDwellMs / 2))) return;
             adapter.setPov(
-              streetViewAnchorHeading(entry.frame.waypoint, anchor),
+              streetViewAnchorHeading(entry.frame.panoramaPosition, anchor),
               experience.anchorPitch ?? 0,
             );
             if (!await run.wait(entranceDwellMs)) return;
@@ -456,7 +465,7 @@ export function useGuidedStreetViewTour({
     adapter.setFrame(target.frame, target.frame.waypoint.heading);
     if (target.lookAtEntrance && anchor) {
       adapter.setPov(
-        streetViewAnchorHeading(target.frame.waypoint, anchor),
+        streetViewAnchorHeading(target.frame.panoramaPosition, anchor),
         experience?.anchorPitch ?? 0,
       );
     }

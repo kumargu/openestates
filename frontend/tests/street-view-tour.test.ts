@@ -33,12 +33,16 @@ const experience: MapLayerExperience = {
 };
 
 function frame(index: number, heading = 15): StreetViewFrame {
+  const panoramaPosition = {
+    latitude: 12.98 + index * 0.0001,
+    longitude: 77.74,
+  };
   return {
     links: [],
     pano: `pano-${index}`,
+    panoramaPosition,
     waypoint: {
-      latitude: 12.98 + index * 0.0001,
-      longitude: 77.74,
+      ...panoramaPosition,
       heading,
       offsetM: index * 50,
     },
@@ -58,6 +62,30 @@ test("road film targets 28 seconds and preserves endpoints, entrance, and contin
   assert.equal(schedule.entries[schedule.entranceIndex!].frame.pano, "pano-18");
   assert.equal(schedule.entries[schedule.entranceIndex! + 1].frame.pano, "pano-19");
   assert.ok(schedule.entries.length <= 12);
+});
+
+test("gate pause follows the actual panorama position instead of a snapped request", () => {
+  const frames = Array.from({ length: 4 }, (_, index) => frame(index));
+  const entrance = { ...frames[1].waypoint };
+  frames[0] = {
+    ...frames[0],
+    panoramaPosition: {
+      latitude: entrance.latitude - 0.00002,
+      longitude: entrance.longitude,
+    },
+  };
+  frames[1] = {
+    ...frames[1],
+    panoramaPosition: {
+      latitude: entrance.latitude + 0.0003,
+      longitude: entrance.longitude,
+    },
+  };
+
+  const schedule = buildStreetViewSchedule(frames, experience, entrance);
+
+  assert.equal(schedule.entries[schedule.entranceIndex!].frame.pano, "pano-0");
+  assert.equal(schedule.entries[schedule.entranceIndex! + 1].frame.pano, "pano-1");
 });
 
 test("road film keeps meaningful curves while downsampling ordinary frames", () => {

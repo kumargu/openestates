@@ -45,6 +45,7 @@ function frame(pano: string, heading: number): StreetViewFrame {
   return {
     links: [],
     pano,
+    panoramaPosition: { latitude: 12.98, longitude: 77.74 },
     waypoint: { latitude: 12.98, longitude: 77.74, heading, offsetM: 0 },
   };
 }

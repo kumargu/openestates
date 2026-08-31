@@ -416,26 +416,27 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       : null,
     [accessLines, homeLatitude, homeLongitude, roadTourActive],
   );
-  const roadWaypoints = useMemo(
-    () => roadFocus && roadExperience
-      ? corridorTourWaypoints(
-        accessLines,
-        { latitude: homeLatitude, longitude: homeLongitude },
-        roadExperience.waypointSpacingM,
-        roadExperience.anchorLookAheadM === undefined
-          ? []
-          : [roadExperience.anchorLookAheadM],
-      )
-      : [],
-    [accessLines, homeLatitude, homeLongitude, roadExperience, roadFocus],
-  );
-  const roadLandingFocus = roadWaypoints[0] ?? roadFocus;
   const entranceAnchor = useMemo(() => {
     const entrance = places.find((place) => place.icon === "entrance" || place.icon === "entrance-likely");
     return entrance
       ? { latitude: entrance.latitude, longitude: entrance.longitude }
       : null;
   }, [places]);
+  const roadWaypoints = useMemo(
+    () => roadFocus && roadExperience
+      ? corridorTourWaypoints(
+        accessLines,
+        { latitude: homeLatitude, longitude: homeLongitude },
+        roadExperience.waypointSpacingM,
+        {
+          anchor: entranceAnchor,
+          anchorLookAheadM: roadExperience.anchorLookAheadM,
+        },
+      )
+      : [],
+    [accessLines, entranceAnchor, homeLatitude, homeLongitude, roadExperience, roadFocus],
+  );
+  const roadLandingFocus = roadWaypoints[0] ?? roadFocus;
   const societyComposition = useMemo(
     () => arrivalExperience
       ? societyCameraComposition(

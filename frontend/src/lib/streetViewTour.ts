@@ -9,6 +9,7 @@ export type StreetViewLink = {
 export type StreetViewFrame = {
   links: StreetViewLink[];
   pano: string;
+  panoramaPosition: { latitude: number; longitude: number };
   waypoint: CorridorTourWaypoint;
 };
 
@@ -117,12 +118,12 @@ export function resolveStreetViewSequence(
 }
 
 function distanceSquared(
-  waypoint: CorridorTourWaypoint,
+  position: { latitude: number; longitude: number },
   point: { latitude: number; longitude: number },
 ): number {
   const longitudeScale = Math.cos((point.latitude * Math.PI) / 180);
-  return (waypoint.latitude - point.latitude) ** 2
-    + ((waypoint.longitude - point.longitude) * longitudeScale) ** 2;
+  return (position.latitude - point.latitude) ** 2
+    + ((position.longitude - point.longitude) * longitudeScale) ** 2;
 }
 
 function entranceFrameIndex(
@@ -133,8 +134,8 @@ function entranceFrameIndex(
   let nearestIndex = 0;
   for (let index = 1; index < frames.length; index += 1) {
     if (
-      distanceSquared(frames[index].waypoint, entrance)
-      < distanceSquared(frames[nearestIndex].waypoint, entrance)
+      distanceSquared(frames[index].panoramaPosition, entrance)
+      < distanceSquared(frames[nearestIndex].panoramaPosition, entrance)
     ) nearestIndex = index;
   }
   return nearestIndex;
