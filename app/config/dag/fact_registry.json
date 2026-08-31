@@ -7039,9 +7039,9 @@
       "scoring_hint": {"direction": "text_match", "weight": 0.0}
     },
     {
-      "fact_key": "route.distance_m",
+      "fact_key": "road.corridor_length_m",
       "bucket": "social_infra",
-      "label": "route distance",
+      "label": "public corridor length",
       "lens": "proof",
       "polarity": "neutral",
       "scopes": [
@@ -7053,75 +7053,7 @@
       "source_types": [
         "OpenStreetMap"
       ],
-      "display_template": "route distance: {value} m",
-      "scoring_hint": {
-        "direction": "text_match",
-        "weight": 0.0
-      }
-    },
-    {
-      "fact_key": "route.mode",
-      "bucket": "social_infra",
-      "label": "route mode",
-      "lens": "proof",
-      "polarity": "neutral",
-      "scopes": [
-        "place"
-      ],
-      "enrichment_terms": [],
-      "answers_preferences": [],
-      "never_default": true,
-      "source_types": [
-        "OpenStreetMap"
-      ],
-      "display_template": "route mode: {value}",
-      "scoring_hint": {
-        "direction": "text_match",
-        "weight": 0.0
-      }
-    },
-    {
-      "fact_key": "route.destination_entity_id",
-      "bucket": "social_infra",
-      "label": "route destination",
-      "lens": "proof",
-      "polarity": "neutral",
-      "scopes": [
-        "place"
-      ],
-      "enrichment_terms": [],
-      "answers_preferences": [],
-      "never_default": true,
-      "source_types": [
-        "OpenStreetMap"
-      ],
-      "display_template": "route destination: {value}",
-      "scoring_hint": {
-        "direction": "text_match",
-        "weight": 0.0
-      }
-    },
-    {
-      "fact_key": "route.frontage_road_name",
-      "bucket": "social_infra",
-      "label": "frontage road",
-      "lens": "proof",
-      "polarity": "neutral",
-      "scopes": [
-        "place"
-      ],
-      "enrichment_terms": [
-        "frontage road",
-        "approach road"
-      ],
-      "answers_preferences": [
-        "approach road"
-      ],
-      "never_default": true,
-      "source_types": [
-        "OpenStreetMap"
-      ],
-      "display_template": "frontage road: {value}",
+      "display_template": "public corridor length: {value} m",
       "scoring_hint": {
         "direction": "text_match",
         "weight": 0.0

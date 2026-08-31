@@ -13,13 +13,9 @@ import type { MapLayerExperience } from "../src/lib/types.ts";
 
 const experience: MapLayerExperience = {
   kind: "street_view_tour",
-  tourMode: "end_to_end",
-  distanceEachDirectionM: 750,
   waypointSpacingM: 50,
   overviewDwellMs: 1_800,
   dwellMs: 2_500,
-  curveDwellMs: 4_200,
-  sideRoadDwellMs: 5_000,
   anchorPitch: 6,
   cameraAltitudeM: 25,
   cameraRangeM: 145,
@@ -73,6 +69,21 @@ test("road film keeps meaningful curves while downsampling ordinary frames", () 
   assert.equal(schedule.entries.some((entry) => entry.lookAtEntrance), false);
 });
 
+test("road film clamps misconfigured targets to the runtime duration bounds", () => {
+  const frames = Array.from({ length: 30 }, (_, index) => frame(index));
+  const tooShort = buildStreetViewSchedule(frames, {
+    ...experience,
+    targetDurationMs: 10_000,
+  });
+  const tooLong = buildStreetViewSchedule(frames, {
+    ...experience,
+    targetDurationMs: 40_000,
+  });
+
+  assert.equal(tooShort.durationMs, 24_000);
+  assert.equal(tooLong.durationMs, 32_000);
+});
+
 test("panorama gaps are explicit and material gaps stop the sequence", () => {
   const resolutions = Array.from({ length: 8 }, (_, index) => ({
     waypoint: frame(index).waypoint,
@@ -88,6 +99,29 @@ test("panorama gaps are explicit and material gaps stop the sequence", () => {
   const materialGap = resolveStreetViewSequence(materialResolutions, 140);
   assert.equal(materialGap.endedEarly, true);
   assert.equal(materialGap.frames.at(-1)?.pano, "pano-2");
+});
+
+test("a leading panorama gap never silently teleports into the corridor", () => {
+  const frames = Array.from({ length: 5 }, (_, index) => frame(index));
+  const shortLeadingGap = frames.map((item, index) => ({
+    waypoint: item.waypoint,
+    frame: index === 0 ? null : item,
+  }));
+  const materialLeadingGap = frames.map((item, index) => ({
+    waypoint: item.waypoint,
+    frame: index < 3 ? null : item,
+  }));
+
+  assert.deepEqual(resolveStreetViewSequence(shortLeadingGap, 75), {
+    endedEarly: false,
+    frames: frames.slice(1),
+    skippedShortGap: true,
+  });
+  assert.deepEqual(resolveStreetViewSequence(materialLeadingGap, 75), {
+    endedEarly: true,
+    frames: [],
+    skippedShortGap: false,
+  });
 });
 
 test("heading interpolation chooses the shortest turn", () => {

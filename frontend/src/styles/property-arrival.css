@@ -121,11 +121,17 @@
   color: var(--oe-ink-muted, #6d6963);
 }
 
-.property-arrival-map__search-preview button {
+.property-arrival-map__search-preview button,
+.property-arrival-map__search-preview a {
   justify-self: start;
   margin-top: 0.2rem;
   color: var(--color-cool-deep, #3f5c8a);
   font-weight: 650;
+}
+
+.property-arrival-map__search-preview a:focus-visible {
+  outline: 3px solid rgba(196, 92, 38, 0.38);
+  outline-offset: 3px;
 }
 
 .property-arrival-map .nearby-map {

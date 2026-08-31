@@ -26,9 +26,7 @@ import {
 import { mapMarkerPinOptions } from "../src/lib/mapMarkerVisual.ts";
 import {
   shouldReorientStreetView,
-  sideRoadHeading,
   streetViewAnchorHeading,
-  streetViewAnchorFrame,
   streetViewPlayback,
   type StreetViewFrame,
 } from "../src/hooks/useGuidedStreetViewTour.ts";
@@ -158,11 +156,8 @@ test("the arrival tile owns society and guided-road 3D evidence", () => {
       renderKind: "terrain_corridor",
       experience: {
         kind: "street_view_tour",
-        distanceEachDirectionM: 300,
         waypointSpacingM: 60,
         dwellMs: 3_600,
-        curveDwellMs: 2_400,
-        sideRoadDwellMs: 2_400,
         cameraAltitudeM: 8,
         cameraRangeM: 30,
         cameraTilt: 82,
@@ -216,6 +211,10 @@ test("arrival entrance labels and icons follow scene config and status", () => {
   assert.equal(inferred[0]?.name, "Likely entrance");
   assert.equal(inferred[0]?.icon, "entrance-likely");
   assert.deepEqual(arrivalMarkerPlaces({ ...base, places: [] }, layer), []);
+  assert.deepEqual(arrivalMarkerPlaces({
+    ...base,
+    places: [{ ...base.places[0], properties: {} }],
+  }, layer), []);
   const verified = arrivalMarkerPlaces({
     ...base,
     places: [{ ...base.places[0], properties: { status: "verified" } }],
@@ -298,7 +297,7 @@ test("large irregular boundaries increase range and mobile padding", () => {
   assert.ok(mobile.final.range > desktop.final.range);
 });
 
-test("approach-road camera targets the nearest road segment and looks along it", () => {
+test("approach-road camera follows the sourced travel direction", () => {
   const road = {
     id: "ecc-road",
     name: "ECC Road",
@@ -318,22 +317,44 @@ test("approach-road camera targets the nearest road segment and looks along it",
   assert.ok(focus);
   assert.ok(Math.abs(focus.latitude - 12.98166) < 0.0001);
   assert.ok(Math.abs(focus.longitude - 77.74341) < 0.0001);
-  assert.ok(focus.heading > 10 && focus.heading < 20);
+  assert.ok(focus.heading > 190 && focus.heading < 200);
 
-  const waypoints = corridorTourWaypoints([road], home, 150, 60);
+  const waypoints = corridorTourWaypoints([road], home, 60);
   assert.equal(waypoints.some((waypoint) => waypoint.offsetM === 0), true);
-  assert.equal(waypoints.some((waypoint) => waypoint.offsetM === 150), true);
-  assert.equal(waypoints.some((waypoint) => waypoint.offsetM === -150), true);
-  assert.ok(waypoints.every((waypoint) => waypoint.heading > 10 && waypoint.heading < 20));
+  assert.ok(waypoints[0].offsetM < 0);
+  assert.ok(waypoints.at(-1)!.offsetM > 0);
+  assert.ok(waypoints.every((waypoint) => waypoint.heading > 190 && waypoint.heading < 200));
 
-  const fullRoad = corridorTourWaypoints([road], home, 150, 60, "end_to_end", [35]);
-  assert.ok(Math.abs(fullRoad[0].latitude - 12.98) < 0.0001);
-  assert.ok(Math.abs(fullRoad.at(-1)!.latitude - 12.984) < 0.0001);
+  const fullRoad = corridorTourWaypoints([road], home, 60, [35]);
+  assert.ok(Math.abs(fullRoad[0].latitude - 12.984) < 0.0001);
+  assert.ok(Math.abs(fullRoad.at(-1)!.latitude - 12.98) < 0.0001);
   assert.equal(fullRoad.some((waypoint) => waypoint.offsetM === 0), true);
   assert.equal(fullRoad.some((waypoint) => waypoint.offsetM === 35), true);
 });
 
-test("guided road playback covers both directions and returns to its start", () => {
+test("southbound one-way geometry never reverses for a compass preference", () => {
+  const road = {
+    id: "southbound-one-way",
+    name: "Public road",
+    coordinates: [
+      [77.74, 12.984],
+      [77.74, 12.982],
+      [77.74, 12.98],
+    ] as [number, number][],
+    source_type: "OpenStreetMap",
+    properties: { direction: "oneway_forward" },
+  };
+  const waypoints = corridorTourWaypoints(
+    [road],
+    { latitude: 12.982, longitude: 77.7405 },
+    60,
+  );
+
+  assert.ok(waypoints[0].latitude > waypoints.at(-1)!.latitude);
+  assert.ok(waypoints.every((waypoint) => waypoint.heading === 180));
+});
+
+test("guided road playback always covers the corridor once", () => {
   const frames = [-120, -60, 0, 60, 120].map((offsetM) => ({
     links: [],
     pano: `pano-${offsetM}`,
@@ -347,7 +368,7 @@ test("guided road playback covers both directions and returns to its start", () 
 
   assert.deepEqual(
     streetViewPlayback(frames).map((frame) => frame.waypoint.offsetM),
-    [0, 60, 120, 60, 0, -60, -120, -60, 0],
+    [-120, -60, 0, 60, 120],
   );
 });
 
@@ -364,7 +385,7 @@ test("end-to-end road playback passes the gate once without reversing", () => {
   } satisfies StreetViewFrame));
 
   assert.deepEqual(
-    streetViewPlayback(frames, "end_to_end").map((frame) => frame.waypoint.offsetM),
+    streetViewPlayback(frames).map((frame) => frame.waypoint.offsetM),
     [-120, -60, 0, 60, 120],
   );
   const gateHeading = streetViewAnchorHeading(
@@ -374,29 +395,7 @@ test("end-to-end road playback passes the gate once without reversing", () => {
   assert.ok(gateHeading > 260 && gateHeading < 280);
 });
 
-test("guided road playback can pause just beyond the gate", () => {
-  const frames = [-60, 0, 30, 60].map((offsetM) => ({
-    links: [],
-    pano: `pano-${offsetM}`,
-    waypoint: {
-      latitude: 12.982,
-      longitude: 77.7435,
-      heading: 15,
-      offsetM,
-    },
-  } satisfies StreetViewFrame));
-
-  assert.equal(streetViewAnchorFrame(frames)?.waypoint.offsetM, 0);
-  assert.equal(streetViewAnchorFrame(frames, 35)?.waypoint.offsetM, 30);
-  assert.equal(streetViewAnchorFrame([], 35), null);
-});
-
-test("guided road playback recognizes a side-road view", () => {
-  assert.equal(sideRoadHeading([
-    { heading: 15, pano: "forward" },
-    { heading: 105, pano: "side-road" },
-    { heading: 195, pano: "backward" },
-  ], 15), 105);
+test("guided road playback turns only for a meaningful curve", () => {
   assert.equal(shouldReorientStreetView(15, 21), false);
   assert.equal(shouldReorientStreetView(15, 35), true);
 });

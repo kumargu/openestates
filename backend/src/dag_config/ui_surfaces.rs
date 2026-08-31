@@ -83,7 +83,13 @@ pub struct UiSurfaceSceneExperienceConfig {
     #[serde(default)]
     pub society_play_label: Option<String>,
     #[serde(default)]
+    pub society_pause_label: Option<String>,
+    #[serde(default)]
+    pub society_resume_label: Option<String>,
+    #[serde(default)]
     pub search_context_label: Option<String>,
+    #[serde(default)]
+    pub search_context_view_home_label: Option<String>,
     #[serde(default)]
     pub back_to_society_label: Option<String>,
 }
@@ -151,19 +157,10 @@ pub struct UiSurfaceLayerRule {
 #[serde(rename_all = "camelCase")]
 pub struct UiSurfaceLayerExperienceConfig {
     pub kind: String,
-    #[serde(default)]
-    pub tour_mode: Option<String>,
-    pub distance_each_direction_m: u32,
     pub waypoint_spacing_m: u32,
     #[serde(default)]
     pub overview_dwell_ms: Option<u32>,
     pub dwell_ms: u32,
-    pub curve_dwell_ms: u32,
-    pub side_road_dwell_ms: u32,
-    #[serde(default)]
-    pub look_toward_anchor: bool,
-    #[serde(default)]
-    pub anchor_dwell_ms: Option<u32>,
     #[serde(default)]
     pub anchor_look_ahead_m: Option<u32>,
     #[serde(default)]
@@ -309,6 +306,35 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
         }
         if let Some(experience) = scene.experience.as_ref() {
             let positive = |value: f64| value.is_finite() && value > 0.0;
+            let has_blank_copy = [
+                experience.missing_boundary_state.as_deref(),
+                experience.google_unavailable_state.as_deref(),
+                experience.society_play_label.as_deref(),
+                experience.society_pause_label.as_deref(),
+                experience.society_resume_label.as_deref(),
+                experience.search_context_label.as_deref(),
+                experience.search_context_view_home_label.as_deref(),
+                experience.back_to_society_label.as_deref(),
+            ]
+            .into_iter()
+            .flatten()
+            .any(|value| value.trim().is_empty());
+            let missing_society_control = experience
+                .society_play_label
+                .as_deref()
+                .is_none_or(str::is_empty)
+                || experience
+                    .society_pause_label
+                    .as_deref()
+                    .is_none_or(str::is_empty)
+                || experience
+                    .society_resume_label
+                    .as_deref()
+                    .is_none_or(str::is_empty)
+                || experience
+                    .search_context_view_home_label
+                    .as_deref()
+                    .is_none_or(str::is_empty);
             if experience.reveal_duration_ms == 0
                 || !positive(experience.start_range_m)
                 || !positive(experience.final_range_m)
@@ -317,6 +343,8 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                 || !positive(experience.rotation_arc_degrees)
                 || !positive(experience.boundary_padding)
                 || !positive(experience.mobile_boundary_padding)
+                || has_blank_copy
+                || missing_society_control
             {
                 return Err(DagConfigError::InvalidConfig(format!(
                     "surface {} contains an invalid scene experience",
@@ -358,20 +386,18 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
             }
             if let Some(experience) = layer.experience.as_ref() {
                 let finite_positive = |value: f64| value.is_finite() && value > 0.0;
-                let valid_tour_mode = experience
-                    .tour_mode
-                    .as_deref()
-                    .is_none_or(|mode| matches!(mode, "center_out_and_back" | "end_to_end"));
+                let missing_playback_copy = [
+                    experience.pause_label.as_deref(),
+                    experience.resume_label.as_deref(),
+                    experience.replay_label.as_deref(),
+                    experience.skip_label.as_deref(),
+                ]
+                .into_iter()
+                .any(|value| value.is_none_or(|label| label.trim().is_empty()));
                 if experience.kind.trim().is_empty()
-                    || !valid_tour_mode
-                    || experience.distance_each_direction_m == 0
                     || experience.waypoint_spacing_m == 0
                     || experience.overview_dwell_ms == Some(0)
                     || experience.dwell_ms == 0
-                    || experience.curve_dwell_ms == 0
-                    || experience.side_road_dwell_ms == 0
-                    || experience.anchor_dwell_ms == Some(0)
-                    || (experience.look_toward_anchor && experience.anchor_dwell_ms.is_none())
                     || experience
                         .anchor_pitch
                         .is_some_and(|pitch| !pitch.is_finite() || !(-90.0..=90.0).contains(&pitch))
@@ -382,6 +408,7 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                     || experience.minimum_frame_dwell_ms == Some(0)
                     || experience.entrance_dwell_ms == Some(0)
                     || experience.maximum_panorama_gap_m == Some(0)
+                    || missing_playback_copy
                     || matches!(
                         (
                             experience.minimum_duration_ms,
@@ -511,8 +538,20 @@ mod tests {
         assert_eq!(scene_experience.final_tilt, 48.0);
         assert_eq!(scene_experience.final_heading, 210.0);
         assert_eq!(
+            scene_experience.society_pause_label.as_deref(),
+            Some("Pause society reveal")
+        );
+        assert_eq!(
+            scene_experience.society_resume_label.as_deref(),
+            Some("Resume society reveal")
+        );
+        assert_eq!(
             scene_experience.google_unavailable_state.as_deref(),
             Some("Map unavailable")
+        );
+        assert_eq!(
+            scene_experience.search_context_view_home_label.as_deref(),
+            Some("View home")
         );
         assert_eq!(
             arrival_scene.anchor.boundary_fact_key.as_deref(),
@@ -565,14 +604,9 @@ mod tests {
         );
         let experience = approach_road.experience.as_ref().expect("road experience");
         assert_eq!(experience.kind, "street_view_tour");
-        assert_eq!(experience.tour_mode.as_deref(), Some("end_to_end"));
-        assert_eq!(experience.distance_each_direction_m, 350);
         assert_eq!(experience.waypoint_spacing_m, 65);
         assert_eq!(experience.overview_dwell_ms, Some(1800));
         assert_eq!(experience.dwell_ms, 2500);
-        assert_eq!(experience.curve_dwell_ms, 4200);
-        assert!(experience.look_toward_anchor);
-        assert_eq!(experience.anchor_dwell_ms, Some(5000));
         assert_eq!(experience.anchor_look_ahead_m, Some(35));
         assert_eq!(experience.anchor_pitch, Some(6.0));
         assert_eq!(experience.transition_ms, 4200);

@@ -1,5 +1,5 @@
 import type { MapLayerExperience } from "./types.ts";
-import type { CorridorTourMode, CorridorTourWaypoint } from "./arrivalMapProjection.ts";
+import type { CorridorTourWaypoint } from "./arrivalMapProjection.ts";
 
 export type StreetViewLink = {
   heading: number;
@@ -36,8 +36,6 @@ export type StreetViewSchedule = {
 };
 
 const CURVE_THRESHOLD_DEGREES = 12;
-const SIDE_ROAD_MIN_DEGREES = 38;
-const SIDE_ROAD_MAX_DEGREES = 132;
 
 export function normalizeHeading(heading: number): number {
   return (heading % 360 + 360) % 360;
@@ -62,34 +60,12 @@ export function shouldReorientStreetView(currentHeading: number, nextHeading: nu
   return headingDistance(currentHeading, nextHeading) >= CURVE_THRESHOLD_DEGREES;
 }
 
-export function streetViewPlayback(
-  frames: StreetViewFrame[],
-  tourMode: CorridorTourMode = "center_out_and_back",
-): StreetViewFrame[] {
+export function streetViewPlayback(frames: StreetViewFrame[]): StreetViewFrame[] {
   if (frames.length === 0) return [];
   const sorted = frames.slice().sort((left, right) =>
     left.waypoint.offsetM - right.waypoint.offsetM);
-  if (tourMode === "end_to_end") {
-    return sorted.filter((frame, index) =>
-      index === 0 || frame.pano !== sorted[index - 1].pano);
-  }
-  const center = sorted.reduce((nearest, frame) =>
-    Math.abs(frame.waypoint.offsetM) < Math.abs(nearest.waypoint.offsetM)
-      ? frame
-      : nearest);
-  const forward = sorted.filter((frame) => frame.waypoint.offsetM >= center.waypoint.offsetM);
-  const backward = sorted
-    .filter((frame) => frame.waypoint.offsetM < center.waypoint.offsetM)
-    .sort((left, right) => right.waypoint.offsetM - left.waypoint.offsetM);
-  const playback = [
-    ...forward,
-    ...forward.slice(0, -1).reverse(),
-    ...backward,
-    ...backward.slice(0, -1).reverse(),
-    center,
-  ];
-  return playback.filter((frame, index) =>
-    index === 0 || frame.pano !== playback[index - 1].pano);
+  return sorted.filter((frame, index) =>
+    index === 0 || frame.pano !== sorted[index - 1].pano);
 }
 
 export function resolveStreetViewSequence(
@@ -106,6 +82,16 @@ export function resolveStreetViewSequence(
   for (let index = 0; index < ordered.length; index += 1) {
     const resolution = ordered[index];
     if (!resolution.frame) continue;
+    if (previousLoadedIndex < 0 && index > 0) {
+      const leadingGapM = Math.abs(
+        resolution.waypoint.offsetM - ordered[0].waypoint.offsetM,
+      );
+      if (leadingGapM > maximumGapM) {
+        endedEarly = true;
+        break;
+      }
+      skippedShortGap = true;
+    }
     if (previousLoadedIndex >= 0 && index > previousLoadedIndex + 1) {
       const gapM = Math.abs(
         resolution.waypoint.offsetM - ordered[previousLoadedIndex].waypoint.offsetM,
@@ -191,9 +177,13 @@ export function buildStreetViewSchedule(
   experience: MapLayerExperience,
   entrance?: { latitude: number; longitude: number } | null,
 ): StreetViewSchedule {
-  const playback = streetViewPlayback(frames, experience.tourMode ?? "end_to_end");
+  const playback = streetViewPlayback(frames);
   if (playback.length === 0) return { durationMs: 0, entries: [], entranceIndex: null };
-  const targetDurationMs = experience.targetDurationMs ?? 28_000;
+  const configuredTargetDurationMs = experience.targetDurationMs ?? 28_000;
+  const targetDurationMs = Math.min(
+    experience.maximumDurationMs ?? Number.POSITIVE_INFINITY,
+    Math.max(experience.minimumDurationMs ?? 0, configuredTargetDurationMs),
+  );
   const overheadMs = (experience.overviewDwellMs ?? 0) + experience.transitionMs;
   const entranceDwellMs = entrance ? experience.entranceDwellMs ?? 0 : 0;
   const availableMs = Math.max(0, targetDurationMs - overheadMs - entranceDwellMs);
@@ -232,24 +222,6 @@ export function buildStreetViewSchedule(
   };
 }
 
-export function sideRoadHeading(
-  links: StreetViewLink[],
-  roadHeading: number,
-): number | null {
-  const candidates = links
-    .map((link) => ({
-      distance: Math.min(
-        headingDistance(link.heading, roadHeading),
-        headingDistance(link.heading, normalizeHeading(roadHeading + 180)),
-      ),
-      heading: link.heading,
-    }))
-    .filter(({ distance }) =>
-      distance >= SIDE_ROAD_MIN_DEGREES && distance <= SIDE_ROAD_MAX_DEGREES)
-    .sort((left, right) => Math.abs(90 - left.distance) - Math.abs(90 - right.distance));
-  return candidates[0]?.heading ?? null;
-}
-
 export function streetViewAnchorHeading(
   from: { latitude: number; longitude: number },
   to: { latitude: number; longitude: number },
@@ -259,16 +231,4 @@ export function streetViewAnchorHeading(
   const east = (to.longitude - from.longitude) * longitudeScale;
   const north = (to.latitude - from.latitude) * latitudeScale;
   return normalizeHeading(Math.atan2(east, north) * 180 / Math.PI);
-}
-
-export function streetViewAnchorFrame(
-  frames: StreetViewFrame[],
-  lookAheadM = 0,
-): StreetViewFrame | null {
-  if (frames.length === 0) return null;
-  return frames.reduce((nearest, frame) =>
-    Math.abs(frame.waypoint.offsetM - lookAheadM)
-      < Math.abs(nearest.waypoint.offsetM - lookAheadM)
-      ? frame
-      : nearest);
 }

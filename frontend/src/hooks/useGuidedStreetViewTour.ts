@@ -3,7 +3,6 @@ import {
   useEffect,
   useRef,
   useState,
-  useSyncExternalStore,
   type RefObject,
 } from "react";
 import { loadGoogleStreetViewLibrary } from "../lib/googleMaps3d.ts";
@@ -15,8 +14,6 @@ import {
   easedHeadingSteps,
   resolveStreetViewSequence,
   shouldReorientStreetView,
-  sideRoadHeading,
-  streetViewAnchorFrame,
   streetViewAnchorHeading,
   streetViewPlayback,
   type StreetViewFrame,
@@ -30,8 +27,6 @@ export {
   easedHeadingSteps,
   resolveStreetViewSequence,
   shouldReorientStreetView,
-  sideRoadHeading,
-  streetViewAnchorFrame,
   streetViewAnchorHeading,
   streetViewPlayback,
 };
@@ -149,6 +144,7 @@ type GuidedStreetViewTourOptions = {
   autoPlay: boolean;
   containerRef: RefObject<HTMLDivElement | null>;
   experience: MapLayerExperience | null;
+  onPlaybackCancelled?: () => void;
   playbackController: ArrivalPlaybackController;
   waypoints: CorridorTourWaypoint[];
 };
@@ -167,16 +163,13 @@ export function useGuidedStreetViewTour({
   autoPlay,
   containerRef,
   experience,
+  onPlaybackCancelled,
   playbackController,
   waypoints,
 }: GuidedStreetViewTourOptions): GuidedStreetViewTour {
-  const playbackState = useSyncExternalStore(
-    playbackController.subscribe,
-    playbackController.snapshot,
-    playbackController.snapshot,
-  );
   const adapterRef = useRef<GoogleStreetViewAdapter | null>(null);
   const scheduleRef = useRef<StreetViewSchedule | null>(null);
+  const autoPlayRef = useRef(autoPlay);
   const [ready, setReady] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -184,8 +177,8 @@ export function useGuidedStreetViewTour({
   const [manualPlay, setManualPlay] = useState(false);
 
   useEffect(() => {
-    if (playbackState === "playing") adapterRef.current?.resume();
-  }, [playbackState]);
+    autoPlayRef.current = autoPlay;
+  }, [autoPlay]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -203,10 +196,10 @@ export function useGuidedStreetViewTour({
 
     const run = playbackController.begin("playing");
     let unregisterStopper = () => {};
-    const cancel = () => playbackController.cancel("settled");
-    const keyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") playbackController.pause();
-      else cancel();
+    let unregisterResumer = () => {};
+    const cancel = () => {
+      playbackController.cancel("settled");
+      onPlaybackCancelled?.();
     };
     const visibilityChanged = () => {
       if (document.hidden) cancel();
@@ -214,7 +207,6 @@ export function useGuidedStreetViewTour({
     container.addEventListener("pointerdown", cancel, { capture: true });
     container.addEventListener("touchstart", cancel, { capture: true, passive: true });
     container.addEventListener("wheel", cancel, { capture: true, passive: true });
-    container.addEventListener("keydown", keyDown, { capture: true });
     document.addEventListener("visibilitychange", visibilityChanged);
 
     void loadGoogleStreetViewLibrary()
@@ -253,13 +245,14 @@ export function useGuidedStreetViewTour({
         adapterRef.current = adapter;
         scheduleRef.current = schedule;
         unregisterStopper = playbackController.registerStopper(() => adapter.stop());
+        unregisterResumer = playbackController.registerResumer(() => adapter.resume());
         setReady(true);
         setProgress({ current: 1, total: schedule.entries.length });
         if (sequence.endedEarly) setStatus(experience.endsHereState ?? null);
         else if (sequence.skippedShortGap) setStatus(experience.shortGapState ?? null);
 
         const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        if ((!autoPlay && !manualPlay) || reducedMotion) {
+        if ((!autoPlayRef.current && !manualPlay) || reducedMotion) {
           playbackController.cancel("settled");
           adapter.resume();
           return;
@@ -314,11 +307,11 @@ export function useGuidedStreetViewTour({
     return () => {
       disposed = true;
       unregisterStopper();
+      unregisterResumer();
       if (run.isCurrent()) playbackController.cancel("settled");
       container.removeEventListener("pointerdown", cancel, { capture: true });
       container.removeEventListener("touchstart", cancel, { capture: true });
       container.removeEventListener("wheel", cancel, { capture: true });
-      container.removeEventListener("keydown", keyDown, { capture: true });
       document.removeEventListener("visibilitychange", visibilityChanged);
       adapterRef.current?.hide();
       adapterRef.current = null;
@@ -327,10 +320,10 @@ export function useGuidedStreetViewTour({
   }, [
     active,
     anchor,
-    autoPlay,
     containerRef,
     experience,
     manualPlay,
+    onPlaybackCancelled,
     playbackController,
     replayVersion,
     waypoints,

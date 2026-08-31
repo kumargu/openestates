@@ -56,6 +56,7 @@ fn society_access_emits_boundary_public_corridor_and_typed_entrance() {
     assert!(facts.facts.iter().all(|fact| {
         fact.fact_key != "transit_access_route"
             && fact.fact_key != "transit_access_route_entity"
+            && !fact.fact_key.starts_with("route.")
             && !fact.value_json.contains("ground_access")
     }));
     assert!(facts.facts.iter().any(|fact| {
@@ -70,6 +71,11 @@ fn society_access_emits_boundary_public_corridor_and_typed_entrance() {
         fact.entity_id.starts_with("place:approach-road:")
             && fact.fact_key == "road.direction"
             && fact.value_json.contains("two_way")
+    }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.entity_id.starts_with("place:approach-road:")
+            && fact.fact_key == "road.corridor_length_m"
+            && fact.value_json.contains("640")
     }));
     assert!(facts.facts.iter().any(|fact| {
         fact.fact_key == "society.entrance_entity"

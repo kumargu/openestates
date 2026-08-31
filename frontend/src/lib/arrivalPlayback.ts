@@ -37,6 +37,7 @@ export class ArrivalPlaybackController {
   private runId = 0;
   private readonly listeners = new Set<() => void>();
   private readonly stoppers = new Set<() => void>();
+  private readonly resumers = new Set<() => void>();
   private readonly waits = new Set<PendingWait>();
 
   constructor(clock: ArrivalPlaybackClock = browserClock) {
@@ -73,6 +74,7 @@ export class ArrivalPlaybackController {
   resume(): void {
     if (this.state !== "paused") return;
     this.setState(this.activeState);
+    for (const resume of this.resumers) resume();
     for (const wait of this.waits) this.schedule(wait);
   }
 
@@ -86,14 +88,28 @@ export class ArrivalPlaybackController {
     return () => this.stoppers.delete(stopper);
   }
 
+  registerResumer(resumer: () => void): () => void {
+    this.resumers.add(resumer);
+    return () => this.resumers.delete(resumer);
+  }
+
   isCurrent(runId: number): boolean {
     return runId === this.runId;
+  }
+
+  remainingWaitMs(): number {
+    let remainingMs = 0;
+    for (const wait of this.waits) {
+      const elapsedMs = wait.id === null ? 0 : this.clock.now() - wait.startedAt;
+      remainingMs = Math.max(remainingMs, Math.max(0, wait.remainingMs - elapsedMs));
+    }
+    return remainingMs;
   }
 
   activate(runId: number, state: ArrivalActiveState): boolean {
     if (!this.isCurrent(runId)) return false;
     this.activeState = state;
-    this.setState(state);
+    if (this.state !== "paused") this.setState(state);
     return true;
   }
 
@@ -197,6 +213,13 @@ export function useArrivalPlaybackController(): {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const pause = useCallback(() => controller.pause(), [controller]);
   const resume = useCallback(() => controller.resume(), [controller]);
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") controller.pause();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [controller]);
   useEffect(() => () => controller.cancel("idle"), [controller]);
   return { controller, state, pause, resume };
 }

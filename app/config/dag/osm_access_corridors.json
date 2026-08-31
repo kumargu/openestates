@@ -31,7 +31,8 @@
     "linked_entity_fact_key": "approach_road_entity",
     "direction_fact_key": "road.direction",
     "association_fact_key": "road.association_method",
-    "source_geometry_fact_key": "road.source_geometry_geojson"
+    "source_geometry_fact_key": "road.source_geometry_geojson",
+    "corridor_length_fact_key": "road.corridor_length_m"
   },
   "entrance": {
     "linked_entity_fact_key": "society.entrance_entity",

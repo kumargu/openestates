@@ -3,13 +3,19 @@ import {
   createRef,
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useState,
   type ErrorInfo,
   type ReactNode,
 } from "react";
-import type { ArrivalSearchSociety, PropertyMapContext } from "../../lib/types.ts";
+import { Link } from "react-router-dom";
+import type {
+  ArrivalSearchSociety,
+  MapOverlayLine,
+  PropertyMapContext,
+} from "../../lib/types.ts";
 import { useArrivalPlaybackController } from "../../lib/arrivalPlayback.ts";
 import {
   buildNumberedPlaces,
@@ -22,6 +28,14 @@ import {
   metroLinesNearArrival,
   type ArrivalCameraMode,
 } from "../../lib/arrivalMapProjection.ts";
+import type { PlaceCluster } from "../../lib/nearbyPlateProjection.ts";
+import {
+  arrivalMissingState,
+  arrivalSearchSocietiesForView,
+  arrivalViewOptions,
+  societyPlaybackAction,
+  type ArrivalView,
+} from "../../lib/arrivalViewState.ts";
 
 const SocietyScene = lazy(async () => {
   const module = await import("./PropertyArrivalSocietyScene.tsx");
@@ -33,8 +47,6 @@ const ApproachScene = lazy(async () => {
   return { default: module.PropertyArrivalApproachScene };
 });
 
-type ArrivalView = "society" | "metro" | "approach";
-
 type Props = {
   context: PropertyMapContext;
   searchContextSocieties?: ArrivalSearchSociety[];
@@ -42,6 +54,9 @@ type Props = {
 
 const SOCIETY_VIEW_RADIUS_KM = 0.8;
 const DEFAULT_APPROACH_DWELL_MS = 3_600;
+const EMPTY_ARRIVAL_CLUSTERS: PlaceCluster[] = [];
+const EMPTY_ARRIVAL_LINES: MapOverlayLine[] = [];
+const IGNORE_ARRIVAL_SELECTION = () => undefined;
 
 function compactPrice(price: number): string | null {
   if (!Number.isFinite(price) || price <= 0) return null;
@@ -107,6 +122,13 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
   const roadExperience = roadLayer?.experience?.kind === "street_view_tour"
     ? roadLayer.experience
     : undefined;
+  const approachOverviewDwellMs = roadExperience?.overviewDwellMs
+    ?? roadExperience?.dwellMs
+    ?? DEFAULT_APPROACH_DWELL_MS;
+  const hasRoadExperience = Boolean(roadExperience);
+  const hasApproachLayer = Boolean(roadLayer);
+  const approachLabel = roadLayer?.label;
+  const metroLabel = metroLayer?.label;
   const metroPlaces = useMemo(() => {
     if (!home) return [];
     return buildNumberedPlaces(metroStationsAroundHome(
@@ -125,20 +147,16 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
     () => arrivalMarkerPlaces(context, entranceLayer),
     [context, entranceLayer],
   );
-  const views = useMemo(() => [
-    { id: "society" as const, label: "Society", available: true },
-    { id: "metro" as const, label: metroLayer?.label ?? "Metro", available: metroLines.length > 0 },
-    {
-      id: "approach" as const,
-      label: roadLayer?.label ?? "Approach road",
-      available: roadLines.length > 0 && Boolean(roadExperience),
-    },
-  ].filter((view) => view.available), [
-    metroLayer?.label,
+  const views = useMemo(() => arrivalViewOptions({
+    approachLabel,
+    hasApproachLayer,
+    hasMetroEvidence: metroLines.length > 0,
+    metroLabel,
+  }), [
+    approachLabel,
+    hasApproachLayer,
+    metroLabel,
     metroLines.length,
-    roadExperience,
-    roadLayer?.label,
-    roadLines.length,
   ]);
   const [view, setView] = useState<ArrivalView>(() => views[0]?.id ?? "society");
   const [cameraMode, setCameraMode] = useState<ArrivalCameraMode>(() =>
@@ -155,23 +173,42 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
   const selectedSearchSociety = searchContextSocieties.find((candidate) =>
     candidate.societyId === selectedSearchSocietyId) ?? null;
   const arrivalExperience = context.arrivalExperience;
-  const missingArrivalState = activeView === "society" && !context.home.boundary
-    ? arrivalExperience?.missingBoundaryState
-    : (activeView === "society" || activeView === "approach") && entrancePlaces.length === 0
-    ? entranceLayer?.emptyState
-    : activeView === "society" && roadLayer && roadLines.length === 0
-    ? roadLayer.emptyState
+  const missingArrivalState = arrivalMissingState(activeView, {
+    hasApproachRoad: roadLines.length > 0,
+    hasBoundary: Boolean(context.home.boundary),
+    hasEntrance: entrancePlaces.length > 0,
+    missingApproachRoadState: roadLayer?.emptyState,
+    missingBoundaryState: arrivalExperience?.missingBoundaryState,
+    missingEntranceState: entranceLayer?.emptyState,
+  });
+  const visibleSearchContextSocieties = arrivalSearchSocietiesForView(
+    activeView,
+    searchContextSocieties,
+  );
+  const societyAction = activeView === "society"
+    ? societyPlaybackAction(playbackState, societyAutoPlay)
     : null;
+  const societyActionLabel = societyAction === "pause"
+    ? arrivalExperience?.societyPauseLabel
+    : societyAction === "resume"
+    ? arrivalExperience?.societyResumeLabel
+    : societyAction === "play"
+    ? arrivalExperience?.societyPlayLabel
+    : null;
+  const cancelSocietyPlayback = useCallback(() => setSocietyAutoPlay(false), []);
+  const cancelApproachPlayback = useCallback(() => setApproachAutoPlay(false), []);
 
   useEffect(() => {
-    if (activeView !== "approach" || activeCameraMode !== "home") return undefined;
+    if (
+      activeView !== "approach"
+      || activeCameraMode !== "home"
+      || !approachAutoPlay
+      || roadLines.length === 0
+      || !hasRoadExperience
+    ) return undefined;
     const run = playbackController.begin("playing");
     if (!run.activate()) return undefined;
-    void run.wait(
-      roadExperience?.overviewDwellMs
-        ?? roadExperience?.dwellMs
-        ?? DEFAULT_APPROACH_DWELL_MS,
-    ).then((completed) => {
+    void run.wait(approachOverviewDwellMs).then((completed) => {
       if (completed && run.isCurrent()) setCameraMode("evidence");
     });
     return () => {
@@ -180,8 +217,10 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
   }, [
     activeCameraMode,
     activeView,
-    roadExperience?.dwellMs,
-    roadExperience?.overviewDwellMs,
+    approachAutoPlay,
+    approachOverviewDwellMs,
+    hasRoadExperience,
+    roadLines.length,
     playbackController,
   ]);
 
@@ -194,11 +233,43 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
     };
   }, [expanded]);
 
+  useEffect(() => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const stopForReducedMotion = (event: MediaQueryListEvent) => {
+      if (!event.matches) return;
+      playbackController.cancel("settled");
+      setSocietyAutoPlay(false);
+      setApproachAutoPlay(false);
+      if (activeView === "approach") setCameraMode("evidence");
+    };
+    reducedMotion.addEventListener("change", stopForReducedMotion);
+    return () => reducedMotion.removeEventListener("change", stopForReducedMotion);
+  }, [activeView, playbackController]);
+
+  const selectView = useCallback((next: ArrivalView) => {
+    playbackController.cancel("settled");
+    if (activeView === "society") setSocietyAutoPlay(false);
+    if (activeView === "approach") setApproachAutoPlay(false);
+    setView(next);
+    const reducedApproach = next === "approach"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setCameraMode(next === "metro" || reducedApproach ? "evidence" : "home");
+  }, [activeView, playbackController]);
+
+  const selectSearchSociety = useCallback((societyId: string) => {
+    playbackController.cancel("settled");
+    setSocietyAutoPlay(false);
+    setApproachAutoPlay(false);
+    setView("society");
+    setCameraMode("home");
+    setSelectedSearchSocietyId(societyId);
+  }, [playbackController]);
+
   if (!home || views.length === 0) return null;
 
   const visiblePlaces = activeView === "metro" ? metroPlaces : entrancePlaces;
-  const visibleMetroLines = activeView === "metro" ? metroLines : [];
-  const visibleRoadLines = activeView === "approach" ? roadLines : [];
+  const visibleMetroLines = activeView === "metro" ? metroLines : EMPTY_ARRIVAL_LINES;
+  const visibleRoadLines = activeView === "approach" ? roadLines : EMPTY_ARRIVAL_LINES;
   const viewport = activeView === "metro"
     ? arrivalEvidenceViewport(home, visiblePlaces, visibleMetroLines)
     : {
@@ -207,23 +278,6 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
       zoom: 14.6,
       paddingFactor: 0.2,
     };
-
-  function selectView(next: ArrivalView) {
-    playbackController.cancel("settled");
-    if (activeView === "society") setSocietyAutoPlay(false);
-    if (activeView === "approach") setApproachAutoPlay(false);
-    setView(next);
-    setCameraMode(next === "metro" ? "evidence" : "home");
-  }
-
-  function selectSearchSociety(societyId: string) {
-    playbackController.cancel("settled");
-    setSocietyAutoPlay(false);
-    setApproachAutoPlay(false);
-    setView("society");
-    setCameraMode("home");
-    setSelectedSearchSocietyId(societyId);
-  }
 
   return (
     <div className="property-arrival-map">
@@ -241,21 +295,35 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
         ))}
       </div>
       {missingArrivalState && (
-        <p className="property-arrival-map__status">{missingArrivalState}</p>
+        <p className="property-arrival-map__status" role="status" aria-live="polite">
+          {missingArrivalState}
+        </p>
       )}
-      {activeView === "society"
-        && (playbackState === "paused" || (!societyAutoPlay && playbackState === "settled"))
-        && arrivalExperience?.societyPlayLabel && (
+      {societyAction && societyActionLabel ? (
         <button
           type="button"
           className="property-arrival-map__society-play"
-          onClick={() => playbackState === "paused"
-            ? playbackController.resume()
-            : setSocietyAutoPlay(true)}
+          onClick={() => {
+            if (societyAction === "pause") playbackController.pause();
+            else if (societyAction === "resume") playbackController.resume();
+            else setSocietyAutoPlay(true);
+          }}
         >
-          {arrivalExperience.societyPlayLabel}
+          {societyActionLabel}
         </button>
-      )}
+      ) : null}
+      {activeView === "approach"
+        && activeCameraMode === "home"
+        && !approachAutoPlay
+        && roadExperience?.replayLabel ? (
+        <button
+          type="button"
+          className="property-arrival-map__society-play"
+          onClick={() => setApproachAutoPlay(true)}
+        >
+          {roadExperience.replayLabel}
+        </button>
+      ) : null}
       <ArrivalMapBoundary unavailableLabel={arrivalExperience?.googleUnavailableState}>
         <Suspense
           fallback={(
@@ -275,12 +343,12 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
                 boundary: context.home.boundary,
               }}
               places={visiblePlaces}
-              clusters={[]}
+              clusters={EMPTY_ARRIVAL_CLUSTERS}
               selectedId={null}
               viewport={viewport}
               metroLines={visibleMetroLines}
               accessLines={visibleRoadLines}
-              redFlagLines={[]}
+              redFlagLines={EMPTY_ARRIVAL_LINES}
               showMetroLines={false}
               water={null}
               waterTint={false}
@@ -291,14 +359,11 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
               playbackController={playbackController}
               autoPlaySociety={false}
               autoPlayApproach={approachAutoPlay}
-              secondarySocieties={searchContextSocieties}
-              selectedSecondarySocietyId={selectedSearchSocietyId}
-              onSelectSecondarySociety={selectSearchSociety}
-              onSocietyPlaybackCancelled={() => setSocietyAutoPlay(false)}
-              onSelectCluster={() => undefined}
-              onSelectPlace={() => undefined}
-              onSelectAccessLine={() => undefined}
-              onSelectRedFlagLine={() => undefined}
+              onPlaybackCancelled={cancelApproachPlayback}
+              onSelectCluster={IGNORE_ARRIVAL_SELECTION}
+              onSelectPlace={IGNORE_ARRIVAL_SELECTION}
+              onSelectAccessLine={IGNORE_ARRIVAL_SELECTION}
+              onSelectRedFlagLine={IGNORE_ARRIVAL_SELECTION}
               onBackToHome={() => selectView("society")}
               showBackToHome={false}
               onToggleExpanded={() => setExpanded((current) => !current)}
@@ -312,12 +377,12 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
               boundary: context.home.boundary,
             }}
             places={visiblePlaces}
-            clusters={[]}
+            clusters={EMPTY_ARRIVAL_CLUSTERS}
             selectedId={null}
             viewport={viewport}
             metroLines={visibleMetroLines}
-            accessLines={[]}
-            redFlagLines={[]}
+            accessLines={EMPTY_ARRIVAL_LINES}
+            redFlagLines={EMPTY_ARRIVAL_LINES}
             showMetroLines={activeView === "metro"}
             water={null}
             waterTint={false}
@@ -326,14 +391,14 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
             arrivalExperience={context.arrivalExperience}
             playbackController={playbackController}
             autoPlaySociety={activeView === "society" && societyAutoPlay}
-            secondarySocieties={searchContextSocieties}
-            selectedSecondarySocietyId={selectedSearchSocietyId}
-            onSelectSecondarySociety={selectSearchSociety}
-            onSocietyPlaybackCancelled={() => setSocietyAutoPlay(false)}
-            onSelectCluster={() => undefined}
-            onSelectPlace={() => undefined}
-            onSelectAccessLine={() => undefined}
-            onSelectRedFlagLine={() => undefined}
+            secondarySocieties={visibleSearchContextSocieties}
+            selectedSecondarySocietyId={activeView === "society" ? selectedSearchSocietyId : null}
+            onSelectSecondarySociety={activeView === "society" ? selectSearchSociety : undefined}
+            onPlaybackCancelled={cancelSocietyPlayback}
+            onSelectCluster={IGNORE_ARRIVAL_SELECTION}
+            onSelectPlace={IGNORE_ARRIVAL_SELECTION}
+            onSelectAccessLine={IGNORE_ARRIVAL_SELECTION}
+            onSelectRedFlagLine={IGNORE_ARRIVAL_SELECTION}
             onBackToHome={() => selectView("society")}
             showBackToHome={false}
             onToggleExpanded={() => setExpanded((current) => !current)}
@@ -341,7 +406,9 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
           )}
         </Suspense>
       </ArrivalMapBoundary>
-      {searchContextSocieties.length > 0 && arrivalExperience?.searchContextLabel && (
+      {activeView === "society"
+        && searchContextSocieties.length > 0
+        && arrivalExperience?.searchContextLabel ? (
         <aside className="property-arrival-map__search-context" aria-label={arrivalExperience.searchContextLabel}>
           <span>{arrivalExperience.searchContextLabel}</span>
           <div>
@@ -368,6 +435,11 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
                   compactPrice(selectedSearchSociety.preview.price),
                 ].filter(Boolean).join(" · ")}
               </span>
+              {arrivalExperience.searchContextViewHomeLabel ? (
+                <Link to={selectedSearchSociety.href}>
+                  {arrivalExperience.searchContextViewHomeLabel}
+                </Link>
+              ) : null}
               {arrivalExperience.backToSocietyLabel && (
                 <button
                   type="button"
@@ -379,7 +451,7 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
             </div>
           )}
         </aside>
-      )}
+      ) : null}
     </div>
   );
 }

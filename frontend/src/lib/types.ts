@@ -443,6 +443,7 @@ export type MapComparisonHome = {
 };
 
 export type ArrivalSearchSociety = {
+  href: string;
   propertyId: string;
   societyId: string;
   proofFocus?: ProofFocus;
@@ -501,21 +502,18 @@ export type ArrivalSceneExperience = {
   missingBoundaryState?: string;
   googleUnavailableState?: string;
   societyPlayLabel?: string;
+  societyPauseLabel?: string;
+  societyResumeLabel?: string;
   searchContextLabel?: string;
+  searchContextViewHomeLabel?: string;
   backToSocietyLabel?: string;
 };
 
 export type MapLayerExperience = {
   kind: string;
-  tourMode?: "center_out_and_back" | "end_to_end";
-  distanceEachDirectionM: number;
   waypointSpacingM: number;
   overviewDwellMs?: number;
   dwellMs: number;
-  curveDwellMs: number;
-  sideRoadDwellMs: number;
-  lookTowardAnchor?: boolean;
-  anchorDwellMs?: number;
   anchorLookAheadM?: number;
   anchorPitch?: number;
   cameraAltitudeM: number;

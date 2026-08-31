@@ -67,6 +67,7 @@ test("pause and resume preserve the remaining wait instead of restarting", async
 
   clock.advance(400);
   controller.pause();
+  assert.equal(controller.remainingWaitMs(), 600);
   clock.advance(5_000);
   assert.equal(controller.snapshot(), "paused");
   controller.resume();
@@ -76,4 +77,24 @@ test("pause and resume preserve the remaining wait instead of restarting", async
 
   assert.equal(await wait, true);
   assert.equal(run.isCurrent(), true);
+});
+
+test("async preparation cannot override pause and resumes registered renderers", async () => {
+  const clock = new FakeClock();
+  const controller = new ArrivalPlaybackController(clock);
+  let resumes = 0;
+  controller.registerResumer(() => { resumes += 1; });
+  const run = controller.begin("playing");
+
+  controller.pause();
+  assert.equal(run.activate(), true);
+  assert.equal(controller.snapshot(), "paused");
+  const wait = run.wait(100);
+  clock.advance(500);
+
+  controller.resume();
+  assert.equal(resumes, 1);
+  assert.equal(controller.snapshot(), "playing");
+  clock.advance(100);
+  assert.equal(await wait, true);
 });

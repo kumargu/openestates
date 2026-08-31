@@ -9,7 +9,11 @@ import {
   type StoryScenePlayback,
 } from "./PropertyFilmstrip.tsx";
 import type { ArrivalSearchSociety, PropertyMapContext } from "../../lib/types.ts";
-import { hasArrivalMap } from "../../lib/arrivalMapProjection.ts";
+import {
+  hasArrivalMap,
+  mappedArrivalEntranceStatus,
+} from "../../lib/arrivalMapProjection.ts";
+import { arrivalGateDistanceLabel } from "../../lib/arrivalViewState.ts";
 import { PropertyArrivalMap } from "./PropertyArrivalMap.tsx";
 import "../../styles/property-arrival.css";
 
@@ -25,16 +29,11 @@ type Props = {
 
 const ARRIVAL_CLOSE_DISTANCE_M = 50;
 
-function distanceLabel(distanceFromGateM?: number): string | undefined {
-  if (distanceFromGateM === undefined) return undefined;
-  if (distanceFromGateM === 0) return "At the gate";
-  return `${Math.round(distanceFromGateM)} m from gate`;
-}
-
 function viewScale(
   distanceFromGateM?: number,
+  entranceStatus: "verified" | "inferred" | null = null,
 ): PropertyFilmstripFrame["viewScale"] {
-  if (distanceFromGateM === undefined) return "wide";
+  if (!entranceStatus || distanceFromGateM === undefined) return "wide";
   return distanceFromGateM <= ARRIVAL_CLOSE_DISTANCE_M ? "close" : "wide";
 }
 
@@ -50,7 +49,10 @@ function captureDateLabel(capturedAt?: string): string | undefined {
   }).format(date);
 }
 
-function frameMeta(frame: StoryArrivalFrame): string | undefined {
+function frameMeta(
+  frame: StoryArrivalFrame,
+  entranceStatus: "verified" | "inferred" | null,
+): string | undefined {
   const lifecycle = frame.lifecycle === "current"
     ? frame.stripKind === "street_view_strip"
       ? "Street View"
@@ -61,7 +63,7 @@ function frameMeta(frame: StoryArrivalFrame): string | undefined {
   return [
     lifecycle,
     captureDateLabel(frame.capturedAt),
-    distanceLabel(frame.distanceFromGateM),
+    arrivalGateDistanceLabel(frame.distanceFromGateM, entranceStatus),
   ]
     .filter(Boolean)
     .join(" · ") || undefined;
@@ -95,6 +97,7 @@ export function PropertyArrivalFilm({
   const usableFrameCount = availability.frameKey === frameKey
     ? availability.count
     : distinctFrames.length;
+  const entranceStatus = mappedArrivalEntranceStatus(mapContext);
   const syncAvailability = useCallback((frameIds: string[]) => {
     setAvailability((current) =>
       current.frameKey === frameKey && current.count === frameIds.length
@@ -107,12 +110,12 @@ export function PropertyArrivalFilm({
         id: frame.id,
         url: frame.url,
         label: frame.label || `Approach view ${index + 1}`,
-        meta: frameMeta(frame),
+        meta: frameMeta(frame, entranceStatus),
         lifecycle: frame.lifecycle,
         sourceUrl: frame.sourceUrl,
-        viewScale: viewScale(frame.distanceFromGateM),
+        viewScale: viewScale(frame.distanceFromGateM, entranceStatus),
       })),
-    [distinctFrames],
+    [distinctFrames, entranceStatus],
   );
 
   const mapAvailable = hasArrivalMap(mapContext);

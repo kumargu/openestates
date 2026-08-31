@@ -17,6 +17,7 @@ export const DISCOVERY_CONTEXT_TTL_MS = 30 * 60 * 1_000;
 
 export type DiscoveryMapCandidate = {
   propertyId: string;
+  propertyIds: string[];
   societyId: string;
   societyName: string;
   rank: number;
@@ -166,10 +167,12 @@ export function writeDiscoveryMapContext(
     if (!societyName || !societyId) continue;
     const existing = societies.get(societyId);
     if (existing) {
+      if (!existing.propertyIds.includes(result.id)) existing.propertyIds.push(result.id);
       continue;
     }
     const candidate: DiscoveryMapCandidate = {
       propertyId: result.id,
+      propertyIds: [result.id],
       societyId,
       societyName,
       rank,
@@ -213,7 +216,7 @@ export function readDiscoveryMapContext(
       candidate.version !== 2
       || candidate.id !== contextId
       || typeof candidate.queryFingerprint !== "string"
-      || !candidate.queryFingerprint.trim()
+      || !/^q[0-9a-z]+$/.test(candidate.queryFingerprint)
       || typeof candidate.createdAt !== "number"
       || candidate.createdAt > now
       || now - candidate.createdAt > DISCOVERY_CONTEXT_TTL_MS
@@ -224,6 +227,11 @@ export function readDiscoveryMapContext(
         item
         && typeof item.propertyId === "string"
         && item.propertyId.trim()
+        && Array.isArray(item.propertyIds)
+        && item.propertyIds.length > 0
+        && item.propertyIds.every((propertyId) =>
+          typeof propertyId === "string" && propertyId.trim())
+        && item.propertyIds.includes(item.propertyId)
         && typeof item.societyId === "string"
         && item.societyId.trim()
         && typeof item.societyName === "string"
@@ -249,6 +257,18 @@ export function readDiscoveryMapContext(
   } catch {
     return null;
   }
+}
+
+export function discoveryMapContextForProperty(
+  context: DiscoveryMapContext | null,
+  propertyId: string,
+): DiscoveryMapContext | null {
+  const normalizedPropertyId = propertyId.trim();
+  if (!context || !normalizedPropertyId) return null;
+  return context.candidates.some((candidate) =>
+    candidate.propertyIds.includes(normalizedPropertyId))
+    ? context
+    : null;
 }
 
 export function consumeDiscoveryReturn(url: string): number | null {

@@ -19,6 +19,7 @@ import {
   getPropertySurface,
   getPropertySurfacesBatch,
   parseProofFocusParam,
+  propertyDetailPath,
 } from "../lib/api.ts";
 import {
   recommendationShelfItems,
@@ -50,6 +51,7 @@ import { formatGoogleRating } from "../lib/reviewFormatting.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
 import {
+  discoveryMapContextForProperty,
   propertyExploreHref,
   readDiscoveryMapContext,
 } from "../lib/navigationContext.ts";
@@ -344,8 +346,8 @@ function PropertyPageBody({
   >("loading");
   const [retryKey, setRetryKey] = useState(0);
   const discoveryMapContext = useMemo(
-    () => readDiscoveryMapContext(contextId),
-    [contextId],
+    () => discoveryMapContextForProperty(readDiscoveryMapContext(contextId), id),
+    [contextId, id],
   );
 
   useEffect(() => {
@@ -424,6 +426,11 @@ function PropertyPageBody({
           || longitude > 180
         ) return [];
         return [{
+          href: propertyDetailPath(
+            candidate.propertyId,
+            candidate.proofFocus,
+            discoveryMapContext?.id,
+          ),
           propertyId: candidate.propertyId,
           societyId: candidate.societyId,
           proofFocus: candidate.proofFocus,

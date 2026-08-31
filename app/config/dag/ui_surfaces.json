@@ -248,7 +248,10 @@
         "missingBoundaryState": "Society boundary not mapped",
         "googleUnavailableState": "Map unavailable",
         "societyPlayLabel": "Play society reveal",
+        "societyPauseLabel": "Pause society reveal",
+        "societyResumeLabel": "Resume society reveal",
         "searchContextLabel": "Also in your search",
+        "searchContextViewHomeLabel": "View home",
         "backToSocietyLabel": "Back to this society"
       },
       "layers": [
@@ -311,15 +314,9 @@
             "emptyState": "Approach road not mapped",
             "experience": {
               "kind": "street_view_tour",
-              "tourMode": "end_to_end",
-              "distanceEachDirectionM": 350,
               "waypointSpacingM": 65,
               "overviewDwellMs": 1800,
               "dwellMs": 2500,
-              "curveDwellMs": 4200,
-              "sideRoadDwellMs": 5000,
-              "lookTowardAnchor": true,
-              "anchorDwellMs": 5000,
               "anchorLookAheadM": 35,
               "anchorPitch": 6,
               "cameraAltitudeM": 25,

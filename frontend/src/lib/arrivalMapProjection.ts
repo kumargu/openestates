@@ -25,8 +25,6 @@ export type CorridorTourWaypoint = CorridorCameraFocus & {
   offsetM: number;
 };
 
-export type CorridorTourMode = "center_out_and_back" | "end_to_end";
-
 export type SocietyCameraComposition = {
   center: { latitude: number; longitude: number };
   start: { heading: number; range: number; tilt: number };
@@ -38,7 +36,6 @@ type CorridorProjection = CorridorCameraFocus & {
   segmentLengthsM: number[];
   distanceAlongM: number;
   totalDistanceM: number;
-  directionSign: 1 | -1;
   longitudeMeters: number;
   latitudeMeters: number;
 };
@@ -55,15 +52,28 @@ export function arrivalMarkerPlaces(
   return buildNumberedPlaces(
     context.places
       .filter((place) => place.layer === layer.id)
-      .map((place) => {
+      .flatMap((place) => {
         const status = place.properties?.status;
-        return {
+        if (status !== "verified" && status !== "inferred") return [];
+        return [{
           ...place,
-          name: (status ? layer.featureValueLabels?.status?.[status] : undefined) ?? place.name,
+          name: layer.featureValueLabels?.status?.[status] ?? place.name,
           icon: status === "inferred" ? "entrance-likely" : (place.icon ?? "entrance"),
-        };
+        }];
       }),
   );
+}
+
+export function mappedArrivalEntranceStatus(
+  context?: PropertyMapContext | null,
+): "verified" | "inferred" | null {
+  if (!context) return null;
+  const entranceLayer = context.layers?.find((layer) => layer.renderKind === "arrival_marker");
+  const statuses = context.places
+    .filter((place) => place.layer === entranceLayer?.id)
+    .map((place) => place.properties?.status);
+  if (statuses.includes("verified")) return "verified";
+  return statuses.includes("inferred") ? "inferred" : null;
 }
 
 export function societyCameraComposition(
@@ -216,52 +226,30 @@ export function corridorCameraFocus(
 export function corridorTourWaypoints(
   lines: MapOverlayLine[],
   home: { latitude: number; longitude: number },
-  distanceEachDirectionM: number,
   waypointSpacingM: number,
-  tourMode: CorridorTourMode = "center_out_and_back",
   additionalOffsetsM: number[] = [],
 ): CorridorTourWaypoint[] {
   const projection = nearestCorridorProjection(lines, home);
-  if (!projection || distanceEachDirectionM <= 0 || waypointSpacingM <= 0) return [];
-  const offsets = tourMode === "end_to_end"
-    ? fullCorridorOffsets(projection, waypointSpacingM)
-    : boundedCorridorOffsets(distanceEachDirectionM, waypointSpacingM);
+  if (!projection || waypointSpacingM <= 0) return [];
+  const offsets = fullCorridorOffsets(projection, waypointSpacingM);
   additionalOffsetsM.forEach((offsetM) => offsets.add(offsetM));
 
   return [...offsets]
     .sort((left, right) => left - right)
     .map((offsetM) => {
       const targetDistance = clamp(
-        projection.distanceAlongM + offsetM * projection.directionSign,
+        projection.distanceAlongM + offsetM,
         0,
         projection.totalDistanceM,
       );
       const point = pointAlongCorridor(projection, targetDistance);
       return {
         ...point,
-        offsetM: (targetDistance - projection.distanceAlongM) / projection.directionSign,
+        offsetM: targetDistance - projection.distanceAlongM,
       };
     })
     .filter((waypoint, index, waypoints) => index === 0
       || Math.abs(waypoint.offsetM - waypoints[index - 1].offsetM) >= 1);
-}
-
-function boundedCorridorOffsets(
-  distanceEachDirectionM: number,
-  waypointSpacingM: number,
-): Set<number> {
-  const offsets = new Set<number>([0]);
-  for (
-    let distance = waypointSpacingM;
-    distance < distanceEachDirectionM;
-    distance += waypointSpacingM
-  ) {
-    offsets.add(distance);
-    offsets.add(-distance);
-  }
-  offsets.add(distanceEachDirectionM);
-  offsets.add(-distanceEachDirectionM);
-  return offsets;
 }
 
 function fullCorridorOffsets(
@@ -269,8 +257,8 @@ function fullCorridorOffsets(
   waypointSpacingM: number,
 ): Set<number> {
   const endpointOffsets = [
-    (0 - projection.distanceAlongM) / projection.directionSign,
-    (projection.totalDistanceM - projection.distanceAlongM) / projection.directionSign,
+    0 - projection.distanceAlongM,
+    projection.totalDistanceM - projection.distanceAlongM,
   ].sort((left, right) => left - right);
   const startOffset = endpointOffsets[0] ?? 0;
   const endOffset = endpointOffsets[1] ?? 0;
@@ -320,17 +308,15 @@ function nearestCorridorProjection(
       const distance = Math.hypot(x, y);
       if (!nearest || distance < nearest.distance) {
         const bearing = normalizeHeading(Math.atan2(dx, dy) * 180 / Math.PI);
-        const directionSign = bearing >= 180 ? -1 : 1;
         nearest = {
           latitude: home.latitude + y / latitudeMeters,
           longitude: home.longitude + x / longitudeMeters,
           distance,
-          heading: directionSign === 1 ? bearing : normalizeHeading(bearing + 180),
+          heading: bearing,
           coordinates: line.coordinates,
           segmentLengthsM,
           distanceAlongM: distanceBeforeM + progress * Math.sqrt(lengthSquared),
           totalDistanceM: segmentLengthsM.reduce((sum, length) => sum + length, 0),
-          directionSign,
           longitudeMeters,
           latitudeMeters,
         };
@@ -362,9 +348,7 @@ function pointAlongCorridor(
       return {
         latitude: startLatitude + (endLatitude - startLatitude) * progress,
         longitude: startLongitude + (endLongitude - startLongitude) * progress,
-        heading: corridor.directionSign === 1
-          ? bearing
-          : normalizeHeading(bearing + 180),
+        heading: bearing,
       };
     }
     distanceBeforeM = segmentEndM;

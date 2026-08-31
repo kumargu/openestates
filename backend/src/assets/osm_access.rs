@@ -93,6 +93,7 @@ struct ApproachRoadConfig {
     direction_fact_key: String,
     association_fact_key: String,
     source_geometry_fact_key: String,
+    corridor_length_fact_key: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -350,7 +351,7 @@ fn push_approach_road_facts(
             annotations,
             annotation_keys,
             &road_entity_id,
-            "route.distance_m",
+            &config.corridor_length_fact_key,
             FactValue::Numeric(distance),
             Some("Corridor distance: {value} m".to_string()),
             &[],
@@ -725,6 +726,11 @@ fn load_config() -> Result<OsmAccessConfigFile, OsmAccessAssetError> {
             .is_empty()
         || config.approach_road.direction_fact_key.trim().is_empty()
         || config.approach_road.association_fact_key.trim().is_empty()
+        || config
+            .approach_road
+            .corridor_length_fact_key
+            .trim()
+            .is_empty()
         || config
             .approach_road
             .source_geometry_fact_key

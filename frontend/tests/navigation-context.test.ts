@@ -5,6 +5,7 @@ import {
   clearDiscoveryContext,
   consumeDiscoveryReturn,
   DISCOVERY_CONTEXT_TTL_MS,
+  discoveryMapContextForProperty,
   navigationMode,
   propertyExploreHref,
   queryFingerprint,
@@ -140,6 +141,7 @@ test("map context keeps ranked search societies without duplicate configurations
     candidates: [
       {
         propertyId: "one",
+        propertyIds: ["one", "two"],
         societyId: "society:a",
         societyName: "Alpha",
         rank: 0,
@@ -147,6 +149,7 @@ test("map context keeps ranked search societies without duplicate configurations
       },
       {
         propertyId: "three",
+        propertyIds: ["three"],
         societyId: "society:b",
         societyName: "Beta",
         rank: 2,
@@ -154,6 +157,47 @@ test("map context keeps ranked search societies without duplicate configurations
       },
     ],
   });
+});
+
+test("map context is consumed only by a property carried by its URL token", () => {
+  sessionValues.clear();
+  const result = (id: string, societyId: string): SearchResultItem => ({
+    id,
+    kg_entity_refs: {
+      property_entity_id: `property:${id}`,
+      society_entity_id: societyId,
+      source_entity_ids: [],
+    },
+    title: id,
+    area: "Whitefield",
+    price: 20_000_000,
+    price_per_sqft: 12_000,
+    bhk: 3,
+    sqft: 1_600,
+    society_name: societyId,
+    builder_name: "Builder",
+    hero_image: null,
+    transparency_tags: [],
+    description_summary: "",
+    possession_status: "Ready",
+    metro_distance_mins: 10,
+    floor: 4,
+    total_floors: 18,
+    facing: "East",
+    match_score: 0.8,
+    match_label: "Strong match",
+    match_reason: "Near school",
+    match_tier: "exact",
+  });
+  writeDiscoveryMapContext("quiet 3bhk", [
+    result("one", "society:a"),
+    result("two", "society:a"),
+  ], { id: "bound-context", now: 1_000 });
+  const context = readDiscoveryMapContext("bound-context", 1_001);
+
+  assert.equal(discoveryMapContextForProperty(context, "one")?.id, "bound-context");
+  assert.equal(discoveryMapContextForProperty(context, "two")?.id, "bound-context");
+  assert.equal(discoveryMapContextForProperty(context, "unrelated"), null);
 });
 
 test("discovery map context requires its URL token and expires after thirty minutes", () => {
@@ -179,7 +223,22 @@ test("discovery map context requires its URL token and expires after thirty minu
     id: "malformed",
     queryFingerprint: queryFingerprint("quiet 3bhk"),
     createdAt: 5_000,
-    candidates: [{ propertyId: "missing-preview", societyId: "society:a", societyName: "Alpha", rank: 0 }],
+    candidates: [{
+      propertyId: "missing-preview",
+      propertyIds: ["missing-preview"],
+      societyId: "society:a",
+      societyName: "Alpha",
+      rank: 0,
+    }],
   }));
   assert.equal(readDiscoveryMapContext("malformed", 5_001), null);
+
+  sessionValues.set("openestates:discovery-map-context:v2:bad-fingerprint", JSON.stringify({
+    version: 2,
+    id: "bad-fingerprint",
+    queryFingerprint: "quiet 3bhk",
+    createdAt: 5_000,
+    candidates: [],
+  }));
+  assert.equal(readDiscoveryMapContext("bad-fingerprint", 5_001), null);
 });
