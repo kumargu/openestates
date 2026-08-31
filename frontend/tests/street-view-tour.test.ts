@@ -191,6 +191,35 @@ test("actual panorama distance and link continuity prevent silent teleports", ()
   assert.deepEqual(distantSequence.frames.map((item) => item.pano), ["pano-0"]);
 });
 
+test("sampled panoramas can continue through aligned intermediate Google links", () => {
+  const first = frame(0, 0);
+  const second = frame(5, 0);
+  first.links = [{ heading: 0, pano: "intermediate-a" }];
+  second.links = [{ heading: 180, pano: "intermediate-d" }];
+  const sequence = resolveStreetViewSequence([
+    { waypoint: first.waypoint, frame: first },
+    { waypoint: second.waypoint, frame: second },
+  ], 140);
+  assert.equal(sequence.endedEarly, false);
+  assert.deepEqual(sequence.frames.map((item) => item.pano), ["pano-0", "pano-5"]);
+});
+
+test("nearby panoramas on a differently aligned road do not continue the tour", () => {
+  const first = frame(0, 90);
+  const second = {
+    ...frame(1, 90),
+    panoramaPosition: { latitude: 12.98, longitude: 77.7401 },
+    links: [{ heading: 90, pano: "parallel-road-east" }],
+  };
+  first.links = [{ heading: 90, pano: "parallel-road-west" }];
+  const sequence = resolveStreetViewSequence([
+    { waypoint: first.waypoint, frame: first },
+    { waypoint: second.waypoint, frame: second },
+  ], 140);
+  assert.equal(sequence.endedEarly, true);
+  assert.deepEqual(sequence.frames.map((item) => item.pano), ["pano-0"]);
+});
+
 test("a leading panorama gap never silently teleports into the corridor", () => {
   const frames = Array.from({ length: 5 }, (_, index) => frame(index));
   const shortLeadingGap = frames.map((item, index) => ({

@@ -48,6 +48,8 @@ export type EntranceCameraSequence = {
 
 const CURVE_THRESHOLD_DEGREES = 12;
 const EARTH_RADIUS_M = 6_371_000;
+const DEFAULT_PANORAMA_ROUTE_SNAP_M = 35;
+const PANORAMA_HEADING_TOLERANCE_DEGREES = 55;
 
 export function normalizeHeading(heading: number): number {
   return (heading % 360 + 360) % 360;
@@ -112,26 +114,75 @@ export function streetViewPlayback(frames: StreetViewFrame[]): StreetViewFrame[]
     index === 0 || frame.pano !== sorted[index - 1].pano);
 }
 
-function panoramaDistanceM(left: StreetViewFrame, right: StreetViewFrame): number {
-  const leftLatitude = left.panoramaPosition.latitude * Math.PI / 180;
-  const rightLatitude = right.panoramaPosition.latitude * Math.PI / 180;
+function positionDistanceM(
+  left: { latitude: number; longitude: number },
+  right: { latitude: number; longitude: number },
+): number {
+  const leftLatitude = left.latitude * Math.PI / 180;
+  const rightLatitude = right.latitude * Math.PI / 180;
   const latitudeDelta = rightLatitude - leftLatitude;
-  const longitudeDelta = (right.panoramaPosition.longitude - left.panoramaPosition.longitude)
-    * Math.PI / 180;
+  const longitudeDelta = (right.longitude - left.longitude) * Math.PI / 180;
   const haversine = Math.sin(latitudeDelta / 2) ** 2
     + Math.cos(leftLatitude) * Math.cos(rightLatitude) * Math.sin(longitudeDelta / 2) ** 2;
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(haversine)));
 }
 
-function panoramasAreLinked(left: StreetViewFrame, right: StreetViewFrame): boolean {
+function panoramaDistanceM(left: StreetViewFrame, right: StreetViewFrame): number {
+  return positionDistanceM(left.panoramaPosition, right.panoramaPosition);
+}
+
+function panoramasHaveDirectOrSharedLink(
+  left: StreetViewFrame,
+  right: StreetViewFrame,
+): boolean {
   if (left.pano === right.pano) return true;
-  return left.links.some((link) => link.pano === right.pano)
-    || right.links.some((link) => link.pano === left.pano);
+  const leftTargets = new Set(left.links.map((link) => link.pano));
+  return leftTargets.has(right.pano)
+    || right.links.some((link) => link.pano === left.pano || leftTargets.has(link.pano));
+}
+
+function linkSupportsHeading(links: StreetViewLink[], heading: number): boolean {
+  return links.some((link) =>
+    Math.abs(shortestHeadingDelta(link.heading, heading))
+      <= PANORAMA_HEADING_TOLERANCE_DEGREES);
+}
+
+function panoramasFollowRequestedCorridor(
+  left: StreetViewFrame,
+  right: StreetViewFrame,
+  maximumRouteSnapM: number,
+): boolean {
+  if (left.links.length === 0 || right.links.length === 0) return false;
+  if (
+    positionDistanceM(left.panoramaPosition, left.waypoint) > maximumRouteSnapM
+    || positionDistanceM(right.panoramaPosition, right.waypoint) > maximumRouteSnapM
+  ) return false;
+  const panoramaHeading = streetViewAnchorHeading(
+    left.panoramaPosition,
+    right.panoramaPosition,
+  );
+  const waypointHeading = streetViewAnchorHeading(left.waypoint, right.waypoint);
+  if (
+    Math.abs(shortestHeadingDelta(panoramaHeading, waypointHeading))
+      > PANORAMA_HEADING_TOLERANCE_DEGREES
+  ) return false;
+  return linkSupportsHeading(left.links, panoramaHeading)
+    && linkSupportsHeading(right.links, normalizeHeading(panoramaHeading + 180));
+}
+
+function panoramasAreContinuous(
+  left: StreetViewFrame,
+  right: StreetViewFrame,
+  maximumRouteSnapM: number,
+): boolean {
+  return panoramasHaveDirectOrSharedLink(left, right)
+    || panoramasFollowRequestedCorridor(left, right, maximumRouteSnapM);
 }
 
 export function resolveStreetViewSequence(
   resolutions: StreetViewResolution[],
   maximumGapM: number,
+  maximumRouteSnapM = DEFAULT_PANORAMA_ROUTE_SNAP_M,
 ): StreetViewSequence {
   const ordered = resolutions.slice().sort((left, right) =>
     left.waypoint.offsetM - right.waypoint.offsetM);
@@ -168,7 +219,7 @@ export function resolveStreetViewSequence(
       previousFrame
       && (
         panoramaDistanceM(previousFrame, resolution.frame) > maximumGapM
-        || !panoramasAreLinked(previousFrame, resolution.frame)
+        || !panoramasAreContinuous(previousFrame, resolution.frame, maximumRouteSnapM)
       )
     ) {
       endedEarly = true;
