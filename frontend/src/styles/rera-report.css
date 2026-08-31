@@ -1529,10 +1529,16 @@
   border-top: 1px solid color-mix(in srgb, var(--color-border) 45%, transparent);
 }
 
-.rera-document-groups li > span {
+.rera-document-groups li > a {
   color: var(--color-text-secondary);
   font-size: 0.87rem;
   font-weight: 680;
+  text-decoration: none;
+}
+
+.rera-document-groups li > a:hover,
+.rera-document-groups li > a:focus-visible {
+  color: var(--color-accent);
 }
 
 .rera-schedule-groups .rera-fact-list {

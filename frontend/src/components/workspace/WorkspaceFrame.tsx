@@ -22,6 +22,7 @@ import {
   clearDiscoveryContext,
   discoveryReturnHref,
   navigationMode,
+  readDiscoveryContext,
   requestDiscoveryReturn,
   writeDiscoveryContext,
 } from "../../lib/navigationContext.ts";
@@ -272,6 +273,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       ? "workspace"
       : "discovery";
   const effectiveSidebarCollapsed = sidebarCollapsed;
+  const discoveryContext = readDiscoveryContext();
   const discoveryHref = discoveryReturnHref();
   const sidebarHomes = homes;
 
@@ -287,6 +289,8 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
           reduced={sidebarReduced}
           mode={sidebarMode}
           discoveryHref={discoveryHref}
+          discoveryResultCount={discoveryContext?.resultCount}
+          hasDiscoveryContext={discoveryContext !== null}
           onToggle={toggleSidebar}
           onFocus={focusHome}
           onRemove={removeHome}

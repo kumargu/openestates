@@ -26,10 +26,13 @@ test("workspace nav follows the focused home across property views", () => {
   const items = workspaceNavItems("home one/with slash", "rera", {
     mode: "property-context",
     discoveryHref: "/?q=quiet+3bhk",
+    discoveryResultCount: 18,
+    hasDiscoveryContext: true,
   });
   const byView = new Map(items.map((item) => [item.view, item]));
 
-  assert.equal(byView.get("browse")?.label, "Explore");
+  assert.equal(byView.get("browse")?.label, "Back to 18 results");
+  assert.equal(byView.get("browse")?.icon, "back");
   assert.equal(byView.get("browse")?.to, "/?q=quiet+3bhk");
   assert.equal(byView.get("home")?.label, "Home");
   assert.equal(byView.get("notebook")?.label, "Notes");
@@ -54,6 +57,19 @@ test("property context never invents a current home", () => {
   assert.equal(byView.get("home")?.available, false);
   assert.equal(byView.get("rera")?.available, false);
   assert.equal(byView.get("plan")?.available, false);
+  assert.equal(byView.get("browse")?.label, "Explore");
+  assert.equal(byView.get("browse")?.icon, "browse");
+});
+
+test("property context keeps a generic return when a legacy discovery has no count", () => {
+  const returnItem = workspaceNavItems("home-1", "home", {
+    mode: "property-context",
+    discoveryHref: "/?q=near+metro",
+    hasDiscoveryContext: true,
+  }).find((item) => item.view === "browse");
+
+  assert.equal(returnItem?.label, "Back to results");
+  assert.equal(returnItem?.icon, "back");
 });
 
 test("workspace and compare destinations keep distinct active states", () => {

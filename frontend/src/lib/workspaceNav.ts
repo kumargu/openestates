@@ -7,7 +7,7 @@ export type WorkspaceView = "browse" | "home" | "notebook" | "compare" | "rera" 
 export type WorkspaceNavItem = {
   view: WorkspaceView;
   label: string;
-  icon: "browse" | "listing" | "notebook" | "compare" | "rera" | "plan";
+  icon: "back" | "browse" | "listing" | "notebook" | "compare" | "rera" | "plan";
   to: string;
   active: boolean;
   /** False when the item needs a focused shortlist home and none is set. */
@@ -24,12 +24,19 @@ export function activeWorkspaceView(pathname: string): WorkspaceView {
   return "browse";
 }
 
+function discoveryReturnLabel(resultCount?: number): string {
+  if (!resultCount || resultCount < 1) return "Back to results";
+  return `Back to ${resultCount} ${resultCount === 1 ? "result" : "results"}`;
+}
+
 export function workspaceNavItems(
   focusedId: string,
   activeView: WorkspaceView,
   options: {
     mode?: "discovery" | "property-context" | "workspace";
     discoveryHref?: string;
+    discoveryResultCount?: number;
+    hasDiscoveryContext?: boolean;
     compareIds?: string[];
   } = {},
 ): WorkspaceNavItem[] {
@@ -43,11 +50,14 @@ export function workspaceNavItems(
 
   const mode = options.mode ?? "workspace";
   if (mode === "property-context") {
+    const discoveryLabel = options.hasDiscoveryContext
+      ? discoveryReturnLabel(options.discoveryResultCount)
+      : "Explore";
     return [
       {
         view: "browse",
-        label: "Explore",
-        icon: "browse",
+        label: discoveryLabel,
+        icon: options.hasDiscoveryContext ? "back" : "browse",
         to: options.discoveryHref ?? "/",
         active: false,
         available: true,
