@@ -62,6 +62,38 @@ test("drafts without the current down-payment model are dropped", () => {
   assert.equal(readPlanDraft("home-1"), null);
 });
 
+test("version 3 drafts retain repayment inputs without obsolete strategy state", () => {
+  values.clear();
+  values.set(planDraftStorageKey("home-1"), JSON.stringify({
+    version: 3,
+    propertyId: "home-1",
+    inputs: buildBaselinePlanInputs(20_000_000),
+    extraEmisPerYear: 2,
+    updatedAt: Date.now(),
+  }));
+
+  assert.equal(readPlanDraft("home-1")?.extraEmisPerYear, 2);
+});
+
+test("version 4 drafts migrate SIP to the nearest explicit EMI multiple", () => {
+  values.clear();
+  const inputs = {
+    ...buildBaselinePlanInputs(20_000_000),
+    monthlyEmiThousands: 150,
+    monthlySipThousands: 260,
+  };
+  values.set(planDraftStorageKey("home-1"), JSON.stringify({
+    version: 4,
+    propertyId: "home-1",
+    inputs,
+    extraEmisPerYear: 2,
+    updatedAt: Date.now(),
+  }));
+
+  const migrated = readPlanDraft("home-1");
+  assert.equal(migrated?.inputs.monthlySipThousands, 300);
+});
+
 test("reset clears the stored draft so defaults come back", () => {
   values.clear();
   writePlanDraft("home-1", { ...buildBaselinePlanInputs(20_000_000), monthlyEmiThousands: 250 }, 3);

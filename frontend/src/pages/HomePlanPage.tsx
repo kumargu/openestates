@@ -12,10 +12,12 @@ import {
   workspaceCompareHref,
   workspacePlanReplacementId,
 } from "../lib/workspaceNav.ts";
-import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
+import {
+  PlanAssumptionRail,
+  RentAssumptionRail,
+} from "../features/home-plan/PlanAssumptionRail.tsx";
 import { PlanGraph } from "../features/home-plan/PlanGraph.tsx";
-import { PlanWhisper } from "../features/home-plan/PlanWhisper.tsx";
-import { VerdictBlock } from "../features/home-plan/VerdictBlock.tsx";
+import { RepaymentDashboard } from "../features/home-plan/RepaymentDashboard.tsx";
 import {
   buildBaselinePlanInputs,
   calculateProjection,
@@ -33,7 +35,7 @@ import {
   isExplicitlyReadyStatus,
   parsePlanDate,
 } from "../features/home-plan/financeEngine.ts";
-import { buildMonthlyPlanVerdict, defaultPlanFocusYear } from "../features/home-plan/monthlyPlanView.ts";
+import { calculateRepaymentDashboard } from "../features/home-plan/repaymentModel.ts";
 import {
   canPersistPlanDraft,
   clearPlanDraft,
@@ -114,6 +116,7 @@ export function HomePlanPage() {
   const [extraEmisPerYear, setExtraEmisPerYear] = useState(
     DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear,
   );
+  const [planMode, setPlanMode] = useState<"repayment" | "rent-vs-buy">("repayment");
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
@@ -149,6 +152,7 @@ export function HomePlanPage() {
         setPropertyData(data);
         setPreviewYear(null);
         setPinnedYear(null);
+        setPlanMode("repayment");
         if (!hasPlannablePrice(data.property.price)) {
           setInputs(null);
           setExtraEmisPerYear(DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear);
@@ -176,7 +180,15 @@ export function HomePlanPage() {
   }, [id, retryKey]);
 
   const projection = useMemo(
-    () => inputs ? calculateProjection(inputs, extraEmisPerYear) : null,
+    () => inputs
+      ? calculateProjection(inputs, extraEmisPerYear, DEFAULT_PLAN_MODEL_CONFIG)
+      : null,
+    [inputs, extraEmisPerYear],
+  );
+  const repayment = useMemo(
+    () => inputs
+      ? calculateRepaymentDashboard(inputs, extraEmisPerYear)
+      : null,
     [inputs, extraEmisPerYear],
   );
 
@@ -225,6 +237,7 @@ export function HomePlanPage() {
     || propertyData?.property.id !== id
     || !inputs
     || !projection
+    || !repayment
   ) {
     const propertyIsChanging = Boolean(id)
       && status === "ready"
@@ -234,7 +247,7 @@ export function HomePlanPage() {
     ) : !id ? (
       <section className="home-plan-empty">
         <h1>Choose a home to plan.</h1>
-        <p>Rent vs buy uses the price and status of one home from your workspace.</p>
+        <p>EMI Plan uses the price of one home from your workspace to model its loan.</p>
         <Link to="/">Explore</Link>
       </section>
     ) : status === "loading" || propertyIsChanging ? (
@@ -242,13 +255,13 @@ export function HomePlanPage() {
     ) : status === "not_found" ? (
       <section className="home-plan-empty">
         <h1>This home is no longer available.</h1>
-        <p>Add another home to your workspace and its rent vs buy plan will be ready here.</p>
+        <p>Add another home to your workspace to inspect its repayment plan.</p>
         <Link to="/">Explore</Link>
       </section>
     ) : status === "no_price" ? (
       <section className="home-plan-empty">
         <h1>We don’t have a price for this home yet.</h1>
-        <p>Rent vs buy starts from the asking price. Pick another home in your workspace to plan.</p>
+        <p>Loan planning starts from the asking price. Pick another home in your workspace.</p>
         <Link to="/">Explore</Link>
       </section>
     ) : (
@@ -297,29 +310,27 @@ export function HomePlanPage() {
 
   const property = propertyData.property;
   const baseline = buildBaselinePlanInputs(property.price, constructionProfileFor(propertyData));
-  const defaultYear = defaultPlanFocusYear(projection, inputs.holdingPeriodYears);
-  const activeYear = previewYear ?? pinnedYear ?? defaultYear;
-  const verdict = buildMonthlyPlanVerdict(projection, activeYear);
-  const perspectiveYear = pinnedYear ?? defaultYear;
-  const perspectiveVerdict = buildMonthlyPlanVerdict(projection, perspectiveYear);
-  const perspectiveTheme = projection.extraEmisPerYear > 0
-    ? "prepay"
-    : perspectiveVerdict.buyWins
-      ? "buy"
-      : "rent";
-  const perspectiveSignature = [
-    perspectiveTheme,
-    perspectiveYear,
-    projection.loanFreeYear ?? "open",
-  ].join(":");
   // Drafts capture what the buyer changed, so they are written on edit only.
-  const persistEdit = (nextInputs: PlanInputs, nextExtraEmisPerYear: number) => {
+  const persistEdit = (
+    nextInputs: PlanInputs,
+    nextExtraEmisPerYear: number,
+  ) => {
     if (!canPersistPlanDraft(id, propertyData.property.id, status)) return;
     writePlanDraft(id, nextInputs, nextExtraEmisPerYear);
   };
 
   const updateInput = (key: EditablePlanInput, value: number) => {
-    const next = updatePlanInput(inputs, key, value);
+    const sipMultiple = [1, 2, 3].find((multiple) => (
+      Math.abs(inputs.monthlySipThousands - inputs.monthlyEmiThousands * multiple) < 0.01
+    ));
+    const updated = updatePlanInput(inputs, key, value);
+    const next = sipMultiple != null
+      && (key === "monthlyEmiThousands" || key === "downPaymentPercent")
+      ? {
+        ...updated,
+        monthlySipThousands: updated.monthlyEmiThousands * sipMultiple,
+      }
+      : updated;
     setPreviewYear(null);
     setInputs(next);
     persistEdit(next, extraEmisPerYear);
@@ -342,8 +353,8 @@ export function HomePlanPage() {
   return (
     <div className="home-plan-shell home-plan-shell--workspace">
       <Helmet>
-        <title>{property.title} — {BUY_VS_RENT.pageTitle} | {PUBLIC_BRAND_NAME}</title>
-        <meta name="description" content={`Compare renting with buying ${property.title} over time.`} />
+        <title>{property.title} — EMI Plan | {PUBLIC_BRAND_NAME}</title>
+        <meta name="description" content={`Inspect repayment choices for ${property.title}.`} />
       </Helmet>
 
       <WorkspaceHeader
@@ -351,44 +362,79 @@ export function HomePlanPage() {
         compareHref={compareHref}
         buyVsRentHref={workspaceBuyVsRentHref(id)}
         compareCount={compareIds.length}
-        contextDisplay="mobile-only"
-        context={(
-          <WorkspacePropertySwitcher
-            selectedId={id}
-            homes={homeOptions}
-            onSelect={selectProperty}
-          />
-        )}
       />
 
       <div className="home-plan-body">
         <div className="home-plan-main">
           <div className="home-plan-canvas">
-            <VerdictBlock verdict={verdict} />
+            <header className="home-plan-property-context">
+              <div>
+                <h1>
+                  {propertyData.society?.name?.trim() || property.title}
+                  <span> · {formatCurrency(property.price, true)} asking price</span>
+                </h1>
+                {homeOptions.length > 1 ? (
+                  <WorkspacePropertySwitcher
+                    selectedId={id}
+                    homes={homeOptions}
+                    onSelect={selectProperty}
+                    triggerLabel="Change home"
+                  />
+                ) : null}
+              </div>
+              <p>Modelled loan {formatCurrency(projection.loanAmount, true)}</p>
+            </header>
+
+            <nav className="home-plan-mode-tabs" aria-label="Plan view">
+              <button
+                type="button"
+                className={planMode === "repayment" ? "is-active" : undefined}
+                aria-current={planMode === "repayment" ? "page" : undefined}
+                onClick={() => setPlanMode("repayment")}
+              >
+                Repayment
+              </button>
+              <button
+                type="button"
+                className={planMode === "rent-vs-buy" ? "is-active" : undefined}
+                aria-current={planMode === "rent-vs-buy" ? "page" : undefined}
+                onClick={() => setPlanMode("rent-vs-buy")}
+              >
+                Rent vs Buy
+              </button>
+            </nav>
 
             <PlanAssumptionRail
               inputs={inputs}
               extraEmisPerYear={extraEmisPerYear}
-              loanFreeYear={projection.loanFreeYear}
+              repaymentMode={planMode === "repayment"}
               onInputChange={updateInput}
               onExtraEmisChange={updateExtraEmisPerYear}
               onReset={resetInputs}
             />
 
-            <section className="home-plan-stage" aria-label="Projection over time">
-              <PlanGraph
-                projection={projection}
-                activeYear={verdict.activeYear}
-                onPreviewYearChange={setPreviewYear}
-                onPinYear={setPinnedYear}
+            {planMode === "repayment" ? (
+              <RepaymentDashboard
+                inputs={inputs}
+                model={repayment}
               />
-              <PlanWhisper
-                key={perspectiveSignature}
-                theme={perspectiveTheme}
-                activeYear={perspectiveYear}
-                loanFreeYear={projection.loanFreeYear}
-              />
-            </section>
+            ) : (
+              <section className="home-plan-rent-mode" aria-label="Rent versus buy scenario">
+                <RentAssumptionRail
+                  inputs={inputs}
+                  onInputChange={updateInput}
+                  onReset={resetInputs}
+                />
+                <PlanGraph
+                  projection={projection}
+                  activeYear={previewYear
+                    ?? pinnedYear
+                    ?? Math.min(inputs.holdingPeriodYears, projection.points.length - 1)}
+                  onPreviewYearChange={setPreviewYear}
+                  onPinYear={setPinnedYear}
+                />
+              </section>
+            )}
           </div>
         </div>
       </div>

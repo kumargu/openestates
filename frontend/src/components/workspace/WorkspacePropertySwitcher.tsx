@@ -16,10 +16,12 @@ export function WorkspacePropertySwitcher({
   selectedId,
   homes,
   onSelect,
+  triggerLabel,
 }: {
   selectedId?: string;
   homes: WorkspacePropertyOption[];
   onSelect: (propertyId: string) => void;
+  triggerLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const switcherRef = useRef<HTMLDivElement>(null);
@@ -99,8 +101,8 @@ export function WorkspacePropertySwitcher({
         }}
       >
         <span className="workspace-home-switcher__identity">
-          <strong>{selectedHome.label}</strong>
-          <span>{selectedHome.meta}</span>
+          <strong>{triggerLabel ?? selectedHome.label}</strong>
+          {triggerLabel ? null : <span>{selectedHome.meta}</span>}
         </span>
         <svg viewBox="0 0 16 16" aria-hidden="true">
           <path d="m4 6 4 4 4-4" />

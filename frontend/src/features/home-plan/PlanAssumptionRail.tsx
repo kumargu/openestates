@@ -1,4 +1,9 @@
-import { type EditablePlanInput, type PlanInputs } from "./model.ts";
+import {
+  formatLakhCurrency,
+  formatMonthlyCurrency,
+  type EditablePlanInput,
+  type PlanInputs,
+} from "./model.ts";
 import { useState } from "react";
 
 const LAKH = 100_000;
@@ -12,7 +17,7 @@ function monthlyInterestThresholdThousands(inputs: PlanInputs): number {
 type PlanAssumptionRailProps = {
   inputs: PlanInputs;
   extraEmisPerYear: number;
-  loanFreeYear: number | null;
+  repaymentMode?: boolean;
   onInputChange: (key: EditablePlanInput, value: number) => void;
   onExtraEmisChange: (count: number) => void;
   onReset: () => void;
@@ -25,7 +30,7 @@ type InputSpec = {
   max?: number;
   prefix?: string;
   suffix: string;
-  note: string;
+  note?: string;
 };
 
 function PlanInput({
@@ -36,6 +41,7 @@ function PlanInput({
   prefix,
   suffix,
   note,
+  valueScale = 1,
   onChange,
 }: {
   label: string;
@@ -44,10 +50,13 @@ function PlanInput({
   max?: number;
   prefix?: string;
   suffix: string;
-  note: string;
+  note?: string;
+  valueScale?: number;
   onChange: (value: number) => void;
 }) {
-  const [draft, setDraft] = useState(String(value));
+  const displayValue = value / valueScale;
+  const displayText = valueScale === 100 ? displayValue.toFixed(2) : String(displayValue);
+  const [draft, setDraft] = useState(String(displayValue));
   const [editing, setEditing] = useState(false);
 
   function normalizeDraft(raw: string): string {
@@ -62,7 +71,8 @@ function PlanInput({
     if (!raw.trim()) return min;
     const next = Number(raw);
     if (!Number.isFinite(next)) return null;
-    const bounded = Math.max(min, next);
+    const scaled = next * valueScale;
+    const bounded = Math.max(min, scaled);
     return max === undefined ? bounded : Math.min(max, bounded);
   }
 
@@ -74,7 +84,7 @@ function PlanInput({
         <input
           type="text"
           inputMode="decimal"
-          value={editing ? draft : String(value)}
+          value={editing ? draft : displayText}
           onChange={(event) => {
             const nextDraft = normalizeDraft(event.target.value);
             setDraft(nextDraft);
@@ -83,20 +93,20 @@ function PlanInput({
           }}
           onFocus={(event) => {
             setEditing(true);
-            setDraft(String(value));
+            setDraft(String(displayValue));
             event.currentTarget.select();
           }}
           onBlur={(event) => {
             const next = parseInput(event.currentTarget.value);
             const committed = next ?? value;
             setEditing(false);
-            setDraft(String(committed));
+            setDraft(String(committed / valueScale));
             if (committed !== value) onChange(committed);
           }}
         />
         <b>{suffix}</b>
       </div>
-      <small>{note}</small>
+      {note ? <small>{note}</small> : null}
     </label>
   );
 }
@@ -104,18 +114,16 @@ function PlanInput({
 export function PlanAssumptionRail({
   inputs,
   extraEmisPerYear,
-  loanFreeYear,
+  repaymentMode = true,
   onInputChange,
   onExtraEmisChange,
   onReset,
 }: PlanAssumptionRailProps) {
   const principalThresholdThousands = monthlyInterestThresholdThousands(inputs);
   const emiNote = principalThresholdThousands > 0 && inputs.monthlyEmiThousands <= principalThresholdThousands
-    ? `Principal starts above ₹${principalThresholdThousands.toLocaleString("en-IN")}K / mo`
-    : loanFreeYear == null
-      ? "Loan stays open at this EMI"
-      : `Loan-free around year ${loanFreeYear}`;
-  const buyPathInputs: InputSpec[] = [
+    ? `Must exceed ${formatMonthlyCurrency(principalThresholdThousands * 1_000)} to reduce principal`
+    : "Before extra payments";
+  const financingInputs: InputSpec[] = [
     {
       key: "downPaymentPercent",
       label: "Down payment",
@@ -133,41 +141,18 @@ export function PlanAssumptionRail({
       note: "Bank rate",
     },
   ];
-  const rentPathInputs: InputSpec[] = [
-    {
-      key: "currentRentThousands",
-      label: "Monthly rent",
-      min: 0,
-      prefix: "₹",
-      suffix: "K / mo",
-      note: "Monthly housing cost",
-    },
-    {
-      key: "monthlySipThousands",
-      label: "Monthly SIP",
-      min: 0,
-      prefix: "₹",
-      suffix: "K / mo",
-      note: "Rent-path investment",
-    },
-    {
-      key: "equityReturn",
-      label: "SIP return",
-      min: 0,
-      max: 20,
-      suffix: "%",
-      note: "Expected yearly gain",
-    },
-  ];
-
   return (
-    <section className="home-plan-inline-studio" aria-label="Your monthly plan">
+    <section
+      className={`home-plan-inline-studio ${repaymentMode ? "" : "is-rent-buy"}`}
+      aria-label={repaymentMode ? "Loan repayment assumptions" : "Buy assumptions"}
+    >
       <div className="home-plan-inline-studio__primary">
-        <div className="home-plan-inline-studio__buy" role="group" aria-label="Buy plan">
-          {buyPathInputs.map(({ key, ...input }) => (
+        <div className="home-plan-inline-studio__buy" role="group" aria-label="Loan plan">
+          {financingInputs.map(({ key, ...input }) => (
             <PlanInput
               key={key}
               {...input}
+              note={repaymentMode ? input.note : undefined}
               value={inputs[key]}
               onChange={(value) => onInputChange(key, value)}
             />
@@ -176,19 +161,20 @@ export function PlanAssumptionRail({
             label="Monthly EMI"
             min={inputs.downPaymentPercent === 100 ? 0 : 1}
             prefix="₹"
-            suffix="K / mo"
-            note={emiNote}
+            suffix="L/month"
+            note={repaymentMode ? emiNote : undefined}
             value={inputs.monthlyEmiThousands}
+            valueScale={100}
             onChange={(value) => onInputChange("monthlyEmiThousands", value)}
           />
-          <div className="home-plan-inline-studio__extra" role="group" aria-label="Extra EMIs each year">
-            <span>Extra EMIs / year</span>
+          <div className="home-plan-inline-studio__extra" role="group" aria-label="Extra payments each year">
+            <span>Extra payments / year</span>
             <div>
               {[0, 1, 2, 3, 4, 6].map((count) => (
                 <button
                   type="button"
                   key={count}
-                  className={extraEmisPerYear === count ? "is-active" : ""}
+                  className={extraEmisPerYear === count ? "is-active" : undefined}
                   aria-pressed={extraEmisPerYear === count}
                   onClick={() => onExtraEmisChange(count)}
                 >
@@ -196,24 +182,97 @@ export function PlanAssumptionRail({
                 </button>
               ))}
             </div>
+            <small>Each equals one EMI: {formatLakhCurrency(inputs.monthlyEmiThousands * 1_000)}</small>
           </div>
         </div>
 
-        <div className="home-plan-inline-studio__divider" aria-hidden="true" />
+        {repaymentMode ? (
+          <div className="home-plan-inline-studio__repay-actions">
+            <button type="button" className="home-plan-inline-studio__reset" onClick={onReset}>
+              Reset plan
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
 
-        <div className="home-plan-inline-studio__rent" role="group" aria-label="Rent plan">
-          {rentPathInputs.map(({ key, ...input }) => (
-            <PlanInput
-              key={key}
-              {...input}
-              value={inputs[key]}
-              onChange={(value) => onInputChange(key, value)}
-            />
+export function RentAssumptionRail({
+  inputs,
+  onInputChange,
+  onReset,
+}: {
+  inputs: PlanInputs;
+  onInputChange: (key: EditablePlanInput, value: number) => void;
+  onReset: () => void;
+}) {
+  const rentInput = {
+    label: "Monthly rent",
+    min: 0,
+    prefix: "₹",
+    suffix: "L/month",
+  };
+  const returnInput = {
+    label: "SIP return",
+    min: 0,
+    max: 20,
+    suffix: "%",
+    note: "Expected yearly gain",
+  };
+  const selectedSipMultiple = [1, 2, 3].find((multiple) => (
+    Math.abs(inputs.monthlySipThousands - inputs.monthlyEmiThousands * multiple) < 0.01
+  ));
+
+  return (
+    <section className="home-plan-rent-controls" aria-label="Rent and investment assumptions">
+      <PlanInput
+        {...rentInput}
+        value={inputs.currentRentThousands}
+        valueScale={100}
+        onChange={(value) => onInputChange("currentRentThousands", value)}
+      />
+      <div className="home-plan-sip-multiple">
+        <span>Monthly SIP</span>
+        <div role="group" aria-label="Monthly SIP as a multiple of EMI">
+          {[1, 2, 3].map((multiple) => (
+            <button
+              type="button"
+              key={multiple}
+              className={selectedSipMultiple === multiple ? "is-active" : undefined}
+              aria-pressed={selectedSipMultiple === multiple}
+              onClick={() => onInputChange(
+                "monthlySipThousands",
+                inputs.monthlyEmiThousands * multiple,
+              )}
+            >
+              {multiple}× EMI
+            </button>
           ))}
-          <button type="button" className="home-plan-inline-studio__reset" onClick={onReset}>
-            Reset
-          </button>
         </div>
+      </div>
+      <div className="home-plan-rent-actions">
+        <details className="home-plan-rent-assumptions">
+          <summary>Assumptions</summary>
+          <div className="home-plan-rent-assumptions__body">
+            <PlanInput
+              {...returnInput}
+              value={inputs.equityReturn}
+              onChange={(value) => onInputChange("equityReturn", value)}
+            />
+            <dl>
+              <div>
+                <dt>Home growth</dt>
+                <dd>{inputs.assumptions.homeAppreciationRate}% / year</dd>
+              </div>
+              <div>
+                <dt>Rent growth</dt>
+                <dd>{inputs.assumptions.rentInflationRate}% / year</dd>
+              </div>
+            </dl>
+          </div>
+        </details>
+        <button type="button" onClick={onReset}>Reset plan</button>
       </div>
     </section>
   );

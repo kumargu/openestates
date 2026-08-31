@@ -7,7 +7,7 @@ export type WorkspaceView = "browse" | "home" | "notebook" | "compare" | "rera" 
 export type WorkspaceNavItem = {
   view: WorkspaceView;
   label: string;
-  icon: "back" | "browse" | "listing" | "notebook" | "compare" | "rera";
+  icon: "back" | "browse" | "listing" | "notebook" | "compare" | "rera" | "plan";
   to: string;
   active: boolean;
   /** False when the item needs a focused shortlist home and none is set. */
@@ -44,6 +44,7 @@ export function workspaceNavItems(
   const hasFocus = Boolean(encodedId);
   const detailHref = hasFocus ? `/property/${encodedId}` : "/";
   const reraHref = hasFocus ? `/property/${encodedId}/rera` : "/";
+  const planHref = workspaceBuyVsRentHref(focusedId);
   const compareIds = options.compareIds ?? [];
   const compareHref = workspaceCompareHref(compareIds, focusedId);
 
@@ -70,6 +71,7 @@ export function workspaceNavItems(
         available: hasFocus,
       },
       { view: "rera", label: "RERA", icon: "rera", to: reraHref, active: activeView === "rera", available: hasFocus },
+      { view: "plan", label: "EMI Plan", icon: "plan", to: planHref, active: activeView === "plan", available: hasFocus },
       { view: "notebook", label: "Notes", icon: "notebook", to: "/workspace", active: false, available: true },
     ];
   }

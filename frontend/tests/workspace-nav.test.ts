@@ -39,11 +39,13 @@ test("workspace nav follows the focused home across property views", () => {
   assert.equal(byView.get("home")?.to, "/property/home%20one%2Fwith%20slash");
   assert.equal(byView.get("rera")?.to, "/property/home%20one%2Fwith%20slash/rera");
   assert.equal(byView.get("rera")?.label, "RERA");
+  assert.equal(byView.get("plan")?.to, "/workspace/buy-vs-rent/home%20one%2Fwith%20slash");
+  assert.equal(byView.get("plan")?.label, "EMI Plan");
   assert.equal(byView.get("rera")?.active, true);
   assert.equal(byView.get("home")?.active, false);
   assert.equal(byView.get("home")?.available, true);
   assert.equal(byView.get("rera")?.available, true);
-  assert.equal(byView.has("plan"), false);
+  assert.equal(byView.get("plan")?.available, true);
 });
 
 test("property context never invents a current home", () => {
@@ -54,6 +56,7 @@ test("property context never invents a current home", () => {
   assert.equal(byView.get("notebook")?.available, true);
   assert.equal(byView.get("home")?.available, false);
   assert.equal(byView.get("rera")?.available, false);
+  assert.equal(byView.get("plan")?.available, false);
   assert.equal(byView.get("browse")?.label, "Explore");
   assert.equal(byView.get("browse")?.icon, "browse");
 });
