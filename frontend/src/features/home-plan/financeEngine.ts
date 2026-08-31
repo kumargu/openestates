@@ -46,7 +46,6 @@ import {
 const LAKH = 100_000;
 const MONTHS_IN_YEAR = 12;
 
-export type RepaymentStrategy = "finish_earlier" | "lower_emi";
 export type LoanRepaymentStatus =
   | "no_loan"
   | "repaid"
@@ -68,9 +67,6 @@ export type LoanScheduleMonth = {
 export type LoanSchedule = {
   months: LoanScheduleMonth[];
   openingMonthlyEmi: number;
-  endingMonthlyEmi: number;
-  /** First extra payment. Later lower-EMI extras can be smaller. */
-  annualPrepayment: number;
   baselinePayoffMonth: number | null;
   payoffMonth: number | null;
   totalInterest: number | null;
@@ -79,11 +75,8 @@ export type LoanSchedule = {
 
 export type LoanScheduleOptions = {
   extraEmisPerYear?: number;
-  strategy?: RepaymentStrategy;
   /** Restricts extras to one repayment year; omitted means every year. */
   oneOffExtraPaymentYear?: number;
-  /** Starts recurring annual extras in this repayment year. */
-  extraEmisStartYear?: number;
 };
 
 type ConstructionPlan = {
@@ -164,19 +157,6 @@ export function monthlyPayment(principal: number, annualRate: number, years: num
   return principal * monthlyRate * growth / (growth - 1);
 }
 
-function monthlyPaymentForMonths(
-  principal: number,
-  annualRate: number,
-  months: number,
-): number {
-  if (principal <= 0) return 0;
-  if (months <= 0) return Number.POSITIVE_INFINITY;
-  const monthlyRate = annualRate / 100 / MONTHS_IN_YEAR;
-  if (monthlyRate === 0) return principal / months;
-  const growth = (1 + monthlyRate) ** months;
-  return principal * monthlyRate * growth / (growth - 1);
-}
-
 export function principalFromMonthlyPayment(
   payment: number,
   annualRate: number,
@@ -208,8 +188,7 @@ export function monthsToPayoff(
 /**
  * Canonical monthly loan schedule used by repayment, interest and wealth views.
  * Each recurring extra stays equal to the opening EMI selected by the buyer.
- * This keeps "4 extra payments/year" a stable cash commitment under both
- * repayment strategies, even when the scheduled EMI is later re-amortised.
+ * The scheduled EMI stays fixed, so every extra reduces principal and tenure.
  */
 export function buildLoanSchedule(
   inputs: PlanInputs,
@@ -231,20 +210,6 @@ export function buildLoanSchedule(
   ) {
     throw new RangeError("oneOffExtraPaymentYear must be a finite whole number >= 1");
   }
-  if (
-    options.extraEmisStartYear != null
-    && (
-      !Number.isFinite(options.extraEmisStartYear)
-      || options.extraEmisStartYear < 1
-      || !Number.isInteger(options.extraEmisStartYear)
-    )
-  ) {
-    throw new RangeError("extraEmisStartYear must be a finite whole number >= 1");
-  }
-  if (options.oneOffExtraPaymentYear != null && options.extraEmisStartYear != null) {
-    throw new RangeError("one-off and recurring-start timing cannot be combined");
-  }
-  const strategy = options.strategy ?? "finish_earlier";
   const plan = constructionPlanFor(inputs, config);
   const builderSchedule = buildPaymentSchedule(inputs, config);
   const drawsByMonth = new Map(builderSchedule.map((payment) => [payment.month, payment.loanAmount]));
@@ -263,7 +228,6 @@ export function buildLoanSchedule(
   const maximumMonth = plan.possessionMonth + config.simulation.maximumLoanYears * MONTHS_IN_YEAR;
   const months: LoanScheduleMonth[] = [];
   let balance = 0;
-  let currentMonthlyEmi = openingMonthlyEmi;
   let totalInterest = 0;
   let payoffMonth: number | null = principal <= config.simulation.closedBalanceRupees
     ? plan.possessionMonth
@@ -276,7 +240,7 @@ export function buildLoanSchedule(
     const paymentNumber = hasPossession ? month - plan.possessionMonth + 1 : 0;
     const interestPaid = balance * monthlyRate;
     let scheduledPayment = hasPossession
-      ? Math.min(currentMonthlyEmi, balance + interestPaid)
+      ? Math.min(openingMonthlyEmi, balance + interestPaid)
       : interestPaid;
     let principalPaid = hasPossession ? Math.max(0, scheduledPayment - interestPaid) : 0;
     let extraPaid = 0;
@@ -285,7 +249,7 @@ export function buildLoanSchedule(
       balance = Math.max(0, balance + interestPaid - scheduledPayment);
       const paymentYear = Math.ceil(paymentNumber / MONTHS_IN_YEAR);
       const extraPaymentIsActive = options.oneOffExtraPaymentYear == null
-        ? paymentYear >= (options.extraEmisStartYear ?? 1)
+        ? true
         : paymentYear === options.oneOffExtraPaymentYear;
       const monthWithinPaymentYear = (paymentNumber - 1) % MONTHS_IN_YEAR + 1;
       const extraPaymentsDue = Math.floor(
@@ -294,36 +258,19 @@ export function buildLoanSchedule(
         (monthWithinPaymentYear - 1) * extraEmisPerYear / MONTHS_IN_YEAR,
       );
       const scheduledExtra = openingMonthlyEmi * extraPaymentsDue;
-      const canPreserveBaselinePayoff = (
-        strategy !== "lower_emi"
-        || baselinePayoffMonth == null
-        || baselinePayoffMonth - (month + 1) > 1
-      );
       if (
         balance > config.simulation.closedBalanceRupees
         && scheduledExtra > 0
         && extraPaymentIsActive
-        && canPreserveBaselinePayoff
       ) {
         const maximumExtra = Math.max(0, balance - config.simulation.closedBalanceRupees);
-        extraPaid = strategy === "lower_emi" && scheduledExtra >= maximumExtra
-          ? 0
-          : Math.min(maximumExtra, scheduledExtra);
+        extraPaid = Math.min(maximumExtra, scheduledExtra);
         balance -= extraPaid;
       }
     }
 
     totalInterest += interestPaid;
-    const scheduledEmi = currentMonthlyEmi;
-    if (
-      strategy === "lower_emi"
-      && extraPaid > 0
-      && baselinePayoffMonth != null
-      && balance > config.simulation.closedBalanceRupees
-    ) {
-      const remainingPayments = baselinePayoffMonth - (month + 1);
-      currentMonthlyEmi = monthlyPaymentForMonths(balance, inputs.loanRate, remainingPayments);
-    }
+    const scheduledEmi = openingMonthlyEmi;
 
     if (!hasPossession) {
       scheduledPayment = interestPaid;
@@ -350,8 +297,6 @@ export function buildLoanSchedule(
   return {
     months,
     openingMonthlyEmi,
-    endingMonthlyEmi: currentMonthlyEmi,
-    annualPrepayment: months.find((month) => month.extraPaid > 0)?.extraPaid ?? 0,
     baselinePayoffMonth,
     payoffMonth,
     totalInterest: payoffMonth == null ? null : totalInterest,
@@ -493,28 +438,15 @@ export function buildPaymentSchedule(
   });
 }
 
-export function calculateFinancingInterest(
-  inputs: PlanInputs,
-  extraEmisPerYear?: number,
-  config: PlanModelConfig = DEFAULT_PLAN_MODEL_CONFIG,
-  strategy: RepaymentStrategy = "finish_earlier",
-): number | null {
-  return buildLoanSchedule(inputs, {
-    extraEmisPerYear: extraEmisPerYear ?? config.defaults.extraEmisPerYear,
-    strategy,
-  }, config).totalInterest;
-}
-
 export function calculateProjectionPoints(
   inputs: PlanInputs,
   extraEmisPerYear?: number,
   config: PlanModelConfig = DEFAULT_PLAN_MODEL_CONFIG,
-  strategy: RepaymentStrategy = "finish_earlier",
 ): ProjectionPoint[] {
   extraEmisPerYear ??= config.defaults.extraEmisPerYear;
   const plan = constructionPlanFor(inputs, config);
   const schedule = buildPaymentSchedule(inputs, config);
-  const loanSchedule = buildLoanSchedule(inputs, { extraEmisPerYear, strategy }, config);
+  const loanSchedule = buildLoanSchedule(inputs, { extraEmisPerYear }, config);
   const loanMonths = new Map(loanSchedule.months.map((month) => [month.month, month]));
   const purchasePrice = schedule.reduce((sum, payment) => sum + payment.amount, 0);
   const emi = inputs.monthlyEmiThousands * 1_000;
@@ -532,6 +464,7 @@ export function calculateProjectionPoints(
 
   // Buyer starts with the financed home, not an invented cash buffer.
   let buyInvestments = 0;
+  let cumulativeBuyerExtraPrincipalOutflow = 0;
   let rentInvestments = 0;
   let loanBalance = 0;
   let builderPaid = 0;
@@ -555,11 +488,12 @@ export function calculateProjectionPoints(
       ? loanMonth?.interestPaid ?? 0
       : 0;
     const regularPayment = hasPossession ? loanMonth?.scheduledPayment ?? 0 : 0;
-    const monthlyBuyerHousingCost = hasPossession
+    const regularBuyerHousingCost = hasPossession
       ? regularPayment
       : hasPurchased
         ? monthlyRent + preEmiInterest
         : 0;
+    const monthlyBuyerHousingCost = regularBuyerHousingCost + (loanMonth?.extraPaid ?? 0);
     const propertyValue = compoundMonthly(
       inputs.propertyPriceLakh * LAKH,
       inputs.assumptions.homeAppreciationRate,
@@ -571,7 +505,8 @@ export function calculateProjectionPoints(
       points.push({
         year: month / MONTHS_IN_YEAR,
         buyNetWorth: hasPurchased
-          ? propertyValue - loanBalance - builderBalance + buyInvestments
+          ? propertyValue - loanBalance - builderBalance
+            + buyInvestments - cumulativeBuyerExtraPrincipalOutflow
           : 0,
         rentNetWorth: rentInvestments,
         propertyValue,
@@ -587,10 +522,12 @@ export function calculateProjectionPoints(
 
     if (month === endMonth) break;
 
+    cumulativeBuyerExtraPrincipalOutflow += loanMonth?.extraPaid ?? 0;
+
     // Whatever the monthly commitment does not spend on housing is invested.
     buyInvestments = hasPurchased
       ? buyInvestments * (1 + sipRateMonthly)
-        + Math.max(0, buyMonthlyBudget - monthlyBuyerHousingCost)
+        + Math.max(0, buyMonthlyBudget - regularBuyerHousingCost)
       : 0;
     rentInvestments = rentInvestments * (1 + sipRateMonthly)
       + Math.max(0, rentMonthlyBudget - monthlyRent);

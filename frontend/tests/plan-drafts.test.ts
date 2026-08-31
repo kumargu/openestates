@@ -27,15 +27,13 @@ test("Buy vs Rent drafts remain independent per property", () => {
   const first = { ...buildBaselinePlanInputs(20_000_000), monthlyEmiThousands: 175 };
   const second = { ...buildBaselinePlanInputs(30_000_000), monthlyEmiThousands: 240 };
 
-  writePlanDraft("home/one", first, 2, "lower_emi");
+  writePlanDraft("home/one", first, 2);
   writePlanDraft("home-two", second, 4);
 
   assert.equal(readPlanDraft("home/one")?.inputs.monthlyEmiThousands, 175);
   assert.equal(readPlanDraft("home/one")?.extraEmisPerYear, 2);
-  assert.equal(readPlanDraft("home/one")?.repaymentStrategy, "lower_emi");
   assert.equal(readPlanDraft("home-two")?.inputs.monthlyEmiThousands, 240);
   assert.equal(readPlanDraft("home-two")?.extraEmisPerYear, 4);
-  assert.equal(readPlanDraft("home-two")?.repaymentStrategy, "finish_earlier");
   assert.match(planDraftStorageKey("home/one"), /home%2Fone$/);
 });
 
@@ -64,7 +62,7 @@ test("drafts without the current down-payment model are dropped", () => {
   assert.equal(readPlanDraft("home-1"), null);
 });
 
-test("version 3 drafts migrate to finish-earlier repayment", () => {
+test("version 3 drafts retain repayment inputs without obsolete strategy state", () => {
   values.clear();
   values.set(planDraftStorageKey("home-1"), JSON.stringify({
     version: 3,
@@ -74,7 +72,7 @@ test("version 3 drafts migrate to finish-earlier repayment", () => {
     updatedAt: Date.now(),
   }));
 
-  assert.equal(readPlanDraft("home-1")?.repaymentStrategy, "finish_earlier");
+  assert.equal(readPlanDraft("home-1")?.extraEmisPerYear, 2);
 });
 
 test("version 4 drafts migrate SIP to the nearest explicit EMI multiple", () => {
@@ -89,13 +87,11 @@ test("version 4 drafts migrate SIP to the nearest explicit EMI multiple", () => 
     propertyId: "home-1",
     inputs,
     extraEmisPerYear: 2,
-    repaymentStrategy: "lower_emi",
     updatedAt: Date.now(),
   }));
 
   const migrated = readPlanDraft("home-1");
   assert.equal(migrated?.inputs.monthlySipThousands, 300);
-  assert.equal(migrated?.repaymentStrategy, "lower_emi");
 });
 
 test("reset clears the stored draft so defaults come back", () => {

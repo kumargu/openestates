@@ -59,35 +59,18 @@ test("chart scrubbing and ticks stay bounded", () => {
 });
 
 test("repayment stories expose the selected monthly schedule", () => {
-  const model = calculateRepaymentDashboard(inputs, 2, "finish_earlier");
-  const stories = buildRepaymentChartStories(inputs, model);
+  const model = calculateRepaymentDashboard(inputs, 2);
+  const stories = buildRepaymentChartStories(model);
   assert.deepEqual(stories.annual, model.recurrentSchedule);
-  assert.equal(stories.monthly, stories.selectedMonthly);
   assert.ok(stories.selectedMonthly.length > 0);
   assert.ok(stories.selectedMonthly.every((month) => month.paymentNumber > 0));
   assert.ok(stories.selectedMonthly.some((month) => month.extraPaid > 0));
   assert.ok(stories.baselineMonthly.every((month) => month.extraPaid === 0));
-  assert.ok(stories.finishEarlierMonthly.length < stories.baselineMonthly.length);
+  assert.ok(stories.selectedMonthly.length < stories.baselineMonthly.length);
   assert.equal(
-    stories.finishEarlierMonthly.at(-1)?.closingBalance,
+    stories.selectedMonthly.at(-1)?.closingBalance,
     0,
-    "finish-earlier path must terminate at the real payoff month",
+    "selected path must terminate at the real payoff month",
   );
-});
-
-test("repayment chart stories preserve strategy mathematics", () => {
-  const model = calculateRepaymentDashboard(inputs, 4, "lower_emi");
-  const stories = buildRepaymentChartStories(inputs, model);
-  const finishEmis = new Set(stories.finishEarlierMonthly.map((month) => month.scheduledEmi));
-  assert.equal(finishEmis.size, 1, "finish-earlier must keep its scheduled EMI constant");
-  assert.ok(
-    stories.lowerEmiMonthly.at(-1)!.scheduledEmi < stories.lowerEmiMonthly[0].scheduledEmi,
-    "lower-EMI must reduce the scheduled payment after prepayments",
-  );
-  assert.ok(
-    stories.lowerEmiMonthly.length >= stories.finishEarlierMonthly.length,
-    "lower-EMI must not masquerade as the shorter-tenure strategy",
-  );
-  assert.equal(stories.lowerEmiMonthly.at(-1)?.closingBalance, 0);
 });
 

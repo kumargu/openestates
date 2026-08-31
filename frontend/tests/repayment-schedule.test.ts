@@ -28,14 +28,12 @@ const INPUTS: PlanInputs = {
   },
 };
 
-function schedule(extraEmisPerYear: number, strategy: "finish_earlier" | "lower_emi") {
+function schedule(extraEmisPerYear: number) {
   const baseline = buildLoanSchedule(INPUTS, {
     extraEmisPerYear: 0,
-    strategy: "finish_earlier",
   }).months.filter((month) => month.paymentNumber > 0);
   const selected = buildLoanSchedule(INPUTS, {
     extraEmisPerYear,
-    strategy,
   }).months.filter((month) => month.paymentNumber > 0);
   return {
     selected,
@@ -44,7 +42,7 @@ function schedule(extraEmisPerYear: number, strategy: "finish_earlier" | "lower_
 }
 
 test("yearly repayment values exactly aggregate their monthly rows", () => {
-  const { years } = schedule(4, "finish_earlier");
+  const { years } = schedule(4);
   for (const year of years) {
     const sum = (pick: (month: typeof year.months[number]) => number) =>
       year.months.reduce((total, month) => total + pick(month), 0);
@@ -57,7 +55,7 @@ test("yearly repayment values exactly aggregate their monthly rows", () => {
 });
 
 test("scheduled payment contains interest and scheduled principal without double-counting extras", () => {
-  const { selected, years } = schedule(4, "finish_earlier");
+  const { selected, years } = schedule(4);
   for (const month of selected) {
     assert.ok(
       Math.abs(month.scheduledPayment - month.interestPaid - month.principalPaid) < 0.01,
@@ -71,15 +69,8 @@ test("scheduled payment contains interest and scheduled principal without double
   assert.equal(years.at(-1)?.closingBalance, 0);
 });
 
-test("lower-EMI schedule exposes recast payments and still closes at zero", () => {
-  const { selected, years } = schedule(4, "lower_emi");
-  const openingEmi = selected[0]?.scheduledEmi ?? 0;
-  assert.ok(selected.some((month) => month.scheduledEmi < openingEmi - 1));
-  assert.equal(years.at(-1)?.closingBalance, 0);
-});
-
 test("CSV annual totals match the visible yearly schedule", () => {
-  const { years } = schedule(4, "finish_earlier");
+  const { years } = schedule(4);
   const csv = repaymentScheduleCsv(years);
   const firstYear = years[0];
   assert.ok(firstYear);

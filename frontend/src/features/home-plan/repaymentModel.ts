@@ -2,8 +2,8 @@ import {
   buildLoanSchedule,
   constructionPlanFor,
   type LoanSchedule,
+  type LoanScheduleMonth,
   type LoanRepaymentStatus,
-  type RepaymentStrategy,
 } from "./financeEngine.ts";
 import type { PlanInputs } from "./model.ts";
 import {
@@ -28,77 +28,29 @@ export type OneOffExtraPaymentPoint = {
   year: number;
   interestSaved: number;
   monthsSaved: number;
-  monthlyEmiReduction: number;
   extraPaid: number;
-};
-
-/** Impact of starting the selected annual extra-EMI cadence in this year. */
-export type CadenceStartPoint = {
-  startYear: number;
-  interestSaved: number;
-  monthsSaved: number;
-  monthlyEmiReduction: number;
-  extraPaid: number;
-};
-
-/** @deprecated Compatibility shape for the current chart. */
-export type PrepaymentRunPoint = OneOffExtraPaymentPoint & {
-  throughYear: number;
-  /** @deprecated This is now the independent one-off saving, not a cumulative delta. */
-  incrementalInterestSaved: number;
-};
-
-export type CadenceComparisonPoint = {
-  extraEmisPerYear: 0 | 1 | 2 | 3 | 4 | 6;
-  interestSaved: number;
-  monthsSaved: number;
-  endingMonthlyEmi: number;
-  totalExtraPaid: number;
-};
-
-export type StrategyComparisonPoint = {
-  strategy: RepaymentStrategy;
-  interestSaved: number;
-  monthsSaved: number;
-  payoffMonths: number | null;
-  firstRecalculatedMonthlyEmi: number;
-  endingMonthlyEmi: number;
-  totalExtraPaid: number;
 };
 
 export type RepaymentMarkers = {
   crossoverYear: number | null;
   halfFirstYearImpactYear: number | null;
-  halfCadenceImpactStartYear: number | null;
 };
 
 export type RepaymentDashboardModel = {
   status: LoanRepaymentStatus;
-  strategy: RepaymentStrategy;
   extraEmisPerYear: number;
   openingMonthlyEmi: number;
-  endingMonthlyEmi: number;
-  firstRecalculatedMonthlyEmi: number;
-  firstYearRecalculatedMonthlyEmi: number;
-  annualPrepayment: number;
   interestSaved: number;
   monthsSaved: number;
   comparisonAvailable: boolean;
   baselinePayoffMonths: number | null;
   selectedPayoffMonths: number | null;
   baselineHorizonMonths: number;
+  baselineSchedule: LoanScheduleMonth[];
+  selectedSchedule: LoanScheduleMonth[];
   recurrentSchedule: RepaymentYearPoint[];
   oneOffExtraPaymentCurve: OneOffExtraPaymentPoint[];
-  cadenceStartCurve: CadenceStartPoint[];
-  cadenceComparison: CadenceComparisonPoint[];
-  strategyComparison: StrategyComparisonPoint[];
   markers: RepaymentMarkers;
-  /** @deprecated Use `recurrentSchedule`. */
-  repaymentYears: RepaymentYearPoint[];
-  /** @deprecated Use `oneOffExtraPaymentCurve`. */
-  prepaymentRun: PrepaymentRunPoint[];
-  crossoverYear: number | null;
-  halfImpactYear: number | null;
 };
 
 function repaymentYearsFor(
@@ -161,26 +113,13 @@ function totalExtraPaid(schedule: LoanSchedule): number {
   return schedule.months.reduce((sum, month) => sum + month.extraPaid, 0);
 }
 
-function firstRecalculatedEmi(schedule: LoanSchedule): number {
-  const firstExtraIndex = schedule.months.findIndex((month) => month.extraPaid > 0);
-  return firstExtraIndex >= 0
-    ? schedule.months[firstExtraIndex + 1]?.scheduledEmi ?? schedule.endingMonthlyEmi
-    : schedule.openingMonthlyEmi;
-}
-
-function firstYearRecalculatedEmi(schedule: LoanSchedule): number {
-  return schedule.months.find((month) => month.paymentNumber === MONTHS_IN_YEAR + 1)?.scheduledEmi
-    ?? schedule.endingMonthlyEmi;
-}
-
 export function calculateRepaymentDashboard(
   inputs: PlanInputs,
   extraEmisPerYear: number,
-  strategy: RepaymentStrategy,
   config: PlanModelConfig = DEFAULT_PLAN_MODEL_CONFIG,
 ): RepaymentDashboardModel {
   const baseline = buildLoanSchedule(inputs, { extraEmisPerYear: 0 }, config);
-  const selected = buildLoanSchedule(inputs, { extraEmisPerYear, strategy }, config);
+  const selected = buildLoanSchedule(inputs, { extraEmisPerYear }, config);
   const construction = constructionPlanFor(inputs, config);
   const baselineYears = baseline.payoffMonth == null
     ? config.simulation.maximumJourneyYears
@@ -195,7 +134,6 @@ export function calculateRepaymentDashboard(
   for (let year = 1; baseline.totalInterest != null && year <= maximumRunYears; year += 1) {
     const candidate = buildLoanSchedule(inputs, {
       extraEmisPerYear: 1,
-      strategy,
       oneOffExtraPaymentYear: year,
     }, config);
     const extraPaid = totalExtraPaid(candidate);
@@ -205,7 +143,6 @@ export function calculateRepaymentDashboard(
       year,
       interestSaved,
       monthsSaved: monthsSavedAgainst(baseline, candidate),
-      monthlyEmiReduction: Math.max(0, candidate.openingMonthlyEmi - candidate.endingMonthlyEmi),
       extraPaid,
     });
   }
@@ -219,82 +156,15 @@ export function calculateRepaymentDashboard(
       point.year > 1 && point.interestSaved <= firstYearImpact / 2
     ))?.year ?? null
     : null;
-  const cadenceStartCurve: CadenceStartPoint[] = [];
-  for (let startYear = 1; startYear <= maximumRunYears; startYear += 1) {
-    const candidate = buildLoanSchedule(inputs, {
-      extraEmisPerYear,
-      strategy,
-      extraEmisStartYear: startYear,
-    }, config);
-    cadenceStartCurve.push({
-      startYear,
-      interestSaved: interestSavedAgainst(baseline, candidate),
-      monthsSaved: monthsSavedAgainst(baseline, candidate),
-      monthlyEmiReduction: Math.max(0, candidate.openingMonthlyEmi - candidate.endingMonthlyEmi),
-      extraPaid: totalExtraPaid(candidate),
-    });
-  }
-  const firstYearCadenceImpact = cadenceStartCurve[0]?.interestSaved ?? 0;
-  const halfCadenceImpactStartYear = firstYearCadenceImpact > 0
-    ? cadenceStartCurve.find((point) => (
-      point.startYear > 1 && point.interestSaved <= firstYearCadenceImpact / 2
-    ))?.startYear ?? null
-    : null;
-  const cadenceComparison = ([0, 1, 2, 3, 4, 6] as const).map((cadence) => {
-    const candidate = cadence === extraEmisPerYear
-      ? selected
-      : buildLoanSchedule(inputs, { extraEmisPerYear: cadence, strategy }, config);
-    return {
-      extraEmisPerYear: cadence,
-      interestSaved: interestSavedAgainst(baseline, candidate),
-      monthsSaved: monthsSavedAgainst(baseline, candidate),
-      endingMonthlyEmi: candidate.endingMonthlyEmi,
-      totalExtraPaid: totalExtraPaid(candidate),
-    };
-  });
-  const strategyComparison = (["finish_earlier", "lower_emi"] as const).map(
-    (comparisonStrategy) => {
-      const candidate = comparisonStrategy === strategy
-        ? selected
-        : buildLoanSchedule(inputs, {
-          extraEmisPerYear,
-          strategy: comparisonStrategy,
-        }, config);
-      return {
-        strategy: comparisonStrategy,
-        interestSaved: interestSavedAgainst(baseline, candidate),
-        monthsSaved: monthsSavedAgainst(baseline, candidate),
-        payoffMonths: candidate.payoffMonth == null
-          ? null
-          : candidate.months.at(-1)?.paymentNumber ?? null,
-        firstRecalculatedMonthlyEmi: firstRecalculatedEmi(candidate),
-        endingMonthlyEmi: candidate.endingMonthlyEmi,
-        totalExtraPaid: totalExtraPaid(candidate),
-      };
-    },
-  );
-  const firstRecalculatedMonthlyEmi = firstRecalculatedEmi(selected);
-  const firstYearRecalculatedMonthlyEmi = firstYearRecalculatedEmi(selected);
   const markers = {
     crossoverYear,
     halfFirstYearImpactYear: halfImpactYear,
-    halfCadenceImpactStartYear,
   };
-  const prepaymentRun: PrepaymentRunPoint[] = oneOffExtraPaymentCurve.map((point) => ({
-    ...point,
-    throughYear: point.year,
-    incrementalInterestSaved: point.interestSaved,
-  }));
 
   return {
     status: selected.status,
-    strategy,
     extraEmisPerYear,
     openingMonthlyEmi: selected.openingMonthlyEmi,
-    endingMonthlyEmi: selected.endingMonthlyEmi,
-    firstRecalculatedMonthlyEmi,
-    firstYearRecalculatedMonthlyEmi,
-    annualPrepayment: selected.annualPrepayment,
     interestSaved: interestSavedAgainst(baseline, selected),
     monthsSaved: monthsSavedAgainst(baseline, selected),
     comparisonAvailable: baseline.payoffMonth != null && baseline.totalInterest != null,
@@ -306,15 +176,10 @@ export function calculateRepaymentDashboard(
       : selected.months.at(-1)?.paymentNumber ?? null,
     baselineHorizonMonths: baseline.months.at(-1)?.paymentNumber
       ?? config.simulation.maximumJourneyYears * MONTHS_IN_YEAR,
+    baselineSchedule: baseline.months,
+    selectedSchedule: selected.months,
     recurrentSchedule,
     oneOffExtraPaymentCurve,
-    cadenceStartCurve,
-    cadenceComparison,
-    strategyComparison,
     markers,
-    repaymentYears: recurrentSchedule,
-    prepaymentRun,
-    crossoverYear,
-    halfImpactYear,
   };
 }

@@ -34,7 +34,6 @@ import { DEFAULT_PLAN_MODEL_CONFIG } from "../features/home-plan/modelConfig.ts"
 import {
   isExplicitlyReadyStatus,
   parsePlanDate,
-  type RepaymentStrategy,
 } from "../features/home-plan/financeEngine.ts";
 import { calculateRepaymentDashboard } from "../features/home-plan/repaymentModel.ts";
 import {
@@ -117,7 +116,6 @@ export function HomePlanPage() {
   const [extraEmisPerYear, setExtraEmisPerYear] = useState(
     DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear,
   );
-  const [repaymentStrategy, setRepaymentStrategy] = useState<RepaymentStrategy>("finish_earlier");
   const [planMode, setPlanMode] = useState<"repayment" | "rent-vs-buy">("repayment");
   const [retryKey, setRetryKey] = useState(0);
 
@@ -158,7 +156,6 @@ export function HomePlanPage() {
         if (!hasPlannablePrice(data.property.price)) {
           setInputs(null);
           setExtraEmisPerYear(DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear);
-          setRepaymentStrategy("finish_earlier");
           setStatus("no_price");
           return;
         }
@@ -172,7 +169,6 @@ export function HomePlanPage() {
         setExtraEmisPerYear(
           draft?.extraEmisPerYear ?? DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear,
         );
-        setRepaymentStrategy(draft?.repaymentStrategy ?? "finish_earlier");
         setStatus("ready");
       })
       .catch((error: unknown) => {
@@ -185,15 +181,15 @@ export function HomePlanPage() {
 
   const projection = useMemo(
     () => inputs
-      ? calculateProjection(inputs, extraEmisPerYear, DEFAULT_PLAN_MODEL_CONFIG, "finish_earlier")
+      ? calculateProjection(inputs, extraEmisPerYear, DEFAULT_PLAN_MODEL_CONFIG)
       : null,
     [inputs, extraEmisPerYear],
   );
   const repayment = useMemo(
     () => inputs
-      ? calculateRepaymentDashboard(inputs, extraEmisPerYear, repaymentStrategy)
+      ? calculateRepaymentDashboard(inputs, extraEmisPerYear)
       : null,
-    [inputs, extraEmisPerYear, repaymentStrategy],
+    [inputs, extraEmisPerYear],
   );
 
   const workspacePropertyIds = [...new Set([...(id ? [id] : []), ...propertyIds])];
@@ -318,10 +314,9 @@ export function HomePlanPage() {
   const persistEdit = (
     nextInputs: PlanInputs,
     nextExtraEmisPerYear: number,
-    nextRepaymentStrategy: RepaymentStrategy,
   ) => {
     if (!canPersistPlanDraft(id, propertyData.property.id, status)) return;
-    writePlanDraft(id, nextInputs, nextExtraEmisPerYear, nextRepaymentStrategy);
+    writePlanDraft(id, nextInputs, nextExtraEmisPerYear);
   };
 
   const updateInput = (key: EditablePlanInput, value: number) => {
@@ -338,19 +333,13 @@ export function HomePlanPage() {
       : updated;
     setPreviewYear(null);
     setInputs(next);
-    persistEdit(next, extraEmisPerYear, repaymentStrategy);
+    persistEdit(next, extraEmisPerYear);
   };
 
   const updateExtraEmisPerYear = (count: number) => {
     setPreviewYear(null);
     setExtraEmisPerYear(count);
-    persistEdit(inputs, count, repaymentStrategy);
-  };
-
-  const updateRepaymentStrategy = (strategy: RepaymentStrategy) => {
-    setPreviewYear(null);
-    setRepaymentStrategy(strategy);
-    persistEdit(inputs, extraEmisPerYear, strategy);
+    persistEdit(inputs, count);
   };
 
   const resetInputs = () => {
@@ -358,7 +347,6 @@ export function HomePlanPage() {
     setPreviewYear(null);
     setPinnedYear(null);
     setExtraEmisPerYear(DEFAULT_PLAN_MODEL_CONFIG.defaults.extraEmisPerYear);
-    setRepaymentStrategy("finish_earlier");
     clearPlanDraft(id);
   };
 
@@ -419,11 +407,9 @@ export function HomePlanPage() {
             <PlanAssumptionRail
               inputs={inputs}
               extraEmisPerYear={extraEmisPerYear}
-              repaymentStrategy={repaymentStrategy}
-              showRepaymentObjective={planMode === "repayment"}
+              repaymentMode={planMode === "repayment"}
               onInputChange={updateInput}
               onExtraEmisChange={updateExtraEmisPerYear}
-              onStrategyChange={updateRepaymentStrategy}
               onReset={resetInputs}
             />
 

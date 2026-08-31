@@ -1,5 +1,4 @@
 import { normalizePlanInputs, type PlanInputs } from "./model.ts";
-import type { RepaymentStrategy } from "./financeEngine.ts";
 
 const PLAN_DRAFT_STORAGE_PREFIX = "openestates:buy-vs-rent-draft:";
 /**
@@ -7,16 +6,16 @@ const PLAN_DRAFT_STORAGE_PREFIX = "openestates:buy-vs-rent-draft:";
  * apart from a default. Version 2 stores buyer edits only. Version 3 adds a
  * required down-payment assumption; older drafts are dropped so returning
  * buyers receive the complete financing model and current defaults. Version 5
- * makes Rent vs Buy SIP choices explicit 1× / 2× / 3× EMI multiples.
+ * makes Rent vs Buy SIP choices explicit 1× / 2× / 3× EMI multiples. Version 6
+ * removes the superseded repayment-strategy branch.
  */
-const PLAN_DRAFT_VERSION = 5;
+const PLAN_DRAFT_VERSION = 6;
 
 export type PropertyPlanDraft = {
   version: typeof PLAN_DRAFT_VERSION;
   propertyId: string;
   inputs: PlanInputs;
   extraEmisPerYear: number;
-  repaymentStrategy: RepaymentStrategy;
   updatedAt: number;
 };
 
@@ -28,7 +27,7 @@ function normalizeDraft(value: unknown, propertyId: string): PropertyPlanDraft |
   if (typeof value !== "object" || value == null) return null;
   const candidate = value as Partial<PropertyPlanDraft>;
   if (
-    ![PLAN_DRAFT_VERSION, 4, 3].includes(candidate.version ?? -1)
+    ![PLAN_DRAFT_VERSION, 5, 4, 3].includes(candidate.version ?? -1)
     || candidate.propertyId !== propertyId
     || candidate.inputs == null
   ) {
@@ -57,9 +56,6 @@ function normalizeDraft(value: unknown, propertyId: string): PropertyPlanDraft |
       propertyId,
       inputs: migratedInputs,
       extraEmisPerYear: Math.max(0, Math.floor(candidate.extraEmisPerYear ?? 0)),
-      repaymentStrategy: candidate.repaymentStrategy === "lower_emi"
-        ? "lower_emi"
-        : "finish_earlier",
       updatedAt: candidate.updatedAt ?? 0,
     };
   } catch {
@@ -81,14 +77,12 @@ export function writePlanDraft(
   propertyId: string,
   inputs: PlanInputs,
   extraEmisPerYear: number,
-  repaymentStrategy: RepaymentStrategy = "finish_earlier",
 ): PropertyPlanDraft {
   const draft: PropertyPlanDraft = {
     version: PLAN_DRAFT_VERSION,
     propertyId,
     inputs: normalizePlanInputs(inputs),
     extraEmisPerYear: Math.max(0, Math.floor(extraEmisPerYear)),
-    repaymentStrategy,
     updatedAt: Date.now(),
   };
   window.localStorage.setItem(planDraftStorageKey(propertyId), JSON.stringify(draft));

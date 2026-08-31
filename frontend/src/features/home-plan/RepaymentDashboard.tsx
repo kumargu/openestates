@@ -88,21 +88,15 @@ function OutcomeStrip({
   const becomesRepayable = model.baselinePayoffMonths == null
     && model.selectedPayoffMonths != null;
   const action = `${model.extraEmisPerYear} extra payment${model.extraEmisPerYear === 1 ? "" : "s"}/year`;
-  const before = model.strategy === "finish_earlier"
-    ? durationLabel(model.baselinePayoffMonths)
-    : `${formatMonthlyCurrency(model.openingMonthlyEmi)} now`;
-  const after = model.strategy === "finish_earlier"
-    ? durationLabel(model.selectedPayoffMonths)
-    : `${formatMonthlyCurrency(model.firstYearRecalculatedMonthlyEmi)} after year 1`;
+  const before = durationLabel(model.baselinePayoffMonths);
+  const after = durationLabel(model.selectedPayoffMonths);
   const benefit = noExtras
     ? "Choose extra payments above to compare a repayment plan."
     : !model.comparisonAvailable
       ? becomesRepayable
         ? "The selected plan becomes repayable; lifetime interest is not comparable."
         : "The loan does not close within the modelled horizon."
-      : model.strategy === "finish_earlier"
-        ? `Save ${durationLabel(model.monthsSaved)} and ${formatCurrency(model.interestSaved, true)} interest`
-        : `EMI keeps stepping down as the fixed extras recur each year; the original payoff date stays unchanged and estimated interest falls by ${formatCurrency(model.interestSaved, true)}`;
+      : `Save ${durationLabel(model.monthsSaved)} and ${formatCurrency(model.interestSaved, true)} interest`;
 
   return (
     <section className="home-plan-outcome-strip" aria-label="Selected repayment outcome">
@@ -417,7 +411,6 @@ function zeroImpactPoint(year: number): OneOffExtraPaymentPoint {
     year,
     interestSaved: 0,
     monthsSaved: 0,
-    monthlyEmiReduction: 0,
     extraPaid: 0,
   };
 }
@@ -614,18 +607,10 @@ function AssumptionsDisclosure({
             calculated monthly on the remaining balance.
           </li>
           <li>
-            Each recurring extra payment stays equal to today&apos;s EMI—
+            Each extra payment equals one EMI—currently
             {" "}{formatLakhCurrency(model.openingMonthlyEmi)}—and goes directly to principal.
-            Lower-EMI extras stop when another full payment would close the loan early.
-          </li>
-          <li>
-            {model.strategy === "finish_earlier"
-              ? "Shorten tenure keeps the monthly EMI unchanged and brings the payoff date forward."
-              : "Lower EMI keeps the original payoff date and recalculates the monthly EMI after each extra payment."}
-          </li>
-          <li>
-            This is an illustrative recast. A lender may default to shortening tenure, require
-            a request to lower EMI, or apply product-specific prepayment limits.
+            EMI remains unchanged, so the loan tenure reduces. Actual lender rules, limits,
+            charges and processing may differ.
           </li>
           <li>
             The half-impact marker is the first year an extra payment avoids 50% or less of
@@ -642,7 +627,7 @@ export function RepaymentDashboard({
   inputs,
   model,
 }: RepaymentDashboardProps) {
-  const stories = useMemo(() => buildRepaymentChartStories(inputs, model), [inputs, model]);
+  const stories = useMemo(() => buildRepaymentChartStories(model), [model]);
   const horizonMonths = Math.max(12, model.baselineHorizonMonths);
   const horizonYears = Math.max(1, Math.ceil(horizonMonths / 12));
   const [previewYear, setPreviewYear] = useState<number | null>(null);
@@ -669,7 +654,7 @@ export function RepaymentDashboard({
     <div className="home-plan-dashboard">
       <OutcomeStrip model={model} onViewSchedule={() => setScheduleOpen(true)} />
       <BalanceChart
-        key={`${inputs.downPaymentPercent}-${inputs.loanRate}-${inputs.monthlyEmiThousands}-${model.extraEmisPerYear}-${model.strategy}`}
+        key={`${inputs.downPaymentPercent}-${inputs.loanRate}-${inputs.monthlyEmiThousands}-${model.extraEmisPerYear}`}
         stories={stories}
         model={model}
         horizonMonths={horizonMonths}

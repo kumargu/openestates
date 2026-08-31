@@ -11,7 +11,6 @@
   --plan-interest: #9a6b2e;
   --plan-principal: var(--color-cool-deep);
   --plan-extra: #4f887b;
-  --plan-lower-emi: var(--color-accent);
   position: relative;
   isolation: isolate;
   display: flex;
@@ -138,7 +137,7 @@
 
 .home-plan-inline-studio__buy {
   display: grid;
-  grid-template-columns: 8.5rem 8.5rem 10rem minmax(15rem, 1fr) minmax(14rem, 1fr);
+  grid-template-columns: 8.5rem 8.5rem 10rem minmax(15rem, 1fr);
   align-items: end;
   gap: 1rem;
   min-width: 0;
@@ -151,8 +150,7 @@
 }
 
 .home-plan-inline-input > span,
-.home-plan-inline-studio__extra > span,
-.home-plan-repayment-use > span {
+.home-plan-inline-studio__extra > span {
   color: var(--plan-faint);
   font-size: 0.62rem;
   font-weight: 730;
@@ -273,44 +271,6 @@
 
 .home-plan-inline-studio__reset:hover {
   color: var(--plan-ink);
-}
-
-.home-plan-repayment-use {
-  display: grid;
-  align-self: end;
-  gap: 0.28rem;
-  min-width: 0;
-}
-
-.home-plan-repayment-use > div {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.12rem;
-  width: fit-content;
-  max-width: 100%;
-  padding: 0.16rem;
-  border: 1px solid var(--plan-line);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--plan-soft) 62%, transparent);
-}
-
-.home-plan-repayment-use button {
-  min-height: 2rem;
-  padding: 0.42rem 0.62rem;
-  border: 0;
-  border-radius: 6px;
-  color: var(--plan-muted);
-  background: transparent;
-  cursor: pointer;
-  font-size: 0.7rem;
-  font-weight: 680;
-  white-space: nowrap;
-}
-
-.home-plan-repayment-use button.is-active {
-  color: var(--plan-ink);
-  background: var(--plan-base);
-  box-shadow: 0 1px 3px rgba(49, 60, 70, 0.12);
 }
 
 .home-plan-dashboard {
@@ -846,13 +806,8 @@
 }
 
 .home-plan-curve.is-selected,
-.home-plan-curve.is-finish-earlier,
 .home-plan-curve.is-timing {
   stroke: var(--plan-accent);
-}
-
-.home-plan-curve.is-lower-emi {
-  stroke: var(--plan-lower-emi);
 }
 
 .home-plan-curve.is-buy {
@@ -1575,8 +1530,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .home-plan-inline-studio__extra,
-  .home-plan-repayment-use {
+  .home-plan-inline-studio__extra {
     grid-column: 1 / -1;
   }
 }

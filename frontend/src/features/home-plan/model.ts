@@ -4,7 +4,6 @@ import {
   calculateProjectionPoints,
   constructionPlanFor,
   monthlyPayment,
-  type RepaymentStrategy,
 } from "./financeEngine.ts";
 import {
   DEFAULT_PLAN_MODEL_CONFIG,
@@ -73,8 +72,6 @@ export type PlanProjection = {
   /** First year the loan is cleared by the monthly plan, even beyond the graph horizon. */
   loanFreeYear: number | null;
   extraEmisPerYear: number;
-  repaymentStrategy: RepaymentStrategy;
-  endingMonthlyEmi: number;
   possessionMonth: number;
   possessionDate: string | null;
   constructionDateSource: ConstructionProfile["dateSource"];
@@ -101,13 +98,10 @@ export type LoanJourneyPoint = {
 
 export type LoanJourney = {
   monthlyEmi: number;
-  endingMonthlyEmi: number;
-  annualPrepayment: number;
   loanFreeMonths: number;
   monthsSaved: number;
   interestSaved: number | null;
   totalInterest: number | null;
-  repaymentStrategy: RepaymentStrategy;
   points: LoanJourneyPoint[];
 };
 
@@ -258,13 +252,12 @@ export function calculateLoanJourney(
   inputs: PlanInputs,
   extraEmisPerYear?: number,
   config: PlanModelConfig = DEFAULT_PLAN_MODEL_CONFIG,
-  strategy: RepaymentStrategy = "finish_earlier",
 ): LoanJourney {
   inputs = normalizePlanInputs(inputs);
   extraEmisPerYear = normalizeExtraEmisPerYear(
     extraEmisPerYear ?? config.defaults.extraEmisPerYear,
   );
-  const schedule = buildLoanSchedule(inputs, { extraEmisPerYear, strategy }, config);
+  const schedule = buildLoanSchedule(inputs, { extraEmisPerYear }, config);
   const baseline = buildLoanSchedule(inputs, { extraEmisPerYear: 0 }, config);
   const points: LoanJourneyPoint[] = [];
   let yearlyInterest = 0;
@@ -315,8 +308,6 @@ export function calculateLoanJourney(
 
   return {
     monthlyEmi: schedule.openingMonthlyEmi,
-    endingMonthlyEmi: schedule.endingMonthlyEmi,
-    annualPrepayment: schedule.annualPrepayment,
     loanFreeMonths: schedule.payoffMonth ?? schedule.months.length,
     monthsSaved: closed && baseline.payoffMonth != null
       ? Math.max(0, baseline.payoffMonth - schedule.payoffMonth!)
@@ -325,7 +316,6 @@ export function calculateLoanJourney(
       ? Math.max(0, baseline.totalInterest - schedule.totalInterest)
       : null,
     totalInterest: schedule.totalInterest,
-    repaymentStrategy: strategy,
     points,
   };
 }
@@ -351,7 +341,6 @@ export function calculateProjection(
   inputs: PlanInputs,
   extraEmisPerYear?: number,
   config: PlanModelConfig = DEFAULT_PLAN_MODEL_CONFIG,
-  strategy: RepaymentStrategy = "finish_earlier",
 ): PlanProjection {
   inputs = normalizePlanInputs(inputs);
   extraEmisPerYear = normalizeExtraEmisPerYear(
@@ -361,9 +350,9 @@ export function calculateProjection(
   const loanAmount = schedule.reduce((sum, payment) => sum + payment.loanAmount, 0);
   const monthlyEmi = inputs.monthlyEmiThousands * 1_000;
   const upfrontPayment = schedule.reduce((sum, payment) => sum + payment.cashAmount, 0);
-  const journey = calculateLoanJourney(inputs, extraEmisPerYear, config, strategy);
+  const journey = calculateLoanJourney(inputs, extraEmisPerYear, config);
   const totalInterest = journey.totalInterest;
-  const points = calculateProjectionPoints(inputs, extraEmisPerYear, config, strategy);
+  const points = calculateProjectionPoints(inputs, extraEmisPerYear, config);
   const constructionPlan = constructionPlanFor(inputs, config);
   const loanFreeYear = journey.totalInterest == null
     ? null
@@ -379,8 +368,6 @@ export function calculateProjection(
     breakEvenYear: findBreakEvenYear(points, inputs.purchaseYear),
     loanFreeYear,
     extraEmisPerYear,
-    repaymentStrategy: strategy,
-    endingMonthlyEmi: journey.endingMonthlyEmi,
     possessionMonth: constructionPlan.possessionMonth,
     possessionDate: constructionPlan.possessionDate,
     constructionDateSource: constructionPlan.dateSource,

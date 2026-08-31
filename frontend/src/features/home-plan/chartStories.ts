@@ -1,8 +1,4 @@
-import {
-  buildLoanSchedule,
-  type LoanScheduleMonth,
-} from "./financeEngine.ts";
-import type { PlanInputs } from "./model.ts";
+import type { LoanScheduleMonth } from "./financeEngine.ts";
 import type {
   RepaymentDashboardModel,
   RepaymentYearPoint,
@@ -24,18 +20,12 @@ export type RepaymentChartStories = Readonly<{
   annual: RepaymentYearPoint[];
   baselineMonthly: MonthlyRepaymentPoint[];
   selectedMonthly: MonthlyRepaymentPoint[];
-  finishEarlierMonthly: MonthlyRepaymentPoint[];
-  lowerEmiMonthly: MonthlyRepaymentPoint[];
-  /** @deprecated Use `selectedMonthly`. */
-  monthly: MonthlyRepaymentPoint[];
 }>;
 
 function monthlyPoints(
-  inputs: PlanInputs,
-  extraEmisPerYear: number,
-  strategy: RepaymentDashboardModel["strategy"],
+  months: LoanScheduleMonth[],
 ): MonthlyRepaymentPoint[] {
-  return buildLoanSchedule(inputs, { extraEmisPerYear, strategy }).months
+  return months
     .filter((month) => month.paymentNumber > 0)
     .map((month) => ({
       month: month.month,
@@ -50,23 +40,13 @@ function monthlyPoints(
 }
 
 export function buildRepaymentChartStories(
-  inputs: PlanInputs,
   model: RepaymentDashboardModel,
 ): RepaymentChartStories {
-  const baselineMonthly = monthlyPoints(inputs, 0, "finish_earlier");
-  const selectedMonthly = monthlyPoints(inputs, model.extraEmisPerYear, model.strategy);
-  const finishEarlierMonthly = model.strategy === "finish_earlier"
-    ? selectedMonthly
-    : monthlyPoints(inputs, model.extraEmisPerYear, "finish_earlier");
-  const lowerEmiMonthly = model.strategy === "lower_emi"
-    ? selectedMonthly
-    : monthlyPoints(inputs, model.extraEmisPerYear, "lower_emi");
+  const baselineMonthly = monthlyPoints(model.baselineSchedule);
+  const selectedMonthly = monthlyPoints(model.selectedSchedule);
   return {
     annual: model.recurrentSchedule,
     baselineMonthly,
     selectedMonthly,
-    finishEarlierMonthly,
-    lowerEmiMonthly,
-    monthly: selectedMonthly,
   };
 }

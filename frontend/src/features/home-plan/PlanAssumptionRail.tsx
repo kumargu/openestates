@@ -5,7 +5,6 @@ import {
   type PlanInputs,
 } from "./model.ts";
 import { useState } from "react";
-import type { RepaymentStrategy } from "./financeEngine.ts";
 
 const LAKH = 100_000;
 const MONTHS_IN_YEAR = 12;
@@ -18,11 +17,9 @@ function monthlyInterestThresholdThousands(inputs: PlanInputs): number {
 type PlanAssumptionRailProps = {
   inputs: PlanInputs;
   extraEmisPerYear: number;
-  repaymentStrategy: RepaymentStrategy;
-  showRepaymentObjective?: boolean;
+  repaymentMode?: boolean;
   onInputChange: (key: EditablePlanInput, value: number) => void;
   onExtraEmisChange: (count: number) => void;
-  onStrategyChange: (strategy: RepaymentStrategy) => void;
   onReset: () => void;
 };
 
@@ -117,11 +114,9 @@ function PlanInput({
 export function PlanAssumptionRail({
   inputs,
   extraEmisPerYear,
-  repaymentStrategy,
-  showRepaymentObjective = true,
+  repaymentMode = true,
   onInputChange,
   onExtraEmisChange,
-  onStrategyChange,
   onReset,
 }: PlanAssumptionRailProps) {
   const principalThresholdThousands = monthlyInterestThresholdThousands(inputs);
@@ -148,8 +143,8 @@ export function PlanAssumptionRail({
   ];
   return (
     <section
-      className={`home-plan-inline-studio ${showRepaymentObjective ? "" : "is-rent-buy"}`}
-      aria-label={showRepaymentObjective ? "Loan repayment assumptions" : "Buy assumptions"}
+      className={`home-plan-inline-studio ${repaymentMode ? "" : "is-rent-buy"}`}
+      aria-label={repaymentMode ? "Loan repayment assumptions" : "Buy assumptions"}
     >
       <div className="home-plan-inline-studio__primary">
         <div className="home-plan-inline-studio__buy" role="group" aria-label="Loan plan">
@@ -157,7 +152,7 @@ export function PlanAssumptionRail({
             <PlanInput
               key={key}
               {...input}
-              note={showRepaymentObjective ? input.note : undefined}
+              note={repaymentMode ? input.note : undefined}
               value={inputs[key]}
               onChange={(value) => onInputChange(key, value)}
             />
@@ -167,7 +162,7 @@ export function PlanAssumptionRail({
             min={inputs.downPaymentPercent === 100 ? 0 : 1}
             prefix="₹"
             suffix="L/month"
-            note={showRepaymentObjective ? emiNote : undefined}
+            note={repaymentMode ? emiNote : undefined}
             value={inputs.monthlyEmiThousands}
             valueScale={100}
             onChange={(value) => onInputChange("monthlyEmiThousands", value)}
@@ -187,38 +182,11 @@ export function PlanAssumptionRail({
                 </button>
               ))}
             </div>
-            <small>
-              {showRepaymentObjective
-                ? `Each stays at today's EMI: ${formatLakhCurrency(inputs.monthlyEmiThousands * 1_000)}`
-                : "Each equals one monthly EMI"}
-            </small>
+            <small>Each equals one EMI: {formatLakhCurrency(inputs.monthlyEmiThousands * 1_000)}</small>
           </div>
-          {showRepaymentObjective ? (
-            <div className="home-plan-repayment-use">
-              <span>Apply extra payments to</span>
-              <div role="group" aria-label="Apply extra payments to">
-                <button
-                  type="button"
-                  className={repaymentStrategy === "finish_earlier" ? "is-active" : undefined}
-                  aria-pressed={repaymentStrategy === "finish_earlier"}
-                  onClick={() => onStrategyChange("finish_earlier")}
-                >
-                  Shorten tenure
-                </button>
-                <button
-                  type="button"
-                  className={repaymentStrategy === "lower_emi" ? "is-active" : undefined}
-                  aria-pressed={repaymentStrategy === "lower_emi"}
-                  onClick={() => onStrategyChange("lower_emi")}
-                >
-                  Lower EMI
-                </button>
-              </div>
-            </div>
-          ) : null}
         </div>
 
-        {showRepaymentObjective ? (
+        {repaymentMode ? (
           <div className="home-plan-inline-studio__repay-actions">
             <button type="button" className="home-plan-inline-studio__reset" onClick={onReset}>
               Reset plan
