@@ -28,7 +28,7 @@ import { LivingEvidenceTile } from "../components/evidence/LivingEvidenceTile.ts
 import { SearchFocusBoard } from "../components/evidence/SearchFocusBoard.tsx";
 import { UniverseBoard } from "../components/evidence/UniverseBoard.tsx";
 import { useEvidenceBatch } from "../hooks/useEvidenceBatch.ts";
-import { writeDiscoveryMapContext } from "../lib/navigationContext.ts";
+import { queryFingerprint, writeDiscoveryMapContext } from "../lib/navigationContext.ts";
 
 /* ---------- Area Context Bar ---------- */
 
@@ -418,6 +418,7 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
       matchLabels={hasQuery ? searchResultReasonLabels(result) : []}
       proofFocus={primaryProofFocus(result, query)}
       discoveryContextId={hasQuery ? discoveryContextId : null}
+      discoveryQueryFingerprint={hasQuery ? queryFingerprint(query) : null}
     />
   );
   return (

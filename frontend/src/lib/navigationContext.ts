@@ -262,9 +262,14 @@ export function readDiscoveryMapContext(
 export function discoveryMapContextForProperty(
   context: DiscoveryMapContext | null,
   propertyId: string,
+  expectedQueryFingerprint?: string | null,
 ): DiscoveryMapContext | null {
   const normalizedPropertyId = propertyId.trim();
   if (!context || !normalizedPropertyId) return null;
+  if (
+    expectedQueryFingerprint
+    && context.queryFingerprint !== expectedQueryFingerprint
+  ) return null;
   return context.candidates.some((candidate) =>
     candidate.propertyIds.includes(normalizedPropertyId))
     ? context

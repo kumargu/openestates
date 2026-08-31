@@ -71,8 +71,18 @@ export function propertyMapContextFromSurfaceScene(
 
 function mapAnchorBoundary(scene: SurfaceSceneResponse): PropertyMapContext["home"]["boundary"] {
   const boundary = scene.anchor.boundary;
-  if (!boundary || boundary.geometry.type !== "Polygon") return undefined;
-  const coordinates = boundary.geometry.coordinates[0];
+  if (!boundary) return undefined;
+  let coordinates: [number, number][] | undefined;
+  if (boundary.geometry.type === "Polygon") {
+    coordinates = boundary.geometry.coordinates[0];
+  } else if (boundary.geometry.type === "MultiPolygon") {
+    coordinates = boundary.geometry.coordinates
+      .map((polygon) => polygon[0])
+      .filter((ring): ring is [number, number][] => Boolean(ring))
+      .sort((left, right) => polygonRingArea(right) - polygonRingArea(left))[0];
+  } else {
+    return undefined;
+  }
   if (!coordinates || coordinates.length < 4) return undefined;
   return {
     id: `${scene.anchor.entityId}:boundary`,
@@ -81,6 +91,13 @@ function mapAnchorBoundary(scene: SurfaceSceneResponse): PropertyMapContext["hom
     coordinates,
     source_type: boundary.sourceType,
   };
+}
+
+function polygonRingArea(ring: [number, number][]): number {
+  return Math.abs(ring.slice(1).reduce((area, point, index) => {
+    const previous = ring[index];
+    return area + previous[0] * point[1] - point[0] * previous[1];
+  }, 0));
 }
 
 function mapLinesByLayer(

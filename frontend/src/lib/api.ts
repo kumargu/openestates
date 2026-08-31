@@ -152,10 +152,12 @@ export function propertyDetailPath(
   id: string,
   focus?: ProofFocus,
   discoveryContextId?: string | null,
+  discoveryQueryFingerprint?: string | null,
 ): string {
   const params = new URLSearchParams();
   if (focus) params.set("focus", JSON.stringify(focus));
   if (discoveryContextId?.trim()) params.set("context", discoveryContextId);
+  if (discoveryQueryFingerprint?.trim()) params.set("qf", discoveryQueryFingerprint);
   const suffix = params.size > 0 ? `?${params.toString()}` : "";
   return `/property/${encodeURIComponent(id)}${suffix}`;
 }

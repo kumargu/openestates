@@ -42,7 +42,10 @@ function frame(index: number, heading = 15): StreetViewFrame {
     longitude: 77.74,
   };
   return {
-    links: [],
+    links: [
+      ...(index > 0 ? [{ heading, pano: `pano-${index - 1}` }] : []),
+      { heading, pano: `pano-${index + 1}` },
+    ],
     pano: `pano-${index}`,
     panoramaPosition,
     waypoint: {
@@ -141,7 +144,16 @@ test("panorama gaps are explicit and material gaps stop the sequence", () => {
     waypoint: frame(index).waypoint,
     frame: index === 3 ? null : frame(index),
   } satisfies StreetViewResolution));
-  const shortGap = resolveStreetViewSequence(resolutions, 140);
+  const linkedAcrossGap = resolutions.map((resolution, index) => index === 2 && resolution.frame
+    ? {
+      ...resolution,
+      frame: {
+        ...resolution.frame,
+        links: [...resolution.frame.links, { heading: 15, pano: "pano-4" }],
+      },
+    }
+    : resolution);
+  const shortGap = resolveStreetViewSequence(linkedAcrossGap, 140);
   assert.equal(shortGap.skippedShortGap, true);
   assert.equal(shortGap.endedEarly, false);
   assert.equal(shortGap.frames.at(-1)?.pano, "pano-7");
@@ -151,6 +163,32 @@ test("panorama gaps are explicit and material gaps stop the sequence", () => {
   const materialGap = resolveStreetViewSequence(materialResolutions, 140);
   assert.equal(materialGap.endedEarly, true);
   assert.equal(materialGap.frames.at(-1)?.pano, "pano-2");
+});
+
+test("actual panorama distance and link continuity prevent silent teleports", () => {
+  const first = frame(0);
+  const disconnected = {
+    ...frame(1),
+    links: [],
+  };
+  first.links = [];
+  const disconnectedSequence = resolveStreetViewSequence([
+    { waypoint: first.waypoint, frame: first },
+    { waypoint: disconnected.waypoint, frame: disconnected },
+  ], 140);
+  assert.equal(disconnectedSequence.endedEarly, true);
+  assert.deepEqual(disconnectedSequence.frames.map((item) => item.pano), ["pano-0"]);
+
+  const farAway = {
+    ...frame(1),
+    panoramaPosition: { latitude: 13.1, longitude: 77.74 },
+  };
+  const distantSequence = resolveStreetViewSequence([
+    { waypoint: frame(0).waypoint, frame: frame(0) },
+    { waypoint: farAway.waypoint, frame: farAway },
+  ], 140);
+  assert.equal(distantSequence.endedEarly, true);
+  assert.deepEqual(distantSequence.frames.map((item) => item.pano), ["pano-0"]);
 });
 
 test("a leading panorama gap never silently teleports into the corridor", () => {

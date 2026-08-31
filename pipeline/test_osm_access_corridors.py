@@ -47,13 +47,13 @@ def road(way_id=10, tags=None, points=None):
     }
 
 
-def gate(node_id=50):
+def gate(node_id=50, latitude=12.9810, longitude=77.7405):
     return {
         "type": "node",
         "id": node_id,
         "tags": {"barrier": "gate", "entrance": "main"},
-        "lat": 12.9810,
-        "lon": 77.7405,
+        "lat": latitude,
+        "lon": longitude,
     }
 
 
@@ -95,7 +95,7 @@ class OsmSocietyAccessTests(unittest.TestCase):
     def test_reverse_oneway_is_oriented_legally(self):
         record = society_access_record(
             subject(),
-            {"elements": [boundary(), road(tags={"oneway": "-1"})]},
+            {"elements": [boundary(), road(tags={"oneway": "-1"}), gate()]},
             "query",
             {"eligible_highway_values": ["tertiary"]},
             "2026-08-30T12:00:00Z",
@@ -103,9 +103,9 @@ class OsmSocietyAccessTests(unittest.TestCase):
         coordinates = json.loads(record["approach_geometry_geojson"])["coordinates"]
         self.assertEqual(record["approach_direction"], "oneway_reverse")
         self.assertEqual(coordinates[0], [77.7406, 12.982])
-        self.assertEqual(coordinates[-1], [77.7404, 12.98])
+        self.assertEqual(coordinates[-1], [77.7405, 12.981])
 
-    def test_two_way_corridor_uses_longer_lead_in_and_keeps_continuation(self):
+    def test_two_way_corridor_terminates_at_the_entrance(self):
         record = society_access_record(
             subject(),
             {"elements": [boundary(), road(), gate()]},
@@ -117,8 +117,41 @@ class OsmSocietyAccessTests(unittest.TestCase):
         entrance = [record["entrance_longitude"], record["entrance_latitude"]]
         self.assertEqual(record["approach_direction"], "two_way")
         self.assertNotEqual(coordinates[0], entrance)
-        self.assertNotEqual(coordinates[-1], entrance)
-        self.assertIn(entrance, coordinates)
+        self.assertEqual(coordinates[-1], entrance)
+
+    def test_connected_public_ways_form_one_entrance_bound_path(self):
+        feeder = road(
+            9,
+            {"highway": "residential", "name": "Feeder Road"},
+            [
+                {"lat": 12.9790, "lon": 77.7403},
+                {"lat": 12.9800, "lon": 77.7404},
+            ],
+        )
+        record = society_access_record(
+            subject(),
+            {"elements": [boundary(), feeder, road(), gate()]},
+            "query",
+            {"eligible_highway_values": ["tertiary", "residential"]},
+            "2026-08-30T12:00:00Z",
+        )
+        coordinates = json.loads(record["approach_geometry_geojson"])["coordinates"]
+        self.assertEqual(coordinates[0], [77.7403, 12.979])
+        self.assertEqual(coordinates[-1], [77.7405, 12.981])
+
+    def test_oneway_starting_at_gate_is_not_presented_as_an_approach(self):
+        outgoing = road(
+            tags={"oneway": "yes"},
+            points=[
+                {"lat": 12.9810, "lon": 77.7405},
+                {"lat": 12.9820, "lon": 77.7406},
+            ],
+        )
+        record = society_access_record(
+            subject(), {"elements": [boundary(), outgoing, gate()]}, "query", {},
+            "2026-08-30T12:00:00Z",
+        )
+        self.assertNotIn("approach_geometry_geojson", record)
 
     def test_missing_gate_never_invents_an_entrance(self):
         record = society_access_record(
@@ -126,6 +159,36 @@ class OsmSocietyAccessTests(unittest.TestCase):
         )
         self.assertNotIn("entrance_latitude", record)
         self.assertNotIn("entrance_status", record)
+        self.assertNotIn("approach_geometry_geojson", record)
+
+    def test_named_multipolygon_relation_is_preserved(self):
+        relation = {
+            "type": "relation",
+            "id": 99,
+            "tags": {"type": "multipolygon", "landuse": "residential", "name": "Waterford"},
+            "members": [
+                {
+                    "type": "way",
+                    "role": "outer",
+                    "geometry": boundary()["geometry"],
+                },
+                {
+                    "type": "way",
+                    "role": "outer",
+                    "geometry": [
+                        {"lat": 12.9820, "lon": 77.7420},
+                        {"lat": 12.9820, "lon": 77.7424},
+                        {"lat": 12.9824, "lon": 77.7424},
+                        {"lat": 12.9820, "lon": 77.7420},
+                    ],
+                },
+            ],
+        }
+        record = society_access_record(
+            subject(), {"elements": [relation]}, "query", {}, "2026-08-30T12:00:00Z"
+        )
+        self.assertEqual(record["boundary_way_id"], "relation/99")
+        self.assertEqual(json.loads(record["boundary_geometry_geojson"])["type"], "MultiPolygon")
 
     def test_reviewed_coordinates_are_verified(self):
         record = society_access_record(
@@ -149,6 +212,7 @@ class OsmSocietyAccessTests(unittest.TestCase):
         self.assertIn('[timeout:45]', query)
         self.assertIn('way["highway"~"^(primary|residential)$"]', query)
         self.assertIn('way["landuse"~"^(residential)$"]["name"]', query)
+        self.assertIn('relation["type"="multipolygon"]', query)
         self.assertIn('node["barrier"="gate"]', query)
         self.assertIn('node["entrance"~"^(main|yes)$"]', query)
 

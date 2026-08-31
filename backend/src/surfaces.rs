@@ -219,9 +219,18 @@ pub struct SceneGap {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "PascalCase")]
 pub enum SceneGeometry {
-    Point { coordinates: [f64; 2] },
-    LineString { coordinates: Vec<[f64; 2]> },
-    Polygon { coordinates: Vec<Vec<[f64; 2]>> },
+    Point {
+        coordinates: [f64; 2],
+    },
+    LineString {
+        coordinates: Vec<[f64; 2]>,
+    },
+    Polygon {
+        coordinates: Vec<Vec<[f64; 2]>>,
+    },
+    MultiPolygon {
+        coordinates: Vec<Vec<Vec<[f64; 2]>>>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -1081,7 +1090,10 @@ fn scene_boundary_from_rows(rows: &ServingEntityFactRows, fact_key: &str) -> Opt
                 return None;
             };
             let geometry = scene_geometry_from_geojson(value)?;
-            if !matches!(geometry, SceneGeometry::Polygon { .. }) {
+            if !matches!(
+                geometry,
+                SceneGeometry::Polygon { .. } | SceneGeometry::MultiPolygon { .. }
+            ) {
                 return None;
             }
             Some(SceneBoundary {
@@ -1121,6 +1133,13 @@ fn scene_geometry_from_geojson_value(value: &GeoJsonValue) -> Option<SceneGeomet
             })
         }),
         GeoJsonValue::Polygon(rings) => geojson_polygon(rings),
+        GeoJsonValue::MultiPolygon(polygons) => {
+            let coordinates = polygons
+                .iter()
+                .map(|rings| normalized_polygon_coordinates(rings))
+                .collect::<Option<Vec<_>>>()?;
+            (!coordinates.is_empty()).then_some(SceneGeometry::MultiPolygon { coordinates })
+        }
         GeoJsonValue::GeometryCollection(geometries) => geometries
             .iter()
             .find_map(|geometry| scene_geometry_from_geojson_value(&geometry.value)),
@@ -1129,7 +1148,11 @@ fn scene_geometry_from_geojson_value(value: &GeoJsonValue) -> Option<SceneGeomet
 }
 
 fn geojson_polygon(rings: &[Vec<Vec<f64>>]) -> Option<SceneGeometry> {
-    let coordinates = rings
+    normalized_polygon_coordinates(rings).map(|coordinates| SceneGeometry::Polygon { coordinates })
+}
+
+fn normalized_polygon_coordinates(rings: &[Vec<Vec<f64>>]) -> Option<Vec<Vec<[f64; 2]>>> {
+    let mut coordinates = rings
         .iter()
         .map(|ring| {
             ring.iter()
@@ -1139,8 +1162,38 @@ fn geojson_polygon(rings: &[Vec<Vec<f64>>]) -> Option<SceneGeometry> {
                 .collect::<Option<Vec<_>>>()
         })
         .collect::<Option<Vec<_>>>()?;
-    (!coordinates.is_empty() && coordinates.iter().all(|ring| ring.len() >= 4))
-        .then_some(SceneGeometry::Polygon { coordinates })
+    if coordinates.is_empty() {
+        return None;
+    }
+    for (index, ring) in coordinates.iter_mut().enumerate() {
+        if ring.len() < 4
+            || ring.first() != ring.last()
+            || ring[..ring.len() - 1]
+                .iter()
+                .enumerate()
+                .filter(|(index, point)| ring[..*index].iter().all(|seen| seen != *point))
+                .count()
+                < 3
+        {
+            return None;
+        }
+        let area = signed_ring_area(ring);
+        if !area.is_finite() || area.abs() <= f64::EPSILON {
+            return None;
+        }
+        let should_reverse = (index == 0 && area < 0.0) || (index > 0 && area > 0.0);
+        if should_reverse {
+            ring.reverse();
+        }
+    }
+    Some(coordinates)
+}
+
+fn signed_ring_area(ring: &[[f64; 2]]) -> f64 {
+    ring.windows(2)
+        .map(|pair| pair[0][0] * pair[1][1] - pair[1][0] * pair[0][1])
+        .sum::<f64>()
+        / 2.0
 }
 
 fn geojson_line_string(points: &[Vec<f64>]) -> Option<SceneGeometry> {
@@ -1327,6 +1380,13 @@ fn collect_geometry_points(geometry: &SceneGeometry, points: &mut Vec<(f64, f64)
                     .iter()
                     .flat_map(|ring| ring.iter().map(|point| (point[1], point[0]))),
             );
+        }
+        SceneGeometry::MultiPolygon { coordinates } => {
+            points.extend(coordinates.iter().flat_map(|polygon| {
+                polygon
+                    .iter()
+                    .flat_map(|ring| ring.iter().map(|point| (point[1], point[0])))
+            }));
         }
     }
 }
@@ -1608,6 +1668,43 @@ mod tests {
         assert_eq!(
             scene_geometry_from_geojson(r#"{"type":"LineString","coordinates":[[77.745,12.94]]}"#),
             None
+        );
+        assert_eq!(
+            scene_geometry_from_geojson(
+                r#"{"type":"Polygon","coordinates":[[[77.745,12.94],[77.747,12.94],[77.745,12.94],[77.745,12.94]]]}"#
+            ),
+            None
+        );
+        assert_eq!(
+            scene_geometry_from_geojson(
+                r#"{"type":"Polygon","coordinates":[[[77.745,12.94],[77.747,12.94],[77.747,12.942],[77.745,12.942]]]}"#
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn geometry_reader_preserves_valid_multipolygons() {
+        assert_eq!(
+            scene_geometry_from_geojson(
+                r#"{"type":"MultiPolygon","coordinates":[[[[77.745,12.94],[77.747,12.94],[77.747,12.942],[77.745,12.94]]],[[[77.75,12.95],[77.752,12.95],[77.752,12.952],[77.75,12.95]]]]}"#
+            ),
+            Some(SceneGeometry::MultiPolygon {
+                coordinates: vec![
+                    vec![vec![
+                        [77.745, 12.94],
+                        [77.747, 12.94],
+                        [77.747, 12.942],
+                        [77.745, 12.94],
+                    ]],
+                    vec![vec![
+                        [77.75, 12.95],
+                        [77.752, 12.95],
+                        [77.752, 12.952],
+                        [77.75, 12.95],
+                    ]],
+                ],
+            })
         );
     }
 

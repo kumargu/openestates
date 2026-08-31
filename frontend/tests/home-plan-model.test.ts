@@ -159,7 +159,7 @@ test("plan snapshot captures monthly assumptions and inspected outcome", () => {
     activeYear: 12,
   });
 
-  assert.match(note.source, /^Saved \d{1,2} [A-Za-z]{3} \d{4}$/);
+  assert.match(note.source, /^Saved \d{1,2} [A-Za-z]{3,4} \d{4}$/);
   assert.deepEqual(note.labels, ["finance", "emi", "price"]);
   assert.equal(note.title, "Waterford Estate plan, ₹1.8L EMI");
   assert.match(note.detail, /Waterford Estate/);

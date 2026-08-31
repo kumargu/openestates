@@ -382,8 +382,21 @@ fn polygon_coordinates(geometry: &SceneGeometry) -> Option<Vec<[f64; 2]>> {
         SceneGeometry::Polygon { coordinates } => {
             coordinates.first().filter(|ring| ring.len() >= 4).cloned()
         }
+        SceneGeometry::MultiPolygon { coordinates } => coordinates
+            .iter()
+            .filter_map(|polygon| polygon.first())
+            .max_by(|left, right| polygon_ring_area(left).total_cmp(&polygon_ring_area(right)))
+            .filter(|ring| ring.len() >= 4)
+            .cloned(),
         _ => None,
     }
+}
+
+fn polygon_ring_area(ring: &[[f64; 2]]) -> f64 {
+    ring.windows(2)
+        .map(|pair| pair[0][0] * pair[1][1] - pair[1][0] * pair[0][1])
+        .sum::<f64>()
+        .abs()
 }
 
 fn add_metro_line_stations(

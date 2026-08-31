@@ -65,9 +65,14 @@ test("proof focus URL contract round-trips through detail and surface paths", ()
     reason: "matched near Manipal Hospital Whitefield",
   };
 
-  const detailUrl = new URL(propertyDetailPath("property id/with slash", focus), "http://test.local");
+  const detailUrl = new URL(
+    propertyDetailPath("property id/with slash", focus, "context-1", "q123"),
+    "http://test.local",
+  );
   const parsed = parseProofFocusParam(detailUrl.searchParams.get("focus"));
   assert.deepEqual(parsed, focus);
+  assert.equal(detailUrl.searchParams.get("context"), "context-1");
+  assert.equal(detailUrl.searchParams.get("qf"), "q123");
 
   const surfaceUrl = new URL(
     propertySurfacePath("property id/with slash", "around_this_home", parsed),
@@ -173,7 +178,7 @@ test("the arrival tile owns society and guided-road 3D evidence", () => {
   assert.equal(hasAroundThisHomePlate(context), false);
 });
 
-test("arrival keeps an anchor-only society when its boundary is missing", () => {
+test("arrival keeps real imagery when the map has only society coordinates", () => {
   assert.equal(hasArrivalMap({
     ...emptyMapContext,
     home: {
@@ -181,7 +186,7 @@ test("arrival keeps an anchor-only society when its boundary is missing", () => 
       latitude: 12.98,
       longitude: 77.74,
     },
-  }), true);
+  }), false);
 });
 
 test("arrival entrance labels and icons follow scene config and status", () => {

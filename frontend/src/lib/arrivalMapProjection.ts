@@ -122,7 +122,15 @@ export function societyCameraComposition(
 
 export function hasArrivalMap(context?: PropertyMapContext | null): boolean {
   if (!context || !resolveHomeAnchor(context)) return false;
-  return true;
+  const hasBoundary = Boolean(context.home.boundary?.coordinates.length);
+  const hasEntrance = context.layers?.some((layer) =>
+    layer.renderKind === "arrival_marker"
+      && context.places.some((place) => place.layer === layer.id)) ?? false;
+  const hasApproach = context.layers?.some((layer) =>
+    layer.renderKind === "terrain_corridor"
+      && (context.layer_lines?.[layer.id] ?? context.access_lines ?? [])
+        .some((line) => line.coordinates.length >= 2)) ?? false;
+  return hasBoundary || hasEntrance || hasApproach;
 }
 
 function clamp(value: number, min: number, max: number): number {

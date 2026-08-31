@@ -187,7 +187,13 @@ fn push_society_boundary_fact(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(|way_id| format!("https://www.openstreetmap.org/way/{way_id}"));
+        .map(|osm_id| {
+            if osm_id.contains('/') {
+                format!("https://www.openstreetmap.org/{osm_id}")
+            } else {
+                format!("https://www.openstreetmap.org/way/{osm_id}")
+            }
+        });
     push_fact_with_source(
         facts,
         annotations,
@@ -699,9 +705,16 @@ fn is_polygon_geometry(value: &str) -> bool {
         GeoJson::Feature(feature) => feature.geometry.as_ref().map(|geometry| &geometry.value),
         GeoJson::FeatureCollection(_) => None,
     };
-    let Some(GeoJsonValue::Polygon(rings)) = geometry else {
-        return false;
-    };
+    match geometry {
+        Some(GeoJsonValue::Polygon(rings)) => valid_polygon_rings(rings),
+        Some(GeoJsonValue::MultiPolygon(polygons)) => {
+            !polygons.is_empty() && polygons.iter().all(|rings| valid_polygon_rings(rings))
+        }
+        _ => false,
+    }
+}
+
+fn valid_polygon_rings(rings: &[Vec<Vec<f64>>]) -> bool {
     !rings.is_empty()
         && rings.iter().all(|ring| {
             ring.len() >= 4
@@ -713,7 +726,21 @@ fn is_polygon_geometry(value: &str) -> bool {
                         && (-180.0..=180.0).contains(&point[0])
                         && (-90.0..=90.0).contains(&point[1])
                 })
+                && ring[..ring.len() - 1]
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, point)| ring[..*index].iter().all(|seen| seen != *point))
+                    .count()
+                    >= 3
+                && signed_ring_area(ring).abs() > f64::EPSILON
         })
+}
+
+fn signed_ring_area(ring: &[Vec<f64>]) -> f64 {
+    ring.windows(2)
+        .map(|pair| pair[0][0] * pair[1][1] - pair[1][0] * pair[0][1])
+        .sum::<f64>()
+        / 2.0
 }
 
 fn load_config() -> Result<OsmAccessConfigFile, OsmAccessAssetError> {
@@ -840,5 +867,30 @@ impl From<ReraAssetError> for OsmAccessAssetError {
 impl From<SourceEntityResolutionError> for OsmAccessAssetError {
     fn from(value: SourceEntityResolutionError) -> Self {
         Self::Identity(value)
+    }
+}
+
+#[cfg(test)]
+mod geometry_tests {
+    use super::is_polygon_geometry;
+
+    #[test]
+    fn boundary_geometry_requires_closed_non_degenerate_rings() {
+        assert!(is_polygon_geometry(
+            r#"{"type":"Polygon","coordinates":[[[77.0,12.0],[77.1,12.0],[77.1,12.1],[77.0,12.0]]]}"#
+        ));
+        assert!(!is_polygon_geometry(
+            r#"{"type":"Polygon","coordinates":[[[77.0,12.0],[77.1,12.0],[77.1,12.1],[77.0,12.1]]]}"#
+        ));
+        assert!(!is_polygon_geometry(
+            r#"{"type":"Polygon","coordinates":[[[77.0,12.0],[77.1,12.0],[77.2,12.0],[77.0,12.0]]]}"#
+        ));
+    }
+
+    #[test]
+    fn boundary_geometry_accepts_valid_multipolygons() {
+        assert!(is_polygon_geometry(
+            r#"{"type":"MultiPolygon","coordinates":[[[[77.0,12.0],[77.1,12.0],[77.1,12.1],[77.0,12.0]]],[[[77.2,12.2],[77.3,12.2],[77.3,12.3],[77.2,12.2]]]]}"#
+        ));
     }
 }

@@ -38,6 +38,7 @@ type Props = {
   variant?: "default" | "browse";
   proofFocus?: ProofFocus;
   discoveryContextId?: string | null;
+  discoveryQueryFingerprint?: string | null;
   matchLabels?: string[];
   /** Keep shortlist entry points explicit instead of enabling them on every card surface. */
   allowSave?: boolean;
@@ -49,6 +50,7 @@ export function LivingEvidenceTile({
   variant = "default",
   proofFocus,
   discoveryContextId,
+  discoveryQueryFingerprint,
   matchLabels = [],
   allowSave = false,
 }: Props) {
@@ -125,7 +127,12 @@ export function LivingEvidenceTile({
         ) : null}
       </div>
       <Link
-        to={propertyDetailPath(property.id, proofFocus, discoveryContextId)}
+        to={propertyDetailPath(
+          property.id,
+          proofFocus,
+          discoveryContextId,
+          discoveryQueryFingerprint,
+        )}
         className="catalog-card__link"
       >
         <div className="catalog-card__caption">

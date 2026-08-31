@@ -47,6 +47,7 @@ export type EntranceCameraSequence = {
 };
 
 const CURVE_THRESHOLD_DEGREES = 12;
+const EARTH_RADIUS_M = 6_371_000;
 
 export function normalizeHeading(heading: number): number {
   return (heading % 360 + 360) % 360;
@@ -111,6 +112,23 @@ export function streetViewPlayback(frames: StreetViewFrame[]): StreetViewFrame[]
     index === 0 || frame.pano !== sorted[index - 1].pano);
 }
 
+function panoramaDistanceM(left: StreetViewFrame, right: StreetViewFrame): number {
+  const leftLatitude = left.panoramaPosition.latitude * Math.PI / 180;
+  const rightLatitude = right.panoramaPosition.latitude * Math.PI / 180;
+  const latitudeDelta = rightLatitude - leftLatitude;
+  const longitudeDelta = (right.panoramaPosition.longitude - left.panoramaPosition.longitude)
+    * Math.PI / 180;
+  const haversine = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(leftLatitude) * Math.cos(rightLatitude) * Math.sin(longitudeDelta / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(haversine)));
+}
+
+function panoramasAreLinked(left: StreetViewFrame, right: StreetViewFrame): boolean {
+  if (left.pano === right.pano) return true;
+  return left.links.some((link) => link.pano === right.pano)
+    || right.links.some((link) => link.pano === left.pano);
+}
+
 export function resolveStreetViewSequence(
   resolutions: StreetViewResolution[],
   maximumGapM: number,
@@ -144,6 +162,17 @@ export function resolveStreetViewSequence(
         break;
       }
       skippedShortGap = true;
+    }
+    const previousFrame = frames.at(-1);
+    if (
+      previousFrame
+      && (
+        panoramaDistanceM(previousFrame, resolution.frame) > maximumGapM
+        || !panoramasAreLinked(previousFrame, resolution.frame)
+      )
+    ) {
+      endedEarly = true;
+      break;
     }
     if (frames.at(-1)?.pano !== resolution.frame.pano) frames.push(resolution.frame);
     previousLoadedIndex = index;

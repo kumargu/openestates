@@ -291,12 +291,14 @@ export function PropertyPage() {
 
   const focusParam = searchParams.get("focus");
   const contextId = searchParams.get("context");
+  const contextQueryFingerprint = searchParams.get("qf");
   return (
     <PropertyPageBody
-      key={`${id}:${focusParam ?? ""}:${contextId ?? ""}`}
+      key={`${id}:${focusParam ?? ""}:${contextId ?? ""}:${contextQueryFingerprint ?? ""}`}
       id={id}
       focusParam={focusParam}
       contextId={contextId}
+      contextQueryFingerprint={contextQueryFingerprint}
     />
   );
 }
@@ -305,10 +307,12 @@ function PropertyPageBody({
   id,
   focusParam,
   contextId,
+  contextQueryFingerprint,
 }: {
   id: string;
   focusParam: string | null;
   contextId: string | null;
+  contextQueryFingerprint: string | null;
 }) {
   const proofFocus = useMemo(
     () => parseProofFocusParam(focusParam),
@@ -346,8 +350,12 @@ function PropertyPageBody({
   >("loading");
   const [retryKey, setRetryKey] = useState(0);
   const discoveryMapContext = useMemo(
-    () => discoveryMapContextForProperty(readDiscoveryMapContext(contextId), id),
-    [contextId, id],
+    () => discoveryMapContextForProperty(
+      readDiscoveryMapContext(contextId),
+      id,
+      contextQueryFingerprint,
+    ),
+    [contextId, contextQueryFingerprint, id],
   );
 
   useEffect(() => {

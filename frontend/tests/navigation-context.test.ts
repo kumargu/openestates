@@ -198,6 +198,10 @@ test("map context is consumed only by a property carried by its URL token", () =
   assert.equal(discoveryMapContextForProperty(context, "one")?.id, "bound-context");
   assert.equal(discoveryMapContextForProperty(context, "two")?.id, "bound-context");
   assert.equal(discoveryMapContextForProperty(context, "unrelated"), null);
+  assert.equal(
+    discoveryMapContextForProperty(context, "one", queryFingerprint("another search")),
+    null,
+  );
 });
 
 test("discovery map context requires its URL token and expires after thirty minutes", () => {

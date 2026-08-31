@@ -50,6 +50,7 @@ const ApproachScene = lazy(async () => {
 type Props = {
   context: PropertyMapContext;
   searchContextSocieties?: ArrivalSearchSociety[];
+  onUnavailable?: () => void;
 };
 
 const SOCIETY_VIEW_RADIUS_KM = 0.8;
@@ -66,7 +67,7 @@ function compactPrice(price: number): string | null {
 }
 
 class ArrivalMapBoundary extends Component<
-  { children: ReactNode; unavailableLabel?: string },
+  { children: ReactNode; onUnavailable?: () => void; unavailableLabel?: string },
   { failed: boolean }
 > {
   state = { failed: false };
@@ -78,6 +79,7 @@ class ArrivalMapBoundary extends Component<
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("[PropertyArrivalMap] Map unavailable", error, info);
+    this.props.onUnavailable?.();
   }
 
   componentDidUpdate(
@@ -104,7 +106,11 @@ class ArrivalMapBoundary extends Component<
   }
 }
 
-export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Props) {
+export function PropertyArrivalMap({
+  context,
+  searchContextSocieties = [],
+  onUnavailable,
+}: Props) {
   const { controller: playbackController, state: playbackState } = useArrivalPlaybackController();
   const [societyAutoPlay, setSocietyAutoPlay] = useState(true);
   const [approachAutoPlay, setApproachAutoPlay] = useState(true);
@@ -324,7 +330,10 @@ export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Pro
           {roadExperience.replayLabel}
         </button>
       ) : null}
-      <ArrivalMapBoundary unavailableLabel={arrivalExperience?.googleUnavailableState}>
+      <ArrivalMapBoundary
+        unavailableLabel={arrivalExperience?.googleUnavailableState}
+        onUnavailable={onUnavailable}
+      >
         <Suspense
           fallback={(
             <div

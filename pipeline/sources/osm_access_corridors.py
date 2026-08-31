@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import heapq
 import json
 import math
 import re
@@ -74,6 +75,8 @@ def society_access_overpass_query(
     boundary_query = (
         f'  way["landuse"~"^({boundary_pattern})$"]["name"]'
         f"({south:.7f},{west:.7f},{north:.7f},{east:.7f});\n"
+        f'  relation["type"="multipolygon"]["landuse"~"^({boundary_pattern})$"]["name"]'
+        f"({south:.7f},{west:.7f},{north:.7f},{east:.7f});\n"
         if boundary_pattern else ""
     )
     return (
@@ -127,24 +130,15 @@ def society_access_record(
             boundary_way_id=boundary[0],
             boundary_geometry_geojson=boundary[2],
         )
-    if road:
-        focus = entrance["coordinate"] if entrance else origin
-        source_points = road["points"]
-        direction = _road_direction(road["tags"])
-        legal_points = list(reversed(source_points)) if direction == "oneway_reverse" else source_points
-        bounded = _bounded_line(
-            legal_points,
-            focus,
-            float(collector.get("max_corridor_meters") or 1_500.0),
-        )
-        if direction == "two_way":
-            bounded = _orient_two_way(bounded, focus)
+    route = _entrance_bound_route(roads, road, entrance, collector) if road and entrance else None
+    if road and route:
+        bounded, direction = route
         record.update(
             approach_road_name=road["name"],
             approach_way_id=road["id"],
             approach_distance_meters=_line_length_m(bounded),
             approach_geometry_geojson=_line_geojson(bounded),
-            approach_source_geometry_geojson=_line_geojson(source_points),
+            approach_source_geometry_geojson=_line_geojson(bounded),
             approach_direction=direction,
             approach_association_method=road["association_method"],
             source_url=f"https://www.openstreetmap.org/way/{road['id']}",
@@ -285,22 +279,137 @@ def _society_boundary(payload: Dict[str, Any], subject_name: str) -> Optional[Tu
     normalized_subject = _normalized_name(subject_name)
     if not normalized_subject:
         return None
+    candidates = []
     for element in payload.get("elements") or []:
-        if not isinstance(element, dict) or element.get("type") != "way":
+        if not isinstance(element, dict) or element.get("type") not in {"way", "relation"}:
             continue
         tags = element.get("tags") if isinstance(element.get("tags"), dict) else {}
         name = _optional_string(tags.get("name"))
-        points = _element_points(element)
         if not name or _normalized_name(name) != normalized_subject:
             continue
-        if len(points) < 4 or points[0] != points[-1]:
+        if element.get("type") == "way":
+            points = _valid_ring(_element_points(element), outer=True)
+            if points is None:
+                continue
+            geometry_value = {
+                "type": "Polygon",
+                "coordinates": [[[lon, lat] for lat, lon in points]],
+            }
+            candidates.append((0, f"way/{element.get('id') or ''}", name, geometry_value, points))
             continue
-        geometry = json.dumps(
-            {"type": "Polygon", "coordinates": [[[lon, lat] for lat, lon in points]]},
-            separators=(",", ":"), sort_keys=True,
+        polygons = _relation_polygons(element)
+        if not polygons:
+            continue
+        geometry_value = (
+            {"type": "Polygon", "coordinates": polygons[0]}
+            if len(polygons) == 1
+            else {"type": "MultiPolygon", "coordinates": polygons}
         )
-        return str(element.get("id") or ""), name, geometry, points
-    return None
+        reference = [
+            (point[1], point[0])
+            for polygon in polygons
+            for point in polygon[0]
+        ]
+        candidates.append((1, f"relation/{element.get('id') or ''}", name, geometry_value, reference))
+    if not candidates:
+        return None
+    _priority, osm_ref, name, geometry_value, reference = max(
+        candidates, key=lambda candidate: (candidate[0], candidate[1])
+    )
+    return (
+        osm_ref,
+        name,
+        json.dumps(geometry_value, separators=(",", ":"), sort_keys=True),
+        reference,
+    )
+
+
+def _relation_polygons(element: Dict[str, Any]) -> List[List[List[List[float]]]]:
+    """Assemble closed multipolygon member ways without treating exteriors as holes."""
+    role_paths: Dict[str, List[List[Coordinate]]] = {"outer": [], "inner": []}
+    for member in element.get("members") or []:
+        if not isinstance(member, dict) or member.get("type") != "way":
+            continue
+        role = str(member.get("role") or "outer").lower()
+        if role not in role_paths:
+            continue
+        points = _element_points(member)
+        if len(points) >= 2:
+            role_paths[role].append(points)
+    outer_rings = [ring for path in _stitch_rings(role_paths["outer"])
+                   if (ring := _valid_ring(path, outer=True)) is not None]
+    inner_rings = [ring for path in _stitch_rings(role_paths["inner"])
+                   if (ring := _valid_ring(path, outer=False)) is not None]
+    polygons: List[List[List[List[float]]]] = [
+        [[[lon, lat] for lat, lon in ring]] for ring in outer_rings
+    ]
+    for inner in inner_rings:
+        point = inner[0]
+        container = next(
+            (polygon for polygon in polygons if _point_in_ring(point, [
+                (coordinate[1], coordinate[0]) for coordinate in polygon[0]
+            ])),
+            None,
+        )
+        if container is not None:
+            container.append([[lon, lat] for lat, lon in inner])
+    return polygons
+
+
+def _stitch_rings(paths: List[List[Coordinate]]) -> List[List[Coordinate]]:
+    remaining = [list(path) for path in paths]
+    rings: List[List[Coordinate]] = []
+    while remaining:
+        ring = remaining.pop(0)
+        changed = True
+        while ring[0] != ring[-1] and changed:
+            changed = False
+            for index, path in enumerate(remaining):
+                if ring[-1] == path[0]:
+                    ring.extend(path[1:])
+                elif ring[-1] == path[-1]:
+                    ring.extend(reversed(path[:-1]))
+                elif ring[0] == path[-1]:
+                    ring = path[:-1] + ring
+                elif ring[0] == path[0]:
+                    ring = list(reversed(path[1:])) + ring
+                else:
+                    continue
+                remaining.pop(index)
+                changed = True
+                break
+        rings.append(ring)
+    return rings
+
+
+def _valid_ring(points: List[Coordinate], outer: bool) -> Optional[List[Coordinate]]:
+    points = _dedupe_adjacent(points)
+    if len(points) < 4 or points[0] != points[-1] or len(set(points[:-1])) < 3:
+        return None
+    area = _signed_ring_area(points)
+    if abs(area) <= 1e-14:
+        return None
+    should_reverse = (outer and area < 0) or (not outer and area > 0)
+    return list(reversed(points)) if should_reverse else points
+
+
+def _signed_ring_area(points: List[Coordinate]) -> float:
+    return sum(
+        left[1] * right[0] - right[1] * left[0]
+        for left, right in zip(points, points[1:])
+    ) / 2.0
+
+
+def _point_in_ring(point: Coordinate, ring: List[Coordinate]) -> bool:
+    inside = False
+    latitude, longitude = point
+    for left, right in zip(ring, ring[1:]):
+        if (left[0] > latitude) == (right[0] > latitude):
+            continue
+        crossing = (right[1] - left[1]) * (latitude - left[0]) / (right[0] - left[0]) + left[1]
+        if longitude < crossing:
+            inside = not inside
+    return inside
 
 
 def _road_direction(tags: Dict[str, Any]) -> str:
@@ -312,45 +421,109 @@ def _road_direction(tags: Dict[str, Any]) -> str:
     return "two_way"
 
 
-def _orient_two_way(points: List[Coordinate], focus: Coordinate) -> List[Coordinate]:
-    if len(points) < 2:
-        return points
-    along = _nearest_along_distance(points, focus)
-    return points if along >= _line_length_m(points) - along else list(reversed(points))
+def _entrance_bound_route(
+    roads: List[Dict[str, Any]],
+    frontage: Dict[str, Any],
+    entrance: Dict[str, Any],
+    collector: Dict[str, Any],
+) -> Optional[Tuple[List[Coordinate], str]]:
+    """Return a legal connected public-road path whose final point is the entrance."""
+    entrance_coordinate = entrance["coordinate"]
+    snap_limit = float(collector.get("max_route_entrance_snap_meters") or 1.0)
+    cap_meters = float(collector.get("max_corridor_meters") or 1_500.0)
+    minimum_meters = float(collector.get("min_approach_route_meters") or 25.0)
+    snapped = _nearest_segment_projection(frontage["points"], entrance_coordinate)
+    if snapped is None or snapped[0] > snap_limit:
+        return None
+    _snap_distance, segment_index, projection, ratio = snapped
+    direction = _road_direction(frontage["tags"])
+    left = frontage["points"][segment_index]
+    right = frontage["points"][segment_index + 1]
 
+    incoming: Dict[Coordinate, List[Tuple[Coordinate, float]]] = {}
+    for road in roads:
+        road_direction = _road_direction(road["tags"])
+        for start, end in zip(road["points"], road["points"][1:]):
+            length = _distance_m(start, end)
+            if length <= 0:
+                continue
+            if road_direction in {"two_way", "oneway_forward"}:
+                incoming.setdefault(end, []).append((start, length))
+            if road_direction in {"two_way", "oneway_reverse"}:
+                incoming.setdefault(start, []).append((end, length))
 
-def _bounded_line(points: List[Coordinate], focus: Coordinate, cap_meters: float) -> List[Coordinate]:
-    if len(points) < 2 or _line_length_m(points) <= cap_meters:
-        return list(points)
-    cumulative = _cumulative_distances(points)
-    focus_distance = _nearest_along_distance(points, focus)
-    start = max(0.0, min(focus_distance - cap_meters / 2.0, cumulative[-1] - cap_meters))
-    end = min(cumulative[-1], start + cap_meters)
-    output = [_point_at_distance(points, cumulative, start)]
-    output.extend(point for point, distance in zip(points, cumulative) if start < distance < end)
-    output.append(_point_at_distance(points, cumulative, end))
-    return _dedupe_adjacent(output)
+    entrance_tail = [entrance_coordinate]
+    initial: List[Tuple[Coordinate, float]] = []
+    if direction in {"two_way", "oneway_forward"} and ratio > 1e-6:
+        initial.append((left, _distance_m(left, projection)))
+    if direction in {"two_way", "oneway_reverse"} and ratio < 1.0 - 1e-6:
+        initial.append((right, _distance_m(right, projection)))
+    if projection == entrance_coordinate:
+        try:
+            vertex_index = frontage["points"].index(entrance_coordinate)
+        except ValueError:
+            vertex_index = -1
+        if direction in {"two_way", "oneway_forward"} and vertex_index > 0:
+            predecessor = frontage["points"][vertex_index - 1]
+            initial.append((predecessor, _distance_m(predecessor, projection)))
+        if direction in {"two_way", "oneway_reverse"} and 0 <= vertex_index < len(frontage["points"]) - 1:
+            predecessor = frontage["points"][vertex_index + 1]
+            initial.append((predecessor, _distance_m(predecessor, projection)))
+    if not initial:
+        return None
 
-
-def _nearest_along_distance(points: List[Coordinate], focus: Coordinate) -> float:
-    cumulative = _cumulative_distances(points)
-    return min(
-        ((_distance_m(point, focus), cumulative[index]) for index, point in enumerate(points)),
-        default=(math.inf, 0.0),
-    )[1]
-
-
-def _point_at_distance(points: List[Coordinate], cumulative: List[float], distance: float) -> Coordinate:
-    for index in range(1, len(points)):
-        if cumulative[index] < distance:
+    distances: Dict[Coordinate, float] = {}
+    suffixes: Dict[Coordinate, List[Coordinate]] = {}
+    queue: List[Tuple[float, Coordinate]] = []
+    for node, distance in initial:
+        total = distance + _distance_m(projection, entrance_coordinate)
+        if total > cap_meters or total >= distances.get(node, math.inf):
             continue
-        span = cumulative[index] - cumulative[index - 1]
-        if span <= 0:
-            return points[index]
-        ratio = (distance - cumulative[index - 1]) / span
-        left, right = points[index - 1], points[index]
-        return (left[0] + (right[0] - left[0]) * ratio, left[1] + (right[1] - left[1]) * ratio)
-    return points[-1]
+        distances[node] = total
+        suffixes[node] = [node, *entrance_tail]
+        heapq.heappush(queue, (total, node))
+    while queue:
+        distance, node = heapq.heappop(queue)
+        if distance != distances.get(node):
+            continue
+        for predecessor, edge_length in incoming.get(node, []):
+            if predecessor in {projection, entrance_coordinate}:
+                continue
+            candidate = distance + edge_length
+            if candidate > cap_meters or candidate >= distances.get(predecessor, math.inf):
+                continue
+            distances[predecessor] = candidate
+            suffixes[predecessor] = [predecessor, *suffixes[node]]
+            heapq.heappush(queue, (candidate, predecessor))
+    eligible = [node for node, distance in distances.items() if distance >= minimum_meters]
+    if not eligible:
+        return None
+    start = max(eligible, key=lambda node: (distances[node], node))
+    return _dedupe_adjacent(suffixes[start]), direction
+
+
+def _nearest_segment_projection(
+    points: List[Coordinate], focus: Coordinate
+) -> Optional[Tuple[float, int, Coordinate, float]]:
+    if len(points) < 2:
+        return None
+    latitude_scale = 110_570.0
+    longitude_scale = 111_320.0 * max(0.1, math.cos(math.radians(focus[0])))
+    candidates = []
+    for index, (left, right) in enumerate(zip(points, points[1:])):
+        ax = (left[1] - focus[1]) * longitude_scale
+        ay = (left[0] - focus[0]) * latitude_scale
+        bx = (right[1] - focus[1]) * longitude_scale
+        by = (right[0] - focus[0]) * latitude_scale
+        dx, dy = bx - ax, by - ay
+        denominator = dx * dx + dy * dy
+        ratio = 0.0 if denominator == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / denominator))
+        projection = (
+            left[0] + (right[0] - left[0]) * ratio,
+            left[1] + (right[1] - left[1]) * ratio,
+        )
+        candidates.append((math.hypot(ax + ratio * dx, ay + ratio * dy), index, projection, ratio))
+    return min(candidates, default=None)
 
 
 def _polylines_distance_m(left: List[Coordinate], right: List[Coordinate]) -> float:
@@ -389,13 +562,6 @@ def _line_geojson(points: List[Coordinate]) -> str:
 
 def _line_length_m(points: List[Coordinate]) -> float:
     return sum(_distance_m(left, right) for left, right in zip(points, points[1:]))
-
-
-def _cumulative_distances(points: List[Coordinate]) -> List[float]:
-    output = [0.0]
-    for left, right in zip(points, points[1:]):
-        output.append(output[-1] + _distance_m(left, right))
-    return output
 
 
 def _element_points(element: Dict[str, Any]) -> List[Coordinate]:

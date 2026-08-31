@@ -659,7 +659,8 @@ export type SceneFeature = {
 export type SceneGeometry =
   | { type: "Point"; coordinates: [number, number] }
   | { type: "LineString"; coordinates: [number, number][] }
-  | { type: "Polygon"; coordinates: [number, number][][] };
+  | { type: "Polygon"; coordinates: [number, number][][] }
+  | { type: "MultiPolygon"; coordinates: [number, number][][][] };
 
 export type SceneCoordinateQuality = "exact" | "derived" | "approximate" | "missing";
 
