@@ -399,6 +399,7 @@ export type MapPlacePin = {
   lines?: string[];
   source_url?: string;
   source_type: string;
+  properties?: Record<string, string>;
 };
 
 export type MapWaterContext = {
@@ -420,6 +421,7 @@ export type MapOverlayLine = {
   coordinates: [number, number][];
   source_type: string;
   source_url?: string;
+  properties?: Record<string, string>;
 };
 
 export type MapOverlayPolygon = {
@@ -460,6 +462,8 @@ export type MapLayerMeta = {
   renderKind?: string;
   mapPresentation?: MapPresentation;
   experience?: MapLayerExperience;
+  emptyState?: string;
+  featureValueLabels?: Record<string, Record<string, string>>;
   rank?: number;
   enabledByDefault?: boolean;
 };
@@ -574,6 +578,8 @@ export type SceneLayer = {
   renderKind: "pin" | "line" | "polygon" | "corridor" | "evidence_list" | string;
   mapPresentation?: MapPresentation;
   experience?: MapLayerExperience;
+  emptyState?: string;
+  featureValueLabels?: Record<string, Record<string, string>>;
   relationClass: "access" | "risk_externality" | "context" | string;
   enabledByDefault: boolean;
   rank: number;
@@ -594,6 +600,7 @@ export type SceneFeature = {
   coordinateQuality: SceneCoordinateQuality;
   metrics?: SceneMetrics;
   display: SceneFeatureDisplay;
+  properties?: Record<string, string>;
   confidence: number;
   receiptIds: string[];
 };

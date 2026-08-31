@@ -17,13 +17,19 @@ import {
 } from "../../lib/nearbyPlateProjection.ts";
 import {
   arrivalEvidenceViewport,
+  arrivalMarkerPlaces,
   metroLinesNearArrival,
   type ArrivalCameraMode,
 } from "../../lib/arrivalMapProjection.ts";
 
-const ArrivalGoogle3DMap = lazy(async () => {
-  const module = await import("./PropertyArrivalGoogle3DMap.tsx");
-  return { default: module.PropertyArrivalGoogle3DMap };
+const SocietyScene = lazy(async () => {
+  const module = await import("./PropertyArrivalSocietyScene.tsx");
+  return { default: module.PropertyArrivalSocietyScene };
+});
+
+const ApproachScene = lazy(async () => {
+  const module = await import("./PropertyArrivalApproachScene.tsx");
+  return { default: module.PropertyArrivalApproachScene };
 });
 
 type ArrivalView = "society" | "metro" | "approach";
@@ -77,6 +83,7 @@ class ArrivalMapBoundary extends Component<
 export function PropertyArrivalMap({ context }: Props) {
   const home = useMemo(() => resolveHomeAnchor(context), [context]);
   const roadLayer = context.layers?.find((layer) => layer.renderKind === "terrain_corridor");
+  const entranceLayer = context.layers?.find((layer) => layer.renderKind === "arrival_marker");
   const metroLayer = context.layers?.find((layer) => layer.id === "metro");
   const roadLines = useMemo(
     () => roadLayer
@@ -101,8 +108,12 @@ export function PropertyArrivalMap({ context }: Props) {
       : [],
     [context.metro_lines, home, metroPlaces],
   );
+  const entrancePlaces = useMemo(
+    () => arrivalMarkerPlaces(context, entranceLayer),
+    [context, entranceLayer],
+  );
   const views = useMemo(() => [
-    { id: "society" as const, label: "Society", available: Boolean(context.home.boundary) },
+    { id: "society" as const, label: "Society", available: true },
     { id: "metro" as const, label: metroLayer?.label ?? "Metro", available: metroLines.length > 0 },
     {
       id: "approach" as const,
@@ -110,7 +121,6 @@ export function PropertyArrivalMap({ context }: Props) {
       available: roadLines.length > 0 && Boolean(roadExperience),
     },
   ].filter((view) => view.available), [
-    context.home.boundary,
     metroLayer?.label,
     metroLines.length,
     roadExperience,
@@ -157,7 +167,7 @@ export function PropertyArrivalMap({ context }: Props) {
 
   if (!home || views.length === 0) return null;
 
-  const visiblePlaces = activeView === "metro" ? metroPlaces : [];
+  const visiblePlaces = activeView === "metro" ? metroPlaces : entrancePlaces;
   const visibleMetroLines = activeView === "metro" ? metroLines : [];
   const visibleRoadLines = activeView === "approach" ? roadLines : [];
   const viewport = activeView === "metro"
@@ -189,6 +199,11 @@ export function PropertyArrivalMap({ context }: Props) {
           </button>
         ))}
       </div>
+      {(activeView === "society" || activeView === "approach")
+        && entrancePlaces.length === 0
+        && entranceLayer?.emptyState && (
+        <p className="property-arrival-map__status">{entranceLayer.emptyState}</p>
+      )}
       <ArrivalMapBoundary>
         <Suspense
           fallback={(
@@ -199,7 +214,37 @@ export function PropertyArrivalMap({ context }: Props) {
             />
           )}
         >
-          <ArrivalGoogle3DMap
+          {activeView === "approach" && roadExperience ? (
+            <ApproachScene
+              home={{
+                latitude: home.latitude,
+                longitude: home.longitude,
+                name: context.home.name,
+                boundary: context.home.boundary,
+              }}
+              places={visiblePlaces}
+              clusters={[]}
+              selectedId={null}
+              viewport={viewport}
+              metroLines={visibleMetroLines}
+              accessLines={visibleRoadLines}
+              redFlagLines={[]}
+              showMetroLines={false}
+              water={null}
+              waterTint={false}
+              expanded={expanded}
+              cameraMode={activeCameraMode}
+              experience={roadExperience}
+              onSelectCluster={() => undefined}
+              onSelectPlace={() => undefined}
+              onSelectAccessLine={() => undefined}
+              onSelectRedFlagLine={() => undefined}
+              onBackToHome={() => selectView("society")}
+              showBackToHome={false}
+              onToggleExpanded={() => setExpanded((current) => !current)}
+            />
+          ) : (
+            <SocietyScene
             home={{
               latitude: home.latitude,
               longitude: home.longitude,
@@ -211,15 +256,13 @@ export function PropertyArrivalMap({ context }: Props) {
             selectedId={null}
             viewport={viewport}
             metroLines={visibleMetroLines}
-            accessLines={visibleRoadLines}
+            accessLines={[]}
             redFlagLines={[]}
             showMetroLines={activeView === "metro"}
             water={null}
             waterTint={false}
             expanded={expanded}
             cameraMode={activeCameraMode}
-            terrainCorridor={activeView === "approach"}
-            layerExperience={activeView === "approach" ? roadExperience : undefined}
             onSelectCluster={() => undefined}
             onSelectPlace={() => undefined}
             onSelectAccessLine={() => undefined}
@@ -227,7 +270,8 @@ export function PropertyArrivalMap({ context }: Props) {
             onBackToHome={() => selectView("society")}
             showBackToHome={false}
             onToggleExpanded={() => setExpanded((current) => !current)}
-          />
+            />
+          )}
         </Suspense>
       </ArrivalMapBoundary>
     </div>

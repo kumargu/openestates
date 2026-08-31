@@ -215,11 +215,13 @@
         "nearby_metro_stations",
         "approach_road",
         "approach_road_entity",
+        "society.entrance_entity",
         "society.boundary_geojson"
       ],
       "traversal": [
         "property -> in_society -> society",
-        "society -> served_by_road -> road_segment"
+        "society approach_road_entity -> place:approach-road:*",
+        "society society.entrance_entity -> place:society-entrance:*"
       ],
       "components": [
         "PropertyArrivalFilm"
@@ -234,7 +236,7 @@
           "entityRef": "society",
           "boundaryFactKey": "society.boundary_geojson"
         },
-        "layers": [
+      "layers": [
           {
             "id": "metro",
             "label": "Metro",
@@ -250,8 +252,38 @@
             "maxItems": 2,
             "enabledByDefault": true,
             "rank": 1
+        },
+        {
+          "id": "entrance",
+          "label": "Entrance",
+          "factKeys": [
+            "society.entrance_entity"
+          ],
+          "linkedEntityFactKeys": [
+            "society.entrance_entity"
+          ],
+          "family": "access",
+          "relationClass": "access",
+          "renderKind": "arrival_marker",
+          "mapPresentation": "immersive_3d",
+          "featureProperties": {
+            "status": "entrance.status",
+            "associationMethod": "entrance.association_method"
           },
-          {
+          "featureValueLabels": {
+            "status": {
+              "verified": "Entrance",
+              "inferred": "Likely entrance"
+            }
+          },
+          "emptyState": "Entrance not mapped",
+          "icon": "entrance",
+          "sort": "distance",
+          "maxItems": 1,
+          "enabledByDefault": true,
+          "rank": 2
+        },
+        {
             "id": "approach_road",
             "label": "Approach road",
             "factKeys": ["approach_road"],
@@ -285,7 +317,11 @@
             "sort": "distance",
             "maxItems": 1,
             "enabledByDefault": true,
-            "rank": 2
+          "featureProperties": {
+            "direction": "road.direction",
+            "associationMethod": "road.association_method"
+          },
+          "rank": 3
           }
         ]
       }

@@ -46,6 +46,14 @@ const MARKER_THEMES: Record<string, MarkerTheme> = {
     background: "#ebccd2",
     path: '<path d="M5 4h14v16H5zM12 8v8M8 12h8"/>',
   },
+  "entrance": {
+    background: "#d9e0d1",
+    path: '<path d="M5 20V6h14v14M8 20V9h8v11M12 9v11"/>',
+  },
+  "entrance-likely": {
+    background: "#e8e1d4",
+    path: '<path d="M5 20V6h14v14M8 20V9h8v11M12 9v11" stroke-dasharray="2 2"/>',
+  },
   "road": {
     background: "#dedbd5",
     path: '<path d="M8 3 5 21M16 3l3 18M12 4v4M12 11v4M12 18v2"/>',

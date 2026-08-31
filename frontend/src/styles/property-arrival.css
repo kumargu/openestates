@@ -43,6 +43,13 @@
   outline-offset: 3px;
 }
 
+.property-arrival-map__status {
+  margin: 0;
+  padding: 0 0 0.5rem;
+  color: var(--oe-ink-muted);
+  font-size: 0.78rem;
+}
+
 .property-arrival-map .nearby-map {
   overflow: hidden;
   border: 1px solid rgba(35, 31, 28, 0.08);

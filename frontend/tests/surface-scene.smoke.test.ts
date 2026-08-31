@@ -58,6 +58,7 @@ test("around-this-home and arrival scenes stay isolated", () => {
         availableCount: 1,
         shownCount: 1,
         fillState: "filled",
+        featureValueLabels: { direction: { two_way: "Two way" } },
       },
       {
         id: "schools",
@@ -113,6 +114,7 @@ test("around-this-home and arrival scenes stay isolated", () => {
         coordinateQuality: "exact",
         metrics: { distanceM: 1120 },
         display: { tone: "positive", icon: "road", priority: 2 },
+        properties: { direction: "two_way", associationMethod: "address_match" },
         confidence: 0.78,
         receiptIds: ["receipt:access"],
       },
@@ -215,6 +217,7 @@ test("around-this-home and arrival scenes stay isolated", () => {
   assert.equal(context.layer_lines?.approach_road, undefined);
   assert.equal(arrivalContext.home.boundary?.source_type, "OpenStreetMap");
   assert.equal(arrivalContext.layer_lines?.approach_road?.[0]?.name, "ECC Road");
+  assert.equal(arrivalContext.layer_lines?.approach_road?.[0]?.properties?.direction, "two_way");
   assert.equal(
     arrivalContext.layers?.find((layer) => layer.id === "approach_road")?.renderKind,
     "terrain_corridor",

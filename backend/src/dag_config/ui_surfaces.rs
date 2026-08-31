@@ -79,6 +79,12 @@ pub struct UiSurfaceLayerRule {
     pub fact_keys: Vec<String>,
     #[serde(default, rename = "featureLabels")]
     pub feature_labels: HashMap<String, String>,
+    #[serde(default, rename = "featureProperties")]
+    pub feature_properties: HashMap<String, String>,
+    #[serde(default, rename = "featureValueLabels")]
+    pub feature_value_labels: HashMap<String, HashMap<String, String>>,
+    #[serde(default, rename = "emptyState")]
+    pub empty_state: Option<String>,
     #[serde(default, rename = "edgeTypes")]
     pub edge_types: Vec<String>,
     #[serde(default, rename = "linkedEntityFactKeys")]
@@ -342,6 +348,37 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                     )));
                 }
             }
+            for (property, fact_key) in &layer.feature_properties {
+                if property.trim().is_empty() || fact_key.trim().is_empty() {
+                    return Err(DagConfigError::InvalidConfig(format!(
+                        "surface {} layer {} contains an incomplete feature property",
+                        surface.id, layer.id
+                    )));
+                }
+            }
+            if layer
+                .empty_state
+                .as_deref()
+                .is_some_and(|state| state.trim().is_empty())
+            {
+                return Err(DagConfigError::InvalidConfig(format!(
+                    "surface {} layer {} has a blank emptyState",
+                    surface.id, layer.id
+                )));
+            }
+            for (property, labels) in &layer.feature_value_labels {
+                if !layer.feature_properties.contains_key(property)
+                    || labels.is_empty()
+                    || labels
+                        .iter()
+                        .any(|(value, label)| value.trim().is_empty() || label.trim().is_empty())
+                {
+                    return Err(DagConfigError::InvalidConfig(format!(
+                        "surface {} layer {} has invalid featureValueLabels for {}",
+                        surface.id, layer.id, property
+                    )));
+                }
+            }
         }
     }
     Ok(())
@@ -394,6 +431,28 @@ mod tests {
         assert_eq!(
             arrival_metro.map_presentation.as_deref(),
             Some("immersive_3d")
+        );
+        let entrance = arrival_scene
+            .layers
+            .iter()
+            .find(|layer| layer.id == "entrance")
+            .expect("entrance layer exists");
+        assert_eq!(entrance.render_kind, "arrival_marker");
+        assert_eq!(entrance.empty_state.as_deref(), Some("Entrance not mapped"));
+        assert_eq!(
+            entrance
+                .feature_properties
+                .get("status")
+                .map(String::as_str),
+            Some("entrance.status")
+        );
+        assert_eq!(
+            entrance
+                .feature_value_labels
+                .get("status")
+                .and_then(|labels| labels.get("inferred"))
+                .map(String::as_str),
+            Some("Likely entrance")
         );
         let approach_road = arrival_scene
             .layers

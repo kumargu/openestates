@@ -120,6 +120,8 @@ function mergedLayers(
       renderKind: layer.renderKind,
       mapPresentation: layer.mapPresentation,
       experience: layer.experience,
+      emptyState: layer.emptyState,
+      featureValueLabels: layer.featureValueLabels,
       rank: layer.rank,
       enabledByDefault: layer.enabledByDefault,
     });
@@ -174,6 +176,7 @@ function mapPlacePinFromFeature(
     review_count: feature.metrics?.reviewCount,
     source_url: receipt?.sourceUrl,
     source_type: receipt?.sourceType ?? PUBLIC_BRAND_NAME,
+    properties: feature.properties,
   };
 }
 
@@ -199,6 +202,7 @@ function mapLineFromFeature(
     coordinates,
     source_type: receipt?.sourceType ?? PUBLIC_BRAND_NAME,
     source_url: receipt?.sourceUrl,
+    properties: feature.properties,
   };
 }
 

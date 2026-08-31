@@ -95,6 +95,10 @@ pub struct SceneLayer {
     pub map_presentation: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub experience: Option<UiSurfaceLayerExperienceConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub empty_state: Option<String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub feature_value_labels: HashMap<String, HashMap<String, String>>,
     pub relation_class: String,
     pub enabled_by_default: bool,
     pub rank: u32,
@@ -121,6 +125,8 @@ pub struct SceneFeature {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metrics: Option<SceneMetrics>,
     pub display: SceneFeatureDisplay,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub properties: HashMap<String, String>,
     pub confidence: f32,
     pub receipt_ids: Vec<String>,
 }
@@ -421,6 +427,7 @@ pub fn build_surface_scene_with_focus(
                     icon: icon_for_layer(layer_rule),
                     priority: layer_rank,
                 },
+                properties: candidate.properties,
                 confidence: candidate.confidence,
                 receipt_ids: vec![receipt_id],
             });
@@ -432,6 +439,8 @@ pub fn build_surface_scene_with_focus(
             render_kind: layer_rule.render_kind.clone(),
             map_presentation: layer_rule.map_presentation.clone(),
             experience: layer_rule.experience.clone(),
+            empty_state: layer_rule.empty_state.clone(),
+            feature_value_labels: layer_rule.feature_value_labels.clone(),
             relation_class: layer_rule.relation_class.clone(),
             enabled_by_default: layer_rule.enabled_by_default,
             rank: layer_rank,
@@ -482,6 +491,7 @@ struct SceneFeatureCandidate {
     distance_m: Option<u32>,
     rating: Option<f64>,
     review_count: Option<u32>,
+    properties: HashMap<String, String>,
     confidence: f32,
     receipt: SceneReceipt,
 }
@@ -685,6 +695,7 @@ fn features_for_layer(
                         geometry: linked_rows
                             .and_then(scene_geometry_from_rows)
                             .or_else(|| scene_geometry_from_rows(rows)),
+                        property_rows: linked_rows.or(Some(rows)),
                         coordinate_quality,
                         index,
                     }
@@ -710,6 +721,7 @@ fn features_for_layer(
                 entity_id: Some(target_entity_id.clone()),
                 coordinates: feature_coords,
                 geometry: scene_geometry_from_rows(target_rows),
+                property_rows: Some(target_rows),
                 coordinate_quality,
                 index,
             });
@@ -737,6 +749,7 @@ struct FactFeatureSource<'a> {
     entity_id: Option<String>,
     coordinates: Option<(f64, f64)>,
     geometry: Option<SceneGeometry>,
+    property_rows: Option<&'a ServingEntityFactRows>,
     coordinate_quality: CoordinateQuality,
     index: usize,
 }
@@ -751,10 +764,15 @@ fn feature_candidate_from_fact(
     let fact = source.fact;
     let claim = fact_claim(fact)?;
     let parsed = parse_nearby_display(&claim);
-    let place = fact
-        .source_url
+    let place = source
+        .entity_id
         .as_deref()
-        .and_then(|url| place_index.by_source_url.get(url))
+        .and_then(|entity_id| place_index.by_entity_id.get(entity_id))
+        .or_else(|| {
+            fact.source_url
+                .as_deref()
+                .and_then(|url| place_index.by_source_url.get(url))
+        })
         .or_else(|| place_from_edges(&parsed.name, edge_places));
     let place_coordinates = place.and_then(|place| place.coordinates);
     let coordinates = place_coordinates.or(source.coordinates).or(anchor_coords)?;
@@ -800,6 +818,7 @@ fn feature_candidate_from_fact(
         confidence: fact.confidence,
         scope: distance_m.map(|distance| format!("within {} m", rounded_scope_m(distance))),
     };
+    let properties = scene_feature_properties(layer_rule, source.property_rows);
     Some(SceneFeatureCandidate {
         entity_id: place
             .map(|place| place.entity_id.clone())
@@ -817,6 +836,7 @@ fn feature_candidate_from_fact(
         distance_m,
         rating,
         review_count,
+        properties,
         confidence: fact.confidence,
         receipt,
     })
@@ -985,6 +1005,36 @@ fn linked_entity_id_for_fact(
 fn fact_text_value(fact: &ServingFactRecord) -> Option<String> {
     match &fact.value {
         FactValue::Text(value) if !value.trim().is_empty() => Some(value.trim().to_string()),
+        _ => None,
+    }
+}
+
+fn scene_feature_properties(
+    layer_rule: &UiSurfaceLayerRule,
+    rows: Option<&ServingEntityFactRows>,
+) -> HashMap<String, String> {
+    let Some(rows) = rows else {
+        return HashMap::new();
+    };
+    layer_rule
+        .feature_properties
+        .iter()
+        .filter_map(|(property, fact_key)| {
+            rows.facts
+                .iter()
+                .find(|fact| fact.fact_key == *fact_key)
+                .and_then(scene_property_value)
+                .map(|value| (property.clone(), value))
+        })
+        .collect()
+}
+
+fn scene_property_value(fact: &ServingFactRecord) -> Option<String> {
+    match &fact.value {
+        FactValue::Text(value) if !value.trim().is_empty() => Some(value.trim().to_string()),
+        FactValue::Numeric(value) if value.is_finite() => Some(value.to_string()),
+        FactValue::Bool(value) => Some(value.to_string()),
+        FactValue::Tags(values) if !values.is_empty() => Some(values.join(",")),
         _ => None,
     }
 }
@@ -1711,6 +1761,9 @@ mod tests {
                     label: "Drains".to_string(),
                     fact_keys: vec!["stormwater_drain_nearby".to_string()],
                     feature_labels: HashMap::new(),
+                    feature_properties: HashMap::new(),
+                    feature_value_labels: HashMap::new(),
+                    empty_state: None,
                     edge_types: Vec::new(),
                     linked_entity_fact_keys: vec!["stormwater_drain_place_entity".to_string()],
                     sort_priority_fact_keys: Vec::new(),
@@ -1822,6 +1875,9 @@ mod tests {
                         "high_voltage_transmission_line_nearby".to_string(),
                     ],
                     feature_labels: HashMap::new(),
+                    feature_properties: HashMap::new(),
+                    feature_value_labels: HashMap::new(),
+                    empty_state: None,
                     edge_types: Vec::new(),
                     linked_entity_fact_keys: Vec::new(),
                     sort_priority_fact_keys: vec![
@@ -1924,6 +1980,9 @@ mod tests {
                         "high_voltage_transmission_line_nearby".to_string(),
                     ],
                     feature_labels: HashMap::new(),
+                    feature_properties: HashMap::new(),
+                    feature_value_labels: HashMap::new(),
+                    empty_state: None,
                     edge_types: Vec::new(),
                     linked_entity_fact_keys: Vec::new(),
                     sort_priority_fact_keys: vec![
@@ -2048,6 +2107,9 @@ mod tests {
                     label: "Tech parks".to_string(),
                     fact_keys: vec!["nearby_tech_parks".to_string()],
                     feature_labels: HashMap::new(),
+                    feature_properties: HashMap::new(),
+                    feature_value_labels: HashMap::new(),
+                    empty_state: None,
                     edge_types: Vec::new(),
                     linked_entity_fact_keys: Vec::new(),
                     sort_priority_fact_keys: Vec::new(),
@@ -2147,6 +2209,12 @@ mod tests {
                 ),
                 None,
             ),
+            serving_fact(
+                "place:transmission-line:one",
+                "feature.status",
+                FactValue::Text("verified".to_string()),
+                None,
+            ),
         ];
         let bundle = loaded_bundle(entities, facts);
         let surface = UiSurfaceConfig {
@@ -2169,6 +2237,15 @@ mod tests {
                     label: "Red flags".to_string(),
                     fact_keys: vec!["high_voltage_transmission_line_nearby".to_string()],
                     feature_labels: HashMap::new(),
+                    feature_properties: HashMap::from([(
+                        "status".to_string(),
+                        "feature.status".to_string(),
+                    )]),
+                    feature_value_labels: HashMap::from([(
+                        "status".to_string(),
+                        HashMap::from([("verified".to_string(), "Verified".to_string())]),
+                    )]),
+                    empty_state: Some("Not mapped".to_string()),
                     edge_types: Vec::new(),
                     linked_entity_fact_keys: vec![
                         "high_voltage_transmission_line_place_entity".to_string()
@@ -2210,7 +2287,15 @@ mod tests {
 
         assert_eq!(scene.layers[0].id, "red_flags");
         assert_eq!(scene.layers[0].available_count, 1);
+        assert_eq!(scene.layers[0].empty_state.as_deref(), Some("Not mapped"));
         assert_eq!(scene.features.len(), 1);
+        assert_eq!(
+            scene.features[0]
+                .properties
+                .get("status")
+                .map(String::as_str),
+            Some("verified")
+        );
         assert_eq!(
             scene.features[0].entity_id.as_deref(),
             Some("place:transmission-line:one")
@@ -2272,6 +2357,9 @@ mod tests {
                     label: "Red flags".to_string(),
                     fact_keys: vec!["nearby_graveyards".to_string()],
                     feature_labels: HashMap::new(),
+                    feature_properties: HashMap::new(),
+                    feature_value_labels: HashMap::new(),
+                    empty_state: None,
                     edge_types: Vec::new(),
                     linked_entity_fact_keys: Vec::new(),
                     sort_priority_fact_keys: Vec::new(),
@@ -2337,6 +2425,7 @@ mod tests {
                     icon: None,
                     priority: 1,
                 },
+                properties: HashMap::new(),
                 confidence: 0.8,
                 receipt_ids: Vec::new(),
             }],
@@ -2365,6 +2454,9 @@ mod tests {
             label: "Groundwater".to_string(),
             fact_keys: vec!["environment.groundwater_potential_class".to_string()],
             feature_labels: HashMap::new(),
+            feature_properties: HashMap::new(),
+            feature_value_labels: HashMap::new(),
+            empty_state: None,
             edge_types: Vec::new(),
             linked_entity_fact_keys: Vec::new(),
             sort_priority_fact_keys: Vec::new(),
@@ -2394,6 +2486,9 @@ mod tests {
             label: "Waterlogging".to_string(),
             fact_keys: vec!["risk.approach_road_waterlogging".to_string()],
             feature_labels: HashMap::new(),
+            feature_properties: HashMap::new(),
+            feature_value_labels: HashMap::new(),
+            empty_state: None,
             edge_types: vec!["served_by_road".to_string()],
             linked_entity_fact_keys: Vec::new(),
             sort_priority_fact_keys: Vec::new(),

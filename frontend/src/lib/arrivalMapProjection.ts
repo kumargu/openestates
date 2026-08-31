@@ -1,5 +1,6 @@
-import type { MapOverlayLine, PropertyMapContext } from "./types.ts";
+import type { MapLayerMeta, MapOverlayLine, PropertyMapContext } from "./types.ts";
 import {
+  buildNumberedPlaces,
   resolveHomeAnchor,
   zoomForRadiusKm,
   type NumberedPlace,
@@ -33,6 +34,25 @@ type CorridorProjection = CorridorCameraFocus & {
 const METRO_CORRIDOR_BUFFER_KM = 0.9;
 const METRO_MAX_SEGMENTS = 3;
 const VIEWPORT_PADDING = 1.35;
+
+export function arrivalMarkerPlaces(
+  context: PropertyMapContext,
+  layer: MapLayerMeta | undefined,
+): NumberedPlace[] {
+  if (!layer) return [];
+  return buildNumberedPlaces(
+    context.places
+      .filter((place) => place.layer === layer.id)
+      .map((place) => {
+        const status = place.properties?.status;
+        return {
+          ...place,
+          name: (status ? layer.featureValueLabels?.status?.[status] : undefined) ?? place.name,
+          icon: status === "inferred" ? "entrance-likely" : (place.icon ?? "entrance"),
+        };
+      }),
+  );
+}
 
 export function hasArrivalMap(context?: PropertyMapContext | null): boolean {
   if (!context || !resolveHomeAnchor(context)) return false;

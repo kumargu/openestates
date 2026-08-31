@@ -17,6 +17,7 @@ import {
 } from "../src/lib/nearbyPlateProjection.ts";
 import {
   arrivalEvidenceViewport,
+  arrivalMarkerPlaces,
   corridorCameraFocus,
   corridorTourWaypoints,
   hasArrivalMap,
@@ -174,6 +175,41 @@ test("the arrival tile owns society and guided-road 3D evidence", () => {
 
   assert.equal(hasArrivalMap(context), true);
   assert.equal(hasAroundThisHomePlate(context), false);
+});
+
+test("arrival entrance labels and icons follow scene config and status", () => {
+  const layer = {
+    id: "entrance",
+    label: "Entrance",
+    renderKind: "arrival_marker",
+    emptyState: "Entrance not mapped",
+    featureValueLabels: {
+      status: { verified: "Entrance", inferred: "Likely entrance" },
+    },
+  };
+  const base = {
+    ...emptyMapContext,
+    places: [{
+      feature_id: "entrance-one",
+      layer: "entrance",
+      name: "Entrance",
+      latitude: 12.98,
+      longitude: 77.74,
+      source_type: "OpenStreetMap",
+      properties: { status: "inferred" },
+    }],
+  } satisfies PropertyMapContext;
+
+  const inferred = arrivalMarkerPlaces(base, layer);
+  assert.equal(inferred[0]?.name, "Likely entrance");
+  assert.equal(inferred[0]?.icon, "entrance-likely");
+  assert.deepEqual(arrivalMarkerPlaces({ ...base, places: [] }, layer), []);
+  const verified = arrivalMarkerPlaces({
+    ...base,
+    places: [{ ...base.places[0], properties: { status: "verified" } }],
+  }, layer);
+  assert.equal(verified[0]?.name, "Entrance");
+  assert.equal(verified[0]?.icon, "entrance");
 });
 
 test("arrival metro framing shifts from the society toward its evidence", () => {
