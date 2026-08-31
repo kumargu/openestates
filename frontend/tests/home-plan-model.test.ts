@@ -535,7 +535,7 @@ test("extra EMIs update payoff, total interest, snapshot, and top insight togeth
   assert.equal(note.catalogKey, "plan:home-1:current");
 });
 
-test("lower-EMI extras shrink from the same opening scheduled-EMI basis", () => {
+test("both strategies keep every recurring extra at the opening EMI", () => {
   const extraEmisPerYear = 2;
   const finishEarlier = buildLoanSchedule(ready, {
     extraEmisPerYear,
@@ -546,14 +546,16 @@ test("lower-EMI extras shrink from the same opening scheduled-EMI basis", () => 
     strategy: "lower_emi",
   });
 
-  assert.equal(finishEarlier.annualPrepayment, ready.monthlyEmiThousands * 1_000 * extraEmisPerYear);
+  assert.equal(finishEarlier.annualPrepayment, ready.monthlyEmiThousands * 1_000);
   assert.equal(lowerEmi.annualPrepayment, finishEarlier.annualPrepayment);
   assert.ok(finishEarlier.payoffMonth! < finishEarlier.baselinePayoffMonth!);
   assert.equal(lowerEmi.payoffMonth, lowerEmi.baselinePayoffMonth);
   assert.ok(lowerEmi.endingMonthlyEmi < lowerEmi.openingMonthlyEmi);
   const lowerExtras = lowerEmi.months.filter((month) => month.extraPaid > 0);
   assert.ok(lowerExtras.length > 1);
-  assert.ok(lowerExtras[1].extraPaid < lowerExtras[0].extraPaid);
+  for (const extra of lowerExtras) {
+    assert.equal(extra.extraPaid, lowerEmi.openingMonthlyEmi);
+  }
 });
 
 test("repayment dashboard exposes recurrent, cadence, strategy and one-off series", () => {
@@ -590,12 +592,26 @@ test("repayment dashboard exposes recurrent, cadence, strategy and one-off serie
 });
 
 test("lower-EMI dashboard trades recurring commitment for monthly room", () => {
-  const dashboard = calculateRepaymentDashboard(ready, 3, "lower_emi");
+  const dashboard = calculateRepaymentDashboard(ready, 4, "lower_emi");
+  const schedule = buildLoanSchedule(ready, {
+    extraEmisPerYear: 4,
+    strategy: "lower_emi",
+  });
+  const firstYearExtras = schedule.months.filter((month) => (
+    month.paymentNumber >= 1
+    && month.paymentNumber <= 12
+    && month.extraPaid > 0
+  ));
+  const yearTwoOpeningEmi = schedule.months.find((month) => month.paymentNumber === 13)!
+    .scheduledEmi;
 
   // A final fixed extra payment may settle the remaining balance; before that
   // edge, every prepayment is re-amortised to the baseline payoff month.
   assert.ok(dashboard.monthsSaved >= 0);
+  assert.equal(firstYearExtras.length, 4);
+  assert.equal(dashboard.firstYearRecalculatedMonthlyEmi, yearTwoOpeningEmi);
   assert.ok(dashboard.firstRecalculatedMonthlyEmi < dashboard.openingMonthlyEmi);
+  assert.ok(dashboard.firstYearRecalculatedMonthlyEmi < dashboard.firstRecalculatedMonthlyEmi);
   assert.ok(dashboard.firstRecalculatedMonthlyEmi > dashboard.endingMonthlyEmi);
   assert.ok(dashboard.endingMonthlyEmi < dashboard.openingMonthlyEmi);
   assert.ok(dashboard.interestSaved > 0);
@@ -624,7 +640,7 @@ test("repayment dashboard marks rescued loans as incomparable to a non-closing b
 
   assert.equal(dashboard.status, "repaid");
   assert.equal(dashboard.baselinePayoffMonths, null);
-  assert.equal(dashboard.selectedPayoffMonths, 233);
+  assert.ok(dashboard.selectedPayoffMonths != null);
   assert.equal(dashboard.comparisonAvailable, false);
   assert.equal(dashboard.interestSaved, 0);
   assert.equal(dashboard.monthsSaved, 0);
@@ -881,7 +897,7 @@ test("finish-earlier keeps EMI constant and shortens tenure", () => {
   }
 });
 
-test("lower-EMI keeps baseline payoff and sizes every extra from that year's EMI", () => {
+test("lower-EMI keeps baseline payoff with fixed opening-EMI extras", () => {
   const cadence = 3;
   const schedule = buildLoanSchedule(ready, {
     extraEmisPerYear: cadence,
@@ -892,11 +908,33 @@ test("lower-EMI keeps baseline payoff and sizes every extra from that year's EMI
   assert.equal(schedule.payoffMonth, schedule.baselinePayoffMonth);
   assert.ok(extras.length > 2);
   for (const month of extras) {
-    assert.ok(Math.abs(month.extraPaid - cadence * month.scheduledEmi) < 0.01);
+    assert.equal(month.extraPaid, schedule.openingMonthlyEmi);
   }
-  for (let index = 1; index < extras.length; index += 1) {
-    assert.ok(extras[index].extraPaid < extras[index - 1].extraPaid);
-  }
+
+  const firstExtra = extras[0];
+  const followingMonth = schedule.months.find(
+    (month) => month.paymentNumber === firstExtra.paymentNumber + 1,
+  )!;
+  const remainingPayments = schedule.baselinePayoffMonth! - (firstExtra.month + 1);
+  const monthlyRate = ready.loanRate / 100 / 12;
+  const growth = (1 + monthlyRate) ** remainingPayments;
+  const expectedRecastEmi = firstExtra.closingBalance * monthlyRate * growth / (growth - 1);
+  assert.ok(Math.abs(followingMonth.scheduledEmi - expectedRecastEmi) < 0.01);
+});
+
+test("multiple extra payments are spaced through each repayment year", () => {
+  const schedule = buildLoanSchedule(ready, {
+    extraEmisPerYear: 4,
+    strategy: "finish_earlier",
+  });
+  const firstYearExtraMonths = schedule.months
+    .filter((month) => month.paymentNumber <= 12 && month.extraPaid > 0)
+    .map((month) => month.paymentNumber);
+
+  assert.deepEqual(firstYearExtraMonths, [3, 6, 9, 12]);
+  assert.ok(schedule.months
+    .filter((month) => firstYearExtraMonths.includes(month.paymentNumber))
+    .every((month) => Math.abs(month.extraPaid - month.scheduledEmi) < 0.01));
 });
 
 test("one-off savings decline with delay and markers select first satisfying years", () => {

@@ -45,7 +45,7 @@ export function WorkspaceHeader({
             className={mode === "buy-vs-rent" ? "is-active" : undefined}
             aria-current={mode === "buy-vs-rent" ? "page" : undefined}
           >
-            Plan
+            EMI Plan
           </Link>
         </nav>
       </div>

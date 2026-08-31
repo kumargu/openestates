@@ -185,9 +185,9 @@ export function HomePlanPage() {
 
   const projection = useMemo(
     () => inputs
-      ? calculateProjection(inputs, extraEmisPerYear, DEFAULT_PLAN_MODEL_CONFIG, repaymentStrategy)
+      ? calculateProjection(inputs, extraEmisPerYear, DEFAULT_PLAN_MODEL_CONFIG, "finish_earlier")
       : null,
-    [inputs, extraEmisPerYear, repaymentStrategy],
+    [inputs, extraEmisPerYear],
   );
   const repayment = useMemo(
     () => inputs
@@ -251,7 +251,7 @@ export function HomePlanPage() {
     ) : !id ? (
       <section className="home-plan-empty">
         <h1>Choose a home to plan.</h1>
-        <p>Plan uses the price of one home from your workspace to model its loan.</p>
+        <p>EMI Plan uses the price of one home from your workspace to model its loan.</p>
         <Link to="/">Explore</Link>
       </section>
     ) : status === "loading" || propertyIsChanging ? (
@@ -365,7 +365,7 @@ export function HomePlanPage() {
   return (
     <div className="home-plan-shell home-plan-shell--workspace">
       <Helmet>
-        <title>{property.title} — Plan | {PUBLIC_BRAND_NAME}</title>
+        <title>{property.title} — EMI Plan | {PUBLIC_BRAND_NAME}</title>
         <meta name="description" content={`Inspect repayment choices for ${property.title}.`} />
       </Helmet>
 
@@ -420,6 +420,7 @@ export function HomePlanPage() {
               inputs={inputs}
               extraEmisPerYear={extraEmisPerYear}
               repaymentStrategy={repaymentStrategy}
+              showRepaymentObjective={planMode === "repayment"}
               onInputChange={updateInput}
               onExtraEmisChange={updateExtraEmisPerYear}
               onStrategyChange={updateRepaymentStrategy}
@@ -436,10 +437,10 @@ export function HomePlanPage() {
                 <RentAssumptionRail
                   inputs={inputs}
                   onInputChange={updateInput}
+                  onReset={resetInputs}
                 />
                 <PlanGraph
                   projection={projection}
-                  equityReturn={inputs.equityReturn}
                   activeYear={previewYear
                     ?? pinnedYear
                     ?? Math.min(inputs.holdingPeriodYears, projection.points.length - 1)}

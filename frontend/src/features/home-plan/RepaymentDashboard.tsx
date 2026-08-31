@@ -10,6 +10,8 @@ import type {
   RepaymentDashboardModel,
   RepaymentYearPoint,
 } from "./repaymentModel.ts";
+import { RepaymentScheduleSheet } from "./RepaymentScheduleSheet.tsx";
+import { aggregateRepaymentSchedule } from "./repaymentSchedule.ts";
 import {
   buildRepaymentChartStories,
   type MonthlyRepaymentPoint,
@@ -77,23 +79,21 @@ function loanYearFromPointer(
 
 function OutcomeStrip({
   model,
+  onViewSchedule,
 }: {
   model: RepaymentDashboardModel;
+  onViewSchedule: () => void;
 }) {
-  const lowerReduction = Math.max(
-    0,
-    model.openingMonthlyEmi - model.firstRecalculatedMonthlyEmi,
-  );
   const noExtras = model.extraEmisPerYear === 0;
   const becomesRepayable = model.baselinePayoffMonths == null
     && model.selectedPayoffMonths != null;
   const action = `${model.extraEmisPerYear} extra payment${model.extraEmisPerYear === 1 ? "" : "s"}/year`;
   const before = model.strategy === "finish_earlier"
     ? durationLabel(model.baselinePayoffMonths)
-    : formatMonthlyCurrency(model.openingMonthlyEmi);
+    : `${formatMonthlyCurrency(model.openingMonthlyEmi)} now`;
   const after = model.strategy === "finish_earlier"
     ? durationLabel(model.selectedPayoffMonths)
-    : formatMonthlyCurrency(model.firstRecalculatedMonthlyEmi);
+    : `${formatMonthlyCurrency(model.firstYearRecalculatedMonthlyEmi)} after year 1`;
   const benefit = noExtras
     ? "Choose extra payments above to compare a repayment plan."
     : !model.comparisonAvailable
@@ -102,7 +102,7 @@ function OutcomeStrip({
         : "The loan does not close within the modelled horizon."
       : model.strategy === "finish_earlier"
         ? `Save ${durationLabel(model.monthsSaved)} and ${formatCurrency(model.interestSaved, true)} interest`
-        : `Reduce the monthly EMI by ${formatCurrency(lowerReduction)}/month and save ${formatCurrency(model.interestSaved, true)} interest`;
+        : `EMI keeps stepping down as the fixed extras recur each year; the original payoff date stays unchanged and estimated interest falls by ${formatCurrency(model.interestSaved, true)}`;
 
   return (
     <section className="home-plan-outcome-strip" aria-label="Selected repayment outcome">
@@ -114,6 +114,14 @@ function OutcomeStrip({
         <b>{after}</b>
       </div>
       <p>{benefit}</p>
+      <div className="home-plan-outcome-strip__schedule">
+        <button type="button" onClick={onViewSchedule}>
+          <span aria-hidden="true">▤</span>
+          View yearly schedule
+          <span aria-hidden="true">›</span>
+        </button>
+        <small>Inspect every year and expand any year into monthly payments.</small>
+      </div>
     </section>
   );
 }
@@ -606,16 +614,18 @@ function AssumptionsDisclosure({
             calculated monthly on the remaining balance.
           </li>
           <li>
-            Each extra payment equals one scheduled EMI—currently
+            Each recurring extra payment stays equal to today&apos;s EMI—
             {" "}{formatLakhCurrency(model.openingMonthlyEmi)}—and goes directly to principal.
+            Lower-EMI extras stop when another full payment would close the loan early.
           </li>
           <li>
             {model.strategy === "finish_earlier"
-              ? "Finish earlier keeps the monthly EMI unchanged and brings the payoff date forward."
+              ? "Shorten tenure keeps the monthly EMI unchanged and brings the payoff date forward."
               : "Lower EMI keeps the original payoff date and recalculates the monthly EMI after each extra payment."}
           </li>
           <li>
-            Under Lower EMI, later extra payments shrink with the recalculated EMI.
+            This is an illustrative recast. A lender may default to shortening tenure, require
+            a request to lower EMI, or apply product-specific prepayment limits.
           </li>
           <li>
             The half-impact marker is the first year an extra payment avoids 50% or less of
@@ -637,7 +647,12 @@ export function RepaymentDashboard({
   const horizonYears = Math.max(1, Math.ceil(horizonMonths / 12));
   const [previewYear, setPreviewYear] = useState<number | null>(null);
   const [pinnedYear, setPinnedYear] = useState(1);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const activeYear = Math.max(1, Math.min(horizonYears, previewYear ?? pinnedYear));
+  const schedule = useMemo(
+    () => aggregateRepaymentSchedule(stories.selectedMonthly, stories.baselineMonthly),
+    [stories.baselineMonthly, stories.selectedMonthly],
+  );
 
   if (stories.baselineMonthly.length === 0) {
     return (
@@ -652,7 +667,7 @@ export function RepaymentDashboard({
 
   return (
     <div className="home-plan-dashboard">
-      <OutcomeStrip model={model} />
+      <OutcomeStrip model={model} onViewSchedule={() => setScheduleOpen(true)} />
       <BalanceChart
         key={`${inputs.downPaymentPercent}-${inputs.loanRate}-${inputs.monthlyEmiThousands}-${model.extraEmisPerYear}-${model.strategy}`}
         stories={stories}
@@ -684,6 +699,18 @@ export function RepaymentDashboard({
         />
       </div>
       <AssumptionsDisclosure inputs={inputs} model={model} />
+      <RepaymentScheduleSheet
+        open={scheduleOpen}
+        inputs={inputs}
+        model={model}
+        years={schedule}
+        activeYear={activeYear}
+        onSelectYear={(year) => {
+          setPreviewYear(null);
+          setPinnedYear(year);
+        }}
+        onClose={() => setScheduleOpen(false)}
+      />
     </div>
   );
 }

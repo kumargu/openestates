@@ -207,8 +207,9 @@ export function monthsToPayoff(
 
 /**
  * Canonical monthly loan schedule used by repayment, interest and wealth views.
- * Each annual extra is a multiple of the EMI scheduled in that repayment year.
- * This matters for lower-EMI plans: future extras fall with the re-amortised EMI.
+ * Each recurring extra stays equal to the opening EMI selected by the buyer.
+ * This keeps "4 extra payments/year" a stable cash commitment under both
+ * repayment strategies, even when the scheduled EMI is later re-amortised.
  */
 export function buildLoanSchedule(
   inputs: PlanInputs,
@@ -286,23 +287,28 @@ export function buildLoanSchedule(
       const extraPaymentIsActive = options.oneOffExtraPaymentYear == null
         ? paymentYear >= (options.extraEmisStartYear ?? 1)
         : paymentYear === options.oneOffExtraPaymentYear;
-      const scheduledAnnualExtra = currentMonthlyEmi * extraEmisPerYear;
+      const monthWithinPaymentYear = (paymentNumber - 1) % MONTHS_IN_YEAR + 1;
+      const extraPaymentsDue = Math.floor(
+        monthWithinPaymentYear * extraEmisPerYear / MONTHS_IN_YEAR,
+      ) - Math.floor(
+        (monthWithinPaymentYear - 1) * extraEmisPerYear / MONTHS_IN_YEAR,
+      );
+      const scheduledExtra = openingMonthlyEmi * extraPaymentsDue;
       const canPreserveBaselinePayoff = (
         strategy !== "lower_emi"
         || baselinePayoffMonth == null
-        || month + 1 < baselinePayoffMonth
+        || baselinePayoffMonth - (month + 1) > 1
       );
       if (
-        paymentNumber % MONTHS_IN_YEAR === 0
-        && balance > config.simulation.closedBalanceRupees
-        && scheduledAnnualExtra > 0
+        balance > config.simulation.closedBalanceRupees
+        && scheduledExtra > 0
         && extraPaymentIsActive
         && canPreserveBaselinePayoff
       ) {
-        const maximumExtra = strategy === "lower_emi"
-          ? Math.max(0, balance - config.simulation.closedBalanceRupees)
-          : balance;
-        extraPaid = Math.min(maximumExtra, scheduledAnnualExtra);
+        const maximumExtra = Math.max(0, balance - config.simulation.closedBalanceRupees);
+        extraPaid = strategy === "lower_emi" && scheduledExtra >= maximumExtra
+          ? 0
+          : Math.min(maximumExtra, scheduledExtra);
         balance -= extraPaid;
       }
     }

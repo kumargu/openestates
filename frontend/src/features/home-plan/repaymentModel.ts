@@ -79,6 +79,7 @@ export type RepaymentDashboardModel = {
   openingMonthlyEmi: number;
   endingMonthlyEmi: number;
   firstRecalculatedMonthlyEmi: number;
+  firstYearRecalculatedMonthlyEmi: number;
   annualPrepayment: number;
   interestSaved: number;
   monthsSaved: number;
@@ -165,6 +166,11 @@ function firstRecalculatedEmi(schedule: LoanSchedule): number {
   return firstExtraIndex >= 0
     ? schedule.months[firstExtraIndex + 1]?.scheduledEmi ?? schedule.endingMonthlyEmi
     : schedule.openingMonthlyEmi;
+}
+
+function firstYearRecalculatedEmi(schedule: LoanSchedule): number {
+  return schedule.months.find((month) => month.paymentNumber === MONTHS_IN_YEAR + 1)?.scheduledEmi
+    ?? schedule.endingMonthlyEmi;
 }
 
 export function calculateRepaymentDashboard(
@@ -268,6 +274,7 @@ export function calculateRepaymentDashboard(
     },
   );
   const firstRecalculatedMonthlyEmi = firstRecalculatedEmi(selected);
+  const firstYearRecalculatedMonthlyEmi = firstYearRecalculatedEmi(selected);
   const markers = {
     crossoverYear,
     halfFirstYearImpactYear: halfImpactYear,
@@ -286,6 +293,7 @@ export function calculateRepaymentDashboard(
     openingMonthlyEmi: selected.openingMonthlyEmi,
     endingMonthlyEmi: selected.endingMonthlyEmi,
     firstRecalculatedMonthlyEmi,
+    firstYearRecalculatedMonthlyEmi,
     annualPrepayment: selected.annualPrepayment,
     interestSaved: interestSavedAgainst(baseline, selected),
     monthsSaved: monthsSavedAgainst(baseline, selected),

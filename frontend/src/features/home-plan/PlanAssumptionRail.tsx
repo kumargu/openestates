@@ -19,6 +19,7 @@ type PlanAssumptionRailProps = {
   inputs: PlanInputs;
   extraEmisPerYear: number;
   repaymentStrategy: RepaymentStrategy;
+  showRepaymentObjective?: boolean;
   onInputChange: (key: EditablePlanInput, value: number) => void;
   onExtraEmisChange: (count: number) => void;
   onStrategyChange: (strategy: RepaymentStrategy) => void;
@@ -32,7 +33,7 @@ type InputSpec = {
   max?: number;
   prefix?: string;
   suffix: string;
-  note: string;
+  note?: string;
 };
 
 function PlanInput({
@@ -52,7 +53,7 @@ function PlanInput({
   max?: number;
   prefix?: string;
   suffix: string;
-  note: string;
+  note?: string;
   valueScale?: number;
   onChange: (value: number) => void;
 }) {
@@ -108,7 +109,7 @@ function PlanInput({
         />
         <b>{suffix}</b>
       </div>
-      <small>{note}</small>
+      {note ? <small>{note}</small> : null}
     </label>
   );
 }
@@ -117,6 +118,7 @@ export function PlanAssumptionRail({
   inputs,
   extraEmisPerYear,
   repaymentStrategy,
+  showRepaymentObjective = true,
   onInputChange,
   onExtraEmisChange,
   onStrategyChange,
@@ -145,13 +147,17 @@ export function PlanAssumptionRail({
     },
   ];
   return (
-    <section className="home-plan-inline-studio" aria-label="Loan repayment assumptions">
+    <section
+      className={`home-plan-inline-studio ${showRepaymentObjective ? "" : "is-rent-buy"}`}
+      aria-label={showRepaymentObjective ? "Loan repayment assumptions" : "Buy assumptions"}
+    >
       <div className="home-plan-inline-studio__primary">
         <div className="home-plan-inline-studio__buy" role="group" aria-label="Loan plan">
           {financingInputs.map(({ key, ...input }) => (
             <PlanInput
               key={key}
               {...input}
+              note={showRepaymentObjective ? input.note : undefined}
               value={inputs[key]}
               onChange={(value) => onInputChange(key, value)}
             />
@@ -161,7 +167,7 @@ export function PlanAssumptionRail({
             min={inputs.downPaymentPercent === 100 ? 0 : 1}
             prefix="₹"
             suffix="L/month"
-            note={emiNote}
+            note={showRepaymentObjective ? emiNote : undefined}
             value={inputs.monthlyEmiThousands}
             valueScale={100}
             onChange={(value) => onInputChange("monthlyEmiThousands", value)}
@@ -182,39 +188,43 @@ export function PlanAssumptionRail({
               ))}
             </div>
             <small>
-              Each equals one EMI: {formatLakhCurrency(inputs.monthlyEmiThousands * 1_000)}
+              {showRepaymentObjective
+                ? `Each stays at today's EMI: ${formatLakhCurrency(inputs.monthlyEmiThousands * 1_000)}`
+                : "Each equals one monthly EMI"}
             </small>
           </div>
+          {showRepaymentObjective ? (
+            <div className="home-plan-repayment-use">
+              <span>Apply extra payments to</span>
+              <div role="group" aria-label="Apply extra payments to">
+                <button
+                  type="button"
+                  className={repaymentStrategy === "finish_earlier" ? "is-active" : undefined}
+                  aria-pressed={repaymentStrategy === "finish_earlier"}
+                  onClick={() => onStrategyChange("finish_earlier")}
+                >
+                  Shorten tenure
+                </button>
+                <button
+                  type="button"
+                  className={repaymentStrategy === "lower_emi" ? "is-active" : undefined}
+                  aria-pressed={repaymentStrategy === "lower_emi"}
+                  onClick={() => onStrategyChange("lower_emi")}
+                >
+                  Lower EMI
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
-        <div className="home-plan-inline-studio__repay-actions">
-          <button type="button" className="home-plan-inline-studio__reset" onClick={onReset}>
-            Reset plan
-          </button>
-        </div>
-      </div>
-      <div className="home-plan-setup-strategy">
-        <span>Repayment objective</span>
-        <div className="home-plan-setup-strategy__choices" role="group" aria-label="Repayment objective">
-          <button
-            type="button"
-            className={repaymentStrategy === "finish_earlier" ? "is-active" : undefined}
-            aria-pressed={repaymentStrategy === "finish_earlier"}
-            onClick={() => onStrategyChange("finish_earlier")}
-          >
-            <strong>Finish earlier</strong>
-            <small>Keep the monthly EMI · shorten the loan</small>
-          </button>
-          <button
-            type="button"
-            className={repaymentStrategy === "lower_emi" ? "is-active" : undefined}
-            aria-pressed={repaymentStrategy === "lower_emi"}
-            onClick={() => onStrategyChange("lower_emi")}
-          >
-            <strong>Lower EMI</strong>
-            <small>Keep the payoff date · reduce monthly commitment</small>
-          </button>
-        </div>
+        {showRepaymentObjective ? (
+          <div className="home-plan-inline-studio__repay-actions">
+            <button type="button" className="home-plan-inline-studio__reset" onClick={onReset}>
+              Reset plan
+            </button>
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -223,16 +233,17 @@ export function PlanAssumptionRail({
 export function RentAssumptionRail({
   inputs,
   onInputChange,
+  onReset,
 }: {
   inputs: PlanInputs;
   onInputChange: (key: EditablePlanInput, value: number) => void;
+  onReset: () => void;
 }) {
   const rentInput = {
     label: "Monthly rent",
     min: 0,
     prefix: "₹",
     suffix: "L/month",
-    note: "Current rent",
   };
   const returnInput = {
     label: "SIP return",
@@ -271,16 +282,30 @@ export function RentAssumptionRail({
             </button>
           ))}
         </div>
-        <small>{formatMonthlyCurrency(inputs.monthlySipThousands * 1_000)}</small>
       </div>
-      <details className="home-plan-rent-assumptions">
-        <summary>Assumptions · {inputs.equityReturn}% SIP return</summary>
-        <PlanInput
-          {...returnInput}
-          value={inputs.equityReturn}
-          onChange={(value) => onInputChange("equityReturn", value)}
-        />
-      </details>
+      <div className="home-plan-rent-actions">
+        <details className="home-plan-rent-assumptions">
+          <summary>Assumptions</summary>
+          <div className="home-plan-rent-assumptions__body">
+            <PlanInput
+              {...returnInput}
+              value={inputs.equityReturn}
+              onChange={(value) => onInputChange("equityReturn", value)}
+            />
+            <dl>
+              <div>
+                <dt>Home growth</dt>
+                <dd>{inputs.assumptions.homeAppreciationRate}% / year</dd>
+              </div>
+              <div>
+                <dt>Rent growth</dt>
+                <dd>{inputs.assumptions.rentInflationRate}% / year</dd>
+              </div>
+            </dl>
+          </div>
+        </details>
+        <button type="button" onClick={onReset}>Reset plan</button>
+      </div>
     </section>
   );
 }
