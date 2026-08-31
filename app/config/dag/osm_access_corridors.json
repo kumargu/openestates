@@ -1,45 +1,42 @@
 {
-  "version": 1,
-  "description": "Offline OpenStreetMap street-network paths from society access roads to operational transit stations.",
+  "version": 2,
+  "description": "Society-centric OpenStreetMap boundaries, explicit entrances and sourced public approach corridors.",
   "collector": {
-    "source_id": "openstreetmap_transit_access",
+    "source_id": "openstreetmap_society_access",
     "source_type": "OpenStreetMap",
-    "fetch_source": "overpass_access_corridor_snapshot",
+    "fetch_source": "overpass_society_access_snapshot",
     "overpass_url_env": "OPENESTATES_OVERPASS_API_URL",
     "default_overpass_url": "https://overpass-api.de/api/interpreter",
     "query_timeout_seconds": 60,
-    "bbox_padding_meters": 450.0,
-    "max_station_distance_meters": 5000.0,
-    "station_candidate_limit": 4,
-    "max_snap_distance_meters": 300.0,
+    "bbox_padding_meters": 1650.0,
+    "max_corridor_meters": 1500.0,
+    "max_frontage_distance_meters": 120.0,
+    "max_entrance_boundary_distance_meters": 35.0,
+    "max_entrance_road_distance_meters": 30.0,
     "allow_partial_subject_failures": false,
     "confidence": 0.78,
     "boundary_landuse_values": ["residential"],
     "road_suffixes": ["Road", "Street", "Marg"],
-    "highway_values": [
-      "primary",
-      "secondary",
-      "tertiary",
-      "unclassified",
-      "residential",
-      "service",
-      "living_street",
-      "pedestrian",
-      "footway",
-      "path",
-      "steps"
-    ]
-  },
-  "corridor": {
-    "summary_fact_key": "transit_access_route",
-    "summary_display_label": "Metro access",
-    "linked_entity_fact_key": "transit_access_route_entity",
-    "linked_entity_display_label": "Metro access map route",
-    "route_mode": "ground_access"
+    "eligible_highway_values": [
+      "motorway", "trunk", "primary", "secondary", "tertiary",
+      "unclassified", "residential", "service", "living_street"
+    ],
+    "denied_highway_values": [
+      "footway", "path", "steps", "pedestrian", "cycleway", "bridleway"
+    ],
+    "denied_access_values": ["no", "private"]
   },
   "approach_road": {
     "summary_fact_key": "approach_road",
-    "linked_entity_fact_key": "approach_road_entity"
+    "linked_entity_fact_key": "approach_road_entity",
+    "direction_fact_key": "road.direction",
+    "association_fact_key": "road.association_method",
+    "source_geometry_fact_key": "road.source_geometry_geojson"
+  },
+  "entrance": {
+    "linked_entity_fact_key": "society.entrance_entity",
+    "status_fact_key": "entrance.status",
+    "association_fact_key": "entrance.association_method"
   },
   "society_boundary": {
     "geometry_fact_key": "society.boundary_geojson"

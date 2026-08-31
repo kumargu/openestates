@@ -1,102 +1,85 @@
 use backend::assets::{
-    osm_transit_access_corridor_facts_input, KgViewRecords, OsmTransitAccessCorridorRecord,
-    OsmTransitAccessCorridorsInput,
+    osm_society_access_facts_input, KgViewRecords, OsmSocietyAccessInput, OsmSocietyAccessRecord,
 };
 use backend::knowledge::KnowledgeGraph;
 use chrono::{TimeZone, Utc};
 
-fn waterford_corridor() -> OsmTransitAccessCorridorRecord {
-    OsmTransitAccessCorridorRecord {
+fn waterford_access() -> OsmSocietyAccessRecord {
+    OsmSocietyAccessRecord {
         entity_id: "society:prestige-waterford".to_string(),
         project_key: None,
-        query: "OSM streets between Waterford and the nearest operational metro".to_string(),
-        corridor_id: "waterford-tree-park".to_string(),
-        destination_station_id: "node/123".to_string(),
-        destination_name: "Kadugodi Tree Park".to_string(),
-        destination_latitude: 12.9855,
-        destination_longitude: 77.7475,
-        frontage_road_name: Some("ECC Road".to_string()),
-        frontage_way_id: Some("23213668".to_string()),
-        frontage_distance_meters: Some(640.0),
-        frontage_geometry_geojson: Some(
-            r#"{"type":"LineString","coordinates":[[77.739,12.979],[77.742,12.982],[77.744,12.983]]}"#
-                .to_string(),
+        query: "OSM society boundary, gates and public roads".to_string(),
+        access_id: "waterford-access".to_string(),
+        approach_road_name: Some("ECC Road".to_string()),
+        approach_way_id: Some("23213668".to_string()),
+        approach_distance_meters: Some(640.0),
+        approach_geometry_geojson: Some(
+            r#"{"type":"LineString","coordinates":[[77.739,12.979],[77.742,12.982],[77.744,12.983]]}"#.to_string(),
         ),
+        approach_source_geometry_geojson: Some(
+            r#"{"type":"LineString","coordinates":[[77.738,12.978],[77.742,12.982],[77.745,12.984]]}"#.to_string(),
+        ),
+        approach_direction: Some("two_way".to_string()),
+        approach_association_method: Some("address_match".to_string()),
         boundary_name: Some("Prestige Waterford".to_string()),
         boundary_way_id: Some("133630420".to_string()),
         boundary_geometry_geojson: Some(
-            r#"{"type":"Polygon","coordinates":[[[77.740,12.980],[77.744,12.980],[77.744,12.983],[77.740,12.980]]]}"#
-                .to_string(),
+            r#"{"type":"Polygon","coordinates":[[[77.740,12.980],[77.744,12.980],[77.744,12.983],[77.740,12.980]]]}"#.to_string(),
         ),
-        road_names: vec![
-            "Ecumenical Christian Center Road".to_string(),
-            "Whitefield Main Road".to_string(),
-        ],
-        route_way_ids: vec!["23213668".to_string()],
-        distance_meters: 1_120.0,
-        origin_snap_distance_meters: 42.0,
-        destination_snap_distance_meters: 18.0,
+        entrance_id: Some("node/501".to_string()),
+        entrance_latitude: Some(12.981),
+        entrance_longitude: Some(77.7405),
+        entrance_status: Some("inferred".to_string()),
+        entrance_association_method: Some("osm_gate_boundary_public_road".to_string()),
+        entrance_source_url: Some("https://www.openstreetmap.org/node/501".to_string()),
         subject_latitude: 12.9814204,
         subject_longitude: 77.7408686,
-        geometry_geojson:
-            r#"{"type":"LineString","coordinates":[[77.7409,12.9814],[77.744,12.983],[77.7475,12.9855]]}"#
-                .to_string(),
         source_url: Some("https://www.openstreetmap.org/way/23213668".to_string()),
         confidence: 0.78,
         fetched_at: Utc.with_ymd_and_hms(2026, 8, 30, 9, 0, 0).unwrap(),
-        fetch_source: "overpass_access_corridor_snapshot".to_string(),
+        fetch_source: "overpass_society_access_snapshot".to_string(),
     }
 }
 
 #[test]
-fn osm_access_facts_emit_a_linked_routed_corridor() {
-    let input = OsmTransitAccessCorridorsInput {
-        snapshot_date: "2026-08-30".to_string(),
-        records: vec![waterford_corridor()],
-        source_watermarks: Vec::new(),
-    };
+fn society_access_emits_boundary_public_corridor_and_typed_entrance() {
+    let facts = osm_society_access_facts_input(
+        &OsmSocietyAccessInput {
+            snapshot_date: "2026-08-30".to_string(),
+            records: vec![waterford_access()],
+            source_watermarks: Vec::new(),
+        },
+        "test-run",
+    )
+    .unwrap();
 
-    let facts = osm_transit_access_corridor_facts_input(&input, "test-run").unwrap();
-    let route_entity_id = facts
-        .facts
-        .iter()
-        .find(|fact| fact.fact_key == "transit_access_route_entity")
-        .expect("linked route entity fact")
-        .value_json
-        .clone();
-
-    assert!(route_entity_id.contains("place:transit-access:"));
-    assert!(facts.facts.iter().any(|fact| {
-        fact.fact_key == "transit_access_route"
-            && fact.value_json.contains("ECC Road → Kadugodi Tree Park")
-            && fact.value_json.contains("1.1 km")
+    assert!(facts.facts.iter().all(|fact| {
+        fact.fact_key != "transit_access_route"
+            && fact.fact_key != "transit_access_route_entity"
+            && !fact.value_json.contains("ground_access")
     }));
     assert!(facts.facts.iter().any(|fact| {
         fact.entity_id == "society:prestige-waterford"
             && fact.fact_key == "society.boundary_geojson"
-            && fact.value_json.contains("Polygon")
             && fact.source_url.as_deref() == Some("https://www.openstreetmap.org/way/133630420")
-    }));
-    assert!(facts.facts.iter().any(|fact| {
-        fact.fact_key == "geo.geometry_geojson"
-            && fact.value_json.contains("LineString")
-            && fact.source_type == "OpenStreetMap"
-    }));
-    assert!(facts.facts.iter().any(|fact| {
-        fact.fact_key == "route.frontage_road_name" && fact.value_json.contains("ECC Road")
-    }));
-    assert!(facts.facts.iter().any(|fact| {
-        fact.entity_id == "society:prestige-waterford"
-            && fact.fact_key == "approach_road"
-            && fact.value_json.contains("ECC Road")
     }));
     assert!(facts.facts.iter().any(|fact| {
         fact.fact_key == "approach_road_entity" && fact.value_json.contains("place:approach-road:")
     }));
     assert!(facts.facts.iter().any(|fact| {
         fact.entity_id.starts_with("place:approach-road:")
-            && fact.fact_key == "geo.geometry_geojson"
-            && fact.value_json.contains("77.739")
+            && fact.fact_key == "road.direction"
+            && fact.value_json.contains("two_way")
+    }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.fact_key == "society.entrance_entity"
+            && fact.value_json.contains("place:society-entrance:")
+    }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.entity_id.starts_with("place:society-entrance:")
+            && fact.fact_key == "entrance.status"
+            && fact.value_json.contains("inferred")
+            && fact.source_url.as_deref() == Some("https://www.openstreetmap.org/node/501")
     }));
 
     let kg_records = KgViewRecords::from_graph_with_skill_facts(
@@ -106,23 +89,48 @@ fn osm_access_facts_emit_a_linked_routed_corridor() {
     )
     .unwrap();
     assert!(kg_records.entities.iter().any(|entity| {
-        entity.entity_id.starts_with("place:transit-access:") && entity.entity_type == "place"
+        entity.entity_id.starts_with("place:approach-road:") && entity.entity_type == "place"
     }));
     assert!(kg_records.entities.iter().any(|entity| {
-        entity.entity_id.starts_with("place:approach-road:") && entity.entity_type == "place"
+        entity.entity_id.starts_with("place:society-entrance:") && entity.entity_type == "place"
     }));
 }
 
 #[test]
-fn osm_access_facts_reject_invalid_route_geometry() {
-    let input = OsmTransitAccessCorridorsInput {
+fn missing_entrance_emits_no_entity_or_claim() {
+    let mut record = waterford_access();
+    record.entrance_id = None;
+    record.entrance_latitude = None;
+    record.entrance_longitude = None;
+    record.entrance_status = None;
+    record.entrance_association_method = None;
+    record.entrance_source_url = None;
+    let facts = osm_society_access_facts_input(
+        &OsmSocietyAccessInput {
+            snapshot_date: "2026-08-30".to_string(),
+            records: vec![record],
+            source_watermarks: Vec::new(),
+        },
+        "test-run",
+    )
+    .unwrap();
+    assert!(facts.facts.iter().all(|fact| {
+        fact.fact_key != "society.entrance_entity"
+            && !fact.entity_id.starts_with("place:society-entrance:")
+    }));
+}
+
+#[test]
+fn invalid_public_corridor_geometry_is_rejected() {
+    let input = OsmSocietyAccessInput {
         snapshot_date: "2026-08-30".to_string(),
-        records: vec![OsmTransitAccessCorridorRecord {
-            geometry_geojson: r#"{"type":"LineString","coordinates":[[77.74,12.98]]}"#.to_string(),
-            ..waterford_corridor()
+        records: vec![OsmSocietyAccessRecord {
+            approach_geometry_geojson: Some(
+                r#"{"type":"LineString","coordinates":[[77.74,12.98]]}"#.to_string(),
+            ),
+            ..waterford_access()
         }],
         source_watermarks: Vec::new(),
     };
-
-    assert!(osm_transit_access_corridor_facts_input(&input, "test-run").is_err());
+    assert!(osm_society_access_facts_input(&input, "test-run").is_err());
 }

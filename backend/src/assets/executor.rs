@@ -38,7 +38,7 @@ use super::{
     GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
     GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
     IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID,
-    OSM_TRANSIT_ACCESS_CORRIDOR_FACTS_ASSET_ID, RERA_CLAIMS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    OSM_SOCIETY_ACCESS_FACTS_ASSET_ID, RERA_CLAIMS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
     RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
     RERA_SOURCE_RECORDS_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
     STORMWATER_DRAIN_FACTS_ASSET_ID,
@@ -1291,8 +1291,8 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::OsmPowerLineFacts,
         );
         executors.insert(
-            static_asset_id(OSM_TRANSIT_ACCESS_CORRIDOR_FACTS_ASSET_ID),
-            BuiltInAssetExecutor::OsmTransitAccessCorridorFacts,
+            static_asset_id(OSM_SOCIETY_ACCESS_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::OsmSocietyAccessFacts,
         );
         executors.insert(
             static_asset_id(STORMWATER_DRAIN_FACTS_ASSET_ID),
@@ -1341,7 +1341,7 @@ enum BuiltInAssetExecutor {
     SocietyGroundwaterPotentialFacts,
     BengaluruMetroStationFacts,
     OsmPowerLineFacts,
-    OsmTransitAccessCorridorFacts,
+    OsmSocietyAccessFacts,
     StormwaterDrainFacts,
     CurrentProjectFacts,
     KgSocietyView,
@@ -1953,12 +1953,12 @@ impl BuiltInAssetExecutor {
                 let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
-            Self::OsmTransitAccessCorridorFacts => {
+            Self::OsmSocietyAccessFacts => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let input = context
                     .options
                     .source_inputs
-                    .osm_transit_access_corridors
+                    .osm_society_access
                     .as_ref()
                     .ok_or_else(|| source_input_error(&context))?;
                 let parent_records = context
@@ -1975,7 +1975,7 @@ impl BuiltInAssetExecutor {
                     &parent_records,
                     CANONICAL_SOCIETY_NODES_ASSET_ID,
                 )?;
-                let input = super::canonicalize_osm_transit_access_corridors_input(
+                let input = super::canonicalize_osm_society_access_input(
                     &context.dag.lake,
                     input,
                     canonical_record,
@@ -1983,10 +1983,8 @@ impl BuiltInAssetExecutor {
                     context.options.source_scope,
                 )
                 .await?;
-                let input = super::osm_transit_access_corridor_facts_input(
-                    &input,
-                    &context.run_id.to_string(),
-                )?;
+                let input =
+                    super::osm_society_access_facts_input(&input, &context.run_id.to_string())?;
                 let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
@@ -2904,7 +2902,7 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
         && source_inputs.external_images_weekly.is_none()
         && source_inputs.environment_groundwater_potential.is_none()
         && source_inputs.bengaluru_metro_stations.is_none()
-        && source_inputs.osm_transit_access_corridors.is_none()
+        && source_inputs.osm_society_access.is_none()
         && source_inputs.osm_power_infrastructure.is_none()
         && source_inputs.stormwater_drains.is_none()
 }

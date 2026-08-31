@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::environment::EnvironmentGroundwaterPotentialInput;
-use super::osm_access::OsmTransitAccessCorridorsInput;
+use super::osm_access::OsmSocietyAccessInput;
 use super::osm_power::OsmPowerInfrastructureInput;
 use super::source_provider::SourceEntitySeed;
 use super::stormwater::StormwaterDrainRiskInput;
@@ -18,8 +18,8 @@ use super::{
     EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
     GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
     GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID,
-    OSM_TRANSIT_ACCESS_CORRIDOR_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
-    RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
+    OSM_SOCIETY_ACCESS_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
     SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID, STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 
@@ -58,7 +58,7 @@ pub struct AssetSourceInputs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bengaluru_metro_stations: Option<BengaluruMetroStationsInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub osm_transit_access_corridors: Option<OsmTransitAccessCorridorsInput>,
+    pub osm_society_access: Option<OsmSocietyAccessInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub osm_power_infrastructure: Option<OsmPowerInfrastructureInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -85,7 +85,7 @@ impl AssetSourceInputs {
             EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
             BENGALURU_METRO_STATION_FACTS_ASSET_ID,
-            OSM_TRANSIT_ACCESS_CORRIDOR_FACTS_ASSET_ID,
+            OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
             STORMWATER_DRAIN_FACTS_ASSET_ID,
         ]
@@ -107,7 +107,7 @@ impl AssetSourceInputs {
                 | EXTERNAL_IMAGES_WEEKLY_ASSET_ID
                 | SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID
                 | BENGALURU_METRO_STATION_FACTS_ASSET_ID
-                | OSM_TRANSIT_ACCESS_CORRIDOR_FACTS_ASSET_ID
+                | OSM_SOCIETY_ACCESS_FACTS_ASSET_ID
                 | OSM_POWER_LINE_FACTS_ASSET_ID
                 | STORMWATER_DRAIN_FACTS_ASSET_ID
         )
@@ -167,7 +167,7 @@ impl AssetSourceInputs {
         );
         for raw_asset_id in [
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
-            OSM_TRANSIT_ACCESS_CORRIDOR_FACTS_ASSET_ID,
+            OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
             STORMWATER_DRAIN_FACTS_ASSET_ID,
         ] {
@@ -240,7 +240,7 @@ impl AssetSourceInputs {
         );
         for raw_asset_id in [
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
-            OSM_TRANSIT_ACCESS_CORRIDOR_FACTS_ASSET_ID,
+            OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
             STORMWATER_DRAIN_FACTS_ASSET_ID,
         ] {

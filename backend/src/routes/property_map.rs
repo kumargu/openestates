@@ -1618,7 +1618,7 @@ mod tests {
                 SceneReceipt {
                     id: "receipt:access".to_string(),
                     entity_id: "society:sample".to_string(),
-                    fact_key: "transit_access_route".to_string(),
+                    fact_key: "approach_road".to_string(),
                     claim: "ECC Road → Kadugodi Tree Park (1.1 km)".to_string(),
                     source_type: "OpenStreetMap".to_string(),
                     source_url: Some("https://www.openstreetmap.org/way/23213668".to_string()),

@@ -16,8 +16,7 @@
     "multi_value_fact_keys": [
       "nearby_schools",
       "nearby_metro_stations",
-      "transit_access_route",
-      "transit_access_route_entity",
+      "society.entrance_entity",
       "nearby_hospitals",
       "nearby_fitness",
       "nearby_tech_parks",
@@ -6943,58 +6942,101 @@
       }
     },
     {
-      "fact_key": "transit_access_route",
+      "fact_key": "society.entrance_entity",
       "bucket": "social_infra",
-      "label": "metro access route",
-      "lens": "positive",
-      "polarity": "positive",
-      "scopes": [
-        "society"
-      ],
-      "enrichment_terms": [
-        "metro access route",
-        "route to metro"
-      ],
-      "answers_preferences": [
-        "metro access",
-        "route to metro"
-      ],
-      "never_default": true,
-      "source_types": [
-        "OpenStreetMap"
-      ],
-      "display_template": "metro access: {value}",
-      "scoring_hint": {
-        "direction": "text_match",
-        "weight": 0.8
-      }
-    },
-    {
-      "fact_key": "transit_access_route_entity",
-      "bucket": "social_infra",
-      "label": "metro access route map entity",
+      "label": "entrance map entity",
       "lens": "proof",
       "polarity": "neutral",
       "scopes": [
         "society"
       ],
       "enrichment_terms": [
-        "metro access route",
-        "route geometry"
+        "entrance",
+        "main gate"
       ],
       "answers_preferences": [
-        "map route",
-        "route geometry"
+        "entrance",
+        "main gate"
       ],
       "never_default": true,
       "source_types": [
         "OpenStreetMap"
       ],
-      "display_template": "metro access route map entity: {value}",
+      "display_template": "entrance: {value}",
       "scoring_hint": {
         "direction": "text_match",
         "weight": 0.0
       }
+    },
+    {
+      "fact_key": "entrance.status",
+      "bucket": "social_infra",
+      "label": "entrance status",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": ["place"],
+      "enrichment_terms": ["entrance", "main gate"],
+      "answers_preferences": ["entrance", "main gate"],
+      "never_default": true,
+      "source_types": ["OpenStreetMap", "Official"],
+      "display_template": "entrance status: {value}",
+      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+    },
+    {
+      "fact_key": "entrance.association_method",
+      "bucket": "social_infra",
+      "label": "entrance association",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": ["place"],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": ["OpenStreetMap", "Official"],
+      "display_template": "entrance association: {value}",
+      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+    },
+    {
+      "fact_key": "road.direction",
+      "bucket": "social_infra",
+      "label": "road direction",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": ["place"],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": ["OpenStreetMap"],
+      "display_template": "road direction: {value}",
+      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+    },
+    {
+      "fact_key": "road.association_method",
+      "bucket": "social_infra",
+      "label": "road association",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": ["place"],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": ["OpenStreetMap"],
+      "display_template": "road association: {value}",
+      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+    },
+    {
+      "fact_key": "road.source_geometry_geojson",
+      "bucket": "social_infra",
+      "label": "road source geometry",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": ["place"],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": ["OpenStreetMap"],
+      "display_template": "road source geometry: {value}",
+      "scoring_hint": {"direction": "text_match", "weight": 0.0}
     },
     {
       "fact_key": "route.distance_m",

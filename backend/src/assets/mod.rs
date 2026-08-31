@@ -98,9 +98,8 @@ pub use media::{
     IMAGE_MEDIA_FACTS_ASSET_ID,
 };
 pub use osm_access::{
-    canonicalize_osm_transit_access_corridors_input, osm_transit_access_corridor_facts_input,
-    OsmAccessAssetError, OsmTransitAccessCorridorRecord, OsmTransitAccessCorridorsInput,
-    OSM_TRANSIT_ACCESS_CORRIDOR_FACTS_ASSET_ID,
+    canonicalize_osm_society_access_input, osm_society_access_facts_input, OsmAccessAssetError,
+    OsmSocietyAccessInput, OsmSocietyAccessRecord, OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
 };
 pub use osm_power::{
     canonicalize_osm_power_infrastructure_input, osm_power_line_facts_input, OsmPowerAssetError,

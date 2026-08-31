@@ -1711,29 +1711,19 @@ mod tests {
     #[test]
     fn scoped_refresh_replaces_only_candidate_fact_keys() {
         let society = "society:rera-catalog";
-        let route = "place:transit-access:catalog-route";
+        let route = "place:approach-road:catalog-route";
         let outside = "society:rera-outside";
         let mut facts = vec![
             fact(society, "google_rating", "Google", "4.2"),
-            fact(
-                society,
-                "transit_access_route",
-                "OpenStreetMap",
-                "old route",
-            ),
-            fact(
-                outside,
-                "transit_access_route",
-                "OpenStreetMap",
-                "outside route",
-            ),
+            fact(society, "approach_road", "OpenStreetMap", "old route"),
+            fact(outside, "approach_road", "OpenStreetMap", "outside route"),
         ];
         let entity_ids = BTreeSet::from([society.to_string(), route.to_string()]);
 
         refresh_candidate_facts(
             &mut facts,
             vec![
-                fact(society, "transit_access_route", "OpenStreetMap", "ECC Road"),
+                fact(society, "approach_road", "OpenStreetMap", "ECC Road"),
                 fact(route, "geo.geometry_geojson", "OpenStreetMap", "line"),
             ],
             &entity_ids,
@@ -1747,7 +1737,7 @@ mod tests {
         }));
         assert!(facts.iter().any(|row| {
             row.entity_id == society
-                && row.fact_key == "transit_access_route"
+                && row.fact_key == "approach_road"
                 && row.value == FactValue::Text("ECC Road".to_string())
         }));
         assert!(facts.iter().any(|row| row.entity_id == route));

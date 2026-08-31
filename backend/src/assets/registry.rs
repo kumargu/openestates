@@ -752,10 +752,10 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Support,
         ),
         asset(
-            "osm_transit_access_corridor_facts",
+            "osm_society_access_facts",
             AssetStage::Silver,
-            "OpenStreetMap street-network routes from societies to operational transit stations, computed offline with route geometry and provenance.",
-            &["canonical_society_nodes", "bengaluru_metro_station_facts"],
+            "OpenStreetMap society boundaries, explicit entrance candidates, and public approach-road geometry collected independently of transit.",
+            &["canonical_society_nodes"],
             RefreshCadence::Monthly,
             CostTier::Free,
             TrustTier::Support,
@@ -784,7 +784,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "home_state_signals",
                 "society_groundwater_potential_facts",
                 "bengaluru_metro_station_facts",
-                "osm_transit_access_corridor_facts",
+                "osm_society_access_facts",
                 "osm_power_line_facts",
                 "stormwater_drain_facts",
             ],
@@ -812,7 +812,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_optional_dependency("image_media_facts")
         .with_optional_dependency("home_state_signals")
         .with_optional_dependency("bengaluru_metro_station_facts")
-        .with_optional_dependency("osm_transit_access_corridor_facts"),
+        .with_optional_dependency("osm_society_access_facts"),
         asset(
             "kg_society_view",
             AssetStage::Gold,

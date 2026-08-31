@@ -8,7 +8,7 @@ use backend::assets::{
     EnvironmentRingPoint, ExternalImageObservationRecord, ExternalImagesWeeklyInput,
     ExternalListingObservationRecord, ExternalListingsWeeklyInput, GoogleNearbyPlaceRecord,
     GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
-    OsmPowerInfrastructureInput, OsmPowerLineObservationRecord, OsmTransitAccessCorridorsInput,
+    OsmPowerInfrastructureInput, OsmPowerLineObservationRecord, OsmSocietyAccessInput,
     ReraProjectPlanFramesInput, ReraProjectSnapshotRecord, ReraRegistryMonthlyInput,
     SkillFactAnnotationRecord, SkillFactRecord, SourceWatermark, StormwaterDrainObservationRecord,
     StormwaterDrainRiskInput, BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
@@ -498,11 +498,11 @@ fn source_inputs(
             }],
             source_watermarks: watermark.clone(),
         }),
-        osm_transit_access_corridors: Some(OsmTransitAccessCorridorsInput {
+        osm_society_access: Some(OsmSocietyAccessInput {
             snapshot_date: "2026-07-14".to_string(),
             records: Vec::new(),
             source_watermarks: vec![SourceWatermark {
-                source: "fixture_osm_transit_access_empty".to_string(),
+                source: "fixture_osm_society_access_empty".to_string(),
                 high_watermark: "records=0".to_string(),
             }],
         }),
