@@ -1,4 +1,10 @@
-import type { MapLayerMeta, MapOverlayLine, PropertyMapContext } from "./types.ts";
+import type {
+  ArrivalSceneExperience,
+  MapLayerMeta,
+  MapOverlayLine,
+  MapOverlayPolygon,
+  PropertyMapContext,
+} from "./types.ts";
 import {
   buildNumberedPlaces,
   resolveHomeAnchor,
@@ -20,6 +26,12 @@ export type CorridorTourWaypoint = CorridorCameraFocus & {
 };
 
 export type CorridorTourMode = "center_out_and_back" | "end_to_end";
+
+export type SocietyCameraComposition = {
+  center: { latitude: number; longitude: number };
+  start: { heading: number; range: number; tilt: number };
+  final: { heading: number; range: number; tilt: number };
+};
 
 type CorridorProjection = CorridorCameraFocus & {
   coordinates: [number, number][];
@@ -54,17 +66,47 @@ export function arrivalMarkerPlaces(
   );
 }
 
+export function societyCameraComposition(
+  home: { latitude: number; longitude: number },
+  boundary: MapOverlayPolygon | undefined,
+  experience: ArrivalSceneExperience,
+  viewportWidth: number,
+): SocietyCameraComposition {
+  const coordinates = boundary?.coordinates ?? [];
+  const center = coordinates.length > 0
+    ? {
+      latitude: (Math.min(...coordinates.map(([, latitude]) => latitude))
+        + Math.max(...coordinates.map(([, latitude]) => latitude))) / 2,
+      longitude: (Math.min(...coordinates.map(([longitude]) => longitude))
+        + Math.max(...coordinates.map(([longitude]) => longitude))) / 2,
+    }
+    : home;
+  const extentM = coordinates.reduce((largest, [longitude, latitude]) => Math.max(
+    largest,
+    distanceKm(center.latitude, center.longitude, latitude, longitude) * 2_000,
+  ), 0);
+  const padding = viewportWidth < 640
+    ? experience.mobileBoundaryPadding
+    : experience.boundaryPadding;
+  const finalRange = Math.max(experience.finalRangeM, extentM * padding);
+  return {
+    center,
+    start: {
+      heading: normalizeHeading(experience.finalHeading - experience.rotationArcDegrees),
+      range: Math.max(experience.startRangeM, finalRange * 1.8),
+      tilt: 12,
+    },
+    final: {
+      heading: normalizeHeading(experience.finalHeading),
+      range: finalRange,
+      tilt: experience.finalTilt,
+    },
+  };
+}
+
 export function hasArrivalMap(context?: PropertyMapContext | null): boolean {
   if (!context || !resolveHomeAnchor(context)) return false;
-  const roadLayer = context.layers?.find((layer) => layer.renderKind === "terrain_corridor");
-  const roadLines = roadLayer
-    ? context.layer_lines?.[roadLayer.id] ?? context.access_lines ?? []
-    : [];
-  return Boolean(
-    context.home.boundary
-    || context.metro_lines?.length
-    || (roadLines.length > 0 && roadLayer?.experience?.kind === "street_view_tour"),
-  );
+  return true;
 }
 
 function clamp(value: number, min: number, max: number): number {

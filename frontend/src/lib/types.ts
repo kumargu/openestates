@@ -447,6 +447,7 @@ export type PropertyMapContext = {
   layers?: MapLayerMeta[];
   places: MapPlacePin[];
   proof_focus?: ProofFocus;
+  arrivalExperience?: ArrivalSceneExperience;
   water?: MapWaterContext;
   metro_lines?: MapOverlayLine[];
   access_lines?: MapOverlayLine[];
@@ -469,6 +470,17 @@ export type MapLayerMeta = {
 };
 
 export type MapPresentation = "immersive_3d" | "readable_2d";
+
+export type ArrivalSceneExperience = {
+  revealDurationMs: number;
+  startRangeM: number;
+  finalRangeM: number;
+  finalTilt: number;
+  finalHeading: number;
+  rotationArcDegrees: number;
+  boundaryPadding: number;
+  mobileBoundaryPadding: number;
+};
 
 export type MapLayerExperience = {
   kind: string;
@@ -498,6 +510,7 @@ export type SurfaceSceneResponse = {
   servingBundleVersion?: string;
   entityRefs: KgEntityRefs;
   anchor: SceneAnchor;
+  experience?: ArrivalSceneExperience;
   viewport: SceneViewport;
   proofFocus?: ProofFocus;
   layers: SceneLayer[];

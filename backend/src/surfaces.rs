@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use crate::dag_config::{
     CoordinateEntityScope, UiSurfaceConfig, UiSurfaceLayerExperienceConfig, UiSurfaceLayerRule,
+    UiSurfaceSceneExperienceConfig,
 };
 use crate::knowledge::FactValue;
 use crate::models::{KgEntityRefs, Property};
@@ -28,6 +29,8 @@ pub struct SurfaceSceneResponse {
     pub serving_bundle_version: Option<String>,
     pub entity_refs: KgEntityRefs,
     pub anchor: SceneAnchor,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub experience: Option<UiSurfaceSceneExperienceConfig>,
     pub viewport: SceneViewport,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proof_focus: Option<ProofFocus>,
@@ -467,6 +470,7 @@ pub fn build_surface_scene_with_focus(
         serving_bundle_version: Some(bundle.manifest.bundle_version.clone()),
         entity_refs,
         anchor,
+        experience: scene_config.experience.clone(),
         viewport,
         proof_focus: applied_focus,
         layers,
@@ -1756,6 +1760,7 @@ mod tests {
                     entity_ref: "society".to_string(),
                     boundary_fact_key: None,
                 },
+                experience: None,
                 layers: vec![UiSurfaceLayerRule {
                     id: "drains".to_string(),
                     label: "Drains".to_string(),
@@ -1867,6 +1872,7 @@ mod tests {
                     entity_ref: "society".to_string(),
                     boundary_fact_key: None,
                 },
+                experience: None,
                 layers: vec![UiSurfaceLayerRule {
                     id: "red_flags".to_string(),
                     label: "Red flags".to_string(),
@@ -1972,6 +1978,7 @@ mod tests {
                     entity_ref: "society".to_string(),
                     boundary_fact_key: None,
                 },
+                experience: None,
                 layers: vec![UiSurfaceLayerRule {
                     id: "red_flags".to_string(),
                     label: "Red flags".to_string(),
@@ -2102,6 +2109,7 @@ mod tests {
                     entity_ref: "society".to_string(),
                     boundary_fact_key: None,
                 },
+                experience: None,
                 layers: vec![UiSurfaceLayerRule {
                     id: "tech".to_string(),
                     label: "Tech parks".to_string(),
@@ -2232,6 +2240,7 @@ mod tests {
                     entity_ref: "society".to_string(),
                     boundary_fact_key: None,
                 },
+                experience: None,
                 layers: vec![UiSurfaceLayerRule {
                     id: "red_flags".to_string(),
                     label: "Red flags".to_string(),
@@ -2352,6 +2361,7 @@ mod tests {
                     entity_ref: "society".to_string(),
                     boundary_fact_key: None,
                 },
+                experience: None,
                 layers: vec![UiSurfaceLayerRule {
                     id: "red_flags".to_string(),
                     label: "Red flags".to_string(),

@@ -231,11 +231,21 @@
         "kind": "scene",
         "targetId": "remote-arrival"
       },
-      "scene": {
-        "anchor": {
-          "entityRef": "society",
-          "boundaryFactKey": "society.boundary_geojson"
-        },
+    "scene": {
+      "anchor": {
+        "entityRef": "society",
+        "boundaryFactKey": "society.boundary_geojson"
+      },
+      "experience": {
+        "revealDurationMs": 7000,
+        "startRangeM": 1800,
+        "finalRangeM": 700,
+        "finalTilt": 48,
+        "finalHeading": 210,
+        "rotationArcDegrees": 140,
+        "boundaryPadding": 1.35,
+        "mobileBoundaryPadding": 1.6
+      },
       "layers": [
           {
             "id": "metro",

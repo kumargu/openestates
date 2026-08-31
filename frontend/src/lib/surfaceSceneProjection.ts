@@ -56,6 +56,7 @@ export function propertyMapContextFromSurfaceScene(
       boundary: mapAnchorBoundary(scene) ?? fallback?.home.boundary,
     },
     layers,
+    arrivalExperience: scene.experience ?? fallback?.arrivalExperience,
     places,
     proof_focus: scene.proofFocus,
     water: fallback?.water,

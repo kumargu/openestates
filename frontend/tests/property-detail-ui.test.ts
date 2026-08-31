@@ -21,6 +21,7 @@ import {
   corridorCameraFocus,
   corridorTourWaypoints,
   hasArrivalMap,
+  societyCameraComposition,
 } from "../src/lib/arrivalMapProjection.ts";
 import { mapMarkerPinOptions } from "../src/lib/mapMarkerVisual.ts";
 import {
@@ -177,6 +178,17 @@ test("the arrival tile owns society and guided-road 3D evidence", () => {
   assert.equal(hasAroundThisHomePlate(context), false);
 });
 
+test("arrival keeps an anchor-only society when its boundary is missing", () => {
+  assert.equal(hasArrivalMap({
+    ...emptyMapContext,
+    home: {
+      ...emptyMapContext.home,
+      latitude: 12.98,
+      longitude: 77.74,
+    },
+  }), true);
+});
+
 test("arrival entrance labels and icons follow scene config and status", () => {
   const layer = {
     id: "entrance",
@@ -224,6 +236,66 @@ test("arrival metro framing shifts from the society toward its evidence", () => 
   assert.ok(viewport.center.latitude > home.latitude);
   assert.ok(viewport.center.longitude > home.longitude);
   assert.ok(viewport.radiusKm >= 0.7);
+});
+
+test("society reveal settles on the approved Waterford composition", () => {
+  const experience = {
+    revealDurationMs: 7_000,
+    startRangeM: 1_800,
+    finalRangeM: 700,
+    finalTilt: 48,
+    finalHeading: 210,
+    rotationArcDegrees: 140,
+    boundaryPadding: 1.35,
+    mobileBoundaryPadding: 1.6,
+  };
+  const boundary = {
+    id: "waterford-boundary",
+    name: "Waterford",
+    kind: "society_boundary",
+    coordinates: [
+      [77.7400, 12.9800],
+      [77.7420, 12.9800],
+      [77.7420, 12.9820],
+      [77.7400, 12.9800],
+    ] as [number, number][],
+    source_type: "OpenStreetMap",
+  };
+  const composition = societyCameraComposition(
+    { latitude: 12.981, longitude: 77.741 },
+    boundary,
+    experience,
+    1280,
+  );
+
+  assert.deepEqual(composition.final, { range: 700, tilt: 48, heading: 210 });
+  assert.equal(composition.start.heading, 70);
+});
+
+test("large irregular boundaries increase range and mobile padding", () => {
+  const experience = {
+    revealDurationMs: 7_000,
+    startRangeM: 1_800,
+    finalRangeM: 700,
+    finalTilt: 48,
+    finalHeading: 210,
+    rotationArcDegrees: 140,
+    boundaryPadding: 1.35,
+    mobileBoundaryPadding: 1.6,
+  };
+  const boundary = {
+    id: "large-boundary",
+    name: "Large society",
+    kind: "society_boundary",
+    coordinates: [
+      [77.73, 12.97], [77.75, 12.972], [77.748, 12.99], [77.732, 12.988], [77.73, 12.97],
+    ] as [number, number][],
+    source_type: "OpenStreetMap",
+  };
+  const desktop = societyCameraComposition({ latitude: 12.98, longitude: 77.74 }, boundary, experience, 1200);
+  const mobile = societyCameraComposition({ latitude: 12.98, longitude: 77.74 }, boundary, experience, 390);
+  assert.ok(desktop.final.range > 700);
+  assert.ok(mobile.final.range > desktop.final.range);
 });
 
 test("approach-road camera targets the nearest road segment and looks along it", () => {

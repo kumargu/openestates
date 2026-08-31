@@ -6,7 +6,9 @@ import {
 } from "../../lib/googleMaps3d.ts";
 import { mapMarkerPinOptions } from "../../lib/mapMarkerVisual.ts";
 import { useGuidedStreetViewTour } from "../../hooks/useGuidedStreetViewTour.ts";
+import type { ArrivalPlaybackController } from "../../lib/arrivalPlayback.ts";
 import type {
+  ArrivalSceneExperience,
   MapLayerExperience,
   MapOverlayLine,
   MapOverlayPolygon,
@@ -21,6 +23,7 @@ import {
   cameraCenterForMode,
   corridorCameraFocus,
   corridorTourWaypoints,
+  societyCameraComposition,
   type ArrivalCameraMode,
 } from "../../lib/arrivalMapProjection.ts";
 import { NOTEBOOK_SAVE_ICON_PATH } from "../notebook/NotebookSaveIcon.tsx";
@@ -48,6 +51,9 @@ export type ArrivalGoogle3DMapProps = {
   cameraMode: ArrivalCameraMode;
   terrainCorridor: boolean;
   layerExperience?: MapLayerExperience;
+  arrivalExperience?: ArrivalSceneExperience;
+  playbackController: ArrivalPlaybackController;
+  autoPlaySociety: boolean;
   pinnedPlaceIds?: string[];
   onSelectCluster: (cluster: PlaceCluster) => void;
   onSelectPlace: (place: NumberedPlace) => void;
@@ -78,6 +84,7 @@ type Map3DElement = HTMLElement & {
     durationMillis: number;
     endCamera: CameraOptions;
   }) => Promise<void>;
+  stopCameraAnimation: () => void;
   gestureHandling: "COOPERATIVE" | "GREEDY";
   heading: number;
   range: number;
@@ -358,6 +365,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     cameraMode,
     terrainCorridor,
     layerExperience,
+    arrivalExperience,
+    playbackController,
+    autoPlaySociety,
     pinnedPlaceIds = [],
     onSelectCluster,
     onSelectPlace,
@@ -411,6 +421,17 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const roadLandingFocus = roadExperience?.tourMode === "end_to_end"
     ? roadWaypoints[0] ?? roadFocus
     : roadFocus;
+  const societyComposition = useMemo(
+    () => arrivalExperience
+      ? societyCameraComposition(
+        { latitude: homeLatitude, longitude: homeLongitude },
+        home.boundary,
+        arrivalExperience,
+        window.innerWidth,
+      )
+      : null,
+    [arrivalExperience, home.boundary, homeLatitude, homeLongitude],
+  );
   const cameraCenter = roadLandingFocus ?? cameraCenterForMode(cameraMode, home, viewport);
   const cameraLatitude = cameraCenter.latitude;
   const cameraLongitude = cameraCenter.longitude;
@@ -424,6 +445,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
 
   useEffect(() => {
     let cancelled = false;
+    let unregisterStopper: () => void = () => {};
     void Promise.all([
       loadGoogleMaps3dLibrary(),
       loadGoogleMarkerLibrary(),
@@ -434,22 +456,26 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         const library = loaded as Maps3DLibrary;
         const markerLibrary = loadedMarkerLibrary as MarkerLibrary;
         terrainElevationRef.current = terrainElevation;
+        const initialCamera = autoPlaySociety ? societyComposition?.start : societyComposition?.final;
         const map = new library.Map3DElement({
           center: {
-            lat: home.latitude,
-            lng: home.longitude,
+            lat: societyComposition?.center.latitude ?? home.latitude,
+            lng: societyComposition?.center.longitude ?? home.longitude,
             altitude: terrainElevation,
           },
           defaultUIHidden: true,
           gestureHandling: "COOPERATIVE",
-          heading: DEFAULT_HEADING,
+          heading: initialCamera?.heading ?? DEFAULT_HEADING,
           mode: "SATELLITE",
-          range: HOME_PORTRAIT_RANGE_M,
-          tilt: 0,
+          range: initialCamera?.range ?? HOME_PORTRAIT_RANGE_M,
+          tilt: initialCamera?.tilt ?? 0,
         });
         libraryRef.current = library;
         markerLibraryRef.current = markerLibrary;
         mapRef.current = map;
+        unregisterStopper = playbackController.registerStopper(() => {
+          map.stopCameraAnimation();
+        });
         containerRef.current.replaceChildren(map);
         setReady(true);
       })
@@ -463,6 +489,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       });
     return () => {
       cancelled = true;
+      unregisterStopper();
       cameraMoveRef.current += 1;
       for (const child of childrenRef.current) child.remove();
       childrenRef.current = [];
@@ -472,7 +499,13 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       markerLibraryRef.current = null;
       terrainElevationRef.current = null;
     };
-  }, [home.latitude, home.longitude]);
+  }, [
+    autoPlaySociety,
+    home.latitude,
+    home.longitude,
+    playbackController,
+    societyComposition,
+  ]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -482,6 +515,43 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || terrainElevationRef.current === null) return;
+    if (
+      cameraMode === "home"
+      && !terrainCorridor
+      && societyComposition
+      && arrivalExperience
+    ) {
+      const finalCamera = targetCamera(
+        societyComposition.center.latitude,
+        societyComposition.center.longitude,
+        terrainElevationRef.current,
+        societyComposition.final.range,
+        societyComposition.final.tilt,
+        societyComposition.final.heading,
+      );
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!autoPlaySociety || reducedMotion) {
+        settleCameraFraming(map, finalCamera);
+        playbackController.cancel("settled");
+        return;
+      }
+      const run = playbackController.begin("revealing");
+      if (!run.activate()) return;
+      void Promise.all([
+        map.flyCameraTo({
+          endCamera: finalCamera,
+          durationMillis: arrivalExperience.revealDurationMs,
+        }).then(() => true).catch(() => false),
+        run.wait(arrivalExperience.revealDurationMs),
+      ]).then(([cameraCompleted, timerCompleted]) => {
+        if (!cameraCompleted || !timerCompleted || !run.isCurrent()) return;
+        settleCameraFraming(map, finalCamera);
+        run.settle();
+      });
+      return () => {
+        if (run.isCurrent()) playbackController.cancel("settled");
+      };
+    }
     const evidenceFocused = cameraMode === "evidence";
     const range = roadLandingFocus && roadExperience
       ? roadExperience.cameraRangeM
@@ -535,9 +605,14 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     cameraLongitude,
     accessLines,
     ready,
+    arrivalExperience,
+    autoPlaySociety,
+    playbackController,
     roadExperience,
     roadLandingFocus,
     roadTourActive,
+    societyComposition,
+    terrainCorridor,
     viewport.radiusKm,
   ]);
 
@@ -546,18 +621,31 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     if (!map || !ready) return undefined;
     const cancelAutomaticCamera = () => {
       cameraMoveRef.current += 1;
+      playbackController.cancel("settled");
+    };
+    const keyDown = (event: Event) => {
+      if (event instanceof KeyboardEvent && event.key === "Escape") {
+        playbackController.pause();
+      } else {
+        cancelAutomaticCamera();
+      }
+    };
+    const visibilityChanged = () => {
+      if (document.hidden) cancelAutomaticCamera();
     };
     map.addEventListener("pointerdown", cancelAutomaticCamera);
     map.addEventListener("touchstart", cancelAutomaticCamera, { passive: true });
     map.addEventListener("wheel", cancelAutomaticCamera, { passive: true });
-    map.addEventListener("keydown", cancelAutomaticCamera);
+    map.addEventListener("keydown", keyDown);
+    document.addEventListener("visibilitychange", visibilityChanged);
     return () => {
       map.removeEventListener("pointerdown", cancelAutomaticCamera);
       map.removeEventListener("touchstart", cancelAutomaticCamera);
       map.removeEventListener("wheel", cancelAutomaticCamera);
-      map.removeEventListener("keydown", cancelAutomaticCamera);
+      map.removeEventListener("keydown", keyDown);
+      document.removeEventListener("visibilitychange", visibilityChanged);
     };
-  }, [ready]);
+  }, [playbackController, ready]);
 
   useEffect(() => {
     const map = mapRef.current;

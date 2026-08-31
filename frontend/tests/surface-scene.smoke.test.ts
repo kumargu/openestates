@@ -30,6 +30,16 @@ test("around-this-home and arrival scenes stay isolated", () => {
       geometry: { type: "Point", coordinates: [77.75, 12.98] },
       coordinateQuality: "exact",
     },
+    experience: {
+      revealDurationMs: 7000,
+      startRangeM: 1800,
+      finalRangeM: 700,
+      finalTilt: 48,
+      finalHeading: 210,
+      rotationArcDegrees: 140,
+      boundaryPadding: 1.35,
+      mobileBoundaryPadding: 1.6,
+    },
     viewport: {
       center: [77.751, 12.981],
       radiusM: 3000,
@@ -216,6 +226,7 @@ test("around-this-home and arrival scenes stay isolated", () => {
   assert.equal(context.home.boundary, undefined);
   assert.equal(context.layer_lines?.approach_road, undefined);
   assert.equal(arrivalContext.home.boundary?.source_type, "OpenStreetMap");
+  assert.equal(arrivalContext.arrivalExperience?.finalRangeM, 700);
   assert.equal(arrivalContext.layer_lines?.approach_road?.[0]?.name, "ECC Road");
   assert.equal(arrivalContext.layer_lines?.approach_road?.[0]?.properties?.direction, "two_way");
   assert.equal(

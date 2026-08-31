@@ -1414,6 +1414,7 @@ mod tests {
                 }),
                 coordinate_quality: CoordinateQuality::Exact,
             },
+            experience: None,
             viewport: SceneViewport {
                 center: None,
                 bounds: None,
@@ -1528,6 +1529,7 @@ mod tests {
                 boundary: None,
                 coordinate_quality: CoordinateQuality::Exact,
             },
+            experience: None,
             viewport: SceneViewport {
                 center: None,
                 bounds: None,

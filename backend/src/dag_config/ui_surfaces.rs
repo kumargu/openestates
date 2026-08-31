@@ -60,7 +60,22 @@ pub struct UiComparisonDimensionConfig {
 pub struct UiSurfaceSceneConfig {
     pub anchor: UiSurfaceAnchorConfig,
     #[serde(default)]
+    pub experience: Option<UiSurfaceSceneExperienceConfig>,
+    #[serde(default)]
     pub layers: Vec<UiSurfaceLayerRule>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UiSurfaceSceneExperienceConfig {
+    pub reveal_duration_ms: u32,
+    pub start_range_m: f64,
+    pub final_range_m: f64,
+    pub final_tilt: f64,
+    pub final_heading: f64,
+    pub rotation_arc_degrees: f64,
+    pub boundary_padding: f64,
+    pub mobile_boundary_padding: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -256,6 +271,23 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                 surface.id
             )));
         }
+        if let Some(experience) = scene.experience.as_ref() {
+            let positive = |value: f64| value.is_finite() && value > 0.0;
+            if experience.reveal_duration_ms == 0
+                || !positive(experience.start_range_m)
+                || !positive(experience.final_range_m)
+                || !positive(experience.final_tilt)
+                || !experience.final_heading.is_finite()
+                || !positive(experience.rotation_arc_degrees)
+                || !positive(experience.boundary_padding)
+                || !positive(experience.mobile_boundary_padding)
+            {
+                return Err(DagConfigError::InvalidConfig(format!(
+                    "surface {} contains an invalid scene experience",
+                    surface.id
+                )));
+            }
+        }
         for layer in &scene.layers {
             if layer.id.trim().is_empty() {
                 return Err(DagConfigError::InvalidConfig(format!(
@@ -419,6 +451,14 @@ mod tests {
             .find(|surface| surface.id == "arrival_story")
             .expect("arrival_story surface exists");
         let arrival_scene = arrival.scene.as_ref().expect("arrival scene rules exist");
+        let scene_experience = arrival_scene
+            .experience
+            .as_ref()
+            .expect("arrival experience");
+        assert_eq!(scene_experience.reveal_duration_ms, 7_000);
+        assert_eq!(scene_experience.final_range_m, 700.0);
+        assert_eq!(scene_experience.final_tilt, 48.0);
+        assert_eq!(scene_experience.final_heading, 210.0);
         assert_eq!(
             arrival_scene.anchor.boundary_fact_key.as_deref(),
             Some("society.boundary_geojson")

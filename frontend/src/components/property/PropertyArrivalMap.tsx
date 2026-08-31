@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import type { PropertyMapContext } from "../../lib/types.ts";
+import { useArrivalPlaybackController } from "../../lib/arrivalPlayback.ts";
 import {
   buildNumberedPlaces,
   metroStationsAroundHome,
@@ -81,6 +82,8 @@ class ArrivalMapBoundary extends Component<
 }
 
 export function PropertyArrivalMap({ context }: Props) {
+  const { controller: playbackController } = useArrivalPlaybackController();
+  const [societyAutoPlay, setSocietyAutoPlay] = useState(true);
   const home = useMemo(() => resolveHomeAnchor(context), [context]);
   const roadLayer = context.layers?.find((layer) => layer.renderKind === "terrain_corridor");
   const entranceLayer = context.layers?.find((layer) => layer.renderKind === "arrival_marker");
@@ -180,6 +183,8 @@ export function PropertyArrivalMap({ context }: Props) {
     };
 
   function selectView(next: ArrivalView) {
+    playbackController.cancel("settled");
+    if (activeView === "society") setSocietyAutoPlay(false);
     setView(next);
     setCameraMode(next === "metro" ? "evidence" : "home");
   }
@@ -235,6 +240,9 @@ export function PropertyArrivalMap({ context }: Props) {
               expanded={expanded}
               cameraMode={activeCameraMode}
               experience={roadExperience}
+              arrivalExperience={context.arrivalExperience}
+              playbackController={playbackController}
+              autoPlaySociety={false}
               onSelectCluster={() => undefined}
               onSelectPlace={() => undefined}
               onSelectAccessLine={() => undefined}
@@ -263,6 +271,9 @@ export function PropertyArrivalMap({ context }: Props) {
             waterTint={false}
             expanded={expanded}
             cameraMode={activeCameraMode}
+            arrivalExperience={context.arrivalExperience}
+            playbackController={playbackController}
+            autoPlaySociety={activeView === "society" && societyAutoPlay}
             onSelectCluster={() => undefined}
             onSelectPlace={() => undefined}
             onSelectAccessLine={() => undefined}
