@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   loadGoogleMaps3dLibrary,
   loadGoogleMarkerLibrary,
@@ -54,6 +54,7 @@ export type ArrivalGoogle3DMapProps = {
   arrivalExperience?: ArrivalSceneExperience;
   playbackController: ArrivalPlaybackController;
   autoPlaySociety: boolean;
+  autoPlayApproach?: boolean;
   pinnedPlaceIds?: string[];
   onSelectCluster: (cluster: PlaceCluster) => void;
   onSelectPlace: (place: NumberedPlace) => void;
@@ -368,6 +369,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     arrivalExperience,
     playbackController,
     autoPlaySociety,
+    autoPlayApproach = true,
     pinnedPlaceIds = [],
     onSelectCluster,
     onSelectPlace,
@@ -421,6 +423,12 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const roadLandingFocus = roadExperience?.tourMode === "end_to_end"
     ? roadWaypoints[0] ?? roadFocus
     : roadFocus;
+  const entranceAnchor = useMemo(() => {
+    const entrance = places.find((place) => place.icon === "entrance" || place.icon === "entrance-likely");
+    return entrance
+      ? { latitude: entrance.latitude, longitude: entrance.longitude }
+      : null;
+  }, [places]);
   const societyComposition = useMemo(
     () => arrivalExperience
       ? societyCameraComposition(
@@ -435,13 +443,21 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const cameraCenter = roadLandingFocus ?? cameraCenterForMode(cameraMode, home, viewport);
   const cameraLatitude = cameraCenter.latitude;
   const cameraLongitude = cameraCenter.longitude;
-  const streetViewReady = useGuidedStreetViewTour({
+  const roadTour = useGuidedStreetViewTour({
     active: Boolean(roadLandingFocus),
-    anchor: { latitude: homeLatitude, longitude: homeLongitude },
+    anchor: entranceAnchor,
+    autoPlay: autoPlayApproach,
     containerRef: streetViewContainerRef,
     experience: roadExperience,
+    playbackController,
     waypoints: roadWaypoints,
   });
+  const playbackState = useSyncExternalStore(
+    playbackController.subscribe,
+    playbackController.snapshot,
+    playbackController.snapshot,
+  );
+  const streetViewReady = roadTour.active;
 
   useEffect(() => {
     let cancelled = false;
@@ -868,7 +884,45 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         aria-hidden={!streetViewReady}
       />
       {roadTourActive && accessLines[0]?.name && (
-        <div className="nearby-map__road-title">{accessLines[0].name}</div>
+        <div className="nearby-map__road-title" aria-live="polite">
+          {accessLines[0].name}
+          {roadTour.progress && ` · ${roadTour.progress.current}/${roadTour.progress.total}`}
+          {roadTour.status && ` · ${roadTour.status}`}
+        </div>
+      )}
+      {roadTourActive && streetViewReady && roadExperience && (
+        <div className="nearby-map__playback-controls" role="group" aria-label="Approach road playback">
+          <button
+            type="button"
+            aria-label={playbackState === "paused"
+              ? roadExperience.resumeLabel
+              : roadExperience.pauseLabel}
+            title={playbackState === "paused"
+              ? roadExperience.resumeLabel
+              : roadExperience.pauseLabel}
+            onClick={() => playbackState === "paused"
+              ? playbackController.resume()
+              : playbackController.pause()}
+          >
+            <span aria-hidden="true">{playbackState === "paused" ? "▶" : "Ⅱ"}</span>
+          </button>
+          <button
+            type="button"
+            aria-label={roadExperience.replayLabel}
+            title={roadExperience.replayLabel}
+            onClick={roadTour.replay}
+          >
+            <span aria-hidden="true">↻</span>
+          </button>
+          <button
+            type="button"
+            aria-label={roadExperience.skipLabel}
+            title={roadExperience.skipLabel}
+            onClick={roadTour.skip}
+          >
+            <span aria-hidden="true">⇥</span>
+          </button>
+        </div>
       )}
       <div className="nearby-map__actions">
         {showBackToHome && cameraMode === "evidence" && (

@@ -164,6 +164,32 @@ pub struct UiSurfaceLayerExperienceConfig {
     pub camera_fov: f64,
     pub street_view_zoom: f64,
     pub transition_ms: u32,
+    #[serde(default)]
+    pub target_duration_ms: Option<u32>,
+    #[serde(default)]
+    pub minimum_duration_ms: Option<u32>,
+    #[serde(default)]
+    pub maximum_duration_ms: Option<u32>,
+    #[serde(default)]
+    pub minimum_frame_dwell_ms: Option<u32>,
+    #[serde(default)]
+    pub entrance_dwell_ms: Option<u32>,
+    #[serde(default)]
+    pub maximum_panorama_gap_m: Option<u32>,
+    #[serde(default)]
+    pub short_gap_state: Option<String>,
+    #[serde(default)]
+    pub ends_here_state: Option<String>,
+    #[serde(default)]
+    pub unavailable_state: Option<String>,
+    #[serde(default)]
+    pub pause_label: Option<String>,
+    #[serde(default)]
+    pub resume_label: Option<String>,
+    #[serde(default)]
+    pub replay_label: Option<String>,
+    #[serde(default)]
+    pub skip_label: Option<String>,
 }
 
 fn default_enabled() -> bool {
@@ -340,6 +366,21 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                         .anchor_pitch
                         .is_some_and(|pitch| !pitch.is_finite() || !(-90.0..=90.0).contains(&pitch))
                     || experience.transition_ms == 0
+                    || experience.target_duration_ms == Some(0)
+                    || experience.minimum_duration_ms == Some(0)
+                    || experience.maximum_duration_ms == Some(0)
+                    || experience.minimum_frame_dwell_ms == Some(0)
+                    || experience.entrance_dwell_ms == Some(0)
+                    || experience.maximum_panorama_gap_m == Some(0)
+                    || matches!(
+                        (
+                            experience.minimum_duration_ms,
+                            experience.target_duration_ms,
+                            experience.maximum_duration_ms,
+                        ),
+                        (Some(minimum), Some(target), Some(maximum))
+                            if minimum > target || target > maximum
+                    )
                     || !finite_positive(experience.camera_altitude_m)
                     || !finite_positive(experience.camera_range_m)
                     || !finite_positive(experience.camera_tilt)

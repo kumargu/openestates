@@ -110,6 +110,44 @@
   text-shadow: 0 1px 5px rgba(0, 0, 0, 0.78);
 }
 
+.nearby-map__playback-controls {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 4;
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.3rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(24, 23, 21, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.nearby-map__playback-controls button {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.nearby-map__playback-controls button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.nearby-map__playback-controls button:focus-visible {
+  outline: 3px solid rgba(255, 214, 165, 0.88);
+  outline-offset: 2px;
+}
+
 .nearby-map-popover {
   display: grid;
   gap: 0.1rem;

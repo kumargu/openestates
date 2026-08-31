@@ -84,6 +84,7 @@ class ArrivalMapBoundary extends Component<
 export function PropertyArrivalMap({ context }: Props) {
   const { controller: playbackController } = useArrivalPlaybackController();
   const [societyAutoPlay, setSocietyAutoPlay] = useState(true);
+  const [approachAutoPlay, setApproachAutoPlay] = useState(true);
   const home = useMemo(() => resolveHomeAnchor(context), [context]);
   const roadLayer = context.layers?.find((layer) => layer.renderKind === "terrain_corridor");
   const entranceLayer = context.layers?.find((layer) => layer.renderKind === "arrival_marker");
@@ -145,18 +146,24 @@ export function PropertyArrivalMap({ context }: Props) {
 
   useEffect(() => {
     if (activeView !== "approach" || activeCameraMode !== "home") return undefined;
-    const timeout = window.setTimeout(
-      () => setCameraMode("evidence"),
+    const run = playbackController.begin("playing");
+    if (!run.activate()) return undefined;
+    void run.wait(
       roadExperience?.overviewDwellMs
         ?? roadExperience?.dwellMs
         ?? DEFAULT_APPROACH_DWELL_MS,
-    );
-    return () => window.clearTimeout(timeout);
+    ).then((completed) => {
+      if (completed && run.isCurrent()) setCameraMode("evidence");
+    });
+    return () => {
+      if (run.isCurrent()) playbackController.cancel("settled");
+    };
   }, [
     activeCameraMode,
     activeView,
     roadExperience?.dwellMs,
     roadExperience?.overviewDwellMs,
+    playbackController,
   ]);
 
   useEffect(() => {
@@ -185,6 +192,7 @@ export function PropertyArrivalMap({ context }: Props) {
   function selectView(next: ArrivalView) {
     playbackController.cancel("settled");
     if (activeView === "society") setSocietyAutoPlay(false);
+    if (activeView === "approach") setApproachAutoPlay(false);
     setView(next);
     setCameraMode(next === "metro" ? "evidence" : "home");
   }
@@ -243,6 +251,7 @@ export function PropertyArrivalMap({ context }: Props) {
               arrivalExperience={context.arrivalExperience}
               playbackController={playbackController}
               autoPlaySociety={false}
+              autoPlayApproach={approachAutoPlay}
               onSelectCluster={() => undefined}
               onSelectPlace={() => undefined}
               onSelectAccessLine={() => undefined}

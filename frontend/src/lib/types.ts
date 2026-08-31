@@ -501,6 +501,19 @@ export type MapLayerExperience = {
   cameraFov: number;
   streetViewZoom: number;
   transitionMs: number;
+  targetDurationMs?: number;
+  minimumDurationMs?: number;
+  maximumDurationMs?: number;
+  minimumFrameDwellMs?: number;
+  entranceDwellMs?: number;
+  maximumPanoramaGapM?: number;
+  shortGapState?: string;
+  endsHereState?: string;
+  unavailableState?: string;
+  pauseLabel?: string;
+  resumeLabel?: string;
+  replayLabel?: string;
+  skipLabel?: string;
 };
 
 export type SurfaceSceneResponse = {

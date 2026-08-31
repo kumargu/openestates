@@ -1,15 +1,41 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from "react";
 import { loadGoogleStreetViewLibrary } from "../lib/googleMaps3d.ts";
+import type { ArrivalPlaybackController } from "../lib/arrivalPlayback.ts";
 import type { MapLayerExperience } from "../lib/types.ts";
-import type {
-  CorridorTourMode,
-  CorridorTourWaypoint,
-} from "../lib/arrivalMapProjection.ts";
+import type { CorridorTourWaypoint } from "../lib/arrivalMapProjection.ts";
+import {
+  buildStreetViewSchedule,
+  easedHeadingSteps,
+  resolveStreetViewSequence,
+  shouldReorientStreetView,
+  sideRoadHeading,
+  streetViewAnchorFrame,
+  streetViewAnchorHeading,
+  streetViewPlayback,
+  type StreetViewFrame,
+  type StreetViewLink,
+  type StreetViewResolution,
+  type StreetViewSchedule,
+} from "../lib/streetViewTour.ts";
 
-type StreetViewLink = {
-  heading: number;
-  pano: string;
+export {
+  buildStreetViewSchedule,
+  easedHeadingSteps,
+  resolveStreetViewSequence,
+  shouldReorientStreetView,
+  sideRoadHeading,
+  streetViewAnchorFrame,
+  streetViewAnchorHeading,
+  streetViewPlayback,
 };
+export type { StreetViewFrame, StreetViewResolution, StreetViewSchedule };
 
 type StreetViewResponse = {
   data: {
@@ -56,111 +82,49 @@ type StreetViewLibrary = {
   StreetViewSource: { OUTDOOR: unknown };
 };
 
-export type StreetViewFrame = {
-  links: StreetViewLink[];
-  pano: string;
-  waypoint: CorridorTourWaypoint;
-};
+class GoogleStreetViewAdapter {
+  private readonly panorama: StreetViewPanorama;
+  private stopped = false;
+
+  constructor(panorama: StreetViewPanorama) {
+    this.panorama = panorama;
+  }
+
+  stop(): void {
+    this.stopped = true;
+  }
+
+  resume(): void {
+    this.stopped = false;
+  }
+
+  setFrame(frame: StreetViewFrame, heading: number, pitch = 0): void {
+    if (this.stopped) return;
+    this.panorama.setPano(frame.pano);
+    this.panorama.setPov({ heading, pitch });
+  }
+
+  setPano(frame: StreetViewFrame): void {
+    if (!this.stopped) this.panorama.setPano(frame.pano);
+  }
+
+  setPov(heading: number, pitch = 0): void {
+    if (!this.stopped) this.panorama.setPov({ heading, pitch });
+  }
+
+  hide(): void {
+    this.panorama.setVisible(false);
+  }
+}
 
 const SEARCH_RADIUS_M = 35;
-const CURVE_THRESHOLD_DEGREES = 12;
-const SIDE_ROAD_MIN_DEGREES = 38;
-const SIDE_ROAD_MAX_DEGREES = 132;
 
-function normalizeHeading(heading: number): number {
-  return (heading % 360 + 360) % 360;
-}
-
-function headingDistance(left: number, right: number): number {
-  const difference = Math.abs(normalizeHeading(left) - normalizeHeading(right));
-  return Math.min(difference, 360 - difference);
-}
-
-export function shouldReorientStreetView(currentHeading: number, nextHeading: number): boolean {
-  return headingDistance(currentHeading, nextHeading) >= CURVE_THRESHOLD_DEGREES;
-}
-
-export function streetViewPlayback(
-  frames: StreetViewFrame[],
-  tourMode: CorridorTourMode = "center_out_and_back",
-): StreetViewFrame[] {
-  if (frames.length === 0) return [];
-  const sorted = frames.slice().sort((left, right) =>
-    left.waypoint.offsetM - right.waypoint.offsetM);
-  if (tourMode === "end_to_end") {
-    return sorted.filter((frame, index) =>
-      index === 0 || frame.pano !== sorted[index - 1].pano);
-  }
-  const center = sorted.reduce((nearest, frame) =>
-    Math.abs(frame.waypoint.offsetM) < Math.abs(nearest.waypoint.offsetM)
-      ? frame
-      : nearest);
-  const forward = sorted.filter((frame) => frame.waypoint.offsetM >= center.waypoint.offsetM);
-  const backward = sorted
-    .filter((frame) => frame.waypoint.offsetM < center.waypoint.offsetM)
-    .sort((left, right) => right.waypoint.offsetM - left.waypoint.offsetM);
-  const playback = [
-    ...forward,
-    ...forward.slice(0, -1).reverse(),
-    ...backward,
-    ...backward.slice(0, -1).reverse(),
-    center,
-  ];
-  return playback.filter((frame, index) =>
-    index === 0 || frame.pano !== playback[index - 1].pano);
-}
-
-export function sideRoadHeading(
-  links: StreetViewLink[],
-  roadHeading: number,
-): number | null {
-  const candidates = links
-    .map((link) => ({
-      distance: Math.min(
-        headingDistance(link.heading, roadHeading),
-        headingDistance(link.heading, normalizeHeading(roadHeading + 180)),
-      ),
-      heading: link.heading,
-    }))
-    .filter(({ distance }) =>
-      distance >= SIDE_ROAD_MIN_DEGREES && distance <= SIDE_ROAD_MAX_DEGREES)
-    .sort((left, right) => Math.abs(90 - left.distance) - Math.abs(90 - right.distance));
-  return candidates[0]?.heading ?? null;
-}
-
-function waitFor(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
-}
-
-export function streetViewAnchorHeading(
-  from: { latitude: number; longitude: number },
-  to: { latitude: number; longitude: number },
-): number {
-  const latitudeScale = 110_570;
-  const longitudeScale = 111_320 * Math.cos((from.latitude * Math.PI) / 180);
-  const east = (to.longitude - from.longitude) * longitudeScale;
-  const north = (to.latitude - from.latitude) * latitudeScale;
-  return normalizeHeading(Math.atan2(east, north) * 180 / Math.PI);
-}
-
-export function streetViewAnchorFrame(
-  frames: StreetViewFrame[],
-  lookAheadM = 0,
-): StreetViewFrame | null {
-  if (frames.length === 0) return null;
-  return frames.reduce((nearest, frame) =>
-    Math.abs(frame.waypoint.offsetM - lookAheadM)
-      < Math.abs(nearest.waypoint.offsetM - lookAheadM)
-      ? frame
-      : nearest);
-}
-
-async function loadFrames(
+async function loadResolutions(
   library: StreetViewLibrary,
   waypoints: CorridorTourWaypoint[],
-): Promise<StreetViewFrame[]> {
+): Promise<StreetViewResolution[]> {
   const service = new library.StreetViewService();
-  const frames = await Promise.all(waypoints.map(async (waypoint) => {
+  return Promise.all(waypoints.map(async (waypoint) => {
     try {
       const response = await service.getPanorama({
         location: { lat: waypoint.latitude, lng: waypoint.longitude },
@@ -169,193 +133,232 @@ async function loadFrames(
         source: library.StreetViewSource.OUTDOOR,
       });
       const pano = response.data.location?.pano;
-      if (!pano) return null;
-      return { links: response.data.links ?? [], pano, waypoint } satisfies StreetViewFrame;
+      return {
+        frame: pano ? { links: response.data.links ?? [], pano, waypoint } : null,
+        waypoint,
+      };
     } catch {
-      return null;
+      return { frame: null, waypoint };
     }
   }));
-  return frames.filter((frame): frame is StreetViewFrame => Boolean(frame));
 }
 
 type GuidedStreetViewTourOptions = {
   active: boolean;
-  anchor: { latitude: number; longitude: number };
+  anchor?: { latitude: number; longitude: number } | null;
+  autoPlay: boolean;
   containerRef: RefObject<HTMLDivElement | null>;
   experience: MapLayerExperience | null;
+  playbackController: ArrivalPlaybackController;
   waypoints: CorridorTourWaypoint[];
+};
+
+export type GuidedStreetViewTour = {
+  active: boolean;
+  progress: { current: number; total: number } | null;
+  replay: () => void;
+  skip: () => void;
+  status: string | null;
 };
 
 export function useGuidedStreetViewTour({
   active,
   anchor,
+  autoPlay,
   containerRef,
   experience,
+  playbackController,
   waypoints,
-}: GuidedStreetViewTourOptions): boolean {
-  const panoramaRef = useRef<StreetViewPanorama | null>(null);
-  const tourRunRef = useRef(0);
+}: GuidedStreetViewTourOptions): GuidedStreetViewTour {
+  const playbackState = useSyncExternalStore(
+    playbackController.subscribe,
+    playbackController.snapshot,
+    playbackController.snapshot,
+  );
+  const adapterRef = useRef<GoogleStreetViewAdapter | null>(null);
+  const scheduleRef = useRef<StreetViewSchedule | null>(null);
   const [ready, setReady] = useState(false);
-  const anchorLatitude = anchor.latitude;
-  const anchorLongitude = anchor.longitude;
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [replayVersion, setReplayVersion] = useState(0);
+  const [manualPlay, setManualPlay] = useState(false);
+
+  useEffect(() => {
+    if (playbackState === "playing") adapterRef.current?.resume();
+  }, [playbackState]);
 
   useEffect(() => {
     const container = containerRef.current;
-    const runId = tourRunRef.current + 1;
-    tourRunRef.current = runId;
+    let disposed = false;
+    adapterRef.current = null;
+    scheduleRef.current = null;
     void Promise.resolve().then(() => {
-      if (tourRunRef.current === runId) setReady(false);
+      if (disposed) return;
+      setReady(false);
+      setProgress(null);
+      setStatus(null);
     });
-    panoramaRef.current = null;
     container?.replaceChildren();
     if (!active || !container || !experience || waypoints.length === 0) return undefined;
 
-    const stopTour = () => {
-      if (tourRunRef.current === runId) tourRunRef.current += 1;
+    const run = playbackController.begin("playing");
+    let unregisterStopper = () => {};
+    const cancel = () => playbackController.cancel("settled");
+    const keyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") playbackController.pause();
+      else cancel();
     };
-    container.addEventListener("pointerdown", stopTour, { capture: true });
-    container.addEventListener("touchstart", stopTour, { capture: true, passive: true });
-    container.addEventListener("wheel", stopTour, { capture: true, passive: true });
-    container.addEventListener("keydown", stopTour, { capture: true });
     const visibilityChanged = () => {
-      if (document.hidden) stopTour();
+      if (document.hidden) cancel();
     };
+    container.addEventListener("pointerdown", cancel, { capture: true });
+    container.addEventListener("touchstart", cancel, { capture: true, passive: true });
+    container.addEventListener("wheel", cancel, { capture: true, passive: true });
+    container.addEventListener("keydown", keyDown, { capture: true });
     document.addEventListener("visibilitychange", visibilityChanged);
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry && !entry.isIntersecting) stopTour();
-    }, { threshold: 0.15 });
-    observer.observe(container);
 
-    void Promise.all([
-      loadGoogleStreetViewLibrary().then((loaded) =>
-        loadFrames(loaded as StreetViewLibrary, waypoints)
-          .then((frames) => ({ frames, library: loaded as StreetViewLibrary }))),
-      waitFor(experience.transitionMs),
-    ]).then(([{ frames, library }]) => {
-      if (tourRunRef.current !== runId || frames.length === 0) return;
-      const tourMode = experience.tourMode ?? "center_out_and_back";
-      const playback = streetViewPlayback(frames, tourMode);
-      const first = playback[0];
-      if (!first) return;
-      const panorama = new library.StreetViewPanorama(container, {
-        addressControl: false,
-        clickToGo: true,
-        disableDefaultUI: true,
-        enableCloseButton: false,
-        fullscreenControl: false,
-        linksControl: true,
-        motionTracking: false,
-        panControl: false,
-        pano: first.pano,
-        pov: { heading: first.waypoint.heading, pitch: 0 },
-        showRoadLabels: false,
-        visible: true,
-        zoom: experience.streetViewZoom,
-        zoomControl: false,
-      });
-      panoramaRef.current = panorama;
-      setReady(true);
+    void loadGoogleStreetViewLibrary()
+      .then(async (loaded) => {
+        const library = loaded as StreetViewLibrary;
+        const resolutions = await loadResolutions(library, waypoints);
+        if (disposed || !run.isCurrent()) return;
+        const sequence = resolveStreetViewSequence(
+          resolutions,
+          experience.maximumPanoramaGapM ?? experience.waypointSpacingM * 2,
+        );
+        const schedule = buildStreetViewSchedule(sequence.frames, experience, anchor);
+        const first = schedule.entries[0]?.frame;
+        if (!first) {
+          setStatus(experience.unavailableState ?? null);
+          run.unavailable();
+          return;
+        }
+        const panorama = new library.StreetViewPanorama(container, {
+          addressControl: false,
+          clickToGo: true,
+          disableDefaultUI: true,
+          enableCloseButton: false,
+          fullscreenControl: false,
+          linksControl: true,
+          motionTracking: false,
+          panControl: false,
+          pano: first.pano,
+          pov: { heading: first.waypoint.heading, pitch: 0 },
+          showRoadLabels: false,
+          visible: true,
+          zoom: experience.streetViewZoom,
+          zoomControl: false,
+        });
+        const adapter = new GoogleStreetViewAdapter(panorama);
+        adapterRef.current = adapter;
+        scheduleRef.current = schedule;
+        unregisterStopper = playbackController.registerStopper(() => adapter.stop());
+        setReady(true);
+        setProgress({ current: 1, total: schedule.entries.length });
+        if (sequence.endedEarly) setStatus(experience.endsHereState ?? null);
+        else if (sequence.skippedShortGap) setStatus(experience.shortGapState ?? null);
 
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const seenJunctions = new Set<string>();
-      const anchorFrame = experience.lookTowardAnchor
-        ? streetViewAnchorFrame(playback, experience.anchorLookAheadM)
-        : null;
-      let cameraHeading = first.waypoint.heading;
-      void (async () => {
-        for (let index = 0; index < playback.length; index += 1) {
-          if (tourRunRef.current !== runId) return;
-          const frame = playback[index];
-          const next = playback[index + 1];
-          const previous = playback[index - 1];
-          const directionDelta = next
-            ? next.waypoint.offsetM - frame.waypoint.offsetM
-            : frame.waypoint.offsetM - (previous?.waypoint.offsetM ?? frame.waypoint.offsetM);
-          const roadHeading = directionDelta >= 0
-            ? frame.waypoint.heading
-            : normalizeHeading(frame.waypoint.heading + 180);
-          panorama.setPano(frame.pano);
+        const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if ((!autoPlay && !manualPlay) || reducedMotion) {
+          playbackController.cancel("settled");
+          adapter.resume();
+          return;
+        }
+        if (!run.activate()) return;
+        if (!await run.wait(experience.transitionMs) || !run.isCurrent()) return;
+
+        let cameraHeading = first.waypoint.heading;
+        for (let index = 0; index < schedule.entries.length; index += 1) {
+          if (!run.isCurrent()) return;
+          const entry = schedule.entries[index];
+          const roadHeading = entry.frame.waypoint.heading;
+          adapter.setPano(entry.frame);
+          let orientationDwellMs = 0;
           if (shouldReorientStreetView(cameraHeading, roadHeading)) {
-            panorama.setPov({ heading: roadHeading, pitch: 0 });
-            cameraHeading = roadHeading;
-          }
-
-          if (
-            anchorFrame?.pano === frame.pano
-            && experience.anchorDwellMs
-          ) {
-            await waitFor(Math.round(experience.dwellMs / 2));
-            if (tourRunRef.current !== runId) return;
-            panorama.setPov({
-              heading: streetViewAnchorHeading(frame.waypoint, {
-                latitude: anchorLatitude,
-                longitude: anchorLongitude,
-              }),
-              pitch: experience.anchorPitch ?? 0,
-            });
-            await waitFor(experience.anchorDwellMs);
-            if (tourRunRef.current !== runId) return;
-            panorama.setPov({ heading: roadHeading, pitch: 0 });
-            cameraHeading = roadHeading;
-            await waitFor(Math.round(experience.dwellMs / 2));
-            continue;
-          }
-
-          const curve = next
-            ? headingDistance(frame.waypoint.heading, next.waypoint.heading)
-              >= CURVE_THRESHOLD_DEGREES
-            : false;
-          const previousDelta = previous
-            ? frame.waypoint.offsetM - previous.waypoint.offsetM
-            : directionDelta;
-          const turnaround = previousDelta * directionDelta < 0;
-          await waitFor(curve || turnaround ? experience.curveDwellMs : experience.dwellMs);
-          if (tourRunRef.current !== runId) return;
-
-          if (
-            tourMode !== "end_to_end"
-            && frame.links.length >= 3
-            && !seenJunctions.has(frame.pano)
-          ) {
-            const sideHeading = sideRoadHeading(frame.links, frame.waypoint.heading);
-            if (sideHeading !== null) {
-              seenJunctions.add(frame.pano);
-              panorama.setPov({ heading: sideHeading, pitch: 0 });
-              await waitFor(experience.sideRoadDwellMs);
-              if (tourRunRef.current !== runId) return;
-              panorama.setPov({ heading: roadHeading, pitch: 0 });
-              cameraHeading = roadHeading;
-              await waitFor(Math.round(experience.dwellMs / 2));
+            const headingSteps = easedHeadingSteps(cameraHeading, roadHeading);
+            const stepDwellMs = Math.min(90, Math.floor(entry.dwellMs / 8));
+            for (const heading of headingSteps) {
+              adapter.setPov(heading);
+              if (!await run.wait(stepDwellMs)) return;
+              orientationDwellMs += stepDwellMs;
             }
           }
+          cameraHeading = roadHeading;
+          setProgress({ current: index + 1, total: schedule.entries.length });
+          const remainingDwellMs = Math.max(0, entry.dwellMs - orientationDwellMs);
+          if (entry.lookAtEntrance && anchor) {
+            const entranceDwellMs = experience.entranceDwellMs ?? 0;
+            const approachDwellMs = Math.max(0, remainingDwellMs - entranceDwellMs);
+            if (!await run.wait(Math.round(approachDwellMs / 2))) return;
+            adapter.setPov(
+              streetViewAnchorHeading(entry.frame.waypoint, anchor),
+              experience.anchorPitch ?? 0,
+            );
+            if (!await run.wait(entranceDwellMs)) return;
+            adapter.setPov(roadHeading, 0);
+            if (!await run.wait(Math.ceil(approachDwellMs / 2))) return;
+          } else if (!await run.wait(remainingDwellMs)) return;
         }
-      })();
-    }).catch((error: unknown) => {
-      if (import.meta.env.DEV) {
-        console.warn("[useGuidedStreetViewTour] Street View tour unavailable", error);
-      }
-    });
+        run.settle();
+      })
+      .catch((error: unknown) => {
+        if (import.meta.env.DEV) {
+          console.warn("[useGuidedStreetViewTour] Street View tour unavailable", error);
+        }
+        if (!disposed) {
+          setStatus(experience.unavailableState ?? null);
+          run.unavailable();
+        }
+      });
 
     return () => {
-      stopTour();
-      container.removeEventListener("pointerdown", stopTour, { capture: true });
-      container.removeEventListener("touchstart", stopTour, { capture: true });
-      container.removeEventListener("wheel", stopTour, { capture: true });
-      container.removeEventListener("keydown", stopTour, { capture: true });
+      disposed = true;
+      unregisterStopper();
+      if (run.isCurrent()) playbackController.cancel("settled");
+      container.removeEventListener("pointerdown", cancel, { capture: true });
+      container.removeEventListener("touchstart", cancel, { capture: true });
+      container.removeEventListener("wheel", cancel, { capture: true });
+      container.removeEventListener("keydown", keyDown, { capture: true });
       document.removeEventListener("visibilitychange", visibilityChanged);
-      observer.disconnect();
-      panoramaRef.current?.setVisible(false);
-      panoramaRef.current = null;
+      adapterRef.current?.hide();
+      adapterRef.current = null;
       container.replaceChildren();
     };
   }, [
     active,
-    anchorLatitude,
-    anchorLongitude,
+    anchor,
+    autoPlay,
     containerRef,
     experience,
+    manualPlay,
+    playbackController,
+    replayVersion,
     waypoints,
   ]);
 
-  return active && ready;
+  const replay = useCallback(() => {
+    playbackController.cancel("idle");
+    setManualPlay(true);
+    setReplayVersion((current) => current + 1);
+  }, [playbackController]);
+
+  const skip = useCallback(() => {
+    const schedule = scheduleRef.current;
+    const adapter = adapterRef.current;
+    if (!schedule || !adapter || schedule.entries.length === 0) return;
+    playbackController.cancel("settled");
+    adapter.resume();
+    const targetIndex = schedule.entranceIndex ?? schedule.entries.length - 1;
+    const target = schedule.entries[targetIndex];
+    adapter.setFrame(target.frame, target.frame.waypoint.heading);
+    if (target.lookAtEntrance && anchor) {
+      adapter.setPov(
+        streetViewAnchorHeading(target.frame.waypoint, anchor),
+        experience?.anchorPitch ?? 0,
+      );
+    }
+    setProgress({ current: targetIndex + 1, total: schedule.entries.length });
+  }, [anchor, experience?.anchorPitch, playbackController]);
+
+  return { active: active && ready, progress, replay, skip, status };
 }
