@@ -222,6 +222,17 @@ async function transitionCameraPose(
   return true;
 }
 
+export async function completeStreetViewHandoff(
+  run: ArrivalPlaybackRun,
+  transitionMs: number,
+  reveal: () => void,
+): Promise<boolean> {
+  if (!run.activate()) return false;
+  if (!await run.wait(transitionMs) || !run.isCurrent()) return false;
+  reveal();
+  return true;
+}
+
 function panoramaOptions(
   frame: StreetViewFrame,
   streetViewZoom: number,
@@ -394,19 +405,22 @@ export function useGuidedStreetViewTour({
         scheduleRef.current = schedule;
         unregisterStopper = playbackController.registerStopper(() => adapter.stop());
         unregisterResumer = playbackController.registerResumer(() => adapter.resume());
-        setReady(true);
         setProgress({ current: 1, total: schedule.entries.length });
         if (sequence.endedEarly) setStatus(experience.endsHereState ?? null);
         else if (sequence.skippedShortGap) setStatus(experience.shortGapState ?? null);
 
         const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         if ((!autoPlayRef.current && !manualPlay) || reducedMotion) {
+          setReady(true);
           playbackController.cancel("settled");
           adapter.resume();
           return;
         }
-        if (!run.activate()) return;
-        if (!await run.wait(experience.transitionMs) || !run.isCurrent()) return;
+        if (!await completeStreetViewHandoff(
+          run,
+          experience.transitionMs,
+          () => setReady(true),
+        )) return;
 
         let cameraHeading = first.waypoint.heading;
         for (let index = 0; index < schedule.entries.length; index += 1) {

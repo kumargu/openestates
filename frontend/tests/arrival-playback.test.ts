@@ -5,6 +5,7 @@ import {
   ArrivalPlaybackController,
   type ArrivalPlaybackClock,
 } from "../src/lib/arrivalPlayback.ts";
+import { completeStreetViewHandoff } from "../src/hooks/useGuidedStreetViewTour.ts";
 
 class FakeClock implements ArrivalPlaybackClock {
   time = 0;
@@ -97,4 +98,19 @@ test("async preparation cannot override pause and resumes registered renderers",
   assert.equal(controller.snapshot(), "playing");
   clock.advance(100);
   assert.equal(await wait, true);
+});
+
+test("Street View stays hidden until the 3D road transition completes", async () => {
+  const clock = new FakeClock();
+  const controller = new ArrivalPlaybackController(clock);
+  const run = controller.begin("playing");
+  let reveals = 0;
+  const handoff = completeStreetViewHandoff(run, 4_200, () => { reveals += 1; });
+
+  clock.advance(4_199);
+  assert.equal(reveals, 0);
+  clock.advance(1);
+
+  assert.equal(await handoff, true);
+  assert.equal(reveals, 1);
 });
