@@ -442,6 +442,24 @@ export type MapComparisonHome = {
   boundary?: MapOverlayPolygon;
 };
 
+export type ArrivalSearchSociety = {
+  propertyId: string;
+  societyId: string;
+  proofFocus?: ProofFocus;
+  preview: {
+    area: string;
+    bhk: number;
+    price: number;
+    title: string;
+  };
+  home: {
+    latitude: number;
+    longitude: number;
+    name: string;
+    boundary?: MapOverlayPolygon;
+  };
+};
+
 export type PropertyMapContext = {
   home: MapHomeAnchor;
   layers?: MapLayerMeta[];

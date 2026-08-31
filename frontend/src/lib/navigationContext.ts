@@ -10,21 +10,57 @@ export type DiscoveryContext = {
 
 const DISCOVERY_STORAGE_KEY = "openestates:last-discovery:v1";
 const DISCOVERY_RETURN_INTENT_KEY = "openestates:discovery-return-intent:v1";
-const DISCOVERY_MAP_CONTEXT_KEY = "openestates:discovery-map-context:v1";
+const DISCOVERY_MAP_CONTEXT_KEY = "openestates:discovery-map-context:v2";
+const DISCOVERY_MAP_CONTEXT_LATEST_KEY = "openestates:discovery-map-context:latest-v2";
 const DISCOVERY_MAP_CANDIDATE_LIMIT = 24;
+export const DISCOVERY_CONTEXT_TTL_MS = 30 * 60 * 1_000;
 
 export type DiscoveryMapCandidate = {
-  id: string;
-  propertyIds: string[];
+  propertyId: string;
+  societyId: string;
   societyName: string;
+  rank: number;
+  preview: {
+    area: string;
+    bhk: number;
+    price: number;
+    title: string;
+  };
   proofFocus?: ProofFocus;
 };
 
 export type DiscoveryMapContext = {
-  version: 1;
-  query: string;
+  version: 2;
+  id: string;
+  queryFingerprint: string;
+  createdAt: number;
   candidates: DiscoveryMapCandidate[];
 };
+
+function normalizeQuery(query: string): string {
+  return query.normalize("NFKC").trim().toLocaleLowerCase("en-IN").replace(/\s+/g, " ");
+}
+
+export function queryFingerprint(query: string): string | null {
+  const normalized = normalizeQuery(query);
+  if (!normalized) return null;
+  let hash = 2_166_136_261;
+  for (const character of normalized) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return `q${(hash >>> 0).toString(36)}`;
+}
+
+function newContextId(): string {
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+  if (randomUuid) return randomUuid;
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function contextStorageKey(id: string): string {
+  return `${DISCOVERY_MAP_CONTEXT_KEY}:${id}`;
+}
 
 export function navigationMode(pathname: string, search = ""): NavigationMode {
   if (pathname.startsWith("/workspace") || pathname === "/notebook" || pathname === "/compare") {
@@ -102,71 +138,114 @@ export function clearDiscoveryContext(): void {
   if (typeof window === "undefined") return;
   window.sessionStorage.removeItem(DISCOVERY_STORAGE_KEY);
   window.sessionStorage.removeItem(DISCOVERY_RETURN_INTENT_KEY);
-  window.sessionStorage.removeItem(DISCOVERY_MAP_CONTEXT_KEY);
+  const contextId = window.sessionStorage.getItem(DISCOVERY_MAP_CONTEXT_LATEST_KEY);
+  if (contextId) window.sessionStorage.removeItem(contextStorageKey(contextId));
+  window.sessionStorage.removeItem(DISCOVERY_MAP_CONTEXT_LATEST_KEY);
 }
 
 export function writeDiscoveryMapContext(
   query: string,
   results: SearchResultItem[],
-  focusForResult: (result: SearchResultItem) => ProofFocus | undefined =
-    (result) => result.proof_focuses?.[0],
-): void {
-  if (typeof window === "undefined" || !query.trim()) return;
+  focusOrOptions: ((result: SearchResultItem) => ProofFocus | undefined) | {
+    id?: string;
+    now?: number;
+  } = (result) => result.proof_focuses?.[0],
+  options: { id?: string; now?: number } = {},
+): string | null {
+  const fingerprint = queryFingerprint(query);
+  if (typeof window === "undefined" || !fingerprint) return null;
+  const focusForResult = typeof focusOrOptions === "function"
+    ? focusOrOptions
+    : (result: SearchResultItem) => result.proof_focuses?.[0];
+  const contextOptions = typeof focusOrOptions === "function" ? options : focusOrOptions;
   const societies = new Map<string, DiscoveryMapCandidate>();
   const candidates: DiscoveryMapCandidate[] = [];
-  for (const result of results) {
+  for (const [rank, result] of results.entries()) {
     const societyName = result.society_name.trim() || result.title.trim();
-    const societyKey = result.kg_entity_refs?.society_entity_id
-      || societyName.toLocaleLowerCase("en-IN");
-    if (!societyName) continue;
-    const existing = societies.get(societyKey);
+    const societyId = result.kg_entity_refs?.society_entity_id?.trim();
+    if (!societyName || !societyId) continue;
+    const existing = societies.get(societyId);
     if (existing) {
-      if (!existing.propertyIds.includes(result.id)) existing.propertyIds.push(result.id);
       continue;
     }
     const candidate: DiscoveryMapCandidate = {
-      id: result.id,
-      propertyIds: [result.id],
+      propertyId: result.id,
+      societyId,
       societyName,
+      rank,
+      preview: {
+        area: result.area,
+        bhk: result.bhk,
+        price: result.price,
+        title: result.title,
+      },
       proofFocus: focusForResult(result),
     };
-    societies.set(societyKey, candidate);
+    societies.set(societyId, candidate);
     candidates.push(candidate);
     if (candidates.length === DISCOVERY_MAP_CANDIDATE_LIMIT) break;
   }
-  window.sessionStorage.setItem(DISCOVERY_MAP_CONTEXT_KEY, JSON.stringify({
-    version: 1,
-    query: query.trim(),
+  const id = contextOptions.id ?? newContextId();
+  const context: DiscoveryMapContext = {
+    version: 2,
+    id,
+    queryFingerprint: fingerprint,
+    createdAt: contextOptions.now ?? Date.now(),
     candidates,
-  } satisfies DiscoveryMapContext));
+  };
+  window.sessionStorage.setItem(contextStorageKey(id), JSON.stringify(context));
+  window.sessionStorage.setItem(DISCOVERY_MAP_CONTEXT_LATEST_KEY, id);
+  return id;
 }
 
-export function readDiscoveryMapContext(): DiscoveryMapContext | null {
-  if (typeof window === "undefined") return null;
+export function readDiscoveryMapContext(
+  contextId: string | null,
+  now = Date.now(),
+): DiscoveryMapContext | null {
+  if (typeof window === "undefined" || !contextId?.trim()) return null;
   try {
     const parsed: unknown = JSON.parse(
-      window.sessionStorage.getItem(DISCOVERY_MAP_CONTEXT_KEY) ?? "null",
+      window.sessionStorage.getItem(contextStorageKey(contextId)) ?? "null",
     );
     if (!parsed || typeof parsed !== "object") return null;
     const candidate = parsed as Partial<DiscoveryMapContext>;
     if (
-      candidate.version !== 1
-      || typeof candidate.query !== "string"
-      || !candidate.query.trim()
+      candidate.version !== 2
+      || candidate.id !== contextId
+      || typeof candidate.queryFingerprint !== "string"
+      || !candidate.queryFingerprint.trim()
+      || typeof candidate.createdAt !== "number"
+      || candidate.createdAt > now
+      || now - candidate.createdAt > DISCOVERY_CONTEXT_TTL_MS
       || !Array.isArray(candidate.candidates)
     ) return null;
     const candidates = candidate.candidates.filter(
       (item): item is DiscoveryMapCandidate => Boolean(
         item
-        && typeof item.id === "string"
-        && item.id.trim()
-        && Array.isArray(item.propertyIds)
-        && item.propertyIds.every((id) => typeof id === "string" && id.trim())
+        && typeof item.propertyId === "string"
+        && item.propertyId.trim()
+        && typeof item.societyId === "string"
+        && item.societyId.trim()
         && typeof item.societyName === "string"
-        && item.societyName.trim(),
+        && item.societyName.trim()
+        && typeof item.rank === "number"
+        && Number.isInteger(item.rank)
+        && item.rank >= 0
+        && item.preview
+        && typeof item.preview.title === "string"
+        && typeof item.preview.area === "string"
+        && typeof item.preview.bhk === "number"
+        && typeof item.preview.price === "number",
       ),
     );
-    return { version: 1, query: candidate.query.trim(), candidates };
+    if (candidates.length !== candidate.candidates.length) return null;
+    return {
+      version: 2,
+      id: candidate.id,
+      queryFingerprint: candidate.queryFingerprint,
+      createdAt: candidate.createdAt,
+      candidates,
+    };
   } catch {
     return null;
   }

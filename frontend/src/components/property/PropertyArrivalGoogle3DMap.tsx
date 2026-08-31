@@ -9,6 +9,7 @@ import { useGuidedStreetViewTour } from "../../hooks/useGuidedStreetViewTour.ts"
 import type { ArrivalPlaybackController } from "../../lib/arrivalPlayback.ts";
 import type {
   ArrivalSceneExperience,
+  ArrivalSearchSociety,
   MapLayerExperience,
   MapOverlayLine,
   MapOverlayPolygon,
@@ -55,6 +56,9 @@ export type ArrivalGoogle3DMapProps = {
   playbackController: ArrivalPlaybackController;
   autoPlaySociety: boolean;
   autoPlayApproach?: boolean;
+  secondarySocieties?: ArrivalSearchSociety[];
+  selectedSecondarySocietyId?: string | null;
+  onSelectSecondarySociety?: (societyId: string) => void;
   pinnedPlaceIds?: string[];
   onSelectCluster: (cluster: PlaceCluster) => void;
   onSelectPlace: (place: NumberedPlace) => void;
@@ -370,6 +374,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     playbackController,
     autoPlaySociety,
     autoPlayApproach = true,
+    secondarySocieties = [],
+    selectedSecondarySocietyId = null,
+    onSelectSecondarySociety,
     pinnedPlaceIds = [],
     onSelectCluster,
     onSelectPlace,
@@ -458,6 +465,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     playbackController.snapshot,
   );
   const streetViewReady = roadTour.active;
+  const selectedSecondarySociety = secondarySocieties.find((candidate) =>
+    candidate.societyId === selectedSecondarySocietyId) ?? null;
+  const hadSecondarySelectionRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -522,6 +532,37 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     playbackController,
     societyComposition,
   ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || terrainElevationRef.current === null) return;
+    if (selectedSecondarySociety) {
+      hadSecondarySelectionRef.current = true;
+      const camera = targetCamera(
+        selectedSecondarySociety.home.latitude,
+        selectedSecondarySociety.home.longitude,
+        terrainElevationRef.current,
+        HOME_PORTRAIT_RANGE_M,
+        HOME_PORTRAIT_TILT,
+        DEFAULT_HEADING,
+      );
+      void map.flyCameraTo({ endCamera: camera, durationMillis: EVIDENCE_CAMERA_DURATION_MS });
+      return;
+    }
+    if (!hadSecondarySelectionRef.current) return;
+    hadSecondarySelectionRef.current = false;
+    const primary = societyComposition?.final;
+    if (!primary) return;
+    const camera = targetCamera(
+      societyComposition.center.latitude,
+      societyComposition.center.longitude,
+      terrainElevationRef.current,
+      primary.range,
+      primary.tilt,
+      primary.heading,
+    );
+    void map.flyCameraTo({ endCamera: camera, durationMillis: EVIDENCE_CAMERA_DURATION_MS });
+  }, [ready, selectedSecondarySociety, societyComposition]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -679,6 +720,31 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         { fill: "#f8f1df1f", stroke: "#fff7e3e6" },
         nextChildren,
       );
+    }
+    for (const society of secondarySocieties) {
+      if (society.home.boundary) {
+        addPolygon(
+          map,
+          library,
+          society.home.boundary,
+          { fill: "#74849d14", stroke: "#71819999" },
+          nextChildren,
+        );
+      }
+      const marker = new library.Marker3DInteractiveElement({
+        altitudeMode: "CLAMP_TO_GROUND",
+        collisionBehavior: "OPTIONAL_AND_HIDES_LOWER_PRIORITY",
+        drawsWhenOccluded: true,
+        label: society.societyId === selectedSecondarySocietyId ? society.home.name : undefined,
+        position: { lat: society.home.latitude, lng: society.home.longitude },
+        title: society.home.name,
+      });
+      marker.append(new markerLibrary.PinElement(mapMarkerPinOptions("home", "subdued")));
+      if (onSelectSecondarySociety) {
+        marker.addEventListener("gmp-click", () => onSelectSecondarySociety(society.societyId));
+      }
+      map.append(marker);
+      nextChildren.push(marker);
     }
     const showGreenPatches = places.some((place) => place.layer === "parks");
     for (const patch of showGreenPatches ? greenPatches : EMPTY_POLYGONS) {
@@ -850,6 +916,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     redFlagLines,
     ready,
     selectedId,
+    secondarySocieties,
+    selectedSecondarySocietyId,
+    onSelectSecondarySociety,
     showMetroLines,
     roadTourActive,
     waterTint,

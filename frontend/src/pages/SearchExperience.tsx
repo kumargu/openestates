@@ -243,6 +243,7 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
   const [searchFailed, setSearchFailed] = useState(false);
   const [panelPropertyId, setPanelPropertyId] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [discoveryContextId, setDiscoveryContextId] = useState<string | null>(null);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
@@ -352,11 +353,16 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
 
   useEffect(() => {
     if (!hasQuery || waitingForSearchResults) return;
-    writeDiscoveryMapContext(
-      query,
-      universeResults,
-      (result) => primaryProofFocus(result, query),
-    );
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      setDiscoveryContextId(writeDiscoveryMapContext(
+        query,
+        universeResults,
+        (result) => primaryProofFocus(result, query),
+      ));
+    });
+    return () => { cancelled = true; };
   }, [hasQuery, query, universeResults, waitingForSearchResults]);
 
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.areaContext ?? null : null;
@@ -411,6 +417,7 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
       onQuickView={setPanelPropertyId}
       matchLabels={hasQuery ? searchResultReasonLabels(result) : []}
       proofFocus={primaryProofFocus(result, query)}
+      discoveryContextId={hasQuery ? discoveryContextId : null}
     />
   );
   return (

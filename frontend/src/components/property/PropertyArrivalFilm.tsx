@@ -8,7 +8,7 @@ import {
   type PropertyFilmstripFrame,
   type StoryScenePlayback,
 } from "./PropertyFilmstrip.tsx";
-import type { PropertyMapContext } from "../../lib/types.ts";
+import type { ArrivalSearchSociety, PropertyMapContext } from "../../lib/types.ts";
 import { hasArrivalMap } from "../../lib/arrivalMapProjection.ts";
 import { PropertyArrivalMap } from "./PropertyArrivalMap.tsx";
 import "../../styles/property-arrival.css";
@@ -20,6 +20,7 @@ type Props = {
   playback?: StoryScenePlayback;
   cinematicMotion?: boolean;
   mapContext?: PropertyMapContext | null;
+  searchContextSocieties?: ArrivalSearchSociety[];
 };
 
 const ARRIVAL_CLOSE_DISTANCE_M = 50;
@@ -83,6 +84,7 @@ export function PropertyArrivalFilm({
   playback,
   cinematicMotion = true,
   mapContext,
+  searchContextSocieties,
 }: Props) {
   const distinctFrames = useMemo(() => distinctArrivalFrames(frames), [frames]);
   const frameKey = distinctFrames.map((frame) => frame.id).join("|");
@@ -127,7 +129,10 @@ export function PropertyArrivalFilm({
         <h2 id="property-arrival-title">The way in.</h2>
       </header>
       {mapAvailable && mapContext ? (
-        <PropertyArrivalMap context={mapContext} />
+        <PropertyArrivalMap
+          context={mapContext}
+          searchContextSocieties={searchContextSocieties}
+        />
       ) : (
         <PropertyFilmstrip
           ariaLabel={`Approach to ${title}`}

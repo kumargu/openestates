@@ -4,8 +4,10 @@ import {
   captureDiscoveryDeparture,
   clearDiscoveryContext,
   consumeDiscoveryReturn,
+  DISCOVERY_CONTEXT_TTL_MS,
   navigationMode,
   propertyExploreHref,
+  queryFingerprint,
   readDiscoveryMapContext,
   requestDiscoveryReturn,
   writeDiscoveryContext,
@@ -123,18 +125,61 @@ test("map context keeps ranked search societies without duplicate configurations
     match_reason: "Near school",
     match_tier: "exact",
   });
-  writeDiscoveryMapContext("quiet 3bhk", [
+  const contextId = writeDiscoveryMapContext("quiet 3bhk", [
     result("one", "society:a", "Alpha"),
     result("two", "society:a", "Alpha"),
     result("three", "society:b", "Beta"),
-  ]);
+  ], { id: "context-one", now: 1_000 });
 
-  assert.deepEqual(readDiscoveryMapContext(), {
-    version: 1,
-    query: "quiet 3bhk",
+  assert.equal(contextId, "context-one");
+  assert.deepEqual(readDiscoveryMapContext(contextId, 1_001), {
+    version: 2,
+    id: "context-one",
+    queryFingerprint: queryFingerprint("quiet 3bhk"),
+    createdAt: 1_000,
     candidates: [
-      { id: "one", propertyIds: ["one", "two"], societyName: "Alpha" },
-      { id: "three", propertyIds: ["three"], societyName: "Beta" },
+      {
+        propertyId: "one",
+        societyId: "society:a",
+        societyName: "Alpha",
+        rank: 0,
+        preview: { title: "Alpha", area: "Whitefield", bhk: 3, price: 20_000_000 },
+      },
+      {
+        propertyId: "three",
+        societyId: "society:b",
+        societyName: "Beta",
+        rank: 2,
+        preview: { title: "Beta", area: "Whitefield", bhk: 3, price: 20_000_000 },
+      },
     ],
   });
+});
+
+test("discovery map context requires its URL token and expires after thirty minutes", () => {
+  sessionValues.clear();
+  const result = {
+    id: "one",
+    kg_entity_refs: { property_entity_id: "property:one", society_entity_id: "society:a", source_entity_ids: [] },
+    title: "Alpha", area: "Whitefield", price: 20_000_000, price_per_sqft: 12_000,
+    bhk: 3, sqft: 1_600, society_name: "Alpha", builder_name: "Builder", hero_image: null,
+    transparency_tags: [], description_summary: "", possession_status: "Ready", metro_distance_mins: 10,
+    floor: 4, total_floors: 18, facing: "East", match_score: 0.8, match_label: "Strong match",
+    match_reason: "Near school", match_tier: "exact",
+  } satisfies SearchResultItem;
+  writeDiscoveryMapContext("Quiet   3BHK", [result], { id: "token", now: 5_000 });
+
+  assert.equal(queryFingerprint(" quiet 3bhk "), queryFingerprint("Quiet   3BHK"));
+  assert.equal(readDiscoveryMapContext(null, 5_001), null);
+  assert.equal(readDiscoveryMapContext("wrong-token", 5_001), null);
+  assert.equal(readDiscoveryMapContext("token", 5_000 + DISCOVERY_CONTEXT_TTL_MS + 1), null);
+
+  sessionValues.set("openestates:discovery-map-context:v2:malformed", JSON.stringify({
+    version: 2,
+    id: "malformed",
+    queryFingerprint: queryFingerprint("quiet 3bhk"),
+    createdAt: 5_000,
+    candidates: [{ propertyId: "missing-preview", societyId: "society:a", societyName: "Alpha", rank: 0 }],
+  }));
+  assert.equal(readDiscoveryMapContext("malformed", 5_001), null);
 });

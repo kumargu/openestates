@@ -9,7 +9,7 @@ import {
   type ErrorInfo,
   type ReactNode,
 } from "react";
-import type { PropertyMapContext } from "../../lib/types.ts";
+import type { ArrivalSearchSociety, PropertyMapContext } from "../../lib/types.ts";
 import { useArrivalPlaybackController } from "../../lib/arrivalPlayback.ts";
 import {
   buildNumberedPlaces,
@@ -37,10 +37,18 @@ type ArrivalView = "society" | "metro" | "approach";
 
 type Props = {
   context: PropertyMapContext;
+  searchContextSocieties?: ArrivalSearchSociety[];
 };
 
 const SOCIETY_VIEW_RADIUS_KM = 0.8;
 const DEFAULT_APPROACH_DWELL_MS = 3_600;
+
+function compactPrice(price: number): string | null {
+  if (!Number.isFinite(price) || price <= 0) return null;
+  if (price >= 10_000_000) return `₹${(price / 10_000_000).toFixed(1).replace(/\.0$/, "")} Cr`;
+  if (price >= 100_000) return `₹${(price / 100_000).toFixed(1).replace(/\.0$/, "")} L`;
+  return `₹${Math.round(price).toLocaleString("en-IN")}`;
+}
 
 class ArrivalMapBoundary extends Component<
   { children: ReactNode },
@@ -81,10 +89,11 @@ class ArrivalMapBoundary extends Component<
   }
 }
 
-export function PropertyArrivalMap({ context }: Props) {
+export function PropertyArrivalMap({ context, searchContextSocieties = [] }: Props) {
   const { controller: playbackController } = useArrivalPlaybackController();
   const [societyAutoPlay, setSocietyAutoPlay] = useState(true);
   const [approachAutoPlay, setApproachAutoPlay] = useState(true);
+  const [selectedSearchSocietyId, setSelectedSearchSocietyId] = useState<string | null>(null);
   const home = useMemo(() => resolveHomeAnchor(context), [context]);
   const roadLayer = context.layers?.find((layer) => layer.renderKind === "terrain_corridor");
   const entranceLayer = context.layers?.find((layer) => layer.renderKind === "arrival_marker");
@@ -143,6 +152,8 @@ export function PropertyArrivalMap({ context }: Props) {
     : activeView === "metro"
     ? "evidence"
     : "home";
+  const selectedSearchSociety = searchContextSocieties.find((candidate) =>
+    candidate.societyId === selectedSearchSocietyId) ?? null;
 
   useEffect(() => {
     if (activeView !== "approach" || activeCameraMode !== "home") return undefined;
@@ -195,6 +206,15 @@ export function PropertyArrivalMap({ context }: Props) {
     if (activeView === "approach") setApproachAutoPlay(false);
     setView(next);
     setCameraMode(next === "metro" ? "evidence" : "home");
+  }
+
+  function selectSearchSociety(societyId: string) {
+    playbackController.cancel("settled");
+    setSocietyAutoPlay(false);
+    setApproachAutoPlay(false);
+    setView("society");
+    setCameraMode("home");
+    setSelectedSearchSocietyId(societyId);
   }
 
   return (
@@ -252,6 +272,9 @@ export function PropertyArrivalMap({ context }: Props) {
               playbackController={playbackController}
               autoPlaySociety={false}
               autoPlayApproach={approachAutoPlay}
+              secondarySocieties={searchContextSocieties}
+              selectedSecondarySocietyId={selectedSearchSocietyId}
+              onSelectSecondarySociety={selectSearchSociety}
               onSelectCluster={() => undefined}
               onSelectPlace={() => undefined}
               onSelectAccessLine={() => undefined}
@@ -283,6 +306,9 @@ export function PropertyArrivalMap({ context }: Props) {
             arrivalExperience={context.arrivalExperience}
             playbackController={playbackController}
             autoPlaySociety={activeView === "society" && societyAutoPlay}
+            secondarySocieties={searchContextSocieties}
+            selectedSecondarySocietyId={selectedSearchSocietyId}
+            onSelectSecondarySociety={selectSearchSociety}
             onSelectCluster={() => undefined}
             onSelectPlace={() => undefined}
             onSelectAccessLine={() => undefined}
@@ -294,6 +320,43 @@ export function PropertyArrivalMap({ context }: Props) {
           )}
         </Suspense>
       </ArrivalMapBoundary>
+      {searchContextSocieties.length > 0 && (
+        <aside className="property-arrival-map__search-context" aria-label="Also in your search">
+          <span>Also in your search</span>
+          <div>
+            {searchContextSocieties.map((candidate) => (
+              <button
+                key={candidate.societyId}
+                type="button"
+                aria-pressed={candidate.societyId === selectedSearchSocietyId}
+                onClick={() => selectSearchSociety(candidate.societyId)}
+              >
+                {candidate.home.name}
+              </button>
+            ))}
+          </div>
+          {selectedSearchSociety && (
+            <div className="property-arrival-map__search-preview">
+              <strong>{selectedSearchSociety.preview.title}</strong>
+              <span>
+                {[
+                  Number.isFinite(selectedSearchSociety.preview.bhk)
+                    ? `${selectedSearchSociety.preview.bhk} BHK`
+                    : null,
+                  selectedSearchSociety.preview.area,
+                  compactPrice(selectedSearchSociety.preview.price),
+                ].filter(Boolean).join(" · ")}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedSearchSocietyId(null)}
+              >
+                Back to this society
+              </button>
+            </div>
+          )}
+        </aside>
+      )}
     </div>
   );
 }

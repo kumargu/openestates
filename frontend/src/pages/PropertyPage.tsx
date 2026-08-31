@@ -10,12 +10,14 @@ import type {
   PropertyDetailResponse,
   ProofFocus,
   RecommendationResponse,
+  ArrivalSearchSociety,
   SurfaceSceneResponse,
 } from "../lib/types.ts";
 import {
   getProperty,
   getPropertyRecommendations,
   getPropertySurface,
+  getPropertySurfacesBatch,
   parseProofFocusParam,
 } from "../lib/api.ts";
 import {
@@ -47,7 +49,10 @@ import { readShortlistIds } from "../lib/compare.ts";
 import { formatGoogleRating } from "../lib/reviewFormatting.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
-import { propertyExploreHref } from "../lib/navigationContext.ts";
+import {
+  propertyExploreHref,
+  readDiscoveryMapContext,
+} from "../lib/navigationContext.ts";
 import { formatListingPrice } from "../lib/listing-price.ts";
 import {
   initialPropertySurfaceId,
@@ -283,11 +288,13 @@ export function PropertyPage() {
     );
 
   const focusParam = searchParams.get("focus");
+  const contextId = searchParams.get("context");
   return (
     <PropertyPageBody
-      key={`${id}:${focusParam ?? ""}`}
+      key={`${id}:${focusParam ?? ""}:${contextId ?? ""}`}
       id={id}
       focusParam={focusParam}
+      contextId={contextId}
     />
   );
 }
@@ -295,9 +302,11 @@ export function PropertyPage() {
 function PropertyPageBody({
   id,
   focusParam,
+  contextId,
 }: {
   id: string;
   focusParam: string | null;
+  contextId: string | null;
 }) {
   const proofFocus = useMemo(
     () => parseProofFocusParam(focusParam),
@@ -324,6 +333,8 @@ function PropertyPageBody({
     useState<SurfaceSceneResponse | null>(null);
   const [arrivalScene, setArrivalScene] =
     useState<SurfaceSceneResponse | null>(null);
+  const [searchContextSocieties, setSearchContextSocieties] =
+    useState<ArrivalSearchSociety[]>([]);
   const [comparisonResolution, setComparisonResolution] = useState<{
     key: string;
     properties: PropertyCard[];
@@ -332,6 +343,10 @@ function PropertyPageBody({
     "loading" | "error" | "not_found" | "ok"
   >("loading");
   const [retryKey, setRetryKey] = useState(0);
+  const discoveryMapContext = useMemo(
+    () => readDiscoveryMapContext(contextId),
+    [contextId],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -371,6 +386,62 @@ function PropertyPageBody({
       cancelled = true;
     };
   }, [data?.property?.id]);
+
+  useEffect(() => {
+    const currentSocietyId = data?.entity_refs.society_entity_id;
+    const candidates = discoveryMapContext?.candidates
+      .filter((candidate) => candidate.societyId !== currentSocietyId) ?? [];
+    if (candidates.length === 0) {
+      let cancelled = false;
+      void Promise.resolve().then(() => {
+        if (!cancelled) setSearchContextSocieties([]);
+      });
+      return () => { cancelled = true; };
+    }
+    const controller = new AbortController();
+    void getPropertySurfacesBatch(
+      candidates.map((candidate) => candidate.propertyId),
+      [ARRIVAL_STORY_SURFACE_ID],
+    ).then((response) => {
+      if (controller.signal.aborted) return;
+      const scenesByPropertyId = new Map(response.items.map((item) => [
+        item.propertyId,
+        item.scenes.find((scene) => scene.surfaceId === ARRIVAL_STORY_SURFACE_ID),
+      ]));
+      const resolved = candidates.flatMap((candidate) => {
+        const scene = scenesByPropertyId.get(candidate.propertyId);
+        const mapContext = propertyMapContextFromSurfaceScene(scene);
+        const latitude = mapContext?.home.latitude;
+        const longitude = mapContext?.home.longitude;
+        if (
+          !Number.isFinite(latitude)
+          || !Number.isFinite(longitude)
+          || !latitude
+          || !longitude
+          || latitude < -90
+          || latitude > 90
+          || longitude < -180
+          || longitude > 180
+        ) return [];
+        return [{
+          propertyId: candidate.propertyId,
+          societyId: candidate.societyId,
+          proofFocus: candidate.proofFocus,
+          preview: candidate.preview,
+          home: {
+            latitude,
+            longitude,
+            name: mapContext.home.name,
+            boundary: mapContext.home.boundary,
+          },
+        } satisfies ArrivalSearchSociety];
+      });
+      setSearchContextSocieties(resolved.slice(0, 3));
+    }).catch(() => {
+      if (!controller.signal.aborted) setSearchContextSocieties([]);
+    });
+    return () => controller.abort();
+  }, [data?.entity_refs.society_entity_id, discoveryMapContext]);
 
   useEffect(() => {
     const propertyId = data?.property?.id;
@@ -636,6 +707,7 @@ function PropertyPageBody({
           title={story.identity.title}
           frames={story.arrival.frames}
           mapContext={arrivalContext}
+          searchContextSocieties={searchContextSocieties}
           playback={{
             playing: storyPlaying,
             onPlayingChange: setStoryPlaying,
