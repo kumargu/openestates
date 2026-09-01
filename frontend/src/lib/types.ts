@@ -538,7 +538,6 @@ export type MapLayerExperience = {
   pauseLabel?: string;
   resumeLabel?: string;
   replayLabel?: string;
-  skipLabel?: string;
 };
 
 export type SurfaceSceneResponse = {

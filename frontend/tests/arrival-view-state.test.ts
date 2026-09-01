@@ -64,9 +64,8 @@ test("fallback film omits gate language without a mapped entrance", () => {
 });
 
 test("Society playback exposes pause, resume, and explicit replay actions", () => {
-  assert.equal(societyPlaybackAction("preparing", true), "pause");
-  assert.equal(societyPlaybackAction("revealing", true), "pause");
-  assert.equal(societyPlaybackAction("paused", true), "resume");
-  assert.equal(societyPlaybackAction("settled", false), "play");
-  assert.equal(societyPlaybackAction("settled", true), "play");
+  assert.equal(societyPlaybackAction("preparing"), "pause");
+  assert.equal(societyPlaybackAction("revealing"), "pause");
+  assert.equal(societyPlaybackAction("paused"), "resume");
+  assert.equal(societyPlaybackAction("settled"), "play");
 });

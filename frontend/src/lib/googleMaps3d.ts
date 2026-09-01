@@ -76,6 +76,9 @@ export function loadGoogleMaps3dLibrary(): Promise<unknown> {
     const importer = (window as GoogleMapsWindow).google?.maps?.importLibrary;
     if (!importer) throw new Error("google_maps_3d_import_unavailable");
     return importer("maps3d");
+  }).catch((error: unknown) => {
+    googleMaps3dPromise = null;
+    throw error;
   });
 
   return googleMaps3dPromise;

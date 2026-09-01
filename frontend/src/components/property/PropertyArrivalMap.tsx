@@ -28,7 +28,6 @@ import {
   metroLinesNearArrival,
   type ArrivalCameraMode,
 } from "../../lib/arrivalMapProjection.ts";
-import type { PlaceCluster } from "../../lib/nearbyPlateProjection.ts";
 import {
   arrivalMissingState,
   arrivalSearchSocietiesForView,
@@ -37,14 +36,9 @@ import {
   type ArrivalView,
 } from "../../lib/arrivalViewState.ts";
 
-const SocietyScene = lazy(async () => {
-  const module = await import("./PropertyArrivalSocietyScene.tsx");
-  return { default: module.PropertyArrivalSocietyScene };
-});
-
-const ApproachScene = lazy(async () => {
-  const module = await import("./PropertyArrivalApproachScene.tsx");
-  return { default: module.PropertyArrivalApproachScene };
+const GoogleArrivalMap = lazy(async () => {
+  const module = await import("./PropertyArrivalGoogle3DMap.tsx");
+  return { default: module.PropertyArrivalGoogle3DMap };
 });
 
 type Props = {
@@ -55,9 +49,7 @@ type Props = {
 
 const SOCIETY_VIEW_RADIUS_KM = 0.8;
 const DEFAULT_APPROACH_DWELL_MS = 3_600;
-const EMPTY_ARRIVAL_CLUSTERS: PlaceCluster[] = [];
 const EMPTY_ARRIVAL_LINES: MapOverlayLine[] = [];
-const IGNORE_ARRIVAL_SELECTION = () => undefined;
 
 function compactPrice(price: number): string | null {
   if (!Number.isFinite(price) || price <= 0) return null;
@@ -193,7 +185,7 @@ export function PropertyArrivalMap({
     searchContextSocieties,
   );
   const societyAction = activeView === "society"
-    ? societyPlaybackAction(playbackState, societyAutoPlay)
+    ? societyPlaybackAction(playbackState)
     : null;
   const societyActionLabel = societyAction === "pause"
     ? arrivalExperience?.societyPauseLabel
@@ -355,42 +347,8 @@ export function PropertyArrivalMap({
             />
           )}
         >
-          {activeView === "approach" && roadExperience ? (
-            <ApproachScene
-              home={{
-                latitude: home.latitude,
-                longitude: home.longitude,
-                name: context.home.name,
-                boundary: context.home.boundary,
-              }}
-              places={visiblePlaces}
-              clusters={EMPTY_ARRIVAL_CLUSTERS}
-              selectedId={null}
-              viewport={viewport}
-              metroLines={visibleMetroLines}
-              accessLines={visibleRoadLines}
-              redFlagLines={EMPTY_ARRIVAL_LINES}
-              showMetroLines={false}
-              water={null}
-              waterTint={false}
-              expanded={expanded}
-              cameraMode={activeCameraMode}
-              experience={roadExperience}
-              arrivalExperience={context.arrivalExperience}
-              playbackController={playbackController}
-              autoPlaySociety={false}
-              autoPlayApproach={approachAutoPlay}
-              onPlaybackCancelled={cancelApproachPlayback}
-              onSelectCluster={IGNORE_ARRIVAL_SELECTION}
-              onSelectPlace={IGNORE_ARRIVAL_SELECTION}
-              onSelectAccessLine={IGNORE_ARRIVAL_SELECTION}
-              onSelectRedFlagLine={IGNORE_ARRIVAL_SELECTION}
-              onBackToHome={() => selectView("society")}
-              showBackToHome={false}
-              onToggleExpanded={() => setExpanded((current) => !current)}
-            />
-          ) : (
-            <SocietyScene
+          <GoogleArrivalMap
+            key={activeView === "approach" ? "approach" : "society"}
             home={{
               latitude: home.latitude,
               longitude: home.longitude,
@@ -398,34 +356,27 @@ export function PropertyArrivalMap({
               boundary: context.home.boundary,
             }}
             places={visiblePlaces}
-            clusters={EMPTY_ARRIVAL_CLUSTERS}
-            selectedId={null}
             viewport={viewport}
             metroLines={visibleMetroLines}
-            accessLines={EMPTY_ARRIVAL_LINES}
-            redFlagLines={EMPTY_ARRIVAL_LINES}
+            accessLines={visibleRoadLines}
             showMetroLines={activeView === "metro"}
-            water={null}
-            waterTint={false}
             expanded={expanded}
             cameraMode={activeCameraMode}
+            terrainCorridor={activeView === "approach"}
+            layerExperience={activeView === "approach" ? roadExperience : undefined}
             arrivalExperience={context.arrivalExperience}
             playbackController={playbackController}
             autoPlaySociety={activeView === "society" && societyAutoPlay}
             societyPlaybackVersion={societyPlaybackVersion}
+            autoPlayApproach={approachAutoPlay}
             secondarySocieties={visibleSearchContextSocieties}
             selectedSecondarySocietyId={activeView === "society" ? selectedSearchSocietyId : null}
             onSelectSecondarySociety={activeView === "society" ? selectSearchSociety : undefined}
-            onPlaybackCancelled={cancelSocietyPlayback}
-            onSelectCluster={IGNORE_ARRIVAL_SELECTION}
-            onSelectPlace={IGNORE_ARRIVAL_SELECTION}
-            onSelectAccessLine={IGNORE_ARRIVAL_SELECTION}
-            onSelectRedFlagLine={IGNORE_ARRIVAL_SELECTION}
-            onBackToHome={() => selectView("society")}
-            showBackToHome={false}
+            onPlaybackCancelled={activeView === "approach"
+              ? cancelApproachPlayback
+              : cancelSocietyPlayback}
             onToggleExpanded={() => setExpanded((current) => !current)}
-            />
-          )}
+          />
         </Suspense>
       </ArrivalMapBoundary>
       {activeView === "society"

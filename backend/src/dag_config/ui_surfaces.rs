@@ -203,8 +203,6 @@ pub struct UiSurfaceLayerExperienceConfig {
     pub resume_label: Option<String>,
     #[serde(default)]
     pub replay_label: Option<String>,
-    #[serde(default)]
-    pub skip_label: Option<String>,
 }
 
 fn default_enabled() -> bool {
@@ -398,7 +396,6 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                     experience.pause_label.as_deref(),
                     experience.resume_label.as_deref(),
                     experience.replay_label.as_deref(),
-                    experience.skip_label.as_deref(),
                 ]
                 .into_iter()
                 .any(|value| value.is_none_or(|label| label.trim().is_empty()));

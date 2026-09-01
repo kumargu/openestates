@@ -13,11 +13,9 @@ import type {
   MapLayerExperience,
   MapOverlayLine,
   MapOverlayPolygon,
-  MapWaterContext,
 } from "../../lib/types.ts";
 import type {
   NumberedPlace,
-  PlaceCluster,
   PlateViewport,
 } from "../../lib/nearbyPlateProjection.ts";
 import {
@@ -27,7 +25,6 @@ import {
   societyCameraComposition,
   type ArrivalCameraMode,
 } from "../../lib/arrivalMapProjection.ts";
-import { NOTEBOOK_SAVE_ICON_PATH } from "../notebook/NotebookSaveIcon.tsx";
 
 export type ArrivalGoogle3DMapProps = {
   home: {
@@ -37,17 +34,10 @@ export type ArrivalGoogle3DMapProps = {
     boundary?: MapOverlayPolygon;
   };
   places: NumberedPlace[];
-  clusters: PlaceCluster[];
-  selectedId: string | null;
   viewport: PlateViewport;
   metroLines: MapOverlayLine[];
   accessLines: MapOverlayLine[];
-  redFlagLines: MapOverlayLine[];
-  greenPatches?: MapOverlayPolygon[];
-  lakes?: MapOverlayPolygon[];
   showMetroLines: boolean;
-  water?: MapWaterContext | null;
-  waterTint: boolean;
   expanded: boolean;
   cameraMode: ArrivalCameraMode;
   terrainCorridor: boolean;
@@ -61,14 +51,6 @@ export type ArrivalGoogle3DMapProps = {
   selectedSecondarySocietyId?: string | null;
   onSelectSecondarySociety?: (societyId: string) => void;
   onPlaybackCancelled?: () => void;
-  pinnedPlaceIds?: string[];
-  onSelectCluster: (cluster: PlaceCluster) => void;
-  onSelectPlace: (place: NumberedPlace) => void;
-  onSelectAccessLine: (id: string) => void;
-  onSelectRedFlagLine: (id: string) => void;
-  onRememberPlace?: (place: NumberedPlace) => void;
-  onBackToHome: () => void;
-  showBackToHome?: boolean;
   onToggleExpanded: () => void;
 };
 
@@ -165,7 +147,6 @@ const EVIDENCE_MINIMUM_RANGE_M = 1_100;
 const EVIDENCE_CAMERA_DURATION_MS = 600;
 const HOME_CAMERA_DURATION_MS = 350;
 const DEFAULT_HEADING = 210;
-const EMPTY_POLYGONS: MapOverlayPolygon[] = [];
 
 function evidenceCameraRange(radiusKm: number): number {
   return Math.max(EVIDENCE_MINIMUM_RANGE_M, radiusKm * 900);
@@ -289,42 +270,19 @@ function placeMeta(place: NumberedPlace): string {
   ].filter((value): value is string => Boolean(value)).join(" · ");
 }
 
-function notebookIcon(pinned: boolean): SVGSVGElement {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("width", "15");
-  svg.setAttribute("height", "15");
-  svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("d", NOTEBOOK_SAVE_ICON_PATH);
-  path.setAttribute("fill", pinned ? "currentColor" : "none");
-  path.setAttribute("stroke", "currentColor");
-  path.setAttribute("stroke-width", "1.9");
-  path.setAttribute("stroke-linecap", "round");
-  path.setAttribute("stroke-linejoin", "round");
-  svg.append(path);
-  return svg;
-}
-
 function createPlacePopover(
   library: Maps3DLibrary,
   place: NumberedPlace,
-  pinned: boolean,
-  onRememberPlace?: (place: NumberedPlace) => void,
 ): Popover3DElement {
   const popover = new library.PopoverElement({
     autoPanDisabled: true,
     lightDismissDisabled: false,
   });
-  popover.append(createPlacePopoverContent(place, pinned, onRememberPlace));
+  popover.append(createPlacePopoverContent(place));
   return popover;
 }
 
-function createPlacePopoverContent(
-  place: NumberedPlace,
-  pinned: boolean,
-  onRememberPlace?: (place: NumberedPlace) => void,
-): HTMLDivElement {
+function createPlacePopoverContent(place: NumberedPlace): HTMLDivElement {
   const content = document.createElement("div");
   content.className = "nearby-map-popover";
   const name = document.createElement("strong");
@@ -336,21 +294,6 @@ function createPlacePopoverContent(
     details.textContent = meta;
     content.append(details);
   }
-  if (onRememberPlace) {
-    const noteButton = document.createElement("button");
-    noteButton.type = "button";
-    noteButton.className = "nearby-map-popover__note";
-    noteButton.setAttribute("aria-label", pinned ? "Remove from notes" : "Add to notes");
-    noteButton.title = pinned ? "Saved" : "Add to notes";
-    noteButton.setAttribute("aria-pressed", String(pinned));
-    noteButton.append(notebookIcon(pinned));
-    noteButton.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      onRememberPlace(place);
-    });
-    content.append(noteButton);
-  }
   return content;
 }
 
@@ -358,16 +301,10 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const {
     home,
     places,
-    clusters,
-    selectedId,
     viewport,
     metroLines,
     accessLines,
-    redFlagLines,
-    greenPatches = EMPTY_POLYGONS,
-    lakes = EMPTY_POLYGONS,
     showMetroLines,
-    waterTint,
     expanded,
     cameraMode,
     terrainCorridor,
@@ -381,14 +318,6 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     selectedSecondarySocietyId = null,
     onSelectSecondarySociety,
     onPlaybackCancelled,
-    pinnedPlaceIds = [],
-    onSelectCluster,
-    onSelectPlace,
-    onSelectAccessLine,
-    onSelectRedFlagLine,
-    onRememberPlace,
-    onBackToHome,
-    showBackToHome = true,
     onToggleExpanded,
   } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -827,13 +756,6 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       map.append(marker);
       nextChildren.push(marker);
     }
-    const showGreenPatches = places.some((place) => place.layer === "parks");
-    for (const patch of showGreenPatches ? greenPatches : EMPTY_POLYGONS) {
-      addPolygon(map, library, patch, { fill: "#6e9d6e26", stroke: "#50795099" }, nextChildren);
-    }
-    for (const lake of waterTint ? lakes : EMPTY_POLYGONS) {
-      addPolygon(map, library, lake, { fill: "#4f9fc42e", stroke: "#357fa7aa" }, nextChildren);
-    }
     for (const line of accessLines) {
       if (!roadTourActive) {
         addLine(
@@ -847,7 +769,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
             outerWidth: 0.65,
             drawsOccludedSegments: true,
           },
-          () => onSelectAccessLine(line.id),
+          null,
           nextChildren,
         );
         const labelPosition = lineLabelPosition(line);
@@ -860,7 +782,6 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
             position: labelPosition,
             title: line.name,
           });
-          routeLabel.addEventListener("gmp-click", () => onSelectAccessLine(line.id));
           map.append(routeLabel);
           nextChildren.push(routeLabel);
         }
@@ -884,23 +805,6 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         );
       }
     }
-    for (const line of redFlagLines) {
-      addLine(
-        map,
-        library,
-        line,
-        {
-          color: "#c93f3f",
-          width: 7,
-          outerColor: "#ffffffcc",
-          outerWidth: 0.35,
-          drawsOccludedSegments: false,
-        },
-        () => onSelectRedFlagLine(line.id),
-        nextChildren,
-      );
-    }
-
     if (!roadTourActive) {
       const homeIsContext = cameraMode === "evidence";
       const homeMarker = new library.Marker3DInteractiveElement({
@@ -919,65 +823,24 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       nextChildren.push(homeMarker);
     }
 
-    for (const cluster of clusters) {
-      const marker = new library.Marker3DInteractiveElement({
-        altitudeMode: "CLAMP_TO_GROUND",
-        collisionBehavior: "REQUIRED",
-        position: { lat: cluster.latitude, lng: cluster.longitude },
-        title: `${cluster.count} nearby places`,
-      });
-      const clusterPin = mapMarkerPinOptions(cluster.layer, "active");
-      marker.append(new markerLibrary.PinElement({
-        ...clusterPin,
-        glyphSrc: undefined,
-        glyphText: String(cluster.count),
-      }));
-      marker.addEventListener("gmp-click", () => onSelectCluster(cluster));
-      map.append(marker);
-      nextChildren.push(marker);
-    }
     let activePopover: Popover3DElement | null = null;
     for (const place of places) {
-      const emphasis = place.id === selectedId
-        ? "selected"
-        : selectedId
-        ? "subdued"
-        : "active";
-      const popover = createPlacePopover(
-        library,
-        place,
-        pinnedPlaceIds.includes(place.id),
-        onRememberPlace,
-      );
+      const popover = createPlacePopover(library, place);
       const marker = new library.Marker3DInteractiveElement({
         altitudeMode: "CLAMP_TO_GROUND",
-        collisionBehavior: place.id === selectedId
-          ? "REQUIRED"
-          : "OPTIONAL_AND_HIDES_LOWER_PRIORITY",
-        drawsWhenOccluded: place.id === selectedId,
+        collisionBehavior: "OPTIONAL_AND_HIDES_LOWER_PRIORITY",
+        drawsWhenOccluded: false,
         gmpPopoverTargetElement: popover,
-        label: place.id === selectedId ? place.name : undefined,
         position: { lat: place.latitude, lng: place.longitude },
         title: place.name,
       });
-      marker.append(new markerLibrary.PinElement(mapMarkerPinOptions(place.icon, emphasis)));
+      marker.append(new markerLibrary.PinElement(mapMarkerPinOptions(place.icon, "active")));
       marker.tabIndex = 0;
       marker.setAttribute("aria-label", place.name);
       marker.addEventListener("pointerenter", () => {
         if (activePopover && activePopover !== popover) activePopover.open = false;
         popover.open = true;
         activePopover = popover;
-      });
-      marker.addEventListener("gmp-click", () => {
-        popover.open = false;
-        onSelectPlace(place);
-      });
-      marker.addEventListener("keydown", (event) => {
-        if (event instanceof KeyboardEvent && (event.key === "Enter" || event.key === " ")) {
-          event.preventDefault();
-          popover.open = false;
-          onSelectPlace(place);
-        }
       });
       map.append(marker);
       map.append(popover);
@@ -987,38 +850,22 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     childrenRef.current = nextChildren;
   }, [
     accessLines,
-    clusters,
-    greenPatches,
     cameraMode,
     home.boundary,
     home.latitude,
     home.longitude,
     home.name,
-    lakes,
     metroLines,
-    onSelectAccessLine,
-    onSelectCluster,
-    onSelectPlace,
-    onSelectRedFlagLine,
-    onRememberPlace,
-    pinnedPlaceIds,
     places,
-    redFlagLines,
     ready,
-    selectedId,
     secondarySocieties,
     selectedSecondarySocietyId,
     onSelectSecondarySociety,
     showMetroLines,
     roadTourActive,
-    waterTint,
   ]);
 
   if (loadError) throw loadError;
-
-  function backToHome() {
-    onBackToHome();
-  }
 
   function toggleExpanded() {
     onToggleExpanded();
@@ -1082,9 +929,6 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         </div>
       ) : null}
       <div className="nearby-map__actions">
-        {showBackToHome && cameraMode === "evidence" && (
-          <button type="button" onClick={backToHome}>Back to home</button>
-        )}
         <button type="button" onClick={toggleExpanded}>
           {expanded ? "Close map" : "Expand map"}
         </button>

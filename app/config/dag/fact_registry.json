@@ -8094,7 +8094,7 @@
       }
     }
   ],
-  "fact_count": 135,
+  "fact_count": 139,
   "excluded_search_fact_keys": [
     "google_review_cards",
     "google_review_snippets"

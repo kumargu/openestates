@@ -340,8 +340,7 @@
               "unavailableState": "Street View unavailable",
               "pauseLabel": "Pause approach road",
               "resumeLabel": "Resume approach road",
-              "replayLabel": "Replay approach road",
-              "skipLabel": "Skip approach road"
+              "replayLabel": "Replay approach road"
             },
             "icon": "road",
             "sort": "distance",
