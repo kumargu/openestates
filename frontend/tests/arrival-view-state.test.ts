@@ -68,5 +68,5 @@ test("Society playback exposes pause, resume, and explicit replay actions", () =
   assert.equal(societyPlaybackAction("revealing", true), "pause");
   assert.equal(societyPlaybackAction("paused", true), "resume");
   assert.equal(societyPlaybackAction("settled", false), "play");
-  assert.equal(societyPlaybackAction("settled", true), null);
+  assert.equal(societyPlaybackAction("settled", true), "play");
 });

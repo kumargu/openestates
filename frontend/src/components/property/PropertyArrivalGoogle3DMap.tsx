@@ -55,6 +55,7 @@ export type ArrivalGoogle3DMapProps = {
   arrivalExperience?: ArrivalSceneExperience;
   playbackController: ArrivalPlaybackController;
   autoPlaySociety: boolean;
+  societyPlaybackVersion?: number;
   autoPlayApproach?: boolean;
   secondarySocieties?: ArrivalSearchSociety[];
   selectedSecondarySocietyId?: string | null;
@@ -374,6 +375,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     arrivalExperience,
     playbackController,
     autoPlaySociety,
+    societyPlaybackVersion = 0,
     autoPlayApproach = true,
     secondarySocieties = [],
     selectedSecondarySocietyId = null,
@@ -693,6 +695,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     roadExperience,
     roadLandingFocus,
     roadTourActive,
+    societyPlaybackVersion,
     societyComposition,
     terrainCorridor,
     viewport.radiusKm,
@@ -1062,27 +1065,19 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
                 : playbackController.pause()}
             >
               <span aria-hidden="true">{roadPlaybackCanResume ? "▶" : "Ⅱ"}</span>
+              <span>{roadPlaybackCanResume ? "Resume" : "Pause"}</span>
             </button>
           ) : null}
           {roadTourActive && streetViewReady ? (
-            <>
-              <button
-                type="button"
-                aria-label={roadExperience.replayLabel}
-                title={roadExperience.replayLabel}
-                onClick={roadTour.replay}
-              >
-                <span aria-hidden="true">↻</span>
-              </button>
-              <button
-                type="button"
-                aria-label={roadExperience.skipLabel}
-                title={roadExperience.skipLabel}
-                onClick={roadTour.skip}
-              >
-                <span aria-hidden="true">⇥</span>
-              </button>
-            </>
+            <button
+              type="button"
+              aria-label={roadExperience.replayLabel}
+              title={roadExperience.replayLabel}
+              onClick={roadTour.replay}
+            >
+              <span aria-hidden="true">↻</span>
+              <span>Replay</span>
+            </button>
           ) : null}
         </div>
       ) : null}

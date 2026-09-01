@@ -303,7 +303,6 @@ export type GuidedStreetViewTour = {
   active: boolean;
   progress: { current: number; total: number } | null;
   replay: () => void;
-  skip: () => void;
   status: string | null;
 };
 
@@ -319,7 +318,6 @@ export function useGuidedStreetViewTour({
   waypoints,
 }: GuidedStreetViewTourOptions): GuidedStreetViewTour {
   const adapterRef = useRef<GoogleStreetViewAdapter | null>(null);
-  const scheduleRef = useRef<StreetViewSchedule | null>(null);
   const autoPlayRef = useRef(autoPlay);
   const [ready, setReady] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
@@ -335,7 +333,6 @@ export function useGuidedStreetViewTour({
     const container = containerRef.current;
     let disposed = false;
     adapterRef.current = null;
-    scheduleRef.current = null;
     void Promise.resolve().then(() => {
       if (disposed) return;
       setReady(false);
@@ -402,7 +399,6 @@ export function useGuidedStreetViewTour({
           { pane: secondPane, pano: second.pano, panorama: secondPanorama },
         ], crossfadeMs);
         adapterRef.current = adapter;
-        scheduleRef.current = schedule;
         unregisterStopper = playbackController.registerStopper(() => adapter.stop());
         unregisterResumer = playbackController.registerResumer(() => adapter.resume());
         setProgress({ current: 1, total: schedule.entries.length });
@@ -521,23 +517,5 @@ export function useGuidedStreetViewTour({
     setReplayVersion((current) => current + 1);
   }, [playbackController]);
 
-  const skip = useCallback(() => {
-    const schedule = scheduleRef.current;
-    const adapter = adapterRef.current;
-    if (!schedule || !adapter || schedule.entries.length === 0) return;
-    playbackController.cancel("settled");
-    adapter.resume();
-    const targetIndex = schedule.entranceIndex ?? schedule.entries.length - 1;
-    const target = schedule.entries[targetIndex];
-    adapter.setFrame(target.frame, target.frame.waypoint.heading);
-    if (target.lookAtEntrance && anchor) {
-      adapter.setPov(
-        streetViewAnchorHeading(target.frame.panoramaPosition, anchor),
-        experience?.anchorPitch ?? 0,
-      );
-    }
-    setProgress({ current: targetIndex + 1, total: schedule.entries.length });
-  }, [anchor, experience?.anchorPitch, playbackController]);
-
-  return { active: active && ready, progress, replay, skip, status };
+  return { active: active && ready, progress, replay, status };
 }

@@ -113,6 +113,7 @@ export function PropertyArrivalMap({
 }: Props) {
   const { controller: playbackController, state: playbackState } = useArrivalPlaybackController();
   const [societyAutoPlay, setSocietyAutoPlay] = useState(true);
+  const [societyPlaybackVersion, setSocietyPlaybackVersion] = useState(0);
   const [approachAutoPlay, setApproachAutoPlay] = useState(true);
   const [selectedSearchSocietyId, setSelectedSearchSocietyId] = useState<string | null>(null);
   const home = useMemo(() => resolveHomeAnchor(context), [context]);
@@ -201,6 +202,21 @@ export function PropertyArrivalMap({
     : societyAction === "play"
     ? arrivalExperience?.societyPlayLabel
     : null;
+  const societyActionText = societyAction === "pause"
+    ? "Pause"
+    : societyAction === "resume"
+    ? "Resume"
+    : societyAction === "play"
+    ? "Replay"
+    : null;
+  const approachReplayAvailable = activeView === "approach"
+    && activeCameraMode === "home"
+    && !approachAutoPlay;
+  const navigationAction = societyAction ?? (approachReplayAvailable ? "play" : null);
+  const navigationActionLabel = approachReplayAvailable
+    ? roadExperience?.replayLabel
+    : societyActionLabel;
+  const navigationActionText = approachReplayAvailable ? "Replay" : societyActionText;
   const cancelSocietyPlayback = useCallback(() => setSocietyAutoPlay(false), []);
   const cancelApproachPlayback = useCallback(() => setApproachAutoPlay(false), []);
 
@@ -287,49 +303,45 @@ export function PropertyArrivalMap({
 
   return (
     <div className="property-arrival-map">
-      <div className="property-arrival-map__switcher" role="toolbar" aria-label="Arrival view">
-        {views.map((candidate) => (
+      <div className="property-arrival-map__nav">
+        <div className="property-arrival-map__switcher" role="group" aria-label="Arrival view">
+          {views.map((candidate) => (
+            <button
+              key={candidate.id}
+              type="button"
+              className={candidate.id === activeView ? "is-active" : undefined}
+              aria-pressed={candidate.id === activeView}
+              onClick={() => selectView(candidate.id)}
+            >
+              {candidate.label}
+            </button>
+          ))}
+        </div>
+        {navigationAction && navigationActionText ? (
           <button
-            key={candidate.id}
             type="button"
-            className={candidate.id === activeView ? "is-active" : undefined}
-            aria-pressed={candidate.id === activeView}
-            onClick={() => selectView(candidate.id)}
+            className="property-arrival-map__playback"
+            aria-label={navigationActionLabel ?? navigationActionText}
+            onClick={() => {
+              if (navigationAction === "pause") playbackController.pause();
+              else if (navigationAction === "resume") playbackController.resume();
+              else if (approachReplayAvailable) setApproachAutoPlay(true);
+              else {
+                setSocietyAutoPlay(true);
+                setSocietyPlaybackVersion((current) => current + 1);
+              }
+            }}
           >
-            {candidate.label}
+            <span aria-hidden="true">{navigationAction === "pause" ? "Ⅱ" : navigationAction === "resume" ? "▶" : "↻"}</span>
+            {navigationActionText}
           </button>
-        ))}
+        ) : null}
       </div>
       {missingArrivalState && (
         <p className="property-arrival-map__status" role="status" aria-live="polite">
           {missingArrivalState}
         </p>
       )}
-      {societyAction && societyActionLabel ? (
-        <button
-          type="button"
-          className="property-arrival-map__society-play"
-          onClick={() => {
-            if (societyAction === "pause") playbackController.pause();
-            else if (societyAction === "resume") playbackController.resume();
-            else setSocietyAutoPlay(true);
-          }}
-        >
-          {societyActionLabel}
-        </button>
-      ) : null}
-      {activeView === "approach"
-        && activeCameraMode === "home"
-        && !approachAutoPlay
-        && roadExperience?.replayLabel ? (
-        <button
-          type="button"
-          className="property-arrival-map__society-play"
-          onClick={() => setApproachAutoPlay(true)}
-        >
-          {roadExperience.replayLabel}
-        </button>
-      ) : null}
       <ArrivalMapBoundary
         unavailableLabel={arrivalExperience?.googleUnavailableState}
         onUnavailable={onUnavailable}
@@ -400,6 +412,7 @@ export function PropertyArrivalMap({
             arrivalExperience={context.arrivalExperience}
             playbackController={playbackController}
             autoPlaySociety={activeView === "society" && societyAutoPlay}
+            societyPlaybackVersion={societyPlaybackVersion}
             secondarySocieties={visibleSearchContextSocieties}
             selectedSecondarySocietyId={activeView === "society" ? selectedSearchSocietyId : null}
             onSelectSecondarySociety={activeView === "society" ? selectSearchSociety : undefined}

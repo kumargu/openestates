@@ -73,10 +73,10 @@ export function arrivalGateDistanceLabel(
 
 export function societyPlaybackAction(
   state: ArrivalPlaybackState,
-  autoPlay: boolean,
+  _autoPlay: boolean,
 ): SocietyPlaybackAction | null {
   if (state === "preparing" || state === "revealing") return "pause";
   if (state === "paused") return "resume";
-  if (!autoPlay && state === "settled") return "play";
+  if (state === "settled") return "play";
   return null;
 }
