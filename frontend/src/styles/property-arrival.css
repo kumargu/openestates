@@ -22,20 +22,20 @@
   display: inline-flex;
   align-items: center;
   gap: 0.15rem;
-  padding: 0.25rem;
+  padding: 0.2rem;
   border: 1px solid rgba(35, 31, 28, 0.1);
-  border-radius: 14px;
+  border-radius: 12px;
   background: rgba(35, 31, 28, 0.045);
 }
 
 .property-arrival-map__switcher button {
-  padding: 0.65rem 0.9rem;
+  padding: 0.52rem 0.72rem;
   border: 0;
-  border-radius: 10px;
+  border-radius: 9px;
   background: transparent;
   color: var(--color-text-secondary, #6d6963);
   font: inherit;
-  font-size: 0.9rem;
+  font-size: 0.86rem;
   font-weight: 650;
   letter-spacing: -0.01em;
   cursor: pointer;
@@ -331,8 +331,8 @@
 
   .property-arrival-map__switcher button {
     flex: 1;
-    padding-inline: 0.55rem;
-    font-size: 0.84rem;
+    padding-inline: 0.48rem;
+    font-size: 0.82rem;
     white-space: nowrap;
   }
 
