@@ -6,6 +6,7 @@ export type DiscoveryContext = {
   version: 1;
   url: string;
   scrollY: number;
+  resultCount?: number;
 };
 
 const DISCOVERY_STORAGE_KEY = "openestates:last-discovery:v1";
@@ -90,6 +91,11 @@ export function readDiscoveryContext(): DiscoveryContext | null {
       scrollY: typeof candidate.scrollY === "number" && candidate.scrollY >= 0
         ? candidate.scrollY
         : 0,
+      resultCount: typeof candidate.resultCount === "number"
+        && Number.isInteger(candidate.resultCount)
+        && candidate.resultCount >= 0
+        ? candidate.resultCount
+        : undefined,
     };
   } catch {
     return null;
@@ -100,10 +106,26 @@ export function writeDiscoveryContext(url: string, scrollY = 0): void {
   if (typeof window === "undefined") return;
   const params = url.startsWith("/?") ? new URLSearchParams(url.slice(2)) : null;
   if (!params?.get("q")?.trim()) return;
+  const previous = readDiscoveryContext();
   const context: DiscoveryContext = {
     version: 1,
     url,
     scrollY: Math.max(0, Math.round(scrollY)),
+    resultCount: previous?.url === url ? previous.resultCount : undefined,
+  };
+  window.sessionStorage.setItem(DISCOVERY_STORAGE_KEY, JSON.stringify(context));
+}
+
+export function writeDiscoveryResultCount(url: string, resultCount: number): void {
+  if (typeof window === "undefined" || !Number.isInteger(resultCount) || resultCount < 0) return;
+  const params = url.startsWith("/?") ? new URLSearchParams(url.slice(2)) : null;
+  if (!params?.get("q")?.trim()) return;
+  const previous = readDiscoveryContext();
+  const context: DiscoveryContext = {
+    version: 1,
+    url,
+    scrollY: previous?.url === url ? previous.scrollY : Math.max(0, Math.round(window.scrollY)),
+    resultCount,
   };
   window.sessionStorage.setItem(DISCOVERY_STORAGE_KEY, JSON.stringify(context));
 }

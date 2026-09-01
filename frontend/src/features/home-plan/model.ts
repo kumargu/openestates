@@ -1,10 +1,9 @@
 import {
+  buildLoanSchedule,
   buildPaymentSchedule,
-  calculateFinancingInterest,
   calculateProjectionPoints,
   constructionPlanFor,
   monthlyPayment,
-  monthsToPayoff,
 } from "./financeEngine.ts";
 import {
   DEFAULT_PLAN_MODEL_CONFIG,
@@ -99,7 +98,6 @@ export type LoanJourneyPoint = {
 
 export type LoanJourney = {
   monthlyEmi: number;
-  annualPrepayment: number;
   loanFreeMonths: number;
   monthsSaved: number;
   interestSaved: number | null;
@@ -225,11 +223,9 @@ export function buildBaselinePlanInputs(
     ),
     config,
   );
-  // The rent path spends the same money: rent first, the rest invested.
-  const monthlySipThousands = Math.max(
-    0,
-    monthlyEmiThousands - estimatedRentThousands,
-  );
+  // Rent vs Buy starts with the simplest explicit SIP choice: 1× the EMI.
+  // Buyers can compare 1×, 2× or 3× without an unbounded investment input.
+  const monthlySipThousands = monthlyEmiThousands;
   return {
     propertyPriceLakh,
     downPaymentPercent: defaults.downPaymentPercent,
@@ -261,66 +257,35 @@ export function calculateLoanJourney(
   extraEmisPerYear = normalizeExtraEmisPerYear(
     extraEmisPerYear ?? config.defaults.extraEmisPerYear,
   );
-  const schedule = buildPaymentSchedule(inputs, config);
-  const constructionPlan = constructionPlanFor(inputs, config);
-  const principal = schedule.reduce((sum, payment) => sum + payment.loanAmount, 0);
-  const monthlyEmi = inputs.monthlyEmiThousands * 1_000;
-  const repaymentMonths = monthsToPayoff(principal, inputs.loanRate, monthlyEmi);
-  const maxSimMonths = constructionPlan.possessionMonth
-    + config.simulation.maximumLoanYears * MONTHS_IN_YEAR;
-  const baselineLoanFreeMonth = Number.isFinite(repaymentMonths)
-    ? constructionPlan.possessionMonth + repaymentMonths
-    : maxSimMonths;
-  const paymentsByMonth = new Map(schedule.map((payment) => [payment.month, payment]));
-  const monthlyRate = inputs.loanRate / 100 / MONTHS_IN_YEAR;
-  const annualPrepayment = monthlyEmi * Math.max(0, extraEmisPerYear);
+  const schedule = buildLoanSchedule(inputs, { extraEmisPerYear }, config);
+  const baseline = buildLoanSchedule(inputs, { extraEmisPerYear: 0 }, config);
   const points: LoanJourneyPoint[] = [];
-  let balance = paymentsByMonth.get(0)?.loanAmount ?? 0;
-  let month = 0;
-  let totalInterest = 0;
   let yearlyInterest = 0;
   let yearlyPrincipal = 0;
   let yearlyExtra = 0;
-  points.push({ year: 0, balance, interestPaid: 0, principalPaid: 0, extraPaid: 0 });
+  points.push({
+    year: 0,
+    balance: schedule.months[0]?.openingBalance ?? 0,
+    interestPaid: 0,
+    principalPaid: 0,
+    extraPaid: 0,
+  });
 
-  while (
-    (month < constructionPlan.possessionMonth || balance > config.simulation.closedBalanceRupees)
-    && month < baselineLoanFreeMonth
-    && month < maxSimMonths
-  ) {
-    const interest = balance * monthlyRate;
-    const hasPossession = month >= constructionPlan.possessionMonth;
-    const regularPayment = hasPossession ? Math.min(monthlyEmi, balance + interest) : interest;
-    const principalPayment = Math.max(0, regularPayment - interest);
-    balance = Math.max(0, balance + interest - regularPayment);
-    totalInterest += interest;
-    yearlyInterest += interest;
-    yearlyPrincipal += principalPayment;
-
-    const paymentNumber = hasPossession ? month - constructionPlan.possessionMonth + 1 : 0;
+  for (const month of schedule.months) {
+    yearlyInterest += month.interestPaid;
+    yearlyPrincipal += month.principalPaid;
+    yearlyExtra += month.extraPaid;
     if (
-      paymentNumber > 0
-      && paymentNumber % MONTHS_IN_YEAR === 0
-      && balance > 0
-      && extraEmisPerYear > 0
-    ) {
-      yearlyExtra = Math.min(balance, annualPrepayment);
-      balance -= yearlyExtra;
-    }
-
-    month += 1;
-    balance += paymentsByMonth.get(month)?.loanAmount ?? 0;
-
-    if (
-      month % MONTHS_IN_YEAR === 0
+      (month.month + 1) % MONTHS_IN_YEAR === 0
       || (
-        month >= constructionPlan.possessionMonth
-        && balance <= config.simulation.closedBalanceRupees
+        month.paymentNumber > 0
+        && month.closingBalance <= config.simulation.closedBalanceRupees
       )
     ) {
+      const nextOpeningBalance = schedule.months[month.month + 1]?.openingBalance;
       points.push({
-        year: Math.ceil(month / MONTHS_IN_YEAR),
-        balance,
+        year: Math.ceil((month.month + 1) / MONTHS_IN_YEAR),
+        balance: nextOpeningBalance ?? month.closingBalance,
         interestPaid: yearlyInterest,
         principalPaid: yearlyPrincipal,
         extraPaid: yearlyExtra,
@@ -333,26 +298,24 @@ export function calculateLoanJourney(
 
   const lastPlanYear = Math.min(
     config.simulation.maximumJourneyYears,
-    Math.ceil(baselineLoanFreeMonth / MONTHS_IN_YEAR),
+    Math.ceil((baseline.baselinePayoffMonth ?? schedule.months.length) / MONTHS_IN_YEAR),
   );
   for (let year = points.at(-1)?.year ?? 0; year < lastPlanYear; year += 1) {
     points.push({ year: year + 1, balance: 0, interestPaid: 0, principalPaid: 0, extraPaid: 0 });
   }
 
-  const originalInterest = calculateFinancingInterest(inputs, 0, config);
-  const closed = balance <= config.simulation.closedBalanceRupees;
+  const closed = schedule.payoffMonth != null;
 
   return {
-    monthlyEmi,
-    annualPrepayment,
-    loanFreeMonths: month,
-    monthsSaved: closed && Number.isFinite(repaymentMonths)
-      ? Math.max(0, baselineLoanFreeMonth - month)
+    monthlyEmi: schedule.openingMonthlyEmi,
+    loanFreeMonths: schedule.payoffMonth ?? schedule.months.length,
+    monthsSaved: closed && baseline.payoffMonth != null
+      ? Math.max(0, baseline.payoffMonth - schedule.payoffMonth!)
       : 0,
-    interestSaved: closed && originalInterest != null
-      ? Math.max(0, originalInterest - totalInterest)
+    interestSaved: closed && baseline.totalInterest != null && schedule.totalInterest != null
+      ? Math.max(0, baseline.totalInterest - schedule.totalInterest)
       : null,
-    totalInterest: closed ? totalInterest : null,
+    totalInterest: schedule.totalInterest,
     points,
   };
 }
@@ -426,4 +389,12 @@ export function formatCurrency(value: number, compact = false): string {
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+export function formatLakhCurrency(value: number): string {
+  return `₹${(value / LAKH).toFixed(2)}L`;
+}
+
+export function formatMonthlyCurrency(value: number): string {
+  return `${formatLakhCurrency(value)}/month`;
 }

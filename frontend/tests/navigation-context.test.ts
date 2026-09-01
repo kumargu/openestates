@@ -9,10 +9,12 @@ import {
   navigationMode,
   propertyExploreHref,
   queryFingerprint,
+  readDiscoveryContext,
   readDiscoveryMapContext,
   requestDiscoveryReturn,
   writeDiscoveryContext,
   writeDiscoveryMapContext,
+  writeDiscoveryResultCount,
 } from "../src/lib/navigationContext.ts";
 import type { SearchResultItem } from "../src/lib/types.ts";
 
@@ -72,6 +74,30 @@ test("leaving Explore prepares browser Back to restore the exact position", () =
 
   assert.equal(consumeDiscoveryReturn(url), 912);
   assert.equal(consumeDiscoveryReturn(url), null);
+});
+
+test("discovery result count survives scroll-position updates", () => {
+  sessionValues.clear();
+  const url = "/?q=quiet+3bhk";
+  writeDiscoveryContext(url, 120);
+  writeDiscoveryResultCount(url, 18);
+  writeDiscoveryContext(url, 912);
+
+  assert.deepEqual(readDiscoveryContext(), {
+    version: 1,
+    url,
+    scrollY: 912,
+    resultCount: 18,
+  });
+});
+
+test("a new discovery query does not inherit another query's count", () => {
+  sessionValues.clear();
+  writeDiscoveryContext("/?q=whitefield", 120);
+  writeDiscoveryResultCount("/?q=whitefield", 8);
+  writeDiscoveryContext("/?q=sarjapur", 0);
+
+  assert.equal(readDiscoveryContext()?.resultCount, undefined);
 });
 
 test("starting Explore fresh forgets an old query and return position", () => {

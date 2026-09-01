@@ -4,6 +4,7 @@ import {
   buildBaselinePlanInputs,
   calculateLoanJourney,
   calculateProjection,
+  formatMonthlyCurrency,
   hasPlannablePrice,
   type PlanInputs,
   updatePlanInput,
@@ -15,11 +16,13 @@ import {
 import { buildPlanSnapshotNote } from "../src/features/home-plan/planSnapshot.ts";
 import { buildMonthlyPlanVerdict, defaultPlanFocusYear } from "../src/features/home-plan/monthlyPlanView.ts";
 import {
+  buildLoanSchedule,
   isExplicitlyReadyStatus,
   monthlyPayment,
   principalFromMonthlyPayment,
   rentInMonth,
 } from "../src/features/home-plan/financeEngine.ts";
+import { calculateRepaymentDashboard } from "../src/features/home-plan/repaymentModel.ts";
 
 const BASE_INPUTS: PlanInputs = {
   propertyPriceLakh: 150,
@@ -58,6 +61,11 @@ const ready = {
     dateSource: "not_applicable" as const,
   },
 };
+
+test("monthly currency uses precise Indian lakh notation", () => {
+  assert.equal(formatMonthlyCurrency(135_000), "₹1.35L/month");
+  assert.equal(formatMonthlyCurrency(55_000), "₹0.55L/month");
+});
 
 test("buyer and renter start with matching down-payment capital", () => {
   const projection = calculateProjection(ready);
@@ -163,7 +171,7 @@ test("plan snapshot captures monthly assumptions and inspected outcome", () => {
   assert.deepEqual(note.labels, ["finance", "emi", "price"]);
   assert.equal(note.title, "Waterford Estate plan, ₹1.8L EMI");
   assert.match(note.detail, /Waterford Estate/);
-  assert.match(note.detail, /3 extra EMIs\/year/);
+  assert.match(note.detail, /3 extra payments\/year/);
   assert.match(note.detail, /rent/i);
   assert.match(note.detail, /SIP/);
   assert.match(note.detail, /home.*projected near|home value reads near|home itself is projected near/i);
@@ -188,10 +196,7 @@ test("baseline exposes monthly inputs", () => {
   assert.equal(inputs.downPaymentPercent, 20);
   assert.equal(inputs.monthlyEmiThousands, expectedEmi);
   assert.ok(inputs.currentRentThousands > 0);
-  assert.equal(
-    inputs.monthlySipThousands + inputs.currentRentThousands,
-    inputs.monthlyEmiThousands,
-  );
+  assert.equal(inputs.monthlySipThousands, inputs.monthlyEmiThousands);
   assert.equal(inputs.loanRate, 7.5);
   assert.equal(inputs.equityReturn, 10);
 });
@@ -290,14 +295,11 @@ test("baseline rejects homes without a price instead of inventing one", () => {
   assert.equal(buildBaselinePlanInputs(6_700_000).propertyPriceLakh, 67);
 });
 
-test("high-price baseline keeps a visible SIP while preserving EMI equals rent plus SIP", () => {
+test("high-price baseline starts Rent vs Buy at one EMI of monthly SIP", () => {
   const inputs = buildBaselinePlanInputs(33_100_000);
   const projection = calculateProjection(inputs);
 
-  assert.equal(
-    inputs.monthlySipThousands + inputs.currentRentThousands,
-    inputs.monthlyEmiThousands,
-  );
+  assert.equal(inputs.monthlySipThousands, inputs.monthlyEmiThousands);
   assert.ok(inputs.monthlySipThousands > 0);
   assert.ok(inputs.monthlyEmiThousands > inputs.currentRentThousands);
   assert.ok(projection.loanFreeYear !== null);
@@ -391,20 +393,25 @@ test("rising rent eats into the rent path's investing", () => {
 });
 
 test("break-even is reported only when buying actually overtakes renting", () => {
-  const buyAhead = calculateProjection(buildBaselinePlanInputs(15_100_000));
-  assert.ok(buyAhead.points[1].buyNetWorth >= buyAhead.points[1].rentNetWorth);
-  assert.equal(buyAhead.breakEvenYear, null);
-
-  // A large SIP puts renting ahead first, so a real crossover exists.
-  const rentAheadFirst = calculateProjection({
+  const projection = calculateProjection({
     ...ready,
     monthlyEmiThousands: 135,
     monthlySipThousands: 400,
     holdingPeriodYears: 20,
   });
-  const crossover = rentAheadFirst.breakEvenYear;
-  assert.ok(crossover === null || rentAheadFirst.points[crossover - 1].buyNetWorth
-    < rentAheadFirst.points[crossover - 1].rentNetWorth);
+  const crossover = projection.breakEvenYear;
+  if (crossover == null) {
+    assert.equal(projection.points.some((point, index) => (
+      index > 0
+      && projection.points[index - 1].buyNetWorth < projection.points[index - 1].rentNetWorth
+      && point.buyNetWorth >= point.rentNetWorth
+    )), false);
+  } else {
+    assert.ok(projection.points[crossover - 1].buyNetWorth
+      < projection.points[crossover - 1].rentNetWorth);
+    assert.ok(projection.points[crossover].buyNetWorth
+      >= projection.points[crossover].rentNetWorth);
+  }
 });
 
 test("a closed loan frees the EMI into the buyer's wealth", () => {
@@ -522,10 +529,91 @@ test("extra EMIs update payoff, total interest, snapshot, and top insight togeth
   assert.ok(prepaid.loanFreeYear! < base.loanFreeYear!);
   assert.ok(prepaid.totalInterest! < base.totalInterest!);
   assert.match(view.insight, /At 12 years, (buying|renting) leads by ₹/);
-  assert.match(view.insight, /3 extra EMIs\/year closes the loan/);
+  assert.match(view.insight, /3 extra payments\/year closes the loan/);
   assert.match(view.insight, /Total interest lands near/);
-  assert.match(note.detail, /3 extra EMIs\/year/);
+  assert.match(note.detail, /3 extra payments\/year/);
   assert.equal(note.catalogKey, "plan:home-1:current");
+});
+
+test("Rent vs Buy charges extra principal as buyer cash outflow", () => {
+  const inputs = {
+    ...ready,
+    monthlyEmiThousands: 160,
+    holdingPeriodYears: 20,
+  };
+  const baseline = calculateProjection(inputs, 0);
+  const prepaid = calculateProjection(inputs, 4);
+  const prepaidSchedule = buildLoanSchedule(inputs, { extraEmisPerYear: 4 });
+  const inspectedYear = 2;
+  const extraPaidBeforeCheckpoint = prepaidSchedule.months
+    .filter((month) => month.month < inspectedYear * 12)
+    .reduce((total, month) => total + month.extraPaid, 0);
+  const balanceReduction = baseline.points[inspectedYear].loanBalance
+    - prepaid.points[inspectedYear].loanBalance;
+  const wealthDifference = prepaid.points[inspectedYear].buyNetWorth
+    - baseline.points[inspectedYear].buyNetWorth;
+
+  assert.ok(extraPaidBeforeCheckpoint > 0);
+  assert.ok(Math.abs(wealthDifference - (balanceReduction - extraPaidBeforeCheckpoint)) < 0.01);
+  assert.ok(wealthDifference < balanceReduction);
+});
+
+test("recurring extras stay at the opening EMI and shorten tenure", () => {
+  const extraEmisPerYear = 2;
+  const schedule = buildLoanSchedule(ready, {
+    extraEmisPerYear,
+  });
+
+  assert.ok(schedule.payoffMonth! < schedule.baselinePayoffMonth!);
+  const extras = schedule.months.filter((month) => month.extraPaid > 0);
+  assert.ok(extras.length > 1);
+  assert.equal(extras[0].extraPaid, ready.monthlyEmiThousands * 1_000);
+  for (const extra of extras.slice(0, -1)) {
+    assert.equal(extra.extraPaid, schedule.openingMonthlyEmi);
+  }
+});
+
+test("repayment dashboard exposes recurrent and one-off series", () => {
+  const dashboard = calculateRepaymentDashboard(ready, 2);
+
+  assert.ok(dashboard.markers.crossoverYear != null);
+  assert.ok(dashboard.recurrentSchedule.length > 1);
+  assert.ok(dashboard.oneOffExtraPaymentCurve.length > 2);
+  assert.ok(dashboard.interestSaved > 0);
+  assert.ok(dashboard.monthsSaved > 0);
+  for (let index = 1; index < dashboard.oneOffExtraPaymentCurve.length; index += 1) {
+    assert.ok(
+      dashboard.oneOffExtraPaymentCurve[index].interestSaved
+      <= dashboard.oneOffExtraPaymentCurve[index - 1].interestSaved + 0.01,
+    );
+  }
+});
+
+test("repayment dashboard never turns a simulation horizon into a payoff", () => {
+  const dashboard = calculateRepaymentDashboard({
+    ...ready,
+    monthlyEmiThousands: 10,
+  }, 0);
+
+  assert.equal(dashboard.status, "insufficient_emi");
+  assert.equal(dashboard.baselinePayoffMonths, null);
+  assert.equal(dashboard.selectedPayoffMonths, null);
+  assert.ok(dashboard.baselineHorizonMonths > 0);
+});
+
+test("repayment dashboard marks rescued loans as incomparable to a non-closing baseline", () => {
+  const dashboard = calculateRepaymentDashboard({
+    ...ready,
+    monthlyEmiThousands: 80,
+  }, 4);
+
+  assert.equal(dashboard.status, "repaid");
+  assert.equal(dashboard.baselinePayoffMonths, null);
+  assert.ok(dashboard.selectedPayoffMonths != null);
+  assert.equal(dashboard.comparisonAvailable, false);
+  assert.equal(dashboard.interestSaved, 0);
+  assert.equal(dashboard.monthsSaved, 0);
+  assert.deepEqual(dashboard.oneOffExtraPaymentCurve, []);
 });
 
 test("default plan focus stays on the selected holding period", () => {
@@ -540,7 +628,7 @@ test("default plan focus stays on the selected holding period", () => {
 
   assert.equal(focusYear, inputs.holdingPeriodYears);
   assert.match(view.timeLabel, new RegExp(`After ${inputs.holdingPeriodYears} years`));
-  assert.match(view.insight, /4 extra EMIs\/year closes the loan/);
+  assert.match(view.insight, /4 extra payments\/year closes the loan/);
 });
 
 test("default plan focus falls back to the graph horizon when payoff is outside the chart", () => {
@@ -697,11 +785,147 @@ test("a fully cash purchase has no loan or EMI", () => {
 });
 
 test("payment and principal formulas are inverses", () => {
-  const principal = 11_000_000;
-  const payment = monthlyPayment(principal, 8.5, 20);
-  const restored = principalFromMonthlyPayment(payment, 8.5, 20);
+  for (const rate of [0, 4.5, 8.5, 12]) {
+    for (const years of [1, 15, 20, 30]) {
+      const principal = 11_000_000;
+      const payment = monthlyPayment(principal, rate, years);
+      const restored = principalFromMonthlyPayment(payment, rate, years);
+      assert.ok(Math.abs(restored - principal) < 1);
+    }
+  }
+});
 
-  assert.ok(Math.abs(restored - principal) < 1);
+test("zero-rate schedules conserve balance and repay without interest", () => {
+  const schedule = buildLoanSchedule({
+    ...ready,
+    loanRate: 0,
+    monthlyEmiThousands: 50,
+  });
+
+  assert.equal(schedule.status, "repaid");
+  assert.equal(schedule.totalInterest, 0);
+  for (const month of schedule.months) {
+    assert.ok(Math.abs(
+      month.openingBalance + month.interestPaid
+      - month.scheduledPayment - month.extraPaid - month.closingBalance,
+    ) < 0.01);
+  }
+});
+
+test("positive-rate schedules conserve balance through regular and extra payments", () => {
+  const schedule = buildLoanSchedule(ready, {
+    extraEmisPerYear: 4,
+  });
+
+  for (const month of schedule.months) {
+    assert.ok(Math.abs(
+      month.openingBalance + month.interestPaid
+      - month.scheduledPayment - month.extraPaid - month.closingBalance,
+    ) < 0.01);
+  }
+});
+
+test("insufficient EMI is an explicit non-closing schedule", () => {
+  const schedule = buildLoanSchedule({
+    ...ready,
+    monthlyEmiThousands: 10,
+  });
+
+  assert.equal(schedule.status, "insufficient_emi");
+  assert.equal(schedule.payoffMonth, null);
+  assert.equal(schedule.totalInterest, null);
+  assert.ok(schedule.months.at(-1)!.closingBalance > schedule.months[0].openingBalance);
+});
+
+test("prepayment keeps EMI constant and shortens tenure", () => {
+  const schedule = buildLoanSchedule(ready, {
+    extraEmisPerYear: 3,
+  });
+
+  assert.equal(schedule.status, "repaid");
+  assert.ok(schedule.payoffMonth! < schedule.baselinePayoffMonth!);
+  for (const month of schedule.months.filter((point) => point.paymentNumber > 0)) {
+    assert.equal(month.scheduledEmi, schedule.openingMonthlyEmi);
+  }
+});
+
+test("multiple extra payments are spaced through each repayment year", () => {
+  const schedule = buildLoanSchedule(ready, {
+    extraEmisPerYear: 4,
+  });
+  const firstYearExtraMonths = schedule.months
+    .filter((month) => month.paymentNumber <= 12 && month.extraPaid > 0)
+    .map((month) => month.paymentNumber);
+
+  assert.deepEqual(firstYearExtraMonths, [3, 6, 9, 12]);
+  assert.ok(schedule.months
+    .filter((month) => firstYearExtraMonths.includes(month.paymentNumber))
+    .every((month) => Math.abs(month.extraPaid - month.scheduledEmi) < 0.01));
+});
+
+test("one-off savings decline with delay and markers select first satisfying years", () => {
+  const dashboard = calculateRepaymentDashboard(ready, 2);
+  const curve = dashboard.oneOffExtraPaymentCurve;
+  for (let index = 1; index < curve.length; index += 1) {
+    assert.ok(curve[index].interestSaved <= curve[index - 1].interestSaved + 0.01);
+  }
+  for (const point of curve) {
+    const candidate = buildLoanSchedule(ready, {
+      extraEmisPerYear: 1,
+      oneOffExtraPaymentYear: point.year,
+    });
+    assert.ok(candidate.months.filter((month) => month.extraPaid > 0).length <= 1);
+    assert.ok(Math.abs(
+      candidate.months.reduce((sum, month) => sum + month.extraPaid, 0) - point.extraPaid,
+    ) < 0.01);
+  }
+
+  const expectedHalfImpact = curve.find((point) => (
+    point.year > 1 && point.interestSaved <= curve[0].interestSaved / 2
+  ))?.year ?? null;
+  const expectedCrossover = dashboard.recurrentSchedule.find((point) => (
+    point.principalPaid >= point.interestPaid
+  ))?.year ?? null;
+  assert.equal(dashboard.markers.halfFirstYearImpactYear, expectedHalfImpact);
+  assert.equal(dashboard.markers.crossoverYear, expectedCrossover);
+});
+
+test("one-off timing remains useful when recurring extras are zero", () => {
+  const dashboard = calculateRepaymentDashboard(ready, 0);
+  assert.ok(dashboard.oneOffExtraPaymentCurve[0].interestSaved > 0);
+  assert.ok(dashboard.oneOffExtraPaymentCurve
+    .filter((point) => point.interestSaved > 0)
+    .every((point) => point.extraPaid > 0));
+});
+
+test("greater extra-payment cadence never reduces interest savings", () => {
+  const savings = [0, 1, 2, 3, 4, 6]
+    .map((cadence) => calculateRepaymentDashboard(ready, cadence).interestSaved);
+  for (let index = 1; index < savings.length; index += 1) {
+    assert.ok(savings[index] + 0.01 >= savings[index - 1]);
+  }
+});
+
+test("repayment extras never occur before possession", () => {
+  const inputs = {
+    ...ready,
+    construction: {
+      state: "under_construction" as const,
+      asOfDate: "2026-01-01",
+      startDate: "2025-01-01",
+      completionDate: "2028-01-01",
+      dateSource: "rera" as const,
+    },
+  };
+  const projection = calculateProjection(inputs, 4);
+  const schedule = buildLoanSchedule(inputs, {
+    extraEmisPerYear: 4,
+  });
+
+  assert.ok(schedule.months.some((month) => month.extraPaid > 0));
+  assert.ok(schedule.months
+    .filter((month) => month.month < projection.possessionMonth)
+    .every((month) => month.extraPaid === 0));
 });
 
 test("negated completion statuses are not treated as ready", () => {
