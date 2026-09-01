@@ -11,7 +11,8 @@ use backend::assets::{
     SourceInputProvider, SourceInputRequest, CANONICAL_SOCIETY_NODES_ASSET_ID,
     DEFAULT_RESUME_LEASE_SECONDS, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID,
+    OSM_SOCIETY_ACCESS_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
     SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID, STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 use backend::knowledge::KnowledgeGraph;
@@ -274,6 +275,7 @@ fn add_geospatial_source_companions(allowed_assets: &mut BTreeSet<String>) -> bo
     let needs_google_places_companion = [
         SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
         OSM_POWER_LINE_FACTS_ASSET_ID,
+        OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
         STORMWATER_DRAIN_FACTS_ASSET_ID,
     ]
     .iter()
@@ -1055,6 +1057,25 @@ mod tests {
                 AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).unwrap(),
             ]
         );
+    }
+
+    #[test]
+    fn source_collection_filter_adds_coordinates_for_osm_society_access() {
+        let osm_access = AssetId::new(OSM_SOCIETY_ACCESS_FACTS_ASSET_ID).unwrap();
+        let google_places = AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID).unwrap();
+        let mut plan = SourceInputCollectionPlan {
+            requested_assets: vec![osm_access.clone()],
+            force_assets: vec![osm_access.clone()],
+            force_refresh_assets: Vec::new(),
+        };
+
+        restrict_source_collection_plan(&mut plan, &[osm_access.clone()]);
+
+        assert_eq!(
+            plan.requested_assets,
+            vec![google_places.clone(), osm_access.clone()]
+        );
+        assert_eq!(plan.force_assets, vec![google_places, osm_access]);
     }
 
     #[test]

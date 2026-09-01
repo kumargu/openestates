@@ -11,7 +11,7 @@ import {
 import { propertyMapContextFromSurfaceScene } from "../src/lib/surfaceSceneProjection.ts";
 import type { SurfaceSceneResponse } from "../src/lib/types.ts";
 
-test("surface scene payload can drive the around-this-home plate", () => {
+test("around-this-home and arrival scenes stay isolated", () => {
   const scene: SurfaceSceneResponse = {
     contractVersion: 1,
     surfaceId: "around_this_home",
@@ -29,6 +29,16 @@ test("surface scene payload can drive the around-this-home plate", () => {
       area: "Whitefield",
       geometry: { type: "Point", coordinates: [77.75, 12.98] },
       coordinateQuality: "exact",
+    },
+    experience: {
+      revealDurationMs: 7000,
+      startRangeM: 1800,
+      finalRangeM: 700,
+      finalTilt: 48,
+      finalHeading: 210,
+      rotationArcDegrees: 140,
+      boundaryPadding: 1.35,
+      mobileBoundaryPadding: 1.6,
     },
     viewport: {
       center: [77.751, 12.981],
@@ -48,13 +58,27 @@ test("surface scene payload can drive the around-this-home plate", () => {
         fillState: "filled",
       },
       {
+        id: "approach_road",
+        label: "Approach road",
+        family: "access",
+        renderKind: "terrain_corridor",
+        relationClass: "access",
+        enabledByDefault: true,
+        rank: 2,
+        availableCount: 1,
+        shownCount: 1,
+        fillState: "filled",
+        featureValueLabels: { direction: { two_way: "Two way" } },
+      },
+      {
         id: "schools",
         label: "Schools",
         family: "access",
         renderKind: "pin",
+        mapPresentation: "readable_2d",
         relationClass: "access",
         enabledByDefault: true,
-        rank: 2,
+        rank: 3,
         availableCount: 1,
         shownCount: 1,
         fillState: "filled",
@@ -86,6 +110,23 @@ test("surface scene payload can drive the around-this-home plate", () => {
         display: { tone: "positive", icon: "graduation-cap", priority: 2 },
         confidence: 0.8,
         receiptIds: ["receipt:school"],
+      },
+      {
+        id: "around_this_home:approach_road:ecc-road",
+        entityId: "place:approach-road:sample",
+        layerId: "approach_road",
+        kind: "place",
+        label: "ECC Road",
+        geometry: {
+          type: "LineString",
+          coordinates: [[77.7409, 12.9814], [77.7475, 12.9855]],
+        },
+        coordinateQuality: "exact",
+        metrics: { distanceM: 1120 },
+        display: { tone: "positive", icon: "road", priority: 2 },
+        properties: { direction: "two_way", associationMethod: "address_match" },
+        confidence: 0.78,
+        receiptIds: ["receipt:access"],
       },
     ],
     relations: [
@@ -123,6 +164,17 @@ test("surface scene payload can drive the around-this-home plate", () => {
         confidence: 0.8,
         scope: "within 950 m",
       },
+      {
+        id: "receipt:access",
+        entityId: "society:sample",
+        factKey: "approach_road",
+        claim: "ECC Road",
+        sourceType: "OpenStreetMap",
+        sourceUrl: "https://www.openstreetmap.org/way/23213668",
+        learnedAt: "2026-08-30T00:00:00Z",
+        confidence: 0.78,
+        scope: "within 1250 m",
+      },
     ],
     fillRate: {
       filledLayers: 2,
@@ -135,10 +187,56 @@ test("surface scene payload can drive the around-this-home plate", () => {
     gaps: [],
   };
 
-  const context = propertyMapContextFromSurfaceScene(scene);
+  const aroundScene: SurfaceSceneResponse = {
+    ...scene,
+    layers: scene.layers.filter((layer) => layer.id !== "approach_road"),
+    features: scene.features.filter((feature) => feature.layerId !== "approach_road"),
+    receipts: scene.receipts.filter((receipt) => receipt.factKey !== "approach_road"),
+  };
+  const arrivalScene: SurfaceSceneResponse = {
+    ...scene,
+    surfaceId: "arrival_story",
+    anchor: {
+      ...scene.anchor,
+      boundary: {
+        geometry: {
+          type: "Polygon",
+          coordinates: [[
+            [77.74, 12.97],
+            [77.76, 12.97],
+            [77.76, 12.99],
+            [77.74, 12.97],
+          ]],
+        },
+        sourceType: "OpenStreetMap",
+        confidence: 0.78,
+      },
+    },
+    layers: scene.layers.filter((layer) => layer.id !== "schools"),
+    features: scene.features.filter((feature) => feature.layerId !== "schools"),
+    receipts: scene.receipts.filter((receipt) => receipt.factKey !== "nearby_schools"),
+  };
+
+  const context = propertyMapContextFromSurfaceScene(aroundScene);
+  const arrivalContext = propertyMapContextFromSurfaceScene(arrivalScene);
   assert.ok(context);
+  assert.ok(arrivalContext);
   assert.equal(hasAroundThisHomePlate(context), true);
   assert.deepEqual(availableLayers(context), ["metro", "schools"]);
+  assert.equal(context.home.boundary, undefined);
+  assert.equal(context.layer_lines?.approach_road, undefined);
+  assert.equal(arrivalContext.home.boundary?.source_type, "OpenStreetMap");
+  assert.equal(arrivalContext.arrivalExperience?.finalRangeM, 700);
+  assert.equal(arrivalContext.layer_lines?.approach_road?.[0]?.name, "ECC Road");
+  assert.equal(arrivalContext.layer_lines?.approach_road?.[0]?.properties?.direction, "two_way");
+  assert.equal(
+    arrivalContext.layers?.find((layer) => layer.id === "approach_road")?.renderKind,
+    "terrain_corridor",
+  );
+  assert.equal(
+    context.layers?.find((layer) => layer.id === "schools")?.mapPresentation,
+    "readable_2d",
+  );
 
   const home = resolveHomeAnchor(context);
   assert.deepEqual(home, {

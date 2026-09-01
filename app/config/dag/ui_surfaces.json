@@ -208,6 +208,154 @@
       }
     },
     {
+      "id": "arrival_story",
+      "title": "The way in",
+      "kicker": "Arrival",
+      "leaf_keys": [
+        "nearby_metro_stations",
+        "approach_road",
+        "approach_road_entity",
+        "society.entrance_entity",
+        "society.boundary_geojson"
+      ],
+      "traversal": [
+        "property -> in_society -> society",
+        "society approach_road_entity -> place:approach-road:*",
+        "society society.entrance_entity -> place:society-entrance:*"
+      ],
+      "components": [
+        "PropertyArrivalFilm"
+      ],
+      "primary_entity": "society",
+      "proofHandoff": {
+        "kind": "scene",
+        "targetId": "remote-arrival"
+      },
+    "scene": {
+      "anchor": {
+        "entityRef": "society",
+        "boundaryFactKey": "society.boundary_geojson"
+      },
+      "experience": {
+        "revealDurationMs": 7000,
+        "startRangeM": 1800,
+        "finalRangeM": 700,
+        "finalTilt": 48,
+        "finalHeading": 210,
+        "rotationArcDegrees": 140,
+        "boundaryPadding": 1.35,
+        "mobileBoundaryPadding": 1.6,
+        "missingBoundaryState": "Society boundary not mapped",
+        "googleUnavailableState": "Map unavailable",
+        "societyPlayLabel": "Play society reveal",
+        "societyPauseLabel": "Pause society reveal",
+        "societyResumeLabel": "Resume society reveal",
+        "searchContextLabel": "Also in your search",
+        "searchContextViewHomeLabel": "View home",
+        "backToSocietyLabel": "Back to this society"
+      },
+      "layers": [
+          {
+            "id": "metro",
+            "label": "Metro",
+            "factKeys": ["nearby_metro_stations"],
+            "sortPriorityFactKeys": ["nearby_metro_stations"],
+            "edgeTypes": ["near_place"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "pin",
+            "mapPresentation": "immersive_3d",
+            "icon": "train",
+            "sort": "distance",
+            "maxItems": 2,
+            "enabledByDefault": true,
+            "rank": 1
+        },
+        {
+          "id": "entrance",
+          "label": "Entrance",
+          "factKeys": [
+            "society.entrance_entity"
+          ],
+          "linkedEntityFactKeys": [
+            "society.entrance_entity"
+          ],
+          "family": "access",
+          "relationClass": "access",
+          "renderKind": "arrival_marker",
+          "mapPresentation": "immersive_3d",
+          "featureProperties": {
+            "status": "entrance.status",
+            "associationMethod": "entrance.association_method"
+          },
+          "featureValueLabels": {
+            "status": {
+              "verified": "Entrance",
+              "inferred": "Likely entrance"
+            }
+          },
+          "emptyState": "Entrance not mapped",
+          "icon": "entrance",
+          "sort": "distance",
+          "maxItems": 1,
+          "enabledByDefault": true,
+          "rank": 2
+        },
+        {
+            "id": "approach_road",
+            "label": "Approach road",
+            "factKeys": ["approach_road"],
+            "linkedEntityFactKeys": ["approach_road_entity"],
+            "sortPriorityFactKeys": ["approach_road"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "terrain_corridor",
+            "mapPresentation": "immersive_3d",
+            "emptyState": "Approach road not mapped",
+            "experience": {
+              "kind": "street_view_tour",
+              "waypointSpacingM": 65,
+              "overviewDwellMs": 1800,
+              "dwellMs": 2500,
+              "anchorLookAheadM": 35,
+              "anchorPitch": 6,
+              "anchorInteriorPitch": 10,
+              "anchorInteriorDwellMs": 2000,
+              "anchorPoseTransitionMs": 700,
+              "cameraAltitudeM": 25,
+              "cameraRangeM": 145,
+              "cameraTilt": 80,
+              "cameraFov": 38,
+              "streetViewZoom": 0.8,
+              "transitionMs": 4200,
+              "targetDurationMs": 28000,
+              "minimumDurationMs": 24000,
+              "maximumDurationMs": 32000,
+              "minimumFrameDwellMs": 1500,
+              "panoramaCrossfadeMs": 280,
+              "entranceDwellMs": 5000,
+              "maximumPanoramaGapM": 140,
+              "shortGapState": "Street View skips a short gap",
+              "endsHereState": "Street View ends here",
+              "unavailableState": "Street View unavailable",
+              "pauseLabel": "Pause approach road",
+              "resumeLabel": "Resume approach road",
+              "replayLabel": "Replay approach road"
+            },
+            "icon": "road",
+            "sort": "distance",
+            "maxItems": 1,
+            "enabledByDefault": true,
+          "featureProperties": {
+            "direction": "road.direction",
+            "associationMethod": "road.association_method"
+          },
+          "rank": 3
+          }
+        ]
+      }
+    },
+    {
       "id": "approach_road",
       "title": "Approach road",
       "kicker": "Access proof",
@@ -561,5 +709,5 @@
       ]
     }
   ],
-  "surface_count": 9
+  "surface_count": 10
 }

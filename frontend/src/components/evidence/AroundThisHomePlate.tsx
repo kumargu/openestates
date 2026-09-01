@@ -417,13 +417,13 @@ function AroundThisHomePlateInner({
       className={`nearby-plate${expanded ? " is-expanded" : ""}`}
       aria-labelledby="around-this-home-title"
     >
+      <header className="property-story-heading">
+        <span>Location</span>
+        <h2 id="around-this-home-title">Around this home.</h2>
+      </header>
+
       <div className="nearby-plate__story-layout">
         <aside className="nearby-plate__story-rail">
-          <header className="property-story-heading">
-            <span>Location</span>
-            <h2 id="around-this-home-title">Around this home.</h2>
-          </header>
-
           <div className="nearby-plate__layers" role="toolbar" aria-label="Map layers">
             {layers.map((layer) => {
               const on = story.kind === "layer" && story.layer === layer;

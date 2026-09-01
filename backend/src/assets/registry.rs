@@ -752,6 +752,15 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Support,
         ),
         asset(
+            "osm_society_access_facts",
+            AssetStage::Silver,
+            "OpenStreetMap society boundaries, explicit entrance candidates, and public approach-road geometry collected independently of transit.",
+            &["canonical_society_nodes"],
+            RefreshCadence::Monthly,
+            CostTier::Free,
+            TrustTier::Support,
+        ),
+        asset(
             "stormwater_drain_facts",
             AssetStage::Silver,
             "Stormwater drain and Rajakaluve proximity facts with geometry for red-flag map overlays.",
@@ -775,6 +784,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "home_state_signals",
                 "society_groundwater_potential_facts",
                 "bengaluru_metro_station_facts",
+                "osm_society_access_facts",
                 "osm_power_line_facts",
                 "stormwater_drain_facts",
             ],
@@ -801,7 +811,8 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_optional_dependency("external_listing_facts")
         .with_optional_dependency("image_media_facts")
         .with_optional_dependency("home_state_signals")
-        .with_optional_dependency("bengaluru_metro_station_facts"),
+        .with_optional_dependency("bengaluru_metro_station_facts")
+        .with_optional_dependency("osm_society_access_facts"),
         asset(
             "kg_society_view",
             AssetStage::Gold,

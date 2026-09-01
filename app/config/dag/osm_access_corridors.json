@@ -1,0 +1,47 @@
+{
+  "version": 2,
+  "description": "Society-centric OpenStreetMap boundaries, explicit entrances and sourced public approach corridors.",
+  "collector": {
+    "source_id": "openstreetmap_society_access",
+    "source_type": "OpenStreetMap",
+    "fetch_source": "overpass_society_access_snapshot",
+    "overpass_url_env": "OPENESTATES_OVERPASS_API_URL",
+    "default_overpass_url": "https://overpass-api.de/api/interpreter",
+    "query_timeout_seconds": 60,
+    "bbox_padding_meters": 1650.0,
+    "max_corridor_meters": 1500.0,
+    "min_approach_route_meters": 25.0,
+    "max_route_entrance_snap_meters": 1.0,
+    "max_frontage_distance_meters": 120.0,
+    "max_entrance_boundary_distance_meters": 35.0,
+    "max_entrance_road_distance_meters": 30.0,
+    "allow_partial_subject_failures": false,
+    "confidence": 0.78,
+    "boundary_landuse_values": ["residential"],
+    "road_suffixes": ["Road", "Street", "Marg"],
+    "eligible_highway_values": [
+      "motorway", "trunk", "primary", "secondary", "tertiary",
+      "unclassified", "residential", "service", "living_street"
+    ],
+    "denied_highway_values": [
+      "footway", "path", "steps", "pedestrian", "cycleway", "bridleway"
+    ],
+    "denied_access_values": ["no", "private"]
+  },
+  "approach_road": {
+    "summary_fact_key": "approach_road",
+    "linked_entity_fact_key": "approach_road_entity",
+    "direction_fact_key": "road.direction",
+    "association_fact_key": "road.association_method",
+    "source_geometry_fact_key": "road.source_geometry_geojson",
+    "corridor_length_fact_key": "road.corridor_length_m"
+  },
+  "entrance": {
+    "linked_entity_fact_key": "society.entrance_entity",
+    "status_fact_key": "entrance.status",
+    "association_fact_key": "entrance.association_method"
+  },
+  "society_boundary": {
+    "geometry_fact_key": "society.boundary_geojson"
+  }
+}

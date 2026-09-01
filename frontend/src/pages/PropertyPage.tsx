@@ -10,13 +10,16 @@ import type {
   PropertyDetailResponse,
   ProofFocus,
   RecommendationResponse,
+  ArrivalSearchSociety,
   SurfaceSceneResponse,
 } from "../lib/types.ts";
 import {
   getProperty,
   getPropertyRecommendations,
   getPropertySurface,
+  getPropertySurfacesBatch,
   parseProofFocusParam,
+  propertyDetailPath,
 } from "../lib/api.ts";
 import {
   recommendationShelfItems,
@@ -47,7 +50,11 @@ import { readShortlistIds } from "../lib/compare.ts";
 import { formatGoogleRating } from "../lib/reviewFormatting.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
-import { propertyExploreHref } from "../lib/navigationContext.ts";
+import {
+  discoveryMapContextForProperty,
+  propertyExploreHref,
+  readDiscoveryMapContext,
+} from "../lib/navigationContext.ts";
 import { formatListingPrice } from "../lib/listing-price.ts";
 import {
   initialPropertySurfaceId,
@@ -61,6 +68,7 @@ function hasKnownNumber(value: number | null | undefined): value is number {
 }
 
 const MAX_EXPLICIT_COMPARISON_CANDIDATES = 4;
+const ARRIVAL_STORY_SURFACE_ID = "arrival_story";
 
 function focusedEvidenceSource(data: PropertyDetailResponse, focus: ProofFocus) {
   for (const section of data.evidence?.sections ?? []) {
@@ -282,11 +290,15 @@ export function PropertyPage() {
     );
 
   const focusParam = searchParams.get("focus");
+  const contextId = searchParams.get("context");
+  const contextQueryFingerprint = searchParams.get("qf");
   return (
     <PropertyPageBody
-      key={`${id}:${focusParam ?? ""}`}
+      key={`${id}:${focusParam ?? ""}:${contextId ?? ""}:${contextQueryFingerprint ?? ""}`}
       id={id}
       focusParam={focusParam}
+      contextId={contextId}
+      contextQueryFingerprint={contextQueryFingerprint}
     />
   );
 }
@@ -294,9 +306,13 @@ export function PropertyPage() {
 function PropertyPageBody({
   id,
   focusParam,
+  contextId,
+  contextQueryFingerprint,
 }: {
   id: string;
   focusParam: string | null;
+  contextId: string | null;
+  contextQueryFingerprint: string | null;
 }) {
   const proofFocus = useMemo(
     () => parseProofFocusParam(focusParam),
@@ -321,6 +337,10 @@ function PropertyPageBody({
     useState<RecommendationResponse | null>(null);
   const [aroundThisHomeScene, setAroundThisHomeScene] =
     useState<SurfaceSceneResponse | null>(null);
+  const [arrivalScene, setArrivalScene] =
+    useState<SurfaceSceneResponse | null>(null);
+  const [searchContextSocieties, setSearchContextSocieties] =
+    useState<ArrivalSearchSociety[]>([]);
   const [comparisonResolution, setComparisonResolution] = useState<{
     key: string;
     properties: PropertyCard[];
@@ -329,6 +349,14 @@ function PropertyPageBody({
     "loading" | "error" | "not_found" | "ok"
   >("loading");
   const [retryKey, setRetryKey] = useState(0);
+  const discoveryMapContext = useMemo(
+    () => discoveryMapContextForProperty(
+      readDiscoveryMapContext(contextId),
+      id,
+      contextQueryFingerprint,
+    ),
+    [contextId, contextQueryFingerprint, id],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -370,6 +398,68 @@ function PropertyPageBody({
   }, [data?.property?.id]);
 
   useEffect(() => {
+    const currentSocietyId = data?.entity_refs.society_entity_id;
+    const candidates = discoveryMapContext?.candidates
+      .filter((candidate) => candidate.societyId !== currentSocietyId) ?? [];
+    if (candidates.length === 0) {
+      let cancelled = false;
+      void Promise.resolve().then(() => {
+        if (!cancelled) setSearchContextSocieties([]);
+      });
+      return () => { cancelled = true; };
+    }
+    const controller = new AbortController();
+    void getPropertySurfacesBatch(
+      candidates.map((candidate) => candidate.propertyId),
+      [ARRIVAL_STORY_SURFACE_ID],
+    ).then((response) => {
+      if (controller.signal.aborted) return;
+      const scenesByPropertyId = new Map(response.items.map((item) => [
+        item.propertyId,
+        item.scenes.find((scene) => scene.surfaceId === ARRIVAL_STORY_SURFACE_ID),
+      ]));
+      const resolved = candidates.flatMap((candidate) => {
+        const scene = scenesByPropertyId.get(candidate.propertyId);
+        const mapContext = propertyMapContextFromSurfaceScene(scene);
+        const latitude = mapContext?.home.latitude;
+        const longitude = mapContext?.home.longitude;
+        if (
+          !Number.isFinite(latitude)
+          || !Number.isFinite(longitude)
+          || !latitude
+          || !longitude
+          || latitude < -90
+          || latitude > 90
+          || longitude < -180
+          || longitude > 180
+        ) return [];
+        return [{
+          href: propertyDetailPath(
+            candidate.propertyId,
+            candidate.proofFocus,
+            discoveryMapContext?.id,
+            discoveryMapContext?.queryFingerprint,
+          ),
+          propertyId: candidate.propertyId,
+          societyId: candidate.societyId,
+          proofFocus: candidate.proofFocus,
+          preview: candidate.preview,
+          home: {
+            latitude,
+            longitude,
+            name: mapContext.home.name,
+            boundary: mapContext.home.boundary,
+          },
+        } satisfies ArrivalSearchSociety];
+      });
+      setSearchContextSocieties(resolved.slice(0, 3));
+    }).catch(() => {
+      if (!controller.signal.aborted) setSearchContextSocieties([]);
+    });
+    return () => controller.abort();
+  }, [data?.entity_refs.society_entity_id, discoveryMapContext]);
+
+  useEffect(() => {
     const propertyId = data?.property?.id;
     if (!propertyId) return;
     let cancelled = false;
@@ -390,6 +480,24 @@ function PropertyPageBody({
       cancelled = true;
     };
   }, [data?.property?.id, proofFocus]);
+
+  useEffect(() => {
+    const propertyId = data?.property?.id;
+    if (!propertyId) return;
+    let cancelled = false;
+
+    getPropertySurface(propertyId, ARRIVAL_STORY_SURFACE_ID)
+      .then((scene) => {
+        if (!cancelled) setArrivalScene(scene);
+      })
+      .catch(() => {
+        if (!cancelled) setArrivalScene(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.property?.id]);
 
   useEffect(() => {
     const propertyId = data?.property?.id;
@@ -430,7 +538,7 @@ function PropertyPageBody({
       window.cancelAnimationFrame(firstFrame);
       if (secondFrame) window.cancelAnimationFrame(secondFrame);
     };
-  }, [status, data?.property?.id, proofFocus, aroundThisHomeScene]);
+  }, [status, data?.property?.id, proofFocus, aroundThisHomeScene, arrivalScene]);
 
   if (status === "loading")
     return (
@@ -501,6 +609,10 @@ function PropertyPageBody({
   const socialImageUrl = p.hero_image ? backendUrl(p.hero_image) : null;
   const aroundThisHomeContext = propertyMapContextFromSurfaceScene(
     aroundThisHomeScene,
+    data.map_context,
+  );
+  const arrivalContext = propertyMapContextFromSurfaceScene(
+    arrivalScene,
     data.map_context,
   );
   const showNearbyPlate = hasAroundThisHomePlate(aroundThisHomeContext);
@@ -610,6 +722,8 @@ function PropertyPageBody({
           propertyId={p.id}
           title={story.identity.title}
           frames={story.arrival.frames}
+          mapContext={arrivalContext}
+          searchContextSocieties={searchContextSocieties}
           playback={{
             playing: storyPlaying,
             onPlayingChange: setStoryPlaying,

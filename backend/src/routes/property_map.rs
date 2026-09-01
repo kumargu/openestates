@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use serde::Serialize;
 
 use crate::dag_config::{
-    load_fact_registry_index, ui_surfaces_config, CoordinateEntityScope, FactRegistryIndex,
+    fact_registry_index_config, ui_surfaces_config, CoordinateEntityScope, FactRegistryIndex,
 };
 use crate::knowledge::FactValue;
 use crate::models::Property;
@@ -42,6 +42,8 @@ pub struct PropertyMapContext {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub metro_lines: Vec<crate::routes::map_overlays::MapOverlayLine>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub access_lines: Vec<crate::routes::map_overlays::MapOverlayLine>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub red_flag_lines: Vec<crate::routes::map_overlays::MapOverlayLine>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub green_patches: Vec<crate::routes::map_overlays::MapOverlayPolygon>,
@@ -59,6 +61,8 @@ pub struct MapHomeAnchor {
     pub latitude: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub longitude: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub boundary: Option<crate::routes::map_overlays::MapOverlayPolygon>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -148,7 +152,7 @@ pub fn build_property_map_context(
     let home_coords = coordinates_for_candidates(facts, &property.society_id);
     let place_by_url = place_lookup_by_google_url(facts);
     let dag_metro_stations = dag_metro_stations(facts);
-    let fact_registry = load_fact_registry_index().ok();
+    let fact_registry = fact_registry_index_config().ok();
 
     let layer_configs = match around_this_home_layers() {
         Ok(layers) => layers,
@@ -167,7 +171,7 @@ pub fn build_property_map_context(
             &layer_config,
             &place_by_url,
             home_coords.as_ref(),
-            fact_registry.as_ref(),
+            fact_registry,
         );
         sort_layer_pins(&mut layer_pins, &layer_config);
         layer_pins
@@ -216,10 +220,12 @@ pub fn build_property_map_context(
             area: (!property.area.trim().is_empty()).then(|| property.area.clone()),
             latitude: overlay_home.map(|coords| coords.0),
             longitude: overlay_home.map(|coords| coords.1),
+            boundary: None,
         },
         places,
         water,
         metro_lines,
+        access_lines: Vec::new(),
         red_flag_lines: Vec::new(),
         green_patches,
         lakes,
@@ -270,37 +276,48 @@ pub fn property_map_context_from_surface_scene(
             })
         })
         .collect::<Vec<_>>();
+    let line_from_feature = |feature: &crate::surfaces::SceneFeature| {
+        let coordinates = line_coordinates(&feature.geometry)?;
+        let receipt = feature
+            .receipt_ids
+            .iter()
+            .find_map(|receipt_id| receipts_by_id.get(receipt_id.as_str()));
+        Some(crate::routes::map_overlays::MapOverlayLine {
+            id: feature.id.clone(),
+            name: feature.label.clone(),
+            label: feature.short_label.clone(),
+            distance_km: feature
+                .metrics
+                .as_ref()
+                .and_then(|metrics| metrics.distance_m)
+                .map(|distance_m| f64::from(distance_m) / 1000.0),
+            details: feature.details.clone(),
+            kind: feature.kind.clone(),
+            coordinates,
+            source_type: receipt
+                .map(|receipt| receipt.source_type.clone())
+                .unwrap_or_else(|| BUYER_SOURCE_FALLBACK.to_string()),
+            source_url: receipt.and_then(|receipt| receipt.source_url.clone()),
+        })
+    };
+    let access_lines = scene
+        .features
+        .iter()
+        .filter(|feature| feature.layer_id == "metro")
+        .filter_map(&line_from_feature)
+        .collect::<Vec<_>>();
     let red_flag_lines = scene
         .features
         .iter()
         .filter(|feature| feature.layer_id == "red_flags")
-        .filter_map(|feature| {
-            let coordinates = line_coordinates(&feature.geometry)?;
-            let receipt = feature
-                .receipt_ids
-                .iter()
-                .find_map(|receipt_id| receipts_by_id.get(receipt_id.as_str()));
-            Some(crate::routes::map_overlays::MapOverlayLine {
-                id: feature.id.clone(),
-                name: feature.label.clone(),
-                label: feature.short_label.clone(),
-                distance_km: feature
-                    .metrics
-                    .as_ref()
-                    .and_then(|metrics| metrics.distance_m)
-                    .map(|distance_m| f64::from(distance_m) / 1000.0),
-                details: feature.details.clone(),
-                kind: feature.kind.clone(),
-                coordinates,
-                source_type: receipt
-                    .map(|receipt| receipt.source_type.clone())
-                    .unwrap_or_else(|| BUYER_SOURCE_FALLBACK.to_string()),
-                source_url: receipt.and_then(|receipt| receipt.source_url.clone()),
-            })
-        })
+        .filter_map(line_from_feature)
         .collect::<Vec<_>>();
 
-    if places.is_empty() && red_flag_lines.is_empty() && home_coords.is_none() {
+    if places.is_empty()
+        && access_lines.is_empty()
+        && red_flag_lines.is_empty()
+        && home_coords.is_none()
+    {
         return None;
     }
 
@@ -311,10 +328,23 @@ pub fn property_map_context_from_surface_scene(
             area: scene.anchor.area.clone(),
             latitude: home_coords.map(|coords| coords.0),
             longitude: home_coords.map(|coords| coords.1),
+            boundary: scene.anchor.boundary.as_ref().and_then(|boundary| {
+                polygon_coordinates(&boundary.geometry).map(|coordinates| {
+                    crate::routes::map_overlays::MapOverlayPolygon {
+                        id: format!("{}:boundary", scene.anchor.entity_id),
+                        name: scene.anchor.label.clone(),
+                        kind: "society_boundary".to_string(),
+                        coordinates,
+                        distance_km: None,
+                        source_type: boundary.source_type.clone(),
+                    }
+                })
+            }),
         },
         places,
         water: None,
         metro_lines: Vec::new(),
+        access_lines,
         red_flag_lines,
         green_patches: Vec::new(),
         lakes: Vec::new(),
@@ -345,6 +375,28 @@ fn line_coordinates(geometry: &SceneGeometry) -> Option<Vec<[f64; 2]>> {
         }
         _ => None,
     }
+}
+
+fn polygon_coordinates(geometry: &SceneGeometry) -> Option<Vec<[f64; 2]>> {
+    match geometry {
+        SceneGeometry::Polygon { coordinates } => {
+            coordinates.first().filter(|ring| ring.len() >= 4).cloned()
+        }
+        SceneGeometry::MultiPolygon { coordinates } => coordinates
+            .iter()
+            .filter_map(|polygon| polygon.first())
+            .max_by(|left, right| polygon_ring_area(left).total_cmp(&polygon_ring_area(right)))
+            .filter(|ring| ring.len() >= 4)
+            .cloned(),
+        _ => None,
+    }
+}
+
+fn polygon_ring_area(ring: &[[f64; 2]]) -> f64 {
+    ring.windows(2)
+        .map(|pair| pair[0][0] * pair[1][1] - pair[1][0] * pair[0][1])
+        .sum::<f64>()
+        .abs()
 }
 
 fn add_metro_line_stations(
@@ -1253,9 +1305,9 @@ mod tests {
     use crate::models::KgEntityRefs;
     use crate::serving::ServingFactRecord;
     use crate::surfaces::{
-        CoordinateQuality, DisplayTone, FillState, SceneAnchor, SceneFeature, SceneFeatureDisplay,
-        SceneFillRate, SceneGeometry, SceneLayer, SceneMetrics, SceneReceipt, SceneViewport,
-        SurfaceSceneResponse,
+        CoordinateQuality, DisplayTone, FillState, SceneAnchor, SceneBoundary, SceneFeature,
+        SceneFeatureDisplay, SceneFillRate, SceneGeometry, SceneLayer, SceneMetrics, SceneReceipt,
+        SceneViewport, SurfaceSceneResponse,
     };
 
     fn fact(
@@ -1360,8 +1412,22 @@ mod tests {
                 geometry: Some(SceneGeometry::Point {
                     coordinates: [77.75, 12.98],
                 }),
+                boundary: Some(SceneBoundary {
+                    geometry: SceneGeometry::Polygon {
+                        coordinates: vec![vec![
+                            [77.74, 12.97],
+                            [77.76, 12.97],
+                            [77.76, 12.99],
+                            [77.74, 12.97],
+                        ]],
+                    },
+                    source_type: "OpenStreetMap".to_string(),
+                    source_url: Some("https://www.openstreetmap.org/way/1".to_string()),
+                    confidence: 0.78,
+                }),
                 coordinate_quality: CoordinateQuality::Exact,
             },
+            experience: None,
             viewport: SceneViewport {
                 center: None,
                 bounds: None,
@@ -1373,6 +1439,10 @@ mod tests {
                 label: "Schools".to_string(),
                 family: "access".to_string(),
                 render_kind: "pin".to_string(),
+                map_presentation: None,
+                experience: None,
+                empty_state: None,
+                feature_value_labels: HashMap::new(),
                 relation_class: "access".to_string(),
                 enabled_by_default: true,
                 rank: 1,
@@ -1404,6 +1474,7 @@ mod tests {
                     icon: None,
                     priority: 1,
                 },
+                properties: HashMap::new(),
                 confidence: 0.8,
                 receipt_ids: vec!["receipt:school".to_string()],
             }],
@@ -1435,12 +1506,20 @@ mod tests {
             .expect("point scene should project to map context");
         assert_eq!(context.home.name, "Sample Society");
         assert_eq!(context.home.latitude, Some(12.98));
+        assert_eq!(
+            context
+                .home
+                .boundary
+                .as_ref()
+                .map(|boundary| boundary.coordinates.len()),
+            Some(4)
+        );
         assert_eq!(context.places[0].distance_km, Some(0.65));
         assert_eq!(context.places[0].source_type, "Google");
     }
 
     #[test]
-    fn map_context_projects_red_flag_lines_from_surface_scene() {
+    fn map_context_projects_evidence_lines_from_surface_scene() {
         let scene = SurfaceSceneResponse {
             contract_version: 1,
             surface_id: "around_this_home".to_string(),
@@ -1460,8 +1539,10 @@ mod tests {
                 geometry: Some(SceneGeometry::Point {
                     coordinates: [77.75, 12.98],
                 }),
+                boundary: None,
                 coordinate_quality: CoordinateQuality::Exact,
             },
+            experience: None,
             viewport: SceneViewport {
                 center: None,
                 bounds: None,
@@ -1473,6 +1554,10 @@ mod tests {
                 label: "Red flags".to_string(),
                 family: "risk".to_string(),
                 render_kind: "pin".to_string(),
+                map_presentation: None,
+                experience: None,
+                empty_state: None,
+                feature_value_labels: HashMap::new(),
                 relation_class: "risk_externality".to_string(),
                 enabled_by_default: true,
                 rank: 1,
@@ -1480,46 +1565,90 @@ mod tests {
                 shown_count: 1,
                 fill_state: FillState::Filled,
             }],
-            features: vec![SceneFeature {
-                id: "around_this_home:red_flags:line-one".to_string(),
-                entity_id: Some("place:osm-power-line:one".to_string()),
-                layer_id: "red_flags".to_string(),
-                kind: "place".to_string(),
-                label: "High voltage transmission line".to_string(),
-                short_label: Some("Transmission line".to_string()),
-                details: vec!["220 kV".to_string()],
-                geometry: SceneGeometry::LineString {
-                    coordinates: vec![[77.75, 12.98], [77.752, 12.982]],
+            features: vec![
+                SceneFeature {
+                    id: "around_this_home:red_flags:line-one".to_string(),
+                    entity_id: Some("place:osm-power-line:one".to_string()),
+                    layer_id: "red_flags".to_string(),
+                    kind: "place".to_string(),
+                    label: "High voltage transmission line".to_string(),
+                    short_label: Some("Transmission line".to_string()),
+                    details: vec!["220 kV".to_string()],
+                    geometry: SceneGeometry::LineString {
+                        coordinates: vec![[77.75, 12.98], [77.752, 12.982]],
+                    },
+                    coordinate_quality: CoordinateQuality::Exact,
+                    metrics: Some(SceneMetrics {
+                        distance_m: Some(94),
+                        travel_time_min: None,
+                        rating: None,
+                        review_count: None,
+                        severity: Some("high".to_string()),
+                    }),
+                    display: SceneFeatureDisplay {
+                        tone: DisplayTone::Risk,
+                        icon: Some("flag".to_string()),
+                        priority: 1,
+                    },
+                    properties: HashMap::new(),
+                    confidence: 0.8,
+                    receipt_ids: vec!["receipt:line".to_string()],
                 },
-                coordinate_quality: CoordinateQuality::Exact,
-                metrics: Some(SceneMetrics {
-                    distance_m: Some(94),
-                    travel_time_min: None,
-                    rating: None,
-                    review_count: None,
-                    severity: Some("high".to_string()),
-                }),
-                display: SceneFeatureDisplay {
-                    tone: DisplayTone::Risk,
-                    icon: Some("flag".to_string()),
-                    priority: 1,
+                SceneFeature {
+                    id: "around_this_home:metro:access-one".to_string(),
+                    entity_id: Some("place:transit-access:one".to_string()),
+                    layer_id: "metro".to_string(),
+                    kind: "place".to_string(),
+                    label: "ECC Road → Kadugodi Tree Park".to_string(),
+                    short_label: None,
+                    details: Vec::new(),
+                    geometry: SceneGeometry::LineString {
+                        coordinates: vec![[77.7409, 12.9814], [77.7475, 12.9855]],
+                    },
+                    coordinate_quality: CoordinateQuality::Exact,
+                    metrics: Some(SceneMetrics {
+                        distance_m: Some(1_120),
+                        travel_time_min: None,
+                        rating: None,
+                        review_count: None,
+                        severity: None,
+                    }),
+                    display: SceneFeatureDisplay {
+                        tone: DisplayTone::Positive,
+                        icon: Some("train".to_string()),
+                        priority: 1,
+                    },
+                    properties: HashMap::new(),
+                    confidence: 0.78,
+                    receipt_ids: vec!["receipt:access".to_string()],
                 },
-                confidence: 0.8,
-                receipt_ids: vec!["receipt:line".to_string()],
-            }],
+            ],
             relations: Vec::new(),
             callouts: Vec::new(),
-            receipts: vec![SceneReceipt {
-                id: "receipt:line".to_string(),
-                entity_id: "society:sample".to_string(),
-                fact_key: "high_voltage_transmission_line_nearby".to_string(),
-                claim: "way/1 (94 m, 220 kV)".to_string(),
-                source_type: "OpenStreetMap".to_string(),
-                source_url: Some("https://www.openstreetmap.org/way/1".to_string()),
-                learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
-                confidence: 0.8,
-                scope: Some("within 100 m".to_string()),
-            }],
+            receipts: vec![
+                SceneReceipt {
+                    id: "receipt:line".to_string(),
+                    entity_id: "society:sample".to_string(),
+                    fact_key: "high_voltage_transmission_line_nearby".to_string(),
+                    claim: "way/1 (94 m, 220 kV)".to_string(),
+                    source_type: "OpenStreetMap".to_string(),
+                    source_url: Some("https://www.openstreetmap.org/way/1".to_string()),
+                    learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+                    confidence: 0.8,
+                    scope: Some("within 100 m".to_string()),
+                },
+                SceneReceipt {
+                    id: "receipt:access".to_string(),
+                    entity_id: "society:sample".to_string(),
+                    fact_key: "approach_road".to_string(),
+                    claim: "ECC Road → Kadugodi Tree Park (1.1 km)".to_string(),
+                    source_type: "OpenStreetMap".to_string(),
+                    source_url: Some("https://www.openstreetmap.org/way/23213668".to_string()),
+                    learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+                    confidence: 0.78,
+                    scope: Some("within 1250 m".to_string()),
+                },
+            ],
             fill_rate: SceneFillRate {
                 filled_layers: 1,
                 partial_layers: 0,
@@ -1534,6 +1663,11 @@ mod tests {
         let context = property_map_context_from_surface_scene(&scene)
             .expect("line scene should still project to map context");
         assert!(context.places.is_empty());
+        assert_eq!(context.access_lines.len(), 1);
+        assert_eq!(
+            context.access_lines[0].name,
+            "ECC Road → Kadugodi Tree Park"
+        );
         assert_eq!(context.red_flag_lines.len(), 1);
         assert_eq!(
             context.red_flag_lines[0].coordinates,

@@ -105,6 +105,6 @@ pub use serving_eligibility::{
 };
 pub use ui_surfaces::{
     load_ui_surfaces, load_ui_surfaces_from_path, ui_surfaces_config, ui_surfaces_path,
-    UiSurfaceAnchorConfig, UiSurfaceConfig, UiSurfaceLayerRule, UiSurfaceSceneConfig,
-    UiSurfacesFile,
+    UiSurfaceAnchorConfig, UiSurfaceConfig, UiSurfaceLayerExperienceConfig, UiSurfaceLayerRule,
+    UiSurfaceSceneConfig, UiSurfaceSceneExperienceConfig, UiSurfacesFile,
 };

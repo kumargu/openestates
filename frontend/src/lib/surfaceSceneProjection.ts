@@ -30,12 +30,20 @@ export function propertyMapContextFromSurfaceScene(
     .filter((feature) => feature.layerId === "red_flags")
     .map((feature) => mapLineFromFeature(feature, receiptsById))
     .filter((line): line is MapOverlayLine => Boolean(line));
+  const accessLines = scene.features
+    .filter((feature) => feature.layerId === "metro")
+    .map((feature) => mapLineFromFeature(feature, receiptsById))
+    .filter((line): line is MapOverlayLine => Boolean(line));
+  const layerLines = mapLinesByLayer(scene, receiptsById);
 
+  const mergedAccessLines = mergeLines(accessLines, fallback?.access_lines ?? []);
   const mergedRedFlagLines = [
     ...redFlagLines,
     ...(fallback?.red_flag_lines ?? []).filter((line) =>
       !redFlagLines.some((candidate) => candidate.id === line.id)),
   ];
+  layerLines.metro = mergedAccessLines;
+  layerLines.red_flags = mergedRedFlagLines;
   const layers = mergedLayers(scene, fallback, mergedRedFlagLines);
 
   return {
@@ -45,16 +53,72 @@ export function propertyMapContextFromSurfaceScene(
       area: scene.anchor.area,
       latitude: anchorCoordinates?.latitude,
       longitude: anchorCoordinates?.longitude,
+      boundary: mapAnchorBoundary(scene) ?? fallback?.home.boundary,
     },
     layers,
+    arrivalExperience: scene.experience ?? fallback?.arrivalExperience,
     places,
     proof_focus: scene.proofFocus,
     water: fallback?.water,
     metro_lines: fallback?.metro_lines,
+    access_lines: mergedAccessLines,
     red_flag_lines: mergedRedFlagLines,
+    layer_lines: layerLines,
     green_patches: fallback?.green_patches,
     lakes: fallback?.lakes,
   };
+}
+
+function mapAnchorBoundary(scene: SurfaceSceneResponse): PropertyMapContext["home"]["boundary"] {
+  const boundary = scene.anchor.boundary;
+  if (!boundary) return undefined;
+  let coordinates: [number, number][] | undefined;
+  if (boundary.geometry.type === "Polygon") {
+    coordinates = boundary.geometry.coordinates[0];
+  } else if (boundary.geometry.type === "MultiPolygon") {
+    coordinates = boundary.geometry.coordinates
+      .map((polygon) => polygon[0])
+      .filter((ring): ring is [number, number][] => Boolean(ring))
+      .sort((left, right) => polygonRingArea(right) - polygonRingArea(left))[0];
+  } else {
+    return undefined;
+  }
+  if (!coordinates || coordinates.length < 4) return undefined;
+  return {
+    id: `${scene.anchor.entityId}:boundary`,
+    name: scene.anchor.label,
+    kind: "society_boundary",
+    coordinates,
+    source_type: boundary.sourceType,
+  };
+}
+
+function polygonRingArea(ring: [number, number][]): number {
+  return Math.abs(ring.slice(1).reduce((area, point, index) => {
+    const previous = ring[index];
+    return area + previous[0] * point[1] - point[0] * previous[1];
+  }, 0));
+}
+
+function mapLinesByLayer(
+  scene: SurfaceSceneResponse,
+  receiptsById: Map<string, SceneReceipt>,
+): Record<string, MapOverlayLine[]> {
+  const lines: Record<string, MapOverlayLine[]> = {};
+  for (const feature of scene.features) {
+    if (feature.geometry.type !== "LineString") continue;
+    const line = mapLineFromFeature(feature, receiptsById);
+    if (!line) continue;
+    (lines[feature.layerId] ??= []).push(line);
+  }
+  return lines;
+}
+
+function mergeLines(primary: MapOverlayLine[], fallback: MapOverlayLine[]): MapOverlayLine[] {
+  return [
+    ...primary,
+    ...fallback.filter((line) => !primary.some((candidate) => candidate.id === line.id)),
+  ];
 }
 
 function mergedLayers(
@@ -71,6 +135,11 @@ function mergedLayers(
     addLayer({
       id: layer.id,
       label: layer.label,
+      renderKind: layer.renderKind,
+      mapPresentation: layer.mapPresentation,
+      experience: layer.experience,
+      emptyState: layer.emptyState,
+      featureValueLabels: layer.featureValueLabels,
       rank: layer.rank,
       enabledByDefault: layer.enabledByDefault,
     });
@@ -114,6 +183,7 @@ function mapPlacePinFromFeature(
     feature_id: feature.id,
     place_entity_id: feature.entityId,
     layer: feature.layerId,
+    icon: feature.display.icon,
     name: feature.label,
     latitude: coordinates.latitude,
     longitude: coordinates.longitude,
@@ -124,6 +194,7 @@ function mapPlacePinFromFeature(
     review_count: feature.metrics?.reviewCount,
     source_url: receipt?.sourceUrl,
     source_type: receipt?.sourceType ?? PUBLIC_BRAND_NAME,
+    properties: feature.properties,
   };
 }
 
@@ -149,6 +220,7 @@ function mapLineFromFeature(
     coordinates,
     source_type: receipt?.sourceType ?? PUBLIC_BRAND_NAME,
     source_url: receipt?.sourceUrl,
+    properties: feature.properties,
   };
 }
 

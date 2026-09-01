@@ -381,12 +381,14 @@ export type MapHomeAnchor = {
   area?: string;
   latitude?: number;
   longitude?: number;
+  boundary?: MapOverlayPolygon;
 };
 
 export type MapPlacePin = {
   feature_id?: string;
   place_entity_id?: string;
   layer: MapNearbyLayer | string;
+  icon?: string;
   name: string;
   latitude?: number;
   longitude?: number;
@@ -397,6 +399,7 @@ export type MapPlacePin = {
   lines?: string[];
   source_url?: string;
   source_type: string;
+  properties?: Record<string, string>;
 };
 
 export type MapWaterContext = {
@@ -418,6 +421,7 @@ export type MapOverlayLine = {
   coordinates: [number, number][];
   source_type: string;
   source_url?: string;
+  properties?: Record<string, string>;
 };
 
 export type MapOverlayPolygon = {
@@ -429,14 +433,45 @@ export type MapOverlayPolygon = {
   source_type: string;
 };
 
+export type MapComparisonHome = {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  href: string;
+  boundary?: MapOverlayPolygon;
+};
+
+export type ArrivalSearchSociety = {
+  href: string;
+  propertyId: string;
+  societyId: string;
+  proofFocus?: ProofFocus;
+  preview: {
+    area: string;
+    bhk: number;
+    price: number;
+    title: string;
+  };
+  home: {
+    latitude: number;
+    longitude: number;
+    name: string;
+    boundary?: MapOverlayPolygon;
+  };
+};
+
 export type PropertyMapContext = {
   home: MapHomeAnchor;
   layers?: MapLayerMeta[];
   places: MapPlacePin[];
   proof_focus?: ProofFocus;
+  arrivalExperience?: ArrivalSceneExperience;
   water?: MapWaterContext;
   metro_lines?: MapOverlayLine[];
+  access_lines?: MapOverlayLine[];
   red_flag_lines?: MapOverlayLine[];
+  layer_lines?: Record<string, MapOverlayLine[]>;
   green_patches?: MapOverlayPolygon[];
   lakes?: MapOverlayPolygon[];
 };
@@ -444,8 +479,65 @@ export type PropertyMapContext = {
 export type MapLayerMeta = {
   id: string;
   label: string;
+  renderKind?: string;
+  mapPresentation?: MapPresentation;
+  experience?: MapLayerExperience;
+  emptyState?: string;
+  featureValueLabels?: Record<string, Record<string, string>>;
   rank?: number;
   enabledByDefault?: boolean;
+};
+
+export type MapPresentation = "immersive_3d" | "readable_2d";
+
+export type ArrivalSceneExperience = {
+  revealDurationMs: number;
+  startRangeM: number;
+  finalRangeM: number;
+  finalTilt: number;
+  finalHeading: number;
+  rotationArcDegrees: number;
+  boundaryPadding: number;
+  mobileBoundaryPadding: number;
+  missingBoundaryState?: string;
+  googleUnavailableState?: string;
+  societyPlayLabel?: string;
+  societyPauseLabel?: string;
+  societyResumeLabel?: string;
+  searchContextLabel?: string;
+  searchContextViewHomeLabel?: string;
+  backToSocietyLabel?: string;
+};
+
+export type MapLayerExperience = {
+  kind: string;
+  waypointSpacingM: number;
+  overviewDwellMs?: number;
+  dwellMs: number;
+  anchorLookAheadM?: number;
+  anchorPitch?: number;
+  anchorInteriorPitch?: number;
+  anchorInteriorDwellMs?: number;
+  anchorPoseTransitionMs?: number;
+  cameraAltitudeM: number;
+  cameraRangeM: number;
+  cameraTilt: number;
+  cameraFov: number;
+  streetViewZoom: number;
+  transitionMs: number;
+  targetDurationMs?: number;
+  minimumDurationMs?: number;
+  maximumDurationMs?: number;
+  minimumFrameDwellMs?: number;
+  panoramaCrossfadeMs?: number;
+  entranceDwellMs?: number;
+  maximumPanoramaGapM?: number;
+  shortGapState?: string;
+  endsHereState?: string;
+  unavailableState?: string;
+  pauseLabel?: string;
+  resumeLabel?: string;
+  replayLabel?: string;
 };
 
 export type SurfaceSceneResponse = {
@@ -455,6 +547,7 @@ export type SurfaceSceneResponse = {
   servingBundleVersion?: string;
   entityRefs: KgEntityRefs;
   anchor: SceneAnchor;
+  experience?: ArrivalSceneExperience;
   viewport: SceneViewport;
   proofFocus?: ProofFocus;
   layers: SceneLayer[];
@@ -504,7 +597,15 @@ export type SceneAnchor = {
   label: string;
   area?: string;
   geometry?: SceneGeometry;
+  boundary?: SceneBoundary;
   coordinateQuality: SceneCoordinateQuality;
+};
+
+export type SceneBoundary = {
+  geometry: SceneGeometry;
+  sourceType: string;
+  sourceUrl?: string;
+  confidence: number;
 };
 
 export type SceneViewport = {
@@ -525,6 +626,10 @@ export type SceneLayer = {
   label: string;
   family: "access" | "risk" | "environment" | "market" | "context" | string;
   renderKind: "pin" | "line" | "polygon" | "corridor" | "evidence_list" | string;
+  mapPresentation?: MapPresentation;
+  experience?: MapLayerExperience;
+  emptyState?: string;
+  featureValueLabels?: Record<string, Record<string, string>>;
   relationClass: "access" | "risk_externality" | "context" | string;
   enabledByDefault: boolean;
   rank: number;
@@ -545,6 +650,7 @@ export type SceneFeature = {
   coordinateQuality: SceneCoordinateQuality;
   metrics?: SceneMetrics;
   display: SceneFeatureDisplay;
+  properties?: Record<string, string>;
   confidence: number;
   receiptIds: string[];
 };
@@ -552,7 +658,8 @@ export type SceneFeature = {
 export type SceneGeometry =
   | { type: "Point"; coordinates: [number, number] }
   | { type: "LineString"; coordinates: [number, number][] }
-  | { type: "Polygon"; coordinates: [number, number][][] };
+  | { type: "Polygon"; coordinates: [number, number][][] }
+  | { type: "MultiPolygon"; coordinates: [number, number][][][] };
 
 export type SceneCoordinateQuality = "exact" | "derived" | "approximate" | "missing";
 

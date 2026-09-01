@@ -2,15 +2,16 @@ use std::collections::BTreeMap;
 
 use backend::assets::{
     default_openestates_registry, read_skill_fact_artifact_rows, AssetDagExecutionOptions,
-    AssetDagExecutor, AssetMaterializationStore, AssetPartition, AssetSourceInputs, DagRunStatus,
+    AssetDagExecutor, AssetMaterializationStore, AssetPartition, AssetSourceInputs,
+    BengaluruMetroStationInput, BengaluruMetroStationsInput, DagRunStatus,
     EnvironmentGroundwaterPotentialInput, EnvironmentGroundwaterPotentialZone,
     EnvironmentRingPoint, ExternalImageObservationRecord, ExternalImagesWeeklyInput,
     ExternalListingObservationRecord, ExternalListingsWeeklyInput, GoogleNearbyPlaceRecord,
     GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
-    OsmPowerInfrastructureInput, OsmPowerLineObservationRecord, ReraProjectPlanFramesInput,
-    ReraProjectSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
-    SkillFactRecord, SourceWatermark, StormwaterDrainObservationRecord, StormwaterDrainRiskInput,
-    BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+    OsmPowerInfrastructureInput, OsmPowerLineObservationRecord, OsmSocietyAccessInput,
+    ReraProjectPlanFramesInput, ReraProjectSnapshotRecord, ReraRegistryMonthlyInput,
+    SkillFactAnnotationRecord, SkillFactRecord, SourceWatermark, StormwaterDrainObservationRecord,
+    StormwaterDrainRiskInput, BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
     EXTERNAL_LISTING_FACTS_ASSET_ID,
 };
 use backend::knowledge::{FactValue, KnowledgeGraph};
@@ -479,6 +480,31 @@ fn source_inputs(
                 source_fields: BTreeMap::new(),
             }],
             source_watermarks: watermark.clone(),
+        }),
+        bengaluru_metro_stations: Some(BengaluruMetroStationsInput {
+            snapshot_date: "2026-07-14".to_string(),
+            source_url: "https://www.openstreetmap.org".to_string(),
+            stations: vec![BengaluruMetroStationInput {
+                station_id: "node/fixture-metro".to_string(),
+                name: "Fixture Metro".to_string(),
+                latitude: 12.97,
+                longitude: 77.75,
+                lines: vec!["Purple Line".to_string()],
+                network: Some("Namma Metro".to_string()),
+                operator: Some("BMRCL".to_string()),
+                operational_status: Some("operational".to_string()),
+                source_url: Some("https://www.openstreetmap.org/node/fixture-metro".to_string()),
+                source_tags: BTreeMap::new(),
+            }],
+            source_watermarks: watermark.clone(),
+        }),
+        osm_society_access: Some(OsmSocietyAccessInput {
+            snapshot_date: "2026-07-14".to_string(),
+            records: Vec::new(),
+            source_watermarks: vec![SourceWatermark {
+                source: "fixture_osm_society_access_empty".to_string(),
+                high_watermark: "records=0".to_string(),
+            }],
         }),
         osm_power_infrastructure: Some(OsmPowerInfrastructureInput {
             snapshot_date: "2026-07-14".to_string(),

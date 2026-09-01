@@ -48,6 +48,7 @@ from pipeline.skills.prepare_rera_document_previews import (
 from pipeline.skills.rera_document_intelligence import (
     canonical_rera_society_entity_id,
 )
+from pipeline.sources.osm_access_corridors import collect_society_access_records
 
 
 logger = logging.getLogger(__name__)
@@ -152,6 +153,7 @@ EXTERNAL_IMAGES_WEEKLY = "external_images_weekly"
 SOCIETY_GROUNDWATER_POTENTIAL_FACTS = "society_groundwater_potential_facts"
 BENGALURU_METRO_STATION_FACTS = "bengaluru_metro_station_facts"
 OSM_POWER_LINE_FACTS = "osm_power_line_facts"
+OSM_SOCIETY_ACCESS_FACTS = "osm_society_access_facts"
 STORMWATER_DRAIN_FACTS = "stormwater_drain_facts"
 RERA_DETAIL_RECEIPT_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_detail_receipts"
 RERA_REGULATORY_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_records"
@@ -181,6 +183,7 @@ SUPPORTED_ASSETS = frozenset(
         EXTERNAL_IMAGES_WEEKLY,
         SOCIETY_GROUNDWATER_POTENTIAL_FACTS,
         BENGALURU_METRO_STATION_FACTS,
+        OSM_SOCIETY_ACCESS_FACTS,
         OSM_POWER_LINE_FACTS,
         STORMWATER_DRAIN_FACTS,
     )
@@ -291,8 +294,20 @@ def collect_asset_sources(
                 request
             )
         except Exception as error:
+            if BENGALURU_METRO_STATION_FACTS in requested:
+                record_source_failure(
+                    source_failures, [BENGALURU_METRO_STATION_FACTS], error
+                )
+    if OSM_SOCIETY_ACCESS_FACTS in requested:
+        try:
+            output["osm_society_access"] = collect_osm_society_access(
+                request,
+                output.get(RERA_REGISTRY_MONTHLY),
+                output.get(GOOGLE_PLACES_WEEKLY),
+            )
+        except Exception as error:
             record_source_failure(
-                source_failures, [BENGALURU_METRO_STATION_FACTS], error
+                source_failures, [OSM_SOCIETY_ACCESS_FACTS], error
             )
     if OSM_POWER_LINE_FACTS in requested:
         try:
@@ -537,6 +552,52 @@ def collect_stormwater_drains(
         "collection_status": "complete" if records else "complete_empty",
         "records": records,
         "source_watermarks": watermarks,
+    }
+
+
+def collect_osm_society_access(
+    request: Dict[str, Any],
+    rera_input: Dict[str, Any] = None,
+    google_places_input: Dict[str, Any] = None,
+    fetch: Callable[[str, str], Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    planned_at = normalized_planned_at(request)
+    snapshot_date = partition_values(request).get("dt") or planned_at[:10]
+    config = load_dag_config("osm_access_corridors.json")
+    collector = config.get("collector") or {}
+    subjects = geospatial_society_inputs(request, rera_input, google_places_input)
+    address_inputs = source_society_inputs(request, rera_input)
+    for subject in subjects:
+        address_input = address_inputs.get(subject["entity_id"]) or {}
+        subject["address"] = optional_string(address_input.get("address"))
+    if not subjects:
+        raise ValueError("OSM society access collection requires society coordinates")
+
+    source_url = collector_url(collector)
+    records, query_hashes = collect_society_access_records(
+        subjects,
+        fetch or fetch_overpass_json,
+        source_url,
+        collector,
+        planned_at,
+    )
+    watermark_source = str(
+        collector.get("source_id") or "openstreetmap_society_access"
+    )
+    if not records:
+        watermark_source = "{}_empty".format(watermark_source)
+    return {
+        "snapshot_date": snapshot_date,
+        "records": records,
+        "source_watermarks": [
+            {
+                "source": watermark_source,
+                "high_watermark": "query_sha256:{};records={}".format(
+                    hashlib.sha256(";".join(query_hashes).encode("utf-8")).hexdigest(),
+                    len(records),
+                ),
+            }
+        ],
     }
 
 

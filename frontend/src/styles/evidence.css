@@ -703,6 +703,8 @@
    =================================================================== */
 
 .nearby-plate {
+  display: grid;
+  gap: 1rem;
   min-width: 0;
   margin-bottom: 1.25rem;
 }

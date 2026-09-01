@@ -7,6 +7,7 @@ import {
 } from "../src/lib/api.ts";
 import {
   availableLayers,
+  clusterClosePlaces,
   filterPlacesByScale,
   hasAroundThisHomePlate,
   layerLabel,
@@ -14,6 +15,21 @@ import {
   placeMatchesProofFocus,
   scaleForStory,
 } from "../src/lib/nearbyPlateProjection.ts";
+import {
+  arrivalEvidenceViewport,
+  arrivalMarkerPlaces,
+  corridorCameraFocus,
+  corridorTourWaypoints,
+  hasArrivalMap,
+  societyCameraComposition,
+} from "../src/lib/arrivalMapProjection.ts";
+import { mapMarkerPinOptions } from "../src/lib/mapMarkerVisual.ts";
+import {
+  shouldReorientStreetView,
+  streetViewAnchorHeading,
+  streetViewPlayback,
+  type StreetViewFrame,
+} from "../src/hooks/useGuidedStreetViewTour.ts";
 import { resolveBuyerProjectStatus } from "../src/lib/projectStatus.ts";
 import {
   initialPropertySceneUrls,
@@ -49,9 +65,14 @@ test("proof focus URL contract round-trips through detail and surface paths", ()
     reason: "matched near Manipal Hospital Whitefield",
   };
 
-  const detailUrl = new URL(propertyDetailPath("property id/with slash", focus), "http://test.local");
+  const detailUrl = new URL(
+    propertyDetailPath("property id/with slash", focus, "context-1", "q123"),
+    "http://test.local",
+  );
   const parsed = parseProofFocusParam(detailUrl.searchParams.get("focus"));
   assert.deepEqual(parsed, focus);
+  assert.equal(detailUrl.searchParams.get("context"), "context-1");
+  assert.equal(detailUrl.searchParams.get("qf"), "q123");
 
   const surfaceUrl = new URL(
     propertySurfacePath("property id/with slash", "around_this_home", parsed),
@@ -106,6 +127,332 @@ test("around-this-home accepts places, water, or metro evidence", () => {
   }), true);
 });
 
+test("around-this-home keeps mainline visibility semantics", () => {
+  const road = {
+    id: "ecc-road",
+    name: "ECC Road",
+    coordinates: [[77.73, 12.98], [77.74, 12.99]] as [number, number][],
+    source_type: "OpenStreetMap",
+  };
+  assert.equal(hasAroundThisHomePlate({
+    ...emptyMapContext,
+    access_lines: [road],
+    layer_lines: { approach_road: [road] },
+  }), false);
+});
+
+test("the arrival tile owns society and guided-road 3D evidence", () => {
+  const road = {
+    id: "ecc-road",
+    name: "ECC Road",
+    coordinates: [[77.73, 12.98], [77.74, 12.99]] as [number, number][],
+    source_type: "OpenStreetMap",
+  };
+  const context: PropertyMapContext = {
+    ...emptyMapContext,
+    home: {
+      ...emptyMapContext.home,
+      latitude: 12.98,
+      longitude: 77.74,
+    },
+    layers: [{
+      id: "approach_road",
+      label: "Approach road",
+      renderKind: "terrain_corridor",
+      experience: {
+        kind: "street_view_tour",
+        waypointSpacingM: 60,
+        dwellMs: 3_600,
+        cameraAltitudeM: 8,
+        cameraRangeM: 30,
+        cameraTilt: 82,
+        cameraFov: 52,
+        streetViewZoom: 1,
+        transitionMs: 1_000,
+      },
+    }],
+    layer_lines: { approach_road: [road] },
+  };
+
+  assert.equal(hasArrivalMap(context), true);
+  assert.equal(hasAroundThisHomePlate(context), false);
+});
+
+test("arrival keeps real imagery when the map has only society coordinates", () => {
+  assert.equal(hasArrivalMap({
+    ...emptyMapContext,
+    home: {
+      ...emptyMapContext.home,
+      latitude: 12.98,
+      longitude: 77.74,
+    },
+  }), false);
+});
+
+test("arrival entrance labels and icons follow scene config and status", () => {
+  const layer = {
+    id: "entrance",
+    label: "Entrance",
+    renderKind: "arrival_marker",
+    emptyState: "Entrance not mapped",
+    featureValueLabels: {
+      status: { verified: "Entrance", inferred: "Likely entrance" },
+    },
+  };
+  const base = {
+    ...emptyMapContext,
+    places: [{
+      feature_id: "entrance-one",
+      layer: "entrance",
+      name: "Entrance",
+      latitude: 12.98,
+      longitude: 77.74,
+      source_type: "OpenStreetMap",
+      properties: { status: "inferred" },
+    }],
+  } satisfies PropertyMapContext;
+
+  const inferred = arrivalMarkerPlaces(base, layer);
+  assert.equal(inferred[0]?.name, "Likely entrance");
+  assert.equal(inferred[0]?.icon, "entrance-likely");
+  assert.deepEqual(arrivalMarkerPlaces({ ...base, places: [] }, layer), []);
+  assert.deepEqual(arrivalMarkerPlaces({
+    ...base,
+    places: [{ ...base.places[0], properties: {} }],
+  }, layer), []);
+  const verified = arrivalMarkerPlaces({
+    ...base,
+    places: [{ ...base.places[0], properties: { status: "verified" } }],
+  }, layer);
+  assert.equal(verified[0]?.name, "Entrance");
+  assert.equal(verified[0]?.icon, "entrance");
+});
+
+test("arrival metro framing shifts from the society toward its evidence", () => {
+  const home = { latitude: 12.98, longitude: 77.74 };
+  const viewport = arrivalEvidenceViewport(home, [], [{
+    id: "purple",
+    name: "Purple Line",
+    coordinates: [[77.75, 12.99], [77.76, 13]],
+    source_type: "OpenStreetMap",
+  }]);
+
+  assert.ok(viewport.center.latitude > home.latitude);
+  assert.ok(viewport.center.longitude > home.longitude);
+  assert.ok(viewport.radiusKm >= 0.7);
+});
+
+test("society reveal settles on the approved Waterford composition", () => {
+  const experience = {
+    revealDurationMs: 7_000,
+    startRangeM: 1_800,
+    finalRangeM: 700,
+    finalTilt: 48,
+    finalHeading: 210,
+    rotationArcDegrees: 140,
+    boundaryPadding: 1.35,
+    mobileBoundaryPadding: 1.6,
+  };
+  const boundary = {
+    id: "waterford-boundary",
+    name: "Waterford",
+    kind: "society_boundary",
+    coordinates: [
+      [77.7400, 12.9800],
+      [77.7420, 12.9800],
+      [77.7420, 12.9820],
+      [77.7400, 12.9800],
+    ] as [number, number][],
+    source_type: "OpenStreetMap",
+  };
+  const composition = societyCameraComposition(
+    { latitude: 12.981, longitude: 77.741 },
+    boundary,
+    experience,
+    1280,
+  );
+
+  assert.deepEqual(composition.final, { range: 700, tilt: 48, heading: 210 });
+  assert.equal(composition.start.heading, 70);
+});
+
+test("large irregular boundaries increase range and mobile padding", () => {
+  const experience = {
+    revealDurationMs: 7_000,
+    startRangeM: 1_800,
+    finalRangeM: 700,
+    finalTilt: 48,
+    finalHeading: 210,
+    rotationArcDegrees: 140,
+    boundaryPadding: 1.35,
+    mobileBoundaryPadding: 1.6,
+  };
+  const boundary = {
+    id: "large-boundary",
+    name: "Large society",
+    kind: "society_boundary",
+    coordinates: [
+      [77.73, 12.97], [77.75, 12.972], [77.748, 12.99], [77.732, 12.988], [77.73, 12.97],
+    ] as [number, number][],
+    source_type: "OpenStreetMap",
+  };
+  const desktop = societyCameraComposition({ latitude: 12.98, longitude: 77.74 }, boundary, experience, 1200);
+  const mobile = societyCameraComposition({ latitude: 12.98, longitude: 77.74 }, boundary, experience, 390);
+  assert.ok(desktop.final.range > 700);
+  assert.ok(mobile.final.range > desktop.final.range);
+});
+
+test("approach-road camera follows the sourced travel direction", () => {
+  const road = {
+    id: "ecc-road",
+    name: "ECC Road",
+    coordinates: [
+      [77.744, 12.984],
+      [77.7435, 12.982],
+      [77.743, 12.98],
+    ],
+    source_type: "OpenStreetMap",
+  };
+  const home = {
+    latitude: 12.982,
+    longitude: 77.742,
+  };
+  const focus = corridorCameraFocus([road], home);
+
+  assert.ok(focus);
+  assert.ok(Math.abs(focus.latitude - 12.98166) < 0.0001);
+  assert.ok(Math.abs(focus.longitude - 77.74341) < 0.0001);
+  assert.ok(focus.heading > 190 && focus.heading < 200);
+
+  const waypoints = corridorTourWaypoints([road], home, 60);
+  assert.equal(waypoints.some((waypoint) => waypoint.offsetM === 0), true);
+  assert.ok(waypoints[0].offsetM < 0);
+  assert.ok(waypoints.at(-1)!.offsetM > 0);
+  assert.ok(waypoints.every((waypoint) => waypoint.heading > 190 && waypoint.heading < 200));
+
+  const entrance = { latitude: 12.982, longitude: 77.7435 };
+  const fullRoad = corridorTourWaypoints([road], home, 60, {
+    anchor: entrance,
+    anchorLookAheadM: 35,
+  });
+  assert.ok(Math.abs(fullRoad[0].latitude - 12.984) < 0.0001);
+  assert.ok(Math.abs(fullRoad.at(-1)!.latitude - 12.98) < 0.0001);
+  assert.equal(fullRoad.some((waypoint) => waypoint.offsetM === 0), true);
+  const gateWaypoint = fullRoad.find((waypoint) =>
+    Math.abs(waypoint.latitude - entrance.latitude) < 0.0001
+    && Math.abs(waypoint.longitude - entrance.longitude) < 0.0001);
+  assert.ok(gateWaypoint?.anchorOffsetM !== undefined);
+  assert.ok(Math.abs(gateWaypoint.offsetM - gateWaypoint.anchorOffsetM) < 0.1);
+  assert.equal(fullRoad.some((waypoint) =>
+    Math.abs(waypoint.offsetM - (gateWaypoint.anchorOffsetM! + 35)) < 0.1), true);
+});
+
+test("southbound one-way geometry never reverses for a compass preference", () => {
+  const road = {
+    id: "southbound-one-way",
+    name: "Public road",
+    coordinates: [
+      [77.74, 12.984],
+      [77.74, 12.982],
+      [77.74, 12.98],
+    ] as [number, number][],
+    source_type: "OpenStreetMap",
+    properties: { direction: "oneway_forward" },
+  };
+  const waypoints = corridorTourWaypoints(
+    [road],
+    { latitude: 12.982, longitude: 77.7405 },
+    60,
+  );
+
+  assert.ok(waypoints[0].latitude > waypoints.at(-1)!.latitude);
+  assert.ok(waypoints.every((waypoint) => waypoint.heading === 180));
+});
+
+test("guided road playback always covers the corridor once", () => {
+  const frames = [-120, -60, 0, 60, 120].map((offsetM) => ({
+    links: [],
+    pano: `pano-${offsetM}`,
+    panoramaPosition: { latitude: 12.98, longitude: 77.74 },
+    waypoint: {
+      latitude: 12.98,
+      longitude: 77.74,
+      heading: 15,
+      offsetM,
+    },
+  } satisfies StreetViewFrame));
+
+  assert.deepEqual(
+    streetViewPlayback(frames).map((frame) => frame.waypoint.offsetM),
+    [-120, -60, 0, 60, 120],
+  );
+});
+
+test("end-to-end road playback passes the gate once without reversing", () => {
+  const frames = [120, -120, 0, 60, -60].map((offsetM) => ({
+    links: [],
+    pano: `pano-${offsetM}`,
+    panoramaPosition: { latitude: 12.982, longitude: 77.7435 },
+    waypoint: {
+      latitude: 12.982,
+      longitude: 77.7435,
+      heading: 15,
+      offsetM,
+    },
+  } satisfies StreetViewFrame));
+
+  assert.deepEqual(
+    streetViewPlayback(frames).map((frame) => frame.waypoint.offsetM),
+    [-120, -60, 0, 60, 120],
+  );
+  const gateHeading = streetViewAnchorHeading(
+    frames[2].waypoint,
+    { latitude: 12.982, longitude: 77.742 },
+  );
+  assert.ok(gateHeading > 260 && gateHeading < 280);
+});
+
+test("guided road playback turns only for a meaningful curve", () => {
+  assert.equal(shouldReorientStreetView(15, 21), false);
+  assert.equal(shouldReorientStreetView(15, 35), true);
+});
+
+test("map marker visuals distinguish categories and focus", () => {
+  const school = mapMarkerPinOptions("graduation-cap", "active");
+  const hospital = mapMarkerPinOptions("hospital", "active");
+  const selected = mapMarkerPinOptions("graduation-cap", "selected");
+  const subdued = mapMarkerPinOptions("graduation-cap", "subdued");
+
+  assert.notEqual(school.background, hospital.background);
+  assert.notEqual(school.glyphSrc, hospital.glyphSrc);
+  assert.ok(selected.scale > school.scale);
+  assert.ok(school.scale > subdued.scale);
+
+  const clustered = clusterClosePlaces([
+    {
+      id: "school-1",
+      number: 1,
+      layer: "schools",
+      icon: "graduation-cap",
+      name: "One School",
+      latitude: 12.98,
+      longitude: 77.75,
+      source_type: "Google",
+    },
+    {
+      id: "school-2",
+      number: 2,
+      layer: "schools",
+      icon: "graduation-cap",
+      name: "Two School",
+      latitude: 12.9801,
+      longitude: 77.7501,
+      source_type: "Google",
+    },
+  ], "nearby");
+  assert.equal(clustered.clusters[0]?.layer, "schools");
+});
+
 test("surface scene projects to existing around-this-home plate shape", () => {
   const scene: SurfaceSceneResponse = {
     contractVersion: 1,
@@ -121,6 +468,20 @@ test("surface scene projects to existing around-this-home plate shape", () => {
       label: "Test society",
       area: "Whitefield",
       geometry: { type: "Point", coordinates: [77.75, 12.98] },
+      boundary: {
+        geometry: {
+          type: "Polygon",
+          coordinates: [[
+            [77.74, 12.97],
+            [77.76, 12.97],
+            [77.76, 12.99],
+            [77.74, 12.97],
+          ]],
+        },
+        sourceType: "OpenStreetMap",
+        sourceUrl: "https://www.openstreetmap.org/way/1",
+        confidence: 0.78,
+      },
       coordinateQuality: "exact",
     },
     viewport: {},
@@ -134,7 +495,7 @@ test("surface scene projects to existing around-this-home plate shape", () => {
       geometry: { type: "Point", coordinates: [77.751, 12.981] },
       coordinateQuality: "exact",
       metrics: { distanceM: 650, rating: 4.2, reviewCount: 120 },
-      display: { tone: "positive", priority: 1 },
+      display: { tone: "positive", icon: "graduation-cap", priority: 1 },
       confidence: 0.8,
       receiptIds: ["receipt:school"],
     }],
@@ -164,7 +525,10 @@ test("surface scene projects to existing around-this-home plate shape", () => {
   const context = propertyMapContextFromSurfaceScene(scene);
   assert.equal(context?.home.name, "Test society");
   assert.equal(context?.home.latitude, 12.98);
+  assert.equal(context?.home.boundary?.coordinates.length, 4);
+  assert.equal(context?.home.boundary?.source_type, "OpenStreetMap");
   assert.equal(context?.places[0]?.feature_id, "around_this_home:schools:place-school");
+  assert.equal(context?.places[0]?.icon, "graduation-cap");
   assert.equal(context?.places[0]?.distance_km, 0.65);
   assert.equal(context?.places[0]?.source_type, "Google");
   assert.equal(hasAroundThisHomePlate(context), true);

@@ -7,8 +7,8 @@ use backend::assets::{
     CatalogReleaseId, CatalogReleaseStore, CatalogTombstone, CatalogValidationStatus,
     DerivedCatalogAssets, MaterializationId, MaterializationRecord, PinnedMaterialization,
     PromoteCatalogReleaseOptions, SourceWatermark, IMAGE_MEDIA_FACTS_ASSET_ID,
-    RERA_CLAIMS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID,
-    RERA_SOURCE_RECORDS_ASSET_ID,
+    KG_SOCIETY_VIEW_ASSET_ID, RERA_CLAIMS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
+    RERA_RECEIPTS_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
 };
 use backend::data_loader::properties_from_serving_bundle;
 use backend::lake::{LakeKey, LakeStore, LakeStoreLocation, LAKE_URL_ENV};
@@ -261,8 +261,10 @@ struct RebaseReraOptions {
 struct ExtendServingOptions {
     base_release_id: CatalogReleaseId,
     candidate_serving_materialization_id: MaterializationId,
+    kg_materialization_id: Option<MaterializationId>,
     society_ids: Vec<String>,
     excluded_fact_keys: Vec<String>,
+    refresh_existing: bool,
     version: String,
 }
 
@@ -359,8 +361,10 @@ fn parse_extend_serving(args: Vec<String>) -> Result<ExtendServingOptions, Strin
     let mut cursor = 0usize;
     let mut base_release_id = None;
     let mut candidate_serving_materialization_id = None;
+    let mut kg_materialization_id = None;
     let mut society_ids = Vec::new();
     let mut excluded_fact_keys = Vec::new();
+    let mut refresh_existing = false;
     let mut version = None;
     while cursor < args.len() {
         match args[cursor].as_str() {
@@ -380,6 +384,14 @@ fn parse_extend_serving(args: Vec<String>) -> Result<ExtendServingOptions, Strin
                     "--candidate-serving",
                 )?)?);
             }
+            "--kg" => {
+                cursor += 1;
+                kg_materialization_id = Some(parse_materialization_id(take_value(
+                    &args,
+                    &mut cursor,
+                    "--kg",
+                )?)?);
+            }
             "--society" => {
                 cursor += 1;
                 society_ids.push(take_value(&args, &mut cursor, "--society")?);
@@ -387,6 +399,10 @@ fn parse_extend_serving(args: Vec<String>) -> Result<ExtendServingOptions, Strin
             "--exclude-fact" => {
                 cursor += 1;
                 excluded_fact_keys.push(take_value(&args, &mut cursor, "--exclude-fact")?);
+            }
+            "--refresh-existing" => {
+                cursor += 1;
+                refresh_existing = true;
             }
             "--version" => {
                 cursor += 1;
@@ -407,8 +423,10 @@ fn parse_extend_serving(args: Vec<String>) -> Result<ExtendServingOptions, Strin
             .ok_or_else(|| "extend-serving requires --base-release".to_string())?,
         candidate_serving_materialization_id: candidate_serving_materialization_id
             .ok_or_else(|| "extend-serving requires --candidate-serving".to_string())?,
+        kg_materialization_id,
         society_ids,
         excluded_fact_keys,
+        refresh_existing,
         version: version.ok_or_else(|| "extend-serving requires --version".to_string())?,
     })
 }
@@ -800,6 +818,18 @@ async fn extend_catalog_serving(
         &options.candidate_serving_materialization_id,
     )
     .await?;
+    let lineage_kg_materialization_id = match options.kg_materialization_id {
+        Some(materialization_id) => {
+            let kg_asset = AssetId::new(KG_SOCIETY_VIEW_ASSET_ID)
+                .expect("static KG society-view asset id is valid");
+            materializations
+                .record_by_id_for_asset(&kg_asset, &materialization_id)
+                .await?
+                .ok_or_else(|| format!("KG materialization {materialization_id} was not found"))?;
+            materialization_id
+        }
+        None => base_release.derived_assets.kg_materialization_id.clone(),
+    };
 
     let mut entities = read_entities_parquet(
         &lake
@@ -832,27 +862,40 @@ async fn extend_catalog_serving(
         .iter()
         .map(|entity| entity.entity_id.clone())
         .collect::<BTreeSet<_>>();
-    if let Some(existing) = requested_societies
+    let candidate_entity_ids = candidate_entities
         .iter()
-        .find(|society_id| base_entity_ids.contains(*society_id))
+        .map(|entity| entity.entity_id.clone())
+        .collect::<BTreeSet<_>>();
+    if !options.refresh_existing {
+        if let Some(existing) = requested_societies
+            .iter()
+            .find(|society_id| base_entity_ids.contains(*society_id))
+        {
+            return Err(
+                format!("society {existing} already exists in the base serving bundle").into(),
+            );
+        }
+    } else if let Some(missing) = requested_societies
+        .iter()
+        .find(|society_id| !base_entity_ids.contains(*society_id))
     {
-        return Err(format!("society {existing} already exists in the base serving bundle").into());
+        return Err(format!("society {missing} does not exist in the base serving bundle").into());
     }
     let added_entity_ids = candidate_entities
         .iter()
         .filter(|entity| !base_entity_ids.contains(&entity.entity_id))
         .map(|entity| entity.entity_id.clone())
         .collect::<BTreeSet<_>>();
-    entities.extend(
-        candidate_entities
-            .into_iter()
-            .filter(|entity| added_entity_ids.contains(&entity.entity_id)),
-    );
-    let merged_entity_ids = entities
-        .iter()
-        .map(|entity| entity.entity_id.clone())
-        .collect::<BTreeSet<_>>();
-
+    if options.refresh_existing {
+        entities.retain(|entity| !candidate_entity_ids.contains(&entity.entity_id));
+        entities.extend(candidate_entities);
+    } else {
+        entities.extend(
+            candidate_entities
+                .into_iter()
+                .filter(|entity| added_entity_ids.contains(&entity.entity_id)),
+        );
+    }
     let mut facts = read_facts_parquet(
         &lake
             .get_bytes(&LakeKey::new(base_manifest.fact_parquet_key.clone())?)
@@ -863,11 +906,27 @@ async fn extend_catalog_serving(
             .get_bytes(&LakeKey::new(candidate_manifest.fact_parquet_key.clone())?)
             .await?,
     )?;
-    facts.extend(
-        candidate_facts
-            .into_iter()
-            .filter(|fact| added_entity_ids.contains(&fact.entity_id)),
-    );
+    let retired_entity_ids = if options.refresh_existing {
+        replaced_linked_entity_ids(
+            &facts,
+            &candidate_facts,
+            &base_entity_ids,
+            &candidate_entity_ids,
+        )
+    } else {
+        BTreeSet::new()
+    };
+    entities.retain(|entity| !retired_entity_ids.contains(&entity.entity_id));
+    if options.refresh_existing {
+        refresh_candidate_facts(&mut facts, candidate_facts, &candidate_entity_ids);
+    } else {
+        facts.extend(
+            candidate_facts
+                .into_iter()
+                .filter(|fact| added_entity_ids.contains(&fact.entity_id)),
+        );
+    }
+    facts.retain(|fact| !retired_entity_ids.contains(&fact.entity_id));
     let excluded_fact_keys = options
         .excluded_fact_keys
         .into_iter()
@@ -888,12 +947,26 @@ async fn extend_catalog_serving(
             )?)
             .await?,
     )?;
-    search_metadata.extend(
-        candidate_search_metadata
-            .into_iter()
-            .filter(|metadata| added_entity_ids.contains(&metadata.entity_id)),
-    );
+    if options.refresh_existing {
+        refresh_candidate_metadata(
+            &mut search_metadata,
+            candidate_search_metadata,
+            &candidate_entity_ids,
+        );
+    } else {
+        search_metadata.extend(
+            candidate_search_metadata
+                .into_iter()
+                .filter(|metadata| added_entity_ids.contains(&metadata.entity_id)),
+        );
+    }
+    search_metadata.retain(|row| !retired_entity_ids.contains(&row.entity_id));
     search_metadata.retain(|metadata| !excluded_fact_keys.contains(&metadata.fact_key));
+
+    let merged_entity_ids = entities
+        .iter()
+        .map(|entity| entity.entity_id.clone())
+        .collect::<BTreeSet<_>>();
 
     let mut edges = match base_manifest.edge_parquet_key.as_ref() {
         Some(key) => read_edges_parquet(&lake.get_bytes(&LakeKey::new(key.clone())?).await?)?,
@@ -903,6 +976,13 @@ async fn extend_catalog_serving(
         Some(key) => read_edges_parquet(&lake.get_bytes(&LakeKey::new(key.clone())?).await?)?,
         None => Vec::new(),
     };
+    edges.retain(|edge| {
+        merged_entity_ids.contains(&edge.from_entity_id)
+            && merged_entity_ids.contains(&edge.to_entity_id)
+            && (!options.refresh_existing
+                || !candidate_entity_ids.contains(&edge.from_entity_id)
+                || !candidate_entity_ids.contains(&edge.to_entity_id))
+    });
     let mut edge_keys = edges
         .iter()
         .map(|edge| {
@@ -917,6 +997,9 @@ async fn extend_catalog_serving(
     for edge in candidate_edges {
         let touches_added_entity = added_entity_ids.contains(&edge.from_entity_id)
             || added_entity_ids.contains(&edge.to_entity_id);
+        let refreshes_candidate_edge = options.refresh_existing
+            && candidate_entity_ids.contains(&edge.from_entity_id)
+            && candidate_entity_ids.contains(&edge.to_entity_id);
         let endpoints_exist = merged_entity_ids.contains(&edge.from_entity_id)
             && merged_entity_ids.contains(&edge.to_entity_id);
         let edge_key = (
@@ -925,7 +1008,10 @@ async fn extend_catalog_serving(
             edge.to_entity_id.clone(),
             edge.source_type.clone(),
         );
-        if touches_added_entity && endpoints_exist && edge_keys.insert(edge_key) {
+        if (touches_added_entity || refreshes_candidate_edge)
+            && endpoints_exist
+            && edge_keys.insert(edge_key)
+        {
             edges.push(edge);
         }
     }
@@ -953,6 +1039,9 @@ async fn extend_catalog_serving(
         return Err(
             "candidate serving bundle is missing RERA evidence for an added society".into(),
         );
+    }
+    if options.refresh_existing {
+        evidence.retain(|record| !requested_societies.contains(&record.society_id));
     }
     evidence.extend(
         candidate_evidence
@@ -997,15 +1086,100 @@ async fn extend_catalog_serving(
             // input bundles remain immutable source watermarks, but cannot be
             // direct parents: doing so creates multiple global
             // search_serving_bundle materializations in one promotion
-            // lineage. Nor should a scoped candidate's upstream assets become
-            // current globally. The validated base KG remains the sole direct
-            // runtime lineage parent; copied candidate rows are revalidated by
-            // the serving materializer and catalog gates.
-            vec![base_release.derived_assets.kg_materialization_id],
+            // lineage. The base KG remains the default. A refresh may instead
+            // pin an explicitly rebuilt KG so new project-fact lineage can be
+            // promoted; the catalog gates validate that complete chain.
+            vec![lineage_kg_materialization_id],
             MaterializationId::new(),
         )
         .await
         .map_err(Into::into)
+}
+
+fn refresh_candidate_facts(
+    base: &mut Vec<backend::serving::ServingFactRecord>,
+    candidate: Vec<backend::serving::ServingFactRecord>,
+    entity_ids: &BTreeSet<String>,
+) {
+    let keys = candidate
+        .iter()
+        .filter(|fact| entity_ids.contains(&fact.entity_id))
+        .map(|fact| (fact.entity_id.clone(), fact.fact_key.clone()))
+        .collect::<BTreeSet<_>>();
+    base.retain(|fact| !keys.contains(&(fact.entity_id.clone(), fact.fact_key.clone())));
+    base.extend(
+        candidate
+            .into_iter()
+            .filter(|fact| entity_ids.contains(&fact.entity_id)),
+    );
+}
+
+fn replaced_linked_entity_ids(
+    base_facts: &[backend::serving::ServingFactRecord],
+    candidate_facts: &[backend::serving::ServingFactRecord],
+    base_entity_ids: &BTreeSet<String>,
+    candidate_entity_ids: &BTreeSet<String>,
+) -> BTreeSet<String> {
+    let mut candidate_links = BTreeMap::<(String, String), BTreeSet<String>>::new();
+    for fact in candidate_facts {
+        let backend::knowledge::FactValue::Text(target) = &fact.value else {
+            continue;
+        };
+        if !candidate_entity_ids.contains(&fact.entity_id) || !candidate_entity_ids.contains(target)
+        {
+            continue;
+        }
+        candidate_links
+            .entry((fact.entity_id.clone(), fact.fact_key.clone()))
+            .or_default()
+            .insert(target.clone());
+    }
+    let externally_linked = base_facts
+        .iter()
+        .filter(|fact| !candidate_entity_ids.contains(&fact.entity_id))
+        .filter_map(|fact| match &fact.value {
+            backend::knowledge::FactValue::Text(target) if base_entity_ids.contains(target) => {
+                Some(target.clone())
+            }
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+
+    base_facts
+        .iter()
+        .filter_map(|fact| {
+            let candidate_targets =
+                candidate_links.get(&(fact.entity_id.clone(), fact.fact_key.clone()))?;
+            let backend::knowledge::FactValue::Text(target) = &fact.value else {
+                return None;
+            };
+            if !base_entity_ids.contains(target)
+                || candidate_entity_ids.contains(target)
+                || candidate_targets.contains(target)
+            {
+                return None;
+            }
+            (!externally_linked.contains(target)).then(|| target.clone())
+        })
+        .collect()
+}
+
+fn refresh_candidate_metadata(
+    base: &mut Vec<backend::serving::ServingSearchMetadataRecord>,
+    candidate: Vec<backend::serving::ServingSearchMetadataRecord>,
+    entity_ids: &BTreeSet<String>,
+) {
+    let keys = candidate
+        .iter()
+        .filter(|row| entity_ids.contains(&row.entity_id))
+        .map(|row| (row.entity_id.clone(), row.fact_key.clone()))
+        .collect::<BTreeSet<_>>();
+    base.retain(|row| !keys.contains(&(row.entity_id.clone(), row.fact_key.clone())));
+    base.extend(
+        candidate
+            .into_iter()
+            .filter(|row| entity_ids.contains(&row.entity_id)),
+    );
 }
 
 async fn rebase_rera_serving(
@@ -1448,7 +1622,11 @@ fn print_help() {
     );
     println!("  --plans-only                Replace only RERA plan-frame facts during the rebase");
     println!("  --candidate-serving <uuid>  Scoped serving candidate used to extend a catalog");
+    println!("  --kg <uuid>                 Optional rebuilt KG lineage for a scoped refresh");
     println!("  --society <canonical-id>    Society expected in the scoped candidate; repeatable");
+    println!(
+        "  --refresh-existing          Refresh matching fact keys for an existing catalog society"
+    );
     println!(
         "  --exclude-fact <fact-key>   Remove a superseded fact and search metadata; repeatable"
     );
@@ -1609,6 +1787,115 @@ mod tests {
             facts[0].value,
             FactValue::Text("/media/images/sha256/aa/current.jpg".to_string())
         );
+    }
+
+    #[test]
+    fn scoped_refresh_replaces_only_candidate_fact_keys() {
+        let society = "society:rera-catalog";
+        let route = "place:approach-road:catalog-route";
+        let outside = "society:rera-outside";
+        let mut facts = vec![
+            fact(society, "google_rating", "Google", "4.2"),
+            fact(society, "approach_road", "OpenStreetMap", "old route"),
+            fact(outside, "approach_road", "OpenStreetMap", "outside route"),
+        ];
+        let entity_ids = BTreeSet::from([society.to_string(), route.to_string()]);
+
+        refresh_candidate_facts(
+            &mut facts,
+            vec![
+                fact(society, "approach_road", "OpenStreetMap", "ECC Road"),
+                fact(route, "geo.geometry_geojson", "OpenStreetMap", "line"),
+            ],
+            &entity_ids,
+        );
+
+        assert_eq!(facts.len(), 4);
+        assert!(facts.iter().any(|row| {
+            row.entity_id == society
+                && row.fact_key == "google_rating"
+                && row.value == FactValue::Text("4.2".to_string())
+        }));
+        assert!(facts.iter().any(|row| {
+            row.entity_id == society
+                && row.fact_key == "approach_road"
+                && row.value == FactValue::Text("ECC Road".to_string())
+        }));
+        assert!(facts.iter().any(|row| row.entity_id == route));
+        assert!(facts.iter().any(|row| row.entity_id == outside));
+    }
+
+    #[test]
+    fn scoped_refresh_retires_replaced_unshared_link_targets() {
+        let society = "society:waterford";
+        let old_route = "place:approach-road:waterford-old";
+        let new_route = "place:approach-road:waterford-new";
+        let base_facts = vec![
+            fact(society, "approach_road_entity", "OpenStreetMap", old_route),
+            fact(
+                old_route,
+                "geo.geometry_geojson",
+                "OpenStreetMap",
+                "old line",
+            ),
+        ];
+        let candidate_facts = vec![
+            fact(society, "approach_road_entity", "OpenStreetMap", new_route),
+            fact(
+                new_route,
+                "geo.geometry_geojson",
+                "OpenStreetMap",
+                "new line",
+            ),
+        ];
+
+        let retired = replaced_linked_entity_ids(
+            &base_facts,
+            &candidate_facts,
+            &BTreeSet::from([society.to_string(), old_route.to_string()]),
+            &BTreeSet::from([society.to_string(), new_route.to_string()]),
+        );
+
+        assert_eq!(retired, BTreeSet::from([old_route.to_string()]));
+    }
+
+    #[test]
+    fn scoped_refresh_keeps_link_targets_shared_outside_the_candidate() {
+        let society = "society:waterford";
+        let other_society = "society:other";
+        let old_route = "place:approach-road:shared";
+        let new_route = "place:approach-road:waterford-new";
+        let base_facts = vec![
+            fact(society, "approach_road_entity", "OpenStreetMap", old_route),
+            fact(
+                other_society,
+                "approach_road_entity",
+                "OpenStreetMap",
+                old_route,
+            ),
+        ];
+        let candidate_facts = vec![
+            fact(society, "approach_road_entity", "OpenStreetMap", new_route),
+            fact(
+                new_route,
+                "geo.geometry_geojson",
+                "OpenStreetMap",
+                "new line",
+            ),
+        ];
+
+        let retired = replaced_linked_entity_ids(
+            &base_facts,
+            &candidate_facts,
+            &BTreeSet::from([
+                society.to_string(),
+                other_society.to_string(),
+                old_route.to_string(),
+            ]),
+            &BTreeSet::from([society.to_string(), new_route.to_string()]),
+        );
+
+        assert!(retired.is_empty());
     }
 
     #[test]

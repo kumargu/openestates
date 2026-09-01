@@ -330,6 +330,14 @@ Use AI for intent extraction, summarization, ranking explanations, and enrichmen
 ### Structured truth is app-owned
 The app must own: authoritative ranking inputs, listing data, context state, explanation objects, event history, transparency signals. Never store raw LLM text as the durable source of truth.
 
+### OSM owns map truth; Google renders the experience
+Use OSM and Google together through typed DAG facts, with a strict ownership boundary:
+- OSM owns durable boundaries, explicit gates and entrances, public-road geometry, access restrictions, and legal road direction.
+- Google Maps and Street View own visualization, camera presentation, and panorama availability.
+- Never promote Google imagery or runtime renderer state into durable truth.
+- Never infer an entrance or connector from Google visuals, a centroid, a boundary midpoint, or the nearest road point.
+- If Google is unavailable, preserve the OSM facts and show an honest rendering-unavailable state; do not replace or corrupt sourced geometry.
+
 ### Skills own the domain, Rust owns the runtime
 - New knowledge dimension = new skill in `pipeline/skills/` that produces self-describing `SourcedFact`s
 - ZERO Rust code changes needed for new fact types — the skill declares `display_template`, `answers_preferences`, and `scoring_hint` in **`app/config/dag/fact_registry.json`** (Phase 2+), not in Rust

@@ -21,6 +21,7 @@ pub mod home_state;
 pub mod kg_view;
 pub mod materialization;
 pub mod media;
+pub mod osm_access;
 pub mod osm_power;
 pub mod paths;
 pub mod planner;
@@ -95,6 +96,10 @@ pub use media::{
     ExternalImageObservationRecord, ExternalImageSnapshotManifest, ExternalImagesWeeklyInput,
     MediaAssetError, MediaAssetMaterializer, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
     IMAGE_MEDIA_FACTS_ASSET_ID,
+};
+pub use osm_access::{
+    canonicalize_osm_society_access_input, osm_society_access_facts_input, OsmAccessAssetError,
+    OsmSocietyAccessInput, OsmSocietyAccessRecord, OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
 };
 pub use osm_power::{
     canonicalize_osm_power_infrastructure_input, osm_power_line_facts_input, OsmPowerAssetError,

@@ -28,6 +28,7 @@ import { LivingEvidenceTile } from "../components/evidence/LivingEvidenceTile.ts
 import { SearchFocusBoard } from "../components/evidence/SearchFocusBoard.tsx";
 import { UniverseBoard } from "../components/evidence/UniverseBoard.tsx";
 import { useEvidenceBatch } from "../hooks/useEvidenceBatch.ts";
+import { queryFingerprint, writeDiscoveryMapContext } from "../lib/navigationContext.ts";
 
 /* ---------- Area Context Bar ---------- */
 
@@ -242,6 +243,7 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
   const [searchFailed, setSearchFailed] = useState(false);
   const [panelPropertyId, setPanelPropertyId] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [discoveryContextId, setDiscoveryContextId] = useState<string | null>(null);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
@@ -349,6 +351,20 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
   }, [universeResults]);
   const { byId: evidenceById } = useEvidenceBatch(propertyIds, propertyIds.length > 0);
 
+  useEffect(() => {
+    if (!hasQuery || waitingForSearchResults) return;
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      setDiscoveryContextId(writeDiscoveryMapContext(
+        query,
+        universeResults,
+        (result) => primaryProofFocus(result, query),
+      ));
+    });
+    return () => { cancelled = true; };
+  }, [hasQuery, query, universeResults, waitingForSearchResults]);
+
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.areaContext ?? null : null;
   const totalCount = useBackendResults ? searchResponse.totalMatches : hasQuery ? 0 : filtered.length;
   const returnedCount = totalCount;
@@ -401,6 +417,8 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
       onQuickView={setPanelPropertyId}
       matchLabels={hasQuery ? searchResultReasonLabels(result) : []}
       proofFocus={primaryProofFocus(result, query)}
+      discoveryContextId={hasQuery ? discoveryContextId : null}
+      discoveryQueryFingerprint={hasQuery ? queryFingerprint(query) : null}
     />
   );
   return (

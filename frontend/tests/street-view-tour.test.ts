@@ -1,0 +1,250 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  buildStreetViewSchedule,
+  easedHeadingSteps,
+  entranceCameraSequence,
+  resolveStreetViewSequence,
+  shortestHeadingDelta,
+  type StreetViewFrame,
+  type StreetViewResolution,
+} from "../src/lib/streetViewTour.ts";
+import type { MapLayerExperience } from "../src/lib/types.ts";
+
+const experience: MapLayerExperience = {
+  kind: "street_view_tour",
+  waypointSpacingM: 50,
+  overviewDwellMs: 1_800,
+  dwellMs: 2_500,
+  anchorPitch: 6,
+  anchorInteriorPitch: 10,
+  anchorInteriorDwellMs: 2_000,
+  anchorPoseTransitionMs: 700,
+  cameraAltitudeM: 25,
+  cameraRangeM: 145,
+  cameraTilt: 80,
+  cameraFov: 38,
+  streetViewZoom: 0.8,
+  transitionMs: 4_200,
+  targetDurationMs: 28_000,
+  minimumDurationMs: 24_000,
+  maximumDurationMs: 32_000,
+  minimumFrameDwellMs: 1_500,
+  panoramaCrossfadeMs: 280,
+  entranceDwellMs: 5_000,
+  maximumPanoramaGapM: 140,
+};
+
+function frame(index: number, heading = 15): StreetViewFrame {
+  const panoramaPosition = {
+    latitude: 12.98 + index * 0.0001,
+    longitude: 77.74,
+  };
+  return {
+    links: [
+      ...(index > 0 ? [{ heading, pano: `pano-${index - 1}` }] : []),
+      { heading, pano: `pano-${index + 1}` },
+    ],
+    pano: `pano-${index}`,
+    panoramaPosition,
+    waypoint: {
+      ...panoramaPosition,
+      heading,
+      offsetM: index * 50,
+    },
+  };
+}
+
+test("road film targets 28 seconds and preserves endpoints, entrance, and continuation", () => {
+  const frames = Array.from({ length: 36 }, (_, index) => frame(index));
+  const entrance = { latitude: frames[18].waypoint.latitude, longitude: 77.74 };
+  const schedule = buildStreetViewSchedule(frames, experience, entrance);
+
+  assert.equal(schedule.durationMs, 28_000);
+  assert.ok(schedule.durationMs >= experience.minimumDurationMs!);
+  assert.ok(schedule.durationMs <= experience.maximumDurationMs!);
+  assert.equal(schedule.entries[0].frame.pano, "pano-0");
+  assert.equal(schedule.entries.at(-1)?.frame.pano, "pano-35");
+  assert.equal(schedule.entries[schedule.entranceIndex!].frame.pano, "pano-18");
+  assert.equal(schedule.entries[schedule.entranceIndex! + 1].frame.pano, "pano-19");
+  assert.ok(schedule.entries.length <= 12);
+});
+
+test("gate pause follows the actual panorama position instead of a snapped request", () => {
+  const frames = Array.from({ length: 4 }, (_, index) => frame(index));
+  const entrance = { ...frames[1].waypoint };
+  frames[0] = {
+    ...frames[0],
+    panoramaPosition: {
+      latitude: entrance.latitude - 0.00002,
+      longitude: entrance.longitude,
+    },
+  };
+  frames[1] = {
+    ...frames[1],
+    panoramaPosition: {
+      latitude: entrance.latitude + 0.0003,
+      longitude: entrance.longitude,
+    },
+  };
+
+  const schedule = buildStreetViewSchedule(frames, experience, entrance);
+
+  assert.equal(schedule.entries[schedule.entranceIndex!].frame.pano, "pano-0");
+  assert.equal(schedule.entries[schedule.entranceIndex! + 1].frame.pano, "pano-1");
+});
+
+test("gate pause turns inward without moving off the public panorama", () => {
+  const panoramaPosition = { latitude: 12.98, longitude: 77.74 };
+  const sequence = entranceCameraSequence(
+    panoramaPosition,
+    { latitude: 12.981, longitude: 77.74 },
+    { latitude: 12.98, longitude: 77.741 },
+    experience,
+  );
+
+  assert.equal(sequence.entrance.dwellMs, 2_300);
+  assert.equal(sequence.entrance.pitch, 6);
+  assert.ok(sequence.entrance.heading < 1 || sequence.entrance.heading > 359);
+  assert.equal(sequence.interior?.dwellMs, 2_000);
+  assert.equal(sequence.interior?.transitionMs, 700);
+  assert.equal(sequence.interior?.pitch, 10);
+  assert.ok((sequence.interior?.heading ?? 0) > 89);
+  assert.ok((sequence.interior?.heading ?? 0) < 91);
+});
+
+test("road film keeps meaningful curves while downsampling ordinary frames", () => {
+  const frames = Array.from({ length: 40 }, (_, index) =>
+    frame(index, index >= 20 ? 85 : 15));
+  const schedule = buildStreetViewSchedule(frames, experience);
+
+  assert.ok(schedule.entries.some((entry) => entry.frame.pano === "pano-19"));
+  assert.ok(schedule.entries.some((entry) => entry.frame.pano === "pano-20"));
+  assert.equal(schedule.entries.some((entry) => entry.lookAtEntrance), false);
+});
+
+test("road film clamps misconfigured targets to the runtime duration bounds", () => {
+  const frames = Array.from({ length: 30 }, (_, index) => frame(index));
+  const tooShort = buildStreetViewSchedule(frames, {
+    ...experience,
+    targetDurationMs: 10_000,
+  });
+  const tooLong = buildStreetViewSchedule(frames, {
+    ...experience,
+    targetDurationMs: 40_000,
+  });
+
+  assert.equal(tooShort.durationMs, 24_000);
+  assert.equal(tooLong.durationMs, 32_000);
+});
+
+test("panorama gaps are explicit and material gaps stop the sequence", () => {
+  const resolutions = Array.from({ length: 8 }, (_, index) => ({
+    waypoint: frame(index).waypoint,
+    frame: index === 3 ? null : frame(index),
+  } satisfies StreetViewResolution));
+  const linkedAcrossGap = resolutions.map((resolution, index) => index === 2 && resolution.frame
+    ? {
+      ...resolution,
+      frame: {
+        ...resolution.frame,
+        links: [...resolution.frame.links, { heading: 15, pano: "pano-4" }],
+      },
+    }
+    : resolution);
+  const shortGap = resolveStreetViewSequence(linkedAcrossGap, 140);
+  assert.equal(shortGap.skippedShortGap, true);
+  assert.equal(shortGap.endedEarly, false);
+  assert.equal(shortGap.frames.at(-1)?.pano, "pano-7");
+
+  const materialResolutions = resolutions.map((resolution, index) =>
+    index >= 3 && index <= 5 ? { ...resolution, frame: null } : resolution);
+  const materialGap = resolveStreetViewSequence(materialResolutions, 140);
+  assert.equal(materialGap.endedEarly, true);
+  assert.equal(materialGap.frames.at(-1)?.pano, "pano-2");
+});
+
+test("actual panorama distance and link continuity prevent silent teleports", () => {
+  const first = frame(0);
+  const disconnected = {
+    ...frame(1),
+    links: [],
+  };
+  first.links = [];
+  const disconnectedSequence = resolveStreetViewSequence([
+    { waypoint: first.waypoint, frame: first },
+    { waypoint: disconnected.waypoint, frame: disconnected },
+  ], 140);
+  assert.equal(disconnectedSequence.endedEarly, true);
+  assert.deepEqual(disconnectedSequence.frames.map((item) => item.pano), ["pano-0"]);
+
+  const farAway = {
+    ...frame(1),
+    panoramaPosition: { latitude: 13.1, longitude: 77.74 },
+  };
+  const distantSequence = resolveStreetViewSequence([
+    { waypoint: frame(0).waypoint, frame: frame(0) },
+    { waypoint: farAway.waypoint, frame: farAway },
+  ], 140);
+  assert.equal(distantSequence.endedEarly, true);
+  assert.deepEqual(distantSequence.frames.map((item) => item.pano), ["pano-0"]);
+});
+
+test("sampled panoramas can continue through aligned intermediate Google links", () => {
+  const first = frame(0, 0);
+  const second = frame(5, 0);
+  first.links = [{ heading: 0, pano: "intermediate-a" }];
+  second.links = [{ heading: 180, pano: "intermediate-d" }];
+  const sequence = resolveStreetViewSequence([
+    { waypoint: first.waypoint, frame: first },
+    { waypoint: second.waypoint, frame: second },
+  ], 140);
+  assert.equal(sequence.endedEarly, false);
+  assert.deepEqual(sequence.frames.map((item) => item.pano), ["pano-0", "pano-5"]);
+});
+
+test("nearby panoramas on a differently aligned road do not continue the tour", () => {
+  const first = frame(0, 90);
+  const second = {
+    ...frame(1, 90),
+    panoramaPosition: { latitude: 12.98, longitude: 77.7401 },
+    links: [{ heading: 90, pano: "parallel-road-east" }],
+  };
+  first.links = [{ heading: 90, pano: "parallel-road-west" }];
+  const sequence = resolveStreetViewSequence([
+    { waypoint: first.waypoint, frame: first },
+    { waypoint: second.waypoint, frame: second },
+  ], 140);
+  assert.equal(sequence.endedEarly, true);
+  assert.deepEqual(sequence.frames.map((item) => item.pano), ["pano-0"]);
+});
+
+test("a leading panorama gap never silently teleports into the corridor", () => {
+  const frames = Array.from({ length: 5 }, (_, index) => frame(index));
+  const shortLeadingGap = frames.map((item, index) => ({
+    waypoint: item.waypoint,
+    frame: index === 0 ? null : item,
+  }));
+  const materialLeadingGap = frames.map((item, index) => ({
+    waypoint: item.waypoint,
+    frame: index < 3 ? null : item,
+  }));
+
+  assert.deepEqual(resolveStreetViewSequence(shortLeadingGap, 75), {
+    endedEarly: false,
+    frames: frames.slice(1),
+    skippedShortGap: true,
+  });
+  assert.deepEqual(resolveStreetViewSequence(materialLeadingGap, 75), {
+    endedEarly: true,
+    frames: [],
+    skippedShortGap: false,
+  });
+});
+
+test("heading interpolation chooses the shortest turn", () => {
+  assert.equal(shortestHeadingDelta(350, 10), 20);
+  assert.equal(shortestHeadingDelta(10, 350), -20);
+  assert.deepEqual(easedHeadingSteps(350, 10, 2), [0, 10]);
+});
