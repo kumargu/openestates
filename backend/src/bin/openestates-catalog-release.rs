@@ -886,16 +886,16 @@ async fn extend_catalog_serving(
         .filter(|entity| !base_entity_ids.contains(&entity.entity_id))
         .map(|entity| entity.entity_id.clone())
         .collect::<BTreeSet<_>>();
-    entities.extend(
-        candidate_entities
-            .into_iter()
-            .filter(|entity| added_entity_ids.contains(&entity.entity_id)),
-    );
-    let merged_entity_ids = entities
-        .iter()
-        .map(|entity| entity.entity_id.clone())
-        .collect::<BTreeSet<_>>();
-
+    if options.refresh_existing {
+        entities.retain(|entity| !candidate_entity_ids.contains(&entity.entity_id));
+        entities.extend(candidate_entities);
+    } else {
+        entities.extend(
+            candidate_entities
+                .into_iter()
+                .filter(|entity| added_entity_ids.contains(&entity.entity_id)),
+        );
+    }
     let mut facts = read_facts_parquet(
         &lake
             .get_bytes(&LakeKey::new(base_manifest.fact_parquet_key.clone())?)
@@ -906,6 +906,17 @@ async fn extend_catalog_serving(
             .get_bytes(&LakeKey::new(candidate_manifest.fact_parquet_key.clone())?)
             .await?,
     )?;
+    let retired_entity_ids = if options.refresh_existing {
+        replaced_linked_entity_ids(
+            &facts,
+            &candidate_facts,
+            &base_entity_ids,
+            &candidate_entity_ids,
+        )
+    } else {
+        BTreeSet::new()
+    };
+    entities.retain(|entity| !retired_entity_ids.contains(&entity.entity_id));
     if options.refresh_existing {
         refresh_candidate_facts(&mut facts, candidate_facts, &candidate_entity_ids);
     } else {
@@ -915,6 +926,7 @@ async fn extend_catalog_serving(
                 .filter(|fact| added_entity_ids.contains(&fact.entity_id)),
         );
     }
+    facts.retain(|fact| !retired_entity_ids.contains(&fact.entity_id));
     let excluded_fact_keys = options
         .excluded_fact_keys
         .into_iter()
@@ -948,7 +960,13 @@ async fn extend_catalog_serving(
                 .filter(|metadata| added_entity_ids.contains(&metadata.entity_id)),
         );
     }
+    search_metadata.retain(|row| !retired_entity_ids.contains(&row.entity_id));
     search_metadata.retain(|metadata| !excluded_fact_keys.contains(&metadata.fact_key));
+
+    let merged_entity_ids = entities
+        .iter()
+        .map(|entity| entity.entity_id.clone())
+        .collect::<BTreeSet<_>>();
 
     let mut edges = match base_manifest.edge_parquet_key.as_ref() {
         Some(key) => read_edges_parquet(&lake.get_bytes(&LakeKey::new(key.clone())?).await?)?,
@@ -958,6 +976,13 @@ async fn extend_catalog_serving(
         Some(key) => read_edges_parquet(&lake.get_bytes(&LakeKey::new(key.clone())?).await?)?,
         None => Vec::new(),
     };
+    edges.retain(|edge| {
+        merged_entity_ids.contains(&edge.from_entity_id)
+            && merged_entity_ids.contains(&edge.to_entity_id)
+            && (!options.refresh_existing
+                || !candidate_entity_ids.contains(&edge.from_entity_id)
+                || !candidate_entity_ids.contains(&edge.to_entity_id))
+    });
     let mut edge_keys = edges
         .iter()
         .map(|edge| {
@@ -972,6 +997,9 @@ async fn extend_catalog_serving(
     for edge in candidate_edges {
         let touches_added_entity = added_entity_ids.contains(&edge.from_entity_id)
             || added_entity_ids.contains(&edge.to_entity_id);
+        let refreshes_candidate_edge = options.refresh_existing
+            && candidate_entity_ids.contains(&edge.from_entity_id)
+            && candidate_entity_ids.contains(&edge.to_entity_id);
         let endpoints_exist = merged_entity_ids.contains(&edge.from_entity_id)
             && merged_entity_ids.contains(&edge.to_entity_id);
         let edge_key = (
@@ -980,7 +1008,10 @@ async fn extend_catalog_serving(
             edge.to_entity_id.clone(),
             edge.source_type.clone(),
         );
-        if touches_added_entity && endpoints_exist && edge_keys.insert(edge_key) {
+        if (touches_added_entity || refreshes_candidate_edge)
+            && endpoints_exist
+            && edge_keys.insert(edge_key)
+        {
             edges.push(edge);
         }
     }
@@ -1081,6 +1112,56 @@ fn refresh_candidate_facts(
             .into_iter()
             .filter(|fact| entity_ids.contains(&fact.entity_id)),
     );
+}
+
+fn replaced_linked_entity_ids(
+    base_facts: &[backend::serving::ServingFactRecord],
+    candidate_facts: &[backend::serving::ServingFactRecord],
+    base_entity_ids: &BTreeSet<String>,
+    candidate_entity_ids: &BTreeSet<String>,
+) -> BTreeSet<String> {
+    let mut candidate_links = BTreeMap::<(String, String), BTreeSet<String>>::new();
+    for fact in candidate_facts {
+        let backend::knowledge::FactValue::Text(target) = &fact.value else {
+            continue;
+        };
+        if !candidate_entity_ids.contains(&fact.entity_id) || !candidate_entity_ids.contains(target)
+        {
+            continue;
+        }
+        candidate_links
+            .entry((fact.entity_id.clone(), fact.fact_key.clone()))
+            .or_default()
+            .insert(target.clone());
+    }
+    let externally_linked = base_facts
+        .iter()
+        .filter(|fact| !candidate_entity_ids.contains(&fact.entity_id))
+        .filter_map(|fact| match &fact.value {
+            backend::knowledge::FactValue::Text(target) if base_entity_ids.contains(target) => {
+                Some(target.clone())
+            }
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+
+    base_facts
+        .iter()
+        .filter_map(|fact| {
+            let candidate_targets =
+                candidate_links.get(&(fact.entity_id.clone(), fact.fact_key.clone()))?;
+            let backend::knowledge::FactValue::Text(target) = &fact.value else {
+                return None;
+            };
+            if !base_entity_ids.contains(target)
+                || candidate_entity_ids.contains(target)
+                || candidate_targets.contains(target)
+            {
+                return None;
+            }
+            (!externally_linked.contains(target)).then(|| target.clone())
+        })
+        .collect()
 }
 
 fn refresh_candidate_metadata(
@@ -1742,6 +1823,79 @@ mod tests {
         }));
         assert!(facts.iter().any(|row| row.entity_id == route));
         assert!(facts.iter().any(|row| row.entity_id == outside));
+    }
+
+    #[test]
+    fn scoped_refresh_retires_replaced_unshared_link_targets() {
+        let society = "society:waterford";
+        let old_route = "place:approach-road:waterford-old";
+        let new_route = "place:approach-road:waterford-new";
+        let base_facts = vec![
+            fact(society, "approach_road_entity", "OpenStreetMap", old_route),
+            fact(
+                old_route,
+                "geo.geometry_geojson",
+                "OpenStreetMap",
+                "old line",
+            ),
+        ];
+        let candidate_facts = vec![
+            fact(society, "approach_road_entity", "OpenStreetMap", new_route),
+            fact(
+                new_route,
+                "geo.geometry_geojson",
+                "OpenStreetMap",
+                "new line",
+            ),
+        ];
+
+        let retired = replaced_linked_entity_ids(
+            &base_facts,
+            &candidate_facts,
+            &BTreeSet::from([society.to_string(), old_route.to_string()]),
+            &BTreeSet::from([society.to_string(), new_route.to_string()]),
+        );
+
+        assert_eq!(retired, BTreeSet::from([old_route.to_string()]));
+    }
+
+    #[test]
+    fn scoped_refresh_keeps_link_targets_shared_outside_the_candidate() {
+        let society = "society:waterford";
+        let other_society = "society:other";
+        let old_route = "place:approach-road:shared";
+        let new_route = "place:approach-road:waterford-new";
+        let base_facts = vec![
+            fact(society, "approach_road_entity", "OpenStreetMap", old_route),
+            fact(
+                other_society,
+                "approach_road_entity",
+                "OpenStreetMap",
+                old_route,
+            ),
+        ];
+        let candidate_facts = vec![
+            fact(society, "approach_road_entity", "OpenStreetMap", new_route),
+            fact(
+                new_route,
+                "geo.geometry_geojson",
+                "OpenStreetMap",
+                "new line",
+            ),
+        ];
+
+        let retired = replaced_linked_entity_ids(
+            &base_facts,
+            &candidate_facts,
+            &BTreeSet::from([
+                society.to_string(),
+                other_society.to_string(),
+                old_route.to_string(),
+            ]),
+            &BTreeSet::from([society.to_string(), new_route.to_string()]),
+        );
+
+        assert!(retired.is_empty());
     }
 
     #[test]

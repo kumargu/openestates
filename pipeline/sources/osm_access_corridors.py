@@ -100,7 +100,7 @@ def society_access_record(
 ) -> Optional[Dict[str, Any]]:
     """Project only source geometry; absent evidence remains absent."""
     origin = (float(subject["latitude"]), float(subject["longitude"]))
-    boundary = _society_boundary(payload, str(subject.get("name") or ""))
+    boundary = _society_boundary(payload, str(subject.get("name") or ""), origin)
     boundary_points = boundary[3] if boundary else []
     roads = _eligible_roads(payload, collector)
     road = _select_frontage_road(subject, roads, boundary_points, origin, collector)
@@ -275,7 +275,11 @@ def _official_entrance(subject: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     }
 
 
-def _society_boundary(payload: Dict[str, Any], subject_name: str) -> Optional[Tuple[str, str, str, List[Coordinate]]]:
+def _society_boundary(
+    payload: Dict[str, Any],
+    subject_name: str,
+    origin: Coordinate,
+) -> Optional[Tuple[str, str, str, List[Coordinate]]]:
     normalized_subject = _normalized_name(subject_name)
     if not normalized_subject:
         return None
@@ -295,7 +299,15 @@ def _society_boundary(payload: Dict[str, Any], subject_name: str) -> Optional[Tu
                 "type": "Polygon",
                 "coordinates": [[[lon, lat] for lat, lon in points]],
             }
-            candidates.append((0, f"way/{element.get('id') or ''}", name, geometry_value, points))
+            candidates.append((
+                _point_in_ring(origin, points),
+                -_point_to_line_m(origin, points),
+                0,
+                f"way/{element.get('id') or ''}",
+                name,
+                geometry_value,
+                points,
+            ))
             continue
         polygons = _relation_polygons(element)
         if not polygons:
@@ -305,16 +317,31 @@ def _society_boundary(payload: Dict[str, Any], subject_name: str) -> Optional[Tu
             if len(polygons) == 1
             else {"type": "MultiPolygon", "coordinates": polygons}
         )
-        reference = [
-            (point[1], point[0])
+        outer_rings = [
+            [(point[1], point[0]) for point in polygon[0]]
             for polygon in polygons
-            for point in polygon[0]
         ]
-        candidates.append((1, f"relation/{element.get('id') or ''}", name, geometry_value, reference))
+        reference = min(
+            outer_rings,
+            key=lambda ring: (
+                not _point_in_ring(origin, ring),
+                _point_to_line_m(origin, ring),
+            ),
+        )
+        candidates.append((
+            _point_in_ring(origin, reference),
+            -_point_to_line_m(origin, reference),
+            1,
+            f"relation/{element.get('id') or ''}",
+            name,
+            geometry_value,
+            reference,
+        ))
     if not candidates:
         return None
-    _priority, osm_ref, name, geometry_value, reference = max(
-        candidates, key=lambda candidate: (candidate[0], candidate[1])
+    _contains_origin, _distance, _priority, osm_ref, name, geometry_value, reference = max(
+        candidates,
+        key=lambda candidate: (candidate[0], candidate[1], candidate[2], candidate[3]),
     )
     return (
         osm_ref,
@@ -413,10 +440,13 @@ def _point_in_ring(point: Coordinate, ring: List[Coordinate]) -> bool:
 
 
 def _road_direction(tags: Dict[str, Any]) -> str:
-    value = str(tags.get("oneway") or "").lower()
+    value = str(tags.get("oneway") or "").strip().lower()
     if value == "-1":
         return "oneway_reverse"
     if value in {"yes", "1", "true"}:
+        return "oneway_forward"
+    junction = str(tags.get("junction") or "").lower()
+    if value not in {"no", "0", "false"} and junction == "roundabout":
         return "oneway_forward"
     return "two_way"
 

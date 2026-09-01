@@ -438,6 +438,7 @@ function PropertyPageBody({
             candidate.propertyId,
             candidate.proofFocus,
             discoveryMapContext?.id,
+            discoveryMapContext?.queryFingerprint,
           ),
           propertyId: candidate.propertyId,
           societyId: candidate.societyId,

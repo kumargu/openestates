@@ -190,6 +190,39 @@ class OsmSocietyAccessTests(unittest.TestCase):
         self.assertEqual(record["boundary_way_id"], "relation/99")
         self.assertEqual(json.loads(record["boundary_geometry_geojson"])["type"], "MultiPolygon")
 
+    def test_duplicate_boundary_names_choose_the_subject_location(self):
+        distant = boundary()
+        distant["id"] = 999
+        distant["geometry"] = [
+            {"lat": point["lat"] + 0.1, "lon": point["lon"] + 0.1}
+            for point in boundary()["geometry"]
+        ]
+        record = society_access_record(
+            subject(),
+            {"elements": [distant, boundary()]},
+            "query",
+            {},
+            "2026-08-30T12:00:00Z",
+        )
+        self.assertEqual(record["boundary_way_id"], "way/12")
+
+    def test_roundabout_is_not_routed_against_its_implied_oneway(self):
+        outgoing = road(
+            tags={"junction": "roundabout"},
+            points=[
+                {"lat": 12.9810, "lon": 77.7405},
+                {"lat": 12.9820, "lon": 77.7406},
+            ],
+        )
+        record = society_access_record(
+            subject(),
+            {"elements": [boundary(), outgoing, gate()]},
+            "query",
+            {},
+            "2026-08-30T12:00:00Z",
+        )
+        self.assertNotIn("approach_geometry_geojson", record)
+
     def test_reviewed_coordinates_are_verified(self):
         record = society_access_record(
             subject(

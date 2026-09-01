@@ -220,10 +220,12 @@ test("map context is consumed only by a property carried by its URL token", () =
     result("two", "society:a"),
   ], { id: "bound-context", now: 1_000 });
   const context = readDiscoveryMapContext("bound-context", 1_001);
+  const fingerprint = queryFingerprint("quiet 3bhk");
 
-  assert.equal(discoveryMapContextForProperty(context, "one")?.id, "bound-context");
-  assert.equal(discoveryMapContextForProperty(context, "two")?.id, "bound-context");
-  assert.equal(discoveryMapContextForProperty(context, "unrelated"), null);
+  assert.equal(discoveryMapContextForProperty(context, "one", fingerprint)?.id, "bound-context");
+  assert.equal(discoveryMapContextForProperty(context, "two", fingerprint)?.id, "bound-context");
+  assert.equal(discoveryMapContextForProperty(context, "unrelated", fingerprint), null);
+  assert.equal(discoveryMapContextForProperty(context, "one", null), null);
   assert.equal(
     discoveryMapContextForProperty(context, "one", queryFingerprint("another search")),
     null,
@@ -271,4 +273,26 @@ test("discovery map context requires its URL token and expires after thirty minu
     candidates: [],
   }));
   assert.equal(readDiscoveryMapContext("bad-fingerprint", 5_001), null);
+});
+
+test("discovery map context reuses one bounded slot for result updates", () => {
+  sessionValues.clear();
+  const result = {
+    id: "one",
+    kg_entity_refs: { property_entity_id: "property:one", society_entity_id: "society:a", source_entity_ids: [] },
+    title: "Alpha", area: "Whitefield", price: 20_000_000, price_per_sqft: 12_000,
+    bhk: 3, sqft: 1_600, society_name: "Alpha", builder_name: "Builder", hero_image: null,
+    transparency_tags: [], description_summary: "", possession_status: "Ready", metro_distance_mins: 10,
+    floor: 4, total_floors: 18, facing: "East", match_score: 0.8, match_label: "Strong match",
+    match_reason: "Near school", match_tier: "exact",
+  } satisfies SearchResultItem;
+
+  const firstId = writeDiscoveryMapContext("quiet 3bhk", [result], { now: 5_000 });
+  const updatedId = writeDiscoveryMapContext("quiet 3bhk", [result], { now: 5_001 });
+  const nextQueryId = writeDiscoveryMapContext("near metro", [result], { now: 5_002 });
+
+  assert.equal(updatedId, firstId);
+  assert.notEqual(nextQueryId, firstId);
+  assert.equal(readDiscoveryMapContext(firstId, 5_003), null);
+  assert.equal(readDiscoveryMapContext(nextQueryId, 5_003)?.id, nextQueryId);
 });

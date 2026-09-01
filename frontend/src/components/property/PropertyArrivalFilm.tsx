@@ -94,7 +94,7 @@ export function PropertyArrivalFilm({
     frameKey,
     count: distinctFrames.length,
   });
-  const [mapUnavailable, setMapUnavailable] = useState(false);
+  const [mapUnavailableForProperty, setMapUnavailableForProperty] = useState<string | null>(null);
   const usableFrameCount = availability.frameKey === frameKey
     ? availability.count
     : distinctFrames.length;
@@ -122,7 +122,7 @@ export function PropertyArrivalFilm({
   const mapAvailable = hasArrivalMap(mapContext);
   if (!mapAvailable && (filmstripFrames.length === 0 || usableFrameCount === 0)) return null;
   const hasRealViews = filmstripFrames.length > 0 && usableFrameCount > 0;
-  const showMap = mapAvailable && !mapUnavailable;
+  const showMap = mapAvailable && mapUnavailableForProperty !== propertyId;
 
   return (
     <section
@@ -138,7 +138,7 @@ export function PropertyArrivalFilm({
         <PropertyArrivalMap
           context={mapContext}
           searchContextSocieties={searchContextSocieties}
-          onUnavailable={hasRealViews ? () => setMapUnavailable(true) : undefined}
+          onUnavailable={hasRealViews ? () => setMapUnavailableForProperty(propertyId) : undefined}
         />
       ) : (
         <PropertyFilmstrip

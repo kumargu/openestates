@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use serde::Serialize;
 
 use crate::dag_config::{
-    load_fact_registry_index, ui_surfaces_config, CoordinateEntityScope, FactRegistryIndex,
+    fact_registry_index_config, ui_surfaces_config, CoordinateEntityScope, FactRegistryIndex,
 };
 use crate::knowledge::FactValue;
 use crate::models::Property;
@@ -152,7 +152,7 @@ pub fn build_property_map_context(
     let home_coords = coordinates_for_candidates(facts, &property.society_id);
     let place_by_url = place_lookup_by_google_url(facts);
     let dag_metro_stations = dag_metro_stations(facts);
-    let fact_registry = load_fact_registry_index().ok();
+    let fact_registry = fact_registry_index_config().ok();
 
     let layer_configs = match around_this_home_layers() {
         Ok(layers) => layers,
@@ -171,7 +171,7 @@ pub fn build_property_map_context(
             &layer_config,
             &place_by_url,
             home_coords.as_ref(),
-            fact_registry.as_ref(),
+            fact_registry,
         );
         sort_layer_pins(&mut layer_pins, &layer_config);
         layer_pins

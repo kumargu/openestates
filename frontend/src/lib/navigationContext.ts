@@ -210,17 +210,28 @@ export function writeDiscoveryMapContext(
     candidates.push(candidate);
     if (candidates.length === DISCOVERY_MAP_CANDIDATE_LIMIT) break;
   }
-  const id = contextOptions.id ?? newContextId();
-  const context: DiscoveryMapContext = {
-    version: 2,
-    id,
-    queryFingerprint: fingerprint,
-    createdAt: contextOptions.now ?? Date.now(),
-    candidates,
-  };
-  window.sessionStorage.setItem(contextStorageKey(id), JSON.stringify(context));
-  window.sessionStorage.setItem(DISCOVERY_MAP_CONTEXT_LATEST_KEY, id);
-  return id;
+  const now = contextOptions.now ?? Date.now();
+  try {
+    const previousId = window.sessionStorage.getItem(DISCOVERY_MAP_CONTEXT_LATEST_KEY);
+    const previous = readDiscoveryMapContext(previousId, now);
+    const id = contextOptions.id
+      ?? (previous?.queryFingerprint === fingerprint ? previous.id : newContextId());
+    const context: DiscoveryMapContext = {
+      version: 2,
+      id,
+      queryFingerprint: fingerprint,
+      createdAt: now,
+      candidates,
+    };
+    window.sessionStorage.setItem(contextStorageKey(id), JSON.stringify(context));
+    window.sessionStorage.setItem(DISCOVERY_MAP_CONTEXT_LATEST_KEY, id);
+    if (previousId && previousId !== id) {
+      window.sessionStorage.removeItem(contextStorageKey(previousId));
+    }
+    return id;
+  } catch {
+    return null;
+  }
 }
 
 export function readDiscoveryMapContext(
@@ -284,13 +295,14 @@ export function readDiscoveryMapContext(
 export function discoveryMapContextForProperty(
   context: DiscoveryMapContext | null,
   propertyId: string,
-  expectedQueryFingerprint?: string | null,
+  expectedQueryFingerprint: string | null,
 ): DiscoveryMapContext | null {
   const normalizedPropertyId = propertyId.trim();
-  if (!context || !normalizedPropertyId) return null;
   if (
-    expectedQueryFingerprint
-    && context.queryFingerprint !== expectedQueryFingerprint
+    !context
+    || !normalizedPropertyId
+    || !expectedQueryFingerprint
+    || context.queryFingerprint !== expectedQueryFingerprint
   ) return null;
   return context.candidates.some((candidate) =>
     candidate.propertyIds.includes(normalizedPropertyId))

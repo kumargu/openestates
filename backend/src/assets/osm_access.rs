@@ -566,12 +566,10 @@ fn validate_input(input: &OsmSocietyAccessInput) -> Result<(), OsmAccessAssetErr
                 "OSM access corridor row is missing required provenance".to_string(),
             ));
         }
-        for value in [record.subject_latitude, record.subject_longitude] {
-            if !value.is_finite() {
-                return Err(OsmAccessAssetError::InvalidInput(
-                    "OSM access corridor row contains a non-finite value".to_string(),
-                ));
-            }
+        if !valid_coordinates(record.subject_latitude, record.subject_longitude) {
+            return Err(OsmAccessAssetError::InvalidInput(
+                "OSM access corridor row contains invalid subject coordinates".to_string(),
+            ));
         }
         if !(0.0..=1.0).contains(&record.confidence) {
             return Err(OsmAccessAssetError::InvalidInput(
@@ -670,11 +668,10 @@ fn validate_input(input: &OsmSocietyAccessInput) -> Result<(), OsmAccessAssetErr
                 record.access_id
             )));
         }
-        if [record.entrance_latitude, record.entrance_longitude]
-            .into_iter()
-            .flatten()
-            .any(|coordinate| !coordinate.is_finite())
-        {
+        if matches!(
+            (record.entrance_latitude, record.entrance_longitude),
+            (Some(latitude), Some(longitude)) if !valid_coordinates(latitude, longitude)
+        ) {
             return Err(OsmAccessAssetError::InvalidInput(format!(
                 "OSM entrance {} has invalid coordinates",
                 record.access_id
@@ -682,6 +679,13 @@ fn validate_input(input: &OsmSocietyAccessInput) -> Result<(), OsmAccessAssetErr
         }
     }
     Ok(())
+}
+
+fn valid_coordinates(latitude: f64, longitude: f64) -> bool {
+    latitude.is_finite()
+        && longitude.is_finite()
+        && (-90.0..=90.0).contains(&latitude)
+        && (-180.0..=180.0).contains(&longitude)
 }
 
 fn is_route_line_geometry(value: &str) -> bool {
@@ -872,7 +876,7 @@ impl From<SourceEntityResolutionError> for OsmAccessAssetError {
 
 #[cfg(test)]
 mod geometry_tests {
-    use super::is_polygon_geometry;
+    use super::{is_polygon_geometry, valid_coordinates};
 
     #[test]
     fn boundary_geometry_requires_closed_non_degenerate_rings() {
@@ -892,5 +896,13 @@ mod geometry_tests {
         assert!(is_polygon_geometry(
             r#"{"type":"MultiPolygon","coordinates":[[[[77.0,12.0],[77.1,12.0],[77.1,12.1],[77.0,12.0]]],[[[77.2,12.2],[77.3,12.2],[77.3,12.3],[77.2,12.2]]]]}"#
         ));
+    }
+
+    #[test]
+    fn coordinates_must_be_finite_and_in_world_bounds() {
+        assert!(valid_coordinates(12.98, 77.74));
+        assert!(!valid_coordinates(91.0, 77.74));
+        assert!(!valid_coordinates(12.98, 181.0));
+        assert!(!valid_coordinates(f64::NAN, 77.74));
     }
 }
