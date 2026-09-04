@@ -35,7 +35,7 @@ test("workspace nav follows the focused home across property views", () => {
   assert.equal(byView.get("browse")?.icon, "back");
   assert.equal(byView.get("browse")?.to, "/?q=quiet+3bhk");
   assert.equal(byView.get("home")?.label, "Home");
-  assert.equal(byView.get("notebook")?.label, "Notes");
+  assert.equal(byView.get("notebook")?.label, "Workspace");
   assert.equal(byView.get("home")?.to, "/property/home%20one%2Fwith%20slash");
   assert.equal(byView.get("rera")?.to, "/property/home%20one%2Fwith%20slash/rera");
   assert.equal(byView.get("rera")?.label, "RERA");
@@ -70,6 +70,57 @@ test("property context keeps a generic return when a legacy discovery has no cou
 
   assert.equal(returnItem?.label, "Back to results");
   assert.equal(returnItem?.icon, "back");
+});
+
+test("property tools preserve a carried search context", () => {
+  const items = workspaceNavItems("home one", "home", {
+    mode: "property-context",
+    propertySearchContext: {
+      id: "context one",
+      queryFingerprint: "qsearch1",
+      selectedId: "home one",
+    },
+  });
+  const byView = new Map(items.map((item) => [item.view, item]));
+
+  assert.equal(
+    byView.get("home")?.to,
+    "/property/home%20one?context=context+one&qf=qsearch1&searchHome=home+one",
+  );
+  assert.equal(
+    byView.get("rera")?.to,
+    "/property/home%20one/rera?context=context+one&qf=qsearch1&searchHome=home+one",
+  );
+  assert.equal(
+    byView.get("plan")?.to,
+    "/workspace/buy-vs-rent/home%20one?context=context+one&qf=qsearch1&searchHome=home+one",
+  );
+  assert.equal(
+    byView.get("notebook")?.to,
+    "/workspace?context=context+one&qf=qsearch1&searchHome=home+one",
+  );
+});
+
+test("workspace and compare keep the active search span", () => {
+  const items = workspaceNavItems("home-1", "notebook", {
+    mode: "workspace",
+    compareIds: ["home-1", "home-2"],
+    propertySearchContext: {
+      id: "span-1",
+      queryFingerprint: "qspan1",
+      selectedId: "home-1",
+    },
+  });
+  const byView = new Map(items.map((item) => [item.view, item]));
+
+  assert.equal(
+    byView.get("notebook")?.to,
+    "/workspace?context=span-1&qf=qspan1&searchHome=home-1",
+  );
+  assert.equal(
+    byView.get("compare")?.to,
+    "/workspace/compare?ids=home-1%2Chome-2&focus=home-1&context=span-1&qf=qspan1&searchHome=home-1",
+  );
 });
 
 test("workspace and compare destinations keep distinct active states", () => {

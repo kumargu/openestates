@@ -1,6 +1,9 @@
 type RailPageControlsProps = {
   page: number;
   pageCount: number;
+  rangeStart: number;
+  rangeEnd: number;
+  total: number;
   onPageChange: (page: number) => void;
   label: string;
 };
@@ -8,6 +11,9 @@ type RailPageControlsProps = {
 export function RailPageControls({
   page,
   pageCount,
+  rangeStart,
+  rangeEnd,
+  total,
   onPageChange,
   label,
 }: RailPageControlsProps) {
@@ -23,8 +29,8 @@ export function RailPageControls({
       >
         <Chevron direction="prev" />
       </button>
-      <span>
-        {page + 1} / {pageCount}
+      <span aria-live="polite">
+        {rangeStart === rangeEnd ? rangeStart : `${rangeStart}\u2013${rangeEnd}`} of {total}
       </span>
       <button
         type="button"

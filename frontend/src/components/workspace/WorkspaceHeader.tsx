@@ -1,5 +1,10 @@
 import { Link } from "react-router-dom";
 import type { ReactNode } from "react";
+import {
+  hrefWithSearchSpan,
+  searchSpanReferenceForTarget,
+} from "../../lib/navigationContext.ts";
+import { useSearchSpan } from "./SearchSpanContext.ts";
 
 export type WorkspaceMode = "notes" | "compare" | "buy-vs-rent";
 
@@ -20,20 +25,26 @@ export function WorkspaceHeader({
   context,
   contextDisplay = "always",
 }: WorkspaceHeaderProps) {
+  const searchSpan = useSearchSpan();
+  const reference = searchSpanReferenceForTarget(searchSpan);
+  const notesHref = hrefWithSearchSpan("/workspace", reference);
+  const carriedCompareHref = hrefWithSearchSpan(compareHref, reference);
+  const carriedBuyVsRentHref = hrefWithSearchSpan(buyVsRentHref, reference);
+
   return (
     <header className="workspace-header">
       <div className="workspace-header__main">
         <strong className="workspace-header__title">Workspace</strong>
         <nav className="workspace-header__tabs" aria-label="Workspace views">
           <Link
-            to="/workspace"
+            to={notesHref}
             className={mode === "notes" ? "is-active" : undefined}
             aria-current={mode === "notes" ? "page" : undefined}
           >
             Notes
           </Link>
           <Link
-            to={compareHref}
+            to={carriedCompareHref}
             className={mode === "compare" ? "is-active" : undefined}
             aria-current={mode === "compare" ? "page" : undefined}
           >
@@ -41,7 +52,7 @@ export function WorkspaceHeader({
             {compareCount > 0 && <span className="workspace-header__count">{compareCount}</span>}
           </Link>
           <Link
-            to={buyVsRentHref}
+            to={carriedBuyVsRentHref}
             className={mode === "buy-vs-rent" ? "is-active" : undefined}
             aria-current={mode === "buy-vs-rent" ? "page" : undefined}
           >

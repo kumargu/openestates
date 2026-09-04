@@ -1,4 +1,9 @@
-import type { NavigationMode } from "./navigationContext.ts";
+import {
+  hrefWithSearchSpan,
+  propertyHrefWithSearchSpan,
+  type SearchSpanReference,
+  type NavigationMode,
+} from "./navigationContext.ts";
 
 const MAX_ACTIVE_COMPARE_HOMES = 4;
 
@@ -38,15 +43,30 @@ export function workspaceNavItems(
     discoveryResultCount?: number;
     hasDiscoveryContext?: boolean;
     compareIds?: string[];
+    propertySearchContext?: SearchSpanReference | null;
   } = {},
 ): WorkspaceNavItem[] {
   const encodedId = focusedId ? encodeURIComponent(focusedId) : "";
   const hasFocus = Boolean(encodedId);
-  const detailHref = hasFocus ? `/property/${encodedId}` : "/";
-  const reraHref = hasFocus ? `/property/${encodedId}/rera` : "/";
-  const planHref = workspaceBuyVsRentHref(focusedId);
+  const detailHref = hasFocus
+    ? propertyHrefWithSearchSpan(focusedId, options.propertySearchContext ?? null)
+    : "/";
+  const reraHref = hasFocus
+    ? propertyHrefWithSearchSpan(focusedId, options.propertySearchContext ?? null, "/rera")
+    : "/";
+  const planHref = hrefWithSearchSpan(
+    workspaceBuyVsRentHref(focusedId),
+    options.propertySearchContext,
+  );
   const compareIds = options.compareIds ?? [];
-  const compareHref = workspaceCompareHref(compareIds, focusedId);
+  const compareHref = hrefWithSearchSpan(
+    workspaceCompareHref(compareIds, focusedId),
+    options.propertySearchContext,
+  );
+  const notebookHref = hrefWithSearchSpan(
+    "/workspace",
+    options.propertySearchContext,
+  );
 
   const mode = options.mode ?? "workspace";
   if (mode === "property-context") {
@@ -72,13 +92,13 @@ export function workspaceNavItems(
       },
       { view: "rera", label: "RERA", icon: "rera", to: reraHref, active: activeView === "rera", available: hasFocus },
       { view: "plan", label: "EMI Plan", icon: "plan", to: planHref, active: activeView === "plan", available: hasFocus },
-      { view: "notebook", label: "Notes", icon: "notebook", to: "/workspace", active: false, available: true },
+      { view: "notebook", label: "Workspace", icon: "notebook", to: notebookHref, active: activeView === "notebook", available: true },
     ];
   }
 
   return [
     { view: "browse" as const, label: "Explore", icon: "browse" as const, to: options.discoveryHref ?? "/", available: true },
-    { view: "notebook" as const, label: "Notes", icon: "notebook" as const, to: "/workspace", available: true },
+    { view: "notebook" as const, label: "Notes", icon: "notebook" as const, to: notebookHref, available: true },
     { view: "compare" as const, label: "Compare", icon: "compare" as const, to: compareHref, available: compareIds.length > 0 },
     { view: "rera" as const, label: "RERA", icon: "rera" as const, to: reraHref, available: hasFocus },
   ].map((item) => ({

@@ -1197,7 +1197,10 @@ pub(crate) fn query_tokens_spanned(query: &str) -> Vec<SpannedToken> {
                     .chars()
                     .next()
                     .is_some_and(|next| next.is_ascii_digit()));
-        if ch.is_ascii_whitespace() || matches!(ch, ',' | ';') {
+        if ch.is_ascii_whitespace()
+            || matches!(ch, ',' | ';')
+            || (ch == '-' && !ascii_hyphen_joins_numeric_range(query, index))
+        {
             if let Some(start) = token_start.take() {
                 push_spanned_token(query, start, index, &mut tokens);
             }
@@ -1227,6 +1230,17 @@ pub(crate) fn query_tokens_spanned(query: &str) -> Vec<SpannedToken> {
         push_spanned_token(query, start, query.len(), &mut tokens);
     }
     tokens
+}
+
+fn ascii_hyphen_joins_numeric_range(query: &str, index: usize) -> bool {
+    query[..index]
+        .chars()
+        .next_back()
+        .is_some_and(|character| character.is_ascii_digit())
+        && query[index + 1..]
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_digit())
 }
 
 fn push_spanned_token(
@@ -1300,6 +1314,11 @@ mod tests {
             query_tokens("1.5–2Cr budget"),
             vec!["1.5", "-", "2cr", "budget"]
         );
+        assert_eq!(
+            query_tokens("low commute-pain, move-in-ready home"),
+            vec!["low", "commute", "pain", "move", "in", "ready", "home"]
+        );
+        assert_eq!(query_tokens("2-3 BHK"), vec!["2-3", "bhk"]);
     }
 
     #[test]

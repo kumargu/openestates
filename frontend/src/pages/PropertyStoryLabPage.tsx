@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Helmet } from "react-helmet-async";
+import { PageTitle } from "../components/PageTitle.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
@@ -7,8 +7,6 @@ import { PropertyReraTeaser } from "../components/property/PropertyReraTeaser.ts
 import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
 import {
   PropertySceneCard,
-  PropertySceneFacts,
-  PropertySceneIdentity,
   type StoryPlaybackSpeed,
   type StoryScenePlayback,
 } from "../components/property/PropertySceneCard.tsx";
@@ -125,9 +123,7 @@ export function PropertyStoryLabPage() {
 
   return (
     <div className="story-lab">
-      <Helmet>
-        <title>Property Story Lab — {PUBLIC_BRAND_NAME}</title>
-      </Helmet>
+      <PageTitle title={`Property Story Lab — ${PUBLIC_BRAND_NAME}`} />
 
       <header className="story-lab__header">
         <div>
@@ -362,17 +358,10 @@ export function PropertyStoryLabPage() {
                 key={`page:${propertyId}:${imageCount}:${provenance}`}
                 className="property-story-page story-lab__production-shell"
               >
-                <div className="property-scene property-scene--identity-only">
-                  <PropertySceneIdentity
-                    story={story}
-                    actions={actions}
-                    showFacts={false}
-                  />
-                </div>
-                <PropertySceneFacts story={story} pageScoped />
                 <PropertySceneCard
                   story={story}
-                  showIdentity={false}
+                  actions={actions}
+                  identityPlacement="overlay"
                   cinematicMotion={false}
                   playback={{
                     activeIndex,

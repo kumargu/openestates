@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  LANDING_SEARCH_RAIL_CAP,
   composeLandingSearchRails,
   landingSearchRailHomeCount,
-  landingSearchRailTooLong,
+  orderedLandingSearchResults,
 } from "../src/lib/landing-search-rails.ts";
 import type { SearchResponse, SearchResultItem } from "../src/lib/types.ts";
+
+const runtimeVersion = {
+  servingBundleVersion: "test-bundle",
+  scoringPolicyVersion: 1,
+  searchEngineVersion: "test-search",
+};
 
 function result(id: string, tier: SearchResultItem["match_tier"] = "exact"): SearchResultItem {
   return {
@@ -52,13 +57,36 @@ test("renders backend branches and order without regrouping", () => {
       { branchId: "branch-1", label: "2 BHK", results: [result("a"), result("b")] },
       { branchId: "branch-2", label: "3 BHK", results: [result("c"), result("d")] },
     ],
+    orderedResultIds: ["a", "c", "b", "d"],
     totalMatches: 4,
+    runtimeVersion,
     state: "results",
   };
 
   const rails = composeLandingSearchRails(response);
   assert.deepEqual(rails.map((rail) => rail.results.map((item) => item.id)), [["a", "b"], ["c", "d"]]);
+  assert.deepEqual(
+    orderedLandingSearchResults(response).map((item) => item.id),
+    ["a", "c", "b", "d"],
+  );
   assert.equal(landingSearchRailHomeCount(rails), 4);
+});
+
+test("falls back to deduplicated branch order during a rolling backend deploy", () => {
+  const response = {
+    query: "3BHK in Whitefield",
+    resultSets: [
+      { branchId: "one", label: "Matches", results: [result("a"), result("b")] },
+      { branchId: "two", label: "More", results: [result("b"), result("c")] },
+    ],
+    totalMatches: 3,
+    state: "results",
+  } as SearchResponse;
+
+  assert.deepEqual(
+    orderedLandingSearchResults(response).map((item) => item.id),
+    ["a", "b", "c"],
+  );
 });
 
 test("keeps same-project sibling configurations as a quiet plus group", () => {
@@ -69,7 +97,9 @@ test("keeps same-project sibling configurations as a quiet plus group", () => {
       label: "Prestige Waterford",
       results: [result("asked"), result("sibling", "supported")],
     }],
+    orderedResultIds: ["asked", "sibling"],
     totalMatches: 2,
+    runtimeVersion,
     state: "results",
   };
 
@@ -78,22 +108,25 @@ test("keeps same-project sibling configurations as a quiet plus group", () => {
   assert.deepEqual(rail?.siblings?.map((item) => item.id), ["sibling"]);
 });
 
-test("caps rendering without regrouping or reordering backend results", () => {
+test("keeps every backend result available for landing pagination", () => {
   const backendResults = Array.from(
-    { length: LANDING_SEARCH_RAIL_CAP + 2 },
+    { length: 29 },
     (_, index) => result(`home-${index}`),
   );
   const response: SearchResponse = {
     query: "3BHK in Whitefield",
     resultSets: [{ branchId: "branch-1", label: "Matches", results: backendResults }],
+    orderedResultIds: backendResults.map((result) => result.id),
     totalMatches: backendResults.length,
+    runtimeVersion,
     state: "results",
   };
 
   const rails = composeLandingSearchRails(response);
   assert.deepEqual(
     rails[0]?.results.map((item) => item.id),
-    backendResults.slice(0, LANDING_SEARCH_RAIL_CAP).map((item) => item.id),
+    backendResults.map((item) => item.id),
   );
-  assert.equal(landingSearchRailTooLong(rails), false);
+  assert.deepEqual(orderedLandingSearchResults(response), backendResults);
+  assert.equal(landingSearchRailHomeCount(rails), 29);
 });

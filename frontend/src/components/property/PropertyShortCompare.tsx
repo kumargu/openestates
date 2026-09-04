@@ -2,6 +2,12 @@ import { Link } from "react-router-dom";
 import uiSurfacesConfig from "../../../../app/config/dag/ui_surfaces.json";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
 import type { StoryComparison } from "../../lib/propertyStory.ts";
+import {
+  hrefWithSearchSpan,
+  propertyHrefWithSearchSpan,
+  searchSpanReferenceForTarget,
+} from "../../lib/navigationContext.ts";
+import { useSearchSpan } from "../workspace/SearchSpanContext.ts";
 import "../../styles/property-fact-decks.css";
 
 type Props = {
@@ -66,6 +72,7 @@ function dimensionValue(
 }
 
 export function PropertyShortCompare({ homes, compareHref }: Props) {
+  const searchSpan = useSearchSpan();
   if (homes.length !== 3 || !compareHref) return null;
   const dimensions = COMPARISON_DIMENSIONS.filter((dimension) =>
     homes.every((home) => Boolean(dimensionValue(home, dimension))));
@@ -92,7 +99,7 @@ export function PropertyShortCompare({ homes, compareHref }: Props) {
               home.isCurrent ? " is-current" : ""
             }`}
           >
-            <Link to={`/property/${encodeURIComponent(home.id)}`}>
+            <Link to={propertyHrefWithSearchSpan(home.id, searchSpan)}>
               {showImages && home.heroImage && (
                 <span className="property-short-compare__image">
                   <ImageWithFallback
@@ -122,7 +129,10 @@ export function PropertyShortCompare({ homes, compareHref }: Props) {
       </div>
 
       <div className="property-short-compare__handoff">
-        <Link to={compareHref}>Open full Compare ↗</Link>
+        <Link to={hrefWithSearchSpan(
+          compareHref,
+          searchSpanReferenceForTarget(searchSpan),
+        )}>Open full Compare ↗</Link>
       </div>
     </section>
   );

@@ -6,16 +6,18 @@ import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { LandingStoryStage } from "../components/LandingStoryStage.tsx";
 import { BrandMark } from "../components/brand/BrandMark.tsx";
+import { PageTitle } from "../components/PageTitle.tsx";
 import {
   consumeDiscoveryReturn,
   writeDiscoveryResultCount,
 } from "../lib/navigationContext.ts";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
+import { publicSiteUrl } from "../lib/runtimeConfig.ts";
 
 const SEARCH_SUGGESTIONS = [
   { label: "Quiet near schools", query: "Quiet family home near good schools" },
-  { label: "Under ₹2.5Cr", query: "3BHK under 2.5Cr with clear price context" },
-  { label: "Ready to move", query: "Ready-to-move homes with delivery proof" },
+  { label: "Under ₹2.5Cr", query: "3BHK under 2.5Cr with listing price proof" },
+  { label: "Ready to move", query: "Ready-to-move homes with possession proof" },
   { label: "Low commute", query: "Low commute-pain home near Whitefield tech parks" },
 ];
 
@@ -187,6 +189,14 @@ export function HomePage() {
 
   return (
     <div className={`home-page${hasActiveSearch ? " home-page--searching" : ""}`}>
+      <PageTitle title={`${PUBLIC_BRAND_NAME} — Transparent Property Discovery`} />
+      <meta name="description" content="Property discovery that explains why, not just what. Every listing comes with context, evidence, and tradeoffs you can verify." />
+      <meta property="og:title" content={`${PUBLIC_BRAND_NAME} — Transparent Property Discovery`} />
+      <meta property="og:description" content="Property discovery that explains why, not just what. Every listing comes with context, evidence, and tradeoffs you can verify." />
+      <meta property="og:type" content="website" />
+      <meta property="og:site_name" content={PUBLIC_BRAND_NAME} />
+      <meta property="og:url" content={publicSiteUrl("/")} />
+      <link rel="canonical" href={publicSiteUrl("/")} />
       <section
         id="home-search"
         className={`home-hero${hasActiveSearch ? " home-hero--search-active" : ""}`}

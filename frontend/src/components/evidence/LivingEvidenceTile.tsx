@@ -33,7 +33,6 @@ function titleIncludesBhk(title: string, bhk: number): boolean {
 
 type Props = {
   property: PropertyCard;
-  onQuickView?: (id: string) => void;
   /** Landing/browse surfaces — same card shell, minimal meta. */
   variant?: "default" | "browse";
   proofFocus?: ProofFocus;
@@ -46,7 +45,6 @@ type Props = {
 
 export function LivingEvidenceTile({
   property,
-  onQuickView,
   variant = "default",
   proofFocus,
   discoveryContextId,
@@ -73,12 +71,6 @@ export function LivingEvidenceTile({
       : null,
   ].filter((part): part is string => part !== null);
 
-  const handleQuickView = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onQuickView?.(property.id);
-  };
-
   return (
     <article
       className={`catalog-card${variant === "browse" ? " catalog-card--browse" : ""}`}
@@ -91,38 +83,12 @@ export function LivingEvidenceTile({
           loading="lazy"
           fetchPriority="low"
         />
-        {allowSave || onQuickView ? (
+        {allowSave ? (
           <div className="catalog-card__actions" role="group" aria-label="Property actions">
-            {allowSave ? (
-              <SaveHeartButton
-                propertyId={property.id}
-                className="catalog-card__action catalog-card__save"
-              />
-            ) : null}
-            {onQuickView ? (
-              <button
-                type="button"
-                onClick={handleQuickView}
-                className="catalog-card__action"
-                aria-label="Quick view"
-              >
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="16" x2="12" y2="12" />
-                  <line x1="12" y1="8" x2="12.01" y2="8" />
-                </svg>
-              </button>
-            ) : null}
+            <SaveHeartButton
+              propertyId={property.id}
+              className="catalog-card__action catalog-card__save"
+            />
           </div>
         ) : null}
       </div>

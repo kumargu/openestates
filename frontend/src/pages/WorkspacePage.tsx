@@ -1,5 +1,4 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Helmet } from "react-helmet-async";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../hooks/useNotebook.ts";
 import {
@@ -8,10 +7,18 @@ import {
   readShortlistIds,
 } from "../lib/compare.ts";
 import { SocietyComparisonMatrix } from "../components/compare/SocietyComparisonMatrix.tsx";
+import { PageTitle } from "../components/PageTitle.tsx";
 import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
+import { useSearchSpan } from "../components/workspace/SearchSpanContext.ts";
 import { LabelPill } from "../components/ui/LabelPill.tsx";
 import { getProperties, getProperty } from "../lib/api.ts";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
+import {
+  hrefWithSearchSpan,
+  propertyHrefWithSearchSpan,
+  requestSearchSpanReturn,
+  searchSpanReferenceForTarget,
+} from "../lib/navigationContext.ts";
 import {
   matchingNotebookCommands,
   slashQuery,
@@ -145,6 +152,7 @@ function LabelPicker({
 export function WorkspacePage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const searchSpan = useSearchSpan();
   const mode = workspaceMode(location.pathname);
   const {
     notes,
@@ -228,7 +236,9 @@ export function WorkspacePage() {
     focusCandidates,
   );
   const compareHref = workspaceCompareHref(activeCompareIds, focusedWorkspaceId);
-  const buyVsRentHref = workspaceBuyVsRentHref(focusedWorkspaceId);
+  const buyVsRentHref = workspaceBuyVsRentHref(
+    focusedWorkspaceId || searchSpan?.selectedId,
+  );
   const compareViewStatus: CompareStatus =
     selectedHomes.length < 2
       ? catalogStatus === "loading" && activeCompareIds.length >= 2
@@ -293,10 +303,8 @@ export function WorkspacePage() {
 
   return (
     <div className="notion-page workspace-document">
-      <Helmet>
-        <title>Workspace | {PUBLIC_BRAND_NAME}</title>
-        <meta name="robots" content="noindex" />
-      </Helmet>
+      <PageTitle title={`Workspace | ${PUBLIC_BRAND_NAME}`} />
+      <meta name="robots" content="noindex" />
 
       <WorkspaceHeader
         mode={mode}
@@ -323,7 +331,14 @@ export function WorkspacePage() {
         <div className="notion-empty">
           <h2>Empty workspace</h2>
           <p>Save a home or add a note from a property page to start your decision workspace.</p>
-          <Link to="/">Explore</Link>
+          <Link
+            to={searchSpan?.returnUrl ?? "/"}
+            onClick={() => {
+              if (searchSpan) requestSearchSpanReturn(searchSpan);
+            }}
+          >
+            Explore
+          </Link>
         </div>
       ) : (
         <EditorialView
@@ -362,6 +377,11 @@ function CompareWorkspaceView({
   onRemoveHome: (propertyIds: string[]) => void;
   onRetry: () => void;
 }) {
+  const searchSpan = useSearchSpan();
+  const notesHref = hrefWithSearchSpan(
+    "/workspace",
+    searchSpanReferenceForTarget(searchSpan),
+  );
   if (status === "loading") {
     return (
       <section className="workspace-compare-view" aria-label="Compare homes">
@@ -380,7 +400,7 @@ function CompareWorkspaceView({
         <p>Live property data is temporarily unavailable.</p>
         <div className="workspace-compare-empty__actions">
           <button type="button" onClick={onRetry}>Retry</button>
-          <Link to="/workspace">Back to notes</Link>
+          <Link to={notesHref}>Back to notes</Link>
         </div>
       </section>
     );
@@ -392,7 +412,7 @@ function CompareWorkspaceView({
         <span>Compare</span>
         <h2>Add one more home to compare.</h2>
         <p>Use the compare toggle beside saved homes in Notes. The workspace keeps the same notes and labels when you switch views.</p>
-        <Link to="/workspace">Back to notes</Link>
+        <Link to={notesHref}>Back to notes</Link>
       </section>
     );
   }
@@ -438,6 +458,7 @@ function EditorialView({
   onQuickAdd: (propertyId: string, text: string) => void;
   onCommand: (propertyId: string, commandId: NotebookCommand["id"]) => void;
 }) {
+  const searchSpan = useSearchSpan();
   const notedPropertyIds = propertyIds.filter((propertyId) =>
     notes.some((note) => note.propertyId === propertyId),
   );
@@ -463,7 +484,7 @@ function EditorialView({
                 onChange={() => onToggleCompare(propertyId)}
               />
               <div className="notion-entry__title">
-                <Link to={`/property/${encodeURIComponent(propertyId)}`}>
+                <Link to={propertyHrefWithSearchSpan(propertyId, searchSpan)}>
                   {societyLabel(homes.get(propertyId), propertyId)}
                 </Link>
                 <span>
@@ -542,6 +563,7 @@ function SavedHomeRow({
   onQuickAdd: (text: string) => void;
   onCommand: (command: NotebookCommand) => void;
 }) {
+  const searchSpan = useSearchSpan();
   return (
     <div className="notion-saved-home">
       <div className="notion-saved-home__heading">
@@ -551,7 +573,7 @@ function SavedHomeRow({
           onChange={onToggleCompare}
         />
         <div>
-          <Link to={`/property/${encodeURIComponent(propertyId)}`}>{title}</Link>
+          <Link to={propertyHrefWithSearchSpan(propertyId, searchSpan)}>{title}</Link>
           {area && <span>{area}</span>}
         </div>
       </div>
@@ -604,6 +626,7 @@ function NotebookNoteRow({
   onAddParagraphAfter: (propertyId: string, blockId: string) => void;
   onCommandAt: (propertyId: string, blockId: string, commandId: NotebookCommand["id"]) => void;
 }) {
+  const searchSpan = useSearchSpan();
   const [mountedAt] = useState(() => Date.now());
   const labelPicker = (
     <LabelPicker
@@ -641,7 +664,13 @@ function NotebookNoteRow({
               {note.kind === "plan" && (
                 <div className="notion-note__head-tags">
                   {note.planHref && (
-                    <Link className="notion-plan-link" to={note.planHref}>
+                    <Link
+                      className="notion-plan-link"
+                      to={hrefWithSearchSpan(
+                        note.planHref,
+                        searchSpanReferenceForTarget(searchSpan, note.propertyId),
+                      )}
+                    >
                       Open Plan
                     </Link>
                   )}

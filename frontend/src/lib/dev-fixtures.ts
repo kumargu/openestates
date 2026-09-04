@@ -412,7 +412,13 @@ function searchFixtureProperties(query: string): SearchResponse {
     resultSets: results.length > 0
       ? [{ branchId: "branch-1", label: "Matches", results }]
       : [],
+    orderedResultIds: results.map((result) => result.id),
     totalMatches: results.length,
+    runtimeVersion: {
+      servingBundleVersion: "dev-fixtures",
+      scoringPolicyVersion: 0,
+      searchEngineVersion: "dev-fixtures",
+    },
     areaContext: areaContext ?? undefined,
     state: results.length > 0 ? "results" : "no_matches",
   };

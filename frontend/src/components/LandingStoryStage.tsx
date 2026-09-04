@@ -6,7 +6,13 @@ import { RailPageControls } from "./RailPageControls.tsx";
 import { useFittedRailPage } from "../hooks/useFittedRailPage.ts";
 import { propertyDetailPath, searchProperties } from "../lib/api.ts";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
-import { composeLandingSearchRails } from "../lib/landing-search-rails.ts";
+import {
+  composeLandingSearchRails,
+  orderedLandingSearchResults,
+} from "../lib/landing-search-rails.ts";
+import {
+  writeSearchJourneyContext,
+} from "../lib/navigationContext.ts";
 import { primaryProofFocus } from "../lib/proof-focus.ts";
 import { searchResultReasonLabels } from "../lib/search.ts";
 import type { ProofFocus, PropertyCard, SearchResponse, SearchResultItem } from "../lib/types.ts";
@@ -124,10 +130,14 @@ function LandingResultCard({
   property,
   matchLabels,
   proofFocus,
+  discoveryContextId,
+  discoveryQueryFingerprint,
 }: {
   property: PropertyCard;
   matchLabels: string[];
   proofFocus?: ProofFocus;
+  discoveryContextId?: string | null;
+  discoveryQueryFingerprint?: string | null;
 }) {
   return (
     <div className="landing-stage__feature-card">
@@ -136,6 +146,8 @@ function LandingResultCard({
         variant="browse"
         matchLabels={matchLabels}
         proofFocus={proofFocus}
+        discoveryContextId={discoveryContextId}
+        discoveryQueryFingerprint={discoveryQueryFingerprint}
         allowSave
       />
     </div>
@@ -178,6 +190,9 @@ function LandingPagedRail({
           <RailPageControls
             page={page}
             pageCount={pageCount}
+            rangeStart={start + 1}
+            rangeEnd={start + visible.length}
+            total={items.length}
             onPageChange={setPage}
             label={controlsLabel}
           />
@@ -211,11 +226,15 @@ function LandingResultRail({
   siblings = [],
   label,
   query,
+  discoveryContextId,
+  discoveryQueryFingerprint,
 }: {
   results: SearchResultItem[];
   siblings?: SearchResultItem[];
   label?: string;
   query?: string;
+  discoveryContextId: string | null;
+  discoveryQueryFingerprint: string | null;
 }) {
   const items = [...results, ...siblings];
   if (items.length === 0) return null;
@@ -231,6 +250,8 @@ function LandingResultRail({
           property={item}
           matchLabels={searchResultReasonLabels(item as SearchResultItem)}
           proofFocus={primaryProofFocus(item as SearchResultItem, query)}
+          discoveryContextId={discoveryContextId}
+          discoveryQueryFingerprint={discoveryQueryFingerprint}
         />
       )}
     />
@@ -244,16 +265,35 @@ function LandingSearchResults({
   query: string;
   onReady?: (resultCount?: number) => void;
 }) {
-  const [response, setResponse] = useState<SearchResponse | null>(null);
+  const [searchState, setSearchState] = useState<{
+    response: SearchResponse;
+    contextId: string | null;
+    queryFingerprint: string | null;
+  } | null>(null);
   const [failed, setFailed] = useState(false);
+  const response = searchState?.response ?? null;
 
   useEffect(() => {
     const controller = new AbortController();
 
-    searchProperties(query)
+    searchProperties(query, { signal: controller.signal })
       .then((data) => {
         if (controller.signal.aborted) return;
-        setResponse(data);
+        const results = orderedLandingSearchResults(data);
+        const focusForResult = (result: SearchResultItem) =>
+          primaryProofFocus(result, query);
+        const searchSpan = writeSearchJourneyContext(
+          query,
+          `${window.location.pathname}${window.location.search}`,
+          results,
+          data.runtimeVersion,
+          focusForResult,
+        );
+        setSearchState({
+          response: data,
+          contextId: searchSpan?.id ?? null,
+          queryFingerprint: searchSpan?.queryFingerprint ?? null,
+        });
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -300,6 +340,8 @@ function LandingSearchResults({
           siblings={rail.siblings}
           label={rail.label}
           query={query}
+          discoveryContextId={searchState?.contextId ?? null}
+          discoveryQueryFingerprint={searchState?.queryFingerprint ?? null}
         />
       ))}
     </div>

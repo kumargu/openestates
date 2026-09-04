@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { SHORTLIST_CHANGED_EVENT } from "../lib/compare.ts";
 import {
   NOTEBOOK_CHANGED_EVENT,
@@ -37,98 +37,138 @@ function isNotebookState(value: unknown): value is NotebookState {
     && (candidate.hiddenCompareLabels == null || Array.isArray(candidate.hiddenCompareLabels));
 }
 
+const EMPTY_NOTEBOOK: NotebookState = {
+  version: 3,
+  propertyIds: [],
+  documents: {},
+  notes: [],
+  compareIds: [],
+  hiddenCompareLabels: [],
+};
+const notebookSubscribers = new Set<() => void>();
+let notebookSnapshot: NotebookState | null = null;
+let listening = false;
+
+function currentNotebookSnapshot(): NotebookState {
+  if (!notebookSnapshot) {
+    notebookSnapshot = typeof window === "undefined" ? EMPTY_NOTEBOOK : readNotebook();
+  }
+  return notebookSnapshot;
+}
+
+function publishNotebookSnapshot(next: NotebookState): void {
+  if (next === notebookSnapshot) return;
+  notebookSnapshot = next;
+  for (const subscriber of notebookSubscribers) subscriber();
+}
+
+function refreshNotebookSnapshot(event?: Event): void {
+  const detail = (event as CustomEvent<NotebookState> | undefined)?.detail;
+  publishNotebookSnapshot(isNotebookState(detail) ? detail : readNotebook());
+}
+
+function startNotebookListeners(): void {
+  if (listening) return;
+  window.addEventListener(NOTEBOOK_CHANGED_EVENT, refreshNotebookSnapshot);
+  window.addEventListener(SHORTLIST_CHANGED_EVENT, refreshNotebookSnapshot);
+  window.addEventListener("storage", refreshNotebookSnapshot);
+  listening = true;
+}
+
+function stopNotebookListeners(): void {
+  if (!listening) return;
+  window.removeEventListener(NOTEBOOK_CHANGED_EVENT, refreshNotebookSnapshot);
+  window.removeEventListener(SHORTLIST_CHANGED_EVENT, refreshNotebookSnapshot);
+  window.removeEventListener("storage", refreshNotebookSnapshot);
+  listening = false;
+}
+
+function subscribeToNotebook(subscriber: () => void): () => void {
+  notebookSubscribers.add(subscriber);
+  startNotebookListeners();
+  return () => {
+    notebookSubscribers.delete(subscriber);
+    if (notebookSubscribers.size === 0) stopNotebookListeners();
+  };
+}
+
 export function useNotebook() {
-  const [state, setState] = useState<NotebookState>(() =>
-    typeof window === "undefined"
-      ? { version: 3, propertyIds: [], documents: {}, notes: [], compareIds: [], hiddenCompareLabels: [] }
-      : readNotebook(),
+  const state = useSyncExternalStore(
+    subscribeToNotebook,
+    currentNotebookSnapshot,
+    () => EMPTY_NOTEBOOK,
   );
 
-  useEffect(() => {
-    function refresh(event?: Event) {
-      const detail = (event as CustomEvent<NotebookState> | undefined)?.detail;
-      setState(isNotebookState(detail) ? detail : readNotebook());
-    }
-    window.addEventListener(NOTEBOOK_CHANGED_EVENT, refresh);
-    window.addEventListener(SHORTLIST_CHANGED_EVENT, refresh);
-    window.addEventListener("storage", refresh);
-    return () => {
-      window.removeEventListener(NOTEBOOK_CHANGED_EVENT, refresh);
-      window.removeEventListener(SHORTLIST_CHANGED_EVENT, refresh);
-      window.removeEventListener("storage", refresh);
-    };
-  }, []);
-
   const toggleFact = useCallback((input: Parameters<typeof toggleCatalogNote>[0]) => {
-    setState(toggleCatalogNote(input));
+    publishNotebookSnapshot(toggleCatalogNote(input));
   }, []);
 
   const rememberSelection = useCallback((input: Parameters<typeof addSelectionNote>[0]) => {
     const next = addSelectionNote(input);
-    if (next) setState(next);
+    if (next) publishNotebookSnapshot(next);
   }, []);
 
   const addHandwritten = useCallback((input: Parameters<typeof addHandwrittenNote>[0]) => {
     const next = addHandwrittenNote(input);
-    if (next) setState(next);
+    if (next) publishNotebookSnapshot(next);
   }, []);
 
   const addContextual = useCallback((input: Parameters<typeof upsertContextualNote>[0]) => {
     const next = upsertContextualNote(input);
-    if (next) setState(next);
+    if (next) publishNotebookSnapshot(next);
   }, []);
 
   const addCommandBlock = useCallback((input: Parameters<typeof addNotebookCommandBlock>[0]) => {
     const next = addNotebookCommandBlock(input);
-    if (next) setState(next);
+    if (next) publishNotebookSnapshot(next);
   }, []);
 
   const addParagraphAfter = useCallback((input: Parameters<typeof addNotebookParagraphAfter>[0]) => {
-    setState(addNotebookParagraphAfter(input));
+    publishNotebookSnapshot(addNotebookParagraphAfter(input));
   }, []);
 
   const removeNote = useCallback((noteId: string) => {
-    setState(removeNotebookNote(noteId));
+    publishNotebookSnapshot(removeNotebookNote(noteId));
   }, []);
 
   const updateNote = useCallback((noteId: string, patch: Parameters<typeof updateNotebookNote>[1]) => {
-    setState(updateNotebookNote(noteId, patch));
+    publishNotebookSnapshot(updateNotebookNote(noteId, patch));
   }, []);
 
   const setNoteLabels = useCallback((noteId: string, labels: NotebookLabelId[]) => {
-    setState(setNotebookNoteLabels(noteId, labels));
+    publishNotebookSnapshot(setNotebookNoteLabels(noteId, labels));
   }, []);
 
   const addNoteLabel = useCallback((noteId: string, label: NotebookLabelId) => {
-    setState(addNotebookNoteLabel(noteId, label));
+    publishNotebookSnapshot(addNotebookNoteLabel(noteId, label));
   }, []);
 
   const removeNoteLabel = useCallback((noteId: string, label: NotebookLabelId) => {
-    setState(removeNotebookNoteLabel(noteId, label));
+    publishNotebookSnapshot(removeNotebookNoteLabel(noteId, label));
   }, []);
 
   const toggleCompare = useCallback((propertyId: string) => {
-    setState(toggleNotebookCompareId(propertyId));
+    publishNotebookSnapshot(toggleNotebookCompareId(propertyId));
   }, []);
 
   const setCompareIds = useCallback((propertyIds: string[]) => {
-    setState(setNotebookCompareIds(propertyIds));
+    publishNotebookSnapshot(setNotebookCompareIds(propertyIds));
   }, []);
 
   const hideCompareLabel = useCallback((label: NotebookLabelId) => {
-    setState(hideNotebookCompareLabel(label));
+    publishNotebookSnapshot(hideNotebookCompareLabel(label));
   }, []);
 
   const showCompareLabel = useCallback((label: NotebookLabelId) => {
-    setState(showNotebookCompareLabel(label));
+    publishNotebookSnapshot(showNotebookCompareLabel(label));
   }, []);
 
   const removeProperty = useCallback((propertyId: string) => {
-    setState(removeNotebookProperty(propertyId));
+    publishNotebookSnapshot(removeNotebookProperty(propertyId));
   }, []);
 
   const anchorProperty = useCallback((propertyId: string) => {
-    setState(anchorNotebookProperty(propertyId));
+    publishNotebookSnapshot(anchorNotebookProperty(propertyId));
   }, []);
 
   const notesFor = useCallback(

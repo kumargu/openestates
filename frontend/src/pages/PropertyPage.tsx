@@ -1,59 +1,49 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   Link,
+  useNavigate,
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 import type {
-  PropertyCard,
   PropertyDetailResponse,
   ProofFocus,
-  RecommendationResponse,
   ArrivalSearchSociety,
   SurfaceSceneResponse,
 } from "../lib/types.ts";
 import {
   getProperty,
-  getPropertyRecommendations,
   getPropertySurface,
   getPropertySurfacesBatch,
   parseProofFocusParam,
   propertyDetailPath,
 } from "../lib/api.ts";
-import {
-  recommendationShelfItems,
-  type RecommendationShelfItem,
-} from "../lib/recommendations.ts";
 import { PageState } from "../components/PageState.tsx";
+import { PageTitle } from "../components/PageTitle.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
-import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
-import { useNotebook } from "../hooks/useNotebook.ts";
-import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
-import { PropertyReraTeaser } from "../components/property/PropertyReraTeaser.tsx";
 import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
 import {
   PropertySceneCard,
-  PropertySceneFacts,
-  PropertySceneIdentity,
 } from "../components/property/PropertySceneCard.tsx";
-import { PropertyShortCompare } from "../components/property/PropertyShortCompare.tsx";
-import { propertySceneImageAt } from "../lib/propertyScene.ts";
+import {
+  PropertySearchStrip,
+} from "../components/property/PropertySearchRail.tsx";
+import { BrandMark } from "../components/brand/BrandMark.tsx";
 import {
   projectPropertyStory,
 } from "../lib/propertyStory.ts";
-import { readShortlistIds } from "../lib/compare.ts";
-import { formatGoogleRating } from "../lib/reviewFormatting.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
 import {
   discoveryMapContextForProperty,
   propertyExploreHref,
   readDiscoveryMapContext,
+  requestSearchSpanReturn,
+  searchSpanReturnDelta,
 } from "../lib/navigationContext.ts";
 import { formatListingPrice } from "../lib/listing-price.ts";
 import {
@@ -62,12 +52,12 @@ import {
   propertySceneProofFocus,
 } from "../lib/proof-focus.ts";
 import { backendUrl, publicSiteUrl } from "../lib/runtimeConfig.ts";
+import { useSearchSpan } from "../components/workspace/SearchSpanContext.ts";
 
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
-const MAX_EXPLICIT_COMPARISON_CANDIDATES = 4;
 const ARRIVAL_STORY_SURFACE_ID = "arrival_story";
 
 function focusedEvidenceSource(data: PropertyDetailResponse, focus: ProofFocus) {
@@ -104,133 +94,6 @@ function PropertySearchMatch({
       {sourceUrl && (
         <a href={sourceUrl} target="_blank" rel="noreferrer">Source ↗</a>
       )}
-    </section>
-  );
-}
-
-function propertyToCard(data: PropertyDetailResponse): PropertyCard {
-  const { property: p, society } = data;
-  return {
-    id: p.id,
-    kg_entity_refs: data.entity_refs,
-    title: p.title,
-    area: p.area,
-    price: p.price,
-    price_min: p.price_min,
-    price_max: p.price_max,
-    price_per_sqft: p.price_per_sqft,
-    bhk: p.bhk,
-    sqft: p.super_builtup_sqft || p.carpet_area_sqft || 0,
-    carpet_area_sqft: p.carpet_area_sqft,
-    super_builtup_sqft: p.super_builtup_sqft,
-    society_name: society?.name ?? "",
-    builder_name: p.builder_name,
-    images: p.images,
-    hero_image: p.hero_image,
-    transparency_tags: p.transparency_tags,
-    description_summary: p.description_summary,
-    possession_status: p.possession_status,
-    metro_distance_mins: p.metro_distance_mins,
-    floor: p.floor,
-    total_floors: p.total_floors,
-    facing: p.facing,
-    google_rating: data.external_reviews?.google_rating,
-    google_review_count: data.external_reviews?.google_review_count,
-    google_reviews_url:
-      data.external_reviews?.google_reviews_url ?? society?.google_reviews_url,
-    root_source: data.root_source,
-    project_status: data.project_status,
-    project_status_display: data.project_status_display,
-    home_state_display: data.home_state_display,
-    builder_delivery_display: data.builder_trust?.delivery_display,
-    data_freshness: data.data_freshness,
-    decision_labels: data.decision_labels,
-    decision_check_summary: data.decision_check_summary,
-  };
-}
-
-function compactRecommendationArea(area: string): string {
-  const parts = area.split(",").map((part) => part.trim()).filter(Boolean);
-  if (area.length <= 32 || parts.length < 2) return area;
-  return parts.at(-1) ?? area;
-}
-
-function NearbyHomeCard({
-  item,
-  sceneIndex,
-}: {
-  item: RecommendationShelfItem;
-  sceneIndex: number;
-}) {
-  const property = item.property;
-  const { images } = usePropertySceneImages({
-    heroImage: property.hero_image,
-    images: property.images,
-  });
-  const image = propertySceneImageAt(images, sceneIndex, property.hero_image);
-  const title = property.society_name.trim() || property.title.trim();
-  const area = compactRecommendationArea(property.area);
-  const note = property.society_name
-    ? [area, hasKnownNumber(property.bhk) ? `${property.bhk} BHK` : null]
-        .filter(Boolean)
-        .join(" · ")
-    : area;
-  const price = formatListingPrice(property);
-  const rating = formatGoogleRating(property.google_rating);
-
-  return (
-    <article className="property-nearby-card">
-      <Link to={`/property/${property.id}`}>
-        <span className="property-nearby-card__image">
-          <ImageWithFallback
-            src={image}
-            alt=""
-            loading="lazy"
-            fetchPriority="low"
-          />
-        </span>
-        <em>
-          {price}
-          {rating
-            ? ` · ★ ${rating}`
-            : ""}
-        </em>
-        <strong>{title}</strong>
-        <span>{note}</span>
-      </Link>
-    </article>
-  );
-}
-
-function NearbyHomesRail({
-  items,
-  exploreHref,
-}: {
-  items: RecommendationShelfItem[];
-  exploreHref: string;
-}) {
-  if (items.length === 0) return null;
-
-  return (
-    <section
-      id="more-homes"
-      className="property-nearby-rail"
-      aria-labelledby="property-nearby-title"
-    >
-      <div className="property-section-line">
-        <h2 id="property-nearby-title">More homes</h2>
-      </div>
-      <div className="property-nearby-rail__scroller">
-        {items.map((item, index) => (
-          <NearbyHomeCard key={item.id} item={item} sceneIndex={index} />
-        ))}
-      </div>
-      <Link
-        className="property-nearby-rail__all"
-        to={exploreHref}
-      >
-        Explore all homes
-      </Link>
     </section>
   );
 }
@@ -314,37 +177,26 @@ function PropertyPageBody({
   contextId: string | null;
   contextQueryFingerprint: string | null;
 }) {
-  const proofFocus = useMemo(
-    () => parseProofFocusParam(focusParam),
-    [focusParam],
-  );
-  const { compareIds } = useNotebook();
-  const shortlistKey = typeof window === "undefined"
-    ? ""
-    : readShortlistIds().join("\u001f");
-  const explicitComparisonKey = useMemo(() => {
-    const selectedIds = compareIds.length > 0
-      ? compareIds
-      : shortlistKey.split("\u001f").filter(Boolean);
-    return [...new Set(selectedIds)]
-      .filter((propertyId) => propertyId !== id)
-      .slice(0, MAX_EXPLICIT_COMPARISON_CANDIDATES)
-      .join("\u001f");
-  }, [compareIds, id, shortlistKey]);
+  const navigate = useNavigate();
+  const propertySearchContext = useSearchSpan();
   const [storyPlaying, setStoryPlaying] = useState(true);
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
-  const [recommendations, setRecommendations] =
-    useState<RecommendationResponse | null>(null);
+  const proofFocus = useMemo(() => {
+    const focus = parseProofFocusParam(focusParam);
+    const detailBundleVersion = data?.evidence?.serving_bundle_version;
+    if (
+      detailBundleVersion
+      && propertySearchContext
+      && detailBundleVersion !== propertySearchContext.runtimeVersion.servingBundleVersion
+    ) return undefined;
+    return focus;
+  }, [data?.evidence?.serving_bundle_version, focusParam, propertySearchContext]);
   const [aroundThisHomeScene, setAroundThisHomeScene] =
     useState<SurfaceSceneResponse | null>(null);
   const [arrivalScene, setArrivalScene] =
     useState<SurfaceSceneResponse | null>(null);
   const [searchContextSocieties, setSearchContextSocieties] =
     useState<ArrivalSearchSociety[]>([]);
-  const [comparisonResolution, setComparisonResolution] = useState<{
-    key: string;
-    properties: PropertyCard[];
-  }>({ key: "", properties: [] });
   const [status, setStatus] = useState<
     "loading" | "error" | "not_found" | "ok"
   >("loading");
@@ -357,45 +209,32 @@ function PropertyPageBody({
     ),
     [contextId, contextQueryFingerprint, id],
   );
+  const currentSearchResult = propertySearchContext?.results.find(
+    (result) => result.propertyId === id,
+  );
+
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [id]);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
 
-    getProperty(id)
+    getProperty(id, { signal: controller.signal })
       .then((d) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setData(d);
         setStatus("ok");
       })
       .catch((err: Error) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setStatus(err.message.includes("404") ? "not_found" : "error");
       });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [id, retryKey]);
-
-  useEffect(() => {
-    const propertyId = data?.property?.id;
-    if (!propertyId) return;
-    let cancelled = false;
-
-    getPropertyRecommendations(propertyId)
-      .then((response) => {
-        if (cancelled) return;
-        setRecommendations(response);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setRecommendations(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [data?.property?.id]);
 
   useEffect(() => {
     const currentSocietyId = data?.entity_refs.society_entity_id;
@@ -500,31 +339,11 @@ function PropertyPageBody({
   }, [data?.property?.id]);
 
   useEffect(() => {
-    const propertyId = data?.property?.id;
-    const requestedIds = explicitComparisonKey.split("\u001f").filter(Boolean);
-    if (!propertyId || requestedIds.length === 0) return undefined;
-
-    const controller = new AbortController();
-    void Promise.allSettled(
-      requestedIds.map((requestedId) =>
-        getProperty(requestedId, { signal: controller.signal })
-      ),
-    ).then((results) => {
-      if (controller.signal.aborted) return;
-      setComparisonResolution({
-        key: explicitComparisonKey,
-        properties: results.flatMap((result) =>
-          result.status === "fulfilled"
-            ? [propertyToCard(result.value)]
-            : []),
-      });
-    });
-
-    return () => controller.abort();
-  }, [data?.property?.id, explicitComparisonKey]);
-
-  useEffect(() => {
-    if (status !== "ok" || !proofFocus?.targetId) return undefined;
+    if (
+      status !== "ok"
+      || !proofFocus?.targetId
+      || propertySearchContext
+    ) return undefined;
     let secondFrame = 0;
     const firstFrame = window.requestAnimationFrame(() => {
       secondFrame = window.requestAnimationFrame(() => {
@@ -538,7 +357,14 @@ function PropertyPageBody({
       window.cancelAnimationFrame(firstFrame);
       if (secondFrame) window.cancelAnimationFrame(secondFrame);
     };
-  }, [status, data?.property?.id, proofFocus, aroundThisHomeScene, arrivalScene]);
+  }, [
+    status,
+    data?.property?.id,
+    proofFocus,
+    propertySearchContext,
+    aroundThisHomeScene,
+    arrivalScene,
+  ]);
 
   if (status === "loading")
     return (
@@ -616,142 +442,129 @@ function PropertyPageBody({
     data.map_context,
   );
   const showNearbyPlate = hasAroundThisHomePlate(aroundThisHomeContext);
-  const recommendationBranches =
-    recommendations?.items ?? data.recommendation_branches ?? [];
-  const currentCard = propertyToCard(data);
-  const explicitComparisonProperties = comparisonResolution.key
-      === explicitComparisonKey
-    ? comparisonResolution.properties
-    : [];
   const displayTitle = p.title.trim();
   const story = projectPropertyStory(data, {
     mapAvailable: showNearbyPlate,
-    comparisonProperties: explicitComparisonProperties,
-    recommendationProperties: recommendationBranches.map(
-      (branch) => branch.property,
-    ),
   });
   const proofSourceUrl = proofFocus
     ? focusedEvidenceSource(data, proofFocus)
     : undefined;
-  const officialRecordMatch = propertyProofMatch(
-    proofFocus,
-    "official-record",
-    proofSourceUrl,
-  );
   const residentVoiceMatch = propertyProofMatch(
     proofFocus,
     "resident-voice",
     proofSourceUrl,
   );
-  const comparisonIds = new Set(story.comparisons.map((home) => home.id));
-  const moreNearbyItems = recommendationShelfItems(
-    recommendationBranches,
-    currentCard,
-    comparisonIds,
-  );
   const exploreHref = propertyExploreHref(p.area);
+  const returnHref = propertySearchContext?.returnUrl ?? exploreHref;
 
   return (
     <div className="property-decision-page property-story-page">
-      <Helmet>
-        <title>{pageTitle}</title>
-        <meta name="description" content={pageDescription} />
-        <meta property="og:title" content={pageTitle} />
-        <meta property="og:description" content={pageDescription} />
-        <meta property="og:type" content="website" />
-        <meta property="og:site_name" content={PUBLIC_BRAND_NAME} />
-        <meta property="og:url" content={canonicalUrl} />
-        <link rel="canonical" href={canonicalUrl} />
-        {socialImageUrl && <meta property="og:image" content={socialImageUrl} />}
-        <script type="application/ld+json">
-          {JSON.stringify(buildPropertyJsonLd(p))}
-        </script>
-      </Helmet>
-      <div className="property-scene property-scene--identity-only">
-        <PropertySceneIdentity
-          story={story}
-          showFacts={false}
-          actions={(
-            <>
-              <SaveHeartButton
-                propertyId={p.id}
-                className="property-action-link property-action-save"
-                label="Save"
-              />
-              <NotebookCommentAnchor
-                propertyId={p.id}
-                labels={[]}
-                detail={displayTitle}
-                source="Property detail"
-                label="Note"
-              />
-            </>
-          )}
-        />
-      </div>
-      <PropertySceneFacts story={story} pageScoped />
-      <PropertySceneCard
-        sectionId="property-cinema"
-        story={story}
-        showIdentity={false}
-        playback={{
-          playing: storyPlaying,
-          onPlayingChange: setStoryPlaying,
-        }}
-      />
+      <PageTitle title={pageTitle} />
+      <meta name="description" content={pageDescription} />
+      <meta property="og:title" content={pageTitle} />
+      <meta property="og:description" content={pageDescription} />
+      <meta property="og:type" content="website" />
+      <meta property="og:site_name" content={PUBLIC_BRAND_NAME} />
+      <meta property="og:url" content={canonicalUrl} />
+      <link rel="canonical" href={canonicalUrl} />
+      {socialImageUrl && <meta property="og:image" content={socialImageUrl} />}
+      <script type="application/ld+json">
+        {JSON.stringify(buildPropertyJsonLd(p))}
+      </script>
+      <header className="property-journey-header">
+        <Link to="/" className="property-journey-header__brand">
+          <BrandMark size={30} />
+          <span aria-hidden="true">{PUBLIC_BRAND_NAME}</span>
+        </Link>
+        <Link
+          to={returnHref}
+          className="property-journey-header__return"
+          onClick={propertySearchContext
+            ? (event) => {
+              event.preventDefault();
+              requestSearchSpanReturn(propertySearchContext);
+              const delta = searchSpanReturnDelta(propertySearchContext);
+              if (delta !== null) navigate(delta);
+              else navigate(propertySearchContext.returnUrl, { replace: true });
+            }
+            : undefined}
+        >
+          <span aria-hidden="true">←</span>{propertySearchContext ? "Back to results" : "Explore homes"}
+        </Link>
+      </header>
 
-      <main className="property-clean-flow">
-        <PropertySearchMatch data={data} focus={proofFocus} />
+      <div className="property-journey-layout">
+        <div className="property-journey__canvas">
+          {propertySearchContext && currentSearchResult ? (
+            <PropertySearchStrip context={propertySearchContext} />
+          ) : null}
 
-        {story.map.available && aroundThisHomeContext && (
-          <section
-            id="around-this-home"
-            className="property-map-section"
-            aria-label="Around this home"
-            tabIndex={-1}
-          >
-            <AroundThisHomePlate
-              propertyId={id}
-              context={aroundThisHomeContext}
+          <PropertySceneCard
+            sectionId="property-cover"
+            story={story}
+            identityPlacement="overlay"
+            actions={(
+              <>
+                <SaveHeartButton
+                  propertyId={p.id}
+                  className="property-action-link property-action-save"
+                  label="Save"
+                />
+                <NotebookCommentAnchor
+                  propertyId={p.id}
+                  labels={[]}
+                  detail={displayTitle}
+                  source="Property detail"
+                  label="Note"
+                />
+              </>
+            )}
+            playback={{
+              playing: storyPlaying,
+              onPlayingChange: setStoryPlaying,
+            }}
+          />
+
+          <main className="property-clean-flow">
+            <PropertySearchMatch data={data} focus={proofFocus} />
+
+            {story.map.available && aroundThisHomeContext && (
+              <section
+                id="around-this-home"
+                className="property-map-section"
+                aria-label="Around this home"
+                tabIndex={-1}
+              >
+                <AroundThisHomePlate
+                  propertyId={id}
+                  context={aroundThisHomeContext}
+                />
+              </section>
+            )}
+
+            <PropertyArrivalFilm
+              propertyId={p.id}
+              title={story.identity.title}
+              frames={story.arrival.frames}
+              mapContext={arrivalContext}
+              searchContextSocieties={searchContextSocieties}
+              playback={{
+                playing: storyPlaying,
+                onPlayingChange: setStoryPlaying,
+              }}
             />
-          </section>
-        )}
 
-        <PropertyArrivalFilm
-          propertyId={p.id}
-          title={story.identity.title}
-          frames={story.arrival.frames}
-          mapContext={arrivalContext}
-          searchContextSocieties={searchContextSocieties}
-          playback={{
-            playing: storyPlaying,
-            onPlayingChange: setStoryPlaying,
-          }}
-        />
+            <PropertyReviewsDeck
+              model={story.reviews}
+              reviews={data.external_reviews}
+              signals={data.detail_signals}
+              focusedMatch={residentVoiceMatch}
+            />
 
-        <PropertyReviewsDeck
-          model={story.reviews}
-          reviews={data.external_reviews}
-          signals={data.detail_signals}
-          focusedMatch={residentVoiceMatch}
-        />
+          </main>
+        </div>
 
-        <PropertyReraTeaser
-          cards={story.recordCards}
-          focusedMatch={officialRecordMatch}
-        />
-
-        <PropertyShortCompare
-          homes={story.comparisons}
-          compareHref={story.compareHref}
-        />
-
-        <NearbyHomesRail
-          items={moreNearbyItems}
-          exploreHref={exploreHref}
-        />
-      </main>
+      </div>
 
     </div>
   );

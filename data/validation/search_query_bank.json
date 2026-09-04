@@ -2293,6 +2293,22 @@
       "group": "controlled_product"
     },
     {
+      "id": "CONV-SEM-006A",
+      "category": "hyphenated_preference_with_generic_place_family",
+      "query": "Low commute-pain home near tech parks",
+      "expected_semantics": {
+        "place_family": "tech park",
+        "positive_preferences": [
+          "commute"
+        ]
+      },
+      "fixture": "core",
+      "fixture_expectation": {
+        "non_empty_result_sets": 1
+      },
+      "group": "controlled_product"
+    },
+    {
       "id": "CONV-SEM-007",
       "category": "society_alternatives_with_unless_exclusions",
       "query": "Show me SNN Raj Etternia or Prestige Song of the South, unless the available home is above ₹2.8 Cr or still under construction.",

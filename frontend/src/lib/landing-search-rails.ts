@@ -1,8 +1,5 @@
 import type { SearchResponse, SearchResultItem } from "./types.ts";
 
-/** Rendering cap only. Membership and order always come from the backend. */
-export const LANDING_SEARCH_RAIL_CAP = 8;
-
 export type LandingSearchRail = {
   id: string;
   label?: string;
@@ -10,11 +7,26 @@ export type LandingSearchRail = {
   siblings?: SearchResultItem[];
 };
 
+/** Canonical backend traversal order carried into property detail; rendering caps do not apply. */
+export function orderedLandingSearchResults(
+  response: SearchResponse,
+): SearchResultItem[] {
+  const resultSets = Array.isArray(response.resultSets) ? response.resultSets : [];
+  const allResults = resultSets.flatMap((set) => set.results);
+  const resultById = new Map(allResults.map((result) => [result.id, result] as const));
+  const orderedIds = Array.isArray(response.orderedResultIds)
+    ? response.orderedResultIds
+    : allResults.map((result) => result.id);
+  return [...new Set(orderedIds)].flatMap((id) => {
+    const result = resultById.get(id);
+    return result ? [result] : [];
+  });
+}
+
 export function composeLandingSearchRails(response: SearchResponse): LandingSearchRail[] {
   return response.resultSets.map((set) => {
-    const visible = set.results.slice(0, LANDING_SEARCH_RAIL_CAP);
-    const results = visible.filter((result) => result.match_tier !== "supported");
-    const siblings = visible.filter((result) => result.match_tier === "supported");
+    const results = set.results.filter((result) => result.match_tier !== "supported");
+    const siblings = set.results.filter((result) => result.match_tier === "supported");
     return {
       id: set.branchId,
       label: set.label === "Matches" ? undefined : set.label,
@@ -28,11 +40,5 @@ export function landingSearchRailHomeCount(rails: LandingSearchRail[]): number {
   return rails.reduce(
     (count, rail) => count + rail.results.length + (rail.siblings?.length ?? 0),
     0,
-  );
-}
-
-export function landingSearchRailTooLong(rails: LandingSearchRail[]): boolean {
-  return rails.some(
-    (rail) => rail.results.length + (rail.siblings?.length ?? 0) > LANDING_SEARCH_RAIL_CAP,
   );
 }

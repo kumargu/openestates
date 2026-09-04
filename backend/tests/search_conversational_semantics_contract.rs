@@ -176,7 +176,7 @@ fn frozen_product_scenarios_execute_against_controlled_inventory() {
                 .expect("controlled search case follows the typed contract")
         })
         .collect::<Vec<_>>();
-    assert_eq!(cases.len(), 50, "controlled bank size changed");
+    assert_eq!(cases.len(), 51, "controlled bank size changed");
 
     let unique_ids = cases
         .iter()

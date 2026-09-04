@@ -155,10 +155,22 @@ pub struct KnowledgeContext {
 /// gaps stay in logs/admin surfaces rather than leaking into product copy.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SearchRuntimeVersion {
+    pub serving_bundle_version: String,
+    pub scoring_policy_version: u32,
+    pub search_engine_version: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchResponse {
     pub query: String,
     pub result_sets: Vec<SearchResultSet>,
+    /// Canonical traversal order after cross-branch result limiting.
+    pub ordered_result_ids: Vec<String>,
     pub total_matches: usize,
+    /// Pins the exact serving/search semantics that produced this result set.
+    pub runtime_version: SearchRuntimeVersion,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub area_context: Option<AreaProfile>,
     pub state: String,

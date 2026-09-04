@@ -21,9 +21,17 @@ import {
   captureDiscoveryDeparture,
   clearDiscoveryContext,
   discoveryReturnHref,
+  hasSearchSpanUrlParams,
+  hrefWithSearchSpan,
   navigationMode,
+  propertyHrefWithSearchSpan,
   readDiscoveryContext,
+  reconcileSearchSpanAvailability,
   requestDiscoveryReturn,
+  SEARCH_SPAN_TTL_MS,
+  searchSpanContextFromLocation,
+  searchSpanReferenceForTarget,
+  stripSearchSpanUrlParams,
   writeDiscoveryContext,
 } from "../../lib/navigationContext.ts";
 import {
@@ -33,6 +41,7 @@ import {
   workspaceFocusedHomeId,
 } from "../../lib/workspaceNav.ts";
 import { WorkspaceSidebar } from "./WorkspaceSidebar.tsx";
+import { SearchSpanProvider } from "./SearchSpanProvider.tsx";
 import "../../styles/workspace.css";
 
 const SIDEBAR_STORAGE_KEY = "openestates:workspace-sidebar-collapsed";
@@ -44,7 +53,12 @@ type WorkspaceFrameProps = {
 function routePropertyId(pathname: string): string | null {
   const match = pathname.match(/^\/property\/([^/]+)/)
     ?? pathname.match(/^\/workspace\/buy-vs-rent\/([^/]+)/);
-  return match?.[1] ? decodeURIComponent(match[1]) : null;
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
 }
 
 function sameIds(left: string[], right: string[]): boolean {
@@ -55,10 +69,6 @@ function writeSidebarCollapsed(collapsed: boolean) {
   window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
 }
 
-function propertyPath(propertyId: string, suffix = ""): string {
-  return `/property/${encodeURIComponent(propertyId)}${suffix}`;
-}
-
 export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -67,7 +77,17 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const queryFocus = query.get("focus");
   const propertyId = routePropertyId(location.pathname);
   const shellMode = navigationMode(location.pathname, location.search);
+  const [searchSpanRevision, setSearchSpanRevision] = useState(0);
+  const storedPropertySearchContext = useMemo(
+    () => {
+      void searchSpanRevision;
+      return searchSpanContextFromLocation(location.pathname, location.search);
+    },
+    [location.pathname, location.search, searchSpanRevision],
+  );
+  const hasSearchSpanParams = hasSearchSpanUrlParams(location.search);
   const [properties, setProperties] = useState<PropertyCard[]>([]);
+  const [propertyCatalogReady, setPropertyCatalogReady] = useState(false);
   const [shortlistIds, setShortlistIds] = useState<string[]>(() => readShortlistIds());
   const [collapsed, setCollapsed] = useState(() =>
     window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true"
@@ -79,6 +99,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     getProperties({ signal: controller.signal })
       .then((nextProperties) => {
         setProperties(nextProperties);
+        setPropertyCatalogReady(true);
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -105,6 +126,16 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     const availableIds = new Set(properties.map((property) => property.id));
     return shortlistIds.filter((id) => availableIds.has(id));
   }, [properties, shortlistIds]);
+  const catalogPropertyIds = useMemo(
+    () => new Set(properties.map((property) => property.id)),
+    [properties],
+  );
+  const propertySearchContext = useMemo(
+    () => propertyCatalogReady
+      ? reconcileSearchSpanAvailability(storedPropertySearchContext, catalogPropertyIds)
+      : storedPropertySearchContext,
+    [catalogPropertyIds, propertyCatalogReady, storedPropertySearchContext],
+  );
 
   useEffect(() => {
     if (properties.length === 0) return;
@@ -178,7 +209,41 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   );
   const focusedId = shellMode === "property-context"
     ? propertyId ?? ""
-    : propertyId ?? workspaceFocusedId;
+    : propertyId ?? (activeView === "compare"
+      ? workspaceFocusedId
+      : propertySearchContext?.selectedId ?? workspaceFocusedId);
+
+  const searchSpanCreatedAt = propertySearchContext?.createdAt;
+  const searchSpanId = propertySearchContext?.id;
+  useEffect(() => {
+    if (searchSpanCreatedAt == null || !searchSpanId) return undefined;
+    const refresh = () => setSearchSpanRevision((revision) => revision + 1);
+    const expiresIn = Math.max(
+      0,
+      searchSpanCreatedAt + SEARCH_SPAN_TTL_MS - Date.now(),
+    );
+    const expiryTimer = window.setTimeout(refresh, expiresIn + 1);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.clearTimeout(expiryTimer);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, [searchSpanCreatedAt, searchSpanId]);
+
+  useEffect(() => {
+    if (!hasSearchSpanParams || propertySearchContext) return;
+    navigate(`${location.pathname}${stripSearchSpanUrlParams(location.search)}`, {
+      replace: true,
+    });
+  }, [
+    location.pathname,
+    location.search,
+    navigate,
+    propertySearchContext,
+    hasSearchSpanParams,
+  ]);
 
   useEffect(() => {
     if (focusedId) window.localStorage.setItem(FOCUS_STORAGE_KEY, focusedId);
@@ -199,20 +264,26 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       const compareFocus = comparedIds.includes(focus) ? focus : comparedIds[0] ?? "";
       if (compareFocus) next.set("focus", compareFocus);
       else next.delete("focus");
-      navigate(`/workspace/compare?${next.toString()}`, { replace: true });
+      navigate(hrefWithSearchSpan(
+        `/workspace/compare?${next.toString()}`,
+        searchSpanReferenceForTarget(propertySearchContext, compareFocus),
+      ), { replace: true });
       return;
     }
 
     if (activeView === "home" && focus) {
-      navigate(propertyPath(focus));
+      navigate(propertyHrefWithSearchSpan(focus, propertySearchContext));
       return;
     }
     if (activeView === "rera" && focus) {
-      navigate(propertyPath(focus, "/rera"));
+      navigate(propertyHrefWithSearchSpan(focus, propertySearchContext, "/rera"));
       return;
     }
     if (activeView === "plan" && focus) {
-      navigate(`/workspace/buy-vs-rent/${encodeURIComponent(focus)}`);
+      navigate(hrefWithSearchSpan(
+        `/workspace/buy-vs-rent/${encodeURIComponent(focus)}`,
+        searchSpanReferenceForTarget(propertySearchContext, focus),
+      ));
     }
   }
 
@@ -227,11 +298,14 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   function focusHome(nextId: string) {
     window.localStorage.setItem(FOCUS_STORAGE_KEY, nextId);
     if (activeView === "plan") {
-      navigate(`/workspace/buy-vs-rent/${encodeURIComponent(nextId)}`);
+      navigate(hrefWithSearchSpan(
+        `/workspace/buy-vs-rent/${encodeURIComponent(nextId)}`,
+        searchSpanReferenceForTarget(propertySearchContext, nextId),
+      ));
       return;
     }
     if (activeView === "rera") {
-      navigate(propertyPath(nextId, "/rera"));
+      navigate(propertyHrefWithSearchSpan(nextId, propertySearchContext, "/rera"));
       return;
     }
     if (activeView === "compare") {
@@ -239,10 +313,13 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       const focusedHome = homes.find((home) => home.id === nextId);
       next.set("focus", nextId);
       if (focusedHome) next.set("bhk", String(focusedHome.bhk));
-      navigate(`/workspace/compare?${next.toString()}`, { replace: true });
+      navigate(hrefWithSearchSpan(
+        `/workspace/compare?${next.toString()}`,
+        searchSpanReferenceForTarget(propertySearchContext, nextId),
+      ), { replace: true });
       return;
     }
-    navigate(propertyPath(nextId));
+    navigate(propertyHrefWithSearchSpan(nextId, propertySearchContext));
   }
 
   function removeHome(propertyIdToRemove: string) {
@@ -258,10 +335,11 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     detachNotebookPropertyFromShortlist(propertyIdToRemove);
   }
 
-  const reducedBeforeDecision = shellMode === "workspace" && homes.length === 0 && queryIds.length === 0;
-  const reducedEmptyProperty = shellMode === "property-context"
-    && homes.every((home) => home.id === propertyId);
-  const sidebarReduced = reducedBeforeDecision || reducedEmptyProperty;
+  const reducedBeforeDecision = shellMode === "workspace"
+    && !propertySearchContext
+    && homes.length === 0
+    && queryIds.length === 0;
+  const sidebarReduced = reducedBeforeDecision;
   const sidebarCollapsed = collapsed || sidebarReduced;
   const isInternalRoute = location.pathname.startsWith("/_internal/")
     || location.pathname.startsWith("/dev/");
@@ -274,29 +352,39 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       : "discovery";
   const effectiveSidebarCollapsed = sidebarCollapsed;
   const discoveryContext = readDiscoveryContext();
-  const discoveryHref = discoveryReturnHref();
+  const discoveryHref = propertySearchContext?.returnUrl ?? discoveryReturnHref();
   const sidebarHomes = homes;
+  const shellClassName = [
+    "workspace-shell",
+    showSidebar ? null : "workspace-shell--plain",
+    showSidebar && effectiveSidebarCollapsed ? "workspace-shell--collapsed" : null,
+  ].filter(Boolean).join(" ");
 
   return (
-    <div className={`workspace-shell${showSidebar ? "" : " workspace-shell--plain"}${showSidebar && effectiveSidebarCollapsed ? " workspace-shell--collapsed" : ""}`}>
-      {showSidebar ? (
-        <WorkspaceSidebar
-          homes={sidebarHomes}
-          compareIds={activeCompareIds}
-          focusedId={focusedId}
-          activeView={activeView}
-          collapsed={effectiveSidebarCollapsed}
-          reduced={sidebarReduced}
-          mode={sidebarMode}
-          discoveryHref={discoveryHref}
-          discoveryResultCount={discoveryContext?.resultCount}
-          hasDiscoveryContext={discoveryContext !== null}
-          onToggle={toggleSidebar}
-          onFocus={focusHome}
-          onRemove={removeHome}
-        />
-      ) : null}
-      <div className="workspace-view">{children}</div>
-    </div>
+    <SearchSpanProvider value={propertySearchContext}>
+      <div className={shellClassName}>
+        {showSidebar ? (
+          <WorkspaceSidebar
+            key={propertySearchContext?.id ?? "no-search"}
+            homes={sidebarHomes}
+            compareIds={activeCompareIds}
+            focusedId={focusedId}
+            activeView={activeView}
+            collapsed={effectiveSidebarCollapsed}
+            reduced={sidebarReduced}
+            mode={sidebarMode}
+            discoveryHref={discoveryHref}
+            discoveryResultCount={propertySearchContext?.results.length
+              ?? discoveryContext?.resultCount}
+            hasDiscoveryContext={propertySearchContext !== null || discoveryContext !== null}
+            searchContext={propertySearchContext}
+            onToggle={toggleSidebar}
+            onFocus={focusHome}
+            onRemove={removeHome}
+          />
+        ) : null}
+        <div className="workspace-view">{children}</div>
+      </div>
+    </SearchSpanProvider>
   );
 }

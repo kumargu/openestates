@@ -293,130 +293,6 @@
   }
 }
 
-/* Legacy heat stripe — only if old card-a wrapper is still used elsewhere */
-.living-evidence-tile {
-  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
-  box-shadow: inset 3px 0 0 var(--evidence-heat-color, rgba(0, 0, 0, 0.08));
-}
-
-.living-evidence-tile__glance {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.6rem;
-  margin-bottom: 0.45rem;
-}
-
-.living-evidence-tile__read {
-  font-size: 0.72rem;
-  font-weight: 650;
-  color: var(--color-clay-deep, #b85a3c);
-  letter-spacing: 0.02em;
-}
-
-.living-evidence-tile__proof {
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: var(--color-cool-deep, #3f5c8a);
-}
-
-.living-evidence-tile__evidence-line {
-  margin: 0.35rem 0 0;
-  font-size: 0.76rem;
-  line-height: 1.35;
-  color: var(--color-text-muted, #666);
-}
-
-.universe-cluster {
-  margin-bottom: 1.75rem;
-}
-
-.universe-cluster__header {
-  margin-bottom: 0.65rem;
-  padding-bottom: 0.45rem;
-  border-bottom: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
-}
-
-.universe-cluster__title {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 650;
-  color: var(--color-text, #1a1a1a);
-}
-
-.universe-cluster__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 2rem 1.35rem;
-}
-
-.search-focus-board {
-  display: flex;
-  flex-direction: column;
-  gap: 1.75rem;
-}
-
-.search-focus-rail__header {
-  margin-bottom: 0.65rem;
-  padding-bottom: 0.45rem;
-  border-bottom: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
-}
-
-.search-focus-rail__title {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 650;
-  color: var(--color-text, #1a1a1a);
-}
-
-.search-focus-rail__row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.75rem 1.15rem;
-  align-items: stretch;
-}
-
-.search-focus-rail__cell {
-  flex: 0 1 220px;
-  width: min(100%, 240px);
-}
-
-.search-focus-rail__plus {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  align-self: center;
-  width: 2.75rem;
-  margin: 0 0.85rem;
-  pointer-events: none;
-}
-
-.search-focus-rail__plus-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 999px;
-  border: 1px solid rgba(26, 26, 26, 0.1);
-  background: rgba(255, 255, 255, 0.55);
-  color: rgba(26, 26, 26, 0.38);
-  font-size: 0.88rem;
-  font-weight: 450;
-  line-height: 1;
-}
-
-.search-focus-rail__cell--sibling {
-  opacity: 0.97;
-}
-
-@media (max-width: 720px) {
-  .search-focus-rail__plus {
-    width: 100%;
-    margin: 0.15rem 0 0.35rem;
-  }
-}
-
 .evidence-board {
   margin-bottom: 1.5rem;
 }
@@ -650,28 +526,6 @@
   font-weight: 600;
   color: var(--color-clay-deep, #b85a3c);
   cursor: pointer;
-}
-
-.side-panel-evidence {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
-}
-
-.side-panel-evidence__title {
-  margin: 0 0 0.5rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--color-text-muted, #666);
-}
-
-.side-panel-evidence__cards {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
 }
 
 /* Shared geometry for compact detail-page action and evidence tiles. */
@@ -1180,10 +1034,6 @@
 }
 
 @media (max-width: 720px) {
-  .universe-cluster__grid {
-    grid-template-columns: 1fr;
-  }
-
   .evidence-board__grid {
     columns: 1;
   }
@@ -1504,6 +1354,12 @@
   scroll-margin-top: 5rem;
 }
 
+@media (max-width: 860px) {
+  .property-journey-layout .property-map-section {
+    scroll-margin-top: 9rem;
+  }
+}
+
 .property-map-section .nearby-plate {
   container-type: inline-size;
   margin: 0;
@@ -1511,9 +1367,9 @@
 
 .nearby-plate__story-layout {
   display: grid;
-  grid-template-columns: minmax(14rem, 0.34fr) minmax(0, 1fr);
+  grid-template-columns: minmax(11rem, 12.5rem) minmax(0, 1fr);
   align-items: stretch;
-  gap: clamp(1.25rem, 3vw, 2.5rem);
+  gap: clamp(1rem, 2vw, 1.75rem);
 }
 
 .nearby-plate__story-rail {
@@ -1563,7 +1419,7 @@
 }
 
 .nearby-plate__story-layout .nearby-plate__canvas {
-  height: var(--property-story-media-height, clamp(28rem, 58svh, 38rem));
+  height: clamp(32rem, 64svh, 42rem);
   border-color: var(--property-story-rule, rgba(32, 39, 33, 0.14));
   border-radius: 16px;
 }

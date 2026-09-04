@@ -1,22 +1,82 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { propertyDetailPath } from "../src/lib/api.ts";
 import {
   captureDiscoveryDeparture,
   clearDiscoveryContext,
   consumeDiscoveryReturn,
-  DISCOVERY_CONTEXT_TTL_MS,
   discoveryMapContextForProperty,
+  hasSearchSpanUrlParams,
+  hrefWithSearchSpan,
   navigationMode,
   propertyExploreHref,
+  propertyHrefWithSearchSpan,
+  propertySearchContextForProperty,
   queryFingerprint,
   readDiscoveryContext,
   readDiscoveryMapContext,
+  readPropertySearchContext,
+  readSearchSpanDismissedIds,
+  reconcileSearchSpanAvailability,
   requestDiscoveryReturn,
+  rotatePropertySearchResults,
+  SEARCH_SPAN_TTL_MS,
+  searchSpanReturnDelta,
+  searchSpanContextFromLocation,
+  searchSpanReferenceFromUrl,
+  stripSearchSpanUrlParams,
   writeDiscoveryContext,
   writeDiscoveryMapContext,
   writeDiscoveryResultCount,
+  writePropertySearchContext,
+  writeSearchSpanDismissedIds,
+  writeSearchJourneyContext,
 } from "../src/lib/navigationContext.ts";
-import type { SearchResultItem } from "../src/lib/types.ts";
+import type { SearchResultItem, SearchRuntimeVersion } from "../src/lib/types.ts";
+
+const RUNTIME_VERSION: SearchRuntimeVersion = {
+  servingBundleVersion: "serving-test-v1",
+  scoringPolicyVersion: 1,
+  searchEngineVersion: "search-test-v1",
+};
+
+function searchResult(id: string, title = `Home ${id}`): SearchResultItem {
+  return {
+    id,
+    kg_entity_refs: {
+      property_entity_id: `property:${id}`,
+      society_entity_id: `society:${id}`,
+      source_entity_ids: [],
+    },
+    title,
+    area: "Whitefield",
+    price: 20_000_000,
+    price_per_sqft: 12_000,
+    bhk: 3,
+    sqft: 1_600,
+    society_name: `Society ${id}`,
+    builder_name: "Builder",
+    hero_image: null,
+    transparency_tags: [],
+    description_summary: "",
+    possession_status: "Ready",
+    metro_distance_mins: 10,
+    floor: 4,
+    total_floors: 18,
+    facing: "East",
+    match_score: 0.8,
+    match_label: "Strong match",
+    match_reason: "Near school",
+    match_tier: "exact",
+    proof_focuses: [{
+      surfaceId: "around_this_home",
+      layerId: "schools",
+      factKey: "nearby_schools",
+      matchedLabel: `School ${id}`,
+      reason: "Matched a nearby school",
+    }],
+  };
+}
 
 const sessionValues = new Map<string, string>();
 Object.defineProperty(globalThis, "window", {
@@ -39,6 +99,41 @@ test("navigation modes follow route-owned context", () => {
   assert.equal(navigationMode("/workspace"), "workspace");
   assert.equal(navigationMode("/workspace/compare", "?ids=one,two"), "workspace");
   assert.equal(navigationMode("/workspace/buy-vs-rent/home-1"), "workspace");
+});
+
+test("search span references round-trip through workspace destinations", () => {
+  const href = hrefWithSearchSpan("/workspace/compare?ids=one%2Ctwo", {
+    id: "span-1",
+    queryFingerprint: "qspan1",
+    selectedId: "two",
+  });
+
+  assert.equal(
+    href,
+    "/workspace/compare?ids=one%2Ctwo&context=span-1&qf=qspan1&searchHome=two",
+  );
+  assert.deepEqual(
+    searchSpanReferenceFromUrl(new URL(href, "http://test.local").search),
+    { id: "span-1", queryFingerprint: "qspan1", selectedId: "two" },
+  );
+  assert.equal(
+    hrefWithSearchSpan("/property/two?view=map#schools", {
+      id: "span-1",
+      queryFingerprint: "qspan1",
+      selectedId: "two",
+    }),
+    "/property/two?view=map&context=span-1&qf=qspan1&searchHome=two#schools",
+  );
+});
+
+test("partial search span parameters are detected and removed together", () => {
+  assert.equal(hasSearchSpanUrlParams("?focus=map&context=span-1"), true);
+  assert.equal(hasSearchSpanUrlParams("?focus=map&qf=invalid"), true);
+  assert.equal(hasSearchSpanUrlParams("?focus=map"), false);
+  assert.equal(
+    stripSearchSpanUrlParams("?context=span-1&focus=map&qf=invalid&searchHome=one"),
+    "?focus=map",
+  );
 });
 
 test("unrelated and legacy paths do not gain property context", () => {
@@ -122,6 +217,353 @@ test("property exploration preserves search context or falls back to area", () =
   assert.equal(propertyExploreHref(" ", "/"), "/");
 });
 
+test("property journey context preserves every carried result in search order", () => {
+  sessionValues.clear();
+  const results = Array.from({ length: 15 }, (_, index) => ({
+    id: `home-${index + 1}`,
+    kg_entity_refs: {
+      property_entity_id: `property:home-${index + 1}`,
+      society_entity_id: `society:${Math.floor(index / 3)}`,
+      source_entity_ids: [],
+    },
+    title: `Home ${index + 1}`,
+    area: "Whitefield",
+    price: 20_000_000 + index,
+    price_per_sqft: 12_000,
+    bhk: 3,
+    sqft: 1_600 + index,
+    society_name: `Society ${Math.floor(index / 3)}`,
+    builder_name: "Builder",
+    hero_image: null,
+    transparency_tags: [],
+    description_summary: "",
+    possession_status: "Ready",
+    home_state_display: "Delivered · 4 yrs old",
+    metro_distance_mins: 10,
+    floor: 4,
+    total_floors: 18,
+    facing: "East",
+    match_score: 0.8,
+    match_label: "Strong match",
+    match_reason: "Near school",
+    match_tier: "exact",
+    proof_focuses: [{
+      surfaceId: "around_this_home",
+      layerId: "schools",
+      factKey: "nearby_schools",
+      matchedLabel: `School ${index + 1}`,
+      reason: "Matched a nearby school",
+    }],
+  } satisfies SearchResultItem));
+
+  writePropertySearchContext(
+    "journey-1",
+    "quiet 3bhk",
+    "/?q=quiet+3bhk&area=Whitefield",
+    results,
+    RUNTIME_VERSION,
+    (result) => result.proof_focuses?.[0],
+    1_000,
+    912,
+  );
+  const stored = readPropertySearchContext("journey-1", 1_001);
+  const selected = propertySearchContextForProperty(
+    stored,
+    "home-10",
+    queryFingerprint("quiet 3bhk"),
+  );
+
+  assert.equal(stored?.results.length, 15);
+  assert.deepEqual(stored?.results.map((result) => result.propertyId), results.map((result) => result.id));
+  assert.equal(selected?.selectedIndex, 9);
+  assert.equal(selected?.totalResultCount, 15);
+  assert.equal(stored?.results[0]?.stateDisplay, "Delivered · 4 yrs old");
+  assert.equal(selected?.returnUrl, "/?q=quiet+3bhk&area=Whitefield");
+  assert.equal(selected?.returnScrollY, 912);
+  assert.deepEqual(selected?.runtimeVersion, RUNTIME_VERSION);
+  assert.deepEqual(
+    selected?.results[9]?.proofFocus,
+    results[9]?.proof_focuses?.[0],
+  );
+  const selectedResult = selected?.results[9];
+  assert.ok(selected && selectedResult);
+  const carriedUrl = new URL(
+    propertyDetailPath(
+      selectedResult.propertyId,
+      selectedResult.proofFocus,
+      selected.id,
+      selected.queryFingerprint,
+    ),
+    "http://test.local",
+  );
+  assert.equal(carriedUrl.searchParams.get("context"), "journey-1");
+  assert.equal(
+    carriedUrl.searchParams.get("qf"),
+    queryFingerprint("quiet 3bhk"),
+  );
+  assert.deepEqual(
+    JSON.parse(carriedUrl.searchParams.get("focus") ?? "null"),
+    selectedResult.proofFocus,
+  );
+});
+
+test("property search rail pins the current home and rotates the remaining results", () => {
+  const results = ["one", "two", "three", "four"].map((propertyId, rank) => ({
+    propertyId,
+    title: propertyId,
+    societyName: propertyId,
+    area: "Whitefield",
+    rank,
+  }));
+
+  assert.deepEqual(
+    rotatePropertySearchResults(results, "three").map((result) => result.propertyId),
+    ["three", "four", "one", "two"],
+  );
+  assert.deepEqual(
+    rotatePropertySearchResults(results, "one").map((result) => result.propertyId),
+    ["one", "two", "three", "four"],
+  );
+});
+
+test("availability reconciliation drops removed homes without replacing the current result", () => {
+  sessionValues.clear();
+  writePropertySearchContext(
+    "journey-availability",
+    "quiet 3bhk",
+    "/?q=quiet+3bhk",
+    [searchResult("one"), searchResult("two"), searchResult("three")],
+    RUNTIME_VERSION,
+    undefined,
+    1_000,
+  );
+  const context = searchSpanContextFromLocation(
+    "/property/two",
+    `?context=journey-availability&qf=${queryFingerprint("quiet 3bhk")}`,
+    1_001,
+  );
+
+  assert.deepEqual(
+    reconcileSearchSpanAvailability(context, new Set(["two", "three"]))?.results.map(
+      (result) => [result.propertyId, result.rank],
+    ),
+    [["two", 1], ["three", 2]],
+  );
+  assert.equal(
+    reconcileSearchSpanAvailability(context, new Set(["two", "three"]))?.totalResultCount,
+    3,
+  );
+  assert.equal(reconcileSearchSpanAvailability(context, new Set(["one", "three"])), null);
+});
+
+test("search return uses the exact parent history entry when it is still behind us", () => {
+  sessionValues.clear();
+  Object.assign(window, { history: { state: { idx: 7 } } });
+  writePropertySearchContext(
+    "journey-history",
+    "quiet 3bhk",
+    "/?q=quiet+3bhk",
+    [searchResult("one")],
+    RUNTIME_VERSION,
+    undefined,
+    1_000,
+    0,
+    4,
+  );
+  const context = searchSpanContextFromLocation(
+    "/property/one",
+    `?context=journey-history&qf=${queryFingerprint("quiet 3bhk")}`,
+    1_001,
+  );
+
+  assert.ok(context);
+  assert.equal(searchSpanReturnDelta(context), -3);
+  Object.assign(window, { history: { state: { idx: 3 } } });
+  assert.equal(searchSpanReturnDelta(context), null);
+});
+
+test("route identity wins over compare focus and carried search cursor", () => {
+  sessionValues.clear();
+  const results = [searchResult("one"), searchResult("two"), searchResult("three")];
+  assert.equal(writePropertySearchContext(
+    "journey-precedence",
+    "quiet 3bhk",
+    "/?q=quiet+3bhk",
+    results,
+    RUNTIME_VERSION,
+    undefined,
+    1_000,
+  ), true);
+  const reference = `?context=journey-precedence&qf=${queryFingerprint("quiet 3bhk")}&searchHome=three`;
+
+  assert.equal(
+    searchSpanContextFromLocation("/property/two", reference, 1_001)?.selectedId,
+    "two",
+  );
+  assert.equal(
+    searchSpanContextFromLocation(
+      "/workspace/compare",
+      `${reference}&focus=one`,
+      1_001,
+    )?.selectedId,
+    "one",
+  );
+  assert.equal(
+    searchSpanContextFromLocation("/workspace", reference, 1_001)?.selectedId,
+    "three",
+  );
+});
+
+test("off-span saved homes retain the prior search cursor", () => {
+  sessionValues.clear();
+  const results = [searchResult("one"), searchResult("two")];
+  writePropertySearchContext(
+    "journey-membership",
+    "quiet 3bhk",
+    "/?q=quiet+3bhk",
+    results,
+    RUNTIME_VERSION,
+    undefined,
+    1_000,
+  );
+  const reference = `?context=journey-membership&qf=${queryFingerprint("quiet 3bhk")}&searchHome=one`;
+
+  assert.equal(
+    searchSpanContextFromLocation("/property/outside", reference, 1_001)?.selectedId,
+    "one",
+  );
+  assert.equal(
+    searchSpanContextFromLocation(
+      "/workspace/buy-vs-rent/outside",
+      reference,
+      1_001,
+    )?.selectedId,
+    "one",
+  );
+  assert.equal(
+    searchSpanContextFromLocation(
+      "/workspace/compare",
+      `${reference}&focus=outside`,
+      1_001,
+    )?.selectedId,
+    "one",
+  );
+
+  const context = searchSpanContextFromLocation("/property/one", reference, 1_001);
+  assert.ok(context);
+  const href = new URL(propertyHrefWithSearchSpan("outside", context), "http://test.local");
+  assert.equal(href.pathname, "/property/outside");
+  assert.equal(href.searchParams.get("context"), "journey-membership");
+  assert.equal(href.searchParams.get("qf"), queryFingerprint("quiet 3bhk"));
+  assert.equal(href.searchParams.get("searchHome"), "one");
+});
+
+test("property links restore each result's proof focus", () => {
+  sessionValues.clear();
+  const results = [searchResult("one"), searchResult("two")];
+  writePropertySearchContext(
+    "journey-proof",
+    "quiet 3bhk",
+    "/?q=quiet+3bhk",
+    results,
+    RUNTIME_VERSION,
+    undefined,
+    1_000,
+  );
+  const context = searchSpanContextFromLocation(
+    "/property/one",
+    `?context=journey-proof&qf=${queryFingerprint("quiet 3bhk")}`,
+    1_001,
+  );
+  const href = new URL(propertyHrefWithSearchSpan("two", context), "http://test.local");
+
+  assert.equal(href.pathname, "/property/two");
+  assert.equal(href.searchParams.get("searchHome"), "two");
+  assert.deepEqual(
+    JSON.parse(href.searchParams.get("focus") ?? "null"),
+    results[1]?.proof_focuses?.[0],
+  );
+});
+
+test("writer removes malformed duplicates and restores contiguous canonical ranks", () => {
+  sessionValues.clear();
+  const one = searchResult("one");
+  assert.equal(writePropertySearchContext(
+    "journey-normalized",
+    "quiet 3bhk",
+    "/?q=quiet+3bhk",
+    [one, searchResult("bad", " "), one, searchResult("three")],
+    RUNTIME_VERSION,
+    undefined,
+    1_000,
+  ), true);
+
+  assert.deepEqual(
+    readPropertySearchContext("journey-normalized", 1_001)?.results.map(
+      ({ propertyId, rank }) => ({ propertyId, rank }),
+    ),
+    [{ propertyId: "one", rank: 0 }, { propertyId: "three", rank: 1 }],
+  );
+});
+
+test("dismissed search homes persist per span without hiding the current home", () => {
+  sessionValues.clear();
+  const results = [searchResult("one"), searchResult("two"), searchResult("three")];
+  writePropertySearchContext(
+    "journey-dismissed",
+    "quiet 3bhk",
+    "/?q=quiet+3bhk",
+    results,
+    RUNTIME_VERSION,
+    undefined,
+    1_000,
+  );
+  const context = searchSpanContextFromLocation(
+    "/property/two",
+    `?context=journey-dismissed&qf=${queryFingerprint("quiet 3bhk")}`,
+    1_001,
+  );
+  assert.ok(context);
+  writeSearchSpanDismissedIds(context, ["one", "two", "one", "outside"]);
+
+  assert.deepEqual(readSearchSpanDismissedIds(context), ["one"]);
+  const nextContext = searchSpanContextFromLocation(
+    "/property/one",
+    `?context=journey-dismissed&qf=${queryFingerprint("quiet 3bhk")}`,
+    1_001,
+  );
+  assert.ok(nextContext);
+  assert.deepEqual(readSearchSpanDismissedIds(nextContext), []);
+});
+
+test("property journey context fails closed for direct, stale, and unrelated visits", () => {
+  sessionValues.clear();
+  assert.equal(readPropertySearchContext(null), null);
+
+  sessionValues.set("openestates:property-search-context:v1:stale", JSON.stringify({
+    version: 1,
+    id: "stale",
+    queryFingerprint: queryFingerprint("quiet 3bhk"),
+    queryLabel: "quiet 3bhk",
+    returnUrl: "/?q=quiet+3bhk",
+    returnScrollY: 0,
+    createdAt: 1_000,
+    runtimeVersion: RUNTIME_VERSION,
+    results: [{
+      propertyId: "home-1",
+      title: "Home 1",
+      societyName: "Society 1",
+      area: "Whitefield",
+      rank: 0,
+    }],
+  }));
+
+  const stored = readPropertySearchContext("stale", 1_001);
+  assert.equal(propertySearchContextForProperty(stored, "unrelated", queryFingerprint("quiet 3bhk")), null);
+  assert.equal(propertySearchContextForProperty(stored, "home-1", queryFingerprint("another search")), null);
+  assert.equal(readPropertySearchContext("stale", 1_000 + SEARCH_SPAN_TTL_MS + 1), null);
+});
+
 test("map context keeps ranked search societies without duplicate configurations", () => {
   sessionValues.clear();
   const result = (id: string, societyId: string, societyName: string): SearchResultItem => ({
@@ -164,6 +606,7 @@ test("map context keeps ranked search societies without duplicate configurations
     id: "context-one",
     queryFingerprint: queryFingerprint("quiet 3bhk"),
     createdAt: 1_000,
+    propertyIds: ["one", "two", "three"],
     candidates: [
       {
         propertyId: "one",
@@ -183,6 +626,24 @@ test("map context keeps ranked search societies without duplicate configurations
       },
     ],
   });
+});
+
+test("map membership covers every result while previews stay within the serving limit", () => {
+  sessionValues.clear();
+  const results = Array.from({ length: 32 }, (_, index) => searchResult(`home-${index}`));
+  writeDiscoveryMapContext("quiet 3bhk", results, { id: "full-map", now: 1_000 });
+  const context = readDiscoveryMapContext("full-map", 1_001);
+
+  assert.equal(context?.candidates.length, 24);
+  assert.equal(context?.propertyIds.length, 32);
+  assert.equal(
+    discoveryMapContextForProperty(
+      context,
+      "home-31",
+      queryFingerprint("quiet 3bhk"),
+    )?.id,
+    "full-map",
+  );
 });
 
 test("map context is consumed only by a property carried by its URL token", () => {
@@ -232,7 +693,7 @@ test("map context is consumed only by a property carried by its URL token", () =
   );
 });
 
-test("discovery map context requires its URL token and expires after thirty minutes", () => {
+test("discovery map context requires its URL token and shares the journey lifetime", () => {
   sessionValues.clear();
   const result = {
     id: "one",
@@ -248,7 +709,7 @@ test("discovery map context requires its URL token and expires after thirty minu
   assert.equal(queryFingerprint(" quiet 3bhk "), queryFingerprint("Quiet   3BHK"));
   assert.equal(readDiscoveryMapContext(null, 5_001), null);
   assert.equal(readDiscoveryMapContext("wrong-token", 5_001), null);
-  assert.equal(readDiscoveryMapContext("token", 5_000 + DISCOVERY_CONTEXT_TTL_MS + 1), null);
+  assert.equal(readDiscoveryMapContext("token", 5_000 + SEARCH_SPAN_TTL_MS + 1), null);
 
   sessionValues.set("openestates:discovery-map-context:v2:malformed", JSON.stringify({
     version: 2,
@@ -288,11 +749,62 @@ test("discovery map context reuses one bounded slot for result updates", () => {
   } satisfies SearchResultItem;
 
   const firstId = writeDiscoveryMapContext("quiet 3bhk", [result], { now: 5_000 });
+  assert.ok(firstId);
+  writePropertySearchContext(
+    firstId,
+    "quiet 3bhk",
+    "/?q=quiet+3bhk",
+    [result],
+    RUNTIME_VERSION,
+    undefined,
+    5_000,
+  );
   const updatedId = writeDiscoveryMapContext("quiet 3bhk", [result], { now: 5_001 });
   const nextQueryId = writeDiscoveryMapContext("near metro", [result], { now: 5_002 });
 
   assert.equal(updatedId, firstId);
   assert.notEqual(nextQueryId, firstId);
-  assert.equal(readDiscoveryMapContext(firstId, 5_003), null);
+  assert.equal(readDiscoveryMapContext(firstId, 5_003)?.id, firstId);
+  assert.equal(readPropertySearchContext(firstId, 5_003)?.id, firstId);
   assert.equal(readDiscoveryMapContext(nextQueryId, 5_003)?.id, nextQueryId);
+});
+
+test("search span history keeps six recent journeys and expires the oldest", () => {
+  sessionValues.clear();
+  const result = searchResult("one");
+  for (let index = 0; index < 7; index += 1) {
+    writeDiscoveryMapContext(`query ${index}`, [result], {
+      id: `journey-${index}`,
+      now: 10_000 + index,
+    });
+  }
+
+  assert.equal(readDiscoveryMapContext("journey-0", 10_010), null);
+  assert.equal(readDiscoveryMapContext("journey-1", 10_010)?.id, "journey-1");
+  assert.equal(readDiscoveryMapContext("journey-6", 10_010)?.id, "journey-6");
+});
+
+test("repeating a query creates an immutable journey instead of overwriting history", () => {
+  sessionValues.clear();
+  const first = writeSearchJourneyContext(
+    "quiet 3bhk",
+    "/?q=quiet+3bhk",
+    [searchResult("one")],
+    RUNTIME_VERSION,
+    undefined,
+    20_000,
+  );
+  const second = writeSearchJourneyContext(
+    "quiet 3bhk",
+    "/?q=quiet+3bhk",
+    [searchResult("two")],
+    { ...RUNTIME_VERSION, scoringPolicyVersion: 2 },
+    undefined,
+    20_001,
+  );
+
+  assert.ok(first && second);
+  assert.notEqual(first.id, second.id);
+  assert.equal(readPropertySearchContext(first.id, 20_002)?.results[0]?.propertyId, "one");
+  assert.equal(readPropertySearchContext(second.id, 20_002)?.results[0]?.propertyId, "two");
 });

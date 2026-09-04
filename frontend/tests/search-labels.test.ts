@@ -2,26 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   queryWithoutBhkClause,
-  searchResultsAnnouncement,
   searchResultReasonLabels,
   splitLabelParts,
 } from "../src/lib/search.ts";
-
-test("result announcements distinguish named alternatives from broader matches", () => {
-  assert.equal(
-    searchResultsAnnouncement(
-      "Godrej Splendour under 1.4Cr",
-      0,
-      3,
-      "named_society_alternatives",
-    ),
-    'No exact matches for "Godrej Splendour under 1.4Cr". Showing 3 alternatives.',
-  );
-  assert.equal(
-    searchResultsAnnouncement("3BHK under 1Cr", 0, 3, null),
-    'No exact matches for "3BHK under 1Cr". Showing 3 broader matches.',
-  );
-});
 
 test("splitLabelParts keeps commas inside parentheses", () => {
   assert.deepEqual(
@@ -55,6 +38,32 @@ test("a 2 or 3 BHK match reason does not become a tile chip", () => {
     match_reason: "Matches Whitefield · 2 or 3 BHK",
   });
   assert.equal(labels.some((label) => /bhk/i.test(label)), false);
+});
+
+test("generic budget and BHK filters do not repeat on every result tile", () => {
+  const labels = searchResultReasonLabels({
+    title: "3 BHK in Example Society",
+    area: "Whitefield",
+    society_name: "Example Society",
+    builder_name: "Example Builder",
+    match_reason: "3 BHK, under 2.5 Cr, social infrastructure",
+    match_explanation: {
+      reasons: [{
+        preference: "social infrastructure",
+        fact_key: "nearby_schools",
+        display: "Nearby schools: Example School (0.4 km)",
+        score: 0.8,
+        confidence: 0.82,
+        source_type: "Google",
+        scoring_method: "serving-geo-distance",
+      }],
+      preference_coverage: [],
+      graph_driven_pct: 1,
+      total_facts_consulted: 1,
+    },
+  });
+
+  assert.deepEqual(labels, ["Nearby schools: Example School (0.4 km)"]);
 });
 
 test("queryWithoutBhkClause uses UTF-8 source spans", () => {
