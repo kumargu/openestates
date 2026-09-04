@@ -11,9 +11,12 @@ those gaps affect matching and ranking rather than removing the society. The pol
 `app/config/dag/serving_eligibility.json`; fact keys and edge types are not
 branched in the builder.
 
-Eligibility policy version 3 prunes an unusable card independently. A society
+Eligibility policy version 4 prunes an unusable card independently. A society
 remains discoverable when at least one image-backed card survives, including a
 society card whose price and BHK configuration are still unknown.
+
+Buyer-visible cards must also have an area and positive size. This mirrors the
+release gates so a bundle cannot retain a card that its own validator rejects.
 
 An individually unusable property row is removed with its facts and incident
 edges. If no eligible card remains—or society identity is ambiguous—the whole

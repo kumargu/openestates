@@ -38,6 +38,7 @@ import {
   activeWorkspaceView,
   shouldShowWorkspaceSidebar,
   workspaceFocusedHomeId,
+  workspaceNavigationFocusedId,
 } from "../../lib/workspaceNav.ts";
 import { WorkspaceSidebar } from "./WorkspaceSidebar.tsx";
 import { SearchSpanProvider } from "./SearchSpanProvider.tsx";
@@ -231,11 +232,13 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     && homes.some((home) => home.id === queryFocus)
     ? queryFocus
     : null;
-  const focusedId = shellMode === "property-context"
-    ? propertyId ?? ""
-    : propertyId ?? (activeView === "compare"
+  const focusedId = workspaceNavigationFocusedId(
+    shellMode,
+    propertyId,
+    activeView === "compare"
       ? workspaceFocusedId
-      : explicitWorkspaceFocus ?? propertySearchContext?.selectedId ?? workspaceFocusedId);
+      : explicitWorkspaceFocus ?? propertySearchContext?.selectedId ?? workspaceFocusedId,
+  );
 
   const searchSpanCreatedAt = propertySearchContext?.createdAt;
   const searchSpanId = propertySearchContext?.id;

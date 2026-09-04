@@ -6,6 +6,7 @@ import {
   workspaceBuyVsRentHref,
   workspaceCompareHref,
   workspaceFocusedHomeId,
+  workspaceNavigationFocusedId,
   workspaceNavItems,
   workspacePlanReplacementId,
   shouldShowWorkspaceSidebar,
@@ -59,6 +60,16 @@ test("sidebar never invents a current property", () => {
   assert.equal(byView.get("plan")?.available, false);
   assert.equal(byView.get("browse")?.label, "Explore");
   assert.equal(byView.get("browse")?.icon, "browse");
+});
+
+test("discovery does not expose a saved home as the current property", () => {
+  assert.equal(workspaceNavigationFocusedId("landing", null, "saved-home"), "");
+  assert.equal(workspaceNavigationFocusedId("discovery", null, "saved-home"), "");
+  assert.equal(workspaceNavigationFocusedId("workspace", null, "saved-home"), "saved-home");
+  assert.equal(
+    workspaceNavigationFocusedId("property-context", "opened-home", "saved-home"),
+    "opened-home",
+  );
 });
 
 test("property context keeps a generic return when a legacy discovery has no count", () => {

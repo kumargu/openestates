@@ -105,6 +105,16 @@ export function shouldShowWorkspaceSidebar(
   return savedHomeCount > 0;
 }
 
+export function workspaceNavigationFocusedId(
+  mode: NavigationMode,
+  routePropertyId: string | null,
+  workspaceFocusedId: string,
+): string {
+  if (mode === "property-context") return routePropertyId ?? "";
+  if (mode === "workspace") return routePropertyId ?? workspaceFocusedId;
+  return "";
+}
+
 export function workspaceCompareHref(ids: string[], focusId?: string): string {
   const uniqueIds = activeWorkspaceCompareIds(ids, []);
   if (uniqueIds.length < 2) return "/workspace/compare";

@@ -44,17 +44,6 @@
   box-shadow: none;
 }
 
-.property-search-panel__result-open[aria-current="page"]::before {
-  position: absolute;
-  top: 0.65rem;
-  bottom: 0.65rem;
-  left: 0.3rem;
-  width: 3px;
-  border-radius: 999px;
-  background: var(--accent-moss, #71834a);
-  content: "";
-}
-
 .property-search-panel__result-open:focus-visible,
 .property-search-strip a:focus-visible {
   z-index: 1;

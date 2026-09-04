@@ -1,8 +1,18 @@
 {
-  "version": 3,
+  "version": 4,
   "minimum_projected_properties": 1,
   "missing_projection_reason_code": "missing_property_projection",
   "property_requirements": [
+    {
+      "reason_code": "missing_property_area",
+      "predicate": "any_non_empty",
+      "fields": ["area"]
+    },
+    {
+      "reason_code": "missing_property_size",
+      "predicate": "any_positive",
+      "fields": ["carpet_area_sqft"]
+    },
     {
       "reason_code": "missing_property_media",
       "predicate": "any_non_empty",
