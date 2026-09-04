@@ -29,6 +29,7 @@ const inFlightSearches = new Map<string, Promise<SearchResponse>>();
 const PROPERTY_CATALOG_CACHE_MS = 60_000;
 let cachedPropertyCatalog: { loadedAt: number; value: PropertyCard[] } | null = null;
 let inFlightPropertyCatalog: Promise<PropertyCard[]> | null = null;
+let propertyCatalogRequestGeneration = 0;
 const DEFAULT_API_TIMEOUT_MS = 4_000;
 const GET_ATTEMPT_COUNT = 2;
 const GET_RETRY_DELAY_MS = 200;
@@ -36,6 +37,10 @@ const GET_RETRY_DELAY_MS = 200;
 type ApiFetchOptions = {
   signal?: AbortSignal;
   timeoutMs?: number;
+};
+
+type PropertyCatalogFetchOptions = ApiFetchOptions & {
+  refresh?: boolean;
 };
 
 function getDevFixture<T>(path: string): T | null {
@@ -134,25 +139,46 @@ export function getHealth(): Promise<{
   return fetchJson("/api/health");
 }
 
-export function getProperties(options?: ApiFetchOptions): Promise<PropertyCard[]> {
+function requestPropertyCatalog(
+  options: ApiFetchOptions,
+  generation: number,
+): Promise<PropertyCard[]> {
+  return fetchJson<PropertyCard[]>("/api/properties", options)
+    .then(filterListableProperties)
+    .then((value) => {
+      if (generation === propertyCatalogRequestGeneration) {
+        cachedPropertyCatalog = { loadedAt: Date.now(), value };
+      }
+      return value;
+    });
+}
+
+function startPropertyCatalogRequest(options: ApiFetchOptions): Promise<PropertyCard[]> {
+  const generation = ++propertyCatalogRequestGeneration;
+  const request = requestPropertyCatalog(options, generation);
+  const clearRequest = () => {
+    if (inFlightPropertyCatalog === request) inFlightPropertyCatalog = null;
+  };
+  inFlightPropertyCatalog = request;
+  void request.then(clearRequest, clearRequest);
+  return request;
+}
+
+export function getProperties(options: PropertyCatalogFetchOptions = {}): Promise<PropertyCard[]> {
+  if (options.refresh) {
+    return startPropertyCatalogRequest({
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
+    });
+  }
+
   const now = Date.now();
   if (cachedPropertyCatalog && now - cachedPropertyCatalog.loadedAt < PROPERTY_CATALOG_CACHE_MS) {
-    return withCallerAbort(Promise.resolve(cachedPropertyCatalog.value), options?.signal);
+    return withCallerAbort(Promise.resolve(cachedPropertyCatalog.value), options.signal);
   }
-  if (!inFlightPropertyCatalog) {
-    inFlightPropertyCatalog = fetchJson<PropertyCard[]>("/api/properties", {
-      timeoutMs: options?.timeoutMs,
-    })
-      .then(filterListableProperties)
-      .then((value) => {
-        cachedPropertyCatalog = { loadedAt: Date.now(), value };
-        return value;
-      })
-      .finally(() => {
-        inFlightPropertyCatalog = null;
-      });
-  }
-  return withCallerAbort(inFlightPropertyCatalog, options?.signal);
+  const request = inFlightPropertyCatalog
+    ?? startPropertyCatalogRequest({ timeoutMs: options.timeoutMs });
+  return withCallerAbort(request, options.signal);
 }
 
 export function getProperty(id: string, options?: ApiFetchOptions): Promise<PropertyDetailResponse> {

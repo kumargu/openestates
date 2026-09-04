@@ -16,11 +16,11 @@ import {
   readDiscoveryContext,
   readDiscoveryMapContext,
   readPropertySearchContext,
-  readSearchSpanDismissedIds,
+  readSearchJourneyNotForMeIds,
   reconcileSearchSpanAvailability,
   requestDiscoveryReturn,
-  rotatePropertySearchResults,
   SEARCH_SPAN_TTL_MS,
+  searchJourneyCursor,
   searchSpanReturnDelta,
   searchSpanContextFromLocation,
   searchSpanReferenceFromUrl,
@@ -29,7 +29,7 @@ import {
   writeDiscoveryMapContext,
   writeDiscoveryResultCount,
   writePropertySearchContext,
-  writeSearchSpanDismissedIds,
+  writeSearchJourneyNotForMeIds,
   writeSearchJourneyContext,
 } from "../src/lib/navigationContext.ts";
 import type { SearchResultItem, SearchRuntimeVersion } from "../src/lib/types.ts";
@@ -305,24 +305,6 @@ test("property journey context preserves every carried result in search order", 
   );
 });
 
-test("property search rail pins the current home and rotates the remaining results", () => {
-  const results = ["one", "two", "three", "four"].map((propertyId) => ({
-    propertyId,
-    title: propertyId,
-    societyName: propertyId,
-    area: "Whitefield",
-  }));
-
-  assert.deepEqual(
-    rotatePropertySearchResults(results, "three").map((result) => result.propertyId),
-    ["three", "four", "one", "two"],
-  );
-  assert.deepEqual(
-    rotatePropertySearchResults(results, "one").map((result) => result.propertyId),
-    ["one", "two", "three", "four"],
-  );
-});
-
 test("availability reconciliation drops removed homes without replacing the current result", () => {
   sessionValues.clear();
   writePropertySearchContext(
@@ -499,7 +481,7 @@ test("writer removes malformed and duplicate search results", () => {
   );
 });
 
-test("dismissed search homes persist per span without hiding the current home", () => {
+test("not-for-me preferences are reversible journey state and never mutate search order", () => {
   sessionValues.clear();
   const results = [searchResult("one"), searchResult("two"), searchResult("three")];
   writePropertySearchContext(
@@ -517,16 +499,38 @@ test("dismissed search homes persist per span without hiding the current home", 
     1_001,
   );
   assert.ok(context);
-  writeSearchSpanDismissedIds(context, ["one", "two", "one", "outside"]);
+  writeSearchJourneyNotForMeIds(context, ["one", "two", "one", "outside"]);
 
-  assert.deepEqual(readSearchSpanDismissedIds(context), ["one"]);
+  assert.deepEqual(readSearchJourneyNotForMeIds(context), ["one"]);
+  assert.deepEqual(context.results.map((result) => result.propertyId), ["one", "two", "three"]);
+  assert.deepEqual(searchJourneyCursor(context, new Set(["one"])), {
+    position: 2,
+    total: 3,
+    previousResult: undefined,
+    selectedResult: context.results[1],
+    nextResult: context.results[2],
+  });
   const nextContext = searchSpanContextFromLocation(
     "/property/one",
     `?context=journey-dismissed&qf=${queryFingerprint("quiet 3bhk")}`,
     1_001,
   );
   assert.ok(nextContext);
-  assert.deepEqual(readSearchSpanDismissedIds(nextContext), []);
+  assert.deepEqual(readSearchJourneyNotForMeIds(nextContext), []);
+  assert.deepEqual(nextContext.results.map((result) => result.propertyId), ["one", "two", "three"]);
+  assert.equal(searchJourneyCursor(nextContext)?.previousResult, undefined);
+
+  const lastContext = propertySearchContextForProperty(
+    nextContext,
+    "three",
+    queryFingerprint("quiet 3bhk"),
+  );
+  assert.ok(lastContext);
+  assert.equal(searchJourneyCursor(lastContext)?.position, 3);
+  assert.equal(searchJourneyCursor(lastContext)?.nextResult, undefined);
+
+  writeSearchJourneyNotForMeIds(nextContext, []);
+  assert.deepEqual(readSearchJourneyNotForMeIds(context), []);
 });
 
 test("property journey context fails closed for direct, stale, and unrelated visits", () => {

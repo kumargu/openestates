@@ -9,11 +9,11 @@ import {
 } from "../../lib/workspaceNav.ts";
 import { BrandMark } from "../brand/BrandMark.tsx";
 import {
-  readSearchSpanDismissedIds,
+  readSearchJourneyNotForMeIds,
   requestDiscoveryReturn,
   requestSearchSpanReturn,
   searchSpanReturnDelta,
-  writeSearchSpanDismissedIds,
+  writeSearchJourneyNotForMeIds,
 } from "../../lib/navigationContext.ts";
 import type { PropertySearchContext } from "../../lib/navigationContext.ts";
 import { PUBLIC_BRAND_NAME } from "../../lib/brand.ts";
@@ -261,7 +261,7 @@ export function WorkspaceSidebar({
     () => searchContext && searchContext.selectedId !== focusedId ? "saved" : "search",
   );
   const [, refreshSearchView] = useState(0);
-  const [lastDismissed, setLastDismissed] = useState<{
+  const [lastNotForMe, setLastNotForMe] = useState<{
     contextId: string;
     propertyId: string;
   } | null>(null);
@@ -274,38 +274,32 @@ export function WorkspaceSidebar({
   const activePanel = searchContext && preferredPanel === "search"
     ? "search"
     : "saved";
-  const dismissedPropertyIds = readSearchSpanDismissedIds(searchContext);
-  const dismissedIdSet = new Set(dismissedPropertyIds);
-  const visibleSearchCount = searchContext
-    ? searchContext.results.filter((result) =>
-      result.propertyId === searchContext.selectedId
-      || !dismissedIdSet.has(result.propertyId)
-    ).length
-    : 0;
-  const canUndoDismissal = Boolean(
+  const notForMePropertyIds = readSearchJourneyNotForMeIds(searchContext);
+  const notForMeIdSet = new Set(notForMePropertyIds);
+  const canUndoNotForMe = Boolean(
     searchContext
-    && lastDismissed?.contextId === searchContext.id
-    && dismissedIdSet.has(lastDismissed.propertyId),
+    && lastNotForMe?.contextId === searchContext.id
+    && notForMeIdSet.has(lastNotForMe.propertyId),
   );
 
-  function dismissSearchResult(propertyId: string) {
+  function markSearchResultNotForMe(propertyId: string) {
     if (!searchContext || propertyId === searchContext.selectedId) return;
-    writeSearchSpanDismissedIds(searchContext, [
-      ...dismissedPropertyIds,
+    writeSearchJourneyNotForMeIds(searchContext, [
+      ...notForMePropertyIds,
       propertyId,
     ]);
     refreshSearchView((revision) => revision + 1);
-    setLastDismissed({ contextId: searchContext.id, propertyId });
+    setLastNotForMe({ contextId: searchContext.id, propertyId });
   }
 
-  function undoSearchDismissal() {
-    if (!searchContext || lastDismissed?.contextId !== searchContext.id) return;
-    writeSearchSpanDismissedIds(
+  function undoSearchResultNotForMe() {
+    if (!searchContext || lastNotForMe?.contextId !== searchContext.id) return;
+    writeSearchJourneyNotForMeIds(
       searchContext,
-      dismissedPropertyIds.filter((id) => id !== lastDismissed.propertyId),
+      notForMePropertyIds.filter((id) => id !== lastNotForMe.propertyId),
     );
     refreshSearchView((revision) => revision + 1);
-    setLastDismissed(null);
+    setLastNotForMe(null);
   }
 
   function resizeWidthFromPointer(clientX: number): number {
@@ -446,7 +440,7 @@ export function WorkspaceSidebar({
               aria-pressed={activePanel === "search"}
               onClick={() => setPreferredPanel("search")}
             >
-              Search <span>{visibleSearchCount}</span>
+              Search
             </button>
             <button
               type="button"
@@ -467,10 +461,10 @@ export function WorkspaceSidebar({
           <div className="workspace-sidebar__context-panel">
             <PropertySearchPanel
               context={searchContext}
-              dismissedIds={dismissedIdSet}
-              onDismiss={dismissSearchResult}
-              canUndoDismissal={canUndoDismissal}
-              onUndoDismissal={undoSearchDismissal}
+              notForMeIds={notForMeIdSet}
+              onMarkNotForMe={markSearchResultNotForMe}
+              canUndoNotForMe={canUndoNotForMe}
+              onUndoNotForMe={undoSearchResultNotForMe}
               onSelect={onFocus}
             />
           </div>

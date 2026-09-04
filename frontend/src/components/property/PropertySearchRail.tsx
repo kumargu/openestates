@@ -13,9 +13,9 @@ import type {
 } from "../../lib/navigationContext.ts";
 import {
   propertyHrefWithSearchSpan,
-  readSearchSpanDismissedIds,
-  rotatePropertySearchResults,
-  SEARCH_SPAN_VIEW_CHANGED_EVENT,
+  readSearchJourneyNotForMeIds,
+  SEARCH_JOURNEY_PREFERENCES_CHANGED_EVENT,
+  searchJourneyCursor,
 } from "../../lib/navigationContext.ts";
 import "../../styles/property-search-rail.css";
 
@@ -24,23 +24,15 @@ type Props = {
 };
 
 type PanelProps = Props & {
-  dismissedIds: ReadonlySet<string>;
-  onDismiss: (propertyId: string) => void;
-  canUndoDismissal: boolean;
-  onUndoDismissal: () => void;
+  notForMeIds: ReadonlySet<string>;
+  onMarkNotForMe: (propertyId: string) => void;
+  canUndoNotForMe: boolean;
+  onUndoNotForMe: () => void;
   onSelect: (propertyId: string) => void;
 };
 
 function resultName(result: PropertySearchResult): string {
   return result.societyName || result.title;
-}
-
-function resultMeta(result: PropertySearchResult): string {
-  return [
-    result.area,
-    result.bhk ? `${result.bhk} BHK` : null,
-    result.sqft ? `${result.sqft.toLocaleString("en-IN")} sqft` : null,
-  ].filter(Boolean).join(" · ");
 }
 
 function resultCompactMeta(result: PropertySearchResult): string {
@@ -53,23 +45,20 @@ function resultCompactMeta(result: PropertySearchResult): string {
 
 export function PropertySearchPanel({
   context,
-  dismissedIds,
-  onDismiss,
-  canUndoDismissal,
-  onUndoDismissal,
+  notForMeIds,
+  onMarkNotForMe,
+  canUndoNotForMe,
+  onUndoNotForMe,
   onSelect,
 }: PanelProps) {
   const listRef = useRef<HTMLOListElement>(null);
-  const [previewResult, setPreviewResult] = useState<PropertySearchResult | null>(null);
-  const availableResults = context.results.filter((result) =>
-    result.propertyId === context.selectedId || !dismissedIds.has(result.propertyId)
+  const visibleResults = context.results.filter((result) =>
+    result.propertyId === context.selectedId || !notForMeIds.has(result.propertyId)
   );
-  const visibleResults = rotatePropertySearchResults(availableResults, context.selectedId);
-  const visiblePositions = new Map(
-    availableResults.map((result, index) => [result.propertyId, index + 1]),
+  const originalPositions = new Map(
+    context.results.map((result, index) => [result.propertyId, index + 1]),
   );
-  const selectedResult = visibleResults[0];
-  const previewMeta = previewResult ? resultMeta(previewResult) : "";
+  const cursor = searchJourneyCursor(context, notForMeIds);
 
   useLayoutEffect(() => {
     listRef.current
@@ -95,11 +84,15 @@ export function PropertySearchPanel({
     controls[nextIndex]?.focus();
   }
 
-  if (!selectedResult) return null;
-  const total = availableResults.length;
+  if (!cursor) return null;
+  const { position: selectedPosition, total } = cursor;
 
   return (
     <div className="property-search-panel">
+      <header className="property-search-panel__header">
+        <strong>{context.queryLabel}</strong>
+        <span>{selectedPosition} of {total} {total === 1 ? "home" : "homes"}</span>
+      </header>
       <ol
         ref={listRef}
         className="property-search-panel__results"
@@ -107,26 +100,19 @@ export function PropertySearchPanel({
       >
         {visibleResults.map((result) => {
           const selected = result.propertyId === context.selectedId;
+          const position = originalPositions.get(result.propertyId);
           return (
             <li
               key={result.propertyId}
               className={`workspace-sidebar__home property-search-panel__result${selected ? " is-active" : ""}`}
-              onMouseEnter={() => setPreviewResult(result)}
-              onMouseLeave={() => setPreviewResult(null)}
-              onFocus={() => setPreviewResult(result)}
-              onBlur={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget)) {
-                  setPreviewResult(null);
-                }
-              }}
             >
               <button
                 type="button"
                 className="workspace-sidebar__home-open property-search-panel__result-open"
                 aria-current={selected ? "page" : undefined}
                 aria-label={selected
-                  ? `Current home, ${resultName(result)}, result ${visiblePositions.get(result.propertyId)} of ${total}`
-                  : `${resultName(result)}, result ${visiblePositions.get(result.propertyId)} of ${total}`}
+                  ? `Current home, ${resultName(result)}, result ${position} of ${total}`
+                  : `${resultName(result)}, result ${position} of ${total}`}
                 onClick={() => onSelect(result.propertyId)}
               >
                 <strong>{resultName(result)}</strong>
@@ -136,9 +122,8 @@ export function PropertySearchPanel({
               {!selected ? (
                 <button
                   type="button"
-                  className="workspace-sidebar__home-remove property-search-panel__dismiss"
-                  aria-label={`Hide ${resultName(result)} from this search`}
-                  title="Hide from this search"
+                  className="property-search-panel__preference"
+                  aria-label={`Mark ${resultName(result)} as not for me`}
                   onClick={(event) => {
                     const row = event.currentTarget.closest("li");
                     const nextControl = row?.nextElementSibling?.querySelector<HTMLButtonElement>(
@@ -146,31 +131,21 @@ export function PropertySearchPanel({
                     ) ?? row?.previousElementSibling?.querySelector<HTMLButtonElement>(
                       "button.property-search-panel__result-open",
                     );
-                    setPreviewResult(null);
-                    onDismiss(result.propertyId);
+                    onMarkNotForMe(result.propertyId);
                     window.requestAnimationFrame(() => nextControl?.focus());
                   }}
                 >
-                  ×
+                  Not for me
                 </button>
               ) : null}
             </li>
           );
         })}
       </ol>
-      {previewResult && previewResult.propertyId !== context.selectedId ? (
-        <div className="property-search-panel__preview" aria-hidden="true">
-          <strong>{resultName(previewResult)}</strong>
-          {previewMeta ? <span>{previewMeta}</span> : null}
-          {previewResult.price ? (
-            <em>{formatListingPrice({ price: previewResult.price })}</em>
-          ) : null}
-        </div>
-      ) : null}
-      {canUndoDismissal ? (
+      {canUndoNotForMe ? (
         <div className="property-search-panel__undo" role="status">
-          <span>Home hidden</span>
-          <button type="button" onClick={onUndoDismissal}>Undo</button>
+          <span>Marked not for me</span>
+          <button type="button" onClick={onUndoNotForMe}>Undo</button>
         </div>
       ) : null}
     </div>
@@ -181,30 +156,17 @@ export function PropertySearchStrip({ context }: Props) {
   const [, refreshViewState] = useState(0);
   useEffect(() => {
     const refresh = () => refreshViewState((revision) => revision + 1);
-    window.addEventListener(SEARCH_SPAN_VIEW_CHANGED_EVENT, refresh);
+    window.addEventListener(SEARCH_JOURNEY_PREFERENCES_CHANGED_EVENT, refresh);
     window.addEventListener("storage", refresh);
     return () => {
-      window.removeEventListener(SEARCH_SPAN_VIEW_CHANGED_EVENT, refresh);
+      window.removeEventListener(SEARCH_JOURNEY_PREFERENCES_CHANGED_EVENT, refresh);
       window.removeEventListener("storage", refresh);
     };
   }, []);
-  const dismissedIds = new Set(readSearchSpanDismissedIds(context));
-  const results = context.results.filter((result) =>
-    result.propertyId === context.selectedId || !dismissedIds.has(result.propertyId)
-  );
-  const selectedIndex = results.findIndex((result) =>
-    result.propertyId === context.selectedId
-  );
-  const selectedResult = results[selectedIndex];
-  if (!selectedResult) return null;
-  const position = selectedIndex + 1;
-  const total = results.length;
-  const previousResult = total > 1
-    ? results[(selectedIndex - 1 + total) % total]
-    : undefined;
-  const nextResult = total > 1
-    ? results[(selectedIndex + 1) % total]
-    : undefined;
+  const notForMeIds = new Set(readSearchJourneyNotForMeIds(context));
+  const cursor = searchJourneyCursor(context, notForMeIds);
+  if (!cursor) return null;
+  const { nextResult, position, previousResult, total } = cursor;
 
   return (
     <nav className="property-search-strip" aria-label="Homes from your search">
@@ -215,10 +177,12 @@ export function PropertySearchStrip({ context }: Props) {
         >
           ←
         </Link>
-      ) : <span aria-hidden="true" />}
+      ) : (
+        <button type="button" aria-label="No previous result" disabled>←</button>
+      )}
       <div className="property-search-strip__summary">
-        <span>{resultName(selectedResult)}</span>
-        <strong>{position} of {total} {total === 1 ? "home" : "homes"}</strong>
+        <strong>{context.queryLabel}</strong>
+        <span>{position} of {total} {total === 1 ? "home" : "homes"}</span>
       </div>
       {nextResult ? (
         <Link
@@ -227,7 +191,9 @@ export function PropertySearchStrip({ context }: Props) {
         >
           →
         </Link>
-      ) : <span aria-hidden="true" />}
+      ) : (
+        <button type="button" aria-label="No next result" disabled>→</button>
+      )}
     </nav>
   );
 }

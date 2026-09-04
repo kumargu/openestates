@@ -84,18 +84,26 @@ function stopNotebookListeners(): void {
 }
 
 function subscribeToNotebook(subscriber: () => void): () => void {
+  const restarting = notebookSubscribers.size === 0;
   notebookSubscribers.add(subscriber);
   startNotebookListeners();
+  if (restarting) refreshNotebookSnapshot();
   return () => {
     notebookSubscribers.delete(subscriber);
     if (notebookSubscribers.size === 0) stopNotebookListeners();
   };
 }
 
+/** @internal Coherent external-store boundary shared by React consumers. */
+export const notebookExternalStore = {
+  getSnapshot: currentNotebookSnapshot,
+  subscribe: subscribeToNotebook,
+};
+
 export function useNotebook() {
   const state = useSyncExternalStore(
-    subscribeToNotebook,
-    currentNotebookSnapshot,
+    notebookExternalStore.subscribe,
+    notebookExternalStore.getSnapshot,
     () => EMPTY_NOTEBOOK,
   );
 

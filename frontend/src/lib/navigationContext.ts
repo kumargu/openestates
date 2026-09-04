@@ -19,11 +19,12 @@ const DISCOVERY_MAP_CONTEXT_KEY = "openestates:discovery-map-context:v2";
 const DISCOVERY_MAP_CONTEXT_LATEST_KEY = "openestates:discovery-map-context:latest-v2";
 const PROPERTY_SEARCH_CONTEXT_KEY = "openestates:property-search-context:v1";
 const SEARCH_SPAN_INDEX_KEY = "openestates:search-span-index:v1";
-const SEARCH_SPAN_VIEW_STATE_KEY = "openestates:search-span-view:v1";
+const SEARCH_JOURNEY_PREFERENCE_KEY = "openestates:search-journey-preferences:v1";
 const DISCOVERY_MAP_CANDIDATE_LIMIT = 24;
 const SEARCH_SPAN_HISTORY_LIMIT = 6;
 export const SEARCH_SPAN_TTL_MS = 4 * 60 * 60 * 1_000;
-export const SEARCH_SPAN_VIEW_CHANGED_EVENT = "openestates:search-span-view-changed";
+export const SEARCH_JOURNEY_PREFERENCES_CHANGED_EVENT =
+  "openestates:search-journey-preferences-changed";
 const SEARCH_SPAN_URL_PARAMS = ["context", "qf", "searchHome"] as const;
 
 export type PropertySearchResult = {
@@ -56,6 +57,37 @@ export type StoredPropertySearchContext = {
 export type PropertySearchContext = StoredPropertySearchContext & {
   selectedId: string;
 };
+
+export type SearchJourneyCursor = {
+  position: number;
+  total: number;
+  previousResult?: PropertySearchResult;
+  selectedResult: PropertySearchResult;
+  nextResult?: PropertySearchResult;
+};
+
+export function searchJourneyCursor(
+  context: PropertySearchContext,
+  notForMeIds: ReadonlySet<string> = new Set(),
+): SearchJourneyCursor | null {
+  const selectedIndex = context.results.findIndex((result) =>
+    result.propertyId === context.selectedId
+  );
+  const selectedResult = context.results[selectedIndex];
+  if (!selectedResult) return null;
+  return {
+    position: selectedIndex + 1,
+    total: context.results.length,
+    previousResult: context.results
+      .slice(0, selectedIndex)
+      .reverse()
+      .find((result) => !notForMeIds.has(result.propertyId)),
+    selectedResult,
+    nextResult: context.results
+      .slice(selectedIndex + 1)
+      .find((result) => !notForMeIds.has(result.propertyId)),
+  };
+}
 
 export type SearchSpanReference = {
   id: string;
@@ -101,15 +133,6 @@ export function stripSearchSpanUrlParams(search: string): string {
   for (const name of SEARCH_SPAN_URL_PARAMS) params.delete(name);
   const value = params.toString();
   return value ? `?${value}` : "";
-}
-
-export function rotatePropertySearchResults(
-  results: readonly PropertySearchResult[],
-  selectedId: string,
-): PropertySearchResult[] {
-  const selectedIndex = results.findIndex((result) => result.propertyId === selectedId);
-  if (selectedIndex <= 0) return [...results];
-  return [...results.slice(selectedIndex), ...results.slice(0, selectedIndex)];
 }
 
 export type DiscoveryMapCandidate = {
@@ -165,8 +188,8 @@ function propertySearchContextStorageKey(id: string): string {
   return `${PROPERTY_SEARCH_CONTEXT_KEY}:${id}`;
 }
 
-function searchSpanViewStateStorageKey(id: string): string {
-  return `${SEARCH_SPAN_VIEW_STATE_KEY}:${id}`;
+function searchJourneyPreferenceStorageKey(id: string): string {
+  return `${SEARCH_JOURNEY_PREFERENCE_KEY}:${id}`;
 }
 
 type SearchSpanIndexEntry = {
@@ -196,7 +219,7 @@ function readSearchSpanIndex(): SearchSpanIndexEntry[] {
 function removeSearchSpanStorage(id: string): void {
   window.sessionStorage.removeItem(contextStorageKey(id));
   window.sessionStorage.removeItem(propertySearchContextStorageKey(id));
-  window.sessionStorage.removeItem(searchSpanViewStateStorageKey(id));
+  window.sessionStorage.removeItem(searchJourneyPreferenceStorageKey(id));
 }
 
 function forgetSearchSpan(id: string): void {
@@ -764,19 +787,19 @@ export function searchSpanReturnDelta(
     : null;
 }
 
-export function readSearchSpanDismissedIds(
+export function readSearchJourneyNotForMeIds(
   context: PropertySearchContext | null,
 ): string[] {
   if (typeof window === "undefined" || !context) return [];
   try {
     const value: unknown = JSON.parse(
-      window.sessionStorage.getItem(searchSpanViewStateStorageKey(context.id)) ?? "null",
+      window.sessionStorage.getItem(searchJourneyPreferenceStorageKey(context.id)) ?? "null",
     );
     if (!value || typeof value !== "object") return [];
-    const candidate = value as { version?: unknown; dismissedPropertyIds?: unknown };
-    if (candidate.version !== 1 || !Array.isArray(candidate.dismissedPropertyIds)) return [];
+    const candidate = value as { version?: unknown; notForMePropertyIds?: unknown };
+    if (candidate.version !== 1 || !Array.isArray(candidate.notForMePropertyIds)) return [];
     const resultIds = new Set(context.results.map((result) => result.propertyId));
-    return [...new Set(candidate.dismissedPropertyIds)].filter(
+    return [...new Set(candidate.notForMePropertyIds)].filter(
       (id): id is string => typeof id === "string"
         && id !== context.selectedId
         && resultIds.has(id),
@@ -786,21 +809,21 @@ export function readSearchSpanDismissedIds(
   }
 }
 
-export function writeSearchSpanDismissedIds(
+export function writeSearchJourneyNotForMeIds(
   context: PropertySearchContext,
   propertyIds: string[],
 ): boolean {
   if (typeof window === "undefined") return false;
   const resultIds = new Set(context.results.map((result) => result.propertyId));
-  const dismissedPropertyIds = [...new Set(propertyIds)].filter((id) =>
+  const notForMePropertyIds = [...new Set(propertyIds)].filter((id) =>
     id !== context.selectedId && resultIds.has(id)
   );
   try {
     window.sessionStorage.setItem(
-      searchSpanViewStateStorageKey(context.id),
-      JSON.stringify({ version: 1, dismissedPropertyIds }),
+      searchJourneyPreferenceStorageKey(context.id),
+      JSON.stringify({ version: 1, notForMePropertyIds }),
     );
-    window.dispatchEvent?.(new Event(SEARCH_SPAN_VIEW_CHANGED_EVENT));
+    window.dispatchEvent?.(new Event(SEARCH_JOURNEY_PREFERENCES_CHANGED_EVENT));
     return true;
   } catch {
     return false;

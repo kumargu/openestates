@@ -101,6 +101,9 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const hasSearchSpanParams = hasSearchSpanUrlParams(location.search);
   const [properties, setProperties] = useState<PropertyCard[]>([]);
   const [propertyCatalogReady, setPropertyCatalogReady] = useState(false);
+  const [loadedCatalogBundleVersion, setLoadedCatalogBundleVersion] = useState<
+    string | null
+  >(null);
   const [shortlistIds, setShortlistIds] = useState<string[]>(() => readShortlistIds());
   const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
@@ -119,19 +122,25 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(nextWidth));
   }
 
+  const searchCatalogVersion = storedPropertySearchContext
+    ?.runtimeVersion.servingBundleVersion ?? null;
+
   useEffect(() => {
     const controller = new AbortController();
-    getProperties({ signal: controller.signal })
+    const refresh = searchCatalogVersion !== null
+      && loadedCatalogBundleVersion !== searchCatalogVersion;
+    getProperties({ signal: controller.signal, refresh })
       .then((nextProperties) => {
         setProperties(nextProperties);
+        setLoadedCatalogBundleVersion(searchCatalogVersion);
         setPropertyCatalogReady(true);
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setProperties([]);
+        if (!refresh) setProperties([]);
       });
     return () => controller.abort();
-  }, []);
+  }, [loadedCatalogBundleVersion, searchCatalogVersion]);
 
   useEffect(() => {
     function refresh() {
@@ -156,10 +165,19 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     [properties],
   );
   const propertySearchContext = useMemo(
-    () => propertyCatalogReady
+    () => propertyCatalogReady && (
+      searchCatalogVersion === null
+      || loadedCatalogBundleVersion === searchCatalogVersion
+    )
       ? reconcileSearchSpanAvailability(storedPropertySearchContext, catalogPropertyIds)
       : storedPropertySearchContext,
-    [catalogPropertyIds, propertyCatalogReady, storedPropertySearchContext],
+    [
+      catalogPropertyIds,
+      loadedCatalogBundleVersion,
+      propertyCatalogReady,
+      searchCatalogVersion,
+      storedPropertySearchContext,
+    ],
   );
 
   useEffect(() => {
