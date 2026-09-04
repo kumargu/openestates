@@ -17,11 +17,6 @@ export function useFittedRailPage(
   const gap = options.gap ?? LANDING_RAIL_GAP_PX;
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const [pageSize, setPageSize] = useState(4);
-  const [pageState, setPageState] = useState({
-    page: 0,
-    itemCount,
-    pageSize,
-  });
 
   useEffect(() => {
     if (!viewport) return;
@@ -46,20 +41,9 @@ export function useFittedRailPage(
   }, [gap, minCardWidth, viewport]);
 
   const pageCount = Math.max(1, Math.ceil(Math.max(itemCount, 0) / pageSize));
-  const requestedPage = pageState.itemCount === itemCount && pageState.pageSize === pageSize
-    ? pageState.page
-    : 0;
-  const safePage = Math.min(requestedPage, pageCount - 1);
-  const setPage = (page: number) => setPageState({
-    page: Math.max(0, Math.min(page, pageCount - 1)),
-    itemCount,
-    pageSize,
-  });
 
   return {
     viewportRef: setViewport,
-    page: safePage,
-    setPage,
     pageSize,
     pageCount,
   };

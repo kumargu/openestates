@@ -24,7 +24,6 @@ test("workspace view detection includes RERA property reports", () => {
 
 test("workspace nav follows the focused home across property views", () => {
   const items = workspaceNavItems("home one/with slash", "rera", {
-    mode: "property-context",
     discoveryHref: "/?q=quiet+3bhk",
     discoveryResultCount: 18,
     hasDiscoveryContext: true,
@@ -34,7 +33,7 @@ test("workspace nav follows the focused home across property views", () => {
   assert.equal(byView.get("browse")?.label, "Back to 18 results");
   assert.equal(byView.get("browse")?.icon, "back");
   assert.equal(byView.get("browse")?.to, "/?q=quiet+3bhk");
-  assert.equal(byView.get("home")?.label, "Home");
+  assert.equal(byView.get("home")?.label, "This property");
   assert.equal(byView.get("notebook")?.label, "Workspace");
   assert.equal(byView.get("home")?.to, "/property/home%20one%2Fwith%20slash");
   assert.equal(byView.get("rera")?.to, "/property/home%20one%2Fwith%20slash/rera");
@@ -48,8 +47,8 @@ test("workspace nav follows the focused home across property views", () => {
   assert.equal(byView.get("plan")?.available, true);
 });
 
-test("property context never invents a current home", () => {
-  const items = workspaceNavItems("", "browse", { mode: "property-context" });
+test("sidebar never invents a current property", () => {
+  const items = workspaceNavItems("", "browse");
   const byView = new Map(items.map((item) => [item.view, item]));
 
   assert.equal(byView.get("browse")?.available, true);
@@ -63,7 +62,6 @@ test("property context never invents a current home", () => {
 
 test("property context keeps a generic return when a legacy discovery has no count", () => {
   const returnItem = workspaceNavItems("home-1", "home", {
-    mode: "property-context",
     discoveryHref: "/?q=near+metro",
     hasDiscoveryContext: true,
   }).find((item) => item.view === "browse");
@@ -74,7 +72,6 @@ test("property context keeps a generic return when a legacy discovery has no cou
 
 test("property tools preserve a carried search context", () => {
   const items = workspaceNavItems("home one", "home", {
-    mode: "property-context",
     propertySearchContext: {
       id: "context one",
       queryFingerprint: "qsearch1",
@@ -101,10 +98,8 @@ test("property tools preserve a carried search context", () => {
   );
 });
 
-test("workspace and compare keep the active search span", () => {
+test("workspace keeps the active search span", () => {
   const items = workspaceNavItems("home-1", "notebook", {
-    mode: "workspace",
-    compareIds: ["home-1", "home-2"],
     propertySearchContext: {
       id: "span-1",
       queryFingerprint: "qspan1",
@@ -117,42 +112,46 @@ test("workspace and compare keep the active search span", () => {
     byView.get("notebook")?.to,
     "/workspace?context=span-1&qf=qspan1&searchHome=home-1",
   );
-  assert.equal(
-    byView.get("compare")?.to,
-    "/workspace/compare?ids=home-1%2Chome-2&focus=home-1&context=span-1&qf=qspan1&searchHome=home-1",
-  );
+  assert.equal(byView.has("compare"), false);
 });
 
-test("workspace and compare destinations keep distinct active states", () => {
-  const compareItems = workspaceNavItems("home-1", "compare", {
-    compareIds: ["home-1", "home-2"],
-  });
-  assert.equal(compareItems.find((item) => item.view === "compare")?.active, true);
-  assert.equal(compareItems.find((item) => item.view === "notebook")?.active, false);
+test("workspace remains active for its notes and compare modes", () => {
+  const compareItems = workspaceNavItems("home-1", "compare");
+  assert.equal(compareItems.some((item) => item.view === "compare"), false);
+  assert.equal(compareItems.find((item) => item.view === "notebook")?.active, true);
 
   const planItems = workspaceNavItems("home-1", "plan");
-  assert.equal(planItems.find((item) => item.view === "notebook")?.active, true);
-  assert.equal(planItems.find((item) => item.view === "compare")?.active, false);
+  assert.equal(planItems.find((item) => item.view === "plan")?.active, true);
+  assert.equal(planItems.find((item) => item.view === "notebook")?.active, false);
 });
 
-test("workspace sidebar keeps RERA attached to the focused home", () => {
-  const items = workspaceNavItems("home-1", "notebook", {
-    mode: "workspace",
+test("sidebar rows stay stable inside the workspace", () => {
+  const options = {
     discoveryHref: "/?q=near+metro",
-    compareIds: ["home-1", "home-2"],
-  });
-  assert.deepEqual(items.map((item) => item.label), ["Explore", "Notes", "Compare", "RERA"]);
+    hasDiscoveryContext: true,
+  };
+  const items = workspaceNavItems("home-1", "notebook", options);
+  assert.deepEqual(items.map((item) => item.label), ["Back to results", "This property", "RERA", "EMI Plan", "Workspace"]);
+  for (const view of ["home", "compare", "rera", "plan"] as const) {
+    assert.deepEqual(
+      workspaceNavItems("home-1", view, options).map((item) => item.label),
+      items.map((item) => item.label),
+    );
+  }
   assert.equal(items[0]?.to, "/?q=near+metro");
-  assert.equal(items[2]?.to, "/workspace/compare?ids=home-1%2Chome-2&focus=home-1");
+  assert.equal(items[2]?.to, "/property/home-1/rera");
   assert.equal(items[2]?.available, true);
-  assert.equal(items[3]?.to, "/property/home-1/rera");
+  assert.equal(items[3]?.to, "/workspace/buy-vs-rent/home-1");
   assert.equal(items[3]?.available, true);
+  assert.equal(items[4]?.to, "/workspace");
+  assert.equal(items[4]?.active, true);
+  assert.equal(items.some((item) => item.label === "Compare"), false);
   assert.equal(items.some((item) => item.label === "This home"), false);
   assert.equal(items.some((item) => item.label === "Buy vs Rent"), false);
 });
 
 test("workspace RERA is disabled until a home is selected", () => {
-  const rera = workspaceNavItems("", "notebook", { mode: "workspace" })
+  const rera = workspaceNavItems("", "notebook")
     .find((item) => item.view === "rera");
   assert.equal(rera?.available, false);
 });

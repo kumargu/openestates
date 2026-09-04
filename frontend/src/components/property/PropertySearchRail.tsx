@@ -96,19 +96,10 @@ export function PropertySearchPanel({
   }
 
   if (!selectedResult) return null;
-  const position = selectedResult.rank + 1;
   const total = context.totalResultCount;
 
   return (
     <div className="property-search-panel">
-      <header className="property-search-panel__header">
-        <strong>{context.queryLabel}</strong>
-        <div className="property-search-panel__progress-row">
-          <span>Viewing {position}</span>
-          <progress value={position} max={total} aria-label={`Result ${position} of ${total}`} />
-        </div>
-      </header>
-
       <ol
         ref={listRef}
         className="property-search-panel__results"
@@ -139,13 +130,7 @@ export function PropertySearchPanel({
               >
                 <strong>{resultName(result)}</strong>
                 <span>{resultCompactMeta(result)}</span>
-                {selected || result.stateDisplay ? (
-                  <em className={selected ? "property-search-panel__current" : undefined}>
-                    {[selected ? "Current home" : null, result.stateDisplay]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </em>
-                ) : null}
+                {result.stateDisplay ? <em>{result.stateDisplay}</em> : null}
               </Link>
               {!selected ? (
                 <button

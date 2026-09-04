@@ -3,12 +3,9 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../hooks/useNotebook.ts";
 import {
   completeSettledValues,
-  FOCUS_STORAGE_KEY,
-  readShortlistIds,
 } from "../lib/compare.ts";
 import { SocietyComparisonMatrix } from "../components/compare/SocietyComparisonMatrix.tsx";
 import { PageTitle } from "../components/PageTitle.tsx";
-import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
 import { useSearchSpan } from "../components/workspace/SearchSpanContext.ts";
 import { LabelPill } from "../components/ui/LabelPill.tsx";
 import { getProperties, getProperty } from "../lib/api.ts";
@@ -36,9 +33,7 @@ import {
 import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
 import {
   activeWorkspaceCompareIds,
-  workspaceBuyVsRentHref,
   workspaceCompareHref,
-  workspaceFocusedHomeId,
 } from "../lib/workspaceNav.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import "../styles/notebook.css";
@@ -223,22 +218,6 @@ export function WorkspacePage() {
     () => propertyIdsWithNotesFirst(propertyIds, visible),
     [propertyIds, visible],
   );
-  const shortlistedWorkspaceIds = readShortlistIds()
-    .filter((id) => orderedPropertyIds.includes(id));
-  const focusCandidates = mode === "compare"
-    ? activeCompareIds
-    : shortlistedWorkspaceIds.length > 0
-      ? shortlistedWorkspaceIds
-      : orderedPropertyIds;
-  const focusedWorkspaceId = workspaceFocusedHomeId(
-    searchParams.get("focus"),
-    window.localStorage.getItem(FOCUS_STORAGE_KEY),
-    focusCandidates,
-  );
-  const compareHref = workspaceCompareHref(activeCompareIds, focusedWorkspaceId);
-  const buyVsRentHref = workspaceBuyVsRentHref(
-    focusedWorkspaceId || searchSpan?.selectedId,
-  );
   const compareViewStatus: CompareStatus =
     selectedHomes.length < 2
       ? catalogStatus === "loading" && activeCompareIds.length >= 2
@@ -249,6 +228,14 @@ export function WorkspacePage() {
       : compareState.key === compareKey
         ? compareState.status
         : "loading";
+  const notesHref = hrefWithSearchSpan(
+    "/workspace",
+    searchSpanReferenceForTarget(searchSpan),
+  );
+  const compareHref = hrefWithSearchSpan(
+    workspaceCompareHref(activeCompareIds),
+    searchSpanReferenceForTarget(searchSpan),
+  );
 
   function quickAdd(propertyId: string, text: string, labels: NotebookLabelId[] = []) {
     if (!propertyId || !text.trim()) return;
@@ -306,13 +293,21 @@ export function WorkspacePage() {
       <PageTitle title={`Workspace | ${PUBLIC_BRAND_NAME}`} />
       <meta name="robots" content="noindex" />
 
-      <WorkspaceHeader
-        mode={mode}
-        compareHref={compareHref}
-        buyVsRentHref={buyVsRentHref}
-        compareCount={activeCompareIds.length}
-      />
       <h1 className="visually-hidden">Workspace</h1>
+      <nav className="workspace-document__modes" aria-label="Workspace view">
+        <Link
+          to={notesHref}
+          aria-current={mode === "notes" ? "page" : undefined}
+        >
+          Notes
+        </Link>
+        <Link
+          to={compareHref}
+          aria-current={mode === "compare" ? "page" : undefined}
+        >
+          Compare
+        </Link>
+      </nav>
 
       {mode === "compare" ? (
         <CompareWorkspaceView
@@ -378,7 +373,7 @@ function CompareWorkspaceView({
   onRetry: () => void;
 }) {
   const searchSpan = useSearchSpan();
-  const notesHref = hrefWithSearchSpan(
+  const workspaceHref = hrefWithSearchSpan(
     "/workspace",
     searchSpanReferenceForTarget(searchSpan),
   );
@@ -400,7 +395,7 @@ function CompareWorkspaceView({
         <p>Live property data is temporarily unavailable.</p>
         <div className="workspace-compare-empty__actions">
           <button type="button" onClick={onRetry}>Retry</button>
-          <Link to={notesHref}>Back to notes</Link>
+          <Link to={workspaceHref}>Back to workspace</Link>
         </div>
       </section>
     );
@@ -411,8 +406,8 @@ function CompareWorkspaceView({
       <section className="workspace-compare-empty">
         <span>Compare</span>
         <h2>Add one more home to compare.</h2>
-        <p>Use the compare toggle beside saved homes in Notes. The workspace keeps the same notes and labels when you switch views.</p>
-        <Link to={notesHref}>Back to notes</Link>
+        <p>Select Compare beside one more saved property.</p>
+        <Link to={workspaceHref}>Back to workspace</Link>
       </section>
     );
   }
@@ -467,7 +462,7 @@ function EditorialView({
   );
 
   return (
-    <article className="notion-editorial" aria-label="Home notebook document">
+    <article className="notion-editorial" aria-label="Workspace notes">
       {notedPropertyIds.map((propertyId, index) => {
         const homeNotes = notes.filter((n) => n.propertyId === propertyId);
         const home = homes.get(propertyId);

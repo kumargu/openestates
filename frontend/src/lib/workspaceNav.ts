@@ -12,7 +12,7 @@ export type WorkspaceView = "browse" | "home" | "notebook" | "compare" | "rera" 
 export type WorkspaceNavItem = {
   view: WorkspaceView;
   label: string;
-  icon: "back" | "browse" | "listing" | "notebook" | "compare" | "rera" | "plan";
+  icon: "back" | "browse" | "listing" | "notebook" | "rera" | "plan";
   to: string;
   active: boolean;
   /** False when the item needs a focused shortlist home and none is set. */
@@ -38,11 +38,9 @@ export function workspaceNavItems(
   focusedId: string,
   activeView: WorkspaceView,
   options: {
-    mode?: "discovery" | "property-context" | "workspace";
     discoveryHref?: string;
     discoveryResultCount?: number;
     hasDiscoveryContext?: boolean;
-    compareIds?: string[];
     propertySearchContext?: SearchSpanReference | null;
   } = {},
 ): WorkspaceNavItem[] {
@@ -58,55 +56,41 @@ export function workspaceNavItems(
     workspaceBuyVsRentHref(focusedId),
     options.propertySearchContext,
   );
-  const compareIds = options.compareIds ?? [];
-  const compareHref = hrefWithSearchSpan(
-    workspaceCompareHref(compareIds, focusedId),
-    options.propertySearchContext,
-  );
   const notebookHref = hrefWithSearchSpan(
     "/workspace",
     options.propertySearchContext,
   );
-
-  const mode = options.mode ?? "workspace";
-  if (mode === "property-context") {
-    const discoveryLabel = options.hasDiscoveryContext
-      ? discoveryReturnLabel(options.discoveryResultCount)
-      : "Explore";
-    return [
-      {
-        view: "browse",
-        label: discoveryLabel,
-        icon: options.hasDiscoveryContext ? "back" : "browse",
-        to: options.discoveryHref ?? "/",
-        active: false,
-        available: true,
-      },
-      {
-        view: "home",
-        label: "Home",
-        icon: "listing",
-        to: detailHref,
-        active: activeView === "home",
-        available: hasFocus,
-      },
-      { view: "rera", label: "RERA", icon: "rera", to: reraHref, active: activeView === "rera", available: hasFocus },
-      { view: "plan", label: "EMI Plan", icon: "plan", to: planHref, active: activeView === "plan", available: hasFocus },
-      { view: "notebook", label: "Workspace", icon: "notebook", to: notebookHref, active: activeView === "notebook", available: true },
-    ];
-  }
-
+  const canReturnToDiscovery = activeView !== "browse" && options.hasDiscoveryContext;
   return [
-    { view: "browse" as const, label: "Explore", icon: "browse" as const, to: options.discoveryHref ?? "/", available: true },
-    { view: "notebook" as const, label: "Notes", icon: "notebook" as const, to: notebookHref, available: true },
-    { view: "compare" as const, label: "Compare", icon: "compare" as const, to: compareHref, available: compareIds.length > 0 },
-    { view: "rera" as const, label: "RERA", icon: "rera" as const, to: reraHref, available: hasFocus },
-  ].map((item) => ({
-    ...item,
-    active: item.view === "notebook"
-      ? ["notebook", "plan"].includes(activeView)
-      : item.view === activeView,
-  }));
+    {
+      view: "browse",
+      label: canReturnToDiscovery
+        ? discoveryReturnLabel(options.discoveryResultCount)
+        : "Explore",
+      icon: canReturnToDiscovery ? "back" : "browse",
+      to: options.discoveryHref ?? "/",
+      active: activeView === "browse",
+      available: true,
+    },
+    {
+      view: "home",
+      label: "This property",
+      icon: "listing",
+      to: detailHref,
+      active: activeView === "home",
+      available: hasFocus,
+    },
+    { view: "rera", label: "RERA", icon: "rera", to: reraHref, active: activeView === "rera", available: hasFocus },
+    { view: "plan", label: "EMI Plan", icon: "plan", to: planHref, active: activeView === "plan", available: hasFocus },
+    {
+      view: "notebook",
+      label: "Workspace",
+      icon: "notebook",
+      to: notebookHref,
+      active: activeView === "notebook" || activeView === "compare",
+      available: true,
+    },
+  ];
 }
 
 export function shouldShowWorkspaceSidebar(

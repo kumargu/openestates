@@ -2,12 +2,12 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getProperties } from "../../lib/api.ts";
-import { useNotebook } from "../../hooks/useNotebook.ts";
 import {
   FOCUS_STORAGE_KEY,
   parseShortlistIds,
@@ -36,7 +36,6 @@ import {
 } from "../../lib/navigationContext.ts";
 import {
   activeWorkspaceView,
-  activeWorkspaceCompareIds,
   shouldShowWorkspaceSidebar,
   workspaceFocusedHomeId,
 } from "../../lib/workspaceNav.ts";
@@ -44,7 +43,10 @@ import { WorkspaceSidebar } from "./WorkspaceSidebar.tsx";
 import { SearchSpanProvider } from "./SearchSpanProvider.tsx";
 import "../../styles/workspace.css";
 
-const SIDEBAR_STORAGE_KEY = "openestates:workspace-sidebar-collapsed";
+const SIDEBAR_WIDTH_STORAGE_KEY = "openestates:workspace-sidebar-width";
+const SIDEBAR_DEFAULT_WIDTH = 208;
+const SIDEBAR_MIN_WIDTH = 176;
+const SIDEBAR_MAX_WIDTH = 384;
 
 type WorkspaceFrameProps = {
   children: ReactNode;
@@ -65,11 +67,20 @@ function sameIds(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
-function writeSidebarCollapsed(collapsed: boolean) {
-  window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
+function constrainSidebarWidth(width: number): number {
+  if (!Number.isFinite(width)) return SIDEBAR_DEFAULT_WIDTH;
+  return Math.round(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width)));
+}
+
+function readSidebarWidth(): number {
+  const storedWidth = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
+  return storedWidth === null
+    ? SIDEBAR_DEFAULT_WIDTH
+    : constrainSidebarWidth(Number(storedWidth));
 }
 
 export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
@@ -89,10 +100,22 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const [properties, setProperties] = useState<PropertyCard[]>([]);
   const [propertyCatalogReady, setPropertyCatalogReady] = useState(false);
   const [shortlistIds, setShortlistIds] = useState<string[]>(() => readShortlistIds());
-  const [collapsed, setCollapsed] = useState(() =>
-    window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true"
-  );
-  const { compareIds } = useNotebook();
+  const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
+  const [sidebarResizing, setSidebarResizing] = useState(false);
+
+  function previewSidebarWidth(width: number) {
+    shellRef.current?.style.setProperty(
+      "--workspace-sidebar-width",
+      `${constrainSidebarWidth(width)}px`,
+    );
+  }
+
+  function finishSidebarResize(width: number) {
+    const nextWidth = constrainSidebarWidth(width);
+    setSidebarWidth(nextWidth);
+    setSidebarResizing(false);
+    window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(nextWidth));
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -195,10 +218,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     properties.map((property) => property.id),
   );
   const compareFocusIds = queryIds.filter((id) => availablePropertyIds.has(id));
-  const activeCompareIds = activeWorkspaceCompareIds(
-    activeView === "compare" ? queryIds : [],
-    compareIds,
-  );
   const storedFocus = window.localStorage.getItem(FOCUS_STORAGE_KEY);
   const workspaceFocusedId = workspaceFocusedHomeId(
     queryFocus,
@@ -287,14 +306,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     }
   }
 
-  function toggleSidebar() {
-    setCollapsed((current) => {
-      const next = !current;
-      writeSidebarCollapsed(next);
-      return next;
-    });
-  }
-
   function focusHome(nextId: string) {
     window.localStorage.setItem(FOCUS_STORAGE_KEY, nextId);
     if (activeView === "plan") {
@@ -335,12 +346,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     detachNotebookPropertyFromShortlist(propertyIdToRemove);
   }
 
-  const reducedBeforeDecision = shellMode === "workspace"
-    && !propertySearchContext
-    && homes.length === 0
-    && queryIds.length === 0;
-  const sidebarReduced = reducedBeforeDecision;
-  const sidebarCollapsed = collapsed || sidebarReduced;
   const isInternalRoute = location.pathname.startsWith("/_internal/")
     || location.pathname.startsWith("/dev/");
   const showSidebar = !isInternalRoute
@@ -350,35 +355,46 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     : shellMode === "workspace"
       ? "workspace"
       : "discovery";
-  const effectiveSidebarCollapsed = sidebarCollapsed;
   const discoveryContext = readDiscoveryContext();
   const discoveryHref = propertySearchContext?.returnUrl ?? discoveryReturnHref();
   const sidebarHomes = homes;
   const shellClassName = [
     "workspace-shell",
     showSidebar ? null : "workspace-shell--plain",
-    showSidebar && effectiveSidebarCollapsed ? "workspace-shell--collapsed" : null,
+    showSidebar && sidebarResizing ? "workspace-shell--resizing" : null,
   ].filter(Boolean).join(" ");
+
+  useLayoutEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    if (!showSidebar) {
+      shell.style.removeProperty("--workspace-sidebar-width");
+      return;
+    }
+    shell.style.setProperty("--workspace-sidebar-width", `${sidebarWidth}px`);
+  }, [showSidebar, sidebarWidth]);
 
   return (
     <SearchSpanProvider value={propertySearchContext}>
-      <div className={shellClassName}>
+      <div ref={shellRef} className={shellClassName}>
         {showSidebar ? (
           <WorkspaceSidebar
             key={propertySearchContext?.id ?? "no-search"}
             homes={sidebarHomes}
-            compareIds={activeCompareIds}
             focusedId={focusedId}
             activeView={activeView}
-            collapsed={effectiveSidebarCollapsed}
-            reduced={sidebarReduced}
             mode={sidebarMode}
             discoveryHref={discoveryHref}
             discoveryResultCount={propertySearchContext?.results.length
               ?? discoveryContext?.resultCount}
             hasDiscoveryContext={propertySearchContext !== null || discoveryContext !== null}
             searchContext={propertySearchContext}
-            onToggle={toggleSidebar}
+            width={sidebarWidth}
+            minWidth={SIDEBAR_MIN_WIDTH}
+            maxWidth={SIDEBAR_MAX_WIDTH}
+            onResizeStart={() => setSidebarResizing(true)}
+            onResize={previewSidebarWidth}
+            onResizeEnd={finishSidebarResize}
             onFocus={focusHome}
             onRemove={removeHome}
           />

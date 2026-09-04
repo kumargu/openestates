@@ -3,14 +3,11 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { getProperties, getProperty } from "../lib/api.ts";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
-import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
 import { PageTitle } from "../components/PageTitle.tsx";
-import { WorkspacePropertySwitcher } from "../components/workspace/WorkspacePropertySwitcher.tsx";
 import { useSearchSpan } from "../components/workspace/SearchSpanContext.ts";
 import { useNotebook } from "../hooks/useNotebook.ts";
 import {
   workspaceBuyVsRentHref,
-  workspaceCompareHref,
   workspacePlanReplacementId,
 } from "../lib/workspaceNav.ts";
 import {
@@ -96,23 +93,11 @@ function LoadingPlan() {
   );
 }
 
-function propertyLabel(home: PropertyCard): string {
-  return home.society_name?.trim() || home.title;
-}
-
-function propertyMeta(bhk: number, sqft: number, price: number): string {
-  return [
-    bhk > 0 ? `${bhk} BHK` : null,
-    sqft > 0 ? `${sqft.toLocaleString("en-IN")} sqft` : null,
-    price > 0 ? formatCurrency(price, true) : "Price unavailable",
-  ].filter(Boolean).join(" · ");
-}
-
 export function HomePlanPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const searchSpan = useSearchSpan();
-  const { compareIds, propertyIds } = useNotebook();
+  const { propertyIds } = useNotebook();
   const [catalog, setCatalog] = useState<PropertyCard[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
   const [propertyData, setPropertyData] = useState<PropertyDetailResponse | null>(null);
@@ -204,35 +189,13 @@ export function HomePlanPage() {
     ...(searchSpan?.selectedId ? [searchSpan.selectedId] : []),
     ...propertyIds,
   ])];
-  const homeOptions = workspacePropertyIds.flatMap((propertyId) => {
-    if (status === "not_found" && propertyId === id) return [];
-    const catalogHome = catalog.find((home) => home.id === propertyId);
-    if (catalogHome) {
-      return [{
-        id: catalogHome.id,
-        label: propertyLabel(catalogHome),
-        meta: propertyMeta(catalogHome.bhk, catalogHome.sqft, catalogHome.price),
-      }];
-    }
-    if (propertyData?.property.id === propertyId) {
-      return [{
-        id: propertyId,
-        label: propertyData.society?.name?.trim() || propertyData.property.title,
-        meta: propertyMeta(
-          propertyData.property.bhk,
-          propertyData.property.super_builtup_sqft,
-          propertyData.property.price,
-        ),
-      }];
-    }
-    return [];
+  const availableWorkspacePropertyIds = workspacePropertyIds.filter((propertyId) => {
+    if (status === "not_found" && propertyId === id) return false;
+    return catalog.some((home) => home.id === propertyId)
+      || propertyData?.property.id === propertyId;
   });
-  const compareHref = workspaceCompareHref(compareIds, id);
-  const buyVsRentHref = workspaceBuyVsRentHref(
-    id ?? searchSpan?.selectedId ?? propertyIds[0],
-  );
   const planReplacementId = catalogReady && (!id || status === "not_found")
-    ? workspacePlanReplacementId(id, homeOptions.map((home) => home.id))
+    ? workspacePlanReplacementId(id, availableWorkspacePropertyIds)
     : null;
   const replacementPlanHref = planReplacementId
     ? hrefWithSearchSpan(
@@ -250,14 +213,6 @@ export function HomePlanPage() {
     if (!replacementPlanHref) return;
     navigate(replacementPlanHref, { replace: true });
   }, [navigate, replacementPlanHref]);
-
-  const selectProperty = (propertyId: string) => {
-    if (!propertyId) return;
-    navigate(hrefWithSearchSpan(
-      workspaceBuyVsRentHref(propertyId),
-      searchSpanReferenceForTarget(searchSpan, propertyId),
-    ));
-  };
 
   const prepareSearchReturn = () => {
     if (searchSpan) requestSearchSpanReturn(searchSpan);
@@ -319,20 +274,6 @@ export function HomePlanPage() {
       <div className="home-plan-shell home-plan-shell--workspace">
         <PageTitle title={`${BUY_VS_RENT.pageTitle} | ${PUBLIC_BRAND_NAME}`} />
         <meta name="robots" content="noindex" />
-        <WorkspaceHeader
-          mode="buy-vs-rent"
-          compareHref={compareHref}
-          buyVsRentHref={buyVsRentHref}
-          compareCount={compareIds.length}
-          contextDisplay="mobile-only"
-          context={homeOptions.length > 0 ? (
-            <WorkspacePropertySwitcher
-              selectedId={homeOptions.some((home) => home.id === id) ? id : undefined}
-              homes={homeOptions}
-              onSelect={selectProperty}
-            />
-          ) : undefined}
-        />
         {content}
       </div>
     );
@@ -385,31 +326,14 @@ export function HomePlanPage() {
       <PageTitle title={`${property.title} — EMI Plan | ${PUBLIC_BRAND_NAME}`} />
       <meta name="description" content={`Inspect repayment choices for ${property.title}.`} />
 
-      <WorkspaceHeader
-        mode="buy-vs-rent"
-        compareHref={compareHref}
-        buyVsRentHref={workspaceBuyVsRentHref(id)}
-        compareCount={compareIds.length}
-      />
-
       <div className="home-plan-body">
         <div className="home-plan-main">
           <div className="home-plan-canvas">
             <header className="home-plan-property-context">
-              <div>
-                <h1>
-                  {propertyData.society?.name?.trim() || property.title}
-                  <span> · {formatCurrency(property.price, true)} asking price</span>
-                </h1>
-                {homeOptions.length > 1 ? (
-                  <WorkspacePropertySwitcher
-                    selectedId={id}
-                    homes={homeOptions}
-                    onSelect={selectProperty}
-                    triggerLabel="Change home"
-                  />
-                ) : null}
-              </div>
+              <h1>
+                {propertyData.society?.name?.trim() || property.title}
+                <span> · {formatCurrency(property.price, true)} asking price</span>
+              </h1>
               <p>Modelled loan {formatCurrency(projection.loanAmount, true)}</p>
             </header>
 

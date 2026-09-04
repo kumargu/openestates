@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FocusEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { LivingEvidenceTile } from "./evidence/LivingEvidenceTile.tsx";
@@ -140,17 +140,15 @@ function LandingResultCard({
   discoveryQueryFingerprint?: string | null;
 }) {
   return (
-    <div className="landing-stage__feature-card">
-      <LivingEvidenceTile
-        property={property}
-        variant="browse"
-        matchLabels={matchLabels}
-        proofFocus={proofFocus}
-        discoveryContextId={discoveryContextId}
-        discoveryQueryFingerprint={discoveryQueryFingerprint}
-        allowSave
-      />
-    </div>
+    <LivingEvidenceTile
+      property={property}
+      variant="browse"
+      matchLabels={matchLabels}
+      proofFocus={proofFocus}
+      discoveryContextId={discoveryContextId}
+      discoveryQueryFingerprint={discoveryQueryFingerprint}
+      allowSave
+    />
   );
 }
 
@@ -167,43 +165,97 @@ function LandingPagedRail({
   plusAfterCount?: number;
   renderCard: (item: PropertyCard) => ReactNode;
 }) {
-  const { viewportRef, page, setPage, pageSize, pageCount } = useFittedRailPage(items.length);
-  const start = page * pageSize;
-  const visible = items.slice(start, start + pageSize);
-  const showPlus = plusAfterCount > start && plusAfterCount < start + visible.length;
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const scrollTimerRef = useRef<number | null>(null);
+  const [leadingIndex, setLeadingIndex] = useState(0);
+  const { viewportRef, pageSize, pageCount } = useFittedRailPage(items.length);
+  const lastPageStart = Math.max(0, (pageCount - 1) * pageSize);
+  const safeLeadingIndex = Math.min(leadingIndex, lastPageStart);
+  const trailingSlots = pageCount * pageSize - items.length;
   const showHead = Boolean(label) || pageCount > 1;
+
+  const setScroller = useCallback((node: HTMLDivElement | null) => {
+    scrollerRef.current = node;
+    viewportRef(node);
+  }, [viewportRef]);
+
+  const scrollToIndex = useCallback((index: number, behavior: ScrollBehavior = "smooth") => {
+    const scroller = scrollerRef.current;
+    const target = scroller?.querySelector<HTMLElement>(`[data-rail-item-index="${index}"]`);
+    if (!scroller || !target) return;
+
+    const left = target.getBoundingClientRect().left
+      - scroller.getBoundingClientRect().left
+      + scroller.scrollLeft;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    scroller.scrollTo({ left, behavior: reduceMotion ? "auto" : behavior });
+  }, []);
+
+  const syncLeadingItem = useCallback(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
+    const scrollerLeft = scroller.getBoundingClientRect().left;
+    let closestIndex = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    scroller.querySelectorAll<HTMLElement>("[data-rail-item-index]").forEach((card) => {
+      const distance = Math.abs(card.getBoundingClientRect().left - scrollerLeft);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = Number(card.dataset.railItemIndex ?? 0);
+      }
+    });
+    setLeadingIndex(Math.min(closestIndex, lastPageStart));
+  }, [lastPageStart]);
+
+  const handleScroll = useCallback(() => {
+    if (scrollTimerRef.current !== null) window.clearTimeout(scrollTimerRef.current);
+    scrollTimerRef.current = window.setTimeout(() => {
+      scrollTimerRef.current = null;
+      syncLeadingItem();
+    }, 80);
+  }, [syncLeadingItem]);
+
+  useEffect(() => () => {
+    if (scrollTimerRef.current !== null) window.clearTimeout(scrollTimerRef.current);
+  }, []);
 
   if (items.length === 0) return null;
 
   return (
     <div
       className="landing-featured__rail"
-      ref={viewportRef}
       style={{
         "--landing-rail-cols": String(pageSize),
-        "--landing-rail-plus": showPlus ? "2.5rem" : "0rem",
       } as CSSProperties}
     >
       {showHead ? (
         <div className="landing-featured__rail-head">
           {label ? <p className="landing-featured__rail-label">{label}</p> : null}
           <RailPageControls
-            page={page}
-            pageCount={pageCount}
-            rangeStart={start + 1}
-            rangeEnd={start + visible.length}
+            canPrevious={safeLeadingIndex > 0}
+            canNext={safeLeadingIndex < lastPageStart}
+            rangeStart={safeLeadingIndex + 1}
+            rangeEnd={Math.min(safeLeadingIndex + pageSize, items.length)}
             total={items.length}
-            onPageChange={setPage}
+            onPrevious={() => scrollToIndex(Math.max(0, safeLeadingIndex - pageSize))}
+            onNext={() => scrollToIndex(Math.min(lastPageStart, safeLeadingIndex + pageSize))}
             label={controlsLabel}
           />
         </div>
       ) : null}
-      <div className="landing-stage__featured">
-        {visible.map((item, index) => {
-          const itemIndex = start + index;
+      <div
+        ref={setScroller}
+        className="landing-stage__featured landing-stage__featured--scroll"
+        role="region"
+        aria-label={label ? `${label} homes` : "Matching homes"}
+        tabIndex={pageCount > 1 ? 0 : -1}
+        onScroll={handleScroll}
+      >
+        {items.map((item, itemIndex) => {
           return (
             <Fragment key={item.id}>
-              {showPlus && itemIndex === plusAfterCount ? (
+              {plusAfterCount > 0 && itemIndex === plusAfterCount ? (
                 <div
                   className="landing-featured__plus"
                   role="separator"
@@ -212,10 +264,22 @@ function LandingPagedRail({
                   <span aria-hidden="true">+</span>
                 </div>
               ) : null}
-              {renderCard(item)}
+              <div
+                className="landing-stage__feature-card"
+                data-rail-item-index={itemIndex}
+              >
+                {renderCard(item)}
+              </div>
             </Fragment>
           );
         })}
+        {Array.from({ length: trailingSlots }, (_, index) => (
+          <span
+            key={`trailing-slot-${index}`}
+            className="landing-stage__feature-card landing-stage__feature-card--spacer"
+            aria-hidden="true"
+          />
+        ))}
       </div>
     </div>
   );

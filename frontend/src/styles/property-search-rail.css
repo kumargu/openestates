@@ -4,66 +4,7 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
-.property-search-panel__header {
-  display: grid;
-  gap: 0.5rem;
-  padding: 0.8rem 0.6rem 0.7rem;
-  border-bottom: 1px solid var(--property-story-rule);
-}
-
-.property-search-panel__progress-row {
-  display: grid;
-  grid-template-columns: auto minmax(3.5rem, 1fr);
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.property-search-panel__progress-row span {
-  color: var(--color-text-muted);
-  font-size: 0.62rem;
-  font-weight: 760;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.property-search-panel__header > strong {
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--property-story-ink);
-  font-size: 0.82rem;
-  font-weight: 720;
-  letter-spacing: -0.02em;
-  line-height: 1.3;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.property-search-panel__progress-row progress {
-  width: 100%;
-  height: 3px;
-  overflow: hidden;
-  border: 0;
-  border-radius: 999px;
-  appearance: none;
-  background: rgba(32, 39, 33, 0.1);
-}
-
-.property-search-panel__progress-row progress::-webkit-progress-bar {
-  border-radius: 999px;
-  background: rgba(32, 39, 33, 0.1);
-}
-
-.property-search-panel__progress-row progress::-webkit-progress-value {
-  border-radius: 999px;
-  background: var(--accent-moss, #71834a);
-}
-
-.property-search-panel__progress-row progress::-moz-progress-bar {
-  border-radius: 999px;
-  background: var(--accent-moss, #71834a);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .property-search-panel__results {
@@ -120,11 +61,6 @@
   z-index: 1;
   outline: 3px solid color-mix(in srgb, var(--accent-moss, #71834a) 48%, transparent);
   outline-offset: -3px;
-}
-
-.property-search-panel__current {
-  color: var(--accent-moss, #71834a);
-  font-weight: 760;
 }
 
 .property-search-panel__dismiss {
