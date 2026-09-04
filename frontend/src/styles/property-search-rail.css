@@ -71,32 +71,6 @@
   outline-offset: -3px;
 }
 
-.property-search-panel__preference {
-  z-index: 2;
-  align-self: center;
-  margin-right: 0.35rem;
-  padding: 0.28rem 0.38rem;
-  border: 0;
-  border-radius: 0.38rem;
-  background: transparent;
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: 0.5rem;
-  line-height: 1.15;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.property-search-panel__preference:hover {
-  background: rgba(38, 35, 32, 0.055);
-  color: var(--color-text-secondary);
-}
-
-.property-search-panel__preference:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent-moss, #71834a) 48%, transparent);
-  outline-offset: 1px;
-}
-
 .property-search-panel__undo {
   position: absolute;
   right: 0.5rem;

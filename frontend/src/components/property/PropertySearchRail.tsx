@@ -122,8 +122,9 @@ export function PropertySearchPanel({
               {!selected ? (
                 <button
                   type="button"
-                  className="property-search-panel__preference"
-                  aria-label={`Mark ${resultName(result)} as not for me`}
+                  className="workspace-sidebar__home-remove"
+                  aria-label={`Remove ${resultName(result)} from this search`}
+                  title="Remove"
                   onClick={(event) => {
                     const row = event.currentTarget.closest("li");
                     const nextControl = row?.nextElementSibling?.querySelector<HTMLButtonElement>(
@@ -135,7 +136,7 @@ export function PropertySearchPanel({
                     window.requestAnimationFrame(() => nextControl?.focus());
                   }}
                 >
-                  Not for me
+                  ×
                 </button>
               ) : null}
             </li>
@@ -144,7 +145,7 @@ export function PropertySearchPanel({
       </ol>
       {canUndoNotForMe ? (
         <div className="property-search-panel__undo" role="status">
-          <span>Marked not for me</span>
+          <span>Removed from this search</span>
           <button type="button" onClick={onUndoNotForMe}>Undo</button>
         </div>
       ) : null}
