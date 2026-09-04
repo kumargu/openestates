@@ -25,7 +25,7 @@ type Props = {
 
 type PanelProps = Props & {
   dismissedIds: ReadonlySet<string>;
-  onDismiss: (result: PropertySearchResult) => void;
+  onDismiss: (propertyId: string) => void;
   canUndoDismissal: boolean;
   onUndoDismissal: () => void;
   onSelect: (propertyId: string) => void;
@@ -49,13 +49,6 @@ function resultCompactMeta(result: PropertySearchResult): string {
     result.bhk ? `${result.bhk}BHK` : null,
     result.price ? formatListingPrice({ price: result.price }) : null,
   ].filter(Boolean).join(" · ");
-}
-
-function resultHref(
-  context: PropertySearchContext,
-  result: PropertySearchResult,
-): string {
-  return propertyHrefWithSearchSpan(result.propertyId, context);
 }
 
 export function PropertySearchPanel({
@@ -154,7 +147,7 @@ export function PropertySearchPanel({
                       "button.property-search-panel__result-open",
                     );
                     setPreviewResult(null);
-                    onDismiss(result);
+                    onDismiss(result.propertyId);
                     window.requestAnimationFrame(() => nextControl?.focus());
                   }}
                 >
@@ -206,19 +199,18 @@ export function PropertySearchStrip({ context }: Props) {
   if (!selectedResult) return null;
   const position = selectedIndex + 1;
   const total = results.length;
-  const visibleTotal = results.length;
-  const previousResult = visibleTotal > 1
-    ? results[(selectedIndex - 1 + visibleTotal) % visibleTotal]
+  const previousResult = total > 1
+    ? results[(selectedIndex - 1 + total) % total]
     : undefined;
-  const nextResult = visibleTotal > 1
-    ? results[(selectedIndex + 1) % visibleTotal]
+  const nextResult = total > 1
+    ? results[(selectedIndex + 1) % total]
     : undefined;
 
   return (
     <nav className="property-search-strip" aria-label="Homes from your search">
       {previousResult ? (
         <Link
-          to={resultHref(context, previousResult)}
+          to={propertyHrefWithSearchSpan(previousResult.propertyId, context)}
           aria-label={`Previous result, ${resultName(previousResult)}`}
         >
           ←
@@ -230,7 +222,7 @@ export function PropertySearchStrip({ context }: Props) {
       </div>
       {nextResult ? (
         <Link
-          to={resultHref(context, nextResult)}
+          to={propertyHrefWithSearchSpan(nextResult.propertyId, context)}
           aria-label={`Next result, ${resultName(nextResult)}`}
         >
           →

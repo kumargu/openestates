@@ -15,10 +15,7 @@ import {
   searchSpanReturnDelta,
   writeSearchSpanDismissedIds,
 } from "../../lib/navigationContext.ts";
-import type {
-  PropertySearchContext,
-  PropertySearchResult,
-} from "../../lib/navigationContext.ts";
+import type { PropertySearchContext } from "../../lib/navigationContext.ts";
 import { PUBLIC_BRAND_NAME } from "../../lib/brand.ts";
 import { PropertySearchPanel } from "../property/PropertySearchRail.tsx";
 
@@ -266,7 +263,7 @@ export function WorkspaceSidebar({
   const [, refreshSearchView] = useState(0);
   const [lastDismissed, setLastDismissed] = useState<{
     contextId: string;
-    result: PropertySearchResult;
+    propertyId: string;
   } | null>(null);
   const { notes } = useNotebook();
   const noteCount = notes.length;
@@ -288,25 +285,24 @@ export function WorkspaceSidebar({
   const canUndoDismissal = Boolean(
     searchContext
     && lastDismissed?.contextId === searchContext.id
-    && dismissedIdSet.has(lastDismissed.result.propertyId),
+    && dismissedIdSet.has(lastDismissed.propertyId),
   );
 
-  function dismissSearchResult(result: PropertySearchResult) {
-    if (!searchContext || result.propertyId === searchContext.selectedId) return;
+  function dismissSearchResult(propertyId: string) {
+    if (!searchContext || propertyId === searchContext.selectedId) return;
     writeSearchSpanDismissedIds(searchContext, [
       ...dismissedPropertyIds,
-      result.propertyId,
+      propertyId,
     ]);
     refreshSearchView((revision) => revision + 1);
-    setLastDismissed({ contextId: searchContext.id, result });
+    setLastDismissed({ contextId: searchContext.id, propertyId });
   }
 
   function undoSearchDismissal() {
     if (!searchContext || lastDismissed?.contextId !== searchContext.id) return;
-    const propertyId = lastDismissed.result.propertyId;
     writeSearchSpanDismissedIds(
       searchContext,
-      dismissedPropertyIds.filter((id) => id !== propertyId),
+      dismissedPropertyIds.filter((id) => id !== lastDismissed.propertyId),
     );
     refreshSearchView((revision) => revision + 1);
     setLastDismissed(null);
@@ -443,52 +439,52 @@ export function WorkspaceSidebar({
         className="workspace-sidebar__shortlist"
         aria-label={searchContext ? "Search and saved homes" : "Saved homes"}
       >
-          {searchContext ? (
-            <div className="workspace-sidebar__panel-tabs" role="group" aria-label="Home lists">
-              <button
-                type="button"
-                aria-pressed={activePanel === "search"}
-                onClick={() => setPreferredPanel("search")}
-              >
-                Search <span>{visibleSearchCount}</span>
-              </button>
-              <button
-                type="button"
-                aria-pressed={activePanel === "saved"}
-                onClick={() => setPreferredPanel("saved")}
-              >
-                Saved <span>{savedHomeCount}</span>
-              </button>
-            </div>
-          ) : (
-            <div className="workspace-sidebar__section-title">
-              <span>Saved homes</span>
-              <strong>{savedHomes.length}</strong>
-            </div>
-          )}
+        {searchContext ? (
+          <div className="workspace-sidebar__panel-tabs" role="group" aria-label="Home lists">
+            <button
+              type="button"
+              aria-pressed={activePanel === "search"}
+              onClick={() => setPreferredPanel("search")}
+            >
+              Search <span>{visibleSearchCount}</span>
+            </button>
+            <button
+              type="button"
+              aria-pressed={activePanel === "saved"}
+              onClick={() => setPreferredPanel("saved")}
+            >
+              Saved <span>{savedHomeCount}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="workspace-sidebar__section-title">
+            <span>Saved homes</span>
+            <strong>{savedHomes.length}</strong>
+          </div>
+        )}
 
-          {activePanel === "search" && searchContext ? (
-            <div className="workspace-sidebar__context-panel">
-              <PropertySearchPanel
-                context={searchContext}
-                dismissedIds={dismissedIdSet}
-                onDismiss={dismissSearchResult}
-                canUndoDismissal={canUndoDismissal}
-                onUndoDismissal={undoSearchDismissal}
-                onSelect={onFocus}
-              />
-            </div>
-          ) : (
-            <div className="workspace-sidebar__context-panel">
-              <SavedHomesPanel
-                homes={savedHomes}
-                focusedId={focusedId}
-                mode={mode}
-                onFocus={onFocus}
-                onRemove={onRemove}
-              />
-            </div>
-          )}
+        {activePanel === "search" && searchContext ? (
+          <div className="workspace-sidebar__context-panel">
+            <PropertySearchPanel
+              context={searchContext}
+              dismissedIds={dismissedIdSet}
+              onDismiss={dismissSearchResult}
+              canUndoDismissal={canUndoDismissal}
+              onUndoDismissal={undoSearchDismissal}
+              onSelect={onFocus}
+            />
+          </div>
+        ) : (
+          <div className="workspace-sidebar__context-panel">
+            <SavedHomesPanel
+              homes={savedHomes}
+              focusedId={focusedId}
+              mode={mode}
+              onFocus={onFocus}
+              onRemove={onRemove}
+            />
+          </div>
+        )}
       </section>
 
       <div

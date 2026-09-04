@@ -15,7 +15,7 @@ import {
 } from "../lib/navigationContext.ts";
 import { primaryProofFocus } from "../lib/proof-focus.ts";
 import { searchResultReasonLabels } from "../lib/search.ts";
-import type { ProofFocus, PropertyCard, SearchResponse, SearchResultItem } from "../lib/types.ts";
+import type { PropertyCard, SearchResponse, SearchResultItem } from "../lib/types.ts";
 import {
   LANDING_RESOLVE_QUERY,
   LANDING_STORY_CHAPTERS,
@@ -124,32 +124,6 @@ function matchLabels(property: PropertyCard, lensId: FeaturedLensId): string[] {
     if (hasKnownNumber(property.open_space_pct)) labels.push(`${Math.round(property.open_space_pct)}% open space`);
   }
   return labels.slice(0, 2);
-}
-
-function LandingResultCard({
-  property,
-  matchLabels,
-  proofFocus,
-  discoveryContextId,
-  discoveryQueryFingerprint,
-}: {
-  property: PropertyCard;
-  matchLabels: string[];
-  proofFocus?: ProofFocus;
-  discoveryContextId?: string | null;
-  discoveryQueryFingerprint?: string | null;
-}) {
-  return (
-    <LivingEvidenceTile
-      property={property}
-      variant="browse"
-      matchLabels={matchLabels}
-      proofFocus={proofFocus}
-      discoveryContextId={discoveryContextId}
-      discoveryQueryFingerprint={discoveryQueryFingerprint}
-      allowSave
-    />
-  );
 }
 
 function LandingPagedRail({
@@ -310,12 +284,14 @@ function LandingResultRail({
       items={items}
       plusAfterCount={siblings.length > 0 ? results.length : 0}
       renderCard={(item) => (
-        <LandingResultCard
+        <LivingEvidenceTile
           property={item}
+          variant="browse"
           matchLabels={searchResultReasonLabels(item as SearchResultItem)}
           proofFocus={primaryProofFocus(item as SearchResultItem, query)}
           discoveryContextId={discoveryContextId}
           discoveryQueryFingerprint={discoveryQueryFingerprint}
+          allowSave
         />
       )}
     />
@@ -473,9 +449,11 @@ function FeaturedSuggestions({
           controlsLabel="Featured homes pages"
           items={suggestions}
           renderCard={(property) => (
-            <LandingResultCard
+            <LivingEvidenceTile
               property={property}
+              variant="browse"
               matchLabels={matchLabels(property, activeLensId)}
+              allowSave
             />
           )}
         />

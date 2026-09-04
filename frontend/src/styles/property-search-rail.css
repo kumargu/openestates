@@ -209,9 +209,3 @@
     white-space: nowrap;
   }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .property-search-panel__results a {
-    transition: none;
-  }
-}

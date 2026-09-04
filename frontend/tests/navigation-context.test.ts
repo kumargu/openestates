@@ -275,8 +275,6 @@ test("property journey context preserves every carried result in search order", 
 
   assert.equal(stored?.results.length, 15);
   assert.deepEqual(stored?.results.map((result) => result.propertyId), results.map((result) => result.id));
-  assert.equal(selected?.selectedIndex, 9);
-  assert.equal(selected?.totalResultCount, 15);
   assert.equal(stored?.results[0]?.stateDisplay, "Delivered · 4 yrs old");
   assert.equal(selected?.returnUrl, "/?q=quiet+3bhk&area=Whitefield");
   assert.equal(selected?.returnScrollY, 912);
@@ -308,12 +306,11 @@ test("property journey context preserves every carried result in search order", 
 });
 
 test("property search rail pins the current home and rotates the remaining results", () => {
-  const results = ["one", "two", "three", "four"].map((propertyId, rank) => ({
+  const results = ["one", "two", "three", "four"].map((propertyId) => ({
     propertyId,
     title: propertyId,
     societyName: propertyId,
     area: "Whitefield",
-    rank,
   }));
 
   assert.deepEqual(
@@ -345,13 +342,9 @@ test("availability reconciliation drops removed homes without replacing the curr
 
   assert.deepEqual(
     reconcileSearchSpanAvailability(context, new Set(["two", "three"]))?.results.map(
-      (result) => [result.propertyId, result.rank],
+      (result) => result.propertyId,
     ),
-    [["two", 1], ["three", 2]],
-  );
-  assert.equal(
-    reconcileSearchSpanAvailability(context, new Set(["two", "three"]))?.totalResultCount,
-    2,
+    ["two", "three"],
   );
   assert.equal(reconcileSearchSpanAvailability(context, new Set(["one", "three"])), null);
 });
@@ -485,7 +478,7 @@ test("property links restore each result's proof focus", () => {
   );
 });
 
-test("writer removes malformed duplicates and restores contiguous canonical ranks", () => {
+test("writer removes malformed and duplicate search results", () => {
   sessionValues.clear();
   const one = searchResult("one");
   assert.equal(writePropertySearchContext(
@@ -500,9 +493,9 @@ test("writer removes malformed duplicates and restores contiguous canonical rank
 
   assert.deepEqual(
     readPropertySearchContext("journey-normalized", 1_001)?.results.map(
-      ({ propertyId, rank }) => ({ propertyId, rank }),
+      ({ propertyId }) => propertyId,
     ),
-    [{ propertyId: "one", rank: 0 }, { propertyId: "three", rank: 1 }],
+    ["one", "three"],
   );
 });
 

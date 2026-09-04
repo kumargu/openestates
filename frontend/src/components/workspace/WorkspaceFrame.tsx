@@ -41,7 +41,7 @@ import {
   workspaceNavigationFocusedId,
 } from "../../lib/workspaceNav.ts";
 import { WorkspaceSidebar } from "./WorkspaceSidebar.tsx";
-import { SearchSpanProvider } from "./SearchSpanProvider.tsx";
+import { SearchSpanContext } from "./SearchSpanContext.ts";
 import "../../styles/workspace.css";
 
 const SIDEBAR_WIDTH_STORAGE_KEY = "openestates:workspace-sidebar-width";
@@ -92,6 +92,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const [searchSpanRevision, setSearchSpanRevision] = useState(0);
   const storedPropertySearchContext = useMemo(
     () => {
+      // Storage and expiry events change the context without changing the URL.
       void searchSpanRevision;
       return searchSpanContextFromLocation(location.pathname, location.search);
     },
@@ -215,10 +216,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   }, [location.pathname, location.search, shellMode]);
 
   const activeView = activeWorkspaceView(location.pathname);
-  const availablePropertyIds = new Set(
-    properties.map((property) => property.id),
-  );
-  const compareFocusIds = queryIds.filter((id) => availablePropertyIds.has(id));
+  const compareFocusIds = queryIds.filter((id) => catalogPropertyIds.has(id));
   const storedFocus = window.localStorage.getItem(FOCUS_STORAGE_KEY);
   const workspaceFocusedId = workspaceFocusedHomeId(
     queryFocus,
@@ -374,7 +372,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       : "discovery";
   const discoveryContext = readDiscoveryContext();
   const discoveryHref = propertySearchContext?.returnUrl ?? discoveryReturnHref();
-  const sidebarHomes = homes;
   const shellClassName = [
     "workspace-shell",
     showSidebar ? null : "workspace-shell--plain",
@@ -392,12 +389,12 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   }, [showSidebar, sidebarWidth]);
 
   return (
-    <SearchSpanProvider value={propertySearchContext}>
+    <SearchSpanContext.Provider value={propertySearchContext}>
       <div ref={shellRef} className={shellClassName}>
         {showSidebar ? (
           <WorkspaceSidebar
             key={propertySearchContext?.id ?? "no-search"}
-            homes={sidebarHomes}
+            homes={homes}
             focusedId={focusedId}
             activeView={activeView}
             mode={sidebarMode}
@@ -418,6 +415,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
         ) : null}
         <div className="workspace-view">{children}</div>
       </div>
-    </SearchSpanProvider>
+    </SearchSpanContext.Provider>
   );
 }

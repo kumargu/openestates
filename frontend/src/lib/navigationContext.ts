@@ -31,7 +31,6 @@ export type PropertySearchResult = {
   title: string;
   societyName: string;
   area: string;
-  rank: number;
   price?: number;
   bhk?: number;
   sqft?: number;
@@ -56,8 +55,6 @@ export type StoredPropertySearchContext = {
 
 export type PropertySearchContext = StoredPropertySearchContext & {
   selectedId: string;
-  selectedIndex: number;
-  totalResultCount: number;
 };
 
 export type SearchSpanReference = {
@@ -475,7 +472,6 @@ export function writePropertySearchContext(
       title,
       societyName: result.society_name.trim(),
       area: result.area.trim(),
-      rank: 0,
       price: knownPositiveNumber(result.price),
       bhk: knownPositiveNumber(result.bhk),
       sqft: knownPositiveNumber(result.sqft),
@@ -486,7 +482,7 @@ export function writePropertySearchContext(
     } satisfies PropertySearchResult];
   }).filter((result, index, allResults) =>
     allResults.findIndex((candidate) => candidate.propertyId === result.propertyId) === index
-  ).map((result, rank) => ({ ...result, rank }));
+  );
   const context: StoredPropertySearchContext = {
     version: 1,
     id,
@@ -592,9 +588,6 @@ export function readPropertySearchContext(
         && result.title.trim()
         && typeof result.societyName === "string"
         && typeof result.area === "string"
-        && typeof result.rank === "number"
-        && Number.isInteger(result.rank)
-        && result.rank >= 0
         && (result.price === undefined || knownPositiveNumber(result.price) !== undefined)
         && (result.bhk === undefined || knownPositiveNumber(result.bhk) !== undefined)
         && (result.sqft === undefined || knownPositiveNumber(result.sqft) !== undefined)
@@ -606,7 +599,6 @@ export function readPropertySearchContext(
     );
     if (
       results.length !== candidate.results.length
-      || results.some((result, index) => result.rank !== index)
       || new Set(results.map((result) => result.propertyId)).size !== results.length
     ) return null;
     return {
@@ -637,16 +629,11 @@ export function propertySearchContextForProperty(
     || !selectedId
     || !expectedQueryFingerprint
     || context.queryFingerprint !== expectedQueryFingerprint
+    || !context.results.some((result) => result.propertyId === selectedId)
   ) return null;
-  const selectedIndex = context.results.findIndex(
-    (result) => result.propertyId === selectedId,
-  );
-  if (selectedIndex < 0) return null;
   return {
     ...context,
     selectedId,
-    selectedIndex,
-    totalResultCount: context.results.length,
   };
 }
 
@@ -658,17 +645,12 @@ export function reconcileSearchSpanAvailability(
   const results = context.results.filter((result) =>
     availablePropertyIds.has(result.propertyId)
   );
-  const selectedIndex = results.findIndex((result) =>
-    result.propertyId === context.selectedId
-  );
-  return selectedIndex < 0
-    ? null
-    : {
+  return results.some((result) => result.propertyId === context.selectedId)
+    ? {
         ...context,
         results,
-        selectedIndex,
-        totalResultCount: results.length,
-      };
+      }
+    : null;
 }
 
 function routeOwnedPropertyId(pathname: string): string | null {
