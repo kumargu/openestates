@@ -97,7 +97,6 @@ function ReraRecordHeader({
   location: string;
   model: ReraReportViewModel;
 }) {
-  const searchSpan = useSearchSpan();
   let matchState = "Registry record matched";
   if (model.registrations.length === 0) matchState = "Registration match unresolved";
   else if (model.state === "partial") matchState = "Partial registry match";
@@ -106,7 +105,6 @@ function ReraRecordHeader({
   return (
     <header className="rera-record-header">
       <div className="rera-record-header__actions">
-        <Link to={propertyHrefWithSearchSpan(propertyId, searchSpan)}><span aria-hidden="true">←</span> Property</Link>
         <div>
           <SaveHeartButton propertyId={propertyId} label="Save record" />
           {model.registryUrl && (

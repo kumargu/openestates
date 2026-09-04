@@ -28,6 +28,7 @@ type PanelProps = Props & {
   onDismiss: (result: PropertySearchResult) => void;
   canUndoDismissal: boolean;
   onUndoDismissal: () => void;
+  onSelect: (propertyId: string) => void;
 };
 
 function resultName(result: PropertySearchResult): string {
@@ -63,6 +64,7 @@ export function PropertySearchPanel({
   onDismiss,
   canUndoDismissal,
   onUndoDismissal,
+  onSelect,
 }: PanelProps) {
   const listRef = useRef<HTMLOListElement>(null);
   const [previewResult, setPreviewResult] = useState<PropertySearchResult | null>(null);
@@ -70,6 +72,9 @@ export function PropertySearchPanel({
     result.propertyId === context.selectedId || !dismissedIds.has(result.propertyId)
   );
   const visibleResults = rotatePropertySearchResults(availableResults, context.selectedId);
+  const visiblePositions = new Map(
+    availableResults.map((result, index) => [result.propertyId, index + 1]),
+  );
   const selectedResult = visibleResults[0];
   const previewMeta = previewResult ? resultMeta(previewResult) : "";
 
@@ -81,22 +86,24 @@ export function PropertySearchPanel({
 
   function handleKeyDown(event: KeyboardEvent<HTMLOListElement>) {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-    const links = Array.from(
-      listRef.current?.querySelectorAll<HTMLAnchorElement>("a[href]") ?? [],
+    const controls = Array.from(
+      listRef.current?.querySelectorAll<HTMLButtonElement>(
+        "button.property-search-panel__result-open",
+      ) ?? [],
     );
-    if (links.length === 0) return;
-    const focusedIndex = links.findIndex((link) => link === document.activeElement);
+    if (controls.length === 0) return;
+    const focusedIndex = controls.findIndex((control) => control === document.activeElement);
     let nextIndex = focusedIndex < 0 ? 0 : focusedIndex;
-    if (event.key === "ArrowDown") nextIndex = Math.min(links.length - 1, nextIndex + 1);
+    if (event.key === "ArrowDown") nextIndex = Math.min(controls.length - 1, nextIndex + 1);
     if (event.key === "ArrowUp") nextIndex = Math.max(0, nextIndex - 1);
     if (event.key === "Home") nextIndex = 0;
-    if (event.key === "End") nextIndex = links.length - 1;
+    if (event.key === "End") nextIndex = controls.length - 1;
     event.preventDefault();
-    links[nextIndex]?.focus();
+    controls[nextIndex]?.focus();
   }
 
   if (!selectedResult) return null;
-  const total = context.totalResultCount;
+  const total = availableResults.length;
 
   return (
     <div className="property-search-panel">
@@ -120,18 +127,19 @@ export function PropertySearchPanel({
                 }
               }}
             >
-              <Link
-                to={resultHref(context, result)}
+              <button
+                type="button"
                 className="workspace-sidebar__home-open property-search-panel__result-open"
                 aria-current={selected ? "page" : undefined}
                 aria-label={selected
-                  ? `Current home, ${resultName(result)}, result ${result.rank + 1} of ${total}`
-                  : `${resultName(result)}, result ${result.rank + 1} of ${total}`}
+                  ? `Current home, ${resultName(result)}, result ${visiblePositions.get(result.propertyId)} of ${total}`
+                  : `${resultName(result)}, result ${visiblePositions.get(result.propertyId)} of ${total}`}
+                onClick={() => onSelect(result.propertyId)}
               >
                 <strong>{resultName(result)}</strong>
                 <span>{resultCompactMeta(result)}</span>
                 {result.stateDisplay ? <em>{result.stateDisplay}</em> : null}
-              </Link>
+              </button>
               {!selected ? (
                 <button
                   type="button"
@@ -140,11 +148,14 @@ export function PropertySearchPanel({
                   title="Hide from this search"
                   onClick={(event) => {
                     const row = event.currentTarget.closest("li");
-                    const nextLink = row?.nextElementSibling?.querySelector<HTMLAnchorElement>("a[href]")
-                      ?? row?.previousElementSibling?.querySelector<HTMLAnchorElement>("a[href]");
+                    const nextControl = row?.nextElementSibling?.querySelector<HTMLButtonElement>(
+                      "button.property-search-panel__result-open",
+                    ) ?? row?.previousElementSibling?.querySelector<HTMLButtonElement>(
+                      "button.property-search-panel__result-open",
+                    );
                     setPreviewResult(null);
                     onDismiss(result);
-                    window.requestAnimationFrame(() => nextLink?.focus());
+                    window.requestAnimationFrame(() => nextControl?.focus());
                   }}
                 >
                   ×
@@ -193,8 +204,8 @@ export function PropertySearchStrip({ context }: Props) {
   );
   const selectedResult = results[selectedIndex];
   if (!selectedResult) return null;
-  const position = selectedResult.rank + 1;
-  const total = context.totalResultCount;
+  const position = selectedIndex + 1;
+  const total = results.length;
   const visibleTotal = results.length;
   const previousResult = visibleTotal > 1
     ? results[(selectedIndex - 1 + visibleTotal) % visibleTotal]

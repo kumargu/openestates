@@ -348,7 +348,6 @@
 .workspace-sidebar__saved-panel {
   height: 100%;
   overflow-y: auto;
-  overscroll-behavior: contain;
   scrollbar-color: rgba(38, 59, 49, 0.28) transparent;
 }
 

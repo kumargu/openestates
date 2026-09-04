@@ -35,6 +35,7 @@ test("workspace nav follows the focused home across property views", () => {
   assert.equal(byView.get("browse")?.to, "/?q=quiet+3bhk");
   assert.equal(byView.get("home")?.label, "This property");
   assert.equal(byView.get("notebook")?.label, "Workspace");
+  assert.equal(byView.get("notebook")?.to, "/workspace?focus=home+one%2Fwith+slash");
   assert.equal(byView.get("home")?.to, "/property/home%20one%2Fwith%20slash");
   assert.equal(byView.get("rera")?.to, "/property/home%20one%2Fwith%20slash/rera");
   assert.equal(byView.get("rera")?.label, "RERA");
@@ -94,7 +95,7 @@ test("property tools preserve a carried search context", () => {
   );
   assert.equal(
     byView.get("notebook")?.to,
-    "/workspace?context=context+one&qf=qsearch1&searchHome=home+one",
+    "/workspace?focus=home+one&context=context+one&qf=qsearch1&searchHome=home+one",
   );
 });
 
@@ -110,9 +111,24 @@ test("workspace keeps the active search span", () => {
 
   assert.equal(
     byView.get("notebook")?.to,
-    "/workspace?context=span-1&qf=qspan1&searchHome=home-1",
+    "/workspace?focus=home-1&context=span-1&qf=qspan1&searchHome=home-1",
   );
   assert.equal(byView.has("compare"), false);
+});
+
+test("workspace keeps an off-search saved home as the explicit focus", () => {
+  const items = workspaceNavItems("saved-outside-search", "home", {
+    propertySearchContext: {
+      id: "span-1",
+      queryFingerprint: "qspan1",
+      selectedId: "search-result-1",
+    },
+  });
+
+  assert.equal(
+    items.find((item) => item.view === "notebook")?.to,
+    "/workspace?focus=saved-outside-search&context=span-1&qf=qspan1&searchHome=search-result-1",
+  );
 });
 
 test("workspace remains active for its notes and compare modes", () => {
@@ -143,7 +159,7 @@ test("sidebar rows stay stable inside the workspace", () => {
   assert.equal(items[2]?.available, true);
   assert.equal(items[3]?.to, "/workspace/buy-vs-rent/home-1");
   assert.equal(items[3]?.available, true);
-  assert.equal(items[4]?.to, "/workspace");
+  assert.equal(items[4]?.to, "/workspace?focus=home-1");
   assert.equal(items[4]?.active, true);
   assert.equal(items.some((item) => item.label === "Compare"), false);
   assert.equal(items.some((item) => item.label === "This home"), false);

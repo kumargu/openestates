@@ -226,11 +226,16 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       ? compareFocusIds
       : homes.map((home) => home.id),
   );
+  const explicitWorkspaceFocus = activeView === "notebook"
+    && queryFocus
+    && homes.some((home) => home.id === queryFocus)
+    ? queryFocus
+    : null;
   const focusedId = shellMode === "property-context"
     ? propertyId ?? ""
     : propertyId ?? (activeView === "compare"
       ? workspaceFocusedId
-      : propertySearchContext?.selectedId ?? workspaceFocusedId);
+      : explicitWorkspaceFocus ?? propertySearchContext?.selectedId ?? workspaceFocusedId);
 
   const searchSpanCreatedAt = propertySearchContext?.createdAt;
   const searchSpanId = propertySearchContext?.id;
@@ -308,6 +313,15 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
 
   function focusHome(nextId: string) {
     window.localStorage.setItem(FOCUS_STORAGE_KEY, nextId);
+    if (activeView === "notebook") {
+      const next = new URLSearchParams();
+      next.set("focus", nextId);
+      navigate(hrefWithSearchSpan(
+        `/workspace?${next.toString()}`,
+        searchSpanReferenceForTarget(propertySearchContext, nextId),
+      ));
+      return;
+    }
     if (activeView === "plan") {
       navigate(hrefWithSearchSpan(
         `/workspace/buy-vs-rent/${encodeURIComponent(nextId)}`,

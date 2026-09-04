@@ -661,7 +661,14 @@ export function reconcileSearchSpanAvailability(
   const selectedIndex = results.findIndex((result) =>
     result.propertyId === context.selectedId
   );
-  return selectedIndex < 0 ? null : { ...context, results, selectedIndex };
+  return selectedIndex < 0
+    ? null
+    : {
+        ...context,
+        results,
+        selectedIndex,
+        totalResultCount: results.length,
+      };
 }
 
 function routeOwnedPropertyId(pathname: string): string | null {

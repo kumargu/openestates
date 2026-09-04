@@ -351,7 +351,7 @@ test("availability reconciliation drops removed homes without replacing the curr
   );
   assert.equal(
     reconcileSearchSpanAvailability(context, new Set(["two", "three"]))?.totalResultCount,
-    3,
+    2,
   );
   assert.equal(reconcileSearchSpanAvailability(context, new Set(["one", "three"])), null);
 });

@@ -273,6 +273,7 @@ export function WorkspaceSidebar({
   const savedHomes = mode === "property-context"
     ? homes.filter((home) => home.id !== focusedId)
     : homes;
+  const savedHomeCount = homes.length;
   const activePanel = searchContext && preferredPanel === "search"
     ? "search"
     : "saved";
@@ -456,7 +457,7 @@ export function WorkspaceSidebar({
                 aria-pressed={activePanel === "saved"}
                 onClick={() => setPreferredPanel("saved")}
               >
-                Saved <span>{savedHomes.length}</span>
+                Saved <span>{savedHomeCount}</span>
               </button>
             </div>
           ) : (
@@ -474,6 +475,7 @@ export function WorkspaceSidebar({
                 onDismiss={dismissSearchResult}
                 canUndoDismissal={canUndoDismissal}
                 onUndoDismissal={undoSearchDismissal}
+                onSelect={onFocus}
               />
             </div>
           ) : (

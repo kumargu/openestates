@@ -56,8 +56,12 @@ export function workspaceNavItems(
     workspaceBuyVsRentHref(focusedId),
     options.propertySearchContext,
   );
+  const notebookParams = new URLSearchParams();
+  if (focusedId) notebookParams.set("focus", focusedId);
   const notebookHref = hrefWithSearchSpan(
-    "/workspace",
+    notebookParams.size > 0
+      ? `/workspace?${notebookParams.toString()}`
+      : "/workspace",
     options.propertySearchContext,
   );
   const canReturnToDiscovery = activeView !== "browse" && options.hasDiscoveryContext;
