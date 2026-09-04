@@ -6,7 +6,7 @@ export type PropertyCard = {
    * Treat these as the bridge from a compact search/listing response into the
    * richer property evidence responses. A result card should render its normal
    * fast fields first, then use these IDs when the UI needs drill-down evidence,
-   * expandable cards, compare rows, or hover/side-panel context.
+   * expandable cards, compare rows, or detail-page context.
    *
    * Typical UI flow:
    * 1. Render the card from local fields such as price, BHK, area, match_reason.
@@ -916,12 +916,6 @@ export type PropertyEvidenceResponse = {
   sections: EvidenceSection[];
 };
 
-export type PropertyEvidenceBatchResponse = {
-  serving_bundle_version?: string;
-  results: PropertyEvidenceResponse[];
-  missing_property_ids: string[];
-};
-
 export type BuilderPortfolio = {
   builder_name: string;
   tracked_projects: number;
@@ -1193,10 +1187,18 @@ export type SearchResultSet = {
   results: SearchResultItem[];
 };
 
+export type SearchRuntimeVersion = {
+  servingBundleVersion: string;
+  scoringPolicyVersion: number;
+  searchEngineVersion: string;
+};
+
 export type SearchResponse = {
   query: string;
   resultSets: SearchResultSet[];
+  orderedResultIds: string[];
   totalMatches: number;
+  runtimeVersion: SearchRuntimeVersion;
   areaContext?: SearchAreaContext;
   state: "results" | "no_matches";
   searchGuidance?: SearchGuidance;

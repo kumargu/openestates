@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FocusEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { LivingEvidenceTile } from "./evidence/LivingEvidenceTile.tsx";
@@ -6,10 +6,16 @@ import { RailPageControls } from "./RailPageControls.tsx";
 import { useFittedRailPage } from "../hooks/useFittedRailPage.ts";
 import { propertyDetailPath, searchProperties } from "../lib/api.ts";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
-import { composeLandingSearchRails } from "../lib/landing-search-rails.ts";
+import {
+  composeLandingSearchRails,
+  orderedLandingSearchResults,
+} from "../lib/landing-search-rails.ts";
+import {
+  writeSearchJourneyContext,
+} from "../lib/navigationContext.ts";
 import { primaryProofFocus } from "../lib/proof-focus.ts";
 import { searchResultReasonLabels } from "../lib/search.ts";
-import type { ProofFocus, PropertyCard, SearchResponse, SearchResultItem } from "../lib/types.ts";
+import type { PropertyCard, SearchResponse, SearchResultItem } from "../lib/types.ts";
 import {
   LANDING_RESOLVE_QUERY,
   LANDING_STORY_CHAPTERS,
@@ -120,28 +126,6 @@ function matchLabels(property: PropertyCard, lensId: FeaturedLensId): string[] {
   return labels.slice(0, 2);
 }
 
-function LandingResultCard({
-  property,
-  matchLabels,
-  proofFocus,
-}: {
-  property: PropertyCard;
-  matchLabels: string[];
-  proofFocus?: ProofFocus;
-}) {
-  return (
-    <div className="landing-stage__feature-card">
-      <LivingEvidenceTile
-        property={property}
-        variant="browse"
-        matchLabels={matchLabels}
-        proofFocus={proofFocus}
-        allowSave
-      />
-    </div>
-  );
-}
-
 function LandingPagedRail({
   label,
   controlsLabel,
@@ -155,40 +139,97 @@ function LandingPagedRail({
   plusAfterCount?: number;
   renderCard: (item: PropertyCard) => ReactNode;
 }) {
-  const { viewportRef, page, setPage, pageSize, pageCount } = useFittedRailPage(items.length);
-  const start = page * pageSize;
-  const visible = items.slice(start, start + pageSize);
-  const showPlus = plusAfterCount > start && plusAfterCount < start + visible.length;
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const scrollTimerRef = useRef<number | null>(null);
+  const [leadingIndex, setLeadingIndex] = useState(0);
+  const { viewportRef, pageSize, pageCount } = useFittedRailPage(items.length);
+  const lastPageStart = Math.max(0, (pageCount - 1) * pageSize);
+  const safeLeadingIndex = Math.min(leadingIndex, lastPageStart);
+  const trailingSlots = pageCount * pageSize - items.length;
   const showHead = Boolean(label) || pageCount > 1;
+
+  const setScroller = useCallback((node: HTMLDivElement | null) => {
+    scrollerRef.current = node;
+    viewportRef(node);
+  }, [viewportRef]);
+
+  const scrollToIndex = useCallback((index: number, behavior: ScrollBehavior = "smooth") => {
+    const scroller = scrollerRef.current;
+    const target = scroller?.querySelector<HTMLElement>(`[data-rail-item-index="${index}"]`);
+    if (!scroller || !target) return;
+
+    const left = target.getBoundingClientRect().left
+      - scroller.getBoundingClientRect().left
+      + scroller.scrollLeft;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    scroller.scrollTo({ left, behavior: reduceMotion ? "auto" : behavior });
+  }, []);
+
+  const syncLeadingItem = useCallback(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
+    const scrollerLeft = scroller.getBoundingClientRect().left;
+    let closestIndex = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    scroller.querySelectorAll<HTMLElement>("[data-rail-item-index]").forEach((card) => {
+      const distance = Math.abs(card.getBoundingClientRect().left - scrollerLeft);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = Number(card.dataset.railItemIndex ?? 0);
+      }
+    });
+    setLeadingIndex(Math.min(closestIndex, lastPageStart));
+  }, [lastPageStart]);
+
+  const handleScroll = useCallback(() => {
+    if (scrollTimerRef.current !== null) window.clearTimeout(scrollTimerRef.current);
+    scrollTimerRef.current = window.setTimeout(() => {
+      scrollTimerRef.current = null;
+      syncLeadingItem();
+    }, 80);
+  }, [syncLeadingItem]);
+
+  useEffect(() => () => {
+    if (scrollTimerRef.current !== null) window.clearTimeout(scrollTimerRef.current);
+  }, []);
 
   if (items.length === 0) return null;
 
   return (
     <div
       className="landing-featured__rail"
-      ref={viewportRef}
       style={{
         "--landing-rail-cols": String(pageSize),
-        "--landing-rail-plus": showPlus ? "2.5rem" : "0rem",
       } as CSSProperties}
     >
       {showHead ? (
         <div className="landing-featured__rail-head">
           {label ? <p className="landing-featured__rail-label">{label}</p> : null}
           <RailPageControls
-            page={page}
-            pageCount={pageCount}
-            onPageChange={setPage}
+            canPrevious={safeLeadingIndex > 0}
+            canNext={safeLeadingIndex < lastPageStart}
+            rangeStart={safeLeadingIndex + 1}
+            rangeEnd={Math.min(safeLeadingIndex + pageSize, items.length)}
+            total={items.length}
+            onPrevious={() => scrollToIndex(Math.max(0, safeLeadingIndex - pageSize))}
+            onNext={() => scrollToIndex(Math.min(lastPageStart, safeLeadingIndex + pageSize))}
             label={controlsLabel}
           />
         </div>
       ) : null}
-      <div className="landing-stage__featured">
-        {visible.map((item, index) => {
-          const itemIndex = start + index;
+      <div
+        ref={setScroller}
+        className="landing-stage__featured landing-stage__featured--scroll"
+        role="region"
+        aria-label={label ? `${label} homes` : "Matching homes"}
+        tabIndex={pageCount > 1 ? 0 : -1}
+        onScroll={handleScroll}
+      >
+        {items.map((item, itemIndex) => {
           return (
             <Fragment key={item.id}>
-              {showPlus && itemIndex === plusAfterCount ? (
+              {plusAfterCount > 0 && itemIndex === plusAfterCount ? (
                 <div
                   className="landing-featured__plus"
                   role="separator"
@@ -197,10 +238,22 @@ function LandingPagedRail({
                   <span aria-hidden="true">+</span>
                 </div>
               ) : null}
-              {renderCard(item)}
+              <div
+                className="landing-stage__feature-card"
+                data-rail-item-index={itemIndex}
+              >
+                {renderCard(item)}
+              </div>
             </Fragment>
           );
         })}
+        {Array.from({ length: trailingSlots }, (_, index) => (
+          <span
+            key={`trailing-slot-${index}`}
+            className="landing-stage__feature-card landing-stage__feature-card--spacer"
+            aria-hidden="true"
+          />
+        ))}
       </div>
     </div>
   );
@@ -211,11 +264,15 @@ function LandingResultRail({
   siblings = [],
   label,
   query,
+  discoveryContextId,
+  discoveryQueryFingerprint,
 }: {
   results: SearchResultItem[];
   siblings?: SearchResultItem[];
   label?: string;
   query?: string;
+  discoveryContextId: string | null;
+  discoveryQueryFingerprint: string | null;
 }) {
   const items = [...results, ...siblings];
   if (items.length === 0) return null;
@@ -227,10 +284,14 @@ function LandingResultRail({
       items={items}
       plusAfterCount={siblings.length > 0 ? results.length : 0}
       renderCard={(item) => (
-        <LandingResultCard
+        <LivingEvidenceTile
           property={item}
+          variant="browse"
           matchLabels={searchResultReasonLabels(item as SearchResultItem)}
           proofFocus={primaryProofFocus(item as SearchResultItem, query)}
+          discoveryContextId={discoveryContextId}
+          discoveryQueryFingerprint={discoveryQueryFingerprint}
+          allowSave
         />
       )}
     />
@@ -244,16 +305,35 @@ function LandingSearchResults({
   query: string;
   onReady?: (resultCount?: number) => void;
 }) {
-  const [response, setResponse] = useState<SearchResponse | null>(null);
+  const [searchState, setSearchState] = useState<{
+    response: SearchResponse;
+    contextId: string | null;
+    queryFingerprint: string | null;
+  } | null>(null);
   const [failed, setFailed] = useState(false);
+  const response = searchState?.response ?? null;
 
   useEffect(() => {
     const controller = new AbortController();
 
-    searchProperties(query)
+    searchProperties(query, { signal: controller.signal })
       .then((data) => {
         if (controller.signal.aborted) return;
-        setResponse(data);
+        const results = orderedLandingSearchResults(data);
+        const focusForResult = (result: SearchResultItem) =>
+          primaryProofFocus(result, query);
+        const searchSpan = writeSearchJourneyContext(
+          query,
+          `${window.location.pathname}${window.location.search}`,
+          results,
+          data.runtimeVersion,
+          focusForResult,
+        );
+        setSearchState({
+          response: data,
+          contextId: searchSpan?.id ?? null,
+          queryFingerprint: searchSpan?.queryFingerprint ?? null,
+        });
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -300,6 +380,8 @@ function LandingSearchResults({
           siblings={rail.siblings}
           label={rail.label}
           query={query}
+          discoveryContextId={searchState?.contextId ?? null}
+          discoveryQueryFingerprint={searchState?.queryFingerprint ?? null}
         />
       ))}
     </div>
@@ -367,9 +449,11 @@ function FeaturedSuggestions({
           controlsLabel="Featured homes pages"
           items={suggestions}
           renderCard={(property) => (
-            <LandingResultCard
+            <LivingEvidenceTile
               property={property}
+              variant="browse"
               matchLabels={matchLabels(property, activeLensId)}
+              allowSave
             />
           )}
         />

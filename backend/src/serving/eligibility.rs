@@ -874,6 +874,16 @@ mod tests {
                 FactValue::Text("/media/promising.webp".to_string()),
             ),
             fact(
+                "property:promising",
+                "area",
+                FactValue::Text("Hoodi".to_string()),
+            ),
+            fact(
+                "property:promising",
+                "carpet_area_sqft",
+                FactValue::Numeric(1_100.0),
+            ),
+            fact(
                 "society:promising",
                 "google_rating",
                 FactValue::Numeric(4.4),

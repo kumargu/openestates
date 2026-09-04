@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../../hooks/useNotebook.ts";
+import { propertyHrefWithSearchSpan } from "../../lib/navigationContext.ts";
 import { LabelPill } from "../ui/LabelPill.tsx";
+import { useSearchSpan } from "../workspace/SearchSpanContext.ts";
 import { floorPlanForBhk, type FloorPlanComparePlan } from "../../lib/floor-plan-compare.ts";
 import { backendUrl } from "../../lib/runtimeConfig.ts";
 import { buildTaggedMatrixRows } from "../../lib/comparisonMatrix.ts";
@@ -394,6 +396,7 @@ function CompareHomeHeader({
   summary?: string[];
   onRemove?: (propertyIds: string[]) => void;
 }) {
+  const searchSpan = useSearchSpan();
   return (
     <article className="compare-editorial__home">
       {onRemove && (
@@ -406,7 +409,7 @@ function CompareHomeHeader({
           Remove
         </button>
       )}
-      <Link to={`/property/${encodeURIComponent(column.propertyId)}`}>
+      <Link to={propertyHrefWithSearchSpan(column.propertyId, searchSpan)}>
         <i aria-hidden="true">{String(index + 1).padStart(2, "0")}</i>
         <strong>{column.name}</strong>
         <span>{column.area}</span>

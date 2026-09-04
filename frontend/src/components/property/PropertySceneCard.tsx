@@ -24,6 +24,7 @@ type Props = {
   playback?: StoryScenePlayback;
   sectionId?: string;
   showIdentity?: boolean;
+  identityPlacement?: "above" | "overlay";
   cinematicMotion?: boolean;
 };
 
@@ -35,27 +36,12 @@ type IdentityProps = {
 
 export function PropertySceneFacts({
   story,
-  pageScoped = false,
 }: {
   story: PropertyStoryModel;
-  pageScoped?: boolean;
 }) {
   const facts = story.identity.facts.map((fact) => (
     <span key={fact.key}>{fact.value}</span>
   ));
-
-  if (pageScoped) {
-    return (
-      <div
-        id="property-summary"
-        className="property-story-sticky-facts"
-        aria-label="Home summary"
-        tabIndex={-1}
-      >
-        <div className="property-story-sticky-facts__inner">{facts}</div>
-      </div>
-    );
-  }
 
   return (
     <div className="property-scene__facts" aria-label="Home summary">
@@ -107,6 +93,7 @@ export function PropertySceneCard({
   playback,
   sectionId,
   showIdentity = true,
+  identityPlacement = "above",
   cinematicMotion = true,
 }: Props) {
   const [walkerIndex, setWalkerIndex] = useState<number | null>(null);
@@ -157,6 +144,7 @@ export function PropertySceneCard({
   }
 
   const hasImages = filmstripFrames.length > 0;
+  const overlayIdentity = showIdentity && identityPlacement === "overlay" && hasImages;
 
   return (
     <section
@@ -164,7 +152,7 @@ export function PropertySceneCard({
       className={`property-scene${hasImages ? "" : " property-scene--empty"}`}
       aria-labelledby="property-scene-title"
     >
-      {showIdentity && (
+      {showIdentity && !overlayIdentity && (
         <PropertySceneIdentity story={story} actions={actions} />
       )}
 
@@ -182,6 +170,9 @@ export function PropertySceneCard({
           galleryLabel={`All photos · ${usableGalleryUrls.length}`}
           onOpenGallery={usableGalleryUrls.length > 0 ? openGallery : undefined}
           onUsableFramesChange={syncUsableFrames}
+          stageOverlay={overlayIdentity ? (
+            <PropertySceneIdentity story={story} actions={actions} />
+          ) : undefined}
         />
       )}
 

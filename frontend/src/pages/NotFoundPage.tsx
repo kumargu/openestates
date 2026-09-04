@@ -2,15 +2,13 @@
  * 404 Not Found catch-all page.
  */
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
+import { PageTitle } from "../components/PageTitle.tsx";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 
 export function NotFoundPage() {
   return (
     <div className="page-container" style={{ maxWidth: "600px" }}>
-      <Helmet>
-        <title>Page not found | {PUBLIC_BRAND_NAME}</title>
-      </Helmet>
+      <PageTitle title={`Page not found | ${PUBLIC_BRAND_NAME}`} />
       <div
         style={{
           display: "flex",

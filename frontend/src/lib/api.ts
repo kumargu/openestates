@@ -1,7 +1,6 @@
 import type {
   PropertyCard,
   PropertyDetailResponse,
-  PropertyEvidenceBatchResponse,
   PropertyEvidenceResponse,
   ReraEvidenceReportResponse,
   ProofFocus,
@@ -27,6 +26,10 @@ const META_ENV = (import.meta as ImportMeta & {
 }).env ?? {};
 const ENABLE_DEV_FIXTURES = META_ENV.VITE_USE_FIXTURE_API === "true";
 const inFlightSearches = new Map<string, Promise<SearchResponse>>();
+const PROPERTY_CATALOG_CACHE_MS = 60_000;
+let cachedPropertyCatalog: { loadedAt: number; value: PropertyCard[] } | null = null;
+let inFlightPropertyCatalog: Promise<PropertyCard[]> | null = null;
+let propertyCatalogRequestGeneration = 0;
 const DEFAULT_API_TIMEOUT_MS = 4_000;
 const GET_ATTEMPT_COUNT = 2;
 const GET_RETRY_DELAY_MS = 200;
@@ -34,6 +37,10 @@ const GET_RETRY_DELAY_MS = 200;
 type ApiFetchOptions = {
   signal?: AbortSignal;
   timeoutMs?: number;
+};
+
+type PropertyCatalogFetchOptions = ApiFetchOptions & {
+  refresh?: boolean;
 };
 
 function getDevFixture<T>(path: string): T | null {
@@ -63,6 +70,18 @@ function isRetryable(error: unknown): boolean {
 
 function retryDelay(): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, GET_RETRY_DELAY_MS));
+}
+
+function withCallerAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    promise.then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", abort);
+    });
+  });
 }
 
 async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
@@ -120,8 +139,46 @@ export function getHealth(): Promise<{
   return fetchJson("/api/health");
 }
 
-export function getProperties(options?: ApiFetchOptions): Promise<PropertyCard[]> {
-  return fetchJson<PropertyCard[]>("/api/properties", options).then(filterListableProperties);
+function requestPropertyCatalog(
+  options: ApiFetchOptions,
+  generation: number,
+): Promise<PropertyCard[]> {
+  return fetchJson<PropertyCard[]>("/api/properties", options)
+    .then(filterListableProperties)
+    .then((value) => {
+      if (generation === propertyCatalogRequestGeneration) {
+        cachedPropertyCatalog = { loadedAt: Date.now(), value };
+      }
+      return value;
+    });
+}
+
+function startPropertyCatalogRequest(options: ApiFetchOptions): Promise<PropertyCard[]> {
+  const generation = ++propertyCatalogRequestGeneration;
+  const request = requestPropertyCatalog(options, generation);
+  const clearRequest = () => {
+    if (inFlightPropertyCatalog === request) inFlightPropertyCatalog = null;
+  };
+  inFlightPropertyCatalog = request;
+  void request.then(clearRequest, clearRequest);
+  return request;
+}
+
+export function getProperties(options: PropertyCatalogFetchOptions = {}): Promise<PropertyCard[]> {
+  if (options.refresh) {
+    return startPropertyCatalogRequest({
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
+    });
+  }
+
+  const now = Date.now();
+  if (cachedPropertyCatalog && now - cachedPropertyCatalog.loadedAt < PROPERTY_CATALOG_CACHE_MS) {
+    return withCallerAbort(Promise.resolve(cachedPropertyCatalog.value), options.signal);
+  }
+  const request = inFlightPropertyCatalog
+    ?? startPropertyCatalogRequest({ timeoutMs: options.timeoutMs });
+  return withCallerAbort(request, options.signal);
 }
 
 export function getProperty(id: string, options?: ApiFetchOptions): Promise<PropertyDetailResponse> {
@@ -205,16 +262,6 @@ export function getPropertySurfacesBatch(
   });
 }
 
-export function getPropertyEvidenceBatch(
-  propertyIds: string[],
-  limit?: number,
-): Promise<PropertyEvidenceBatchResponse> {
-  return postJson("/api/properties/evidence/batch", {
-    property_ids: propertyIds,
-    limit,
-  });
-}
-
 export function getAreas(options?: ApiFetchOptions): Promise<AreaListItem[]> {
   return fetchJson("/api/areas", options);
 }
@@ -227,19 +274,24 @@ export function getAreaTracker(options?: ApiFetchOptions): Promise<AreaTrackerRe
   return fetchJson("/api/areas/tracker", options);
 }
 
-export function searchProperties(query: string): Promise<SearchResponse> {
+export function searchProperties(
+  query: string,
+  options?: ApiFetchOptions,
+): Promise<SearchResponse> {
   const key = query.trim();
   const existing = inFlightSearches.get(key);
-  if (existing) return existing;
+  if (existing) return withCallerAbort(existing, options?.signal);
 
-  const request = fetchJson<SearchResponse>(`/api/search?q=${encodeURIComponent(query)}`)
+  const request = fetchJson<SearchResponse>(`/api/search?q=${encodeURIComponent(query)}`, {
+    timeoutMs: options?.timeoutMs,
+  })
     .finally(() => {
       if (inFlightSearches.get(key) === request) {
         inFlightSearches.delete(key);
       }
     });
   inFlightSearches.set(key, request);
-  return request;
+  return withCallerAbort(request, options?.signal);
 }
 
 export function getDiscovery(options?: ApiFetchOptions): Promise<DiscoveryResponse> {

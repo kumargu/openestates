@@ -1359,7 +1359,6 @@ async fn rebase_rera_serving(
     }
     let mut parents = vec![
         base_release.derived_assets.kg_materialization_id.clone(),
-        evidence_record.materialization_id.clone(),
         plan_record.materialization_id.clone(),
     ];
     if let Some(media_record) = media_record {
@@ -1370,6 +1369,11 @@ async fn rebase_rera_serving(
             format!("evidence serving bundle is missing required {asset_id} parent")
         })?);
     }
+
+    // The evidence bundle remains an immutable source watermark, but cannot
+    // be a direct parent: a release lineage may contain only one global search
+    // serving materialization. Its KG, plan, and RERA inputs above preserve the
+    // evidence lineage needed for validation and promotion.
 
     SearchServingBundleMaterializer::new(lake.clone())
         .materialize_child_from_serving_records_with_rera_for_run(

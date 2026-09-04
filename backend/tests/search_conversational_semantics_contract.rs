@@ -6,9 +6,9 @@ use backend::models::Property;
 use backend::search::geo::GeoSearchIndex;
 use backend::search::{SearchCapabilityIndex, SearchEngine, SearchIndex};
 use backend::serving::{
-    LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest, ServingEntityAliasIndex,
-    ServingEntityRecord, ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
-    SpatialServingIndex, TantivyRecallIndex,
+    derive_proximity_records, LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest,
+    ServingEntityAliasIndex, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
+    ServingSearchMetadataRecord, SpatialServingIndex, TantivyRecallIndex,
 };
 use chrono::{TimeZone, Utc};
 use serde::Deserialize;
@@ -63,6 +63,7 @@ enum FixtureKind {
     BuyerLanguage,
     DecisionRanking,
     MultiOr,
+    Proximity,
     Regional,
 }
 
@@ -176,7 +177,7 @@ fn frozen_product_scenarios_execute_against_controlled_inventory() {
                 .expect("controlled search case follows the typed contract")
         })
         .collect::<Vec<_>>();
-    assert_eq!(cases.len(), 50, "controlled bank size changed");
+    assert_eq!(cases.len(), 52, "controlled bank size changed");
 
     let unique_ids = cases
         .iter()
@@ -195,6 +196,7 @@ fn frozen_product_scenarios_execute_against_controlled_inventory() {
             FixtureKind::BuyerLanguage,
             FixtureKind::DecisionRanking,
             FixtureKind::MultiOr,
+            FixtureKind::Proximity,
             FixtureKind::Regional,
         ]),
         "every controlled fixture profile must remain represented"
@@ -712,6 +714,7 @@ struct MockSearchFixture {
 #[derive(Clone, Copy, Default)]
 struct FixtureProfile {
     decision_candidates: bool,
+    derive_proximity: bool,
     distance_decoy: bool,
     multi_or_decoys_per_bhk: usize,
     regional_inventory: bool,
@@ -733,6 +736,10 @@ impl MockSearchFixture {
                 multi_or_decoys_per_bhk: 24,
                 ..FixtureProfile::default()
             },
+            FixtureKind::Proximity => FixtureProfile {
+                derive_proximity: true,
+                ..FixtureProfile::default()
+            },
             FixtureKind::Regional => FixtureProfile {
                 regional_inventory: true,
                 ..FixtureProfile::default()
@@ -748,6 +755,17 @@ impl MockSearchFixture {
         builder.add_place("Manipal Hospital Whitefield", "hospital", 12.9690, 77.7340);
         builder.add_place("Bagmane Tech Park", "tech_park", 12.9800, 77.6600);
         builder.add_place("Gopalan National School", "school", 12.9500, 77.6400);
+        builder.add_place("Cult Fitness Club", "fitness", 12.9910, 77.7160);
+        builder.add_fact(
+            "place:cult-fitness-club",
+            "place.types",
+            FactValue::Tags(vec![
+                "fitness_center".to_string(),
+                "gym".to_string(),
+                "health".to_string(),
+                "school".to_string(),
+            ]),
+        );
         builder.add_place("Mock Metro Station", "metro", 12.8500, 77.6000);
         if profile.regional_inventory {
             add_regional_inventory(&mut builder);
@@ -1071,7 +1089,7 @@ impl MockSearchFixture {
             77.5800,
         ));
 
-        builder.build()
+        builder.build(profile.derive_proximity)
     }
 
     fn search(&self, query: &str) -> ObservedSearch {
@@ -1191,6 +1209,14 @@ impl MockSearchFixture {
                                     .proof_focuses
                                     .iter()
                                     .filter_map(|focus| focus.matched_label.clone())
+                                    .chain(
+                                        result
+                                            .match_explanation
+                                            .as_ref()
+                                            .into_iter()
+                                            .flat_map(|explanation| &explanation.reasons)
+                                            .map(|reason| reason.display.clone()),
+                                    )
                                     .collect(),
                                 proof_distances_m: result
                                     .proof_focuses
@@ -1351,7 +1377,17 @@ impl FixtureBuilder {
         });
     }
 
-    fn build(self) -> MockSearchFixture {
+    fn build(mut self, derive_proximity: bool) -> MockSearchFixture {
+        let mut edges = Vec::new();
+        if derive_proximity {
+            let base_index =
+                ServingFactIndex::from_records(self.facts.clone(), self.metadata.clone());
+            let derived = derive_proximity_records(&self.entities, &base_index, &[])
+                .expect("controlled proximity facts derive from config");
+            self.facts.extend(derived.facts);
+            self.metadata.extend(derived.search_metadata);
+            edges = derived.edges;
+        }
         let fact_index = ServingFactIndex::from_records(self.facts.clone(), self.metadata);
         let entity_alias_index = ServingEntityAliasIndex::default();
         let temp_dir = tempdir().expect("temporary Tantivy directory");
@@ -1390,7 +1426,7 @@ impl FixtureBuilder {
             },
             entities: self.entities,
             entity_alias_index,
-            edges: Vec::new(),
+            edges,
             graph_index: GraphIndex::default(),
             recall_index,
             fact_index,

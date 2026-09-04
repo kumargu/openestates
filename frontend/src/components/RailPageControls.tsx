@@ -1,35 +1,43 @@
 type RailPageControlsProps = {
-  page: number;
-  pageCount: number;
-  onPageChange: (page: number) => void;
+  canPrevious: boolean;
+  canNext: boolean;
+  rangeStart: number;
+  rangeEnd: number;
+  total: number;
+  onPrevious: () => void;
+  onNext: () => void;
   label: string;
 };
 
 export function RailPageControls({
-  page,
-  pageCount,
-  onPageChange,
+  canPrevious,
+  canNext,
+  rangeStart,
+  rangeEnd,
+  total,
+  onPrevious,
+  onNext,
   label,
 }: RailPageControlsProps) {
-  if (pageCount <= 1) return null;
+  if (!canPrevious && !canNext) return null;
 
   return (
     <div className="property-rail-controls" aria-label={label}>
       <button
         type="button"
-        onClick={() => onPageChange(Math.max(0, page - 1))}
-        disabled={page === 0}
+        onClick={onPrevious}
+        disabled={!canPrevious}
         aria-label="Previous homes"
       >
         <Chevron direction="prev" />
       </button>
-      <span>
-        {page + 1} / {pageCount}
+      <span aria-live="polite">
+        {rangeStart === rangeEnd ? rangeStart : `${rangeStart}\u2013${rangeEnd}`} of {total}
       </span>
       <button
         type="button"
-        onClick={() => onPageChange(Math.min(pageCount - 1, page + 1))}
-        disabled={page >= pageCount - 1}
+        onClick={onNext}
+        disabled={!canNext}
         aria-label="Next homes"
       >
         <Chevron direction="next" />

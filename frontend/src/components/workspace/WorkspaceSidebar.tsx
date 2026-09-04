@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useRef, useState } from "react";
+import type { KeyboardEvent, PointerEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import type { PropertyCard } from "../../lib/types.ts";
 import { useNotebook } from "../../hooks/useNotebook.ts";
 import {
@@ -7,31 +8,40 @@ import {
   type WorkspaceView,
 } from "../../lib/workspaceNav.ts";
 import { BrandMark } from "../brand/BrandMark.tsx";
-import { requestDiscoveryReturn } from "../../lib/navigationContext.ts";
+import {
+  readSearchJourneyNotForMeIds,
+  requestDiscoveryReturn,
+  requestSearchSpanReturn,
+  searchSpanReturnDelta,
+  writeSearchJourneyNotForMeIds,
+} from "../../lib/navigationContext.ts";
+import type { PropertySearchContext } from "../../lib/navigationContext.ts";
 import { PUBLIC_BRAND_NAME } from "../../lib/brand.ts";
+import { PropertySearchPanel } from "../property/PropertySearchRail.tsx";
 
 type WorkspaceIconName =
   | "back"
   | "browse"
   | "listing"
   | "notebook"
-  | "compare"
   | "rera"
-  | "plan"
-  | "saved";
+  | "plan";
 
 type WorkspaceSidebarProps = {
   homes: PropertyCard[];
-  compareIds: string[];
   focusedId: string;
   activeView: WorkspaceView;
-  collapsed: boolean;
-  reduced: boolean;
   mode: "discovery" | "property-context" | "workspace";
   discoveryHref: string;
   discoveryResultCount?: number;
   hasDiscoveryContext: boolean;
-  onToggle: () => void;
+  searchContext: PropertySearchContext | null;
+  width: number;
+  minWidth: number;
+  maxWidth: number;
+  onResizeStart: () => void;
+  onResize: (width: number) => void;
+  onResizeEnd: (width: number) => void;
   onFocus: (propertyId: string) => void;
   onRemove: (propertyId: string) => void;
 };
@@ -87,14 +97,6 @@ function WorkspaceIcon({
       </svg>
     );
   }
-  if (name === "compare") {
-    return (
-      <svg {...common}>
-        <rect x="3.5" y="5" width="7" height="14" rx="1.4" />
-        <rect x="13.5" y="5" width="7" height="14" rx="1.4" />
-      </svg>
-    );
-  }
   if (name === "rera") {
     return (
       <svg {...common}>
@@ -134,36 +136,24 @@ function homeStateHint(home: PropertyCard): string | null {
   return home.home_state_display || home.project_status_display || null;
 }
 
-export function WorkspaceSidebar({
+type SavedHomesPanelProps = {
+  homes: PropertyCard[];
+  focusedId: string;
+  mode: "discovery" | "property-context" | "workspace";
+  onFocus: (propertyId: string) => void;
+  onRemove: (propertyId: string) => void;
+};
+
+function SavedHomesPanel({
   homes,
-  compareIds,
   focusedId,
-  activeView,
-  collapsed,
-  reduced,
   mode,
-  discoveryHref,
-  discoveryResultCount,
-  hasDiscoveryContext,
-  onToggle,
   onFocus,
   onRemove,
-}: WorkspaceSidebarProps) {
-  const focusedHome = homes.find((home) => home.id === focusedId);
-  const navItems = workspaceNavItems(focusedId, activeView, {
-    mode,
-    discoveryHref,
-    discoveryResultCount,
-    hasDiscoveryContext,
-    compareIds,
-  });
+}: SavedHomesPanelProps) {
   const [showAllHomes, setShowAllHomes] = useState(false);
-  const { notes } = useNotebook();
-  const noteCount = notes.length;
-  const shortlistHomes = mode === "property-context"
-    ? homes.filter((home) => home.id !== focusedId)
-    : homes;
-  const previewHomes = shortlistHomes.slice(0, 4);
+  const focusedHome = homes.find((home) => home.id === focusedId);
+  const previewHomes = homes.slice(0, 4);
   if (
     mode !== "property-context"
     && focusedHome
@@ -171,16 +161,215 @@ export function WorkspaceSidebar({
   ) {
     previewHomes[previewHomes.length - 1] = focusedHome;
   }
-  const visibleHomes = showAllHomes ? shortlistHomes : previewHomes;
+  const visibleHomes = showAllHomes ? homes : previewHomes;
+
+  return (
+    <div className="workspace-sidebar__saved-panel">
+      <div className="workspace-sidebar__shortlist-list">
+        {visibleHomes.length === 0 ? (
+          <div className="workspace-sidebar__empty">
+            <strong>
+              {mode === "property-context"
+                ? "No other saved homes"
+                : "No saved homes yet"}
+            </strong>
+            <p>Save another home to compare.</p>
+          </div>
+        ) : null}
+        {visibleHomes.map((home) => {
+          const name = societyLabel(home);
+          const state = homeStateHint(home);
+          return (
+            <div
+              key={home.id}
+              className={`workspace-sidebar__home${home.id === focusedId ? " is-active" : ""}`}
+            >
+              <button
+                type="button"
+                className="workspace-sidebar__home-open"
+                title={name}
+                onClick={() => onFocus(home.id)}
+              >
+                <strong>{name}</strong>
+                <span>
+                  {[home.area, home.bhk > 0 ? `${home.bhk}BHK` : null]
+                    .filter(Boolean)
+                    .join(" · ")} · {formatCompactPrice(home.price)}
+                </span>
+                {state ? <em>{state}</em> : null}
+              </button>
+              <button
+                type="button"
+                className="workspace-sidebar__home-remove"
+                aria-label={`Remove ${name} from shortlist`}
+                title="Remove"
+                onClick={() => onRemove(home.id)}
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {homes.length > previewHomes.length ? (
+        <button
+          type="button"
+          className="workspace-sidebar__shortlist-toggle"
+          aria-expanded={showAllHomes}
+          onClick={() => setShowAllHomes((current) => !current)}
+        >
+          {showAllHomes ? "Show fewer" : "More saved homes"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+export function WorkspaceSidebar({
+  homes,
+  focusedId,
+  activeView,
+  mode,
+  discoveryHref,
+  discoveryResultCount,
+  hasDiscoveryContext,
+  searchContext,
+  width,
+  minWidth,
+  maxWidth,
+  onResizeStart,
+  onResize,
+  onResizeEnd,
+  onFocus,
+  onRemove,
+}: WorkspaceSidebarProps) {
+  const resizeStartRef = useRef<{
+    pointerId: number;
+    pointerX: number;
+    width: number;
+    latestWidth: number;
+  } | null>(null);
+  const [resizing, setResizing] = useState(false);
+  const navigate = useNavigate();
+  const navItems = workspaceNavItems(focusedId, activeView, {
+    discoveryHref,
+    discoveryResultCount: searchContext ? undefined : discoveryResultCount,
+    hasDiscoveryContext,
+    propertySearchContext: searchContext,
+  });
+  const [preferredPanel, setPreferredPanel] = useState<"search" | "saved">(
+    () => searchContext && searchContext.selectedId !== focusedId ? "saved" : "search",
+  );
+  const [, refreshSearchView] = useState(0);
+  const [lastNotForMe, setLastNotForMe] = useState<{
+    contextId: string;
+    propertyId: string;
+  } | null>(null);
+  const { notes } = useNotebook();
+  const noteCount = notes.length;
+  const savedHomes = mode === "property-context"
+    ? homes.filter((home) => home.id !== focusedId)
+    : homes;
+  const savedHomeCount = homes.length;
+  const activePanel = searchContext && preferredPanel === "search"
+    ? "search"
+    : "saved";
+  const notForMePropertyIds = readSearchJourneyNotForMeIds(searchContext);
+  const notForMeIdSet = new Set(notForMePropertyIds);
+  const canUndoNotForMe = Boolean(
+    searchContext
+    && lastNotForMe?.contextId === searchContext.id
+    && notForMeIdSet.has(lastNotForMe.propertyId),
+  );
+
+  function markSearchResultNotForMe(propertyId: string) {
+    if (!searchContext || propertyId === searchContext.selectedId) return;
+    writeSearchJourneyNotForMeIds(searchContext, [
+      ...notForMePropertyIds,
+      propertyId,
+    ]);
+    refreshSearchView((revision) => revision + 1);
+    setLastNotForMe({ contextId: searchContext.id, propertyId });
+  }
+
+  function undoSearchResultNotForMe() {
+    if (!searchContext || lastNotForMe?.contextId !== searchContext.id) return;
+    writeSearchJourneyNotForMeIds(
+      searchContext,
+      notForMePropertyIds.filter((id) => id !== lastNotForMe.propertyId),
+    );
+    refreshSearchView((revision) => revision + 1);
+    setLastNotForMe(null);
+  }
+
+  function resizeWidthFromPointer(clientX: number): number {
+    const start = resizeStartRef.current;
+    return start ? start.width + clientX - start.pointerX : width;
+  }
+
+  function startResize(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeStartRef.current = {
+      pointerId: event.pointerId,
+      pointerX: event.clientX,
+      width,
+      latestWidth: width,
+    };
+    setResizing(true);
+    onResizeStart();
+  }
+
+  function moveResize(event: PointerEvent<HTMLDivElement>) {
+    if (resizeStartRef.current?.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const nextWidth = resizeWidthFromPointer(event.clientX);
+    resizeStartRef.current.latestWidth = nextWidth;
+    onResize(nextWidth);
+  }
+
+  function finishResize(event: PointerEvent<HTMLDivElement>) {
+    if (resizeStartRef.current?.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const nextWidth = resizeWidthFromPointer(event.clientX);
+    resizeStartRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setResizing(false);
+    onResizeEnd(nextWidth);
+  }
+
+  function cancelResize(event: PointerEvent<HTMLDivElement>) {
+    const start = resizeStartRef.current;
+    if (start?.pointerId !== event.pointerId) return;
+    resizeStartRef.current = null;
+    setResizing(false);
+    onResizeEnd(start.latestWidth);
+  }
+
+  function resizeWithKeyboard(event: KeyboardEvent<HTMLDivElement>) {
+    const step = event.shiftKey ? 24 : 8;
+    let nextWidth: number | null = null;
+    if (event.key === "ArrowLeft") nextWidth = width - step;
+    else if (event.key === "ArrowRight") nextWidth = width + step;
+    else if (event.key === "Home") nextWidth = minWidth;
+    else if (event.key === "End") nextWidth = maxWidth;
+    if (nextWidth === null) return;
+    event.preventDefault();
+    onResize(nextWidth);
+    onResizeEnd(nextWidth);
+  }
 
   return (
     <aside
-      className={`workspace-sidebar workspace-sidebar--${mode}${collapsed ? " workspace-sidebar--collapsed" : ""}${reduced ? " workspace-sidebar--reduced" : ""}`}
+      className={`workspace-sidebar workspace-sidebar--${mode}${resizing ? " workspace-sidebar--resizing" : ""}`}
     >
       <div className="workspace-sidebar__brand-row">
         <Link to="/" className="workspace-sidebar__brand" aria-label={`${PUBLIC_BRAND_NAME} home`}>
           <BrandMark size={28} className="workspace-sidebar__mark" />
-          {!collapsed && <strong>{PUBLIC_BRAND_NAME}</strong>}
+          <strong>{PUBLIC_BRAND_NAME}</strong>
         </Link>
       </div>
 
@@ -221,8 +410,17 @@ export function WorkspaceSidebar({
               className={`workspace-sidebar__nav-item${item.active ? " is-active" : ""}${isDiscoveryReturn ? " workspace-sidebar__nav-item--discovery-return" : ""}`}
               aria-current={item.active ? "page" : undefined}
               title={title}
-              onClick={() => {
-                if (item.view === "browse") requestDiscoveryReturn(item.to);
+              onClick={(event) => {
+                if (item.view !== "browse") return;
+                if (!searchContext) {
+                  requestDiscoveryReturn(item.to);
+                  return;
+                }
+                event.preventDefault();
+                requestSearchSpanReturn(searchContext);
+                const delta = searchSpanReturnDelta(searchContext);
+                if (delta !== null) navigate(delta);
+                else navigate(searchContext.returnUrl, { replace: true });
               }}
             >
               {body}
@@ -231,100 +429,73 @@ export function WorkspaceSidebar({
         })}
       </nav>
 
-      {!collapsed && (
-        <section
-          className="workspace-sidebar__shortlist"
-          aria-labelledby="workspace-shortlist-title"
-        >
-          <div className="workspace-sidebar__shortlist-head">
-            <h2 id="workspace-shortlist-title">
-              {mode === "property-context" ? "Other saved homes" : "Shortlist"}
-            </h2>
-            <span>{shortlistHomes.length}</span>
-          </div>
-          <div className="workspace-sidebar__shortlist-list">
-            {visibleHomes.length === 0 && (
-              <div className="workspace-sidebar__empty">
-                <strong>
-                  {mode === "property-context"
-                    ? "No other saved homes"
-                    : "Your shortlist is empty"}
-                </strong>
-                <p>Save another home to compare.</p>
-              </div>
-            )}
-            {visibleHomes.map((home) => {
-              const name = societyLabel(home);
-              const state = homeStateHint(home);
-              return (
-                <div
-                  key={home.id}
-                  className={`workspace-sidebar__home${home.id === focusedId ? " is-active" : ""}`}
-                >
-                  <button
-                    type="button"
-                    className="workspace-sidebar__home-open"
-                    title={name}
-                    onClick={() => onFocus(home.id)}
-                  >
-                    <strong>{name}</strong>
-                    <span>
-                      {[home.area, home.bhk > 0 ? `${home.bhk}BHK` : null]
-                        .filter(Boolean)
-                        .join(" · ")} · {formatCompactPrice(home.price)}
-                    </span>
-                    {state && <em>{state}</em>}
-                  </button>
-                  <button
-                    type="button"
-                    className="workspace-sidebar__home-remove"
-                    aria-label={`Remove ${name} from shortlist`}
-                    title="Remove"
-                    onClick={() => onRemove(home.id)}
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          {shortlistHomes.length > previewHomes.length && (
+      <section
+        className="workspace-sidebar__shortlist"
+        aria-label={searchContext ? "Search and saved homes" : "Saved homes"}
+      >
+        {searchContext ? (
+          <div className="workspace-sidebar__panel-tabs" role="group" aria-label="Home lists">
             <button
               type="button"
-              className="workspace-sidebar__shortlist-toggle"
-              aria-expanded={showAllHomes}
-              onClick={() => setShowAllHomes((current) => !current)}
+              aria-pressed={activePanel === "search"}
+              onClick={() => setPreferredPanel("search")}
             >
-              {showAllHomes ? "Show fewer" : "… More"}
+              Search
             </button>
-          )}
-        </section>
-      )}
+            <button
+              type="button"
+              aria-pressed={activePanel === "saved"}
+              onClick={() => setPreferredPanel("saved")}
+            >
+              Saved <span>{savedHomeCount}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="workspace-sidebar__section-title">
+            <span>Saved homes</span>
+            <strong>{savedHomes.length}</strong>
+          </div>
+        )}
 
-      <div className="workspace-sidebar__footer">
-        <button
-          type="button"
-          className={`workspace-sidebar__nav-item workspace-sidebar__saved${collapsed ? "" : " is-open"}`}
-          aria-label={
-            reduced
-              ? "Save a home to open the shortlist"
-              : collapsed
-                ? "Show saved homes"
-                : "Hide saved homes"
-          }
-          aria-expanded={!collapsed}
-          disabled={reduced}
-          onClick={onToggle}
-        >
-          <span className="workspace-sidebar__nav-icon">
-            <WorkspaceIcon name="saved" />
-            {homes.length > 0 ? (
-              <em className="workspace-sidebar__nav-badge">{homes.length}</em>
-            ) : null}
-          </span>
-          <span className="workspace-sidebar__nav-label">Saved</span>
-        </button>
-      </div>
+        {activePanel === "search" && searchContext ? (
+          <div className="workspace-sidebar__context-panel">
+            <PropertySearchPanel
+              context={searchContext}
+              notForMeIds={notForMeIdSet}
+              onMarkNotForMe={markSearchResultNotForMe}
+              canUndoNotForMe={canUndoNotForMe}
+              onUndoNotForMe={undoSearchResultNotForMe}
+              onSelect={onFocus}
+            />
+          </div>
+        ) : (
+          <div className="workspace-sidebar__context-panel">
+            <SavedHomesPanel
+              homes={savedHomes}
+              focusedId={focusedId}
+              mode={mode}
+              onFocus={onFocus}
+              onRemove={onRemove}
+            />
+          </div>
+        )}
+      </section>
+
+      <div
+        className="workspace-sidebar__resize-handle"
+        role="separator"
+        aria-label="Resize workspace sidebar"
+        aria-orientation="vertical"
+        aria-valuemin={minWidth}
+        aria-valuemax={maxWidth}
+        aria-valuenow={width}
+        tabIndex={0}
+        onPointerDown={startResize}
+        onPointerMove={moveResize}
+        onPointerUp={finishResize}
+        onPointerCancel={cancelResize}
+        onKeyDown={resizeWithKeyboard}
+      />
     </aside>
   );
 }

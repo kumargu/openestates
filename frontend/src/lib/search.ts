@@ -6,52 +6,10 @@
 
 import type { MatchReason, SearchResultItem, SearchSourceSpan } from "./types.ts";
 
-export type MatchLabel =
-  | "Strong match"
-  | "Good match"
-  | "Partial match"
-  | "Partial fit"
-  | "Value pick"
-  | "Premium match"
-  | "Candidate"
-  | "Similar profile";
-
-export interface MatchResult {
-  label: MatchLabel;
-  reason: string;
-}
-
-export function searchResultsAnnouncement(
-  query: string,
-  eligibleCount: number,
-  returnedCount: number,
-  guidanceMode?: string | null,
-): string {
-  if (returnedCount > eligibleCount) {
-    const resultKind = guidanceMode === "named_society_alternatives"
-      ? "alternatives"
-      : "broader matches";
-    return `No exact matches for "${query}". Showing ${returnedCount} ${resultKind}.`;
-  }
-  if (returnedCount < eligibleCount) {
-    return `Showing ${returnedCount} of ${eligibleCount} eligible properties for "${query}".`;
-  }
-  return `${eligibleCount} ${eligibleCount === 1 ? "property" : "properties"} found for "${query}".`;
-}
-
-/** Avoid repeating parsed search filters on every result card. */
-export function isGenericFilterReason(reason: string): boolean {
-  const distinctive = extractDistinctiveMatchParts(reason);
-  return distinctive.length === 0;
-}
-
 function extractDistinctiveMatchParts(reason: string): string[] {
   const trimmed = reason.trim();
   if (!trimmed) return [];
   if (/^near\s+/i.test(trimmed) && !/^matches\s+/i.test(trimmed)) {
-    return [trimmed];
-  }
-  if (!/^matches\s+/i.test(trimmed)) {
     return [trimmed];
   }
 
@@ -129,9 +87,11 @@ export function searchResultReasonLabels(
     pushUniqueLabel(labels, label);
     if (labels.length >= 2) return labels;
   }
+  if (labels.length > 0) return labels;
 
   const displayReason = displayMatchReason(result.match_reason);
   for (const part of splitLabelParts(displayReason ?? "")) {
+    if (isRequestedBhkClause(part) || /^under\s+/i.test(part)) continue;
     if (isNameOnlyReason(part, result)) continue;
     const label = compactReasonPart(part);
     if (isAreaRestatingLabel(label, result)) continue;

@@ -18,7 +18,7 @@ use super::parquet::{
     write_edges_parquet, write_entities_parquet, write_entity_aliases_parquet, write_facts_parquet,
     write_rera_evidence_parquet, write_search_metadata_parquet, ParquetWriteError,
 };
-use super::proximity::derive_proximity_records;
+use super::proximity::{derive_proximity_records, remove_derived_proximity_records};
 use super::tantivy_index::{TantivyIndexError, TantivyRecallIndex};
 use super::{
     materialize_society_aliases, unique_society_aliases, BundleArtifact, BundleArtifactKind,
@@ -108,13 +108,14 @@ impl ServingBundleBuilder {
     pub async fn build_child_from_serving_records_with_rera(
         &self,
         mut entities: Vec<ServingEntityRecord>,
-        facts: Vec<ServingFactRecord>,
-        search_metadata: Vec<ServingSearchMetadataRecord>,
-        edges: Vec<ServingEdgeRecord>,
+        mut facts: Vec<ServingFactRecord>,
+        mut search_metadata: Vec<ServingSearchMetadataRecord>,
+        mut edges: Vec<ServingEdgeRecord>,
         rera_evidence: Vec<ServingReraEvidenceRecord>,
         known_excluded_rera_evidence_society_ids: Vec<String>,
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
+        remove_derived_proximity_records(&mut facts, &mut search_metadata, &mut edges);
         rebuild_serving_entity_searchable_text(&mut entities, &facts);
         self.build_from_serving_records(
             entities,
@@ -124,7 +125,7 @@ impl ServingBundleBuilder {
             rera_evidence,
             known_excluded_rera_evidence_society_ids,
             bundle_version,
-            false,
+            true,
         )
         .await
     }

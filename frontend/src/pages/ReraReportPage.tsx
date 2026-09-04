@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Helmet } from "react-helmet-async";
 import { Link, useParams } from "react-router-dom";
 import { PageState } from "../components/PageState.tsx";
+import { PageTitle } from "../components/PageTitle.tsx";
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
+import { useSearchSpan } from "../components/workspace/SearchSpanContext.ts";
 import { getProperty, getPropertyRera } from "../lib/api.ts";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
+import { propertyHrefWithSearchSpan } from "../lib/navigationContext.ts";
 import { backendUrl } from "../lib/runtimeConfig.ts";
 import {
   claimValueText,
@@ -103,7 +105,6 @@ function ReraRecordHeader({
   return (
     <header className="rera-record-header">
       <div className="rera-record-header__actions">
-        <Link to={`/property/${encodeURIComponent(propertyId)}`}><span aria-hidden="true">←</span> Property</Link>
         <div>
           <SaveHeartButton propertyId={propertyId} label="Save record" />
           {model.registryUrl && (
@@ -489,6 +490,7 @@ function builderProjectState(project: BuilderProjectRecord): string {
 }
 
 function BuilderRecord({ portfolio }: { portfolio?: BuilderPortfolio }) {
+  const searchSpan = useSearchSpan();
   const [expanded, setExpanded] = useState(false);
   const otherProjects = portfolio?.projects.filter((project) => !project.current) ?? [];
   if (!portfolio || otherProjects.length === 0) return null;
@@ -500,7 +502,7 @@ function BuilderRecord({ portfolio }: { portfolio?: BuilderPortfolio }) {
         {visibleProjects.map((project) => (
           <li key={`${project.property_id}:${project.rera_number ?? project.project_name}`}>
             <div className="rera-builder-index__identity">
-              <Link to={`/property/${encodeURIComponent(project.property_id)}`}>{project.project_name}</Link>
+              <Link to={propertyHrefWithSearchSpan(project.property_id, searchSpan)}>{project.project_name}</Link>
               <span>{project.area}</span>
               {project.rera_number && <small>{project.rera_number}</small>}
             </div>
@@ -970,10 +972,8 @@ function ReraReportContent({ id }: { id: string }) {
 
   return (
     <main className="page-container-wide rera-report-page">
-      <Helmet>
-        <title>{title} RERA | {PUBLIC_BRAND_NAME}</title>
-        <meta name="description" content={`Filed project details for ${title}.`} />
-      </Helmet>
+      <PageTitle title={`${title} RERA | ${PUBLIC_BRAND_NAME}`} />
+      <meta name="description" content={`Filed project details for ${title}.`} />
       <ReraRecordHeader
         propertyId={id}
         title={title}

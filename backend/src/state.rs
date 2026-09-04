@@ -400,11 +400,18 @@ mod tests {
     }
 
     fn zero_result_output(query: &str) -> CachedSearchOutput {
+        let version = version_key("test-bundle");
         CachedSearchOutput {
             response: Arc::new(SearchResponse {
                 query: query.to_string(),
                 result_sets: Vec::new(),
+                ordered_result_ids: Vec::new(),
                 total_matches: 0,
+                runtime_version: crate::search::SearchRuntimeVersion {
+                    serving_bundle_version: version.serving_bundle_version,
+                    scoring_policy_version: version.scoring_policy_version,
+                    search_engine_version: version.search_engine_version,
+                },
                 area_context: None,
                 state: "no_matches".to_string(),
                 search_guidance: None,

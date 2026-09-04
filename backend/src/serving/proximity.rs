@@ -241,6 +241,32 @@ pub fn derive_proximity_records(
     Ok(output)
 }
 
+pub(crate) fn remove_derived_proximity_records(
+    facts: &mut Vec<ServingFactRecord>,
+    search_metadata: &mut Vec<ServingSearchMetadataRecord>,
+    edges: &mut Vec<ServingEdgeRecord>,
+) {
+    let derived_pairs = facts
+        .iter()
+        .filter(|fact| fact.model.as_deref() == Some(DERIVED_MODEL))
+        .map(|fact| (fact.entity_id.clone(), fact.fact_key.clone()))
+        .collect::<HashSet<_>>();
+    let source_pairs = facts
+        .iter()
+        .filter(|fact| fact.model.as_deref() != Some(DERIVED_MODEL))
+        .map(|fact| (fact.entity_id.clone(), fact.fact_key.clone()))
+        .collect::<HashSet<_>>();
+    facts.retain(|fact| fact.model.as_deref() != Some(DERIVED_MODEL));
+    search_metadata.retain(|metadata| {
+        let pair = (metadata.entity_id.clone(), metadata.fact_key.clone());
+        !derived_pairs.contains(&pair) || source_pairs.contains(&pair)
+    });
+    edges.retain(|edge| {
+        !(edge.edge_type.eq_ignore_ascii_case(NEAR_PLACE_EDGE)
+            && edge.source_type.eq_ignore_ascii_case(DERIVED_SOURCE_TYPE))
+    });
+}
+
 fn existing_near_place_edges(existing_edges: &[ServingEdgeRecord]) -> HashSet<(String, String)> {
     existing_edges
         .iter()
@@ -624,6 +650,16 @@ fn place_matches_category(place: &PlacePoint, category: &CategoryMatcher) -> boo
         .name_markers
         .iter()
         .any(|marker| contains_category_text(&place_name, marker));
+    let place_category = place.category.as_deref().map(normalize_category_key);
+
+    if let Some(place_category) = place_category.as_ref() {
+        let canonical_category_matches = category
+            .category_aliases
+            .iter()
+            .any(|alias| alias == place_category);
+        return canonical_category_matches
+            && (!category.require_name_marker || name_marker_match);
+    }
     if category.require_name_marker {
         return name_marker_match;
     }
@@ -633,17 +669,6 @@ fn place_matches_category(place: &PlacePoint, category: &CategoryMatcher) -> boo
         .iter()
         .map(|value| normalize_category_key(value))
         .collect::<HashSet<_>>();
-    let place_category = place.category.as_deref().map(normalize_category_key);
-
-    if let Some(place_category) = place_category.as_ref() {
-        if category
-            .category_aliases
-            .iter()
-            .any(|alias| alias == place_category)
-        {
-            return true;
-        }
-    }
     if category
         .accepted_place_types
         .iter()
@@ -996,6 +1021,55 @@ mod tests {
             &place_point("Cult Whitefield", &["gym"]),
             &matcher
         ));
+    }
+
+    #[test]
+    fn canonical_place_category_prevents_cross_family_derivation() {
+        let config = load_nearby_place_category_config().unwrap();
+        let school = config.category_for_fact_key("nearby_schools").unwrap();
+        let fitness = config.category_for_fact_key("nearby_fitness").unwrap();
+        let school_spec = proximity_fact_spec("nearby_schools", 5.0, None, Some(school)).unwrap();
+        let fitness_spec =
+            proximity_fact_spec("nearby_fitness", 5.0, None, Some(fitness)).unwrap();
+        let mut place = place_point(
+            "Cult Fitness Club",
+            &["fitness_center", "gym", "health", "school"],
+        );
+        place.category = Some("fitness".to_string());
+
+        assert!(place_matches_spec(&place, &fitness_spec));
+        assert!(!place_matches_spec(&place, &school_spec));
+    }
+
+    #[test]
+    fn removes_only_rebuildable_proximity_rows() {
+        let mut derived_fact = text("society:test", "nearby_schools", "Derived School");
+        derived_fact.model = Some(DERIVED_MODEL.to_string());
+        let source_fact = text("society:test", "nearby_schools", "Source School");
+        let mut facts = vec![derived_fact, source_fact];
+        let mut metadata = vec![ServingSearchMetadataRecord {
+            entity_id: "society:test".to_string(),
+            fact_key: "nearby_schools".to_string(),
+            display_template: None,
+            answers_preferences: vec!["school".to_string()],
+            scoring_direction: Some("TextMatch".to_string()),
+            scoring_weight: Some(1.0),
+            scoring_thresholds: Vec::new(),
+        }];
+        let mut edges = vec![ServingEdgeRecord {
+            from_entity_id: "society:test".to_string(),
+            edge_type: NEAR_PLACE_EDGE.to_string(),
+            to_entity_id: "place:test".to_string(),
+            confidence: 0.9,
+            source_type: DERIVED_SOURCE_TYPE.to_string(),
+        }];
+
+        remove_derived_proximity_records(&mut facts, &mut metadata, &mut edges);
+
+        assert_eq!(facts.len(), 1);
+        assert_eq!(facts[0].value_text.as_deref(), Some("Source School"));
+        assert_eq!(metadata.len(), 1);
+        assert!(edges.is_empty());
     }
 
     fn entity(id: &str, entity_type: &str, name: &str) -> ServingEntityRecord {

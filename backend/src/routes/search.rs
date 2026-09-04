@@ -12,7 +12,8 @@ use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::{KnowledgeGraph, SearchEvent};
 use crate::search::{
     guard_search_query, intent, no_results_guidance, schema, KnowledgeContext, SearchEngine,
-    SearchEvidenceGap, SearchResponse, SearchResultCard, SearchResultSet, SourcedClaim,
+    SearchEvidenceGap, SearchResponse, SearchResultCard, SearchResultSet, SearchRuntimeVersion,
+    SourcedClaim,
 };
 use crate::state::{
     AppState, CachedSearchOutput, SearchCacheKey, SearchCacheLookup, SearchLogMessage,
@@ -35,19 +36,22 @@ pub async fn search_properties(
     Query(params): Query<SearchQuery>,
 ) -> Result<Json<SearchResponse>, StatusCode> {
     let query = params.q.unwrap_or_default();
+    let snapshot = state.search_runtime.load_full();
+    let runtime_version = search_runtime_version(&snapshot);
 
     if query.trim().is_empty() {
         return Ok(Json(SearchResponse {
             query,
             result_sets: Vec::new(),
+            ordered_result_ids: Vec::new(),
             total_matches: 0,
+            runtime_version,
             area_context: None,
             state: "no_matches".to_string(),
             search_guidance: None,
         }));
     }
 
-    let snapshot = state.search_runtime.load_full();
     if let Some(guarded) = guard_search_query(&query) {
         if guarded_search_has_local_recall(&snapshot, &query, &guarded) {
             // A loaded project/society name can look like a bare noun phrase to
@@ -65,7 +69,9 @@ pub async fn search_properties(
             return Ok(Json(SearchResponse {
                 query,
                 result_sets: Vec::new(),
+                ordered_result_ids: Vec::new(),
                 total_matches: 0,
+                runtime_version,
                 area_context: None,
                 state: "no_matches".to_string(),
                 search_guidance: Some(guarded.guidance),
@@ -140,6 +146,11 @@ fn compute_search(
     let results = engine_output.results;
     let result_sets = engine_output.result_sets;
     let search_evidence_gaps = engine_output.evidence_gaps;
+    let ordered_result_ids = results
+        .iter()
+        .map(|result| result.card.id.clone())
+        .collect();
+    let runtime_version = search_runtime_version(&snapshot);
 
     // Look up area context if the intent identified an area.
     let area_context = parsed_intent.area.as_ref().and_then(|area_name| {
@@ -193,7 +204,9 @@ fn compute_search(
     let response = SearchResponse {
         query,
         result_sets,
+        ordered_result_ids,
         total_matches,
+        runtime_version,
         area_context,
         state: if total_matches == 0 {
             "no_matches".to_string()
@@ -205,6 +218,14 @@ fn compute_search(
     CachedSearchOutput {
         response: Arc::new(response),
         log_messages,
+    }
+}
+
+fn search_runtime_version(snapshot: &SearchRuntimeSnapshot) -> SearchRuntimeVersion {
+    SearchRuntimeVersion {
+        serving_bundle_version: snapshot.version_key.serving_bundle_version.clone(),
+        scoring_policy_version: snapshot.version_key.scoring_policy_version,
+        search_engine_version: snapshot.version_key.search_engine_version.clone(),
     }
 }
 
@@ -676,12 +697,22 @@ mod tests {
     use crate::knowledge::FactValue;
     use std::sync::atomic::{AtomicU64, Ordering};
 
+    fn test_runtime_version() -> SearchRuntimeVersion {
+        SearchRuntimeVersion {
+            serving_bundle_version: "test-bundle".to_string(),
+            scoring_policy_version: 1,
+            search_engine_version: "test-search".to_string(),
+        }
+    }
+
     #[test]
     fn buyer_response_exposes_result_sets_without_internal_search_state() {
         let response = SearchResponse {
             query: "3bhk whitefield".to_string(),
             result_sets: Vec::new(),
+            ordered_result_ids: Vec::new(),
             total_matches: 0,
+            runtime_version: test_runtime_version(),
             area_context: None,
             state: "no_matches".to_string(),
             search_guidance: None,
@@ -690,7 +721,9 @@ mod tests {
         let value = serde_json::to_value(response).expect("search response should serialize");
         assert_eq!(value["query"], "3bhk whitefield");
         assert_eq!(value["resultSets"], serde_json::json!([]));
+        assert_eq!(value["orderedResultIds"], serde_json::json!([]));
         assert_eq!(value["totalMatches"], 0);
+        assert_eq!(value["runtimeVersion"]["servingBundleVersion"], "test-bundle");
         assert_eq!(value["state"], "no_matches");
         assert!(value.get("searchGuidance").is_none());
         for internal in [
@@ -709,7 +742,9 @@ mod tests {
         let response = SearchResponse {
             query: "find me something good".to_string(),
             result_sets: Vec::new(),
+            ordered_result_ids: Vec::new(),
             total_matches: 0,
+            runtime_version: test_runtime_version(),
             area_context: None,
             state: "no_matches".to_string(),
             search_guidance: Some(crate::search::SearchGuidance {
@@ -788,7 +823,9 @@ mod tests {
         let response = SearchResponse {
             query: "3bhk whitefield".to_string(),
             result_sets: Vec::new(),
+            ordered_result_ids: Vec::new(),
             total_matches: 0,
+            runtime_version: test_runtime_version(),
             area_context: None,
             state: "no_matches".to_string(),
             search_guidance: None,

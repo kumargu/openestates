@@ -8,7 +8,8 @@ use backend::models::Property;
 use backend::search::geo::GeoSearchIndex;
 use backend::search::intent::parse_intent;
 use backend::search::{
-    CompiledQuery, SearchEngine, SearchIndex, SearchResponse, TextSearch, TextSearchRequest,
+    CompiledQuery, SearchEngine, SearchIndex, SearchResponse, SearchRuntimeVersion, TextSearch,
+    TextSearchRequest,
 };
 use backend::serving::{
     normalize_alias, LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest,
@@ -698,10 +699,17 @@ fn runtime_key(bundle_version: &str) -> RuntimeVersionKey {
 }
 
 fn empty_response(query: &str) -> SearchResponse {
+    let version = runtime_key("test-bundle");
     SearchResponse {
         query: query.to_string(),
         result_sets: Vec::new(),
+        ordered_result_ids: Vec::new(),
         total_matches: 0,
+        runtime_version: SearchRuntimeVersion {
+            serving_bundle_version: version.serving_bundle_version,
+            scoring_policy_version: version.scoring_policy_version,
+            search_engine_version: version.search_engine_version,
+        },
         area_context: None,
         state: "no_matches".to_string(),
         search_guidance: None,

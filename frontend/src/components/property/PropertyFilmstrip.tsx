@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
 import {
@@ -64,6 +65,7 @@ type Props = {
   galleryLabel?: string;
   onOpenGallery?: (activeFrameId: string) => void;
   onUsableFramesChange?: (frameIds: string[]) => void;
+  stageOverlay?: ReactNode;
 };
 
 function speedClass(speed: StoryPlaybackSpeed): string {
@@ -100,6 +102,7 @@ export function PropertyFilmstrip({
   galleryLabel,
   onOpenGallery,
   onUsableFramesChange,
+  stageOverlay,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [internalActive, setInternalActive] = useState(0);
@@ -303,7 +306,7 @@ export function PropertyFilmstrip({
       }${isReady ? " is-frame-ready" : ""}${
         cinematicMotion ? " property-filmstrip--cinematic" : ""
       }${cinematicMotion ? ` property-filmstrip--cinematic-${cinematicPace}` : ""
-      }${paused ? " is-paused" : ""}${
+      }${paused ? " is-paused" : ""}${stageOverlay ? " has-stage-overlay" : ""}${
         presentation === "stage" ? " property-filmstrip--stage" : ""
       }`}
       data-motion-theme={selectedTheme}
@@ -369,6 +372,12 @@ export function PropertyFilmstrip({
       </div>
 
       <div className="property-filmstrip__loading" aria-hidden="true" />
+
+      {stageOverlay ? (
+        <div className="property-filmstrip__stage-overlay">
+          {stageOverlay}
+        </div>
+      ) : null}
 
       {!reducedMotion && showPlaybackControl && (
         <button

@@ -27,6 +27,7 @@
 }
 
 .rera-record-header__actions {
+  justify-content: flex-end;
   padding-bottom: 0.85rem;
   border-bottom: 1px solid var(--color-border);
 }
@@ -47,12 +48,6 @@
   font-size: 0.78rem;
   font-weight: 720;
   text-decoration: none;
-}
-
-.rera-record-header__actions > a {
-  padding-left: 0;
-  border-color: transparent;
-  background: transparent;
 }
 
 .rera-record-header__actions > div > a {
