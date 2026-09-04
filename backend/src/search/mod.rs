@@ -10,6 +10,7 @@ pub mod intent;
 pub(crate) mod parser;
 pub(crate) mod query_plan;
 pub mod resolver;
+pub mod revision;
 pub mod schema;
 pub mod text;
 
@@ -25,6 +26,10 @@ pub use guard::{
 };
 pub use index::SearchIndex;
 pub use intent::{SearchIntent, SourceSpan};
+pub use revision::{
+    compile_search_revision, SearchRevision, SearchRevisionLimits, SearchRevisionOperation,
+    SearchRevisionOutcome,
+};
 pub use text::{TextSearch, TextSearchRequest};
 
 use serde::Serialize;

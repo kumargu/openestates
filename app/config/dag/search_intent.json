@@ -341,6 +341,34 @@
       "ranking_instruction_prefixes": ["rank only by", "rank", "choose"],
       "ranking_scope_end_markers": ["even if"],
       "scoped_exclusion_markers": ["unless"],
+      "revision_expand_prefixes": [
+        "also consider",
+        "also show",
+        "add as an alternative"
+      ],
+      "revision_continuity_prefixes": [
+        "keep the same search, but",
+        "keep the same search but",
+        "keep the same search",
+        "make it",
+        "and"
+      ],
+      "revision_switch_prefixes": [
+        "start over",
+        "forget that",
+        "instead"
+      ],
+      "revision_replace_markers": [
+        "matter more",
+        "matters more",
+        "prioritize"
+      ],
+      "revision_correction_prefixes": [
+        "i meant",
+        "change the",
+        "increase the",
+        "decrease the"
+      ],
       "shared_suffix_markers": [
         "but not",
         "but only",

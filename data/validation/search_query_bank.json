@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-08-23",
+  "generated_at": "2026-09-05",
   "description": "Single source of truth for controlled and live search queries. Suites select compatible case groups without splitting cases across files.",
   "case_groups": [
     {
@@ -60,6 +60,19 @@
         "Each case selects a reusable fixture profile and declares typed semantics plus buyer-visible result/proof expectations.",
         "The regional profile spans Whitefield, Sarjapur Road, and North Bengaluru with varied prices, configurations, lifecycle states, ratings, noise evidence, and named metro anchors.",
         "Entity names are controlled benchmark instances, never parser aliases or production hardcoding."
+      ]
+    },
+    {
+      "id": "controlled_journey",
+      "kind": "controlled",
+      "mode": "controlled_search_journeys",
+      "notes": [
+        "Journey turns reference controlled_product cases instead of copying resolved full queries or expected search behavior.",
+        "Every candidate revision executes through the same controlled SearchEngine fixture and expectation contract as its referenced atomic case.",
+        "Only the active revision affects ranking; prior revisions exist for consequence checks, undo, and checkpointing, not cumulative personalization.",
+        "The default experiment caps one active intent at eight explainable alternatives and twelve revisions before a checkpoint; three and eight are measured cohorts, while sixteen remains a power-user stress cohort until its explanations are proven usable.",
+        "The eight-branch sequence is a deliberate stress journey assembled from realistic turns, not a claim that buyers normally enumerate eight fully specified areas in one sitting.",
+        "Area-only follow-ups, task switches such as buy to rent, hard-constraint overwrite semantics, and checkpoint recovery remain explicit intent/architecture gaps before API or UI wiring."
       ]
     },
     {
@@ -125,6 +138,20 @@
       "runner": "rust_controlled",
       "case_groups": [
         "controlled_product"
+      ]
+    },
+    {
+      "id": "controlled_journey",
+      "runner": "rust_controlled_journey",
+      "limits": {
+        "max_active_branches": 8,
+        "max_revision_depth_before_checkpoint": 12,
+        "measured_branch_quality_cohorts": [3, 8],
+        "deferred_branch_stress_cohort": 16
+      },
+      "case_groups": [
+        "controlled_product",
+        "controlled_journey"
       ]
     },
     {
@@ -2584,7 +2611,7 @@
     {
       "id": "BUYER-LANG-009",
       "category": "review_paraphrase",
-      "query": "Ready 3BHK near Bagmane Tech Park under ₹2.4 Cr. People living there should genuinely rate it well.",
+      "query": "Ready 3BHK near Bagmane Tech Park under ₹2.4 Cr. Resident reviews matter more to me now.",
       "expected_semantics": {
         "bhk": 3,
         "budget_max": 24000000,
@@ -4031,6 +4058,399 @@
         "zero_results": true
       },
       "group": "unknown_project"
+    },
+    {
+      "id": "JOURNEY-ATOM-001",
+      "category": "journey_additive_ready_place_refinement",
+      "query": "Ready-to-move 3BHK in Hoodi near Bagmane Tech Park under ₹2.4 Cr",
+      "expected_semantics": {
+        "area": "Hoodi",
+        "bhk": 3,
+        "budget_max": 24000000,
+        "home_state": "ready_to_move",
+        "near": "Bagmane Tech Park"
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-godrej-air-3bhk"
+        ],
+        "excludes": [
+          "mock-bagmane-under-construction-3bhk",
+          "mock-hoodi-expensive-3bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-002",
+      "category": "journey_additive_quiet_refinement",
+      "query": "Ready-to-move quiet 3BHK in Hoodi near Bagmane Tech Park under ₹2.4 Cr",
+      "expected_semantics": {
+        "area": "Hoodi",
+        "bhk": 3,
+        "budget_max": 24000000,
+        "home_state": "ready_to_move",
+        "near": "Bagmane Tech Park",
+        "positive_preferences": [
+          "quiet neighborhood"
+        ]
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-godrej-air-3bhk"
+        ],
+        "excludes": [
+          "mock-bagmane-under-construction-3bhk",
+          "mock-hoodi-expensive-3bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-003",
+      "category": "journey_two_region_or_budgets",
+      "query": "Whitefield 2BHK under 1.6 Cr or Sarjapur Road 3BHK under 2 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "branches": [
+          {
+            "area": "Whitefield",
+            "bhk": 2,
+            "budget_max": 16000000
+          },
+          {
+            "area": "Sarjapur Road",
+            "bhk": 3,
+            "budget_max": 20000000
+          }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-whitefield-value-2bhk"
+          ],
+          [
+            "mock-sarjapur-family-3bhk"
+          ]
+        ],
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-004",
+      "category": "journey_four_area_alternatives",
+      "query": "Whitefield 2BHK under 1.6 Cr or Sarjapur Road 3BHK under 2 Cr or North Bengaluru 3BHK under 1.8 Cr or Bellandur 2BHK under 1.7 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "branches": [
+          { "area": "Whitefield", "bhk": 2, "budget_max": 16000000 },
+          { "area": "Sarjapur Road", "bhk": 3, "budget_max": 20000000 },
+          { "area": "North Bengaluru", "bhk": 3, "budget_max": 18000000 },
+          { "area": "Bellandur", "bhk": 2, "budget_max": 17000000 }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-whitefield-value-2bhk"],
+          ["mock-sarjapur-family-3bhk"],
+          ["mock-north-family-3bhk"],
+          ["mock-bellandur-value-2bhk"]
+        ],
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-005",
+      "category": "journey_five_area_alternatives",
+      "query": "Whitefield 2BHK under 1.6 Cr or Sarjapur Road 3BHK under 2 Cr or North Bengaluru 3BHK under 1.8 Cr or Bellandur 2BHK under 1.7 Cr or HSR Layout 3BHK under 2.5 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "branches": [
+          { "area": "Whitefield", "bhk": 2, "budget_max": 16000000 },
+          { "area": "Sarjapur Road", "bhk": 3, "budget_max": 20000000 },
+          { "area": "North Bengaluru", "bhk": 3, "budget_max": 18000000 },
+          { "area": "Bellandur", "bhk": 2, "budget_max": 17000000 },
+          { "area": "HSR Layout", "bhk": 3, "budget_max": 25000000 }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-whitefield-value-2bhk"],
+          ["mock-sarjapur-family-3bhk"],
+          ["mock-north-family-3bhk"],
+          ["mock-bellandur-value-2bhk"],
+          ["mock-hsr-family-3bhk"]
+        ],
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-006",
+      "category": "journey_six_area_alternatives",
+      "query": "Whitefield 2BHK under 1.6 Cr or Sarjapur Road 3BHK under 2 Cr or North Bengaluru 3BHK under 1.8 Cr or Bellandur 2BHK under 1.7 Cr or HSR Layout 3BHK under 2.5 Cr or Devanahalli 2BHK under 1.2 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "branches": [
+          { "area": "Whitefield", "bhk": 2, "budget_max": 16000000 },
+          { "area": "Sarjapur Road", "bhk": 3, "budget_max": 20000000 },
+          { "area": "North Bengaluru", "bhk": 3, "budget_max": 18000000 },
+          { "area": "Bellandur", "bhk": 2, "budget_max": 17000000 },
+          { "area": "HSR Layout", "bhk": 3, "budget_max": 25000000 },
+          { "area": "Devanahalli", "bhk": 2, "budget_max": 12000000 }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-whitefield-value-2bhk"],
+          ["mock-sarjapur-family-3bhk"],
+          ["mock-north-family-3bhk"],
+          ["mock-bellandur-value-2bhk"],
+          ["mock-hsr-family-3bhk"],
+          ["mock-devanahalli-value-2bhk"]
+        ],
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-007",
+      "category": "journey_seven_area_alternatives",
+      "query": "Whitefield 2BHK under 1.6 Cr or Sarjapur Road 3BHK under 2 Cr or North Bengaluru 3BHK under 1.8 Cr or Bellandur 2BHK under 1.7 Cr or HSR Layout 3BHK under 2.5 Cr or Devanahalli 2BHK under 1.2 Cr or Yelahanka 3BHK under 1.9 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "branches": [
+          { "area": "Whitefield", "bhk": 2, "budget_max": 16000000 },
+          { "area": "Sarjapur Road", "bhk": 3, "budget_max": 20000000 },
+          { "area": "North Bengaluru", "bhk": 3, "budget_max": 18000000 },
+          { "area": "Bellandur", "bhk": 2, "budget_max": 17000000 },
+          { "area": "HSR Layout", "bhk": 3, "budget_max": 25000000 },
+          { "area": "Devanahalli", "bhk": 2, "budget_max": 12000000 },
+          { "area": "Yelahanka", "bhk": 3, "budget_max": 19000000 }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-whitefield-value-2bhk"],
+          ["mock-sarjapur-family-3bhk"],
+          ["mock-north-family-3bhk"],
+          ["mock-bellandur-value-2bhk"],
+          ["mock-hsr-family-3bhk"],
+          ["mock-devanahalli-value-2bhk"],
+          ["mock-yelahanka-family-3bhk"]
+        ],
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-008",
+      "category": "journey_eight_area_alternatives",
+      "query": "Whitefield 2BHK under 1.6 Cr or Sarjapur Road 3BHK under 2 Cr or North Bengaluru 3BHK under 1.8 Cr or Bellandur 2BHK under 1.7 Cr or HSR Layout 3BHK under 2.5 Cr or Devanahalli 2BHK under 1.2 Cr or Yelahanka 3BHK under 1.9 Cr or Electronic City 2BHK under 1.1 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "branches": [
+          { "area": "Whitefield", "bhk": 2, "budget_max": 16000000 },
+          { "area": "Sarjapur Road", "bhk": 3, "budget_max": 20000000 },
+          { "area": "North Bengaluru", "bhk": 3, "budget_max": 18000000 },
+          { "area": "Bellandur", "bhk": 2, "budget_max": 17000000 },
+          { "area": "HSR Layout", "bhk": 3, "budget_max": 25000000 },
+          { "area": "Devanahalli", "bhk": 2, "budget_max": 12000000 },
+          { "area": "Yelahanka", "bhk": 3, "budget_max": 19000000 },
+          { "area": "Electronic City", "bhk": 2, "budget_max": 11000000 }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-whitefield-value-2bhk"],
+          ["mock-sarjapur-family-3bhk"],
+          ["mock-north-family-3bhk"],
+          ["mock-bellandur-value-2bhk"],
+          ["mock-hsr-family-3bhk"],
+          ["mock-devanahalli-value-2bhk"],
+          ["mock-yelahanka-family-3bhk"],
+          ["mock-electronic-city-value-2bhk"]
+        ],
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-REFINE-001",
+      "group": "controlled_journey",
+      "fixture": "buyer_language",
+      "initial_case_id": "BUYER-LANG-002",
+      "turns": [
+        {
+          "utterance": "Make it ready to move and near Bagmane Tech Park",
+          "operation": "refine",
+          "candidate_case_id": "JOURNEY-ATOM-001",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-001",
+          "candidate_effect": "same_membership"
+        },
+        {
+          "utterance": "And quieter",
+          "operation": "refine",
+          "candidate_case_id": "JOURNEY-ATOM-002",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-002",
+          "candidate_effect": "same_membership"
+        }
+      ]
+    },
+    {
+      "id": "JOURNEY-REPHRASE-001",
+      "group": "controlled_journey",
+      "fixture": "buyer_language",
+      "initial_case_id": "BUYER-LANG-002",
+      "turns": [
+        {
+          "utterance": "3 bedrooms in Hoodi costing no more than 2.4 crore",
+          "operation": "rephrase",
+          "candidate_case_id": "BUYER-LANG-018",
+          "outcome": "activate_candidate",
+          "active_case_id": "BUYER-LANG-018",
+          "candidate_effect": "same_order"
+        }
+      ]
+    },
+    {
+      "id": "JOURNEY-EXPAND-001",
+      "group": "controlled_journey",
+      "fixture": "regional",
+      "initial_case_id": "REGION-MIX-001",
+      "turns": [
+        {
+          "utterance": "Also consider 3BHK in Sarjapur Road under 2 Cr",
+          "operation": "expand",
+          "candidate_case_id": "JOURNEY-ATOM-003",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-003",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 3BHK in North Bengaluru under 1.8 Cr",
+          "operation": "expand",
+          "candidate_case_id": "REGION-MIX-007",
+          "outcome": "activate_candidate",
+          "active_case_id": "REGION-MIX-007",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 2BHK in Bellandur under 1.7 Cr",
+          "operation": "expand",
+          "candidate_case_id": "JOURNEY-ATOM-004",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-004",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 3BHK in HSR Layout under 2.5 Cr",
+          "operation": "expand",
+          "candidate_case_id": "JOURNEY-ATOM-005",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-005",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 2BHK in Devanahalli under 1.2 Cr",
+          "operation": "expand",
+          "candidate_case_id": "JOURNEY-ATOM-006",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-006",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 3BHK in Yelahanka under 1.9 Cr",
+          "operation": "expand",
+          "candidate_case_id": "JOURNEY-ATOM-007",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-007",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 2BHK in Electronic City under 1.1 Cr",
+          "operation": "expand",
+          "candidate_case_id": "JOURNEY-ATOM-008",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-008",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 3BHK in South Bengaluru under 2 Cr",
+          "operation": "expand",
+          "outcome": "require_checkpoint",
+          "active_case_id": "JOURNEY-ATOM-008"
+        }
+      ]
+    },
+    {
+      "id": "JOURNEY-CLARIFY-001",
+      "group": "controlled_journey",
+      "fixture": "regional",
+      "initial_case_id": "REGION-MIX-001",
+      "turns": [
+        {
+          "utterance": "Also consider another independent area",
+          "operation": "expand",
+          "outcome": "require_clarification",
+          "active_case_id": "REGION-MIX-001"
+        }
+      ]
+    },
+    {
+      "id": "JOURNEY-SWITCH-001",
+      "group": "controlled_journey",
+      "fixture": "regional",
+      "initial_case_id": "REGION-MIX-003",
+      "turns": [
+        {
+          "utterance": "3BHK in Sarjapur Road under 2 Cr",
+          "operation": "switch",
+          "candidate_case_id": "REGION-MIX-002",
+          "outcome": "activate_candidate",
+          "active_case_id": "REGION-MIX-002",
+          "candidate_effect": "different_membership"
+        }
+      ]
+    },
+    {
+      "id": "JOURNEY-ZERO-001",
+      "group": "controlled_journey",
+      "fixture": "buyer_language",
+      "initial_case_id": "BUYER-LANG-001",
+      "turns": [
+        {
+          "utterance": "Only 4BHK",
+          "operation": "refine",
+          "candidate_case_id": "BUYER-LANG-014",
+          "outcome": "preserve_parent",
+          "active_case_id": "BUYER-LANG-001",
+          "candidate_effect": "zero_results"
+        }
+      ]
+    },
+    {
+      "id": "JOURNEY-PREFERENCE-SHIFT-001",
+      "group": "controlled_journey",
+      "fixture": "buyer_language",
+      "initial_case_id": "BUYER-LANG-008",
+      "turns": [
+        {
+          "utterance": "Ready 3BHK near Bagmane Tech Park under ₹2.4 Cr. Resident reviews matter more to me now.",
+          "operation": "replace",
+          "candidate_case_id": "BUYER-LANG-009",
+          "outcome": "activate_candidate",
+          "active_case_id": "BUYER-LANG-009",
+          "candidate_effect": "same_membership"
+        }
+      ]
     }
   ]
 }

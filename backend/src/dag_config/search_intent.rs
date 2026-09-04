@@ -94,6 +94,16 @@ pub struct DiscourseParserConfig {
     pub ranking_scope_end_markers: Vec<String>,
     #[serde(default)]
     pub scoped_exclusion_markers: Vec<String>,
+    #[serde(default)]
+    pub revision_expand_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_continuity_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_switch_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_replace_markers: Vec<String>,
+    #[serde(default)]
+    pub revision_correction_prefixes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -337,6 +347,46 @@ fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
         config
             .discourse
             .scoped_exclusion_markers
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_expand_prefixes",
+        config
+            .discourse
+            .revision_expand_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_continuity_prefixes",
+        config
+            .discourse
+            .revision_continuity_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_switch_prefixes",
+        config
+            .discourse
+            .revision_switch_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_replace_markers",
+        config
+            .discourse
+            .revision_replace_markers
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_correction_prefixes",
+        config
+            .discourse
+            .revision_correction_prefixes
             .iter()
             .map(String::as_str),
     )?;

@@ -4,7 +4,10 @@ use backend::graph::GraphIndex;
 use backend::knowledge::FactValue;
 use backend::models::Property;
 use backend::search::geo::GeoSearchIndex;
-use backend::search::{SearchCapabilityIndex, SearchEngine, SearchIndex};
+use backend::search::{
+    compile_search_revision, SearchCapabilityIndex, SearchEngine, SearchIndex,
+    SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
+};
 use backend::serving::{
     derive_proximity_records, LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest,
     ServingEntityAliasIndex, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
@@ -16,6 +19,7 @@ use tempfile::tempdir;
 
 const SEARCH_QUERY_BANK: &str = include_str!("../../data/validation/search_query_bank.json");
 const CONTROLLED_SUITE_ID: &str = "controlled_product";
+const CONTROLLED_JOURNEY_SUITE_ID: &str = "controlled_journey";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -40,6 +44,7 @@ struct QuerySuite {
     id: String,
     runner: String,
     case_groups: Vec<String>,
+    limits: Option<JourneyLimits>,
 }
 
 #[derive(Deserialize)]
@@ -137,6 +142,67 @@ struct FixtureExpectation {
     required_proof_labels: HashMap<String, Vec<String>>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ControlledJourneyCase {
+    id: String,
+    #[serde(rename = "group")]
+    _group: String,
+    fixture: FixtureKind,
+    initial_case_id: String,
+    turns: Vec<JourneyTurn>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct JourneyTurn {
+    utterance: String,
+    operation: JourneyOperation,
+    candidate_case_id: Option<String>,
+    outcome: JourneyOutcome,
+    active_case_id: String,
+    candidate_effect: Option<CandidateEffect>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum JourneyOperation {
+    Refine,
+    Rephrase,
+    Expand,
+    Switch,
+    Replace,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum JourneyOutcome {
+    ActivateCandidate,
+    PreserveParent,
+    RequireClarification,
+    RequireCheckpoint,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum CandidateEffect {
+    Narrower,
+    SameMembership,
+    SameOrder,
+    AddsBranch,
+    DifferentMembership,
+    ZeroResults,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct JourneyLimits {
+    max_active_branches: usize,
+    max_revision_depth_before_checkpoint: usize,
+    measured_branch_quality_cohorts: Vec<usize>,
+    deferred_branch_stress_cohort: usize,
+}
+
 #[test]
 fn frozen_product_scenarios_execute_against_controlled_inventory() {
     let bank: SearchQueryBank =
@@ -177,7 +243,7 @@ fn frozen_product_scenarios_execute_against_controlled_inventory() {
                 .expect("controlled search case follows the typed contract")
         })
         .collect::<Vec<_>>();
-    assert_eq!(cases.len(), 52, "controlled bank size changed");
+    assert_eq!(cases.len(), 60, "controlled bank size changed");
 
     let unique_ids = cases
         .iter()
@@ -223,6 +289,346 @@ fn frozen_product_scenarios_execute_against_controlled_inventory() {
         }
         assert_controlled_expectation(case, &output);
     }
+}
+
+#[test]
+fn nested_journeys_reuse_atomic_cases_and_the_same_search_path() {
+    let bank: SearchQueryBank =
+        serde_json::from_str(SEARCH_QUERY_BANK).expect("unified search query bank is valid");
+    let suite = bank
+        .suites
+        .iter()
+        .find(|suite| suite.id == CONTROLLED_JOURNEY_SUITE_ID)
+        .expect("controlled journey suite is required");
+    assert_eq!(suite.runner, "rust_controlled_journey");
+    assert_eq!(
+        suite.case_groups,
+        [CONTROLLED_SUITE_ID, CONTROLLED_JOURNEY_SUITE_ID]
+    );
+    let limits = suite.limits.clone().expect("journey limits are required");
+    assert!(limits.max_active_branches > 1);
+    assert!(limits.max_revision_depth_before_checkpoint > 1);
+    assert_eq!(limits.measured_branch_quality_cohorts, [3, 8]);
+    assert_eq!(limits.deferred_branch_stress_cohort, 16);
+    assert_eq!(limits.max_active_branches, 8);
+
+    let atomic_cases = bank
+        .cases
+        .iter()
+        .filter(|case| {
+            case.get("group").and_then(serde_json::Value::as_str) == Some(CONTROLLED_SUITE_ID)
+        })
+        .map(|case| {
+            let parsed = serde_json::from_value::<ControlledQueryCase>(case.clone())
+                .expect("controlled search case follows the typed contract");
+            (parsed.id.clone(), parsed)
+        })
+        .collect::<HashMap<_, _>>();
+    let journeys = bank
+        .cases
+        .iter()
+        .filter(|case| {
+            case.get("group").and_then(serde_json::Value::as_str)
+                == Some(CONTROLLED_JOURNEY_SUITE_ID)
+        })
+        .map(|case| {
+            serde_json::from_value::<ControlledJourneyCase>(case.clone())
+                .expect("controlled journey follows the typed contract")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(journeys.len(), 7, "controlled journey bank size changed");
+
+    for journey in &journeys {
+        run_controlled_journey(journey, &atomic_cases, limits.clone());
+    }
+}
+
+fn run_controlled_journey(
+    journey: &ControlledJourneyCase,
+    atomic_cases: &HashMap<String, ControlledQueryCase>,
+    limits: JourneyLimits,
+) {
+    assert!(
+        journey.turns.len() + 1 <= limits.max_revision_depth_before_checkpoint,
+        "{} exceeds the revision checkpoint limit",
+        journey.id
+    );
+    let fixture = MockSearchFixture::for_kind(journey.fixture);
+    let mut active_case = atomic_case(atomic_cases, &journey.initial_case_id, journey);
+    assert_eq!(
+        active_case.fixture, journey.fixture,
+        "{} starts on a different fixture",
+        journey.id
+    );
+    let mut active_output = fixture.search(&active_case.query);
+    let mut active_query = active_case.query.clone();
+    let mut active_branch_count = active_output.result_sets.len().max(1);
+    assert_controlled_expectation(active_case, &active_output);
+    assert_branch_limit(&journey.id, &active_output, limits.max_active_branches);
+
+    for (turn_index, turn) in journey.turns.iter().enumerate() {
+        assert!(
+            !turn.utterance.trim().is_empty(),
+            "{} has an empty turn",
+            journey.id
+        );
+        let revision = compile_search_revision(
+            &active_query,
+            &turn.utterance,
+            active_branch_count,
+            SearchRevisionLimits {
+                max_active_branches: limits.max_active_branches,
+            },
+        );
+        assert_eq!(
+            observed_operation(revision.operation),
+            turn.operation,
+            "{} turn {turn_index} compiled the wrong operation",
+            journey.id
+        );
+        let candidate = turn.candidate_case_id.as_deref().map(|case_id| {
+            evaluate_candidate(
+                journey,
+                turn_index,
+                turn,
+                atomic_cases,
+                &fixture,
+                &active_output,
+                case_id,
+                revision
+                    .candidate_query
+                    .as_deref()
+                    .expect("candidate turn must compile a query"),
+            )
+        });
+        assert_revision_outcome(journey, turn_index, turn.outcome, revision.outcome);
+        let expected_active_id = expected_active_case_id(journey, turn, active_case, &candidate);
+        assert_eq!(
+            turn.active_case_id, expected_active_id,
+            "{} turn {turn_index} activates the wrong atomic intent",
+            journey.id
+        );
+
+        if let JourneyOutcome::ActivateCandidate = turn.outcome {
+            let (candidate_case, candidate_output) = candidate.expect("candidate was checked");
+            active_case = candidate_case;
+            active_output = candidate_output;
+            active_query = revision
+                .candidate_query
+                .expect("activated turn retains its compiled query");
+            active_branch_count = revision.candidate_branch_count;
+            assert_branch_limit(&journey.id, &active_output, limits.max_active_branches);
+        }
+    }
+}
+
+fn evaluate_candidate<'a>(
+    journey: &ControlledJourneyCase,
+    turn_index: usize,
+    turn: &JourneyTurn,
+    atomic_cases: &'a HashMap<String, ControlledQueryCase>,
+    fixture: &MockSearchFixture,
+    active_output: &ObservedSearch,
+    case_id: &str,
+    candidate_query: &str,
+) -> (&'a ControlledQueryCase, ObservedSearch) {
+    let candidate_case = atomic_case(atomic_cases, case_id, journey);
+    assert_eq!(
+        candidate_case.fixture, journey.fixture,
+        "{} turn {turn_index} crosses controlled fixtures",
+        journey.id
+    );
+    let output = fixture.search(candidate_query);
+    assert_controlled_expectation(candidate_case, &output);
+    let reference_output = fixture.search(&candidate_case.query);
+    assert_same_search_observation(
+        &journey.id,
+        turn_index,
+        candidate_query,
+        &output,
+        &reference_output,
+    );
+    if let Some(effect) = turn.candidate_effect {
+        assert_candidate_effect(&journey.id, turn_index, effect, active_output, &output);
+    }
+    (candidate_case, output)
+}
+
+fn expected_active_case_id<'a>(
+    journey: &ControlledJourneyCase,
+    turn: &JourneyTurn,
+    active_case: &'a ControlledQueryCase,
+    candidate: &Option<(&'a ControlledQueryCase, ObservedSearch)>,
+) -> &'a str {
+    match turn.outcome {
+        JourneyOutcome::ActivateCandidate => candidate
+            .as_ref()
+            .map(|(case, _)| case.id.as_str())
+            .expect("activated journey turn requires a candidate"),
+        JourneyOutcome::PreserveParent => {
+            assert!(
+                candidate.is_some(),
+                "preserved turn must evaluate a candidate"
+            );
+            active_case.id.as_str()
+        }
+        JourneyOutcome::RequireClarification => {
+            assert_eq!(turn.operation, JourneyOperation::Expand, "{}", journey.id);
+            assert!(
+                candidate.is_none(),
+                "clarification must not execute an unbounded candidate query"
+            );
+            active_case.id.as_str()
+        }
+        JourneyOutcome::RequireCheckpoint => {
+            assert_eq!(turn.operation, JourneyOperation::Expand, "{}", journey.id);
+            assert!(
+                candidate.is_none(),
+                "checkpoint must not execute a candidate"
+            );
+            active_case.id.as_str()
+        }
+    }
+}
+
+fn observed_operation(operation: SearchRevisionOperation) -> JourneyOperation {
+    match operation {
+        SearchRevisionOperation::Refine => JourneyOperation::Refine,
+        SearchRevisionOperation::Rephrase => JourneyOperation::Rephrase,
+        SearchRevisionOperation::Expand => JourneyOperation::Expand,
+        SearchRevisionOperation::Switch => JourneyOperation::Switch,
+        SearchRevisionOperation::Replace => JourneyOperation::Replace,
+    }
+}
+
+fn assert_revision_outcome(
+    journey: &ControlledJourneyCase,
+    turn_index: usize,
+    expected: JourneyOutcome,
+    actual: SearchRevisionOutcome,
+) {
+    let valid = matches!(
+        (expected, actual),
+        (
+            JourneyOutcome::ActivateCandidate,
+            SearchRevisionOutcome::Candidate
+        ) | (
+            JourneyOutcome::PreserveParent,
+            SearchRevisionOutcome::Candidate
+        ) | (
+            JourneyOutcome::RequireClarification,
+            SearchRevisionOutcome::RequireClarification
+        ) | (
+            JourneyOutcome::RequireCheckpoint,
+            SearchRevisionOutcome::RequireCheckpoint
+        )
+    );
+    assert!(
+        valid,
+        "{} turn {turn_index} expected {expected:?}, compiled {actual:?}",
+        journey.id
+    );
+}
+
+fn assert_same_search_observation(
+    journey_id: &str,
+    turn_index: usize,
+    candidate_query: &str,
+    actual: &ObservedSearch,
+    expected: &ObservedSearch,
+) {
+    assert_eq!(
+        owned_result_ids(actual),
+        owned_result_ids(expected),
+        "{journey_id} turn {turn_index} compiled a different ranking: {candidate_query}"
+    );
+    assert_eq!(
+        actual.result_sets.len(),
+        expected.result_sets.len(),
+        "{journey_id} turn {turn_index} compiled different branches: {candidate_query}"
+    );
+    assert_eq!(
+        actual.areas, expected.areas,
+        "{journey_id} turn {turn_index}"
+    );
+    assert_eq!(actual.bhks, expected.bhks, "{journey_id} turn {turn_index}");
+    assert_eq!(
+        actual.budget_max, expected.budget_max,
+        "{journey_id} turn {turn_index}"
+    );
+    assert_eq!(
+        actual.positive_preferences, expected.positive_preferences,
+        "{journey_id} turn {turn_index}"
+    );
+    assert_eq!(
+        actual.negative_preferences, expected.negative_preferences,
+        "{journey_id} turn {turn_index}"
+    );
+    assert_eq!(
+        actual.ranking_priorities, expected.ranking_priorities,
+        "{journey_id} turn {turn_index}"
+    );
+}
+
+fn atomic_case<'a>(
+    cases: &'a HashMap<String, ControlledQueryCase>,
+    case_id: &str,
+    journey: &ControlledJourneyCase,
+) -> &'a ControlledQueryCase {
+    cases
+        .get(case_id)
+        .unwrap_or_else(|| panic!("{} references missing atomic case {case_id}", journey.id))
+}
+
+fn assert_branch_limit(journey_id: &str, output: &ObservedSearch, max_branches: usize) {
+    assert!(
+        output.result_sets.len() <= max_branches,
+        "{journey_id} activated {} branches above the limit {max_branches}",
+        output.result_sets.len()
+    );
+}
+
+fn owned_result_ids(output: &ObservedSearch) -> Vec<String> {
+    output
+        .result_sets
+        .iter()
+        .flatten()
+        .map(|result| result.id.clone())
+        .collect()
+}
+
+fn assert_candidate_effect(
+    journey_id: &str,
+    turn_index: usize,
+    effect: CandidateEffect,
+    parent: &ObservedSearch,
+    candidate: &ObservedSearch,
+) {
+    let parent_ids = owned_result_ids(parent);
+    let candidate_ids = owned_result_ids(candidate);
+    let parent_set = parent_ids.iter().collect::<HashSet<_>>();
+    let candidate_set = candidate_ids.iter().collect::<HashSet<_>>();
+    let valid = match effect {
+        CandidateEffect::Narrower => {
+            !candidate_set.is_empty()
+                && candidate_set.len() < parent_set.len()
+                && candidate_set.is_subset(&parent_set)
+        }
+        CandidateEffect::SameMembership => candidate_set == parent_set,
+        CandidateEffect::SameOrder => candidate_ids == parent_ids,
+        CandidateEffect::AddsBranch => {
+            candidate.result_sets.len() > parent.result_sets.len()
+                && parent_set.is_subset(&candidate_set)
+        }
+        CandidateEffect::DifferentMembership => {
+            !candidate_set.is_empty() && parent_set.is_disjoint(&candidate_set)
+        }
+        CandidateEffect::ZeroResults => candidate_ids.is_empty(),
+    };
+    assert!(
+        valid,
+        "{journey_id} turn {turn_index} expected {effect:?}; parent={parent_ids:?}, candidate={candidate_ids:?}"
+    );
 }
 
 fn result_ids(output: &ObservedSearch) -> Vec<&str> {
@@ -1444,7 +1850,16 @@ impl FixtureBuilder {
 }
 
 fn add_regional_inventory(builder: &mut FixtureBuilder) {
-    for area in ["Whitefield", "Sarjapur Road", "North Bengaluru"] {
+    for area in [
+        "Whitefield",
+        "Sarjapur Road",
+        "North Bengaluru",
+        "Bellandur",
+        "HSR Layout",
+        "Devanahalli",
+        "Yelahanka",
+        "Electronic City",
+    ] {
         builder.add_area(area);
     }
     builder.add_place("Kadugodi Tree Park Metro", "metro", 12.9958, 77.7574);
@@ -1580,6 +1995,58 @@ fn add_regional_inventory(builder: &mut FixtureBuilder) {
         "nearby_metro_stations",
         "Nagawara Metro (0.2 km)",
     );
+    for (id, name, area, bhk, price, latitude, longitude) in [
+        (
+            "mock-bellandur-value-2bhk",
+            "Bellandur Value Homes",
+            "Bellandur",
+            2,
+            16_500_000,
+            12.9250,
+            77.6760,
+        ),
+        (
+            "mock-hsr-family-3bhk",
+            "HSR Family Homes",
+            "HSR Layout",
+            3,
+            24_000_000,
+            12.9116,
+            77.6389,
+        ),
+        (
+            "mock-devanahalli-value-2bhk",
+            "Devanahalli Value Homes",
+            "Devanahalli",
+            2,
+            11_500_000,
+            13.2473,
+            77.7110,
+        ),
+        (
+            "mock-yelahanka-family-3bhk",
+            "Yelahanka Family Homes",
+            "Yelahanka",
+            3,
+            18_500_000,
+            13.1007,
+            77.5963,
+        ),
+        (
+            "mock-electronic-city-value-2bhk",
+            "Electronic City Value Homes",
+            "Electronic City",
+            2,
+            10_500_000,
+            12.8452,
+            77.6602,
+        ),
+    ] {
+        builder.add_home(
+            HomeSpec::new(id, name, area, bhk, price, latitude, longitude)
+                .quality(Some(0.3), Some(4.2)),
+        );
+    }
     builder.add_home(
         HomeSpec::new(
             "mock-north-premium-3bhk",
