@@ -80,14 +80,15 @@ export function searchResultReasonLabels(
   >,
 ): string[] {
   const labels: string[] = [];
+  const structuredReasons = result.match_explanation?.reasons ?? [];
 
-  for (const reason of result.match_explanation?.reasons ?? []) {
+  for (const reason of structuredReasons) {
     const label = compactExplanationLabel(reason);
     if (isAreaRestatingLabel(label, result)) continue;
     pushUniqueLabel(labels, label);
     if (labels.length >= 2) return labels;
   }
-  if (labels.length > 0) return labels;
+  if (structuredReasons.length > 0) return labels;
 
   const displayReason = displayMatchReason(result.match_reason);
   for (const part of splitLabelParts(displayReason ?? "")) {
@@ -112,6 +113,7 @@ export function friendlyMatchLabel(label: string): string {
 function compactExplanationLabel(reason: MatchReason): string | null {
   if (reason.score <= 0) return null;
   const display = reason.display.replace(/\s+/g, " ").trim();
+  if (/https?:\/\//i.test(display)) return null;
   if (display) return truncateCompactDisplay(display);
   const preference = reason.preference.trim();
   if (!preference) return null;

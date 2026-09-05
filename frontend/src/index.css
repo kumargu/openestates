@@ -2137,7 +2137,13 @@ body {
 .landing-featured__results {
   display: grid;
   gap: 1.35rem;
+  min-width: 0;
   animation: landing-rail-in 320ms cubic-bezier(.16, 1, .3, 1);
+}
+
+.landing-featured__rail {
+  width: 100%;
+  min-width: 0;
 }
 
 .landing-featured__rail-head {
@@ -2211,6 +2217,10 @@ body {
 .landing-stage__feature-card {
   flex: 0 0 calc((100% - (var(--landing-rail-cols, 5) - 1) * var(--landing-rail-gap)) / var(--landing-rail-cols, 5));
   min-width: 0;
+  transition:
+    flex-basis 240ms cubic-bezier(.16, 1, .3, 1),
+    opacity 180ms ease,
+    transform 190ms cubic-bezier(.16, 1, .3, 1);
 }
 
 .landing-stage__featured--scroll {
@@ -2219,8 +2229,14 @@ body {
   overscroll-behavior-inline: contain;
   padding-block: 0.45rem 0.75rem;
   scroll-snap-type: x mandatory;
+  scroll-padding-inline: 0.25rem;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+}
+
+.landing-stage__featured--spatial {
+  min-height: 16rem;
+  align-items: flex-end;
 }
 
 .landing-stage__featured--scroll .landing-stage__feature-card:not(.landing-stage__feature-card--spacer) {
@@ -2231,23 +2247,43 @@ body {
   pointer-events: none;
 }
 
-@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-  .landing-stage__featured--scroll .landing-stage__feature-card:not(.landing-stage__feature-card--spacer) {
-    transition: transform 190ms cubic-bezier(.16, 1, .3, 1);
+@media (min-width: 721px) {
+  .landing-stage__featured--scroll.has-active-card
+    .landing-stage__feature-card:not(.is-active, .landing-stage__feature-card--spacer) {
+    flex-basis: calc(
+      (100% - (var(--landing-rail-cols, 5) - 1) * var(--landing-rail-gap)) / var(--landing-rail-cols, 5)
+      - var(--landing-inactive-card-shrink, 0rem)
+    );
   }
 
-  .landing-stage__featured--scroll .landing-stage__feature-card:not(.landing-stage__feature-card--spacer):hover {
-    z-index: 1;
-    transform: translateY(-4px);
+  .landing-stage__featured--scroll .landing-stage__feature-card.is-active {
+    flex-basis: calc(
+      (100% - (var(--landing-rail-cols, 5) - 1) * var(--landing-rail-gap)) / var(--landing-rail-cols, 5)
+      + var(--landing-active-card-growth, 0rem)
+    );
   }
+}
 
-  .landing-stage__featured--scroll .catalog-card__media {
-    transition: box-shadow 190ms ease;
-  }
+.landing-stage__featured--scroll.has-active-card
+  .landing-stage__feature-card:not(.is-active, .landing-stage__feature-card--spacer) {
+  opacity: 0.78;
+}
 
-  .landing-stage__featured--scroll .landing-stage__feature-card:hover .catalog-card__media {
-    box-shadow: 0 12px 24px rgba(42, 36, 31, 0.14);
-  }
+.landing-stage__featured--scroll .landing-stage__feature-card.is-active {
+  z-index: 1;
+  transform: translateY(-4px);
+}
+
+.landing-stage__featured--scroll .catalog-card__media {
+  transition: box-shadow 190ms ease;
+}
+
+.landing-stage__featured--scroll .landing-stage__feature-card.is-active .catalog-card__media {
+  box-shadow: 0 14px 30px rgba(42, 36, 31, 0.16);
+}
+
+.landing-stage__featured--scroll .catalog-card.is-preview-active .catalog-card__image {
+  transform: scale(1.04);
 }
 
 .landing-stage__featured .catalog-card--browse .catalog-card__media {
@@ -2282,8 +2318,57 @@ body {
 }
 
 .landing-stage__featured .catalog-card__action {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
+}
+
+.landing-featured__rail-head .property-rail-controls button {
+  width: 36px;
+  height: 36px;
+}
+
+@media (max-width: 720px) {
+  .landing-stage__feature-card {
+    scroll-margin-top: 6.5rem;
+  }
+
+  .landing-stage__featured--scroll .landing-stage__feature-card.is-active .catalog-card__media {
+    aspect-ratio: 16 / 10;
+  }
+
+  .landing-stage__featured--scroll.has-active-card
+    .landing-stage__feature-card:not(.is-active, .landing-stage__feature-card--spacer) {
+    opacity: 0.9;
+  }
+
+  .landing-stage__featured .catalog-card__action,
+  .landing-featured__rail-head .property-rail-controls button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .landing-stage__featured .catalog-card__action,
+  .landing-featured__rail-head .property-rail-controls button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-stage__feature-card,
+  .landing-stage__featured--scroll .catalog-card__media {
+    transition: none;
+  }
+
+  .landing-stage__featured--scroll .landing-stage__feature-card.is-active {
+    transform: none;
+  }
+
+  .landing-stage__featured--scroll .catalog-card.is-preview-active .catalog-card__image {
+    transform: none;
+  }
 }
 
 .landing-stage__story {

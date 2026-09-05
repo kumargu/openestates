@@ -170,3 +170,29 @@ test("result chips prefer factual matched displays and stay capped at two", () =
     "Google 4.4 · 320 reviews",
   ]);
 });
+
+test("source URLs do not become buyer-facing evidence labels", () => {
+  const labels = searchResultReasonLabels({
+    title: "3 BHK in Example Society",
+    area: "Whitefield",
+    society_name: "Example Society",
+    builder_name: "Example Builder",
+    match_reason: "Verified review quality",
+    match_explanation: {
+      reasons: [{
+        preference: "review quality",
+        fact_key: "google_reviews_url",
+        display: "Google reviews: https://maps.google.com/example",
+        score: 0.7,
+        confidence: 0.82,
+        source_type: "Google",
+        scoring_method: "serving-text",
+      }],
+      preference_coverage: [],
+      graph_driven_pct: 1,
+      total_facts_consulted: 1,
+    },
+  });
+
+  assert.deepEqual(labels, []);
+});

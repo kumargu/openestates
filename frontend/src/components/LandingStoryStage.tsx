@@ -14,7 +14,7 @@ import {
   writeSearchJourneyContext,
 } from "../lib/navigationContext.ts";
 import { primaryProofFocus } from "../lib/proof-focus.ts";
-import { searchResultReasonLabels } from "../lib/search.ts";
+import { friendlyMatchLabel, searchResultReasonLabels } from "../lib/search.ts";
 import type { PropertyCard, SearchResponse, SearchResultItem } from "../lib/types.ts";
 import {
   LANDING_RESOLVE_QUERY,
@@ -28,6 +28,7 @@ import { useLandingSceneController } from "../hooks/useLandingSceneController.ts
 import { useLandingStoryMotion } from "../hooks/useLandingStoryMotion.ts";
 
 const FEATURED_LIMIT = 6;
+const ACTIVE_CARD_GROWTH_REM = 6;
 
 type FeaturedLensId = "metro" | "family" | "township" | "feedback";
 
@@ -131,22 +132,33 @@ function LandingPagedRail({
   controlsLabel,
   items,
   plusAfterCount = 0,
+  spatial = false,
   renderCard,
 }: {
   label?: string;
   controlsLabel: string;
   items: PropertyCard[];
   plusAfterCount?: number;
-  renderCard: (item: PropertyCard) => ReactNode;
+  spatial?: boolean;
+  renderCard: (item: PropertyCard, active: boolean) => ReactNode;
 }) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const scrollTimerRef = useRef<number | null>(null);
+  const pendingTouchPreviewRef = useRef<{
+    id: string;
+    startX: number;
+    startY: number;
+  } | null>(null);
   const [leadingIndex, setLeadingIndex] = useState(0);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const { viewportRef, pageSize, pageCount } = useFittedRailPage(items.length);
   const lastPageStart = Math.max(0, (pageCount - 1) * pageSize);
   const safeLeadingIndex = Math.min(leadingIndex, lastPageStart);
   const trailingSlots = pageCount * pageSize - items.length;
   const showHead = Boolean(label) || pageCount > 1;
+  const inactiveCardShrinkRem = pageSize > 1
+    ? ACTIVE_CARD_GROWTH_REM / (pageSize - 1)
+    : 0;
 
   const setScroller = useCallback((node: HTMLDivElement | null) => {
     scrollerRef.current = node;
@@ -198,9 +210,11 @@ function LandingPagedRail({
 
   return (
     <div
-      className="landing-featured__rail"
+      className={`landing-featured__rail${spatial ? " landing-featured__rail--spatial" : ""}`}
       style={{
         "--landing-rail-cols": String(pageSize),
+        "--landing-active-card-growth": `${ACTIVE_CARD_GROWTH_REM}rem`,
+        "--landing-inactive-card-shrink": `${inactiveCardShrinkRem}rem`,
       } as CSSProperties}
     >
       {showHead ? (
@@ -220,13 +234,28 @@ function LandingPagedRail({
       ) : null}
       <div
         ref={setScroller}
-        className="landing-stage__featured landing-stage__featured--scroll"
+        className={[
+          "landing-stage__featured",
+          "landing-stage__featured--scroll",
+          spatial ? "landing-stage__featured--spatial" : "",
+          activeId ? "has-active-card" : "",
+        ].filter(Boolean).join(" ")}
         role="region"
         aria-label={label ? `${label} homes` : "Matching homes"}
         tabIndex={pageCount > 1 ? 0 : -1}
         onScroll={handleScroll}
+        onPointerLeave={(event) => {
+          if (event.pointerType !== "touch") setActiveId(null);
+        }}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setActiveId(null);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setActiveId(null);
+        }}
       >
         {items.map((item, itemIndex) => {
+          const active = activeId === item.id;
           return (
             <Fragment key={item.id}>
               {plusAfterCount > 0 && itemIndex === plusAfterCount ? (
@@ -239,10 +268,55 @@ function LandingPagedRail({
                 </div>
               ) : null}
               <div
-                className="landing-stage__feature-card"
+                className={`landing-stage__feature-card${active ? " is-active" : ""}`}
                 data-rail-item-index={itemIndex}
+                onPointerEnter={(event) => {
+                  if (event.pointerType !== "touch") setActiveId(item.id);
+                }}
+                onFocusCapture={() => setActiveId(item.id)}
+                onPointerDownCapture={(event) => {
+                  if (event.pointerType !== "touch" || active) return;
+                  if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+                  pendingTouchPreviewRef.current = {
+                    id: item.id,
+                    startX: event.clientX,
+                    startY: event.clientY,
+                  };
+                }}
+                onPointerMoveCapture={(event) => {
+                  const pending = pendingTouchPreviewRef.current;
+                  if (!pending || pending.id !== item.id) return;
+                  if (
+                    Math.hypot(
+                      event.clientX - pending.startX,
+                      event.clientY - pending.startY,
+                    ) > 8
+                  ) {
+                    pendingTouchPreviewRef.current = null;
+                  }
+                }}
+                onPointerCancelCapture={() => {
+                  if (pendingTouchPreviewRef.current?.id === item.id) {
+                    pendingTouchPreviewRef.current = null;
+                  }
+                }}
+                onClickCapture={(event) => {
+                  if (pendingTouchPreviewRef.current?.id !== item.id) return;
+                  pendingTouchPreviewRef.current = null;
+                  event.preventDefault();
+                  setActiveId(item.id);
+                  const card = event.currentTarget;
+                  window.requestAnimationFrame(() => {
+                    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+                    card.scrollIntoView({
+                      behavior: reduceMotion ? "auto" : "smooth",
+                      block: "start",
+                      inline: "nearest",
+                    });
+                  });
+                }}
               >
-                {renderCard(item)}
+                {renderCard(item, active)}
               </div>
             </Fragment>
           );
@@ -283,17 +357,29 @@ function LandingResultRail({
       controlsLabel={label ? `${label} pages` : "Matching homes pages"}
       items={items}
       plusAfterCount={siblings.length > 0 ? results.length : 0}
-      renderCard={(item) => (
-        <LivingEvidenceTile
-          property={item}
-          variant="browse"
-          matchLabels={searchResultReasonLabels(item as SearchResultItem)}
-          proofFocus={primaryProofFocus(item as SearchResultItem, query)}
-          discoveryContextId={discoveryContextId}
-          discoveryQueryFingerprint={discoveryQueryFingerprint}
-          allowSave
-        />
-      )}
+      spatial
+      renderCard={(item, active) => {
+        const result = item as SearchResultItem;
+        const labels = searchResultReasonLabels(result);
+        const proofFocus = primaryProofFocus(result, query);
+        const expandedSignal = result.tradeoff_label
+          ?? labels[1]
+          ?? friendlyMatchLabel(result.match_label);
+        return (
+          <LivingEvidenceTile
+            property={result}
+            variant="browse"
+            matchLabels={labels.slice(0, 1)}
+            previewActive={active}
+            previewSignals={expandedSignal ? [expandedSignal] : []}
+            spatial
+            proofFocus={proofFocus}
+            discoveryContextId={discoveryContextId}
+            discoveryQueryFingerprint={discoveryQueryFingerprint}
+            allowSave
+          />
+        );
+      }}
     />
   );
 }
@@ -448,14 +534,19 @@ function FeaturedSuggestions({
           key={activeLensId}
           controlsLabel="Featured homes pages"
           items={suggestions}
-          renderCard={(property) => (
-            <LivingEvidenceTile
-              property={property}
-              variant="browse"
-              matchLabels={matchLabels(property, activeLensId)}
-              allowSave
-            />
-          )}
+          renderCard={(property, active) => {
+            const labels = matchLabels(property, activeLensId);
+            return (
+              <LivingEvidenceTile
+                property={property}
+                variant="browse"
+                matchLabels={labels}
+                previewActive={active}
+                previewSignals={labels.slice(1)}
+                allowSave
+              />
+            );
+          }}
         />
       )}
     </section>

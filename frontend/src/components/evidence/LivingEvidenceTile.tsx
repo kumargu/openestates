@@ -22,13 +22,39 @@ function isKnownText(value: string | null | undefined): value is string {
 }
 
 function titleIncludesSociety(title: string, societyName: string): boolean {
-  return title
-    .toLocaleLowerCase("en-IN")
-    .includes(societyName.toLocaleLowerCase("en-IN"));
+  const normalizedTitle = title.toLocaleLowerCase("en-IN");
+  return [societyName, societyName.split(",")[0] ?? ""]
+    .map((name) => name.trim().toLocaleLowerCase("en-IN"))
+    .filter((name) => name.length > 3)
+    .some((name) => normalizedTitle.includes(name));
 }
 
 function titleIncludesBhk(title: string, bhk: number): boolean {
   return new RegExp(`\\b${bhk}\\s*bhk\\b`, "i").test(title);
+}
+
+function landingTitle(title: string): string {
+  return title.replace(/^\s*\d+\s*BHK\s+in\s+/i, "").trim() || title;
+}
+
+function areaWithoutRepeatedIdentity(title: string, area: string): string | null {
+  const parts = area
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part, index, all) => (
+      index === 0
+      || part.toLocaleLowerCase("en-IN") !== all[index - 1]?.toLocaleLowerCase("en-IN")
+    ));
+  const normalizedTitle = title.toLocaleLowerCase("en-IN");
+  while (
+    parts.length > 0
+    && parts[0]
+    && normalizedTitle.includes(parts[0].toLocaleLowerCase("en-IN"))
+  ) {
+    parts.shift();
+  }
+  return parts.join(", ") || null;
 }
 
 type Props = {
@@ -41,6 +67,11 @@ type Props = {
   matchLabels?: string[];
   /** Keep shortlist entry points explicit instead of enabling them on every card surface. */
   allowSave?: boolean;
+  /** Landing rails may progressively disclose one short reason without becoming detail cards. */
+  previewActive?: boolean;
+  previewReason?: string | null;
+  previewSignals?: string[];
+  spatial?: boolean;
 };
 
 export function LivingEvidenceTile({
@@ -51,29 +82,44 @@ export function LivingEvidenceTile({
   discoveryQueryFingerprint,
   matchLabels = [],
   allowSave = false,
+  previewActive,
+  previewReason,
+  previewSignals = [],
+  spatial = false,
 }: Props) {
   const { images } = usePropertySceneImages({
     heroImage: property.hero_image,
   });
   const cardImage = images[0] ?? property.hero_image ?? null;
 
+  const hasPreview = previewActive !== undefined;
+  const displayTitle = hasPreview ? landingTitle(property.title) : property.title;
   const societyKnown = isKnownText(property.society_name);
+  const displayArea = areaWithoutRepeatedIdentity(displayTitle, property.area);
   const metaParts = [
-    societyKnown && !titleIncludesSociety(property.title, property.society_name)
+    societyKnown && !titleIncludesSociety(displayTitle, property.society_name)
       ? property.society_name
       : null,
-    property.area,
-    !hasKnownNumber(property.bhk) || titleIncludesBhk(property.title, property.bhk)
+    displayArea,
+    !hasKnownNumber(property.bhk) || titleIncludesBhk(displayTitle, property.bhk)
       ? null
       : `${property.bhk} BHK`,
     hasKnownNumber(property.sqft)
       ? `${property.sqft.toLocaleString("en-IN")} sqft`
       : null,
   ].filter((part): part is string => part !== null);
+  const fitLabel = hasPreview ? matchLabels[0] : null;
+  const visibleMatchLabels = hasPreview ? [] : matchLabels;
 
   return (
     <article
-      className={`catalog-card${variant === "browse" ? " catalog-card--browse" : ""}`}
+      className={[
+        "catalog-card",
+        variant === "browse" ? "catalog-card--browse" : "",
+        hasPreview ? "catalog-card--preview" : "",
+        spatial ? "catalog-card--spatial" : "",
+        previewActive ? "is-preview-active" : "",
+      ].filter(Boolean).join(" ")}
     >
       <div className="catalog-card__media">
         <ImageWithFallback
@@ -87,6 +133,7 @@ export function LivingEvidenceTile({
           <div className="catalog-card__actions" role="group" aria-label="Property actions">
             <SaveHeartButton
               propertyId={property.id}
+              propertyName={displayTitle}
               className="catalog-card__action catalog-card__save"
             />
           </div>
@@ -102,34 +149,54 @@ export function LivingEvidenceTile({
         className="catalog-card__link"
       >
         <div className="catalog-card__caption">
-          <h3 className="catalog-card__title">{property.title}</h3>
+          <h3 className="catalog-card__title">{displayTitle}</h3>
           <p className="catalog-card__meta">{metaParts.join(" · ")}</p>
           <div className="catalog-card__foot">
             <span className="catalog-card__price">
               {formatListingPrice(property)}
             </span>
-            {hasKnownNumber(property.google_rating) ? (
+            {(!hasPreview || !fitLabel) && hasKnownNumber(property.google_rating) ? (
               <span className="catalog-card__rating">
                 Google {property.google_rating.toFixed(1)}
                 {hasKnownNumber(property.google_review_count)
                   ? ` · ${property.google_review_count}`
                   : ""}
               </span>
-            ) : hasKnownNumber(property.price_per_sqft) ? (
+            ) : (!hasPreview || !fitLabel) && hasKnownNumber(property.price_per_sqft) ? (
               <span className="catalog-card__ppsf">
                 {property.price_per_sqft.toLocaleString("en-IN")}/sqft
               </span>
             ) : null}
           </div>
-          {matchLabels.length > 0 && (
+          {fitLabel ? (
+            <p className="catalog-card__fit">{fitLabel}</p>
+          ) : null}
+          {visibleMatchLabels.length > 0 && (
             <div className="catalog-card__signals" aria-label="Search match">
-              {matchLabels.slice(0, 2).map((label) => (
+              {visibleMatchLabels.slice(0, 2).map((label) => (
                 <span key={label} className="catalog-card__signal">
                   {label}
                 </span>
               ))}
             </div>
           )}
+          {previewActive ? (
+            <div className="catalog-card__peek">
+              {previewReason ? (
+                <p className="catalog-card__why">{previewReason}</p>
+              ) : null}
+              {previewSignals.length > 0 ? (
+                <p className="catalog-card__preview-signals">
+                  {previewSignals.slice(0, 3).map((signal) => (
+                    <span key={signal}>{signal}</span>
+                  ))}
+                </p>
+              ) : null}
+              <span className="catalog-card__open">
+                Open home <span aria-hidden="true">→</span>
+              </span>
+            </div>
+          ) : null}
         </div>
       </Link>
     </article>
