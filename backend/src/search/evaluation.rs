@@ -129,6 +129,25 @@ impl BooleanEvaluation {
         }
     }
 
+    pub fn unsatisfied() -> Self {
+        Self::from_state(EvaluationState::Unsatisfied)
+    }
+
+    pub fn unknown() -> Self {
+        Self::from_state(EvaluationState::Unknown)
+    }
+
+    pub fn unsupported() -> Self {
+        Self::from_state(EvaluationState::Unsupported)
+    }
+
+    fn from_state(state: EvaluationState) -> Self {
+        Self {
+            state,
+            verified_matches: Vec::new(),
+        }
+    }
+
     pub fn is_satisfied(&self) -> bool {
         self.state == EvaluationState::Satisfied
     }

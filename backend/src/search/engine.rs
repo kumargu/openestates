@@ -13,6 +13,7 @@ use crate::state::SEARCH_ENGINE_VERSION;
 
 use super::ast::{CompiledQuery, ConstraintExpr, ResolvedEntityConstraint};
 use super::compiled_plan::{CompiledSearchPlan, ResolvedEntityHandle};
+use super::evaluation::{InventoryOption, VerifiedMatch};
 use super::geo;
 use super::index::SearchIndex;
 use super::intent::SearchIntent;
@@ -20,6 +21,7 @@ use super::query_plan::{self, QueryPlan};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text, slug};
 use super::schema;
 use super::text::merged_candidate_ids;
+use super::text::property_matches_constraint_term_with_index;
 use super::{SearchResultCard, SearchResultSet, TextSearch, TextSearchRequest};
 
 const TANTIVY_RECALL_LIMIT: usize = 128;
@@ -675,9 +677,32 @@ impl<'a> SearchEngine<'a> {
                 })
             }
         });
+        let snapshot_identity = self.serving_bundle.map_or("no-serving-bundle", |bundle| {
+            bundle.manifest.bundle_version.as_str()
+        });
         for result in &mut results {
+            if let Some(property) = self
+                .property_by_id
+                .and_then(|by_id| by_id.get(&result.card.id))
+                .and_then(|index| self.properties.get(*index))
+                .or_else(|| {
+                    self.properties
+                        .iter()
+                        .find(|property| property.id == result.card.id)
+                })
+            {
+                result.verified_matches.extend(verified_inventory_matches(
+                    &compiled_query,
+                    property,
+                    self.search_index,
+                    serving_facts,
+                    snapshot_identity,
+                ));
+            }
             if let Some(matches) = verified_spatial_matches.remove(&result.card.id) {
-                result.verified_matches = matches;
+                for verified in matches {
+                    push_unique_verified_match(&mut result.verified_matches, verified);
+                }
             }
         }
         let eligible_result_count = results.len();
@@ -747,9 +772,6 @@ impl<'a> SearchEngine<'a> {
             duration_ms: total_duration_ms,
         });
 
-        let snapshot_identity = self.serving_bundle.map_or("no-serving-bundle", |bundle| {
-            &bundle.manifest.bundle_version
-        });
         let mut compiled_plan =
             CompiledSearchPlan::single(compiled_query.clone(), snapshot_identity);
         compiled_plan.branches[0].resolved_entities = serving_resolved_entities
@@ -778,6 +800,110 @@ impl<'a> SearchEngine<'a> {
             diagnostics,
             evidence_gaps,
         }
+    }
+}
+
+fn verified_inventory_matches(
+    query: &CompiledQuery,
+    property: &Property,
+    search_index: &SearchIndex,
+    serving_facts: Option<&crate::serving::ServingFactIndex>,
+    snapshot_identity: &str,
+) -> Vec<VerifiedMatch> {
+    let mut option = InventoryOption::from_property(property);
+    if let Some(society_entity_id) = search_index.society_entity_id_for_property(&property.id) {
+        option.society_id = society_entity_id.to_string();
+    }
+    let mut term_matches = |term: &super::ast::ConstraintTerm| {
+        property_matches_constraint_term_with_index(
+            property,
+            term,
+            Some(search_index),
+            serving_facts,
+        )
+    };
+    let mut matches = Vec::new();
+    if let Some(predicate) = query
+        .constraints
+        .matched_bhk_include_label(&mut term_matches)
+    {
+        if let Some(bhk) = option.bhk {
+            matches.push(inventory_verified_match(
+                &option,
+                &predicate,
+                "equals",
+                "inventory_option_bhk",
+                f64::from(bhk),
+                "bhk",
+                snapshot_identity,
+            ));
+        }
+    }
+    if let Some((min, max)) = query.constraints.matched_budget_bounds(&mut term_matches) {
+        if let Some(min) = min {
+            if let Some(option_max) = option.price_max {
+                matches.push(inventory_verified_match(
+                    &option,
+                    &format!("price at least {min}"),
+                    "at_least",
+                    "inventory_option_price_max",
+                    option_max as f64,
+                    "INR",
+                    snapshot_identity,
+                ));
+            }
+        }
+        if let Some(max) = max {
+            if let Some(option_min) = option.price_min {
+                matches.push(inventory_verified_match(
+                    &option,
+                    &format!("price at most {max}"),
+                    "at_most",
+                    "inventory_option_price_min",
+                    option_min as f64,
+                    "INR",
+                    snapshot_identity,
+                ));
+            }
+        }
+    }
+    matches
+}
+
+fn inventory_verified_match(
+    option: &InventoryOption,
+    predicate: &str,
+    relation: &str,
+    metric: &str,
+    value: f64,
+    unit: &str,
+    snapshot_identity: &str,
+) -> VerifiedMatch {
+    VerifiedMatch {
+        subject_entity_id: option.property_id.clone(),
+        target_entity_id: Some(option.society_id.clone()),
+        predicate: predicate.to_string(),
+        relation: relation.to_string(),
+        metric: metric.to_string(),
+        value: Some(value),
+        unit: Some(unit.to_string()),
+        observation_ids: vec![option.evidence_reference.clone()],
+        algorithm_version: "inventory-option-evaluator-v1".to_string(),
+        confidence: 1.0,
+        snapshot_identity: snapshot_identity.to_string(),
+    }
+}
+
+fn push_unique_verified_match(matches: &mut Vec<VerifiedMatch>, candidate: VerifiedMatch) {
+    if !matches.iter().any(|existing| {
+        existing.subject_entity_id == candidate.subject_entity_id
+            && existing.target_entity_id == candidate.target_entity_id
+            && existing.relation == candidate.relation
+            && existing.metric == candidate.metric
+            && existing.value == candidate.value
+            && existing.observation_ids == candidate.observation_ids
+    }) {
+        matches.push(candidate);
     }
 }
 

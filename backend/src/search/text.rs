@@ -140,13 +140,15 @@ impl TextSearch {
                 }
                 let society_entity_id = canonical_society_entity_id(p, search_index);
 
-                if !property_matches_query_constraints(
+                if !property_constraint_evaluation(
                     p,
                     compiled_query,
                     search_index,
                     serving_facts,
                     society_entity_id.as_ref(),
-                ) {
+                )
+                .is_satisfied()
+                {
                     return None;
                 }
 
@@ -3240,15 +3242,15 @@ fn canonical_society_entity_id<'a>(
         .unwrap_or_else(|| Cow::Owned(society_node_id(&property.society_id)))
 }
 
-fn property_matches_query_constraints(
+fn property_constraint_evaluation(
     property: &Property,
     query: &CompiledQuery,
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
-) -> bool {
-    query.constraints.evaluate(&mut |term| {
-        property_matches_constraint_term_for_society(
+) -> super::evaluation::BooleanEvaluation {
+    query.constraints.evaluate_states(&mut |term| {
+        constraint_term_evaluation_for_society(
             property,
             term,
             search_index,
@@ -3256,6 +3258,93 @@ fn property_matches_query_constraints(
             society_entity_id,
         )
     })
+}
+
+fn constraint_term_evaluation_for_society(
+    property: &Property,
+    term: &ConstraintTerm,
+    search_index: Option<&SearchIndex>,
+    serving_facts: Option<&ServingFactIndex>,
+    society_entity_id: &str,
+) -> super::evaluation::BooleanEvaluation {
+    use super::evaluation::BooleanEvaluation;
+
+    let option = super::evaluation::InventoryOption::from_property(property);
+    let known_match = |matches| {
+        if matches {
+            BooleanEvaluation::satisfied(Vec::new())
+        } else {
+            BooleanEvaluation::unsatisfied()
+        }
+    };
+    match term {
+        ConstraintTerm::Bhk { value, .. } => option
+            .bhk
+            .map(|_| known_match(option.matches_bhk(*value)))
+            .unwrap_or_else(BooleanEvaluation::unknown),
+        ConstraintTerm::Budget { min, max, .. } => {
+            if option.price_min.is_none() || option.price_max.is_none() {
+                BooleanEvaluation::unknown()
+            } else {
+                known_match(option.matches_budget(
+                    min.as_ref().map(|bound| bound.value),
+                    max.as_ref().map(|bound| bound.value),
+                ))
+            }
+        }
+        ConstraintTerm::Area {
+            entity_id: Some(entity_id),
+            ..
+        } => search_index
+            .map(|index| known_match(index.entity_has_property(entity_id, &property.id)))
+            .unwrap_or_else(BooleanEvaluation::unknown),
+        ConstraintTerm::Area { value, .. } => {
+            if property.area.trim().is_empty() {
+                BooleanEvaluation::unknown()
+            } else {
+                known_match(property_matches_area(property, value))
+            }
+        }
+        ConstraintTerm::Society {
+            entity_id,
+            display_name,
+            ..
+        } => {
+            if let Some(index) = search_index {
+                known_match(index.entity_has_property(entity_id, &property.id))
+            } else if property.society_id.trim().is_empty() {
+                BooleanEvaluation::unknown()
+            } else {
+                known_match(property_matches_excluded_society(property, display_name))
+            }
+        }
+        ConstraintTerm::Builder {
+            entity_id,
+            display_name,
+            ..
+        } => {
+            if let Some(index) = search_index {
+                known_match(index.entity_has_property(entity_id, &property.id))
+            } else if property.builder_name.trim().is_empty() {
+                BooleanEvaluation::unknown()
+            } else {
+                known_match(property_matches_excluded_builder(property, display_name))
+            }
+        }
+        ConstraintTerm::Evidence { constraint, .. } => match match_hard_constraints(
+            std::slice::from_ref(constraint),
+            property,
+            serving_facts,
+            society_entity_id,
+        ) {
+            Some(_) => BooleanEvaluation::satisfied(Vec::new()),
+            None => BooleanEvaluation::unknown(),
+        },
+        // Spatial requirements are evaluated exactly by SearchEngine before
+        // TextSearch ranking. Reaching this point means that separate gate
+        // accepted the candidate; recall membership itself is never checked.
+        ConstraintTerm::Spatial { .. } => BooleanEvaluation::satisfied(Vec::new()),
+    }
 }
 
 pub(crate) fn property_matches_constraint_term_with_index(
@@ -3636,6 +3725,54 @@ mod tests {
             .iter()
             .all(|score| (0.0..=1.0).contains(score)));
         assert!(lower_scores.iter().all(|score| (0.0..=1.0).contains(score)));
+    }
+
+    #[test]
+    fn required_and_negated_unknown_inventory_predicates_fail_closed() {
+        let mut property = local_property(
+            "unknown-bhk",
+            "Whitefield",
+            "unknown-bhk",
+            3,
+            10_000_000,
+            10,
+            0.2,
+        );
+        property.bhk = 0;
+        let positive = CompiledQuery {
+            constraints: crate::search::ast::ConstraintExpr::term(ConstraintTerm::Bhk {
+                value: 2,
+                span: None,
+            }),
+            ..CompiledQuery::from_text("2BHK")
+        };
+        let negated = CompiledQuery {
+            constraints: crate::search::ast::ConstraintExpr::negated(
+                crate::search::ast::ConstraintExpr::term(ConstraintTerm::Bhk {
+                    value: 2,
+                    span: None,
+                }),
+            ),
+            ..CompiledQuery::from_text("not 2BHK")
+        };
+
+        let positive_evaluation =
+            property_constraint_evaluation(&property, &positive, None, None, "society:unknown-bhk");
+        let negated_evaluation =
+            property_constraint_evaluation(&property, &negated, None, None, "society:unknown-bhk");
+
+        assert_eq!(
+            positive_evaluation.state,
+            crate::search::EvaluationState::Unknown
+        );
+        assert_eq!(
+            negated_evaluation.state,
+            crate::search::EvaluationState::Unknown
+        );
+        assert!(!positive_evaluation.is_satisfied());
+        assert!(!negated_evaluation.is_satisfied());
+        assert!(positive_evaluation.verified_matches.is_empty());
+        assert!(negated_evaluation.verified_matches.is_empty());
     }
 
     fn search_for_test(

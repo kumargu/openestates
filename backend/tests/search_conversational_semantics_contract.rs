@@ -940,6 +940,21 @@ fn inside_requires_sourced_containment_and_cannot_use_nearby_coordinates() {
             && matched.metric == "footprint_containment"
             && matched.target_entity_id.as_deref() == Some("area:hoodi")
     }));
+    let inventory_matches = output.results[0]
+        .verified_matches
+        .iter()
+        .filter(|matched| matched.algorithm_version == "inventory-option-evaluator-v1")
+        .collect::<Vec<_>>();
+    assert_eq!(inventory_matches.len(), 2);
+    assert!(inventory_matches
+        .iter()
+        .any(|matched| matched.metric == "inventory_option_bhk" && matched.value == Some(3.0)));
+    assert!(inventory_matches.iter().any(|matched| {
+        matched.metric == "inventory_option_price_min" && matched.value == Some(10_000_000.0)
+    }));
+    assert!(inventory_matches
+        .iter()
+        .all(|matched| matched.observation_ids == ["inventory-option:sourced-inside-home"]));
 }
 
 fn has_required_spatial_term(expression: &backend::search::ConstraintExpr) -> bool {

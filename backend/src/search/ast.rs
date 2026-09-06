@@ -229,19 +229,29 @@ impl ConstraintExpr {
         &self,
         term_evaluation: &mut impl FnMut(&ConstraintTerm) -> PredicateEvaluation,
     ) -> BooleanEvaluation {
+        self.evaluate_states(&mut |term| BooleanEvaluation::from_predicate(term_evaluation(term)))
+    }
+
+    /// Evaluate a Boolean tree when a term is already represented as a
+    /// four-state result. This lets separately verified predicate families
+    /// participate without fabricating an empty `VerifiedMatch`.
+    pub fn evaluate_states(
+        &self,
+        term_evaluation: &mut impl FnMut(&ConstraintTerm) -> BooleanEvaluation,
+    ) -> BooleanEvaluation {
         match self {
             Self::And { clauses } => BooleanEvaluation::all(
                 clauses
                     .iter()
-                    .map(|clause| clause.evaluate_predicates(term_evaluation)),
+                    .map(|clause| clause.evaluate_states(term_evaluation)),
             ),
             Self::AnyOf { clauses } => BooleanEvaluation::any(
                 clauses
                     .iter()
-                    .map(|clause| clause.evaluate_predicates(term_evaluation)),
+                    .map(|clause| clause.evaluate_states(term_evaluation)),
             ),
-            Self::Not { clause } => clause.evaluate_predicates(term_evaluation).negated(),
-            Self::Term { term } => BooleanEvaluation::from_predicate(term_evaluation(term)),
+            Self::Not { clause } => clause.evaluate_states(term_evaluation).negated(),
+            Self::Term { term } => term_evaluation(term),
         }
     }
 

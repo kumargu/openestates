@@ -317,3 +317,57 @@ Inspect the four-state predicate contracts and freeze required `Unknown` plus
 negated `Unknown` scenarios at the compiled Boolean/evaluation boundary. Then
 ensure recall-only evidence cannot enter `VerifiedMatch`, ranking proof, or
 negation success.
+
+## Checkpoint 4A — four-state eligibility and inventory receipts
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Parent commit: `42e11f88`
+
+### Implemented
+
+- Replaced the remaining boolean-only non-spatial eligibility gate with
+  four-state Boolean evaluation. Missing BHK, price, area, entity-index, or
+  required fact evidence evaluates as `Unknown`; only `Satisfied` reaches
+  ranking.
+- Added a regression proving both a required unknown BHK predicate and its
+  negation remain `Unknown`. Negation can no longer turn absent inventory
+  evidence into eligibility.
+- Kept spatial AST terms separate from recall: the engine's exact spatial
+  evaluator must accept hard spatial predicates before TextSearch runs.
+  Candidate membership is never inspected as evidence.
+- Added BHK and price `VerifiedMatch` receipts from the same typed
+  `InventoryOption`. Both carry the same inventory-option observation ID,
+  preventing a BHK from one configuration being paired with another option's
+  price.
+- Price-range eligibility records the actual endpoint used: maximum price for
+  a minimum-bound query and minimum price for a maximum-bound query. The
+  metric names distinguish those cases.
+- Inventory receipts and exact spatial receipts are merged. Spatial proof no
+  longer overwrites the BHK/price evidence attached to a result.
+
+### Gates
+
+- `cargo test --lib search::text::tests`: 72 passed.
+- `cargo test --lib search::evaluation::tests`: 2 passed.
+- `cargo test --test search_conversational_semantics_contract`: 10 passed,
+  including same-observation BHK/price plus sourced-containment proof.
+- `cargo test --test search_efficiency_contract`: 11 passed.
+- `cargo test --test search_revision_api_contract`: 3 passed, including
+  identical direct/revised ordering and proof.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check`: passed without new
+  Rust warnings.
+- `cargo fmt`, `git diff --check`, and the hardcoding audit passed. Audit
+  remains 330 findings, 28 fact-key comparisons, and 0 blocked aliases.
+
+### Remaining gap
+
+- Required configured evidence constraints now fail closed, including under
+  negation, but their `Failed` versus `Unknown` distinction and structured
+  `VerifiedMatch` projection still use the legacy evidence matcher. Migrate
+  that family when touching its proof path; do not weaken current eligibility.
+
+### Next exact command
+
+Inspect revision lowering and implement area-only `AddAlternative` against one
+unambiguous parent branch. It must copy that branch's non-spatial predicates;
+multiple plausible parent branches must clarify without executing a candidate.
