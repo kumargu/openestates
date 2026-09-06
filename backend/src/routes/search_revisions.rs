@@ -9,8 +9,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::search::ast::{ConstraintExpr, ConstraintTerm};
 use crate::search::{
-    compile_search_revision, revision_id_for_query, validated_revision_depth, SearchResponse,
-    SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome, SearchRuntimeVersion,
+    compile_search_revision_with_plan, revision_id_for_query, validated_revision_depth,
+    SearchResponse, SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
+    SearchRuntimeVersion,
 };
 use crate::state::{AppState, RuntimeVersionKey};
 
@@ -171,13 +172,25 @@ pub async fn revise_search(
         );
     }
 
-    let revision = compile_search_revision(
+    let area_only_alternative = crate::search::revision::revision_expansion_fragment(
+        &request.utterance,
+    )
+    .and_then(|fragment| {
+        crate::search::revision::resolve_area_only_alternative(
+            fragment,
+            &snapshot.bundle.entities,
+            &snapshot.bundle.entity_alias_index,
+        )
+    });
+    let revision = compile_search_revision_with_plan(
         &request.parent_query,
         &request.utterance,
         derived_parent_count,
         SearchRevisionLimits {
             max_active_branches: MAX_ACTIVE_BRANCHES,
         },
+        Some(&parent_output.compiled_plan),
+        area_only_alternative.as_deref(),
     );
     let depth_checkpoint = parent_depth >= MAX_REVISION_DEPTH;
     let outcome = if depth_checkpoint {

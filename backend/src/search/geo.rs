@@ -18,6 +18,7 @@ use super::evaluation::{
     BooleanEvaluation, EvaluationEvidence, EvidenceGap, PredicateEvaluation, VerifiedMatch,
 };
 use super::index::SearchIndex;
+use super::intent::SourceSpan;
 use super::parser;
 use super::query_plan::{QueryPlan, QueryRelationClause, RelationRequirement};
 use super::resolver::query_contains_lower_text;
@@ -117,6 +118,7 @@ pub struct GeoSearchQuery<'a> {
 pub(crate) struct ResolvedGeoClause {
     pub relation: String,
     pub target_text: String,
+    pub target_span: SourceSpan,
     pub place_entity_ids: Vec<String>,
     pub category_fact_keys: Vec<String>,
     pub distance_limit_km: Option<f64>,
@@ -307,6 +309,11 @@ impl GeoSearchIndex {
             clauses.push(ResolvedGeoClause {
                 relation: relation.relation.clone(),
                 target_text: relation.target_text.clone(),
+                target_span: SourceSpan {
+                    start: relation.target_span.start,
+                    end: relation.target_span.end,
+                    raw_text: relation.target_text.clone(),
+                },
                 place_entity_ids,
                 category_fact_keys,
                 distance_limit_km: relation.distance_limit_km,
@@ -1011,7 +1018,7 @@ impl<'a> GeoSearchQuery<'a> {
                         entity_id: place.entity_id.clone(),
                         display_name: place.name.clone(),
                         required: clause.requirement == RelationRequirement::Hard,
-                        span: None,
+                        span: Some(clause.target_span.clone()),
                     })
             })
             .collect()
@@ -1980,12 +1987,21 @@ mod tests {
             society_coordinates: Vec::new(),
         };
 
+        let raw_query = "3bhk near Kadugodi Metro";
         let query = index
-            .query("3bhk near Kadugodi Metro")
+            .query(raw_query)
             .expect("explicit metro clause should resolve");
 
         assert_eq!(query.resolved_places().len(), 1);
         assert_eq!(query.resolved_places()[0].entity_id, "place:kadugodi-metro");
+        let ast_terms = query.ast_terms();
+        let [ConstraintTerm::Spatial {
+            span: Some(span), ..
+        }] = ast_terms.as_slice()
+        else {
+            panic!("resolved relation should compile to one spanned spatial predicate");
+        };
+        assert_eq!(&raw_query[span.start..span.end], "Kadugodi Metro");
     }
 
     #[test]

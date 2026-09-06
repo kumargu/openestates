@@ -26,6 +26,35 @@ pub struct NumericBound {
     pub raw_text: String,
 }
 
+/// Structural predicate families understood by the query runtime.
+///
+/// These identify protocol-level mechanics, not configured buyer vocabulary.
+/// Named entities, place categories, fact keys, and scoring meaning remain in
+/// the serving bundle and DAG config.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PredicateFamily {
+    Bhk,
+    Area,
+    Society,
+    Builder,
+    Budget,
+    Evidence,
+    Spatial,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PredicatePolarity {
+    Positive,
+    Negated,
+}
+
+impl PredicatePolarity {
+    fn is_negated(self) -> bool {
+        self == Self::Negated
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "field", rename_all = "snake_case")]
 pub enum ConstraintTerm {
@@ -74,6 +103,32 @@ pub enum ConstraintTerm {
         #[serde(skip_serializing_if = "Option::is_none")]
         span: Option<SourceSpan>,
     },
+}
+
+impl ConstraintTerm {
+    pub fn predicate_family(&self) -> PredicateFamily {
+        match self {
+            Self::Bhk { .. } => PredicateFamily::Bhk,
+            Self::Area { .. } => PredicateFamily::Area,
+            Self::Society { .. } => PredicateFamily::Society,
+            Self::Builder { .. } => PredicateFamily::Builder,
+            Self::Budget { .. } => PredicateFamily::Budget,
+            Self::Evidence { .. } => PredicateFamily::Evidence,
+            Self::Spatial { .. } => PredicateFamily::Spatial,
+        }
+    }
+
+    pub fn source_span(&self) -> Option<&SourceSpan> {
+        match self {
+            Self::Bhk { span, .. }
+            | Self::Area { span, .. }
+            | Self::Society { span, .. }
+            | Self::Builder { span, .. }
+            | Self::Budget { span, .. }
+            | Self::Evidence { span, .. }
+            | Self::Spatial { span, .. } => span.as_ref(),
+        }
+    }
 }
 
 /// Boolean query tree compiled after parsing is complete.
@@ -211,6 +266,21 @@ impl ConstraintExpr {
 
     pub fn term(term: ConstraintTerm) -> Self {
         Self::Term { term }
+    }
+
+    /// Return distinct source spans for selected predicate families and
+    /// Boolean polarity. A nested `Not` flips polarity; double negation
+    /// restores it. The traversal is shared by every revision family.
+    pub fn source_spans_for(
+        &self,
+        families: &[PredicateFamily],
+        polarity: PredicatePolarity,
+    ) -> Vec<SourceSpan> {
+        let mut spans = Vec::new();
+        collect_source_spans(self, families, polarity.is_negated(), false, &mut spans);
+        spans.sort_by_key(|span| (span.start, span.end));
+        spans.dedup_by(|left, right| left.start == right.start && left.end == right.end);
+        spans
     }
 
     /// Evaluate the Boolean tree without flattening grouped alternatives.
@@ -639,19 +709,31 @@ fn compile_constraint_expr(
 
 #[derive(Clone)]
 struct SpannedTerm {
-    family: ConstraintFamily,
+    family: CompilationFamily,
     expr: ConstraintExpr,
     span: Option<SourceSpan>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
-enum ConstraintFamily {
-    Bhk,
-    Area,
-    Society,
-    Builder,
-    Budget,
-    Evidence(String),
+struct CompilationFamily {
+    predicate: PredicateFamily,
+    discriminator: Option<String>,
+}
+
+impl CompilationFamily {
+    fn predicate(predicate: PredicateFamily) -> Self {
+        Self {
+            predicate,
+            discriminator: None,
+        }
+    }
+
+    fn evidence(discriminator: String) -> Self {
+        Self {
+            predicate: PredicateFamily::Evidence,
+            discriminator: Some(discriminator),
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -662,14 +744,15 @@ enum AlternativeFamily {
     Evidence,
 }
 
-fn alternative_family(family: &ConstraintFamily) -> AlternativeFamily {
-    match family {
-        ConstraintFamily::Bhk => AlternativeFamily::Bhk,
-        ConstraintFamily::Area | ConstraintFamily::Society | ConstraintFamily::Builder => {
+fn alternative_family(family: &CompilationFamily) -> AlternativeFamily {
+    match family.predicate {
+        PredicateFamily::Bhk => AlternativeFamily::Bhk,
+        PredicateFamily::Area | PredicateFamily::Society | PredicateFamily::Builder => {
             AlternativeFamily::Entity
         }
-        ConstraintFamily::Budget => AlternativeFamily::Budget,
-        ConstraintFamily::Evidence(_) => AlternativeFamily::Evidence,
+        PredicateFamily::Budget => AlternativeFamily::Budget,
+        PredicateFamily::Evidence => AlternativeFamily::Evidence,
+        PredicateFamily::Spatial => AlternativeFamily::Entity,
     }
 }
 
@@ -689,7 +772,7 @@ fn spanned_bhk_term(slot: &BhkConstraint) -> SpannedTerm {
         raw_text: slot.raw_text.clone(),
     };
     SpannedTerm {
-        family: ConstraintFamily::Bhk,
+        family: CompilationFamily::predicate(PredicateFamily::Bhk),
         expr: ConstraintExpr::term(ConstraintTerm::Bhk {
             value: slot.value,
             span: Some(span.clone()),
@@ -709,7 +792,7 @@ fn area_terms(plan: &QueryPlan, polarity: MentionPolarity) -> Vec<SpannedTerm> {
                 raw_text: area.matched_text.clone(),
             };
             SpannedTerm {
-                family: ConstraintFamily::Area,
+                family: CompilationFamily::predicate(PredicateFamily::Area),
                 expr: ConstraintExpr::term(ConstraintTerm::Area {
                     entity_id: None,
                     value: area.canonical.clone(),
@@ -726,7 +809,7 @@ fn resolved_area_terms<'a>(
 ) -> Vec<SpannedTerm> {
     areas
         .map(|area| SpannedTerm {
-            family: ConstraintFamily::Area,
+            family: CompilationFamily::predicate(PredicateFamily::Area),
             expr: ConstraintExpr::term(ConstraintTerm::Area {
                 entity_id: Some(area.entity_id.clone()),
                 value: area.display_name.clone(),
@@ -746,7 +829,7 @@ fn society_terms<'a>(
 ) -> Vec<SpannedTerm> {
     societies
         .map(|society| SpannedTerm {
-            family: ConstraintFamily::Society,
+            family: CompilationFamily::predicate(PredicateFamily::Society),
             expr: ConstraintExpr::term(ConstraintTerm::Society {
                 entity_id: society.entity_id.clone(),
                 display_name: society.display_name.clone(),
@@ -762,7 +845,7 @@ fn builder_terms<'a>(
 ) -> Vec<SpannedTerm> {
     builders
         .map(|builder| SpannedTerm {
-            family: ConstraintFamily::Builder,
+            family: CompilationFamily::predicate(PredicateFamily::Builder),
             expr: ConstraintExpr::term(ConstraintTerm::Builder {
                 entity_id: builder.entity_id.clone(),
                 display_name: builder.display_name.clone(),
@@ -805,7 +888,7 @@ fn spanned_budget_term(budget: &ParsedBudgetConstraint) -> SpannedTerm {
         span: Some(span.clone()),
     });
     SpannedTerm {
-        family: ConstraintFamily::Budget,
+        family: CompilationFamily::predicate(PredicateFamily::Budget),
         expr,
         span: Some(span),
     }
@@ -825,7 +908,7 @@ fn evidence_terms(
                 end: matched.end,
                 raw_text,
             };
-            let family = ConstraintFamily::Evidence(matched.constraint.field.to_ascii_lowercase());
+            let family = CompilationFamily::evidence(matched.constraint.field.to_ascii_lowercase());
             Some(SpannedTerm {
                 family,
                 expr: ConstraintExpr::term(ConstraintTerm::Evidence {
@@ -891,7 +974,7 @@ fn compile_constraint_plan(
     if active_groups.len() < 2 {
         return None;
     }
-    let mut family_spans = Vec::<(ConstraintFamily, bool, Vec<SourceSpan>)>::new();
+    let mut family_spans = Vec::<(CompilationFamily, bool, Vec<SourceSpan>)>::new();
     for group in &active_groups {
         for term in group.terms {
             let Some(span) = term.span.clone() else {
@@ -1063,10 +1146,10 @@ fn compile_constraint_plan(
     Some(ConstraintPlan { shared, branches })
 }
 
-fn is_entity_family(family: &ConstraintFamily) -> bool {
+fn is_entity_family(family: &CompilationFamily) -> bool {
     matches!(
-        family,
-        ConstraintFamily::Area | ConstraintFamily::Society | ConstraintFamily::Builder
+        family.predicate,
+        PredicateFamily::Area | PredicateFamily::Society | PredicateFamily::Builder
     )
 }
 
@@ -1079,6 +1162,34 @@ fn terms_within_segment_refs(terms: &[SpannedTerm], start: usize, end: usize) ->
                 .is_some_and(|span| span.start >= start && span.start < end)
         })
         .collect()
+}
+
+fn collect_source_spans(
+    expr: &ConstraintExpr,
+    families: &[PredicateFamily],
+    requested_negated: bool,
+    current_negated: bool,
+    spans: &mut Vec<SourceSpan>,
+) {
+    match expr {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
+            for clause in clauses {
+                collect_source_spans(clause, families, requested_negated, current_negated, spans);
+            }
+        }
+        ConstraintExpr::Not { clause } => {
+            collect_source_spans(clause, families, requested_negated, !current_negated, spans)
+        }
+        ConstraintExpr::Term { term }
+            if current_negated == requested_negated
+                && families.contains(&term.predicate_family()) =>
+        {
+            if let Some(span) = term.source_span() {
+                spans.push(span.clone());
+            }
+        }
+        ConstraintExpr::Term { .. } => {}
+    }
 }
 
 fn remove_positive_terms(
@@ -1245,9 +1356,10 @@ fn push_unique_u32(values: &mut Vec<u32>, value: u32) {
 mod tests {
     use super::{
         compile_constraint_expr, semantic_ast_fingerprint, semantic_search_fingerprint,
-        CompiledQuery, ConstraintExpr, ConstraintTerm, ResolvedEntityConstraint, SourceSpan,
+        CompiledQuery, ConstraintExpr, ConstraintTerm, NumericBound, PredicateFamily,
+        PredicatePolarity, ResolvedEntityConstraint, SourceSpan,
     };
-    use crate::search::intent::parse_intent;
+    use crate::search::intent::{parse_intent, HardConstraint};
 
     #[test]
     fn semantic_fingerprint_ignores_buyer_wording_and_source_spans() {
@@ -1996,6 +2108,99 @@ mod tests {
         assert_eq!(&query[spans[0].0..spans[0].1], "2/3 BHK");
         assert_eq!(&query[spans[1].0..spans[1].1], "2/3 BHK");
         assert_eq!(&query[spans[2].0..spans[2].1], "2Cr");
+    }
+
+    #[test]
+    fn predicate_span_selection_is_generic_and_polarity_aware() {
+        let span = |start, end, raw_text: &str| SourceSpan {
+            start,
+            end,
+            raw_text: raw_text.to_string(),
+        };
+        let location_span = span(19, 24, "Hoodi");
+        let expr = ConstraintExpr::and(vec![
+            ConstraintExpr::term(ConstraintTerm::Bhk {
+                value: 3,
+                span: Some(span(0, 4, "3BHK")),
+            }),
+            ConstraintExpr::term(ConstraintTerm::Budget {
+                min: None,
+                max: Some(NumericBound {
+                    value: 20_000_000,
+                    inclusive: true,
+                    raw_text: "2Cr".to_string(),
+                }),
+                span: Some(span(11, 14, "2Cr")),
+            }),
+            ConstraintExpr::term(ConstraintTerm::Area {
+                entity_id: Some("area:hoodi".to_string()),
+                value: "Hoodi".to_string(),
+                span: Some(location_span.clone()),
+            }),
+            ConstraintExpr::term(ConstraintTerm::Spatial {
+                relation: "near".to_string(),
+                entity_id: "area:hoodi".to_string(),
+                display_name: "Hoodi".to_string(),
+                required: false,
+                span: Some(location_span),
+            }),
+            ConstraintExpr::term(ConstraintTerm::Evidence {
+                constraint: HardConstraint {
+                    field: "configured_dimension".to_string(),
+                    operator: super::super::intent::ConstraintOperator::Min,
+                    value: 1.0,
+                    unit: "configured_unit".to_string(),
+                    raw_text: "with evidence".to_string(),
+                },
+                span: Some(span(25, 38, "with evidence")),
+            }),
+            ConstraintExpr::negated(ConstraintExpr::term(ConstraintTerm::Society {
+                entity_id: "society:excluded".to_string(),
+                display_name: "Excluded".to_string(),
+                span: Some(span(43, 51, "Excluded")),
+            })),
+            ConstraintExpr::negated(ConstraintExpr::negated(ConstraintExpr::term(
+                ConstraintTerm::Builder {
+                    entity_id: "builder:included".to_string(),
+                    display_name: "Included".to_string(),
+                    span: Some(span(56, 64, "Included")),
+                },
+            ))),
+        ]);
+
+        assert_eq!(
+            expr.source_spans_for(&[PredicateFamily::Bhk], PredicatePolarity::Positive),
+            [span(0, 4, "3BHK")]
+        );
+        assert_eq!(
+            expr.source_spans_for(
+                &[PredicateFamily::Budget, PredicateFamily::Evidence],
+                PredicatePolarity::Positive,
+            ),
+            [span(11, 14, "2Cr"), span(25, 38, "with evidence")]
+        );
+        assert_eq!(
+            expr.source_spans_for(
+                &[PredicateFamily::Area, PredicateFamily::Spatial],
+                PredicatePolarity::Positive,
+            ),
+            [span(19, 24, "Hoodi")],
+            "the same location span is selected once across structural families"
+        );
+        assert_eq!(
+            expr.source_spans_for(&[PredicateFamily::Society], PredicatePolarity::Positive),
+            [],
+            "negated scopes cannot be revised as positive predicates"
+        );
+        assert_eq!(
+            expr.source_spans_for(&[PredicateFamily::Society], PredicatePolarity::Negated),
+            [span(43, 51, "Excluded")]
+        );
+        assert_eq!(
+            expr.source_spans_for(&[PredicateFamily::Builder], PredicatePolarity::Positive),
+            [span(56, 64, "Included")],
+            "double negation restores positive polarity"
+        );
     }
 
     fn collect_spans(expr: &ConstraintExpr, spans: &mut Vec<(usize, usize)>) {

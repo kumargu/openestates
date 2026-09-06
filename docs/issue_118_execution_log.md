@@ -371,3 +371,137 @@ negation success.
 Inspect revision lowering and implement area-only `AddAlternative` against one
 unambiguous parent branch. It must copy that branch's non-spatial predicates;
 multiple plausible parent branches must clarify without executing a candidate.
+
+## Plan reset — generic predicate architecture before more features
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Parent commit: `0461a73c`
+- Current uncommitted experiment: area-only revision alternatives and their API
+  contracts. This work passes its focused gates but is not ready to commit.
+
+### Why the plan changed
+
+The first area-alternative implementation added an area-specific Boolean-tree
+walker. That solves one example while creating the wrong extension point for
+budget, BHK, evidence, society, builder, and spatial revisions. This is an
+`architecture_gap`, not accepted implementation. Do not add another
+family-specific AST traversal.
+
+Issue 118 now gates continued feature work on one typed predicate architecture:
+
+1. `ConstraintTerm` owns its structural predicate family and optional source
+   span.
+2. `ConstraintExpr` owns the single polarity-aware traversal for selecting
+   spans or terms by predicate family.
+3. Revision patches identify predicate families with typed values, never
+   strings such as `"price"`.
+4. Area-only alternatives use the generic location-scope family selection
+   (`area`, `society`, and `spatial`) and clarify when more than one distinct
+   positive scope exists.
+5. Spatial resolution preserves the parser's source span through the resolved
+   clause and compiled AST, so `near`, `inside`, and future relation revisions
+   use the same machinery as BHK and budget.
+6. Recall, evaluation, ranking, and proof consume compiled predicates and
+   `VerifiedMatch`; they must not introduce product-vocabulary branches or
+   predicate-family copies of Boolean semantics.
+
+### Hardcoding and cleanup rule
+
+When touched Issue 118 code contains a family-specific tree walk, string family
+tag, raw-query branch mutation, always-true predicate evaluation, or duplicated
+proof construction, either replace it with the generic typed path in the same
+checkpoint or record it as a blocking removal item. Named areas, societies,
+places, and aliases remain DAG/serving data, never Rust or parser config.
+
+Abstraction stays structural rather than speculative: code may distinguish
+generic protocol families (`budget`, `spatial`, `evidence`), Boolean operators,
+metrics, and evaluation states. It may not distinguish named buyer vocabulary,
+localities, place categories, or fact keys in control flow.
+
+### Reloaded checkpoints
+
+1. Add generic predicate-family, polarity, source-span, selection, and patch
+   operations to the AST, with shared tests for BHK, budget, area, society,
+   evidence, and spatial terms.
+2. Refactor compiled revisions onto those operations; delete the area-only
+   walker, string family tags, and superseded string-surgery paths as their
+   typed replacements pass.
+3. Converge recall, exact evaluation, ranking, and proof on the same compiled
+   predicate and verified-evidence contracts.
+4. Generate and inspect the East Bengaluru candidate DAG bundle and topology
+   coverage without adding named production hardcoding.
+5. Run touched-path cleanup plus the full correctness, API, DAG, hardcoding,
+   benchmark, smoke, and diff gates.
+
+### Baseline before the reset
+
+- `cargo test --lib search::revision::tests`: 12 passed.
+- `cargo test --test search_revision_api_contract`: 3 passed.
+- Existing macOS compact-unwind linker warning remains unchanged.
+
+### Next exact command
+
+Add the generic family/polarity/span selection API in
+`backend/src/search/ast.rs`, carry relation target spans into spatial AST terms,
+replace `collect_positive_area_spans`, and prove the same API across predicate
+families before changing revision behavior further.
+
+## Checkpoint 5A — generic predicate selection foundation
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Parent commit: `0461a73c`
+
+### Implemented
+
+- Added typed structural `PredicateFamily` and `PredicatePolarity` contracts.
+  Every `ConstraintTerm` now exposes its family and optional source span.
+- Added one distinct, polarity-aware `ConstraintExpr::source_spans_for` traversal.
+  It handles `And`, `AnyOf`, nested `Not`, and double negation for every current
+  predicate family.
+- Replaced the compiler's parallel family enum with a small compilation key
+  built on the authoritative `PredicateFamily`. Evidence-field discrimination
+  remains internal and config-derived.
+- Carried relation target spans through resolved geo clauses into compiled
+  spatial terms. Named-place and area relations can now participate in the same
+  revision machinery as BHK, budget, entity, and evidence predicates.
+- Deleted `collect_positive_area_spans`. Area-only alternatives select the
+  generic positive location-scope family set (`Area`, `Society`, `Spatial`),
+  deduplicate overlapping term spans, and clarify when a branch has multiple
+  distinct scopes.
+- Replaced revision patch family strings such as `"price"` with typed
+  `PredicateFamily::Budget` values.
+- Preserved the single-parent area-alternative behavior and fail-closed
+  multi-parent behavior from the uncommitted experiment.
+
+### Gates
+
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check`: passed.
+- `cargo test --lib search::ast::tests`: 30 passed.
+- `cargo test --lib search::geo::tests`: 26 passed.
+- `cargo test --lib search::revision::tests`: 14 passed.
+- `cargo test --test search_revision_api_contract`: 3 passed.
+- `cargo test --test search_conversational_semantics_contract`: 10 passed.
+- `cargo test --test search_efficiency_contract`: 11 passed.
+- `./tests/smoke_test.sh`: 53 passed against the pinned local development
+  release `waterford-osm-arrival-2026-08-31-release` using the main worktree's
+  lake URL. The feature worktree intentionally contains no local lake assets.
+- `python3 scripts/audit_search_hardcoding.py`: 330 findings, 28 fact-key
+  comparisons, 0 blocked aliases; delta remains zero.
+- `git diff --check`: passed.
+- Existing macOS compact-unwind linker warning remains unchanged.
+
+### Remaining architecture gap
+
+Revision classification now carries typed family identities and uses generic
+AST selection, but candidate execution still lowers through edited canonical
+query text before ordinary search recompiles it. Replace this with typed patch
+application to the authenticated compiled parent plan, retaining canonical
+`activeQuery` only as the deterministic public projection. Delete the replaced
+string-surgery helpers when that gate passes.
+
+### Next exact command
+
+Design the smallest branch-level typed patch operation on `IntentBranch` /
+`CompiledSearchPlan`, then migrate budget replacement and alternative copying
+one at a time. Rerun direct-versus-revised ordering and proof equivalence after
+each migration; do not add predicate-family-specific AST walkers.

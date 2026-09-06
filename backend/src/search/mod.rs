@@ -16,7 +16,7 @@ pub mod revision;
 pub mod schema;
 pub mod text;
 
-pub use ast::{CompiledQuery, ConstraintExpr, ConstraintTerm};
+pub use ast::{CompiledQuery, ConstraintExpr, ConstraintTerm, PredicateFamily, PredicatePolarity};
 pub use capabilities::SearchCapabilityIndex;
 pub use compiled_plan::{
     BoolExpr, BranchId, CompiledSearchPlan, IntentBranch, ResolvedEntityHandle,
@@ -36,9 +36,9 @@ pub use guard::{
 pub use index::SearchIndex;
 pub use intent::{SearchIntent, SourceSpan};
 pub use revision::{
-    compile_search_revision, compiled_branch_count, revision_id_for_query,
-    validated_revision_depth, SearchRevision, SearchRevisionLimits, SearchRevisionOperation,
-    SearchRevisionOutcome, SearchRevisionPatch,
+    compile_search_revision, compile_search_revision_with_plan, compiled_branch_count,
+    revision_id_for_query, validated_revision_depth, SearchRevision, SearchRevisionLimits,
+    SearchRevisionOperation, SearchRevisionOutcome, SearchRevisionPatch,
 };
 pub use text::{TextSearch, TextSearchRequest};
 

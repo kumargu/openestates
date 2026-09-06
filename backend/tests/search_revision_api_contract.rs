@@ -64,6 +64,27 @@ async fn stateless_revision_route_enforces_runtime_parent_and_safe_outcomes() {
         "nested ordinary search must expose the same server-issued revision"
     );
 
+    let area_alternative = post_revision(
+        &app,
+        revision_request(
+            parent_revision,
+            parent_query,
+            1,
+            runtime.clone(),
+            "Also consider Sarjapur",
+        ),
+        28,
+    )
+    .await;
+    assert_eq!(area_alternative.0, StatusCode::OK);
+    assert_eq!(area_alternative.1["outcome"], "candidate");
+    assert_eq!(area_alternative.1["operation"], "expand");
+    assert_eq!(area_alternative.1["activeBranchCount"], 2);
+    assert_eq!(
+        area_alternative.1["activeQuery"],
+        "3BHK in Hoodi under 2.4 Cr or 3BHK in Sarjapur under 2.4 Cr"
+    );
+
     let mut stale_runtime = runtime.clone();
     stale_runtime["searchEngineVersion"] = Value::String("stale-engine".to_string());
     let stale = post_revision(
@@ -130,6 +151,25 @@ async fn stateless_revision_route_enforces_runtime_parent_and_safe_outcomes() {
     assert_eq!(clarification.1["outcome"], "requireClarification");
     assert!(clarification.1.get("search").is_none());
     assert_eq!(clarification.1["activeQuery"], parent_query);
+
+    let multi_parent_query = "3BHK in Hoodi under 2.4 Cr or 2BHK in Sarjapur under 1.8 Cr";
+    let multi_parent = get_search(&app, multi_parent_query, 29).await;
+    let ambiguous_area = post_revision(
+        &app,
+        revision_request(
+            multi_parent.1["revisionId"].as_str().unwrap(),
+            multi_parent_query,
+            2,
+            multi_parent.1["runtimeVersion"].clone(),
+            "Also consider Hoodi",
+        ),
+        30,
+    )
+    .await;
+    assert_eq!(ambiguous_area.0, StatusCode::OK);
+    assert_eq!(ambiguous_area.1["outcome"], "requireClarification");
+    assert!(ambiguous_area.1.get("search").is_none());
+    assert_eq!(ambiguous_area.1["activeQuery"], multi_parent_query);
 }
 
 #[tokio::test]
