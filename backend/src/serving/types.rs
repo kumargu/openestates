@@ -124,12 +124,13 @@ pub fn validate_serving_edge_evidence<'a>(
         )?;
     }
     for edge in edges {
-        edge.validate_derivation(snapshot_identity).map_err(|error| {
-            format!(
-                "edge {} -[{}]-> {} has invalid derivation: {error}",
-                edge.from_entity_id, edge.edge_type, edge.to_entity_id
-            )
-        })?;
+        edge.validate_derivation(snapshot_identity)
+            .map_err(|error| {
+                format!(
+                    "edge {} -[{}]-> {} has invalid derivation: {error}",
+                    edge.from_entity_id, edge.edge_type, edge.to_entity_id
+                )
+            })?;
         if let Some(derivation) = &edge.derivation {
             insert_evidence_subject(
                 &mut evidence_subjects,

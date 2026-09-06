@@ -4,7 +4,7 @@
 
 - Reset recorded: 2026-09-06 Asia/Kolkata
 - Continuation branch: `feat/issue-118-consolidated`
-- Continuation HEAD: Checkpoint 15 working tree (`feat: persist spatial edge derivations`)
+- Continuation HEAD: Checkpoint 16 working tree (`refactor: remove home-state time inference`)
 - Preserved source branch: `feat/issue-118-spatial-intent`
 - Merge base: `d1c06e2b` (`main` at the start of Issue 118 work)
 - Worktree at reset: clean
@@ -39,8 +39,10 @@ checkpoint-local next steps where they differ from the consolidated plan.
     evaluator.
 20. `1b19ac4c` — qualify spatial matches with durable observations and typed
     derivations.
-21. Checkpoint 15 (current working tree) — persist qualified containment and
-    adjacency derivations on serving edges.
+21. `9b9d9820` — persist qualified containment and adjacency derivations on
+    serving edges.
+22. Checkpoint 16 (current working tree) — remove date-derived home state and
+    age facts.
 
 ### Pulled-forward commitment audit
 
@@ -70,9 +72,9 @@ checkpoint-local next steps where they differ from the consolidated plan.
   scoring policy, and proof destinations remain config/DAG-owned. Rust owns
   only structural Boolean, comparison, geometry, and evaluation mechanics.
 - BHK and price must be verified by the same inventory observation.
-- Observation times are provenance metadata only. Timestamp ordering, elapsed
-  time, freshness decay, and age windows cannot affect search eligibility,
-  matching, confidence, scoring, or ranking.
+- Observation times are provenance metadata only. Product/domain code cannot
+  compare, subtract, or order timestamps to infer age, freshness, current
+  state, eligibility, matching, confidence, scoring, or ranking.
 - Spatial recall uses an index followed by exact geometry evaluation. Polygon
   holes and all MultiPolygon parts must survive materialization and serving.
 - A trusted point is an explicitly labelled distance fallback only. It cannot
@@ -205,7 +207,7 @@ failure stops further stacking; honest coverage gaps do not.
 ### Current verified gate summary
 
 The detailed commands and counts remain recorded in the checkpoints below.
-Through the Checkpoint 15 working tree, focused Rust search and serving
+Through the Checkpoint 16 working tree, focused Rust search and serving
 contracts, the frozen query bank, all-target Cargo check, formatting, and
 `git diff --check` pass. The hardcoding audit remains at 330 findings, 28
 fact-key comparisons, and zero blocked aliases, with zero delta from the
@@ -216,16 +218,17 @@ inventory observations. These gates must be rerun for every touched slice.
 ### Exact next command
 
 ```bash
-sed -n '1,220p' backend/src/assets/home_state.rs
-sed -n '220,560p' backend/src/assets/home_state.rs
-rg -n "signed_duration_since|date_naive|learned_at.*[<>]|max_by_key\(.*learned_at|home_age_years|project_age_years" backend/src app/config/dag backend/tests
+sed -n '360,420p' backend/src/community.rs
+sed -n '3360,3405p' backend/src/routes/properties.rs
+sed -n '1700,1740p' backend/src/assets/kg_view.rs
+sed -n '520,565p' backend/src/assets/compaction.rs
+sed -n '420,455p' backend/src/assets/rera.rs
+rg -n "learned_at\s*[<>]|max_by_key\([^\n]*learned_at" backend/src
 ```
 
-Apply the user's explicit no-time-calculation rule to the remaining offline
-`home_state` product derivation. Preserve source dates as facts and timestamps
-as lineage only; do not infer age, freshness, or current delivery state from
-wall-clock comparisons. Keep existing tests but update the existing DAG
-contract rather than adding a new suite.
+Remove the remaining timestamp-based product-record selection. Select by
+durable content/source identity instead. Leave operational elapsed-time metrics,
+retry scheduling, and run-duration diagnostics unchanged.
 
 ## Checkpoint 11 — timestamps removed from search confidence
 
@@ -534,6 +537,62 @@ rg -n "signed_duration_since|date_naive|learned_at.*[<>]|max_by_key\(.*learned_a
 Remove remaining product-state and age inference from dates. Keep explicit
 source status and delay facts, preserve timestamps only as metadata, and update
 the existing home-state/DAG contracts without creating a new test suite.
+
+## Checkpoint 16 — no date-derived home state or age
+
+- Parent commit: `9b9d9820`
+- Classified issue: offline product-state `architecture_gap`
+
+### Implemented
+
+- Removed completion-date versus wall-clock comparison from the
+  `home_state_signals` asset. Completion dates remain upstream source facts but
+  no longer decide whether a home is delivered or under construction.
+- Removed computed `home_age_years`, `project_age_years`, and age buckets.
+- Kept only explicit state inputs: RERA status may map to a controlled home
+  state, and a positive source `rera_delay_months` may mark delay. No absence of
+  delay is promoted to an `on_track` claim.
+- Replaced latest-timestamp selection and `max(source_time, run_time)` with
+  deterministic source-content identity. Output timestamps record the asset
+  run only and do not change product meaning.
+- Strengthened `AGENTS.md`: product/domain code cannot compare, subtract, or
+  order timestamps. Operational retry/run measurements remain allowed.
+
+### Gates and test value
+
+- Existing home-state tests: 2 passed after being updated to assert explicit
+  state/delay behavior and the absence of generated age facts. No new suite or
+  test was added.
+- Frozen conversational query bank: 10 passed.
+- Focused DAG executor vertical reaches its final search assertion, then fails
+  with zero results for `3bhk with greenery in whitefield above 10 acres`.
+  The exact failure reproduces unchanged at parent commit `9b9d9820`, so this
+  checkpoint did not cause it; it remains a pre-existing fail-closed evidence
+  gap to diagnose separately.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check --all-targets`: passed.
+- Hardcoding audit remains 330 findings, 28 fact-key comparisons, and zero
+  blocked aliases.
+- `cargo fmt` and `git diff --check`: passed.
+
+### Candidate identity
+
+No Issue 118 candidate lake or bundle exists. The DAG vertical used an isolated
+temporary lake. The main local lake and current pointer were not changed.
+
+### Next exact command
+
+```bash
+sed -n '360,420p' backend/src/community.rs
+sed -n '3360,3405p' backend/src/routes/properties.rs
+sed -n '1700,1740p' backend/src/assets/kg_view.rs
+sed -n '520,565p' backend/src/assets/compaction.rs
+sed -n '420,455p' backend/src/assets/rera.rs
+rg -n "learned_at\s*[<>]|max_by_key\([^\n]*learned_at" backend/src
+```
+
+Replace the remaining timestamp-based product-record selection with stable
+content/source identity. Keep operational timings and retry scheduling because
+they do not create buyer facts.
 
 ## Goal and invariants
 

@@ -210,10 +210,12 @@ tests, compile/type checks, and the search hardcoding audit.
 ### Time metadata is not product logic
 
 Observation and ingestion timestamps exist for provenance, diagnostics, and
-display only. Do not use elapsed time, timestamp ordering, freshness decay, or
-age windows to change search eligibility, matching, confidence, scoring, or
-ranking. Property facts must win or fail on explicit evidence and configured
-semantics, not on when a row happened to be written.
+display only. Product and domain code must not compare, subtract, or order
+timestamps to infer age, freshness, current state, eligibility, matching,
+confidence, scoring, or ranking. Property facts must win or fail on explicit
+evidence and configured semantics, not on when a row happened to be written.
+Operational retry scheduling, run-duration measurement, and provenance capture
+are allowed because they do not create buyer facts or change product meaning.
 
 Search work must run as a proof loop, not as accumulated code:
 - Start each search-quality session with a chain audit: list the relevant local commits or touched files, map them to the current milestone, and call out anything that looks like duplicated, bypassed, or accidentally productized experimental behavior.
