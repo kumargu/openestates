@@ -104,6 +104,8 @@ pub struct DiscourseParserConfig {
     pub revision_replace_markers: Vec<String>,
     #[serde(default)]
     pub revision_correction_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_ambiguous_spatial_refinements: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -154,6 +156,8 @@ pub struct RelationParserConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct RelationAliasConfig {
     pub alias: String,
+    #[serde(default)]
+    pub operator: Option<String>,
     #[serde(default)]
     pub requires_distance_limit: bool,
     #[serde(default)]

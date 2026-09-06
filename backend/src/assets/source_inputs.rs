@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::environment::EnvironmentGroundwaterPotentialInput;
+use super::locality::OsmLocalityBoundariesInput;
 use super::osm_access::OsmSocietyAccessInput;
 use super::osm_power::OsmPowerInfrastructureInput;
 use super::source_provider::SourceEntitySeed;
@@ -58,6 +59,8 @@ pub struct AssetSourceInputs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bengaluru_metro_stations: Option<BengaluruMetroStationsInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub osm_locality_boundaries: Option<OsmLocalityBoundariesInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub osm_society_access: Option<OsmSocietyAccessInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub osm_power_infrastructure: Option<OsmPowerInfrastructureInput>,
@@ -85,6 +88,7 @@ impl AssetSourceInputs {
             EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
             BENGALURU_METRO_STATION_FACTS_ASSET_ID,
+            super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
             OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
             STORMWATER_DRAIN_FACTS_ASSET_ID,
@@ -107,6 +111,7 @@ impl AssetSourceInputs {
                 | EXTERNAL_IMAGES_WEEKLY_ASSET_ID
                 | SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID
                 | BENGALURU_METRO_STATION_FACTS_ASSET_ID
+                | super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID
                 | OSM_SOCIETY_ACCESS_FACTS_ASSET_ID
                 | OSM_POWER_LINE_FACTS_ASSET_ID
                 | STORMWATER_DRAIN_FACTS_ASSET_ID
@@ -167,6 +172,7 @@ impl AssetSourceInputs {
         );
         for raw_asset_id in [
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+            super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
             OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
             STORMWATER_DRAIN_FACTS_ASSET_ID,

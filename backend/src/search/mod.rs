@@ -27,12 +27,13 @@ pub use guard::{
 pub use index::SearchIndex;
 pub use intent::{SearchIntent, SourceSpan};
 pub use revision::{
-    compile_search_revision, SearchRevision, SearchRevisionLimits, SearchRevisionOperation,
+    compile_search_revision, compiled_branch_count, revision_id_for_query,
+    validated_revision_depth, SearchRevision, SearchRevisionLimits, SearchRevisionOperation,
     SearchRevisionOutcome,
 };
 pub use text::{TextSearch, TextSearchRequest};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::models::{AreaProfile, PropertyCard};
 use crate::proof_focus::ProofFocus;
@@ -158,7 +159,7 @@ pub struct KnowledgeContext {
 
 /// Buyer-safe search response. Internal parsing, diagnostics and enrichment
 /// gaps stay in logs/admin surfaces rather than leaking into product copy.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchRuntimeVersion {
     pub serving_bundle_version: String,
@@ -170,6 +171,10 @@ pub struct SearchRuntimeVersion {
 #[serde(rename_all = "camelCase")]
 pub struct SearchResponse {
     pub query: String,
+    /// Stateless server-issued correlation ID for the active search intent.
+    pub revision_id: String,
+    /// Fingerprint of the semantic AST actually executed by SearchEngine.
+    pub ast_fingerprint: String,
     pub result_sets: Vec<SearchResultSet>,
     /// Canonical traversal order after cross-branch result limiting.
     pub ordered_result_ids: Vec<String>,

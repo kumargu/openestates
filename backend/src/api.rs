@@ -102,10 +102,15 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
         Router::new().route("/api/properties", get(routes::properties::list_properties)),
     );
 
-    let search_routes = Router::new().route(
-        "/api/search",
-        security.protect_search(get(routes::search::search_properties)),
-    );
+    let search_routes = Router::new()
+        .route(
+            "/api/search",
+            security.protect_search(get(routes::search::search_properties)),
+        )
+        .route(
+            "/api/search/revisions",
+            security.protect_search(post(routes::search_revisions::revise_search)),
+        );
 
     let batch_routes = security.protect_batch_reads(
         Router::new()

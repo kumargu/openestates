@@ -222,7 +222,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
             .iter()
             .filter(|step| step.status == AssetRunStepStatus::Skipped)
             .count(),
-        9
+        10
     );
 }
 
@@ -286,7 +286,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ];
-    assert_eq!(report.manifest.planned_count, expected_assets.len());
+    assert_eq!(report.manifest.planned_count, expected_assets.len() + 1);
     assert_eq!(report.executed_assets.len(), expected_assets.len());
     for id in expected_assets {
         assert!(report.executed_assets.contains(&asset_id(id)));
@@ -584,7 +584,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 26);
+    assert_eq!(report.manifest.planned_count, 27);
     assert_eq!(report.executed_assets.len(), 26);
     for id in [
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
@@ -2303,6 +2303,7 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
             }],
             source_watermarks: Vec::new(),
         }),
+        osm_locality_boundaries: None,
         osm_society_access: Some(OsmSocietyAccessInput {
             snapshot_date: "2026-07-13".to_string(),
             records: Vec::new(),

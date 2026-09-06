@@ -144,6 +144,34 @@ impl ServingBundleBuilder {
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         let bundle_version = bundle_version.into();
         let mut artifacts = Vec::new();
+        let topology_index =
+            super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
+        let topology = super::derive_spatial_topology(&entities, &topology_index, &edges);
+        let topology_gap_key = AssetPathBuilder::serving_bundle_key(
+            &bundle_version,
+            "diagnostics/spatial_topology_gaps.json",
+        );
+        let topology_gap_count =
+            topology.ambiguous_entity_ids.len() + topology.missing_geometry_entity_ids.len();
+        let topology_gap_meta = self
+            .lake
+            .put_json(
+                &topology_gap_key,
+                &serde_json::json!({
+                    "format_version": 1,
+                    "classification": "data_gap",
+                    "ambiguous_entity_ids": topology.ambiguous_entity_ids,
+                    "missing_geometry_entity_ids": topology.missing_geometry_entity_ids,
+                }),
+            )
+            .await?;
+        artifacts.push(artifact(
+            BundleArtifactKind::Other,
+            topology_gap_meta,
+            "application/json",
+            Some(topology_gap_count as u64),
+        ));
+        edges.extend(topology.edges);
         if derive_proximity {
             let base_index =
                 super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());

@@ -20,6 +20,7 @@ use tempfile::tempdir;
 const SEARCH_QUERY_BANK: &str = include_str!("../../data/validation/search_query_bank.json");
 const CONTROLLED_SUITE_ID: &str = "controlled_product";
 const CONTROLLED_JOURNEY_SUITE_ID: &str = "controlled_journey";
+const SPATIAL_REVISION_SUITE_ID: &str = "spatial_revision";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -203,6 +204,28 @@ struct JourneyLimits {
     deferred_branch_stress_cohort: usize,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpatialRevisionCase {
+    id: String,
+    #[serde(rename = "group")]
+    _group: String,
+    parent_query: String,
+    parent_branch_count: usize,
+    utterance: String,
+    expected_operation: JourneyOperation,
+    expected_outcome: SpatialRevisionExpectedOutcome,
+    expected_active_query: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum SpatialRevisionExpectedOutcome {
+    Candidate,
+    RequireClarification,
+    RequireCheckpoint,
+}
+
 #[test]
 fn frozen_product_scenarios_execute_against_controlled_inventory() {
     let bank: SearchQueryBank =
@@ -308,7 +331,7 @@ fn nested_journeys_reuse_atomic_cases_and_the_same_search_path() {
     let limits = suite.limits.clone().expect("journey limits are required");
     assert!(limits.max_active_branches > 1);
     assert!(limits.max_revision_depth_before_checkpoint > 1);
-    assert_eq!(limits.measured_branch_quality_cohorts, [3, 8]);
+    assert_eq!(limits.measured_branch_quality_cohorts, [3, 8, 16]);
     assert_eq!(limits.deferred_branch_stress_cohort, 16);
     assert_eq!(limits.max_active_branches, 8);
 
@@ -340,6 +363,435 @@ fn nested_journeys_reuse_atomic_cases_and_the_same_search_path() {
 
     for journey in &journeys {
         run_controlled_journey(journey, &atomic_cases, limits.clone());
+    }
+}
+
+#[test]
+fn issue_118_revision_scenarios_are_frozen_in_the_unified_bank() {
+    let bank: SearchQueryBank =
+        serde_json::from_str(SEARCH_QUERY_BANK).expect("unified search query bank is valid");
+    let suite = bank
+        .suites
+        .iter()
+        .find(|suite| suite.id == SPATIAL_REVISION_SUITE_ID)
+        .expect("Issue 118 spatial revision suite is required");
+    assert_eq!(suite.runner, "rust_spatial_revision");
+    assert_eq!(suite.case_groups, [SPATIAL_REVISION_SUITE_ID]);
+    let cases = bank
+        .cases
+        .iter()
+        .filter(|case| {
+            case.get("group").and_then(serde_json::Value::as_str) == Some(SPATIAL_REVISION_SUITE_ID)
+        })
+        .map(|case| {
+            serde_json::from_value::<SpatialRevisionCase>(case.clone())
+                .expect("spatial revision case follows the typed contract")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(cases.len(), 10, "Issue 118 revision bank size changed");
+
+    for case in cases {
+        let revision = compile_search_revision(
+            &case.parent_query,
+            &case.utterance,
+            case.parent_branch_count,
+            SearchRevisionLimits {
+                max_active_branches: 8,
+            },
+        );
+        assert_eq!(
+            observed_operation(revision.operation),
+            case.expected_operation,
+            "{} compiled the wrong operation",
+            case.id
+        );
+        let observed_outcome = match revision.outcome {
+            SearchRevisionOutcome::Candidate => SpatialRevisionExpectedOutcome::Candidate,
+            SearchRevisionOutcome::RequireClarification => {
+                SpatialRevisionExpectedOutcome::RequireClarification
+            }
+            SearchRevisionOutcome::RequireCheckpoint => {
+                SpatialRevisionExpectedOutcome::RequireCheckpoint
+            }
+        };
+        assert_eq!(
+            observed_outcome, case.expected_outcome,
+            "{} compiled the wrong outcome",
+            case.id
+        );
+        assert_eq!(
+            revision.candidate_query.as_deref(),
+            case.expected_active_query.as_deref(),
+            "{} compiled the wrong active query",
+            case.id
+        );
+    }
+}
+
+#[test]
+fn issue_118_candidate_revisions_execute_through_search_engine() {
+    let bank: SearchQueryBank =
+        serde_json::from_str(SEARCH_QUERY_BANK).expect("unified search query bank is valid");
+    let cases = bank
+        .cases
+        .iter()
+        .filter(|case| {
+            case.get("group").and_then(serde_json::Value::as_str) == Some(SPATIAL_REVISION_SUITE_ID)
+        })
+        .map(|case| serde_json::from_value::<SpatialRevisionCase>(case.clone()).unwrap())
+        .collect::<Vec<_>>();
+    let fixture = issue_118_fixture();
+    let mut executed = 0;
+    for case in &cases {
+        let revision = compile_search_revision(
+            &case.parent_query,
+            &case.utterance,
+            case.parent_branch_count,
+            SearchRevisionLimits {
+                max_active_branches: 8,
+            },
+        );
+        let Some(candidate_query) = revision.candidate_query.as_deref() else {
+            continue;
+        };
+        executed += 1;
+        let output = fixture.search_output(candidate_query);
+        match case.id.as_str() {
+            "SPATIAL-REVISION-READY" => assert!(output.results.iter().all(|result| {
+                result
+                    .card
+                    .possession_status
+                    .eq_ignore_ascii_case("Ready to Move")
+            })),
+            "SPATIAL-REVISION-TWO-ANCHORS" => {
+                let ids = output
+                    .results
+                    .iter()
+                    .map(|result| result.card.id.as_str())
+                    .collect::<Vec<_>>();
+                assert_eq!(ids.len(), ids.iter().collect::<HashSet<_>>().len());
+                assert!(output.results.iter().any(|result| {
+                    let proof_entities = result
+                        .proof_focuses
+                        .iter()
+                        .filter_map(|proof| proof.entity_id.as_deref())
+                        .collect::<HashSet<_>>();
+                    proof_entities.contains("place:hoodi-metro")
+                        && proof_entities.contains("place:manipal-hospital")
+                }));
+            }
+            "SPATIAL-REVISION-BUDGET" => {
+                assert_eq!(output.intent.budget_max, Some(30_000_000));
+                assert!(output
+                    .results
+                    .iter()
+                    .any(|result| result.card.price > 25_000_000));
+            }
+            "SPATIAL-REVISION-KADUGODI" | "SPATIAL-REVISION-HOODI-BRANCH" => {
+                assert_eq!(output.ast_branches.len(), 2);
+                assert_eq!(output.intent_branches.len(), 2);
+            }
+            "SPATIAL-REVISION-EXCLUDE" => {
+                assert!(output
+                    .results
+                    .iter()
+                    .all(|result| result.card.area != "Varthur"));
+                assert!(output.ast_branches.iter().any(contains_negated_area));
+            }
+            "SPATIAL-REVISION-REPLACE" => {
+                assert!(output
+                    .intent
+                    .unsupported_inventory_types
+                    .iter()
+                    .any(|kind| kind.eq_ignore_ascii_case("plot")));
+                assert!(output
+                    .diagnostics
+                    .resolved
+                    .entities
+                    .iter()
+                    .any(|entity| entity.entity_id == "area:north-bengaluru"));
+            }
+            "SPATIAL-REVISION-REPHRASE" => {
+                let direct = fixture.search_output(&case.parent_query);
+                assert_eq!(
+                    backend::search::ast::semantic_search_fingerprint(
+                        &output.ast_branches,
+                        &output.intent_branches,
+                    ),
+                    backend::search::ast::semantic_search_fingerprint(
+                        &direct.ast_branches,
+                        &direct.intent_branches,
+                    )
+                );
+                assert_eq!(
+                    output
+                        .results
+                        .iter()
+                        .map(|result| result.card.id.as_str())
+                        .collect::<Vec<_>>(),
+                    direct
+                        .results
+                        .iter()
+                        .map(|result| result.card.id.as_str())
+                        .collect::<Vec<_>>()
+                );
+            }
+            other => panic!("unexpected candidate revision case {other}"),
+        }
+    }
+    assert_eq!(executed, 8, "every candidate scenario must execute");
+}
+
+fn contains_negated_area(expression: &backend::search::ConstraintExpr) -> bool {
+    match expression {
+        backend::search::ConstraintExpr::Not { clause } => matches!(
+            clause.as_ref(),
+            backend::search::ConstraintExpr::Term {
+                term: backend::search::ConstraintTerm::Area { .. }
+            } | backend::search::ConstraintExpr::AnyOf { .. }
+        ),
+        backend::search::ConstraintExpr::And { clauses }
+        | backend::search::ConstraintExpr::AnyOf { clauses } => {
+            clauses.iter().any(contains_negated_area)
+        }
+        backend::search::ConstraintExpr::Term { .. } => false,
+    }
+}
+
+fn issue_118_fixture() -> MockSearchFixture {
+    let mut builder = FixtureBuilder::default();
+    for area in [
+        "Whitefield",
+        "Hoodi",
+        "Kadugodi",
+        "Varthur",
+        "North Bengaluru",
+    ] {
+        builder.add_area(area);
+    }
+    builder.add_place("Hoodi Metro", "metro", 12.9900, 77.7150);
+    builder.add_place("Manipal Hospital", "hospital", 12.9700, 77.7350);
+    builder.add_edge("place:hoodi-metro", "in_area", "area:hoodi");
+    builder.add_edge("place:manipal-hospital", "in_area", "area:whitefield");
+    for spec in [
+        HomeSpec::new(
+            "whitefield-ready",
+            "Whitefield Ready",
+            "Whitefield",
+            3,
+            24_000_000,
+            12.9800,
+            77.7250,
+        ),
+        HomeSpec::new(
+            "whitefield-stretch",
+            "Whitefield Stretch",
+            "Whitefield",
+            3,
+            28_000_000,
+            12.9810,
+            77.7260,
+        ),
+        HomeSpec::new(
+            "whitefield-building",
+            "Whitefield Building",
+            "Whitefield",
+            3,
+            23_000_000,
+            12.9820,
+            77.7270,
+        )
+        .under_construction(),
+        HomeSpec::new(
+            "hoodi-two",
+            "Hoodi Two",
+            "Hoodi",
+            2,
+            18_000_000,
+            12.9890,
+            77.7160,
+        ),
+        HomeSpec::new(
+            "kadugodi-three",
+            "Kadugodi Three",
+            "Kadugodi",
+            3,
+            26_000_000,
+            12.9950,
+            77.7550,
+        ),
+        HomeSpec::new(
+            "varthur-three",
+            "Varthur Three",
+            "Varthur",
+            3,
+            20_000_000,
+            12.9400,
+            77.7400,
+        ),
+        HomeSpec::new(
+            "north-three",
+            "North Three",
+            "North Bengaluru",
+            3,
+            14_000_000,
+            13.0400,
+            77.6200,
+        ),
+    ] {
+        builder.add_home(spec);
+    }
+    builder.build(true)
+}
+
+#[test]
+fn branch_quality_cohorts_preserve_disconnected_scope_and_branch_local_proof() {
+    let mut builder = FixtureBuilder::default();
+    let branches = (1..=16)
+        .map(|index| {
+            let area = format!("Cohort Area {index}");
+            let society = format!("Cohort Homes {index}");
+            builder.add_area(&area);
+            builder.add_home(HomeSpec::new(
+                &format!("cohort-home-{index}"),
+                &society,
+                &area,
+                2,
+                10_000_000 + index as u64,
+                12.8 + index as f64 / 1000.0,
+                77.5 + index as f64 / 1000.0,
+            ));
+            format!("2BHK in {area} under 2Cr")
+        })
+        .collect::<Vec<_>>();
+    let fixture = builder.build(false);
+
+    for cohort in [3, 8, 16] {
+        let output = fixture.search_output(&branches[..cohort].join(" or "));
+        assert_eq!(
+            output.ast_branches.len(),
+            cohort,
+            "the {cohort}-branch cohort collapsed disconnected scopes"
+        );
+        assert_eq!(output.intent_branches.len(), cohort);
+        assert_eq!(output.result_sets.len(), cohort);
+        assert!(output
+            .result_sets
+            .iter()
+            .all(|branch| branch.results.len() == 1));
+        assert_eq!(
+            output
+                .result_sets
+                .iter()
+                .flat_map(|branch| &branch.results)
+                .map(|result| result.card.id.as_str())
+                .collect::<HashSet<_>>()
+                .len(),
+            cohort,
+            "the {cohort}-branch cohort duplicated or lost a branch-local result"
+        );
+    }
+}
+
+#[test]
+fn sourced_topology_coalesces_only_compatible_connected_spatial_scopes() {
+    let mut builder = FixtureBuilder::default();
+    for area in ["Eastfield", "Nextfield", "Northfield"] {
+        builder.add_area(area);
+        builder.add_home(HomeSpec::new(
+            &format!("home-{}", slug(area)),
+            &format!("{area} Homes"),
+            area,
+            3,
+            10_000_000,
+            12.9,
+            77.7,
+        ));
+    }
+    builder.add_edge("area:eastfield", "adjacent_area", "area:nextfield");
+    let fixture = builder.build(false);
+
+    let connected =
+        fixture.search_output("3BHK in Eastfield under 2Cr or 3BHK in Nextfield under 2Cr");
+    assert_eq!(
+        connected.ast_branches.len(),
+        1,
+        "compatible adjacent scopes should form one active intent branch"
+    );
+
+    let branch_local_budget =
+        fixture.search_output("3BHK in Eastfield under 2Cr or 3BHK in Nextfield under 1.5Cr");
+    assert_eq!(
+        branch_local_budget.ast_branches.len(),
+        2,
+        "different budgets must remain independently explainable"
+    );
+
+    let disconnected =
+        fixture.search_output("3BHK in Eastfield under 2Cr or 3BHK in Northfield under 2Cr");
+    assert_eq!(
+        disconnected.ast_branches.len(),
+        2,
+        "disconnected spatial intent must not collapse"
+    );
+}
+
+#[test]
+fn connected_hard_spatial_alternatives_preserve_any_of_semantics() {
+    let mut builder = FixtureBuilder::default();
+    builder.add_area("Sharedfield");
+    builder.add_place("East Anchor", "landmark", 12.9000, 77.7000);
+    builder.add_place("West Anchor", "landmark", 12.9000, 77.7300);
+    builder.add_edge("place:east-anchor", "in_area", "area:sharedfield");
+    builder.add_edge("place:west-anchor", "in_area", "area:sharedfield");
+    builder.add_home(HomeSpec::new(
+        "east-home",
+        "East Homes",
+        "Sharedfield",
+        3,
+        10_000_000,
+        12.9000,
+        77.7010,
+    ));
+    builder.add_home(HomeSpec::new(
+        "west-home",
+        "West Homes",
+        "Sharedfield",
+        3,
+        10_000_000,
+        12.9000,
+        77.7290,
+    ));
+    let fixture = builder.build(false);
+
+    let output = fixture.search_output(
+        "3BHK within 1 km of East Anchor under 2Cr or 3BHK within 1 km of West Anchor under 2Cr",
+    );
+    let [backend::search::ConstraintExpr::AnyOf { clauses }] = output.ast_branches.as_slice()
+    else {
+        panic!("connected hard alternatives must compile to one AnyOf branch")
+    };
+    assert_eq!(clauses.len(), 2);
+    assert!(clauses.iter().all(has_required_spatial_term));
+    let ids = output
+        .results
+        .iter()
+        .map(|result| result.card.id.as_str())
+        .collect::<HashSet<_>>();
+    assert_eq!(ids, HashSet::from(["east-home", "west-home"]));
+}
+
+fn has_required_spatial_term(expression: &backend::search::ConstraintExpr) -> bool {
+    match expression {
+        backend::search::ConstraintExpr::And { clauses }
+        | backend::search::ConstraintExpr::AnyOf { clauses } => {
+            clauses.iter().any(has_required_spatial_term)
+        }
+        backend::search::ConstraintExpr::Not { clause } => has_required_spatial_term(clause),
+        backend::search::ConstraintExpr::Term {
+            term: backend::search::ConstraintTerm::Spatial { required, .. },
+        } => *required,
+        backend::search::ConstraintExpr::Term { .. } => false,
     }
 }
 
@@ -1499,29 +1951,7 @@ impl MockSearchFixture {
     }
 
     fn search(&self, query: &str) -> ObservedSearch {
-        let index =
-            SearchIndex::build_with_serving_entities(&self.properties, &self.bundle.entities);
-        let society_names = self
-            .properties
-            .iter()
-            .map(|property| (property.society_id.clone(), property.title.clone()))
-            .collect::<HashMap<_, _>>();
-        let property_by_id = self
-            .properties
-            .iter()
-            .enumerate()
-            .map(|(index, property)| (property.id.clone(), index))
-            .collect::<HashMap<_, _>>();
-        let output = SearchEngine {
-            properties: &self.properties,
-            search_index: &index,
-            serving_bundle: Some(&self.bundle),
-            society_names: &society_names,
-            property_by_id: Some(&property_by_id),
-            societies: &[],
-            graph: None,
-        }
-        .search(query);
+        let output = self.search_output(query);
         let negative_preferences = output
             .intent
             .negative_preferences
@@ -1648,6 +2078,32 @@ impl MockSearchFixture {
             resolved_entities,
         }
     }
+
+    fn search_output(&self, query: &str) -> backend::search::engine::SearchEngineOutput {
+        let index =
+            SearchIndex::build_with_serving_entities(&self.properties, &self.bundle.entities);
+        let society_names = self
+            .properties
+            .iter()
+            .map(|property| (property.society_id.clone(), property.title.clone()))
+            .collect::<HashMap<_, _>>();
+        let property_by_id = self
+            .properties
+            .iter()
+            .enumerate()
+            .map(|(index, property)| (property.id.clone(), index))
+            .collect::<HashMap<_, _>>();
+        SearchEngine {
+            properties: &self.properties,
+            search_index: &index,
+            serving_bundle: Some(&self.bundle),
+            society_names: &society_names,
+            property_by_id: Some(&property_by_id),
+            societies: &[],
+            graph: None,
+        }
+        .search(query)
+    }
 }
 
 #[derive(Default)]
@@ -1656,6 +2112,7 @@ struct FixtureBuilder {
     entities: Vec<ServingEntityRecord>,
     facts: Vec<ServingFactRecord>,
     metadata: Vec<ServingSearchMetadataRecord>,
+    edges: Vec<backend::serving::ServingEdgeRecord>,
 }
 
 impl FixtureBuilder {
@@ -1674,6 +2131,16 @@ impl FixtureBuilder {
             "place.category",
             FactValue::Text(category.to_string()),
         );
+    }
+
+    fn add_edge(&mut self, from: &str, relation: &str, to: &str) {
+        self.edges.push(backend::serving::ServingEdgeRecord {
+            from_entity_id: from.to_string(),
+            edge_type: relation.to_string(),
+            to_entity_id: to.to_string(),
+            confidence: 0.9,
+            source_type: "OpenStreetMap".to_string(),
+        });
     }
 
     fn add_home(&mut self, spec: HomeSpec) {
@@ -1784,7 +2251,7 @@ impl FixtureBuilder {
     }
 
     fn build(mut self, derive_proximity: bool) -> MockSearchFixture {
-        let mut edges = Vec::new();
+        let mut edges = self.edges;
         if derive_proximity {
             let base_index =
                 ServingFactIndex::from_records(self.facts.clone(), self.metadata.clone());
@@ -1792,7 +2259,7 @@ impl FixtureBuilder {
                 .expect("controlled proximity facts derive from config");
             self.facts.extend(derived.facts);
             self.metadata.extend(derived.search_metadata);
-            edges = derived.edges;
+            edges.extend(derived.edges);
         }
         let fact_index = ServingFactIndex::from_records(self.facts.clone(), self.metadata);
         let entity_alias_index = ServingEntityAliasIndex::default();
@@ -1801,8 +2268,13 @@ impl FixtureBuilder {
             TantivyRecallIndex::build_in_dir(temp_dir.path(), &self.entities, &self.facts, &[])
                 .expect("mock recall index");
         let geo_index = GeoSearchIndex::from_serving_bundle(&self.entities, &fact_index);
-        let spatial_index = SpatialServingIndex::from_serving_bundle(&self.entities, &fact_index);
+        let spatial_index = SpatialServingIndex::from_serving_bundle_with_edges(
+            &self.entities,
+            &fact_index,
+            &edges,
+        );
         let search_capabilities = SearchCapabilityIndex::from_bundle(&self.entities, &fact_index);
+        let graph_index = GraphIndex::from_serving_edges(&edges);
         let bundle = LoadedServingBundle {
             manifest: ServingBundleManifest {
                 bundle_version: "conversational-semantics-mock".to_string(),
@@ -1814,7 +2286,7 @@ impl FixtureBuilder {
                 search_metadata_count: 0,
                 rera_evidence_count: 0,
                 excluded_rera_evidence_society_ids: Vec::new(),
-                edge_count: 0,
+                edge_count: edges.len() as u64,
                 eligibility_policy_version: 0,
                 quarantined_society_count: 0,
                 quarantine_reason_counts: Default::default(),
@@ -1833,7 +2305,7 @@ impl FixtureBuilder {
             entities: self.entities,
             entity_alias_index,
             edges,
-            graph_index: GraphIndex::default(),
+            graph_index,
             recall_index,
             fact_index,
             rera_evidence_index: ReraEvidenceIndex::default(),

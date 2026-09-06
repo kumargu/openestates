@@ -15,8 +15,10 @@ pub mod projection;
 pub mod proximity;
 pub mod release_validation;
 pub mod rera;
+pub mod spatial_geometry;
 pub mod spatial_index;
 pub mod tantivy_index;
+pub mod topology;
 pub mod types;
 
 pub use aliases::{
@@ -48,10 +50,12 @@ pub use rera::{
     ReraEvidenceSeries, ReraEvidenceSeriesPoint, ReraEvidenceSource, ReraRegulatoryCoverage,
     ReraServingProjectionError, ServingReraEvidenceRecord, RERA_EVIDENCE_SCHEMA_VERSION,
 };
+pub use spatial_geometry::{SpatialBounds, SpatialFeature, SpatialGeometry, SpatialGeometryIndex};
 pub use spatial_index::{SpatialPoint, SpatialServingIndex};
 pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,
 };
+pub use topology::{derive_spatial_topology, SpatialTopologyReport};
 pub use types::{
     unique_society_aliases, BundleArtifact, BundleArtifactKind, QuarantinedSociety,
     ServingBundleManifest, ServingBundleSchema, ServingColumnSchema, ServingEdgeRecord,

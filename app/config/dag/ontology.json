@@ -13,6 +13,8 @@
   "relations": [
     { "from": "property", "edge": "in_society", "to": "society" },
     { "from": "society", "edge": "in_area", "to": "area" },
+    { "from": "place", "edge": "in_area", "to": "area" },
+    { "from": "area", "edge": "adjacent_area", "to": "area" },
     { "from": "society", "edge": "built_by", "to": "builder" },
     { "from": "society", "edge": "served_by_road", "to": "road_segment" },
     { "from": "society", "edge": "maps_to_place", "to": "place" },

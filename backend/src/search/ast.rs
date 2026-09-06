@@ -9,8 +9,10 @@
 //! Tantivy bool queries can compile from this tree later.
 
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
-use super::intent::{HardConstraint, SearchIntent, SourceSpan};
+use super::intent::{HardConstraint, PreferenceSignal, SearchIntent, SourceSpan};
 use super::parser::{BhkConstraint, ParsedBudgetConstraint, SlotPolarity};
 use super::query_plan::{MentionPolarity, QueryPlan};
 
@@ -60,6 +62,14 @@ pub enum ConstraintTerm {
     },
     Evidence {
         constraint: HardConstraint,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        span: Option<SourceSpan>,
+    },
+    Spatial {
+        relation: String,
+        entity_id: String,
+        display_name: String,
+        required: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         span: Option<SourceSpan>,
     },
@@ -114,6 +124,28 @@ impl CompiledQuery {
         let plan = super::query_plan::compile_query_plan(query);
         let intent = super::query_plan::project_search_intent(query, &plan);
         Self::compile(query, &plan, intent, &[])
+    }
+
+    pub(crate) fn add_spatial_constraints(&mut self, terms: Vec<ConstraintTerm>) {
+        let (required, optional): (Vec<_>, Vec<_>) = terms
+            .into_iter()
+            .partition(|term| matches!(term, ConstraintTerm::Spatial { required: true, .. }));
+        let mut clauses = required
+            .into_iter()
+            .map(ConstraintExpr::term)
+            .collect::<Vec<_>>();
+        if !optional.is_empty() {
+            clauses.push(ConstraintExpr::any_of(
+                optional.into_iter().map(ConstraintExpr::term).collect(),
+            ));
+        }
+        if !clauses.is_empty() {
+            self.constraints = ConstraintExpr::and(
+                [self.constraints.clone(), ConstraintExpr::and(clauses)]
+                    .into_iter()
+                    .collect(),
+            );
+        }
     }
 
     #[cfg(test)]
@@ -297,6 +329,131 @@ impl ConstraintExpr {
     }
 }
 
+/// Stable semantic fingerprint for the exact branch AST executed by search.
+/// Source spans and buyer wording are intentionally omitted so equivalent
+/// rephrasings share a fingerprint.
+pub fn semantic_ast_fingerprint(branches: &[ConstraintExpr]) -> String {
+    semantic_search_fingerprint(branches, &[])
+}
+
+pub fn semantic_search_fingerprint(
+    branches: &[ConstraintExpr],
+    intents: &[SearchIntent],
+) -> String {
+    let value = Value::Array(
+        branches
+            .iter()
+            .enumerate()
+            .map(|(index, branch)| {
+                json!({
+                    "constraints": semantic_expr_value(branch),
+                    "preferences": intents.get(index).map(semantic_intent_value),
+                })
+            })
+            .collect(),
+    );
+    let digest = Sha256::digest(
+        serde_json::to_vec(&value).expect("semantic search AST is JSON serializable"),
+    );
+    let encoded = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("sha256:{encoded}")
+}
+
+fn semantic_intent_value(intent: &SearchIntent) -> Value {
+    let mut positive = intent
+        .positive_preferences
+        .iter()
+        .map(semantic_preference_value)
+        .collect::<Vec<_>>();
+    let mut negative = intent
+        .negative_preferences
+        .iter()
+        .map(semantic_preference_value)
+        .collect::<Vec<_>>();
+    positive.sort_by_key(Value::to_string);
+    negative.sort_by_key(Value::to_string);
+    json!({
+        "positive_preferences": positive,
+        "negative_preferences": negative,
+        "ranking_priorities": intent.ranking_priorities,
+        "accepted_tradeoffs": intent.accepted_tradeoffs,
+        "unsupported_inventory_types": intent.unsupported_inventory_types,
+        "buyer_archetype": intent.buyer_archetype,
+    })
+}
+
+fn semantic_preference_value(preference: &PreferenceSignal) -> Value {
+    let mut keys = preference.expanded_keys.clone();
+    keys.sort();
+    keys.dedup();
+    json!({
+        "polarity": preference.polarity,
+        "keys": keys,
+        "weight": preference.weight,
+        "required": preference.required,
+        "missing_evidence_neutral": preference.missing_evidence_neutral,
+    })
+}
+
+fn semantic_expr_value(expression: &ConstraintExpr) -> Value {
+    match expression {
+        ConstraintExpr::And { clauses } => {
+            json!({"and": sorted_semantic_clauses(clauses)})
+        }
+        ConstraintExpr::AnyOf { clauses } => {
+            json!({"any_of": sorted_semantic_clauses(clauses)})
+        }
+        ConstraintExpr::Not { clause } => json!({"not": semantic_expr_value(clause)}),
+        ConstraintExpr::Term { term } => semantic_term_value(term),
+    }
+}
+
+fn sorted_semantic_clauses(clauses: &[ConstraintExpr]) -> Vec<Value> {
+    let mut values = clauses.iter().map(semantic_expr_value).collect::<Vec<_>>();
+    values.sort_by_key(Value::to_string);
+    values
+}
+
+fn semantic_term_value(term: &ConstraintTerm) -> Value {
+    match term {
+        ConstraintTerm::Bhk { value, .. } => json!({"bhk": value}),
+        ConstraintTerm::Area {
+            entity_id, value, ..
+        } => json!({"area": entity_id.as_deref().unwrap_or(value).to_ascii_lowercase()}),
+        ConstraintTerm::Society { entity_id, .. } => json!({"society": entity_id}),
+        ConstraintTerm::Builder { entity_id, .. } => json!({"builder": entity_id}),
+        ConstraintTerm::Budget { min, max, .. } => json!({
+            "budget": {
+                "min": min.as_ref().map(|bound| (bound.value, bound.inclusive)),
+                "max": max.as_ref().map(|bound| (bound.value, bound.inclusive)),
+            }
+        }),
+        ConstraintTerm::Evidence { constraint, .. } => json!({
+            "evidence": {
+                "field": constraint.field,
+                "operator": constraint.operator,
+                "value": constraint.value,
+                "unit": constraint.unit.to_ascii_lowercase(),
+            }
+        }),
+        ConstraintTerm::Spatial {
+            relation,
+            entity_id,
+            required,
+            ..
+        } => json!({
+            "spatial": {
+                "relation": relation.to_ascii_lowercase(),
+                "entity_id": entity_id,
+                "required": required,
+            }
+        }),
+    }
+}
+
 fn collect_buyer_labels(expr: &ConstraintExpr, negated: bool, labels: &mut Vec<String>) {
     match expr {
         ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
@@ -320,6 +477,11 @@ fn collect_buyer_labels(expr: &ConstraintExpr, negated: bool, labels: &mut Vec<S
                     (None, None) => return,
                 },
                 ConstraintTerm::Evidence { constraint, .. } => constraint.raw_text.clone(),
+                ConstraintTerm::Spatial {
+                    relation,
+                    display_name,
+                    ..
+                } => format!("{relation} {display_name}"),
             };
             let label = if negated {
                 format!("Not {label}")
@@ -1049,10 +1211,50 @@ fn push_unique_u32(values: &mut Vec<u32>, value: u32) {
 #[cfg(test)]
 mod tests {
     use super::{
-        compile_constraint_expr, CompiledQuery, ConstraintExpr, ConstraintTerm,
-        ResolvedEntityConstraint, SourceSpan,
+        compile_constraint_expr, semantic_ast_fingerprint, semantic_search_fingerprint,
+        CompiledQuery, ConstraintExpr, ConstraintTerm, ResolvedEntityConstraint, SourceSpan,
     };
     use crate::search::intent::parse_intent;
+
+    #[test]
+    fn semantic_fingerprint_ignores_buyer_wording_and_source_spans() {
+        let first = ConstraintExpr::term(ConstraintTerm::Bhk {
+            value: 3,
+            span: Some(SourceSpan {
+                start: 0,
+                end: 4,
+                raw_text: "3BHK".to_string(),
+            }),
+        });
+        let second = ConstraintExpr::term(ConstraintTerm::Bhk {
+            value: 3,
+            span: Some(SourceSpan {
+                start: 12,
+                end: 22,
+                raw_text: "3 bedrooms".to_string(),
+            }),
+        });
+
+        assert_eq!(
+            semantic_ast_fingerprint(&[first]),
+            semantic_ast_fingerprint(&[second])
+        );
+    }
+
+    #[test]
+    fn semantic_fingerprint_changes_when_ranking_preferences_change() {
+        let ast = ConstraintExpr::term(ConstraintTerm::Bhk {
+            value: 3,
+            span: None,
+        });
+        let baseline = parse_intent("3BHK");
+        let preferred = parse_intent("3BHK quiet");
+
+        assert_ne!(
+            semantic_search_fingerprint(std::slice::from_ref(&ast), &[baseline]),
+            semantic_search_fingerprint(&[ast], &[preferred])
+        );
+    }
 
     #[test]
     fn two_or_three_bhk_not_four_evaluates_as_any_of_and_not() {
@@ -1791,7 +1993,8 @@ mod tests {
             | ConstraintTerm::Area { .. }
             | ConstraintTerm::Society { .. }
             | ConstraintTerm::Builder { .. }
-            | ConstraintTerm::Evidence { .. } => true,
+            | ConstraintTerm::Evidence { .. }
+            | ConstraintTerm::Spatial { .. } => true,
         })
     }
 
@@ -1820,7 +2023,8 @@ mod tests {
             ConstraintTerm::Evidence { .. } => has_evidence,
             ConstraintTerm::Area { .. }
             | ConstraintTerm::Society { .. }
-            | ConstraintTerm::Builder { .. } => true,
+            | ConstraintTerm::Builder { .. }
+            | ConstraintTerm::Spatial { .. } => true,
         })
     }
 
@@ -1842,7 +2046,8 @@ mod tests {
             },
             ConstraintTerm::Area { .. }
             | ConstraintTerm::Society { .. }
-            | ConstraintTerm::Builder { .. } => true,
+            | ConstraintTerm::Builder { .. }
+            | ConstraintTerm::Spatial { .. } => true,
         })
     }
 

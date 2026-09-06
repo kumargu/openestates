@@ -23,21 +23,22 @@ use super::{
     AssetPlanner, AssetRunManifestStore, AssetSourceInputs, AssetStage, CurrentProjectFactsError,
     CurrentProjectFactsMaterializer, DependencyFanInPolicy, EnvironmentalAssetError,
     GooglePlaceAssetError, GooglePlaceSnapshotMaterializer, KgSocietyViewMaterialization,
-    KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, MaterializationId,
-    MaterializationRecord, MediaAssetError, MediaAssetMaterializer, OsmAccessAssetError,
-    OsmPowerAssetError, PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
-    ProjectEnrichmentMaterializer, ReraAssetError, ReraClaimMaterializeError,
-    ReraClaimsMaterializer, ReraEvidenceError, ReraPlanFramesAssetError, ReraReceiptsMaterializer,
-    ReraRegistryMaterializer, ReraSourceRecordsError, ReraSourceRecordsMaterializer,
-    RunManifestError, SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput,
-    SourceEntityResolutionScope, SourceWatermark, StormwaterAssetError, TransitAssetError,
-    APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
-    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
-    CURRENT_PROJECT_FACTS_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
-    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
-    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID,
+    KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, LocalityAssetError,
+    MaterializationId, MaterializationRecord, MediaAssetError, MediaAssetMaterializer,
+    OsmAccessAssetError, OsmPowerAssetError, PartitionResolutionError, PlannerError,
+    ProjectEnrichmentAssetError, ProjectEnrichmentMaterializer, ReraAssetError,
+    ReraClaimMaterializeError, ReraClaimsMaterializer, ReraEvidenceError, ReraPlanFramesAssetError,
+    ReraReceiptsMaterializer, ReraRegistryMaterializer, ReraSourceRecordsError,
+    ReraSourceRecordsMaterializer, RunManifestError, SkillFactMaterializeError,
+    SkillFactMaterializer, SkillFactsInput, SourceEntityResolutionScope, SourceWatermark,
+    StormwaterAssetError, TransitAssetError, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
+    BENGALURU_METRO_STATION_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
+    CANONICAL_SOCIETY_NODES_ASSET_ID, CURRENT_PROJECT_FACTS_ASSET_ID,
+    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
+    KG_SOCIETY_VIEW_ASSET_ID, OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID,
     OSM_SOCIETY_ACCESS_FACTS_ASSET_ID, RERA_CLAIMS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
     RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
     RERA_SOURCE_RECORDS_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
@@ -1287,6 +1288,10 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::BengaluruMetroStationFacts,
         );
         executors.insert(
+            static_asset_id(OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::OsmLocalityBoundaryFacts,
+        );
+        executors.insert(
             static_asset_id(OSM_POWER_LINE_FACTS_ASSET_ID),
             BuiltInAssetExecutor::OsmPowerLineFacts,
         );
@@ -1340,6 +1345,7 @@ enum BuiltInAssetExecutor {
     ApproachRoadGraphFacts,
     SocietyGroundwaterPotentialFacts,
     BengaluruMetroStationFacts,
+    OsmLocalityBoundaryFacts,
     OsmPowerLineFacts,
     OsmSocietyAccessFacts,
     StormwaterDrainFacts,
@@ -1919,6 +1925,23 @@ impl BuiltInAssetExecutor {
                 let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
+            Self::OsmLocalityBoundaryFacts => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let input = context
+                    .options
+                    .source_inputs
+                    .osm_locality_boundaries
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
+                let run_id = context.run_id.to_string();
+                let input = super::osm_locality_boundary_facts_input(
+                    input,
+                    &run_id,
+                    context.options.planned_at,
+                )?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
             Self::OsmPowerLineFacts => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let input = context
@@ -2367,6 +2390,7 @@ pub enum AssetDagExecutorError {
     ApproachRoadGraph(ApproachRoadGraphError),
     Environmental(EnvironmentalAssetError),
     Transit(TransitAssetError),
+    Locality(LocalityAssetError),
     OsmAccess(OsmAccessAssetError),
     OsmPower(OsmPowerAssetError),
     Stormwater(StormwaterAssetError),
@@ -2461,6 +2485,7 @@ impl fmt::Display for AssetDagExecutorError {
             }
             Self::Environmental(err) => write!(f, "environmental asset execution failed: {err}"),
             Self::Transit(err) => write!(f, "transit asset execution failed: {err}"),
+            Self::Locality(err) => write!(f, "locality asset execution failed: {err}"),
             Self::OsmAccess(err) => write!(f, "OSM access asset execution failed: {err}"),
             Self::OsmPower(err) => write!(f, "OSM power asset execution failed: {err}"),
             Self::Stormwater(err) => write!(f, "stormwater asset execution failed: {err}"),
@@ -2672,6 +2697,12 @@ impl From<TransitAssetError> for AssetDagExecutorError {
     }
 }
 
+impl From<LocalityAssetError> for AssetDagExecutorError {
+    fn from(err: LocalityAssetError) -> Self {
+        Self::Locality(err)
+    }
+}
+
 impl From<OsmPowerAssetError> for AssetDagExecutorError {
     fn from(err: OsmPowerAssetError) -> Self {
         Self::OsmPower(err)
@@ -2811,6 +2842,7 @@ fn should_skip_missing_optional_source_input(
     }
     match asset_id.as_str() {
         BENGALURU_METRO_STATION_FACTS_ASSET_ID => source_inputs.bengaluru_metro_stations.is_none(),
+        OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID => source_inputs.osm_locality_boundaries.is_none(),
         _ => false,
     }
 }
@@ -2831,6 +2863,7 @@ fn should_skip_missing_source_input(asset_id: &AssetId, source_inputs: &AssetSou
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID => source_inputs.external_listings_weekly.is_none(),
         EXTERNAL_IMAGES_WEEKLY_ASSET_ID => source_inputs.external_images_weekly.is_none(),
         BENGALURU_METRO_STATION_FACTS_ASSET_ID => source_inputs.bengaluru_metro_stations.is_none(),
+        OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID => source_inputs.osm_locality_boundaries.is_none(),
         _ => false,
     }
 }
@@ -2902,6 +2935,7 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
         && source_inputs.external_images_weekly.is_none()
         && source_inputs.environment_groundwater_potential.is_none()
         && source_inputs.bengaluru_metro_stations.is_none()
+        && source_inputs.osm_locality_boundaries.is_none()
         && source_inputs.osm_society_access.is_none()
         && source_inputs.osm_power_infrastructure.is_none()
         && source_inputs.stormwater_drains.is_none()

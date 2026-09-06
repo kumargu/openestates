@@ -152,6 +152,7 @@ EXTERNAL_LISTINGS_WEEKLY = "external_listings_weekly"
 EXTERNAL_IMAGES_WEEKLY = "external_images_weekly"
 SOCIETY_GROUNDWATER_POTENTIAL_FACTS = "society_groundwater_potential_facts"
 BENGALURU_METRO_STATION_FACTS = "bengaluru_metro_station_facts"
+OSM_LOCALITY_BOUNDARY_FACTS = "osm_locality_boundary_facts"
 OSM_POWER_LINE_FACTS = "osm_power_line_facts"
 OSM_SOCIETY_ACCESS_FACTS = "osm_society_access_facts"
 STORMWATER_DRAIN_FACTS = "stormwater_drain_facts"
@@ -183,6 +184,7 @@ SUPPORTED_ASSETS = frozenset(
         EXTERNAL_IMAGES_WEEKLY,
         SOCIETY_GROUNDWATER_POTENTIAL_FACTS,
         BENGALURU_METRO_STATION_FACTS,
+        OSM_LOCALITY_BOUNDARY_FACTS,
         OSM_SOCIETY_ACCESS_FACTS,
         OSM_POWER_LINE_FACTS,
         STORMWATER_DRAIN_FACTS,
@@ -298,6 +300,17 @@ def collect_asset_sources(
                 record_source_failure(
                     source_failures, [BENGALURU_METRO_STATION_FACTS], error
                 )
+    if OSM_LOCALITY_BOUNDARY_FACTS in requested:
+        try:
+            from pipeline.sources.osm_locality_boundaries import collect_locality_boundaries
+
+            output["osm_locality_boundaries"] = collect_locality_boundaries(
+                snapshot_date,
+                os.environ.get("OPENESTATES_OVERPASS_API_URL") or OVERPASS_API_URL,
+                fetch_overpass_json,
+            )
+        except Exception as error:
+            record_source_failure(source_failures, [OSM_LOCALITY_BOUNDARY_FACTS], error)
     if OSM_SOCIETY_ACCESS_FACTS in requested:
         try:
             output["osm_society_access"] = collect_osm_society_access(

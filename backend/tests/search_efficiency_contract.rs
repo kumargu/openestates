@@ -626,6 +626,8 @@ async fn search_cache_key_changes_with_bundle_version() {
             key_v1.clone(),
             CachedSearchOutput {
                 response: Arc::new(empty_response("3bhk whitefield")),
+                ast_branches: Arc::from([]),
+                intent_branches: Arc::from([]),
                 log_messages: Vec::new(),
             },
         )
@@ -650,6 +652,8 @@ async fn search_cache_hit_still_carries_log_metadata() {
             key.clone(),
             CachedSearchOutput {
                 response: Arc::new(empty_response("3bhk whitefield")),
+                ast_branches: Arc::from([]),
+                intent_branches: Arc::from([]),
                 log_messages: vec![SearchLogMessage::SearchEvent(event.clone())],
             },
         )
@@ -702,6 +706,8 @@ fn empty_response(query: &str) -> SearchResponse {
     let version = runtime_key("test-bundle");
     SearchResponse {
         query: query.to_string(),
+        revision_id: "rev-001-test".to_string(),
+        ast_fingerprint: "sha256:test".to_string(),
         result_sets: Vec::new(),
         ordered_result_ids: Vec::new(),
         total_matches: 0,

@@ -343,6 +343,18 @@
       }
     },
     {
+      "id": "osm_locality_boundary_facts",
+      "stage": "silver",
+      "description": "OpenStreetMap administrative locality polygons used for offline containment and adjacency topology.",
+      "dependencies": [],
+      "refresh": "monthly",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
       "id": "osm_power_line_facts",
       "stage": "silver",
       "description": "OpenStreetMap transmission-line proximity facts with geometry for red-flag map overlays.",
@@ -399,6 +411,7 @@
         "home_state_signals",
         "society_groundwater_potential_facts",
         "bengaluru_metro_station_facts",
+        "osm_locality_boundary_facts",
         "osm_society_access_facts",
         "osm_power_line_facts",
         "stormwater_drain_facts"
@@ -435,6 +448,7 @@
         "rera_project_plan_frames",
         "home_state_signals",
         "bengaluru_metro_station_facts",
+        "osm_locality_boundary_facts",
         "osm_society_access_facts"
       ]
     },

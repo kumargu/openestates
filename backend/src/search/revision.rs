@@ -1,8 +1,15 @@
+use serde::Serialize;
+use sha2::{Digest, Sha256};
+use std::io::Read;
+use std::sync::OnceLock;
+
 use crate::dag_config::search_parser_config;
 
 use super::intent::{parse_intent, SearchIntent};
+use super::SearchRuntimeVersion;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum SearchRevisionOperation {
     Refine,
     Rephrase,
@@ -11,7 +18,8 @@ pub enum SearchRevisionOperation {
     Replace,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum SearchRevisionOutcome {
     Candidate,
     RequireClarification,
@@ -50,9 +58,6 @@ pub fn compile_search_revision(
     }
 
     if let Some(clause) = strip_configured_prefix(turn, &discourse.revision_expand_prefixes) {
-        if clause.is_empty() || !has_structured_search_anchor(clause) {
-            return clarification(SearchRevisionOperation::Expand, active_branch_count);
-        }
         if active_branch_count >= limits.max_active_branches {
             return SearchRevision {
                 operation: SearchRevisionOperation::Expand,
@@ -60,6 +65,9 @@ pub fn compile_search_revision(
                 candidate_query: None,
                 candidate_branch_count: active_branch_count,
             };
+        }
+        if clause.is_empty() || !has_structured_search_anchor(clause) {
+            return clarification(SearchRevisionOperation::Expand, active_branch_count);
         }
         return candidate(
             SearchRevisionOperation::Expand,
@@ -75,6 +83,23 @@ pub fn compile_search_revision(
     let explicitly_corrects =
         strip_configured_prefix(turn, &discourse.revision_correction_prefixes).is_some();
 
+    if discourse
+        .revision_ambiguous_spatial_refinements
+        .iter()
+        .any(|phrase| contains_configured_phrase(turn, std::slice::from_ref(phrase)))
+        && super::parser::parse_query_slots(turn)
+            .distance_limit
+            .is_none()
+    {
+        return clarification(SearchRevisionOperation::Refine, active_branch_count);
+    }
+
+    if explicitly_corrects {
+        if let Some(query) = replace_budget_constraint(parent, turn) {
+            return candidate(SearchRevisionOperation::Refine, query, active_branch_count);
+        }
+    }
+
     if is_complete && explicitly_replaces {
         return candidate(
             SearchRevisionOperation::Replace,
@@ -83,13 +108,16 @@ pub fn compile_search_revision(
         );
     }
     if is_complete {
-        let operation = if !explicitly_switches
-            && equivalent_search_shape(parent, &parse_intent(parent), turn, &standalone_intent)
-        {
-            SearchRevisionOperation::Rephrase
-        } else {
-            SearchRevisionOperation::Switch
-        };
+        let operation =
+            if explicitly_switches && !standalone_intent.unsupported_inventory_types.is_empty() {
+                SearchRevisionOperation::Replace
+            } else if !explicitly_switches
+                && equivalent_search_shape(parent, &parse_intent(parent), turn, &standalone_intent)
+            {
+                SearchRevisionOperation::Rephrase
+            } else {
+                SearchRevisionOperation::Switch
+            };
         return candidate(operation, turn.to_string(), standalone_branch_count(turn));
     }
     if explicitly_switches || explicitly_replaces || explicitly_corrects {
@@ -226,6 +254,122 @@ fn standalone_branch_count(query: &str) -> usize {
     super::query_plan::discourse_branch_layout(query).map_or(1, |layout| layout.segments.len())
 }
 
+pub fn compiled_branch_count(query: &str) -> usize {
+    standalone_branch_count(query)
+}
+
+pub fn revision_id_for_query(
+    query: &str,
+    runtime_version: &SearchRuntimeVersion,
+    depth: usize,
+) -> String {
+    let mut payload = Vec::new();
+    payload.extend_from_slice(
+        query
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .as_bytes(),
+    );
+    payload.push(0);
+    payload.extend_from_slice(
+        &serde_json::to_vec(runtime_version).expect("runtime version is serializable"),
+    );
+    payload.extend_from_slice(&depth.to_be_bytes());
+    let digest = hmac_sha256(revision_signing_key(), &payload);
+    let encoded = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("rev-{depth:03}-{}", &encoded[..32])
+}
+
+pub fn validated_revision_depth(
+    revision_id: &str,
+    query: &str,
+    runtime_version: &SearchRuntimeVersion,
+) -> Option<usize> {
+    let depth = revision_id
+        .strip_prefix("rev-")?
+        .split('-')
+        .next()?
+        .parse::<usize>()
+        .ok()?;
+    let expected = revision_id_for_query(query, runtime_version, depth);
+    (depth > 0 && constant_time_eq(revision_id.as_bytes(), expected.as_bytes())).then_some(depth)
+}
+
+const REVISION_SIGNING_KEY_ENV: &str = "OPENESTATES_REVISION_SIGNING_KEY";
+
+fn revision_signing_key() -> &'static [u8; 32] {
+    static KEY: OnceLock<[u8; 32]> = OnceLock::new();
+    KEY.get_or_init(|| {
+        if let Ok(configured) = std::env::var(REVISION_SIGNING_KEY_ENV) {
+            if !configured.trim().is_empty() {
+                return Sha256::digest(configured.as_bytes()).into();
+            }
+        }
+        let mut key = [0_u8; 32];
+        std::fs::File::open("/dev/urandom")
+            .and_then(|mut source| source.read_exact(&mut key))
+            .expect("secure randomness is required when OPENESTATES_REVISION_SIGNING_KEY is unset");
+        key
+    })
+}
+
+fn hmac_sha256(key: &[u8], payload: &[u8]) -> [u8; 32] {
+    const BLOCK_SIZE: usize = 64;
+    let mut key_block = [0_u8; BLOCK_SIZE];
+    if key.len() > BLOCK_SIZE {
+        key_block[..32].copy_from_slice(&Sha256::digest(key));
+    } else {
+        key_block[..key.len()].copy_from_slice(key);
+    }
+    let mut inner_pad = [0x36_u8; BLOCK_SIZE];
+    let mut outer_pad = [0x5c_u8; BLOCK_SIZE];
+    for index in 0..BLOCK_SIZE {
+        inner_pad[index] ^= key_block[index];
+        outer_pad[index] ^= key_block[index];
+    }
+    let mut inner = Sha256::new();
+    inner.update(inner_pad);
+    inner.update(payload);
+    let inner_digest = inner.finalize();
+    let mut outer = Sha256::new();
+    outer.update(outer_pad);
+    outer.update(inner_digest);
+    outer.finalize().into()
+}
+
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    left.iter()
+        .zip(right)
+        .fold(0_u8, |difference, (left, right)| {
+            difference | (left ^ right)
+        })
+        == 0
+}
+
+fn replace_budget_constraint(parent: &str, utterance: &str) -> Option<String> {
+    let parent_slots = super::parser::parse_query_slots(parent);
+    let replacement_slots = super::parser::parse_query_slots(utterance);
+    let replacement = replacement_slots.budgets.first()?;
+    let replacement_text = utterance.get(replacement.start..replacement.end)?.trim();
+    if replacement_text.is_empty() || parent_slots.budgets.is_empty() {
+        return None;
+    }
+    let mut query = parent.to_string();
+    for budget in parent_slots.budgets.iter().rev() {
+        if budget.start <= budget.end && budget.end <= query.len() {
+            query.replace_range(budget.start..budget.end, replacement_text);
+        }
+    }
+    Some(query.split_whitespace().collect::<Vec<_>>().join(" "))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -306,7 +450,7 @@ mod tests {
     }
 
     #[test]
-    fn partial_budget_correction_does_not_mix_conflicting_limits() {
+    fn partial_budget_correction_replaces_the_previous_limit() {
         let revision = compile_search_revision(
             "3BHK in Hoodi under 2.4 Cr",
             "Increase the budget to 2.8 Cr",
@@ -314,11 +458,101 @@ mod tests {
             LIMITS,
         );
 
-        assert_eq!(revision.operation, SearchRevisionOperation::Replace);
+        assert_eq!(revision.operation, SearchRevisionOperation::Refine);
+        assert_eq!(revision.outcome, SearchRevisionOutcome::Candidate);
+        assert_eq!(
+            revision.candidate_query.as_deref(),
+            Some("3BHK in Hoodi under 2.8 Cr")
+        );
+    }
+
+    #[test]
+    fn vague_relative_distance_requires_clarification() {
+        let revision =
+            compile_search_revision("3BHK near Hoodi under 2.5 Cr", "Make it closer", 1, LIMITS);
         assert_eq!(
             revision.outcome,
             SearchRevisionOutcome::RequireClarification
         );
-        assert!(revision.candidate_query.is_none());
+    }
+
+    #[test]
+    fn issue_118_revision_scenarios_compile_without_server_history() {
+        let parent = "3BHK in Whitefield under 2.5Cr";
+        let ready = compile_search_revision(parent, "Make it ready to move", 1, LIMITS);
+        assert_eq!(ready.operation, SearchRevisionOperation::Refine);
+        assert!(ready
+            .candidate_query
+            .as_deref()
+            .is_some_and(|query| query.contains("ready to move")));
+
+        let both = compile_search_revision(
+            parent,
+            "Near both Hoodi Metro and Manipal Hospital",
+            1,
+            LIMITS,
+        );
+        assert!(both
+            .candidate_query
+            .as_deref()
+            .is_some_and(|query| query.contains("both Hoodi Metro and Manipal Hospital")));
+
+        let budget = compile_search_revision(parent, "Increase the budget to 3Cr", 1, LIMITS);
+        assert_eq!(
+            budget.candidate_query.as_deref(),
+            Some("3BHK in Whitefield under 3Cr")
+        );
+
+        let alternative = compile_search_revision(
+            parent,
+            "Alternatively consider 3BHK in Kadugodi under 2.7Cr",
+            1,
+            LIMITS,
+        );
+        assert_eq!(alternative.operation, SearchRevisionOperation::Expand);
+        assert_eq!(alternative.candidate_branch_count, 2);
+
+        let branch_local =
+            compile_search_revision(parent, "Also consider 2BHK in Hoodi under 2Cr", 1, LIMITS);
+        assert!(branch_local
+            .candidate_query
+            .as_deref()
+            .is_some_and(|query| {
+                query == "3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2Cr"
+            }));
+
+        let excluded = compile_search_revision(
+            "3BHK around Whitefield under 3Cr",
+            "Exclude Varthur",
+            1,
+            LIMITS,
+        );
+        assert!(excluded
+            .candidate_query
+            .as_deref()
+            .is_some_and(|query| query.ends_with("Exclude Varthur")));
+
+        let replacement = compile_search_revision(
+            "3BHK around Whitefield under 3Cr",
+            "Instead, search for plots in North Bengaluru under 1.5Cr",
+            1,
+            LIMITS,
+        );
+        assert_eq!(replacement.operation, SearchRevisionOperation::Replace);
+        assert_eq!(replacement.candidate_branch_count, 1);
+    }
+
+    #[test]
+    fn branch_cohorts_keep_eight_as_the_active_limit() {
+        let query = |count: usize| {
+            (1..=count)
+                .map(|index| format!("2BHK in Test Area {index} under 2Cr"))
+                .collect::<Vec<_>>()
+                .join(" or ")
+        };
+        assert_eq!(compiled_branch_count(&query(3)), 3);
+        assert_eq!(compiled_branch_count(&query(8)), 8);
+        assert_eq!(compiled_branch_count(&query(16)), 16);
+        assert_eq!(LIMITS.max_active_branches, 8);
     }
 }

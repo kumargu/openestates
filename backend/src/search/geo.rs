@@ -9,10 +9,11 @@ use crate::knowledge::FactValue;
 use crate::models::Property;
 use crate::serving::{
     resolve_serving_coordinates, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
-    ServingSearchMetadataRecord, SpatialServingIndex,
+    ServingSearchMetadataRecord, SpatialGeometryIndex, SpatialServingIndex,
 };
 
 use super::analyzer;
+use super::ast::ConstraintTerm;
 use super::index::SearchIndex;
 use super::parser;
 use super::query_plan::{QueryPlan, QueryRelationClause, RelationRequirement};
@@ -111,6 +112,7 @@ pub struct GeoSearchQuery<'a> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ResolvedGeoClause {
+    pub relation: String,
     pub target_text: String,
     pub place_entity_ids: Vec<String>,
     pub category_fact_keys: Vec<String>,
@@ -167,13 +169,25 @@ impl GeoSearchIndex {
         let mut places = Vec::new();
         let mut society_coordinates = Vec::new();
         let mut society_coordinate_ids = HashSet::<String>::new();
+        let geometry = SpatialGeometryIndex::from_serving_bundle(entities, fact_index, &[]);
         for entity in entities {
-            let Some(coordinates) = coordinates_for_entity(fact_index, &entity.entity_id) else {
-                continue;
-            };
             if entity.entity_type.eq_ignore_ascii_case("place")
                 || entity.entity_type.eq_ignore_ascii_case("area")
             {
+                let coordinates =
+                    coordinates_for_entity(fact_index, &entity.entity_id).or_else(|| {
+                        geometry.representative_coordinate(&entity.entity_id).map(
+                            |(latitude, longitude, confidence)| EntityCoordinates {
+                                entity_id: entity.entity_id.clone(),
+                                latitude,
+                                longitude,
+                                confidence,
+                            },
+                        )
+                    });
+                let Some(coordinates) = coordinates else {
+                    continue;
+                };
                 places.push(GeoPlace {
                     entity_id: entity.entity_id.clone(),
                     name: entity.name.clone(),
@@ -184,6 +198,10 @@ impl GeoSearchIndex {
                     match_tokens: significant_place_tokens(&entity.name),
                 });
             } else if entity.entity_type.eq_ignore_ascii_case("society") {
+                let Some(coordinates) = coordinates_for_entity(fact_index, &entity.entity_id)
+                else {
+                    continue;
+                };
                 society_coordinate_ids.insert(coordinates.entity_id.clone());
                 society_coordinates.push(coordinates);
             }
@@ -267,6 +285,7 @@ impl GeoSearchIndex {
                 }
             }
             clauses.push(ResolvedGeoClause {
+                relation: relation.relation.clone(),
                 target_text: relation.target_text.clone(),
                 place_entity_ids,
                 category_fact_keys,
@@ -540,9 +559,38 @@ impl<'a> GeoSearchQuery<'a> {
         eligible_property_ids: Option<&HashSet<String>>,
         clause: &ResolvedGeoClause,
     ) -> HashMap<String, f64> {
+        if clause.relation.eq_ignore_ascii_case("inside") {
+            return self.topology_societies_for_clause(
+                spatial_index,
+                search_index,
+                eligible_property_ids,
+                clause,
+                false,
+            );
+        }
+        if clause.relation.eq_ignore_ascii_case("adjacent") {
+            return self.topology_societies_for_clause(
+                spatial_index,
+                search_index,
+                eligible_property_ids,
+                clause,
+                true,
+            );
+        }
         let policy = schema::ranking_policy();
         let mut candidates = HashMap::<String, f64>::new();
         for place in self.places_for_clause(clause) {
+            if place.entity_id.starts_with("area:") {
+                for society_id in spatial_index.society_ids_inside(&place.entity_id) {
+                    if entity_has_eligible_property(
+                        search_index,
+                        &society_id,
+                        eligible_property_ids,
+                    ) {
+                        candidates.insert(society_id, 0.0);
+                    }
+                }
+            }
             let nearest = if let Some(radius_km) = clause.distance_limit_km {
                 spatial_index
                     .points_within_radius(place.latitude, place.longitude, radius_km)
@@ -584,6 +632,36 @@ impl<'a> GeoSearchQuery<'a> {
                 .into_iter()
                 .collect()
         }
+    }
+
+    fn topology_societies_for_clause(
+        &self,
+        spatial_index: &SpatialServingIndex,
+        search_index: &SearchIndex,
+        eligible_property_ids: Option<&HashSet<String>>,
+        clause: &ResolvedGeoClause,
+        adjacent: bool,
+    ) -> HashMap<String, f64> {
+        let mut candidates = HashMap::new();
+        for place in self.places_for_clause(clause) {
+            let area_ids = if adjacent {
+                spatial_index.adjacent_area_ids(&place.entity_id)
+            } else {
+                vec![place.entity_id.clone()]
+            };
+            for area_id in area_ids {
+                for society_id in spatial_index.society_ids_inside(&area_id) {
+                    if entity_has_eligible_property(
+                        search_index,
+                        &society_id,
+                        eligible_property_ids,
+                    ) {
+                        candidates.insert(society_id, 0.0);
+                    }
+                }
+            }
+        }
+        candidates
     }
 
     pub(crate) fn serving_fact_candidate_property_ids(
@@ -724,6 +802,22 @@ impl<'a> GeoSearchQuery<'a> {
 
     pub(crate) fn resolved_places(&self) -> &[ResolvedGeoPlace] {
         &self.places
+    }
+
+    pub(crate) fn ast_terms(&self) -> Vec<ConstraintTerm> {
+        self.clauses
+            .iter()
+            .flat_map(|clause| {
+                self.places_for_clause(clause)
+                    .map(|place| ConstraintTerm::Spatial {
+                        relation: clause.relation.clone(),
+                        entity_id: place.entity_id.clone(),
+                        display_name: place.name.clone(),
+                        required: clause.requirement == RelationRequirement::Hard,
+                        span: None,
+                    })
+            })
+            .collect()
     }
 
     pub(crate) fn resolved_clauses(&self) -> &[ResolvedGeoClause] {
@@ -1891,6 +1985,36 @@ mod tests {
         assert!(query.resolved_places().iter().any(|place| {
             place.entity_id == "area:marathahalli" && place.name == "Marathahalli"
         }));
+    }
+
+    #[test]
+    fn polygon_only_area_resolves_without_fabricating_coordinate_facts() {
+        let area_id = "area:osm:relation-123";
+        let entities = vec![ServingEntityRecord {
+            entity_id: area_id.to_string(),
+            entity_type: "area".to_string(),
+            name: "Fixture Locality".to_string(),
+            root_source: Some("openstreetmap".to_string()),
+            searchable_text: "Fixture Locality".to_string(),
+        }];
+        let facts = ServingFactIndex::from_records(
+            vec![serving_text_fact(
+                area_id,
+                "geo.geometry_geojson",
+                r#"{"type":"Polygon","coordinates":[[[77.0,12.0],[77.1,12.0],[77.1,12.1],[77.0,12.0]]]}"#,
+                "OpenStreetMap",
+            )],
+            Vec::new(),
+        );
+
+        let index = GeoSearchIndex::from_serving_bundle(&entities, &facts);
+        let query = index
+            .query("3BHK inside Fixture Locality")
+            .expect("polygon-backed areas should resolve by serving identity");
+
+        assert_eq!(query.resolved_clauses().len(), 1);
+        assert_eq!(query.resolved_clauses()[0].relation, "inside");
+        assert_eq!(query.resolved_clauses()[0].place_entity_ids, [area_id]);
     }
 
     #[test]

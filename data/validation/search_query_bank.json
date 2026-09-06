@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-09-05",
+  "generated_at": "2026-09-06",
   "description": "Single source of truth for controlled and live search queries. Suites select compatible case groups without splitting cases across files.",
   "case_groups": [
     {
@@ -76,6 +76,15 @@
       ]
     },
     {
+      "id": "spatial_revision",
+      "kind": "controlled",
+      "mode": "issue_118_revision_contract",
+      "notes": [
+        "These are the frozen Issue 118 stateless revision scenarios; named places are test inputs, never parser aliases.",
+        "Candidate queries must execute through the ordinary SearchEngine, while clarification and checkpoint outcomes preserve the safe parent query."
+      ]
+    },
+    {
       "id": "proof_handoff",
       "kind": "live_bundle",
       "source_bundle_version": "search-experiment-mixed-south-45-2026-08-22-v1",
@@ -146,12 +155,19 @@
       "limits": {
         "max_active_branches": 8,
         "max_revision_depth_before_checkpoint": 12,
-        "measured_branch_quality_cohorts": [3, 8],
+        "measured_branch_quality_cohorts": [3, 8, 16],
         "deferred_branch_stress_cohort": 16
       },
       "case_groups": [
         "controlled_product",
         "controlled_journey"
+      ]
+    },
+    {
+      "id": "spatial_revision",
+      "runner": "rust_spatial_revision",
+      "case_groups": [
+        "spatial_revision"
       ]
     },
     {
@@ -4451,6 +4467,104 @@
           "candidate_effect": "same_membership"
         }
       ]
+    },
+    {
+      "id": "SPATIAL-REVISION-READY",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Make it ready to move",
+      "expected_operation": "refine",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr ready to move"
+    },
+    {
+      "id": "SPATIAL-REVISION-TWO-ANCHORS",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Near both Hoodi Metro and Manipal Hospital",
+      "expected_operation": "refine",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr Near both Hoodi Metro and Manipal Hospital"
+    },
+    {
+      "id": "SPATIAL-REVISION-BUDGET",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Increase the budget to 3Cr",
+      "expected_operation": "refine",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 3Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-KADUGODI",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Alternatively consider 3BHK in Kadugodi under 2.7Cr",
+      "expected_operation": "expand",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr or 3BHK in Kadugodi under 2.7Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-HOODI-BRANCH",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Also consider 2BHK in Hoodi under 2Cr",
+      "expected_operation": "expand",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-EXCLUDE",
+      "group": "spatial_revision",
+      "parent_query": "3BHK around Whitefield under 3Cr",
+      "parent_branch_count": 1,
+      "utterance": "Exclude Varthur",
+      "expected_operation": "refine",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK around Whitefield under 3Cr Exclude Varthur"
+    },
+    {
+      "id": "SPATIAL-REVISION-REPLACE",
+      "group": "spatial_revision",
+      "parent_query": "3BHK around Whitefield under 3Cr",
+      "parent_branch_count": 1,
+      "utterance": "Instead, search for plots in North Bengaluru under 1.5Cr",
+      "expected_operation": "replace",
+      "expected_outcome": "candidate",
+      "expected_active_query": "Instead, search for plots in North Bengaluru under 1.5Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-REPHRASE",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Hoodi under 2.4 Cr",
+      "parent_branch_count": 1,
+      "utterance": "3 bedrooms in Hoodi costing no more than 2.4 crore",
+      "expected_operation": "rephrase",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3 bedrooms in Hoodi costing no more than 2.4 crore"
+    },
+    {
+      "id": "SPATIAL-REVISION-CLARIFY",
+      "group": "spatial_revision",
+      "parent_query": "3BHK near Hoodi under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Make it closer",
+      "expected_operation": "refine",
+      "expected_outcome": "require_clarification"
+    },
+    {
+      "id": "SPATIAL-REVISION-CHECKPOINT",
+      "group": "spatial_revision",
+      "parent_query": "Whitefield 2BHK under 1.6Cr or Sarjapur Road 3BHK under 2Cr or North Bengaluru 3BHK under 1.8Cr or Bellandur 2BHK under 1.7Cr or HSR Layout 3BHK under 2.5Cr or Devanahalli 2BHK under 1.2Cr or Yelahanka 3BHK under 1.9Cr or Electronic City 2BHK under 1.1Cr",
+      "parent_branch_count": 8,
+      "utterance": "Also consider Sarjapur",
+      "expected_operation": "expand",
+      "expected_outcome": "require_checkpoint"
     }
   ]
 }

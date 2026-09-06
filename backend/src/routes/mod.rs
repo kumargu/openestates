@@ -8,6 +8,7 @@ pub mod media;
 pub mod properties;
 pub mod property_map;
 pub mod search;
+pub mod search_revisions;
 pub mod shortlist;
 pub mod sitemap;
 pub mod societies;

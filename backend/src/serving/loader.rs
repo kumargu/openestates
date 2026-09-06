@@ -126,7 +126,8 @@ impl ServingBundleLoader {
         let mut graph_index = GraphIndex::from_serving_edges(&edges);
         graph_index.add_entity_aliases(&aliases);
         let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
-        let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
+        let spatial_index =
+            SpatialServingIndex::from_serving_bundle_with_edges(&entities, &fact_index, &edges);
         let search_capabilities =
             crate::search::SearchCapabilityIndex::from_bundle(&entities, &fact_index);
         Ok(LoadedServingBundle {

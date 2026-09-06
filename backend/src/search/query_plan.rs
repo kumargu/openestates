@@ -834,7 +834,9 @@ fn relation_clauses(
                     } else {
                         format!("rel:{index}:{segment_index}")
                     },
-                    relation: relation.alias.clone(),
+                    relation: relation_config
+                        .and_then(|config| config.operator.clone())
+                        .unwrap_or_else(|| relation.alias.clone()),
                     relation_span,
                     target_text,
                     target_span,
@@ -2106,5 +2108,18 @@ mod tests {
             "negative preferences: {:?}",
             intent.negative_preferences
         );
+    }
+
+    #[test]
+    fn configured_containment_and_adjacency_compile_as_generic_relations() {
+        let inside = compile_query_plan("3BHK inside Hoodi");
+        assert_eq!(inside.clauses.len(), 1);
+        assert_eq!(inside.clauses[0].relation, "inside");
+        assert_eq!(inside.clauses[0].target_text, "hoodi");
+
+        let adjacent = compile_query_plan("3BHK adjacent to Kadugodi");
+        assert_eq!(adjacent.clauses.len(), 1);
+        assert_eq!(adjacent.clauses[0].relation, "adjacent");
+        assert_eq!(adjacent.clauses[0].target_text, "kadugodi");
     }
 }

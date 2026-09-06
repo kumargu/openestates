@@ -339,8 +339,8 @@ impl KgViewRecords {
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
     ) -> Result<(), KgSocietyViewMaterializeError> {
-        let support_place_entities = support_place_entities(support_facts)?;
-        merge_synthesized_entities(&mut self.entities, support_place_entities);
+        let support_spatial_entities = support_spatial_entities(support_facts)?;
+        merge_synthesized_entities(&mut self.entities, support_spatial_entities);
         let mut accepted_entities: HashSet<String> = self
             .entities
             .iter()
@@ -501,29 +501,37 @@ fn merge_synthesized_entities(
     entities.sort_by(|left, right| left.entity_id.cmp(&right.entity_id));
 }
 
-fn support_place_entities(
+fn support_spatial_entities(
     support_facts: &[SkillFactRecord],
 ) -> Result<Vec<KgViewEntityRecord>, KgSocietyViewMaterializeError> {
     let coordinate_entities = super::compaction::resolve_coordinate_fact_records(support_facts)?
         .into_iter()
         .map(|fact| fact.entity_id)
         .collect::<HashSet<_>>();
-    let mut by_entity = BTreeMap::<String, SupportPlaceEntity>::new();
+    let mut by_entity = BTreeMap::<String, SupportSpatialEntity>::new();
     for fact in support_facts
         .iter()
-        .filter(|fact| fact.entity_id.starts_with("place:"))
+        .filter(|fact| fact.entity_id.starts_with("place:") || fact.entity_id.starts_with("area:"))
     {
         let value = serde_json::from_str::<FactValue>(&fact.value_json)?;
-        let entry = by_entity
-            .entry(fact.entity_id.clone())
-            .or_insert_with(|| SupportPlaceEntity {
-                entity_id: fact.entity_id.clone(),
-                name: None,
-                has_coordinates: coordinate_entities.contains(&fact.entity_id),
-                root_source: Some(fact.source_type.to_ascii_lowercase()),
-                created_at: fact.learned_at,
-                updated_at: fact.learned_at,
-            });
+        let entity_type = if fact.entity_id.starts_with("area:") {
+            "area"
+        } else {
+            "place"
+        };
+        let entry =
+            by_entity
+                .entry(fact.entity_id.clone())
+                .or_insert_with(|| SupportSpatialEntity {
+                    entity_id: fact.entity_id.clone(),
+                    entity_type: entity_type.to_string(),
+                    name: None,
+                    has_coordinates: coordinate_entities.contains(&fact.entity_id),
+                    has_geometry: false,
+                    root_source: Some(fact.source_type.to_ascii_lowercase()),
+                    created_at: fact.learned_at,
+                    updated_at: fact.learned_at,
+                });
         entry.created_at = entry.created_at.min(fact.learned_at);
         entry.updated_at = entry.updated_at.max(fact.learned_at);
         if entry.root_source.is_none() && !fact.source_type.trim().is_empty() {
@@ -532,6 +540,9 @@ fn support_place_entities(
         match (fact.fact_key.as_str(), value) {
             ("place.name", FactValue::Text(name)) if !name.trim().is_empty() => {
                 entry.name = Some(name.trim().to_string());
+            }
+            ("geo.geometry_geojson", FactValue::Text(geometry)) if !geometry.trim().is_empty() => {
+                entry.has_geometry = true;
             }
             _ => {}
         }
@@ -543,24 +554,31 @@ fn support_place_entities(
         .collect())
 }
 
-struct SupportPlaceEntity {
+struct SupportSpatialEntity {
     entity_id: String,
+    entity_type: String,
     name: Option<String>,
     has_coordinates: bool,
+    has_geometry: bool,
     root_source: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
 
-impl SupportPlaceEntity {
+impl SupportSpatialEntity {
     fn into_record(self) -> Option<KgViewEntityRecord> {
         let name = self.name?;
-        if !self.has_coordinates {
+        let has_required_geometry = match self.entity_type.as_str() {
+            "area" => self.has_geometry,
+            "place" => self.has_coordinates,
+            _ => false,
+        };
+        if !has_required_geometry {
             return None;
         }
         Some(KgViewEntityRecord {
             entity_id: self.entity_id,
-            entity_type: "place".to_string(),
+            entity_type: self.entity_type,
             name,
             root_source: self.root_source,
             fact_count: 0,
@@ -1931,6 +1949,76 @@ mod tests {
             .fact_annotations
             .iter()
             .all(|annotation| annotation.entity_id != "society:prestige-lavender-fields"));
+    }
+
+    #[test]
+    fn polygon_backed_area_facts_enter_the_typed_kg_view() {
+        let learned_at = Utc.with_ymd_and_hms(2026, 9, 5, 7, 0, 0).unwrap();
+        let area_id = "area:osm:relation-123";
+        let facts = vec![
+            skill_fact(
+                area_id,
+                "place.name",
+                FactValue::Text("Fixture locality".to_string()),
+                learned_at,
+            ),
+            skill_fact(
+                area_id,
+                "geo.geometry_geojson",
+                FactValue::Text(
+                    r#"{"type":"Polygon","coordinates":[[[77.0,12.0],[77.1,12.0],[77.1,12.1],[77.0,12.0]]]}"#
+                        .to_string(),
+                ),
+                learned_at,
+            ),
+        ];
+
+        let records = KgViewRecords::from_graph_with_skill_facts(
+            &KnowledgeGraph::new(),
+            &facts,
+            &[
+                skill_annotation(area_id, "place.name"),
+                skill_annotation(area_id, "geo.geometry_geojson"),
+            ],
+        )
+        .unwrap();
+
+        assert!(records.entities.iter().any(|entity| {
+            entity.entity_id == area_id
+                && entity.entity_type == "area"
+                && entity.name == "Fixture locality"
+        }));
+        assert_eq!(
+            records
+                .facts
+                .iter()
+                .filter(|fact| fact.entity_id == area_id)
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn area_name_without_polygon_does_not_create_serving_truth() {
+        let learned_at = Utc.with_ymd_and_hms(2026, 9, 5, 7, 0, 0).unwrap();
+        let area_id = "area:osm:relation-123";
+        let records = KgViewRecords::from_graph_with_skill_facts(
+            &KnowledgeGraph::new(),
+            &[skill_fact(
+                area_id,
+                "place.name",
+                FactValue::Text("Fixture locality".to_string()),
+                learned_at,
+            )],
+            &[skill_annotation(area_id, "place.name")],
+        )
+        .unwrap();
+
+        assert!(records
+            .entities
+            .iter()
+            .all(|entity| entity.entity_id != area_id));
+        assert!(records.facts.iter().all(|fact| fact.entity_id != area_id));
     }
 
     #[test]

@@ -135,6 +135,7 @@ crawl/source input -> normalize -> DAG asset -> serving bundle -> Rust API -> UI
 ```
 
 Rules:
+- Collected buyer-relevant DAG data is not complete until search can consume it through generic typed serving views; collection-only assets are an architecture gap, not searchable coverage.
 - If a fact appears in the UI, it should come from a promoted DAG-backed serving bundle or from a deterministic computation over DAG facts.
 - Joins against heavy source datasets must happen offline during DAG materialization, not on the request path. For example, society coordinates should be joined to groundwater polygons, drain networks, flood points, metro updates, or other source layers ahead of time, then served as scoped facts with provenance.
 - Canonicalizing entity IDs must preserve runtime alias lookup across facts, graph edges, and spatial/proximity indexes; test each path using the ID carried by runtime properties.

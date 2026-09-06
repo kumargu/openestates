@@ -19,6 +19,7 @@ pub mod geometry;
 pub mod google;
 pub mod home_state;
 pub mod kg_view;
+pub mod locality;
 pub mod materialization;
 pub mod media;
 pub mod osm_access;
@@ -89,6 +90,10 @@ pub use kg_view::{
     KgSocietyViewMaterializer, KgViewArtifact, KgViewArtifactKind, KgViewEdgeRecord,
     KgViewEntityRecord, KgViewFactAnnotationRecord, KgViewFactRecord, KgViewManifest,
     KgViewRecords, KG_SOCIETY_VIEW_ASSET_ID,
+};
+pub use locality::{
+    osm_locality_boundary_facts_input, LocalityAssetError, OsmLocalityBoundariesInput,
+    OsmLocalityBoundaryInput, OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
 };
 pub use materialization::AssetMaterializationStore;
 pub use media::{

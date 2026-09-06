@@ -657,8 +657,7 @@ fn place_matches_category(place: &PlacePoint, category: &CategoryMatcher) -> boo
             .category_aliases
             .iter()
             .any(|alias| alias == place_category);
-        return canonical_category_matches
-            && (!category.require_name_marker || name_marker_match);
+        return canonical_category_matches && (!category.require_name_marker || name_marker_match);
     }
     if category.require_name_marker {
         return name_marker_match;
@@ -1029,8 +1028,7 @@ mod tests {
         let school = config.category_for_fact_key("nearby_schools").unwrap();
         let fitness = config.category_for_fact_key("nearby_fitness").unwrap();
         let school_spec = proximity_fact_spec("nearby_schools", 5.0, None, Some(school)).unwrap();
-        let fitness_spec =
-            proximity_fact_spec("nearby_fitness", 5.0, None, Some(fitness)).unwrap();
+        let fitness_spec = proximity_fact_spec("nearby_fitness", 5.0, None, Some(fitness)).unwrap();
         let mut place = place_point(
             "Cult Fitness Club",
             &["fitness_center", "gym", "health", "school"],

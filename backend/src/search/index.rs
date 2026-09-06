@@ -369,7 +369,9 @@ impl SearchIndex {
                     }
                 })
                 .collect(),
-            ConstraintTerm::Evidence { .. } => self.all_ids.iter().cloned().collect(),
+            ConstraintTerm::Evidence { .. } | ConstraintTerm::Spatial { .. } => {
+                self.all_ids.iter().cloned().collect()
+            }
         }
     }
 

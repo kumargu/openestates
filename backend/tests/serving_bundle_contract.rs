@@ -61,6 +61,21 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         .artifacts
         .iter()
         .any(|artifact| artifact.kind == BundleArtifactKind::QuarantineJson));
+    let topology_gaps = manifest
+        .artifacts
+        .iter()
+        .find(|artifact| {
+            artifact
+                .key
+                .ends_with("diagnostics/spatial_topology_gaps.json")
+        })
+        .expect("spatial topology gaps remain inspectable in the bundle");
+    let topology_gap_body = lake
+        .get_text(&LakeKey::new(topology_gaps.key.clone()).unwrap())
+        .await
+        .unwrap();
+    let topology_gap_json: serde_json::Value = serde_json::from_str(&topology_gap_body).unwrap();
+    assert_eq!(topology_gap_json["classification"], "data_gap");
 
     let entity_bytes = lake
         .get_bytes(&LakeKey::new(manifest.entity_parquet_key.clone()).unwrap())

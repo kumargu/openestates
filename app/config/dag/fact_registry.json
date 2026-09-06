@@ -4127,6 +4127,27 @@
       }
     },
     {
+      "fact_key": "area.admin_level",
+      "bucket": "geo",
+      "label": "administrative level",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "area"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "Administrative level: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
       "fact_key": "place.types",
       "bucket": "geo",
       "label": "place types",

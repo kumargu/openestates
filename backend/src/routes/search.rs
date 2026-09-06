@@ -11,9 +11,9 @@ use crate::knowledge::edge::Relation;
 use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::{KnowledgeGraph, SearchEvent};
 use crate::search::{
-    guard_search_query, intent, no_results_guidance, schema, KnowledgeContext, SearchEngine,
-    SearchEvidenceGap, SearchResponse, SearchResultCard, SearchResultSet, SearchRuntimeVersion,
-    SourcedClaim,
+    guard_search_query, intent, no_results_guidance, revision_id_for_query, schema,
+    KnowledgeContext, SearchEngine, SearchEvidenceGap, SearchResponse, SearchResultCard,
+    SearchResultSet, SearchRuntimeVersion, SourcedClaim,
 };
 use crate::state::{
     AppState, CachedSearchOutput, SearchCacheKey, SearchCacheLookup, SearchLogMessage,
@@ -40,8 +40,12 @@ pub async fn search_properties(
     let runtime_version = search_runtime_version(&snapshot);
 
     if query.trim().is_empty() {
+        let ast_fingerprint = crate::search::ast::semantic_search_fingerprint(&[], &[]);
+        let revision_id = revision_id_for_query(&query, &runtime_version, 1);
         return Ok(Json(SearchResponse {
             query,
+            revision_id,
+            ast_fingerprint,
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
             total_matches: 0,
@@ -58,6 +62,8 @@ pub async fn search_properties(
             // the guardrail. If deterministic local recall has a concrete
             // candidate, let ranking handle the query instead of rejecting it.
         } else {
+            let ast_fingerprint = crate::search::ast::semantic_search_fingerprint(&[], &[]);
+            let revision_id = revision_id_for_query(&query, &runtime_version, 1);
             let mut event = SearchEvent::new(query.clone(), guarded.intent.clone(), 0);
             event.enrichment_gaps.push(EnrichmentGap {
                 entity_id: "search:guardrail".to_string(),
@@ -68,6 +74,8 @@ pub async fn search_properties(
 
             return Ok(Json(SearchResponse {
                 query,
+                revision_id,
+                ast_fingerprint,
                 result_sets: Vec::new(),
                 ordered_result_ids: Vec::new(),
                 total_matches: 0,
@@ -126,7 +134,7 @@ pub async fn search_properties(
     Ok(Json(response))
 }
 
-fn compute_search(
+pub(crate) fn compute_search(
     snapshot: Arc<SearchRuntimeSnapshot>,
     graph: KnowledgeGraph,
     query: String,
@@ -142,6 +150,12 @@ fn compute_search(
         graph: Some(&graph),
     }
     .search(&query);
+    let ast_branches: Arc<[crate::search::ast::ConstraintExpr]> =
+        Arc::from(engine_output.ast_branches.clone());
+    let intent_branches: Arc<[crate::search::SearchIntent]> =
+        Arc::from(engine_output.intent_branches.clone());
+    let ast_fingerprint =
+        crate::search::ast::semantic_search_fingerprint(&ast_branches, &intent_branches);
     let parsed_intent = engine_output.intent;
     let results = engine_output.results;
     let result_sets = engine_output.result_sets;
@@ -151,6 +165,7 @@ fn compute_search(
         .map(|result| result.card.id.clone())
         .collect();
     let runtime_version = search_runtime_version(&snapshot);
+    let revision_id = revision_id_for_query(&query, &runtime_version, 1);
 
     // Look up area context if the intent identified an area.
     let area_context = parsed_intent.area.as_ref().and_then(|area_name| {
@@ -203,6 +218,8 @@ fn compute_search(
     let total_matches = unique_result_count(&result_sets);
     let response = SearchResponse {
         query,
+        revision_id,
+        ast_fingerprint,
         result_sets,
         ordered_result_ids,
         total_matches,
@@ -217,6 +234,8 @@ fn compute_search(
     };
     CachedSearchOutput {
         response: Arc::new(response),
+        ast_branches,
+        intent_branches,
         log_messages,
     }
 }
@@ -292,6 +311,7 @@ fn try_enqueue_search_log(
 fn rebase_cached_response(response: &SearchResponse, query: &str) -> SearchResponse {
     let mut response = response.clone();
     response.query = query.to_string();
+    response.revision_id = revision_id_for_query(query, &response.runtime_version, 1);
     response
 }
 
@@ -709,6 +729,8 @@ mod tests {
     fn buyer_response_exposes_result_sets_without_internal_search_state() {
         let response = SearchResponse {
             query: "3bhk whitefield".to_string(),
+            revision_id: "rev-001-test".to_string(),
+            ast_fingerprint: "sha256:test".to_string(),
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
             total_matches: 0,
@@ -723,7 +745,10 @@ mod tests {
         assert_eq!(value["resultSets"], serde_json::json!([]));
         assert_eq!(value["orderedResultIds"], serde_json::json!([]));
         assert_eq!(value["totalMatches"], 0);
-        assert_eq!(value["runtimeVersion"]["servingBundleVersion"], "test-bundle");
+        assert_eq!(
+            value["runtimeVersion"]["servingBundleVersion"],
+            "test-bundle"
+        );
         assert_eq!(value["state"], "no_matches");
         assert!(value.get("searchGuidance").is_none());
         for internal in [
@@ -741,6 +766,8 @@ mod tests {
     fn buyer_response_can_expose_guidance_without_parser_state() {
         let response = SearchResponse {
             query: "find me something good".to_string(),
+            revision_id: "rev-001-test".to_string(),
+            ast_fingerprint: "sha256:test".to_string(),
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
             total_matches: 0,
@@ -822,6 +849,8 @@ mod tests {
         });
         let response = SearchResponse {
             query: "3bhk whitefield".to_string(),
+            revision_id: "rev-001-test".to_string(),
+            ast_fingerprint: "sha256:test".to_string(),
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
             total_matches: 0,

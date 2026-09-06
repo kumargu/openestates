@@ -313,21 +313,34 @@
       "clause_joiners": ["and", "also", "plus"],
       "aliases": [
         {
-          "alias": "near"
+          "alias": "near",
+          "operator": "near"
         },
         {
-          "alias": "nearby"
+          "alias": "nearby",
+          "operator": "near"
         },
         {
-          "alias": "near by"
+          "alias": "near by",
+          "operator": "near"
         },
         {
           "alias": "within",
+          "operator": "near",
           "requires_distance_limit": true
         },
         {
           "alias": "close to",
+          "operator": "near",
           "default_distance_limit_km": 2.0
+        },
+        {
+          "alias": "inside",
+          "operator": "inside"
+        },
+        {
+          "alias": "adjacent to",
+          "operator": "adjacent"
         }
       ]
     },
@@ -344,7 +357,8 @@
       "revision_expand_prefixes": [
         "also consider",
         "also show",
-        "add as an alternative"
+        "add as an alternative",
+        "alternatively consider"
       ],
       "revision_continuity_prefixes": [
         "keep the same search, but",
@@ -368,6 +382,12 @@
         "change the",
         "increase the",
         "decrease the"
+      ],
+      "revision_ambiguous_spatial_refinements": [
+        "closer",
+        "nearer",
+        "farther",
+        "further away"
       ],
       "shared_suffix_markers": [
         "but not",

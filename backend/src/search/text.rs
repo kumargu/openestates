@@ -970,7 +970,6 @@ fn push_proof_focus(
                 && existing.fact_key.eq_ignore_ascii_case(candidate.fact_key)
                 && existing.entity_id.as_deref() == candidate.entity_id
                 && existing.matched_label.as_deref() == candidate.matched_label
-                && existing.requested_constraint.as_deref() == candidate.requested_constraint
         }) {
             continue;
         }
@@ -3317,6 +3316,7 @@ fn property_matches_constraint_term_for_society(
             society_entity_id,
         )
         .is_some(),
+        ConstraintTerm::Spatial { .. } => true,
     }
 }
 
