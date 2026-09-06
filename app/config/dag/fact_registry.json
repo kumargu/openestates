@@ -4148,6 +4148,27 @@
       }
     },
     {
+      "fact_key": "area.osm_boundary_members",
+      "bucket": "geo",
+      "label": "OSM boundary members",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "area"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": null,
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
       "fact_key": "place.types",
       "bucket": "geo",
       "label": "place types",

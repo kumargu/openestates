@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+use super::evaluation::{BooleanEvaluation, PredicateEvaluation};
 use super::intent::{HardConstraint, PreferenceSignal, SearchIntent, SourceSpan};
 use super::parser::{BhkConstraint, ParsedBudgetConstraint, SlotPolarity};
 use super::query_plan::{MentionPolarity, QueryPlan};
@@ -219,6 +220,28 @@ impl ConstraintExpr {
             Self::AnyOf { clauses } => clauses.iter().any(|clause| clause.evaluate(term_matches)),
             Self::Not { clause } => !clause.evaluate(term_matches),
             Self::Term { term } => term_matches(term),
+        }
+    }
+
+    /// Evaluate without collapsing missing or unsupported evidence into
+    /// booleans. Required eligibility accepts only `Satisfied`.
+    pub fn evaluate_predicates(
+        &self,
+        term_evaluation: &mut impl FnMut(&ConstraintTerm) -> PredicateEvaluation,
+    ) -> BooleanEvaluation {
+        match self {
+            Self::And { clauses } => BooleanEvaluation::all(
+                clauses
+                    .iter()
+                    .map(|clause| clause.evaluate_predicates(term_evaluation)),
+            ),
+            Self::AnyOf { clauses } => BooleanEvaluation::any(
+                clauses
+                    .iter()
+                    .map(|clause| clause.evaluate_predicates(term_evaluation)),
+            ),
+            Self::Not { clause } => clause.evaluate_predicates(term_evaluation).negated(),
+            Self::Term { term } => BooleanEvaluation::from_predicate(term_evaluation(term)),
         }
     }
 

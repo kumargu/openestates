@@ -1,14 +1,31 @@
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
 
+use arc_swap::ArcSwap;
 use axum::body::{to_bytes, Body};
 use axum::extract::ConnectInfo;
 use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
-use backend::api::build_app_router;
-use backend::data_loader::load_app_state;
+use backend::api::build_app_router_with_lake;
+use backend::graph::GraphIndex;
+use backend::knowledge::KnowledgeGraph;
+use backend::lake::LakeStore;
+use backend::models::Property;
+use backend::search::geo::GeoSearchIndex;
+use backend::search::{SearchCapabilityIndex, SearchIndex};
+use backend::security::ExecutionLanes;
+use backend::serving::{
+    LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest, ServingEdgeRecord,
+    ServingEntityAliasIndex, ServingEntityRecord, ServingFactIndex, SpatialServingIndex,
+    TantivyRecallIndex,
+};
+use backend::state::{AppState, SearchResponseCache, SearchRuntimeSnapshot};
+use chrono::{TimeZone, Utc};
 use serde_json::{json, Value};
+use tempfile::tempdir;
+use tokio::sync::{mpsc, RwLock};
 use tower::ServiceExt;
 
 #[tokio::test]
@@ -171,11 +188,165 @@ async fn ninth_branch_requires_checkpoint_without_executing_a_candidate() {
 }
 
 async fn test_app() -> Router {
-    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("backend has a project root")
-        .to_path_buf();
-    build_app_router(Arc::new(load_app_state(&project_root).await), &project_root)
+    let root = tempdir().expect("temporary API fixture root").keep();
+    let lake = LakeStore::local(root.join("lake")).expect("temporary lake");
+    let bundle = Arc::new(test_bundle(&root));
+    let properties = vec![test_property()];
+    let search_index =
+        SearchIndex::build_with_serving_graph(&properties, &bundle.entities, &bundle.edges);
+    let runtime = SearchRuntimeSnapshot::new(
+        bundle.clone(),
+        properties.clone(),
+        Vec::new(),
+        Vec::new(),
+        search_index.clone(),
+    );
+    let (search_event_tx, _search_event_rx) = mpsc::channel(8);
+    let state = Arc::new(AppState {
+        execution: ExecutionLanes::current(),
+        search_runtime: ArcSwap::from_pointee(runtime),
+        search_cache: SearchResponseCache::new(8),
+        property_catalog_cache: tokio::sync::Mutex::new(None),
+        search_event_tx,
+        search_log_dropped_count: AtomicU64::new(0),
+        properties: RwLock::new(properties),
+        search_index: RwLock::new(search_index),
+        serving_bundle: RwLock::new(Some(bundle)),
+        recommendation_cache: RwLock::new(HashMap::new()),
+        areas: RwLock::new(Vec::new()),
+        societies: RwLock::new(Vec::new()),
+        discovery_config: backend::discovery::load_discovery_config(),
+        map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
+        knowledge: Arc::new(RwLock::new(KnowledgeGraph::new())),
+        project_root: root,
+        process_started_at: Utc::now(),
+        interest_counter: AtomicU64::new(0),
+        interest_write_lock: tokio::sync::Mutex::new(()),
+        asset_run_active: AtomicBool::new(false),
+    });
+    build_app_router_with_lake(state, lake)
+}
+
+fn test_bundle(root: &std::path::Path) -> LoadedServingBundle {
+    let entities = vec![
+        serving_entity("area:hoodi", "area", "Hoodi"),
+        serving_entity("area:sarjapur", "area", "Sarjapur"),
+        serving_entity("society:fixture-home", "society", "Fixture Home"),
+    ];
+    let edges = vec![ServingEdgeRecord {
+        from_entity_id: "society:fixture-home".to_string(),
+        edge_type: "in_area".to_string(),
+        to_entity_id: "area:hoodi".to_string(),
+        confidence: 1.0,
+        source_type: "OpenStreetMap".to_string(),
+    }];
+    let facts = Vec::new();
+    let fact_index = ServingFactIndex::from_records(facts.clone(), Vec::new());
+    let recall_dir = root.join("tantivy");
+    let recall_index = TantivyRecallIndex::build_in_dir(&recall_dir, &entities, &facts, &[])
+        .expect("fixture recall index");
+
+    LoadedServingBundle {
+        manifest: ServingBundleManifest {
+            bundle_version: "issue-118-revision-api-fixture".to_string(),
+            format_version: 1,
+            created_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            entity_count: entities.len() as u64,
+            entity_alias_count: 0,
+            fact_count: 0,
+            search_metadata_count: 0,
+            rera_evidence_count: 0,
+            excluded_rera_evidence_society_ids: Vec::new(),
+            edge_count: edges.len() as u64,
+            eligibility_policy_version: 0,
+            quarantined_society_count: 0,
+            quarantine_reason_counts: Default::default(),
+            entity_parquet_key: "entities.parquet".to_string(),
+            entity_alias_parquet_key: None,
+            fact_parquet_key: "facts.parquet".to_string(),
+            search_metadata_parquet_key: "search.parquet".to_string(),
+            rera_evidence_parquet_key: None,
+            edge_parquet_key: Some("edges.parquet".to_string()),
+            quarantine_report_key: None,
+            schema_key: "schema.json".to_string(),
+            trust_policy_key: "trust.json".to_string(),
+            tantivy_index_prefix: "tantivy".to_string(),
+            artifacts: Vec::new(),
+        },
+        entity_alias_index: ServingEntityAliasIndex::default(),
+        graph_index: GraphIndex::from_serving_edges(&edges),
+        geo_index: GeoSearchIndex::from_serving_bundle(&entities, &fact_index),
+        spatial_index: SpatialServingIndex::from_serving_bundle_with_edges(
+            &entities,
+            &fact_index,
+            &edges,
+        ),
+        search_capabilities: SearchCapabilityIndex::from_bundle(&entities, &fact_index),
+        rera_evidence_index: ReraEvidenceIndex::default(),
+        recall_index,
+        fact_index,
+        entities,
+        edges,
+        cache_dir: recall_dir,
+    }
+}
+
+fn serving_entity(entity_id: &str, entity_type: &str, name: &str) -> ServingEntityRecord {
+    ServingEntityRecord {
+        entity_id: entity_id.to_string(),
+        entity_type: entity_type.to_string(),
+        name: name.to_string(),
+        root_source: Some("revision_api_contract".to_string()),
+        searchable_text: name.to_string(),
+    }
+}
+
+fn test_property() -> Property {
+    Property {
+        id: "fixture-home-3bhk".to_string(),
+        title: "Fixture Home".to_string(),
+        area: "Hoodi".to_string(),
+        area_id: "hoodi".to_string(),
+        city: "Bengaluru".to_string(),
+        society_id: "fixture-home".to_string(),
+        builder_name: "Fixture Builder".to_string(),
+        property_type: "Apartment".to_string(),
+        listing_type: "Resale".to_string(),
+        bhk: 3,
+        price: 23_000_000,
+        price_min: None,
+        price_max: None,
+        price_per_sqft: 12_000,
+        carpet_area_sqft: 1_200,
+        super_builtup_sqft: 1_550,
+        floor: 8,
+        total_floors: 20,
+        facing: "East".to_string(),
+        possession_status: "Ready to Move".to_string(),
+        metro_distance_mins: 8,
+        maintenance_cost_monthly: 6_000,
+        society_quality_score: Some(0.7),
+        builder_quality_score: Some(0.7),
+        document_completeness_score: Some(0.8),
+        litigation_risk: Some(0.1),
+        noise_score: Some(0.2),
+        sunlight_score: Some(0.7),
+        airport_noise_score: Some(0.1),
+        waterlogging_risk_score: Some(0.2),
+        traffic_score: Some(0.4),
+        days_on_market: 20,
+        greenery_score: Some(0.6),
+        open_space_score: Some(0.6),
+        resale_strength_score: Some(0.7),
+        interest_level: None,
+        saves_last_7d: None,
+        offers_last_7d: None,
+        images: Vec::new(),
+        hero_image: String::new(),
+        description_summary: "Revision API contract fixture".to_string(),
+        transparency_tags: Vec::new(),
+        source_reference: "revision_api_contract".to_string(),
+    }
 }
 
 fn revision_request(

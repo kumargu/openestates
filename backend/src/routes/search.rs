@@ -154,8 +154,7 @@ pub(crate) fn compute_search(
         Arc::from(engine_output.ast_branches.clone());
     let intent_branches: Arc<[crate::search::SearchIntent]> =
         Arc::from(engine_output.intent_branches.clone());
-    let ast_fingerprint =
-        crate::search::ast::semantic_search_fingerprint(&ast_branches, &intent_branches);
+    let ast_fingerprint = engine_output.compiled_plan.semantic_fingerprint.clone();
     let parsed_intent = engine_output.intent;
     let results = engine_output.results;
     let result_sets = engine_output.result_sets;
@@ -245,6 +244,7 @@ fn search_runtime_version(snapshot: &SearchRuntimeSnapshot) -> SearchRuntimeVers
         serving_bundle_version: snapshot.version_key.serving_bundle_version.clone(),
         scoring_policy_version: snapshot.version_key.scoring_policy_version,
         search_engine_version: snapshot.version_key.search_engine_version.clone(),
+        semantic_contract_digest: snapshot.version_key.semantic_contract_digest.clone(),
     }
 }
 
@@ -722,6 +722,7 @@ mod tests {
             serving_bundle_version: "test-bundle".to_string(),
             scoring_policy_version: 1,
             search_engine_version: "test-search".to_string(),
+            semantic_contract_digest: "sha256:test".to_string(),
         }
     }
 

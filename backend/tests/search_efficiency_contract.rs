@@ -699,6 +699,7 @@ fn runtime_key(bundle_version: &str) -> RuntimeVersionKey {
         serving_bundle_version: bundle_version.to_string(),
         scoring_policy_version: backend::scoring::scoring_policy().version,
         search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
+        semantic_contract_digest: backend::state::semantic_contract_digest().to_string(),
     }
 }
 
@@ -715,6 +716,7 @@ fn empty_response(query: &str) -> SearchResponse {
             serving_bundle_version: version.serving_bundle_version,
             scoring_policy_version: version.scoring_policy_version,
             search_engine_version: version.search_engine_version,
+            semantic_contract_digest: version.semantic_contract_digest,
         },
         area_context: None,
         state: "no_matches".to_string(),

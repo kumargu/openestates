@@ -8,6 +8,7 @@ use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use lru::LruCache;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
@@ -56,6 +57,7 @@ impl SearchRuntimeSnapshot {
             serving_bundle_version: bundle.manifest.bundle_version.clone(),
             scoring_policy_version: scoring_policy().version,
             search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
+            semantic_contract_digest: semantic_contract_digest().to_string(),
         };
 
         Self {
@@ -76,6 +78,34 @@ pub struct RuntimeVersionKey {
     pub serving_bundle_version: String,
     pub scoring_policy_version: u32,
     pub search_engine_version: String,
+    pub semantic_contract_digest: String,
+}
+
+pub fn semantic_contract_digest() -> &'static str {
+    static DIGEST: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    DIGEST.get_or_init(|| {
+        let mut digest = Sha256::new();
+        for config in [
+            include_bytes!("../../app/config/dag/search_intent.json").as_slice(),
+            include_bytes!("../../app/config/dag/search_guardrails.json").as_slice(),
+            include_bytes!("../../app/config/dag/scoring_policy.json").as_slice(),
+            include_bytes!("../../app/config/dag/fact_registry.json").as_slice(),
+            include_bytes!("../../app/config/dag/nearby_place_categories.json").as_slice(),
+            include_bytes!("../../app/config/dag/resolution_policies.json").as_slice(),
+            include_bytes!("../../app/config/dag/ontology.json").as_slice(),
+        ] {
+            digest.update((config.len() as u64).to_be_bytes());
+            digest.update(config);
+        }
+        let digest = digest.finalize();
+        format!(
+            "sha256:{}",
+            digest
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        )
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -398,6 +428,7 @@ mod tests {
             serving_bundle_version: bundle.to_string(),
             scoring_policy_version: 1,
             search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
+            semantic_contract_digest: semantic_contract_digest().to_string(),
         }
     }
 
@@ -415,6 +446,7 @@ mod tests {
                     serving_bundle_version: version.serving_bundle_version,
                     scoring_policy_version: version.scoring_policy_version,
                     search_engine_version: version.search_engine_version,
+                    semantic_contract_digest: version.semantic_contract_digest,
                 },
                 area_context: None,
                 state: "no_matches".to_string(),

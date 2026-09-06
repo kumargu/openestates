@@ -336,11 +336,13 @@
         },
         {
           "alias": "inside",
-          "operator": "inside"
+          "operator": "inside",
+          "required_by_default": true
         },
         {
           "alias": "adjacent to",
-          "operator": "adjacent"
+          "operator": "adjacent",
+          "required_by_default": true
         }
       ]
     },

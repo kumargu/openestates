@@ -30,6 +30,15 @@ pub struct SpatialPoint {
     pub source_url: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpatialDistance {
+    pub distance_km: f64,
+    pub metric: &'static str,
+    pub confidence: f32,
+    pub source_type: Option<String>,
+    pub source_url: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 struct IndexedPoint {
     point: [f64; 2],
@@ -207,6 +216,40 @@ impl SpatialServingIndex {
             .binary_search_by(|point| point.entity_id.as_str().cmp(entity_id))
             .ok()
             .and_then(|index| self.points.get(index))
+    }
+
+    /// Prefer sourced footprint geometry. A coordinate fallback is explicit in
+    /// the returned metric and must never be used to prove containment or
+    /// adjacency.
+    pub fn distance_between(&self, left_id: &str, right_id: &str) -> Option<SpatialDistance> {
+        if let Some(distance_km) = self.geometry.distance_km(left_id, right_id) {
+            let left = self.geometry.feature(left_id)?;
+            let right = self.geometry.feature(right_id)?;
+            return Some(SpatialDistance {
+                distance_km,
+                metric: "footprint_distance",
+                confidence: left.confidence.min(right.confidence),
+                source_type: Some(format!("{}+{}", left.source_type, right.source_type)),
+                source_url: left.source_url.clone().or_else(|| right.source_url.clone()),
+            });
+        }
+        let left = self.point_for_entity(left_id)?;
+        let right = self.point_for_entity(right_id)?;
+        Some(SpatialDistance {
+            distance_km: haversine_km(
+                left.latitude,
+                left.longitude,
+                right.latitude,
+                right.longitude,
+            ),
+            metric: "point_fallback_distance",
+            confidence: left.confidence.min(right.confidence),
+            source_type: left
+                .source_type
+                .clone()
+                .or_else(|| right.source_type.clone()),
+            source_url: left.source_url.clone().or_else(|| right.source_url.clone()),
+        })
     }
 
     pub fn points(&self) -> &[SpatialPoint] {

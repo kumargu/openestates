@@ -161,7 +161,12 @@ pub async fn revise_search(
             runtime_version,
         );
     };
-    let derived_parent_count = parent_output.ast_branches.len().max(1);
+    let derived_parent_count = parent_output
+        .ast_branches
+        .iter()
+        .map(|branch| branch.flat_branches().len())
+        .sum::<usize>()
+        .max(1);
     if request.parent_branch_count != derived_parent_count {
         return revision_error(
             StatusCode::BAD_REQUEST,
@@ -232,7 +237,12 @@ pub async fn revise_search(
             runtime_version,
         );
     };
-    let active_branch_count = candidate_output.ast_branches.len().max(1);
+    let active_branch_count = candidate_output
+        .ast_branches
+        .iter()
+        .map(|branch| branch.flat_branches().len())
+        .sum::<usize>()
+        .max(1);
     let revision_id = revision_id_for_query(
         &active_query,
         &runtime_version,
@@ -615,6 +625,7 @@ fn runtime_version(version: &RuntimeVersionKey) -> SearchRuntimeVersion {
         serving_bundle_version: version.serving_bundle_version.clone(),
         scoring_policy_version: version.scoring_policy_version,
         search_engine_version: version.search_engine_version.clone(),
+        semantic_contract_digest: version.semantic_contract_digest.clone(),
     }
 }
 
@@ -656,6 +667,7 @@ mod tests {
             serving_bundle_version: "bundle-v1".to_string(),
             scoring_policy_version: 1,
             search_engine_version: "engine-v1".to_string(),
+            semantic_contract_digest: "sha256:test".to_string(),
         };
         let revision_id = revision_id_for_query("3BHK in Whitefield", &runtime, 12);
         assert_eq!(

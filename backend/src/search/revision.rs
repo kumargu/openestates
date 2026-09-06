@@ -37,6 +37,16 @@ pub struct SearchRevision {
     pub outcome: SearchRevisionOutcome,
     pub candidate_query: Option<String>,
     pub candidate_branch_count: usize,
+    pub patches: Vec<SearchRevisionPatch>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SearchRevisionPatch {
+    AddPredicate { fragment: String },
+    ReplacePredicate { family: String, fragment: String },
+    RemovePredicate { family: String },
+    AddAlternative { fragment: String },
+    ReplaceIntent { query: String },
 }
 
 /// Compiles one conversational search turn into a full candidate query.
@@ -64,15 +74,19 @@ pub fn compile_search_revision(
                 outcome: SearchRevisionOutcome::RequireCheckpoint,
                 candidate_query: None,
                 candidate_branch_count: active_branch_count,
+                patches: Vec::new(),
             };
         }
         if clause.is_empty() || !has_structured_search_anchor(clause) {
             return clarification(SearchRevisionOperation::Expand, active_branch_count);
         }
-        return candidate(
+        return candidate_with_patch(
             SearchRevisionOperation::Expand,
             format!("{parent} or {clause}"),
             active_branch_count + 1,
+            SearchRevisionPatch::AddAlternative {
+                fragment: clause.to_string(),
+            },
         );
     }
 
@@ -95,8 +109,19 @@ pub fn compile_search_revision(
     }
 
     if explicitly_corrects {
+        if active_branch_count > 1 && !targets_every_branch(turn) {
+            return clarification(SearchRevisionOperation::Refine, active_branch_count);
+        }
         if let Some(query) = replace_budget_constraint(parent, turn) {
-            return candidate(SearchRevisionOperation::Refine, query, active_branch_count);
+            return candidate_with_patch(
+                SearchRevisionOperation::Refine,
+                query,
+                active_branch_count,
+                SearchRevisionPatch::ReplacePredicate {
+                    family: "price".to_string(),
+                    fragment: turn.to_string(),
+                },
+            );
         }
     }
 
@@ -133,7 +158,7 @@ pub fn compile_search_revision(
     if refinement.is_empty() {
         return clarification(SearchRevisionOperation::Refine, active_branch_count);
     }
-    candidate(
+    candidate_with_patch(
         if explicitly_replaces {
             SearchRevisionOperation::Replace
         } else {
@@ -141,6 +166,9 @@ pub fn compile_search_revision(
         },
         format!("{parent} {refinement}"),
         active_branch_count,
+        SearchRevisionPatch::AddPredicate {
+            fragment: refinement.to_string(),
+        },
     )
 }
 
@@ -149,11 +177,34 @@ fn candidate(
     query: String,
     branch_count: usize,
 ) -> SearchRevision {
+    let patch = match operation {
+        SearchRevisionOperation::Expand => SearchRevisionPatch::AddAlternative {
+            fragment: query.clone(),
+        },
+        SearchRevisionOperation::Refine => SearchRevisionPatch::AddPredicate {
+            fragment: query.clone(),
+        },
+        SearchRevisionOperation::Rephrase
+        | SearchRevisionOperation::Switch
+        | SearchRevisionOperation::Replace => SearchRevisionPatch::ReplaceIntent {
+            query: query.clone(),
+        },
+    };
+    candidate_with_patch(operation, query, branch_count, patch)
+}
+
+fn candidate_with_patch(
+    operation: SearchRevisionOperation,
+    query: String,
+    branch_count: usize,
+    patch: SearchRevisionPatch,
+) -> SearchRevision {
     SearchRevision {
         operation,
         outcome: SearchRevisionOutcome::Candidate,
         candidate_query: Some(query),
         candidate_branch_count: branch_count,
+        patches: vec![patch],
     }
 }
 
@@ -163,7 +214,15 @@ fn clarification(operation: SearchRevisionOperation, branch_count: usize) -> Sea
         outcome: SearchRevisionOutcome::RequireClarification,
         candidate_query: None,
         candidate_branch_count: branch_count,
+        patches: Vec::new(),
     }
+}
+
+fn targets_every_branch(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    ["all", "both", "every"]
+        .iter()
+        .any(|target| lower.split_whitespace().any(|word| word == *target))
 }
 
 fn strip_configured_prefix<'a>(value: &'a str, prefixes: &[String]) -> Option<&'a str> {
@@ -554,5 +613,23 @@ mod tests {
         assert_eq!(compiled_branch_count(&query(8)), 8);
         assert_eq!(compiled_branch_count(&query(16)), 16);
         assert_eq!(LIMITS.max_active_branches, 8);
+    }
+
+    #[test]
+    fn untargeted_multi_branch_budget_correction_requires_clarification() {
+        let parent = "3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2Cr";
+        let ambiguous = compile_search_revision(parent, "Increase the budget to 3Cr", 2, LIMITS);
+        assert_eq!(
+            ambiguous.outcome,
+            SearchRevisionOutcome::RequireClarification
+        );
+        assert!(ambiguous.candidate_query.is_none());
+
+        let all = compile_search_revision(parent, "Increase the budget for both to 3Cr", 2, LIMITS);
+        assert_eq!(all.outcome, SearchRevisionOutcome::Candidate);
+        assert!(matches!(
+            all.patches.as_slice(),
+            [SearchRevisionPatch::ReplacePredicate { family, .. }] if family == "price"
+        ));
     }
 }

@@ -4,25 +4,68 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 from typing import Any, Callable
 
 
-DEFAULT_QUERY = """
-[out:json][timeout:60];
-(
-  relation["boundary"="administrative"]["name"]["admin_level"~"^(9|10|11)$"](12.75,77.35,13.20,77.95);
-  way["boundary"="administrative"]["name"]["admin_level"~"^(9|10|11)$"](12.75,77.35,13.20,77.95);
-);
-out tags geom;
-""".strip()
+POLICY_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "app"
+    / "config"
+    / "dag"
+    / "source_adapters"
+    / "openstreetmap_locality_boundaries.json"
+)
+
+
+def load_collection_policy(path: Path = POLICY_PATH) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    collection = payload.get("collection")
+    if not isinstance(collection, dict):
+        raise ValueError("OSM locality adapter requires collection policy")
+    return collection
+
+
+def overpass_query(policy: dict[str, Any]) -> str:
+    region = policy.get("broad_region")
+    bbox = region.get("bbox") if isinstance(region, dict) else None
+    levels = policy.get("admin_levels")
+    if (
+        not isinstance(bbox, list)
+        or len(bbox) != 4
+        or not all(isinstance(value, (int, float)) for value in bbox)
+    ):
+        raise ValueError("OSM locality broad_region.bbox must contain four numbers")
+    if not isinstance(levels, list) or not levels or not all(
+        isinstance(level, int) and 1 <= level <= 12 for level in levels
+    ):
+        raise ValueError("OSM locality admin_levels must contain levels 1..12")
+    output_mode = str(policy.get("output_mode") or "").strip().lower()
+    if output_mode != "body geom":
+        raise ValueError("OSM locality output_mode must be 'body geom'")
+    bounds = ",".join(str(float(value)) for value in bbox)
+    level_pattern = "|".join(str(level) for level in sorted(set(levels)))
+    return "\n".join(
+        [
+            "[out:json][timeout:60];",
+            "(",
+            '  relation["boundary"="administrative"]["name"]'
+            f'["admin_level"~"^({level_pattern})$"]({bounds});',
+            '  way["boundary"="administrative"]["name"]'
+            f'["admin_level"~"^({level_pattern})$"]({bounds});',
+            ");",
+            "out body geom;",
+        ]
+    )
 
 
 def collect_locality_boundaries(
     snapshot_date: str,
     source_url: str,
     fetch: Callable[[str, str], dict[str, Any]],
-    query: str = DEFAULT_QUERY,
+    policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    query = overpass_query(policy or load_collection_policy())
     payload = fetch(source_url, query)
     boundaries = locality_boundaries_from_overpass(payload)
     if not boundaries:
@@ -74,10 +117,31 @@ def locality_boundaries_from_overpass(payload: dict[str, Any]) -> list[dict[str,
                     element_type, element_id
                 ),
                 "admin_level": _text(tags.get("admin_level")),
+                "members": _relation_members(element),
             }
         )
     records.sort(key=lambda record: (record["name"].lower(), record["osm_id"]))
     return records
+
+
+def _relation_members(element: dict[str, Any]) -> list[dict[str, Any]]:
+    if element.get("type") != "relation":
+        return []
+    members = element.get("members")
+    if not isinstance(members, list):
+        return []
+    preserved: list[dict[str, Any]] = []
+    for member in members:
+        if not isinstance(member, dict) or member.get("ref") is None:
+            continue
+        preserved.append(
+            {
+                "member_type": _text(member.get("type")) or "unknown",
+                "member_ref": str(member["ref"]),
+                "role": _text(member.get("role")) or "",
+            }
+        )
+    return preserved
 
 
 def _element_geometry(element: dict[str, Any]) -> dict[str, Any] | None:

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use geo::{
-    Area, BooleanOps, BoundingRect, Centroid, Intersects, LineString, MultiPolygon, Point, Polygon,
+    Area, BooleanOps, BoundingRect, Centroid, Distance, Euclidean, Geometry, Intersects,
+    LineString, MapCoords, MultiPolygon, Point, Polygon,
 };
 use geojson::{GeoJson, Value as GeoJsonValue};
 use rstar::{RTree, RTreeObject, AABB};
@@ -184,6 +185,27 @@ impl SpatialGeometryIndex {
         polygons_adjacent(&left.geometry, &right.geometry)
     }
 
+    /// Minimum footprint distance in kilometres. Coordinates are projected to
+    /// a local equirectangular plane before the exact geometry distance is
+    /// measured; this avoids centroid distance for areas and society polygons.
+    pub fn distance_km(&self, left_id: &str, right_id: &str) -> Option<f64> {
+        let left = self.feature(left_id)?;
+        let right = self.feature(right_id)?;
+        let reference_latitude = (left.bounds.min_latitude
+            + left.bounds.max_latitude
+            + right.bounds.min_latitude
+            + right.bounds.max_latitude)
+            / 4.0;
+        let longitude_scale = 111.32 * reference_latitude.to_radians().cos().abs().max(0.01);
+        let project = |coordinate: geo::Coord<f64>| geo::Coord {
+            x: coordinate.x * longitude_scale,
+            y: coordinate.y * 110.574,
+        };
+        let left = geometry_value(&left.geometry).map_coords(project);
+        let right = geometry_value(&right.geometry).map_coords(project);
+        Some(Euclidean.distance(&left, &right))
+    }
+
     pub fn related(&self, entity_id: &str, relation: &str) -> Vec<&str> {
         self.outgoing
             .get(&(entity_id.to_string(), relation.to_ascii_lowercase()))
@@ -200,6 +222,14 @@ impl SpatialGeometryIndex {
             .flatten()
             .map(String::as_str)
             .collect()
+    }
+}
+
+fn geometry_value(geometry: &SpatialGeometry) -> Geometry<f64> {
+    match geometry {
+        SpatialGeometry::Point(value) => Geometry::Point(*value),
+        SpatialGeometry::Polygon(value) => Geometry::Polygon(value.clone()),
+        SpatialGeometry::MultiPolygon(value) => Geometry::MultiPolygon(value.clone()),
     }
 }
 
@@ -478,6 +508,30 @@ mod tests {
             ("place:second", r#"{"type":"Point","coordinates":[9,9]}"#),
         ]);
         assert!(index.contains_point("area:multi", "place:second"));
+    }
+
+    #[test]
+    fn distance_uses_polygon_footprint_instead_of_centroid() {
+        let index = index(&[
+            (
+                "area:hoodi",
+                r#"{"type":"Polygon","coordinates":[[[77.70,12.97],[77.73,12.97],[77.73,13.00],[77.70,13.00],[77.70,12.97]]]}"#,
+            ),
+            (
+                "place:inside",
+                r#"{"type":"Point","coordinates":[77.701,12.971]}"#,
+            ),
+            (
+                "place:east",
+                r#"{"type":"Point","coordinates":[77.74,12.985]}"#,
+            ),
+        ]);
+
+        assert_eq!(index.distance_km("area:hoodi", "place:inside"), Some(0.0));
+        let east_distance = index
+            .distance_km("area:hoodi", "place:east")
+            .expect("both sourced geometries have a distance");
+        assert!((1.0..1.2).contains(&east_distance), "{east_distance}");
     }
 
     #[test]

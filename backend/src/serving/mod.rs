@@ -51,7 +51,7 @@ pub use rera::{
     ReraServingProjectionError, ServingReraEvidenceRecord, RERA_EVIDENCE_SCHEMA_VERSION,
 };
 pub use spatial_geometry::{SpatialBounds, SpatialFeature, SpatialGeometry, SpatialGeometryIndex};
-pub use spatial_index::{SpatialPoint, SpatialServingIndex};
+pub use spatial_index::{SpatialDistance, SpatialPoint, SpatialServingIndex};
 pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,
 };

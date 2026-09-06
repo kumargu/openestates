@@ -453,6 +453,7 @@ fn sibling_result_card(
         tradeoff_label: Some("Other configuration".to_string()),
         match_explanation: None,
         proof_focuses: Vec::new(),
+        verified_matches: Vec::new(),
         confidence_score: None,
     }
 }
@@ -526,6 +527,7 @@ mod tests {
             tradeoff_label: None,
             match_explanation: None,
             proof_focuses: Vec::new(),
+            verified_matches: Vec::new(),
             confidence_score: None,
         }
     }

@@ -14,6 +14,9 @@ use crate::serving::{
 
 use super::analyzer;
 use super::ast::ConstraintTerm;
+use super::evaluation::{
+    BooleanEvaluation, EvaluationEvidence, EvidenceGap, PredicateEvaluation, VerifiedMatch,
+};
 use super::index::SearchIndex;
 use super::parser;
 use super::query_plan::{QueryPlan, QueryRelationClause, RelationRequirement};
@@ -800,6 +803,174 @@ impl<'a> GeoSearchQuery<'a> {
             .collect()
     }
 
+    pub(crate) fn evaluate_required_for_property(
+        &self,
+        property: &Property,
+        search_index: &SearchIndex,
+        spatial_index: &SpatialServingIndex,
+        fact_index: &ServingFactIndex,
+        snapshot_identity: &str,
+    ) -> BooleanEvaluation {
+        let society_entity_id = search_index
+            .society_entity_id_for_property(&property.id)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("society:{}", property.society_id));
+        BooleanEvaluation::all(
+            self.clauses
+                .iter()
+                .filter(|clause| clause.requirement == RelationRequirement::Hard)
+                .map(|clause| {
+                    self.evaluate_clause(
+                        &society_entity_id,
+                        clause,
+                        spatial_index,
+                        fact_index,
+                        snapshot_identity,
+                    )
+                }),
+        )
+    }
+
+    fn evaluate_clause(
+        &self,
+        society_entity_id: &str,
+        clause: &ResolvedGeoClause,
+        spatial_index: &SpatialServingIndex,
+        fact_index: &ServingFactIndex,
+        snapshot_identity: &str,
+    ) -> BooleanEvaluation {
+        let target_evaluations = self
+            .places_for_clause(clause)
+            .map(|place| {
+                self.evaluate_target(
+                    society_entity_id,
+                    clause,
+                    place,
+                    spatial_index,
+                    snapshot_identity,
+                )
+            })
+            .collect::<Vec<_>>();
+        if !target_evaluations.is_empty() {
+            return BooleanEvaluation::any(target_evaluations);
+        }
+
+        let fact_distance = fact_index
+            .entity(society_entity_id)
+            .and_then(|rows| self.society_rows_match_clause_distance(rows, clause));
+        match fact_distance {
+            Some(distance_km) => BooleanEvaluation::from_predicate(PredicateEvaluation::Satisfied(
+                verified_spatial_match(
+                    society_entity_id,
+                    None,
+                    clause,
+                    "serving_distance_fact",
+                    Some(distance_km),
+                    1.0,
+                    snapshot_identity,
+                ),
+            )),
+            None => BooleanEvaluation::from_predicate(PredicateEvaluation::Unknown(EvidenceGap {
+                predicate: clause.target_text.clone(),
+                reason: "no compatible sourced spatial observation".to_string(),
+            })),
+        }
+    }
+
+    fn evaluate_target(
+        &self,
+        society_entity_id: &str,
+        clause: &ResolvedGeoClause,
+        place: &ResolvedGeoPlace,
+        spatial_index: &SpatialServingIndex,
+        snapshot_identity: &str,
+    ) -> BooleanEvaluation {
+        let relation = clause.relation.to_ascii_lowercase();
+        let evaluation = match relation.as_str() {
+            "inside" => {
+                if spatial_index
+                    .society_ids_inside(&place.entity_id)
+                    .iter()
+                    .any(|id| id == society_entity_id)
+                {
+                    PredicateEvaluation::Satisfied(verified_spatial_match(
+                        society_entity_id,
+                        Some(&place.entity_id),
+                        clause,
+                        "footprint_containment",
+                        Some(1.0),
+                        place.confidence,
+                        snapshot_identity,
+                    ))
+                } else {
+                    PredicateEvaluation::Unknown(EvidenceGap {
+                        predicate: format!("inside {}", place.name),
+                        reason: "no sourced containment relation".to_string(),
+                    })
+                }
+            }
+            "adjacent" => {
+                let matches = spatial_index
+                    .adjacent_area_ids(&place.entity_id)
+                    .into_iter()
+                    .any(|area_id| {
+                        spatial_index
+                            .society_ids_inside(&area_id)
+                            .iter()
+                            .any(|id| id == society_entity_id)
+                    });
+                if matches {
+                    PredicateEvaluation::Satisfied(verified_spatial_match(
+                        society_entity_id,
+                        Some(&place.entity_id),
+                        clause,
+                        "sourced_area_adjacency",
+                        Some(1.0),
+                        place.confidence,
+                        snapshot_identity,
+                    ))
+                } else {
+                    PredicateEvaluation::Unknown(EvidenceGap {
+                        predicate: format!("adjacent to {}", place.name),
+                        reason: "no sourced same-level adjacency relation".to_string(),
+                    })
+                }
+            }
+            "near" => match spatial_index.distance_between(society_entity_id, &place.entity_id) {
+                Some(distance) => {
+                    if clause
+                        .distance_limit_km
+                        .is_some_and(|limit| distance.distance_km > limit)
+                    {
+                        PredicateEvaluation::Unsatisfied(EvaluationEvidence {
+                            predicate: format!("near {}", place.name),
+                            reason: format!(
+                                "{:.3} km exceeds the requested bound",
+                                distance.distance_km
+                            ),
+                        })
+                    } else {
+                        PredicateEvaluation::Satisfied(verified_spatial_match(
+                            society_entity_id,
+                            Some(&place.entity_id),
+                            clause,
+                            distance.metric,
+                            Some(distance.distance_km),
+                            distance.confidence,
+                            snapshot_identity,
+                        ))
+                    }
+                }
+                None => PredicateEvaluation::Unknown(EvidenceGap {
+                    predicate: format!("near {}", place.name),
+                    reason: "no compatible footprint or coordinate evidence".to_string(),
+                }),
+            },
+            _ => PredicateEvaluation::Unsupported(relation),
+        };
+        BooleanEvaluation::from_predicate(evaluation)
+    }
+
     pub(crate) fn resolved_places(&self) -> &[ResolvedGeoPlace] {
         &self.places
     }
@@ -881,7 +1052,7 @@ impl<'a> GeoSearchQuery<'a> {
         terms
     }
 
-    fn has_hard_clauses(&self) -> bool {
+    pub(crate) fn has_hard_clauses(&self) -> bool {
         self.clauses
             .iter()
             .any(|clause| clause.requirement == RelationRequirement::Hard)
@@ -904,6 +1075,42 @@ impl<'a> GeoSearchQuery<'a> {
                 .distance_limit_km
                 .is_none_or(|max_distance| distance_km <= max_distance)
         })
+    }
+}
+
+fn verified_spatial_match(
+    subject_entity_id: &str,
+    target_entity_id: Option<&str>,
+    clause: &ResolvedGeoClause,
+    metric: &str,
+    value: Option<f64>,
+    confidence: f32,
+    snapshot_identity: &str,
+) -> VerifiedMatch {
+    VerifiedMatch {
+        subject_entity_id: subject_entity_id.to_string(),
+        target_entity_id: target_entity_id.map(str::to_string),
+        predicate: clause.target_text.clone(),
+        relation: clause.relation.clone(),
+        metric: metric.to_string(),
+        value,
+        unit: value.map(|_| {
+            if metric.contains("distance") {
+                "km"
+            } else {
+                "boolean"
+            }
+            .to_string()
+        }),
+        observation_ids: vec![format!(
+            "spatial:{}:{}:{}",
+            subject_entity_id,
+            clause.relation,
+            target_entity_id.unwrap_or("category")
+        )],
+        algorithm_version: "spatial-evaluator-v1".to_string(),
+        confidence,
+        snapshot_identity: snapshot_identity.to_string(),
     }
 }
 

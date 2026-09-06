@@ -76,3 +76,74 @@ CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo test --test search_revision_api_co
 
 Then inspect the test runtime construction and replace its external catalog
 dependency with a pinned fixture.
+
+## Checkpoint 1–3 foundation — verified evaluation and OSM correctness
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Safety base: `42bfff34`
+- Worktree: `feat/issue-118-spatial-intent`
+- Candidate serving bundle: not generated yet. The promoted bundle remains
+  `search-proximity-category-v7-2026-09-04` and has no area topology.
+
+### Implemented
+
+- Replaced revision API tests' developer-catalog dependency with a hermetic,
+  pinned fixture runtime.
+- Added four-state predicate evaluation (`Satisfied`, `Unsatisfied`, `Unknown`,
+  `Unsupported`) with fail-closed Boolean composition. Negation preserves
+  `Unknown` and `Unsupported`.
+- Added verified spatial evaluation before ranking. Required containment,
+  adjacency, and bounded distance predicates cannot pass from recall alone.
+- Added footprint-aware geometry distance with explicit point-fallback metric
+  identity and proof records projected from verified matches.
+- Added typed inventory-option evaluation so BHK and price come from one
+  configuration observation.
+- Added semantic-contract digesting to runtime identity and an initial
+  `CompiledSearchPlan` representation.
+- Added typed revision patch variants and fail-closed clarification for
+  untargeted multi-branch budget corrections.
+- Moved the OSM broad-region bbox, admin levels, and output mode into the DAG
+  source-adapter config. The collector now requires `out body geom` and retains
+  OSM relation member type, ref, and role.
+- Added a captured real OSM fixture for relation `19883493`; its seven member
+  ways assemble into one closed polygon. The fixture is test evidence only and
+  is not runtime/parser vocabulary.
+- Updated frozen cases where unqualified `near` is intentionally soft. Explicit
+  bounds, `inside`, and `adjacent` remain hard.
+
+### Gates
+
+- `python3 -m unittest pipeline.test_osm_locality_boundaries`: 4 passed.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check`: passed.
+- `cargo test --lib assets::locality`: 1 passed (712 filtered).
+- `cargo test --test search_conversational_semantics_contract`: 8 passed.
+- `cargo test --test search_revision_api_contract`: 3 passed.
+- `cargo test --test serving_bundle_contract`: 3 passed.
+- `git diff --check`: passed.
+- Hardcoding audit: 330 findings, 28 fact-key comparisons, 0 blocked aliases;
+  delta from base remains zero.
+- Existing macOS compact-unwind linker warning remains unchanged.
+
+### Correctness decisions and gaps
+
+- `near` without a numeric bound is a ranking preference; non-proximate homes
+  remain eligible. This is an explicit contract correction.
+- The compiled-plan data type exists, but branch execution still uses legacy
+  raw-string splitting and reparsing. Classified as an `architecture_gap` and
+  the next blocking implementation slice.
+- Revision patches are typed at classification time but still lower through
+  string construction. Direct compiled-plan patch application remains open.
+- No East Bengaluru candidate bundle or coverage report exists yet. This is a
+  pending Checkpoint 3 deliverable, not a claim about the promoted bundle.
+
+### Next exact command
+
+Inspect and replace the raw branch execution path beginning at:
+
+```bash
+sed -n '150,940p' backend/src/search/engine.rs
+```
+
+Compile branch structure before candidate recall, execute prepared branches,
+and keep topology grouping presentation-only so the logical root remains
+`Any`.

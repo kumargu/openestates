@@ -1,7 +1,9 @@
 pub mod analyzer;
 pub mod ast;
 pub mod capabilities;
+pub mod compiled_plan;
 pub mod engine;
+pub mod evaluation;
 pub mod focus;
 pub mod geo;
 pub mod guard;
@@ -16,9 +18,16 @@ pub mod text;
 
 pub use ast::{CompiledQuery, ConstraintExpr, ConstraintTerm};
 pub use capabilities::SearchCapabilityIndex;
+pub use compiled_plan::{
+    BoolExpr, BranchId, CompiledSearchPlan, IntentBranch, ResolvedEntityHandle,
+};
 pub use engine::{
     CandidateScore, SearchDiagnostics, SearchEngine, SearchEvidenceGap, SearchLayerTiming,
     SearchRecallDiagnostics,
+};
+pub use evaluation::{
+    BooleanEvaluation, EvaluationEvidence, EvaluationState, EvidenceGap, InventoryOption,
+    PredicateEvaluation, VerifiedMatch,
 };
 pub use focus::{build_search_result_focus, FocusBuildInputs, SearchResultFocus};
 pub use guard::{
@@ -29,7 +38,7 @@ pub use intent::{SearchIntent, SourceSpan};
 pub use revision::{
     compile_search_revision, compiled_branch_count, revision_id_for_query,
     validated_revision_depth, SearchRevision, SearchRevisionLimits, SearchRevisionOperation,
-    SearchRevisionOutcome,
+    SearchRevisionOutcome, SearchRevisionPatch,
 };
 pub use text::{TextSearch, TextSearchRequest};
 
@@ -124,6 +133,10 @@ pub struct SearchResultCard {
     /// Generic detail-surface focus handles backed by the same proof reasons.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub proof_focuses: Vec<ProofFocus>,
+    /// Exact predicate observations used for hard eligibility. These are the
+    /// machine-readable receipts behind ranking and proof projections.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verified_matches: Vec<VerifiedMatch>,
     /// Data confidence score — how trustworthy is this result's data?
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence_score: Option<ConfidenceScore>,
@@ -165,6 +178,7 @@ pub struct SearchRuntimeVersion {
     pub serving_bundle_version: String,
     pub scoring_policy_version: u32,
     pub search_engine_version: String,
+    pub semantic_contract_digest: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

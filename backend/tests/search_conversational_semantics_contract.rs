@@ -781,6 +781,55 @@ fn connected_hard_spatial_alternatives_preserve_any_of_semantics() {
     assert_eq!(ids, HashSet::from(["east-home", "west-home"]));
 }
 
+#[test]
+fn inside_requires_sourced_containment_and_cannot_use_nearby_coordinates() {
+    let mut builder = FixtureBuilder::default();
+    builder.add_area("Hoodi");
+    builder.add_fact(
+        "area:hoodi",
+        "geo.geometry_geojson",
+        FactValue::Text(
+            r#"{"type":"Polygon","coordinates":[[[77.70,12.97],[77.73,12.97],[77.73,13.00],[77.70,13.00],[77.70,12.97]]]}"#
+                .to_string(),
+        ),
+    );
+    builder.add_home(HomeSpec::new(
+        "sourced-inside-home",
+        "Sourced Inside",
+        "Hoodi",
+        3,
+        10_000_000,
+        12.985,
+        77.715,
+    ));
+    builder.add_home(HomeSpec::new(
+        "coordinate-only-home",
+        "Coordinate Only",
+        "Hoodi",
+        3,
+        10_000_000,
+        12.986,
+        77.716,
+    ));
+    builder.add_edge("society:sourced-inside", "in_area", "area:hoodi");
+    let fixture = builder.build(false);
+
+    let output = fixture.search_output("3BHK inside Hoodi under 2Cr");
+    assert_eq!(
+        output
+            .results
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>(),
+        ["sourced-inside-home"]
+    );
+    assert!(output.results[0].verified_matches.iter().any(|matched| {
+        matched.relation == "inside"
+            && matched.metric == "footprint_containment"
+            && matched.target_entity_id.as_deref() == Some("area:hoodi")
+    }));
+}
+
 fn has_required_spatial_term(expression: &backend::search::ConstraintExpr) -> bool {
     match expression {
         backend::search::ConstraintExpr::And { clauses }

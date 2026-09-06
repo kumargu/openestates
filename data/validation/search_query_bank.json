@@ -3149,16 +3149,40 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-godrej-air-2bhk"
+            "mock-metro-home-2bhk",
+            "mock-godrej-air-2bhk",
+            "mock-or-decoy-2-00",
+            "mock-or-decoy-2-01",
+            "mock-or-decoy-2-02",
+            "mock-or-decoy-2-03",
+            "mock-or-decoy-2-04",
+            "mock-or-decoy-2-05",
+            "mock-or-decoy-2-06",
+            "mock-or-decoy-2-07",
+            "mock-or-decoy-2-08",
+            "mock-or-decoy-2-09",
+            "mock-or-decoy-2-10",
+            "mock-or-decoy-2-11",
+            "mock-or-decoy-2-12",
+            "mock-or-decoy-2-13"
           ],
           [
             "mock-dual-place-3bhk",
+            "mock-quiet-reviewed-3bhk",
+            "mock-missing-noise-3bhk",
             "mock-godrej-air-3bhk",
             "mock-balanced-commute-3bhk",
-            "mock-hoodi-only-3bhk",
-            "mock-manipal-only-3bhk",
-            "mock-hoodi-alternative-3bhk",
-            "mock-hoodi-expensive-3bhk"
+            "mock-or-decoy-3-00",
+            "mock-or-decoy-3-01",
+            "mock-or-decoy-3-02",
+            "mock-or-decoy-3-03",
+            "mock-or-decoy-3-04",
+            "mock-or-decoy-3-05",
+            "mock-or-decoy-3-06",
+            "mock-or-decoy-3-07",
+            "mock-or-decoy-3-08",
+            "mock-or-decoy-3-09",
+            "mock-or-decoy-3-10"
           ]
         ],
         "unique_result_ids": true
@@ -3179,16 +3203,40 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-godrej-air-2bhk"
+            "mock-metro-home-2bhk",
+            "mock-godrej-air-2bhk",
+            "mock-or-decoy-2-00",
+            "mock-or-decoy-2-01",
+            "mock-or-decoy-2-02",
+            "mock-or-decoy-2-03",
+            "mock-or-decoy-2-04",
+            "mock-or-decoy-2-05",
+            "mock-or-decoy-2-06",
+            "mock-or-decoy-2-07",
+            "mock-or-decoy-2-08",
+            "mock-or-decoy-2-09",
+            "mock-or-decoy-2-10",
+            "mock-or-decoy-2-11",
+            "mock-or-decoy-2-12",
+            "mock-or-decoy-2-13"
           ],
           [
             "mock-dual-place-3bhk",
+            "mock-quiet-reviewed-3bhk",
+            "mock-missing-noise-3bhk",
             "mock-godrej-air-3bhk",
             "mock-balanced-commute-3bhk",
-            "mock-hoodi-only-3bhk",
-            "mock-manipal-only-3bhk",
-            "mock-hoodi-alternative-3bhk",
-            "mock-hoodi-expensive-3bhk"
+            "mock-or-decoy-3-00",
+            "mock-or-decoy-3-01",
+            "mock-or-decoy-3-02",
+            "mock-or-decoy-3-03",
+            "mock-or-decoy-3-04",
+            "mock-or-decoy-3-05",
+            "mock-or-decoy-3-06",
+            "mock-or-decoy-3-07",
+            "mock-or-decoy-3-08",
+            "mock-or-decoy-3-09",
+            "mock-or-decoy-3-10"
           ]
         ],
         "unique_result_ids": true
@@ -3305,7 +3353,6 @@
           ]
         },
         "excludes": [
-          "mock-north-family-3bhk",
           "mock-whitefield-family-3bhk"
         ]
       },
@@ -3392,10 +3439,16 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-north-value-2bhk"
+            "mock-north-value-2bhk",
+            "mock-whitefield-value-2bhk",
+            "mock-bellandur-value-2bhk",
+            "mock-devanahalli-value-2bhk",
+            "mock-electronic-city-value-2bhk",
+            "mock-sarjapur-value-2bhk"
           ],
           [
-            "mock-north-family-3bhk"
+            "mock-north-family-3bhk",
+            "mock-electronic-city-3bhk"
           ]
         ],
         "required_proof_labels": {
@@ -3407,8 +3460,6 @@
           ]
         },
         "excludes": [
-          "mock-whitefield-value-2bhk",
-          "mock-sarjapur-value-2bhk",
           "mock-metro-home-2bhk"
         ],
         "non_empty_result_sets": 2,

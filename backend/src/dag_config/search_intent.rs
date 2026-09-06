@@ -161,6 +161,8 @@ pub struct RelationAliasConfig {
     #[serde(default)]
     pub requires_distance_limit: bool,
     #[serde(default)]
+    pub required_by_default: bool,
+    #[serde(default)]
     pub default_distance_limit_km: Option<f64>,
 }
 

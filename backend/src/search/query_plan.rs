@@ -804,7 +804,10 @@ fn relation_clauses(
                     .or_else(|| relation_config.and_then(|alias| alias.default_distance_limit_km));
             let requires_distance =
                 relation_config.is_some_and(|alias| alias.requires_distance_limit);
-            let requirement = if requires_distance || distance_limit_km.is_some() {
+            let requirement = if requires_distance
+                || distance_limit_km.is_some()
+                || relation_config.is_some_and(|alias| alias.required_by_default)
+            {
                 RelationRequirement::Hard
             } else {
                 RelationRequirement::Coverage

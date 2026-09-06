@@ -23,8 +23,7 @@ use super::analyzer;
 use super::ast::{CompiledQuery, ConstraintTerm};
 use super::geo;
 use super::index::{
-    listing_satisfies_budget, property_matches_excluded_builder, property_matches_excluded_society,
-    SearchIndex,
+    property_matches_excluded_builder, property_matches_excluded_society, SearchIndex,
 };
 use super::intent::{ConstraintOperator, HardConstraint, SearchIntent};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text};
@@ -679,6 +678,7 @@ impl TextSearch {
                         tradeoff_label: None,
                         match_explanation,
                         proof_focuses,
+                        verified_matches: Vec::new(),
                         confidence_score,
                     },
                 })
@@ -3282,7 +3282,9 @@ fn property_matches_constraint_term_for_society(
     society_entity_id: &str,
 ) -> bool {
     match term {
-        ConstraintTerm::Bhk { value, .. } => property.bhk == *value,
+        ConstraintTerm::Bhk { value, .. } => {
+            super::evaluation::InventoryOption::from_property(property).matches_bhk(*value)
+        }
         ConstraintTerm::Area {
             entity_id: Some(entity_id),
             ..
@@ -3302,13 +3304,12 @@ fn property_matches_constraint_term_for_society(
         } => search_index
             .map(|index| index.entity_has_property(entity_id, &property.id))
             .unwrap_or_else(|| property_matches_excluded_builder(property, display_name)),
-        ConstraintTerm::Budget { min, max, .. } => listing_satisfies_budget(
-            property.price,
-            property.price_min,
-            property.price_max,
-            min.as_ref().map(|bound| bound.value),
-            max.as_ref().map(|bound| bound.value),
-        ),
+        ConstraintTerm::Budget { min, max, .. } => {
+            super::evaluation::InventoryOption::from_property(property).matches_budget(
+                min.as_ref().map(|bound| bound.value),
+                max.as_ref().map(|bound| bound.value),
+            )
+        }
         ConstraintTerm::Evidence { constraint, .. } => match_hard_constraints(
             std::slice::from_ref(constraint),
             property,

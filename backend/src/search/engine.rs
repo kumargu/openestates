@@ -12,6 +12,7 @@ use crate::serving::{
 use crate::state::SEARCH_ENGINE_VERSION;
 
 use super::ast::{CompiledQuery, ConstraintExpr, ResolvedEntityConstraint};
+use super::compiled_plan::{CompiledSearchPlan, ResolvedEntityHandle};
 use super::geo;
 use super::index::SearchIndex;
 use super::intent::SearchIntent;
@@ -37,6 +38,7 @@ pub struct SearchEngine<'a> {
 
 #[derive(Debug, Clone)]
 pub struct SearchEngineOutput {
+    pub compiled_plan: CompiledSearchPlan,
     pub ast_branches: Vec<ConstraintExpr>,
     pub intent_branches: Vec<SearchIntent>,
     pub intent: SearchIntent,
@@ -509,7 +511,7 @@ impl<'a> SearchEngine<'a> {
             tantivy_candidate_ids(self.serving_bundle, query, self.search_index)
         });
 
-        let geo_candidate_ids = timer.measure("geo_recall", || {
+        let mut geo_candidate_ids = timer.measure("geo_recall", || {
             let coordinate_candidates = geo_query
                 .as_ref()
                 .zip(self.serving_bundle)
@@ -545,6 +547,48 @@ impl<'a> SearchEngine<'a> {
             )
             .unwrap_or_default()
         });
+        let mut verified_spatial_matches = HashMap::new();
+        let mut spatial_evaluation_gaps = Vec::new();
+        if let (Some(query), Some(bundle)) = (geo_query.as_ref(), self.serving_bundle) {
+            if query.has_hard_clauses() {
+                geo_candidate_ids.retain(|property_id| {
+                    let property = self
+                        .property_by_id
+                        .and_then(|by_id| by_id.get(property_id))
+                        .and_then(|index| self.properties.get(*index))
+                        .or_else(|| {
+                            self.properties
+                                .iter()
+                                .find(|property| property.id == *property_id)
+                        });
+                    let Some(property) = property else {
+                        return false;
+                    };
+                    let evaluation = query.evaluate_required_for_property(
+                        property,
+                        self.search_index,
+                        &bundle.spatial_index,
+                        &bundle.fact_index,
+                        &bundle.manifest.bundle_version,
+                    );
+                    if evaluation.is_satisfied() {
+                        verified_spatial_matches
+                            .insert(property_id.clone(), evaluation.verified_matches);
+                        true
+                    } else {
+                        spatial_evaluation_gaps.push(SearchEvidenceGap {
+                            entity_id: property_id.clone(),
+                            missing_fact: "spatial_predicate".to_string(),
+                            reason: format!(
+                                "required spatial evaluation ended in {:?}",
+                                evaluation.state
+                            ),
+                        });
+                        false
+                    }
+                });
+            }
+        }
         if let Some(query) = geo_query.as_mut() {
             query.restrict_evidence_to_properties(
                 self.properties,
@@ -553,7 +597,9 @@ impl<'a> SearchEngine<'a> {
             );
         }
 
-        let resolved_geo_constraint = geo_query.as_ref().is_some_and(|query| !query.is_empty());
+        let resolved_geo_constraint = geo_query
+            .as_ref()
+            .is_some_and(|query| query.has_hard_clauses());
         let extra_candidate_ids = if resolved_geo_constraint {
             optional_non_empty(geo_candidate_ids.clone())
         } else {
@@ -598,7 +644,7 @@ impl<'a> SearchEngine<'a> {
             .as_ref()
             .and_then(|ids| candidate_property_indexes(ids, self.property_by_id));
 
-        let results = timer.measure("ranking", || {
+        let mut results = timer.measure("ranking", || {
             if unresolved_entity_clause.is_some()
                 || unavailable_required_capability.is_some()
                 || (resolved_geo_constraint
@@ -623,9 +669,15 @@ impl<'a> SearchEngine<'a> {
                 })
             }
         });
+        for result in &mut results {
+            if let Some(matches) = verified_spatial_matches.remove(&result.card.id) {
+                result.verified_matches = matches;
+            }
+        }
         let eligible_result_count = results.len();
         let mut evidence_gaps = Vec::new();
         evidence_gaps.extend(unresolved_proximity_gaps(geo_query.as_ref()));
+        evidence_gaps.extend(spatial_evaluation_gaps);
         let result_sets = build_result_sets(
             &compiled_query,
             &results,
@@ -689,7 +741,28 @@ impl<'a> SearchEngine<'a> {
             duration_ms: total_duration_ms,
         });
 
+        let snapshot_identity = self.serving_bundle.map_or("no-serving-bundle", |bundle| {
+            &bundle.manifest.bundle_version
+        });
+        let mut compiled_plan =
+            CompiledSearchPlan::single(compiled_query.clone(), snapshot_identity);
+        compiled_plan.branches[0].resolved_entities = serving_resolved_entities
+            .iter()
+            .map(|entity| ResolvedEntityHandle {
+                entity_id: entity.entity_id.clone(),
+                entity_type: entity.entity_type.clone(),
+                display_name: entity.name.clone(),
+            })
+            .collect();
+        compiled_plan.resolution_gaps = diagnostics
+            .warnings
+            .iter()
+            .filter(|warning| warning.contains("unresolved"))
+            .cloned()
+            .collect();
+
         SearchEngineOutput {
+            compiled_plan,
             ast_branches,
             intent_branches: vec![intent.clone()],
             intent: intent.clone(),
@@ -791,6 +864,17 @@ fn combine_branch_outputs(
     outputs: Vec<SearchEngineOutput>,
     total_duration_ms: f64,
 ) -> SearchEngineOutput {
+    let snapshot_identity = outputs
+        .first()
+        .map(|output| output.compiled_plan.snapshot_identity.as_str())
+        .unwrap_or("no-serving-bundle");
+    let compiled_plan = CompiledSearchPlan::combine(
+        outputs
+            .iter()
+            .map(|output| output.compiled_plan.clone())
+            .collect(),
+        snapshot_identity,
+    );
     let mut intent =
         query_plan::project_search_intent(query, &query_plan::compile_query_plan(query));
     let mut result_sets = Vec::new();
@@ -841,6 +925,7 @@ fn combine_branch_outputs(
         .flat_map(|output| output.intent_branches.iter().cloned())
         .collect();
     SearchEngineOutput {
+        compiled_plan,
         ast_branches,
         intent_branches,
         intent,

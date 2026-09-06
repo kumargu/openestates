@@ -30,6 +30,15 @@ pub struct OsmLocalityBoundaryInput {
     pub source_url: String,
     #[serde(default)]
     pub admin_level: Option<String>,
+    #[serde(default)]
+    pub members: Vec<OsmBoundaryMemberInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OsmBoundaryMemberInput {
+    pub member_type: String,
+    pub member_ref: String,
+    pub role: String,
 }
 
 pub fn osm_locality_boundary_facts_input(
@@ -75,6 +84,13 @@ pub fn osm_locality_boundary_facts_input(
                 "area.admin_level",
                 FactValue::Text(admin_level.to_string()),
                 Some("Administrative level: {value}"),
+            ));
+        }
+        if !boundary.members.is_empty() {
+            boundary_facts.push((
+                "area.osm_boundary_members",
+                FactValue::Text(serde_json::to_string(&boundary.members)?),
+                None,
             ));
         }
         for (fact_key, value, template) in boundary_facts {
@@ -221,10 +237,15 @@ mod tests {
                 geometry_geojson: r#"{"type":"Polygon","coordinates":[[[77.0,12.0],[77.1,12.0],[77.1,12.1],[77.0,12.0]]]}"#.to_string(),
                 source_url: "https://www.openstreetmap.org/relation/123".to_string(),
                 admin_level: Some("10".to_string()),
+                members: vec![OsmBoundaryMemberInput {
+                    member_type: "way".to_string(),
+                    member_ref: "456".to_string(),
+                    role: "outer".to_string(),
+                }],
             }],
             source_watermarks: Vec::new(),
         }, "run-1", Utc::now()).unwrap();
-        assert_eq!(output.facts.len(), 4);
+        assert_eq!(output.facts.len(), 5);
         assert!(output
             .facts
             .iter()
@@ -239,5 +260,9 @@ mod tests {
                 && fact.value_json
                     == serde_json::to_string(&FactValue::Text("10".to_string())).unwrap()
         }));
+        assert!(output
+            .facts
+            .iter()
+            .any(|fact| fact.fact_key == "area.osm_boundary_members"));
     }
 }

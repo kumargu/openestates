@@ -5,6 +5,12 @@
   "collection": {
     "transport": "overpass",
     "scope": "configured administrative boundary levels within the broad market region",
+    "broad_region": {
+      "id": "bengaluru_market_region",
+      "bbox": [12.75, 77.35, 13.20, 77.95]
+    },
+    "admin_levels": [9, 10, 11],
+    "output_mode": "body geom",
     "request_path_allowed": false
   },
   "output": {
@@ -13,6 +19,7 @@
       "place.name",
       "place.category",
       "area.admin_level",
+      "area.osm_boundary_members",
       "geo.geometry_geojson"
     ],
     "derived_relations": ["in_area", "adjacent_area"]
