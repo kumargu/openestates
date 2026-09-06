@@ -70,7 +70,7 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
         societies: &[],
         compiled_query: &compiled_query,
         graph: None,
-        inventory: inventory_context(&inventory_options),
+        evaluation: inventory_context(&inventory_options),
     });
     let elapsed = started.elapsed();
 
@@ -468,7 +468,7 @@ fn unsupported_inventory_query_short_circuits_large_mock_corpus() {
         societies: &[],
         compiled_query: &compiled_query,
         graph: None,
-        inventory: inventory_context(&inventory_options),
+        evaluation: inventory_context(&inventory_options),
     });
     let elapsed = started.elapsed();
 
@@ -522,7 +522,7 @@ fn candidate_ranking_preserves_order_and_corpus_tiebreaks() {
         societies: &[],
         compiled_query: &compiled_query,
         graph: None,
-        inventory: inventory_context(&inventory_options),
+        evaluation: inventory_context(&inventory_options),
     });
     let restricted = TextSearch::search(TextSearchRequest {
         properties: &properties,
@@ -535,7 +535,7 @@ fn candidate_ranking_preserves_order_and_corpus_tiebreaks() {
         societies: &[],
         compiled_query: &compiled_query,
         graph: None,
-        inventory: inventory_context(&inventory_options),
+        evaluation: inventory_context(&inventory_options),
     });
 
     assert_eq!(

@@ -21,7 +21,7 @@ use crate::serving::{
 
 use super::analyzer;
 use super::ast::{CompiledQuery, ConstraintTerm};
-use super::evaluation::InventoryOption;
+use super::evaluation::{InventoryOption, VerifiedMatch};
 use super::geo;
 use super::index::{
     property_matches_excluded_builder, property_matches_excluded_society, SearchIndex,
@@ -44,8 +44,9 @@ use super::{
 pub struct TextSearch;
 
 #[derive(Clone, Copy)]
-pub struct InventoryEvaluationContext<'a> {
+pub struct SearchEvaluationContext<'a> {
     pub options: &'a HashMap<String, InventoryOption>,
+    pub spatial_matches: &'a HashMap<String, Vec<VerifiedMatch>>,
     pub snapshot_identity: &'a str,
 }
 
@@ -60,7 +61,7 @@ pub struct TextSearchRequest<'a, 'geo> {
     pub societies: &'a [Society],
     pub compiled_query: &'a CompiledQuery,
     pub graph: Option<&'a KnowledgeGraph>,
-    pub inventory: InventoryEvaluationContext<'a>,
+    pub evaluation: SearchEvaluationContext<'a>,
 }
 
 const COORDINATE_NAMED_PLACE_PROOF_RANK: u8 = 1;
@@ -79,7 +80,7 @@ impl TextSearch {
             request.societies,
             request.compiled_query,
             request.graph,
-            request.inventory,
+            request.evaluation,
         )
     }
 
@@ -95,7 +96,7 @@ impl TextSearch {
         societies: &[Society],
         compiled_query: &CompiledQuery,
         graph: Option<&KnowledgeGraph>,
-        inventory: InventoryEvaluationContext<'_>,
+        evaluation: SearchEvaluationContext<'_>,
     ) -> Vec<SearchResultCard> {
         let query = compiled_query.raw.as_str();
         let intent = &compiled_query.intent;
@@ -156,12 +157,19 @@ impl TextSearch {
                     search_index,
                     serving_facts,
                     society_entity_id.as_ref(),
-                    inventory,
+                    evaluation,
                 );
                 if !constraint_evaluation.is_satisfied() {
                     return None;
                 }
-                let verified_matches = constraint_evaluation.verified_matches;
+                let mut verified_matches = constraint_evaluation.verified_matches;
+                if let Some(spatial_matches) = evaluation.spatial_matches.get(&p.id) {
+                    for spatial_match in spatial_matches {
+                        if !verified_matches.contains(spatial_match) {
+                            verified_matches.push(spatial_match.clone());
+                        }
+                    }
+                }
 
                 if !required_preferences_have_evidence(
                     p,
@@ -233,7 +241,7 @@ impl TextSearch {
                                 search_index,
                                 serving_facts,
                                 society_entity_id.as_ref(),
-                                inventory,
+                                evaluation,
                             )
                         });
                 let hard_constraint_matches = match_hard_constraints(
@@ -644,7 +652,7 @@ impl TextSearch {
                     search_index,
                     serving_facts,
                     society_entity_id.as_ref(),
-                    inventory,
+                    evaluation,
                 );
 
                 // Compute confidence score for this result
@@ -3157,7 +3165,7 @@ fn property_constraint_evaluation(
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
-    inventory: InventoryEvaluationContext<'_>,
+    evaluation: SearchEvaluationContext<'_>,
 ) -> super::evaluation::BooleanEvaluation {
     query.constraints.evaluate_states(&mut |term| {
         constraint_term_evaluation_for_society(
@@ -3166,7 +3174,7 @@ fn property_constraint_evaluation(
             search_index,
             serving_facts,
             society_entity_id,
-            inventory,
+            evaluation,
         )
     })
 }
@@ -3177,7 +3185,7 @@ fn constraint_term_evaluation_for_society(
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
-    inventory: InventoryEvaluationContext<'_>,
+    evaluation: SearchEvaluationContext<'_>,
 ) -> super::evaluation::BooleanEvaluation {
     use super::evaluation::BooleanEvaluation;
 
@@ -3189,7 +3197,7 @@ fn constraint_term_evaluation_for_society(
         }
     };
     match term {
-        ConstraintTerm::Bhk { value, .. } => inventory
+        ConstraintTerm::Bhk { value, .. } => evaluation
             .options
             .get(&property.id)
             .map(|option| {
@@ -3197,11 +3205,11 @@ fn constraint_term_evaluation_for_society(
                     &property.id,
                     society_entity_id,
                     *value,
-                    inventory.snapshot_identity,
+                    evaluation.snapshot_identity,
                 )
             })
             .unwrap_or_else(BooleanEvaluation::unknown),
-        ConstraintTerm::Budget { min, max, .. } => inventory
+        ConstraintTerm::Budget { min, max, .. } => evaluation
             .options
             .get(&property.id)
             .map(|option| {
@@ -3210,7 +3218,7 @@ fn constraint_term_evaluation_for_society(
                     society_entity_id,
                     min.as_ref().map(|bound| bound.value),
                     max.as_ref().map(|bound| bound.value),
-                    inventory.snapshot_identity,
+                    evaluation.snapshot_identity,
                 )
             })
             .unwrap_or_else(BooleanEvaluation::unknown),
@@ -3262,10 +3270,30 @@ fn constraint_term_evaluation_for_society(
             Some(_) => BooleanEvaluation::satisfied(Vec::new()),
             None => BooleanEvaluation::unknown(),
         },
-        // Spatial requirements are evaluated exactly by SearchEngine before
-        // TextSearch ranking. Reaching this point means that separate gate
-        // accepted the candidate; recall membership itself is never checked.
-        ConstraintTerm::Spatial { .. } => BooleanEvaluation::satisfied(Vec::new()),
+        ConstraintTerm::Spatial {
+            relation,
+            entity_id,
+            ..
+        } => {
+            let matches = evaluation
+                .spatial_matches
+                .get(&property.id)
+                .into_iter()
+                .flatten()
+                .filter(|verified| {
+                    verified.subject_entity_id == society_entity_id
+                        && verified.target_entity_id.as_deref() == Some(entity_id)
+                        && verified.relation.eq_ignore_ascii_case(relation)
+                        && verified.snapshot_identity == evaluation.snapshot_identity
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            if matches.is_empty() {
+                BooleanEvaluation::unknown()
+            } else {
+                BooleanEvaluation::satisfied(matches)
+            }
+        }
     }
 }
 
@@ -3274,7 +3302,7 @@ pub(crate) fn property_matches_constraint_term_with_index(
     term: &ConstraintTerm,
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
-    inventory: InventoryEvaluationContext<'_>,
+    evaluation: SearchEvaluationContext<'_>,
 ) -> bool {
     let society_entity_id = canonical_society_entity_id(property, search_index);
     property_matches_constraint_term_for_society(
@@ -3283,7 +3311,7 @@ pub(crate) fn property_matches_constraint_term_with_index(
         search_index,
         serving_facts,
         society_entity_id.as_ref(),
-        inventory,
+        evaluation,
     )
 }
 
@@ -3293,7 +3321,7 @@ fn property_matches_constraint_term_for_society(
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
-    inventory: InventoryEvaluationContext<'_>,
+    evaluation: SearchEvaluationContext<'_>,
 ) -> bool {
     constraint_term_evaluation_for_society(
         property,
@@ -3301,7 +3329,7 @@ fn property_matches_constraint_term_for_society(
         search_index,
         serving_facts,
         society_entity_id,
-        inventory,
+        evaluation,
     )
     .is_satisfied()
 }
@@ -3375,7 +3403,7 @@ fn build_match_reason(
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
-    inventory: InventoryEvaluationContext<'_>,
+    evaluation: SearchEvaluationContext<'_>,
 ) -> String {
     let intent = &query.intent;
     let mut parts = Vec::new();
@@ -3399,7 +3427,7 @@ fn build_match_reason(
             search_index,
             serving_facts,
             society_entity_id,
-            inventory,
+            evaluation,
         )
     }) {
         parts.push(label);
@@ -3411,7 +3439,7 @@ fn build_match_reason(
             search_index,
             serving_facts,
             society_entity_id,
-            inventory,
+            evaluation,
         )
     });
     if let Some((min, max)) = matched_budget {
@@ -3437,7 +3465,7 @@ fn build_match_reason(
             search_index,
             serving_facts,
             society_entity_id,
-            inventory,
+            evaluation,
         )
     }) {
         parts.push(constraint.raw_text.clone());
@@ -3748,7 +3776,7 @@ mod tests {
             societies,
             compiled_query: &compiled_query,
             graph,
-            inventory: fixture_inventory_context(&inventory_options),
+            evaluation: fixture_inventory_context(&inventory_options),
         })
     }
 
@@ -4118,17 +4146,24 @@ mod tests {
 
     fn fixture_inventory_context(
         options: &HashMap<String, InventoryOption>,
-    ) -> InventoryEvaluationContext<'_> {
-        InventoryEvaluationContext {
+    ) -> SearchEvaluationContext<'_> {
+        SearchEvaluationContext {
             options,
+            spatial_matches: empty_spatial_matches(),
             snapshot_identity: FIXTURE_SNAPSHOT_IDENTITY,
         }
     }
 
-    fn empty_inventory_context() -> InventoryEvaluationContext<'static> {
+    fn empty_inventory_context() -> SearchEvaluationContext<'static> {
         static OPTIONS: std::sync::OnceLock<HashMap<String, InventoryOption>> =
             std::sync::OnceLock::new();
         fixture_inventory_context(OPTIONS.get_or_init(HashMap::new))
+    }
+
+    fn empty_spatial_matches() -> &'static HashMap<String, Vec<VerifiedMatch>> {
+        static MATCHES: std::sync::OnceLock<HashMap<String, Vec<VerifiedMatch>>> =
+            std::sync::OnceLock::new();
+        MATCHES.get_or_init(HashMap::new)
     }
 
     fn add_area_constraint(intent: &mut SearchIntent, area: &str) {
@@ -4438,7 +4473,7 @@ mod tests {
             societies: &[],
             compiled_query: &compiled_query,
             graph: None,
-            inventory: fixture_inventory_context(&fixture_inventory_options(
+            evaluation: fixture_inventory_context(&fixture_inventory_options(
                 &properties,
                 Some(&index),
             )),
@@ -4514,7 +4549,7 @@ mod tests {
             societies: &[],
             compiled_query: &compiled_query,
             graph: Some(&graph),
-            inventory: fixture_inventory_context(&fixture_inventory_options(
+            evaluation: fixture_inventory_context(&fixture_inventory_options(
                 &properties,
                 Some(&index),
             )),
@@ -4651,7 +4686,7 @@ mod tests {
             societies: &[],
             compiled_query: &compiled_query,
             graph: None,
-            inventory: fixture_inventory_context(&fixture_inventory_options(
+            evaluation: fixture_inventory_context(&fixture_inventory_options(
                 &properties,
                 Some(&index),
             )),
@@ -4714,7 +4749,7 @@ mod tests {
             societies: &[],
             compiled_query: &registration,
             graph: None,
-            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
+            evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
 
         assert_eq!(registration_results.len(), 1);
@@ -4755,7 +4790,7 @@ mod tests {
             societies: &[],
             compiled_query: &legal_query,
             graph: None,
-            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
+            evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert!(legal_results.is_empty());
     }
@@ -4821,7 +4856,7 @@ mod tests {
             societies: &[],
             compiled_query: &ordinary,
             graph: None,
-            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
+            evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert_eq!(ordinary_results.len(), 1, "soft discovery remains lenient");
         assert!(ordinary_results[0]
@@ -4849,7 +4884,7 @@ mod tests {
             societies: &[],
             compiled_query: &required,
             graph: None,
-            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
+            evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert!(required_results.is_empty());
     }
@@ -4896,7 +4931,7 @@ mod tests {
             societies: &[],
             compiled_query: &ordinary,
             graph: None,
-            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
+            evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert_eq!(ordinary_results.len(), 1, "soft discovery remains lenient");
         let explanation = ordinary_results[0]
@@ -4929,7 +4964,7 @@ mod tests {
             societies: &[],
             compiled_query: &required,
             graph: None,
-            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
+            evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert!(required_results.is_empty());
     }
@@ -4989,7 +5024,7 @@ mod tests {
             societies: &[],
             compiled_query: &query,
             graph: None,
-            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
+            evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert_eq!(
             results
@@ -5025,7 +5060,7 @@ mod tests {
             societies: &[],
             compiled_query: &ordinary,
             graph: None,
-            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
+            evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert_eq!(ordinary_results.len(), 1);
 
@@ -5041,7 +5076,7 @@ mod tests {
             societies: &[],
             compiled_query: &constrained,
             graph: None,
-            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
+            evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert!(constrained_results.is_empty());
     }
@@ -8786,7 +8821,7 @@ mod tests {
             societies: &[],
             compiled_query: &compiled_query,
             graph: None,
-            inventory: fixture_inventory_context(&fixture_inventory_options(
+            evaluation: fixture_inventory_context(&fixture_inventory_options(
                 &properties,
                 Some(&index),
             )),

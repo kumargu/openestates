@@ -4,7 +4,7 @@
 
 - Reset recorded: 2026-09-06 Asia/Kolkata
 - Continuation branch: `feat/issue-118-consolidated`
-- Continuation HEAD: Checkpoint 12 (`refactor: unify inventory predicate evaluation`)
+- Continuation HEAD: Checkpoint 13 (`refactor: require exact spatial evaluations`)
 - Preserved source branch: `feat/issue-118-spatial-intent`
 - Merge base: `d1c06e2b` (`main` at the start of Issue 118 work)
 - Worktree at reset: clean
@@ -33,19 +33,21 @@ checkpoint-local next steps where they differ from the consolidated plan.
 15. `59246b97` — qualify inventory search evidence with snapshot-owned receipts.
 16. `72fe4bb6` — focus Issue 118 test investment without weakening the query bank.
 17. `2ea0f2ec` — remove timestamp-derived confidence from search ranking.
-18. Checkpoint 12 (current log commit) — unify inventory eligibility and proof
-    projection around snapshot-owned receipts.
+18. `0df8f26c` — unify inventory eligibility and proof projection around
+    snapshot-owned receipts.
+19. Checkpoint 13 (current log commit) — remove automatic spatial success from
+    the shared Boolean evaluator.
 
 ### Pulled-forward commitment audit
 
 | Commitment | Current state |
 |---|---|
 | Snapshot-only search construction (#123) | Implemented for `SearchEngine`: its only constructor input is one `SearchRuntimeSnapshot`; the lower-level parallel `TextSearch` evaluator remains to be removed. |
-| Four-state evaluation (#123) | Inventory now has one four-state evaluator used by eligibility and proof. Spatial and other predicates still have parallel/empty-success paths. |
+| Four-state evaluation (#123) | Inventory and required spatial predicates now flow through the shared Boolean evaluator. Area/entity/evidence predicates still have empty-success paths. |
 | Stable spatial/price/BHK evidence references (#123) | BHK/price verified matches share one validated, snapshot-qualified external-listing `EvidenceRef`; spatial matches still emit synthesized legacy observation strings. |
 | Semantic-contract digest (#123) | Partial: config inputs are hashed, but resolved bindings and evaluator/algorithm versions are not comprehensive. |
 | Capability/evaluator/proof bindings (#123) | Incomplete. |
-| Touched mixed-state and duplicate-path removal (#123) | Inventory property-field evaluation and duplicate proof projection are removed; other duplicate paths remain. |
+| Touched mixed-state and duplicate-path removal (#123) | Inventory duplicate evaluation/projection and automatic spatial success are removed; other duplicate paths remain. |
 | OSM locality and society geometry (#124) | Implemented and fixture-tested. |
 | Google/OSM canonical identity (#124) | Incomplete: provider-independent place/locality crosswalks are not fully materialized. |
 | Area hierarchy and topology (#124) | Implemented synthetically; not yet verified in a real candidate bundle. |
@@ -199,8 +201,8 @@ failure stops further stacking; honest coverage gaps do not.
 ### Current verified gate summary
 
 The detailed commands and counts remain recorded in the checkpoints below.
-Through the Checkpoint 12 working tree, focused Rust search and
-serving contracts, all-target Cargo check, formatting, smoke tests, and
+Through the Checkpoint 13 working tree, focused Rust search and serving
+contracts, the frozen query bank, all-target Cargo check, formatting, and
 `git diff --check` pass. The hardcoding audit remains at 330 findings, 28
 fact-key comparisons, and zero blocked aliases, with zero delta from the
 recorded base. These gates must be rerun for every touched slice.
@@ -208,14 +210,15 @@ recorded base. These gates must be rerun for every touched slice.
 ### Exact next command
 
 ```bash
-sed -n '540,730p' backend/src/search/engine.rs
-sed -n '3140,3280p' backend/src/search/text.rs
-rg -n "ConstraintTerm::Spatial|BooleanEvaluation::satisfied\(Vec::new" backend/src/search
+sed -n '180,330p' backend/src/serving/evidence.rs
+sed -n '1,240p' backend/src/serving/topology.rs
+sed -n '1080,1150p' backend/src/search/geo.rs
+rg -n "observation_ids|evidence_refs|DerivedEvidence" backend/src/serving backend/src/search
 ```
 
-Pass the already-computed exact spatial evaluations into the same `TextSearch`
-Boolean traversal. Remove automatic empty spatial success while preserving the
-query-bank branch ordering and exact geometry gate.
+Replace synthesized spatial observation strings with snapshot-qualified
+`DerivedEvidence` references backed by the exact input geometry observations.
+Keep containment, adjacency, footprint distance, and point fallback distinct.
 
 ## Checkpoint 11 — timestamps removed from search confidence
 
@@ -316,6 +319,63 @@ rg -n "ConstraintTerm::Spatial|BooleanEvaluation::satisfied\(Vec::new" backend/s
 Pass the already-computed exact spatial evaluations into the same `TextSearch`
 Boolean traversal. Remove automatic empty spatial success while preserving the
 query-bank branch ordering and exact geometry gate.
+
+## Checkpoint 13 — exact spatial evaluation in the shared path
+
+- Parent commit: `0df8f26c`
+- Classified issue: spatial evaluator `architecture_gap`
+
+### Implemented
+
+- Replaced `TextSearch`'s automatic spatial success with exact verified matches
+  computed from the pinned spatial and fact indexes.
+- Hard spatial terms now participate in the same Boolean traversal as inventory
+  terms. A missing, wrong-target, wrong-relation, wrong-subject, or wrong-
+  snapshot match is `Unknown` and cannot pass eligibility.
+- Removed optional spatial terms from the hard-eligibility AST. Their verified
+  evaluations remain attached to result proof/ranking data without excluding
+  otherwise valid homes.
+- Removed the post-search spatial proof merge. The matches used by evaluation
+  now flow directly into result cards.
+- Renamed the paired runtime input to `SearchEvaluationContext`; it owns the
+  snapshot identity plus inventory and spatial evaluations without independent
+  runtime assembly.
+
+### Gates and test value
+
+- The first frozen query-bank run caught a real generic bug: optional named-
+  place intent had been compiled as hard eligibility and masked by the old
+  automatic-success branch. After separating optional evidence from hard
+  predicates, all 10 query-bank contracts passed unchanged.
+- Search efficiency contract: 11 passed, including the large spatial corpus.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check --all-targets`: passed
+  without warnings.
+- Hardcoding audit: 330 findings, 28 fact-key comparisons, zero blocked aliases;
+  delta remains zero.
+- `cargo fmt` and `git diff --check`: passed.
+
+### Deliberate boundary
+
+Spatial evaluation still emits synthesized legacy `observation_ids` and no
+snapshot-qualified `EvidenceRef`. Durable derived spatial evidence is the next
+blocking identity step.
+
+### Candidate identity
+
+No Issue 118 candidate lake or bundle exists. No lake pointer changed.
+
+### Next exact command
+
+```bash
+sed -n '180,330p' backend/src/serving/evidence.rs
+sed -n '1,240p' backend/src/serving/topology.rs
+sed -n '1080,1150p' backend/src/search/geo.rs
+rg -n "observation_ids|evidence_refs|DerivedEvidence" backend/src/serving backend/src/search
+```
+
+Replace synthesized spatial observation strings with snapshot-qualified
+`DerivedEvidence` references backed by the exact input geometry observations.
+Keep containment, adjacency, footprint distance, and point fallback distinct.
 
 ## Goal and invariants
 

@@ -1042,8 +1042,7 @@ mod tests {
         // A property whose society has no KG node should still match hard constraints
         // (area, BHK) but not receive legacy preference scoring.
         use crate::search::{
-            CompiledQuery, InventoryEvaluationContext, InventoryOption, TextSearch,
-            TextSearchRequest,
+            CompiledQuery, InventoryOption, SearchEvaluationContext, TextSearch, TextSearchRequest,
         };
         use crate::serving::{EvidenceRef, SourceObservation};
         use chrono::{TimeZone, Utc};
@@ -1163,8 +1162,9 @@ mod tests {
             societies: &societies,
             compiled_query: &compiled_query,
             graph: Some(&graph),
-            inventory: InventoryEvaluationContext {
+            evaluation: SearchEvaluationContext {
                 options: &inventory_options,
+                spatial_matches: &std::collections::HashMap::new(),
                 snapshot_identity,
             },
         });

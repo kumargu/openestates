@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use backend::knowledge::FactValue;
 use backend::models::Property;
 use backend::search::evaluation::InventoryOption;
-use backend::search::InventoryEvaluationContext;
+use backend::search::{SearchEvaluationContext, VerifiedMatch};
 use backend::serving::{EvidenceRef, ServingFactRecord, SourceObservation};
 use chrono::{TimeZone, Utc};
 
@@ -47,9 +47,12 @@ pub fn inventory_options(properties: &[Property]) -> HashMap<String, InventoryOp
 
 pub fn inventory_context(
     options: &HashMap<String, InventoryOption>,
-) -> InventoryEvaluationContext<'_> {
-    InventoryEvaluationContext {
+) -> SearchEvaluationContext<'_> {
+    static SPATIAL_MATCHES: std::sync::OnceLock<HashMap<String, Vec<VerifiedMatch>>> =
+        std::sync::OnceLock::new();
+    SearchEvaluationContext {
         options,
+        spatial_matches: SPATIAL_MATCHES.get_or_init(HashMap::new),
         snapshot_identity: SNAPSHOT_IDENTITY,
     }
 }

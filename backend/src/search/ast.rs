@@ -183,18 +183,13 @@ impl CompiledQuery {
     }
 
     pub(crate) fn add_spatial_constraints(&mut self, terms: Vec<ConstraintTerm>) {
-        let (required, optional): (Vec<_>, Vec<_>) = terms
+        let required = terms
             .into_iter()
-            .partition(|term| matches!(term, ConstraintTerm::Spatial { required: true, .. }));
-        let mut clauses = required
+            .filter(|term| matches!(term, ConstraintTerm::Spatial { required: true, .. }));
+        let clauses = required
             .into_iter()
             .map(ConstraintExpr::term)
             .collect::<Vec<_>>();
-        if !optional.is_empty() {
-            clauses.push(ConstraintExpr::any_of(
-                optional.into_iter().map(ConstraintExpr::term).collect(),
-            ));
-        }
         if !clauses.is_empty() {
             self.constraints = ConstraintExpr::and(
                 [self.constraints.clone(), ConstraintExpr::and(clauses)]

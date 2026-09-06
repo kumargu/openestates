@@ -240,7 +240,7 @@ impl SearchWorld {
             societies: &self.societies,
             compiled_query: &compiled_query,
             graph: Some(&self.graph),
-            inventory: inventory_context(&self.inventory_options),
+            evaluation: inventory_context(&self.inventory_options),
         })
     }
 
@@ -261,7 +261,7 @@ impl SearchWorld {
             societies: &self.societies,
             compiled_query: &compiled_query,
             graph: Some(&self.graph),
-            inventory: inventory_context(&self.inventory_options),
+            evaluation: inventory_context(&self.inventory_options),
         })
     }
 

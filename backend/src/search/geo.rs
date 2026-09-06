@@ -864,6 +864,34 @@ impl<'a> GeoSearchQuery<'a> {
         )
     }
 
+    pub(crate) fn verified_matches_for_property(
+        &self,
+        property: &Property,
+        search_index: &SearchIndex,
+        spatial_index: &SpatialServingIndex,
+        fact_index: &ServingFactIndex,
+        snapshot_identity: &str,
+    ) -> Vec<VerifiedMatch> {
+        let society_entity_id = search_index
+            .society_entity_id_for_property(&property.id)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("society:{}", property.society_id));
+        self.clauses
+            .iter()
+            .map(|clause| {
+                self.evaluate_clause(
+                    &society_entity_id,
+                    clause,
+                    spatial_index,
+                    fact_index,
+                    snapshot_identity,
+                )
+            })
+            .filter(|evaluation| evaluation.is_satisfied())
+            .flat_map(|evaluation| evaluation.verified_matches)
+            .collect()
+    }
+
     fn evaluate_clause(
         &self,
         society_entity_id: &str,

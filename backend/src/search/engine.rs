@@ -12,14 +12,13 @@ use crate::state::{SearchRuntimeSnapshot, SEARCH_ENGINE_VERSION};
 
 use super::ast::{CompiledQuery, ConstraintExpr, ResolvedEntityConstraint};
 use super::compiled_plan::{CompiledSearchPlan, ResolvedEntityHandle};
-use super::evaluation::VerifiedMatch;
 use super::geo;
 use super::index::SearchIndex;
 use super::intent::SearchIntent;
 use super::query_plan::{self, QueryPlan};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text, slug};
 use super::schema;
-use super::text::{merged_candidate_ids, InventoryEvaluationContext};
+use super::text::{merged_candidate_ids, SearchEvaluationContext};
 use super::{SearchResultCard, SearchResultSet, TextSearch, TextSearchRequest};
 
 const TANTIVY_RECALL_LIMIT: usize = 128;
@@ -586,8 +585,6 @@ impl<'a> SearchEngine<'a> {
                         &self.snapshot.version_key.serving_bundle_version,
                     );
                     if evaluation.is_satisfied() {
-                        verified_spatial_matches
-                            .insert(property_id.clone(), evaluation.verified_matches);
                         true
                     } else {
                         spatial_evaluation_gaps.push(SearchEvidenceGap {
@@ -601,6 +598,32 @@ impl<'a> SearchEngine<'a> {
                         false
                     }
                 });
+            }
+            for property_id in &geo_candidate_ids {
+                let property = self
+                    .snapshot
+                    .property_by_id
+                    .get(property_id)
+                    .and_then(|index| self.snapshot.properties.get(*index))
+                    .or_else(|| {
+                        self.snapshot
+                            .properties
+                            .iter()
+                            .find(|property| property.id == *property_id)
+                    });
+                let Some(property) = property else {
+                    continue;
+                };
+                let matches = query.verified_matches_for_property(
+                    property,
+                    &self.snapshot.search_index,
+                    &self.snapshot.bundle.spatial_index,
+                    &self.snapshot.bundle.fact_index,
+                    &self.snapshot.version_key.serving_bundle_version,
+                );
+                if !matches.is_empty() {
+                    verified_spatial_matches.insert(property_id.clone(), matches);
+                }
             }
         }
         if let Some(query) = geo_query.as_mut() {
@@ -653,7 +676,7 @@ impl<'a> SearchEngine<'a> {
             .as_ref()
             .and_then(|ids| candidate_property_indexes(ids, Some(&self.snapshot.property_by_id)));
 
-        let mut results = timer.measure("ranking", || {
+        let results = timer.measure("ranking", || {
             if unresolved_entity_clause.is_some()
                 || unavailable_required_capability.is_some()
                 || (resolved_geo_constraint
@@ -675,21 +698,15 @@ impl<'a> SearchEngine<'a> {
                     societies: &self.snapshot.societies,
                     compiled_query: &compiled_query,
                     graph: None,
-                    inventory: InventoryEvaluationContext {
+                    evaluation: SearchEvaluationContext {
                         options: &self.snapshot.inventory_options,
+                        spatial_matches: &verified_spatial_matches,
                         snapshot_identity: &self.snapshot.version_key.serving_bundle_version,
                     },
                 })
             }
         });
         let snapshot_identity = self.snapshot.version_key.serving_bundle_version.as_str();
-        for result in &mut results {
-            if let Some(matches) = verified_spatial_matches.remove(&result.card.id) {
-                for verified in matches {
-                    push_unique_verified_match(&mut result.verified_matches, verified);
-                }
-            }
-        }
         let eligible_result_count = results.len();
         let mut evidence_gaps = Vec::new();
         evidence_gaps.extend(unresolved_proximity_gaps(geo_query.as_ref()));
@@ -701,8 +718,9 @@ impl<'a> SearchEngine<'a> {
             Some(&self.snapshot.property_by_id),
             &self.snapshot.search_index,
             serving_facts,
-            InventoryEvaluationContext {
+            SearchEvaluationContext {
                 options: &self.snapshot.inventory_options,
+                spatial_matches: &verified_spatial_matches,
                 snapshot_identity,
             },
         );
@@ -789,19 +807,6 @@ impl<'a> SearchEngine<'a> {
             diagnostics,
             evidence_gaps,
         }
-    }
-}
-
-fn push_unique_verified_match(matches: &mut Vec<VerifiedMatch>, candidate: VerifiedMatch) {
-    if !matches.iter().any(|existing| {
-        existing.subject_entity_id == candidate.subject_entity_id
-            && existing.target_entity_id == candidate.target_entity_id
-            && existing.relation == candidate.relation
-            && existing.metric == candidate.metric
-            && existing.value == candidate.value
-            && existing.observation_ids == candidate.observation_ids
-    }) {
-        matches.push(candidate);
     }
 }
 
@@ -1178,7 +1183,7 @@ fn build_result_sets(
     property_by_id: Option<&HashMap<String, usize>>,
     search_index: &SearchIndex,
     serving_facts: Option<&crate::serving::ServingFactIndex>,
-    inventory: InventoryEvaluationContext<'_>,
+    evaluation: SearchEvaluationContext<'_>,
 ) -> Vec<SearchResultSet> {
     let branches = compiled_query.constraints.flat_branches();
     let branch_count = branches.len();
@@ -1205,7 +1210,7 @@ fn build_result_sets(
                         term,
                         Some(search_index),
                         serving_facts,
-                        inventory,
+                        evaluation,
                     )
                 });
                 if !exact {
