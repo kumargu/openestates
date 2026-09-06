@@ -1,5 +1,207 @@
 # Issue 118 execution log
 
+## Consolidated continuation plan — Issues 118, 123, and 124
+
+- Reset recorded: 2026-09-06 Asia/Kolkata
+- Continuation branch: `feat/issue-118-consolidated`
+- Continuation HEAD: `d1203aea` (`refactor: share typed revision replacement`)
+- Preserved source branch: `feat/issue-118-spatial-intent`
+- Merge base: `d1c06e2b` (`main` at the start of Issue 118 work)
+- Worktree at reset: clean
+
+This document is the single source of memory for the remaining Issue 118 work.
+The detailed checkpoint history below remains authoritative for what each
+local commit implemented and proved. This section supersedes the older
+checkpoint-local next steps where they differ from the consolidated plan.
+
+### Completed local commits
+
+1. `87fe103d` — compile conversational search revisions.
+2. `42bfff34` — preserve the original spatial experiment and baseline.
+3. `2f0aefba` — add four-state, fail-closed search evidence foundations.
+4. `ce50c216` — derive OSM footprint topology offline.
+5. `529a7d24` — compile branches before execution and preserve logical ORs.
+6. `42e11f88` — resolve named places through sourced area context.
+7. `0461a73c` — fail closed on unknown inventory predicates.
+8. `e81cc950` — generalize predicate-family revision selection.
+9. `d1203aea` — share typed branch predicate replacement.
+
+### Pulled-forward commitment audit
+
+| Commitment | Current state |
+|---|---|
+| Snapshot-only search construction (#123) | Partial: routes acquire a snapshot, but `SearchEngine` can still be assembled from independently supplied generations. |
+| Four-state evaluation (#123) | Implemented for spatial and inventory eligibility, but parallel evaluators and empty verified matches remain. |
+| Stable spatial/price/BHK evidence references (#123) | Partial: receipts often use synthesized identifiers rather than durable source observations. |
+| Semantic-contract digest (#123) | Partial: config inputs are hashed, but resolved bindings and evaluator/algorithm versions are not comprehensive. |
+| Capability/evaluator/proof bindings (#123) | Incomplete. |
+| Touched mixed-state and duplicate-path removal (#123) | Incomplete. |
+| OSM locality and society geometry (#124) | Implemented and fixture-tested. |
+| Google/OSM canonical identity (#124) | Incomplete: provider-independent place/locality crosswalks are not fully materialized. |
+| Area hierarchy and topology (#124) | Implemented synthetically; not yet verified in a real candidate bundle. |
+| Footprint containment and distance (#124) | Implemented, but a separate spatial evaluation path remains. |
+| Typed spatial derivations (#124) | Partial: durable lineage and observation identities are missing. |
+
+### Architectural lessons and non-negotiable gates
+
+- Recall returns candidate IDs; it never proves a predicate.
+- Required predicates accept only `Satisfied(VerifiedMatch)` and negated
+  `Unknown` remains `Unknown`.
+- Buyer text is compiled once under one pinned runtime snapshot. Revisions
+  authenticate and patch that compiled plan; they do not reparse a projected
+  query string.
+- Product vocabulary, aliases, category meaning, capability eligibility,
+  scoring policy, and proof destinations remain config/DAG-owned. Rust owns
+  only structural Boolean, comparison, geometry, and evaluation mechanics.
+- BHK and price must be verified by the same inventory observation.
+- Spatial recall uses an index followed by exact geometry evaluation. Polygon
+  holes and all MultiPolygon parts must survive materialization and serving.
+- A trusted point is an explicitly labelled distance fallback only. It cannot
+  prove whole-footprint containment, intersection, or adjacency.
+- Provider identities are retained, but runtime aliases come only from
+  validated serving crosswalk records. Ambiguous identity candidates remain
+  separate and diagnostic.
+- Logical alternatives execute independently. Presentation topology may group
+  branches but cannot coalesce them. Deduplication happens only after
+  evaluation and retains all matching branch proof sets.
+- Coverage gaps are informational. Corrupt geometry, invalid merges, dangling
+  or cross-snapshot evidence, invalid derivations, collector defects, and
+  advertised capabilities without evaluator/proof bindings block promotion.
+
+### Remaining implementation plan
+
+#### 1. Contract and identity foundation
+
+- Introduce durable `ObservationId`, `DerivationId`, and snapshot-qualified
+  `EvidenceRef` contracts. Source observations retain provider identity,
+  subject, observation time, source URL, and asset lineage. Derived relations
+  retain algorithm version and input evidence references. No identifier may be
+  fabricated solely from property ID, fact key, or query text.
+- Version serving records so these identities survive facts, inventory options,
+  spatial relations, runtime evaluation, result membership, and API proofs.
+- Make one `Arc<SearchRuntimeSnapshot>` (or a validated context owning it) the
+  only construction input for search. Remove independent property/index/bundle/
+  society/graph generation assembly.
+- Compile a capability catalog from DAG config: capability ID, subject/target
+  scope, operators, value/unit rules, eligible observations, resolution policy,
+  evaluator binding, proof projection, and evidence destination.
+- Reject advertised capabilities without evaluator and proof bindings. Treat a
+  missing per-entity observation as coverage, not a schema error.
+- Derive the semantic digest from resolved capability bindings, relation
+  definitions, eligibility policies, proof bindings, and evaluator/algorithm
+  versions.
+
+#### 2. Canonical entities and spatial evidence
+
+- Materialize provider-independent areas, places, and societies offline while
+  retaining OSM and Google identities. Merge only when type, normalized
+  identity, market region, parent/spatial compatibility, and uniqueness agree;
+  place crosswalks also require configured category, area context, and
+  coordinate tolerance.
+- Preserve complete Polygon/MultiPolygon geometry with holes end-to-end.
+- Materialize typed containment, same-level adjacency, footprint distance, and
+  explicitly labelled trusted-point fallback derivations. Every derivation
+  records subject, target, metric, typed value/unit, input references,
+  algorithm version, confidence, snapshot identity, and semantic contract.
+- Keep gate access, route geometry/travel time, full-footprint Google
+  collection, internal amenities, drain/lake/power migration, and UI/map/
+  imagery deferred. Requests for those predicates return `Unsupported`.
+
+#### 3. One generic compiled search path
+
+- Converge onto two authoritative predicate shapes:
+  `CapabilityPredicate` and `EntityRelationPredicate`, each with stable
+  predicate identity, typed operator/value/unit, required state, source span,
+  and explicit resolution state where applicable.
+- Compile generic category clauses even without a named entity, preserving
+  unresolved and ambiguous targets.
+- Execute one `CompiledSearchPlan` against its pinned snapshot. One evaluator
+  traverses the Boolean tree for spatial, inventory, identity, and configured
+  evidence predicates and emits four-state results plus verified matches.
+- Rank and project proofs exclusively from those evaluations. Remove raw
+  discourse branch-query construction, connected-scope execution coalescing,
+  automatic spatial success, string relation dispatch, empty satisfied
+  evidence, duplicate Boolean compatibility matchers, and runtime aliases
+  superseded by serving crosswalks after replacement gates pass.
+
+#### 4. Typed stateless revisions
+
+- Recompile and authenticate `parentQuery` under the requested pinned runtime.
+  Apply typed revision patches directly to predicate and branch IDs in that
+  parent plan, then execute the patched plan without reparsing
+  `candidate_query`.
+- Render deterministic `activeQuery` only for the public response and HMAC
+  revision identity. Preserve existing target/clarification rules, branch and
+  revision limits, area-only inheritance, and non-execution for clarification
+  or checkpoint outcomes.
+- Delete string-editing helpers only after direct and revised equivalents have
+  identical ordering, branch membership, metrics, values, observation
+  references, and proofs.
+
+#### 5. East Bengaluru candidate and final gates
+
+- Add config-owned pacing, retry/backoff, `Retry-After`, bounded output, and
+  honest failure diagnostics to offline OSM society collection.
+- Clone the existing lake into an isolated copy-on-write Issue 118 candidate;
+  never mutate the main lake and never push or promote remotely. Force fresh
+  locality and society OSM assets, then rebuild `current_project_facts`,
+  `kg_society_view`, and `search_serving_bundle`.
+- Extend the existing Parquet profiler with canonical/provider entities and
+  aliases; observation/derivation IDs; geometry type/validity; containment,
+  adjacency, and proximity edges; ambiguous identities/topology gaps;
+  capability coverage and verified real examples; checksums, lineage, bundle
+  size, and semantic digest.
+- Final contracts cover evidence survival through Parquet/runtime/API, row-
+  order stability, invalid/cross-subject/cross-snapshot reference rejection,
+  holes and multipart geometry, area/place identity separation, distinct
+  spatial metrics/fallback, Boolean and branch-local semantics through 3/8/16
+  branches, direct/revised equivalence, hardcoding audit stability, Rust and
+  Python tests, smoke tests, candidate validation, latency/memory benchmarks,
+  formatting, and `git diff --check`.
+
+Each checkpoint updates this log, runs its focused contract plus Cargo check and
+the hardcoding audit, and creates one coherent local commit. A correctness
+failure stops further stacking; honest coverage gaps do not.
+
+### Candidate identity at reset
+
+- Issue 118 candidate lake: not created.
+- Issue 118 candidate bundle: not generated.
+- Main local lake must remain read-only for candidate work.
+- Current main-lake serving pointer (inspection only):
+  `data/lake/manifests/assets/search_serving_bundle/partition=global/current.json`
+- Current pointed version: `search-proximity-category-v7-2026-09-04`
+- Current materialization: `653cd6fd-c41e-412e-9764-208bfba07240`
+- Current run: `4790e79e-3fe1-4b05-bc16-4279f3cfab30`
+- The current bundle has no verified Issue 118 area-topology coverage and is
+  not an Issue 118 candidate.
+
+### Current verified gate summary
+
+The detailed commands and counts remain recorded in the checkpoints below.
+At `d1203aea`, focused Rust search/revision/serving contracts, Cargo check,
+formatting, the Python OSM fixture tests, smoke tests, and `git diff --check`
+have passed at their relevant checkpoints. The hardcoding audit remains at 330
+findings, 28 fact-key comparisons, and zero blocked aliases, with zero delta
+from the recorded base. These gates must be rerun for every touched slice.
+
+### Exact next command
+
+The next checkpoint begins by reading the authoritative spatial predicate and
+runtime construction paths before any code change:
+
+```bash
+sed -n '1,280p' backend/src/search/compiled_plan.rs
+sed -n '1,360p' backend/src/search/evaluation.rs
+sed -n '1,520p' backend/src/search/geo.rs
+rg -n "SearchEngine::new|struct SearchRuntimeSnapshot|SpatialConstraint|VerifiedMatch|candidate_query" backend/src backend/tests
+```
+
+Then extend the generic spatial predicate contract with relation metric,
+optional typed bound, resolution state, and category/capability identity. The
+first implementation gate is a focused compiled-plan/evaluation contract;
+direct revision execution comes only after those evaluator inputs are complete.
+
 ## Goal and invariants
 
 Implement human-like, topology-aware backend search with one compiled logical
