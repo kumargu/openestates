@@ -152,6 +152,7 @@ pub(crate) fn compute_search(
     .search(&query);
     let ast_branches: Arc<[crate::search::ast::ConstraintExpr]> =
         Arc::from(engine_output.ast_branches.clone());
+    let compiled_plan = Arc::new(engine_output.compiled_plan.clone());
     let intent_branches: Arc<[crate::search::SearchIntent]> =
         Arc::from(engine_output.intent_branches.clone());
     let ast_fingerprint = engine_output.compiled_plan.semantic_fingerprint.clone();
@@ -233,6 +234,7 @@ pub(crate) fn compute_search(
     };
     CachedSearchOutput {
         response: Arc::new(response),
+        compiled_plan,
         ast_branches,
         intent_branches,
         log_messages,

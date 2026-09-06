@@ -19,6 +19,7 @@ use super::intent::SearchIntent;
 use super::query_plan::{self, QueryPlan};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text, slug};
 use super::schema;
+use super::text::merged_candidate_ids;
 use super::{SearchResultCard, SearchResultSet, TextSearch, TextSearchRequest};
 
 const TANTIVY_RECALL_LIMIT: usize = 128;
@@ -162,66 +163,88 @@ struct TantivyRecallResult {
     warning: Option<String>,
 }
 
+struct PreparedSearchBranch<'a> {
+    query: String,
+    query_plan: QueryPlan,
+    compiled_query: CompiledQuery,
+    geo_query: Option<geo::GeoSearchQuery<'a>>,
+    serving_resolved_entities: Vec<ResolvedSearchEntity>,
+    requested_societies: Vec<String>,
+    unresolved_entity_clause: Option<String>,
+    unavailable_required_capability: Option<String>,
+}
+
 impl<'a> SearchEngine<'a> {
     pub fn search(&self, query: &str) -> SearchEngineOutput {
-        if let Some(branch_queries) = query_plan::paired_ordinal_branch_queries(query) {
-            if branch_queries
-                .iter()
-                .all(|branch| self.branch_has_search_anchor(branch))
+        let top_level_plan = query_plan::compile_query_plan(query);
+        let aggregate_intent = query_plan::project_search_intent(query, &top_level_plan);
+        if let Some(branch_queries) =
+            query_plan::paired_ordinal_branch_queries_with_plan(query, &top_level_plan)
+        {
+            let prepared = self.prepare_branches(&branch_queries);
+            if prepared.iter().all(Self::branch_has_search_anchor) {
+                return self.search_independent_branches(aggregate_intent, prepared);
+            }
+        }
+        if let Some(branch_queries) = self.discourse_branch_queries(query, &top_level_plan) {
+            let prepared = self.prepare_branches(&branch_queries);
+            if !self.has_implicit_shared_scope_prefix(&prepared)
+                && !self.has_implicit_shared_geo_suffix(&prepared)
+                && prepared.iter().all(Self::branch_has_search_anchor)
             {
-                return self.search_independent_branches(query, &branch_queries);
+                if self.should_coalesce_connected_scopes(&prepared) {
+                    return self.search_connected_branches(aggregate_intent, prepared);
+                }
+                return self.search_independent_branches(aggregate_intent, prepared);
             }
         }
-        if let Some(branch_queries) = self.discourse_branch_queries(query) {
-            if self.should_coalesce_connected_scopes(&branch_queries) {
-                return self.search_connected_branches(query, &branch_queries);
-            }
-            return self.search_independent_branches(query, &branch_queries);
-        }
-        self.search_single(query)
+        let prepared = self.prepare_branch_from_plan(query, top_level_plan, aggregate_intent);
+        self.search_prepared(prepared)
+    }
+
+    fn prepare_branches<'b>(&'b self, branch_queries: &[String]) -> Vec<PreparedSearchBranch<'b>> {
+        branch_queries
+            .iter()
+            .map(|branch| self.prepare_branch(branch))
+            .collect()
     }
 
     fn search_independent_branches(
         &self,
-        query: &str,
-        branch_queries: &[String],
+        aggregate_intent: SearchIntent,
+        prepared: Vec<PreparedSearchBranch<'_>>,
     ) -> SearchEngineOutput {
         let started_at = Instant::now();
-        let outputs = branch_queries
-            .iter()
-            .map(|branch| self.search_single(branch))
+        let outputs = prepared
+            .into_iter()
+            .map(|branch| self.search_prepared(branch))
             .collect::<Vec<_>>();
-        combine_branch_outputs(query, outputs, started_at.elapsed().as_secs_f64() * 1000.0)
+        combine_branch_outputs(
+            aggregate_intent,
+            outputs,
+            started_at.elapsed().as_secs_f64() * 1000.0,
+        )
     }
 
     fn search_connected_branches(
         &self,
-        query: &str,
-        branch_queries: &[String],
+        aggregate_intent: SearchIntent,
+        prepared: Vec<PreparedSearchBranch<'_>>,
     ) -> SearchEngineOutput {
         let started_at = Instant::now();
-        let outputs = branch_queries
-            .iter()
-            .map(|branch| self.search_single(branch))
+        let outputs = prepared
+            .into_iter()
+            .map(|branch| self.search_prepared(branch))
             .collect::<Vec<_>>();
-        let mut combined =
-            combine_branch_outputs(query, outputs, started_at.elapsed().as_secs_f64() * 1000.0);
-        combined.ast_branches = vec![ConstraintExpr::any_of(combined.ast_branches.clone())];
-        combined.intent_branches = vec![combined.intent.clone()];
-        combined.result_sets = if combined.results.is_empty() {
-            Vec::new()
-        } else {
-            vec![SearchResultSet {
-                branch_id: "branch-1".to_string(),
-                label: combined.ast_branches[0].buyer_label(),
-                results: combined.results.clone(),
-            }]
-        };
-        combined
+        combine_branch_outputs(
+            aggregate_intent,
+            outputs,
+            started_at.elapsed().as_secs_f64() * 1000.0,
+        )
     }
 
-    fn discourse_branch_queries(&self, query: &str) -> Option<Vec<String>> {
-        let layout = query_plan::discourse_branch_layout(query)?;
+    fn discourse_branch_queries(&self, query: &str, plan: &QueryPlan) -> Option<Vec<String>> {
+        let layout = query_plan::discourse_branch_layout_with_plan(query, plan)?;
         let shared_suffix = layout
             .shared_suffix
             .map(|suffix| query[suffix.start..suffix.end].trim());
@@ -235,27 +258,19 @@ impl<'a> SearchEngine<'a> {
                     .unwrap_or_else(|| branch.to_string())
             })
             .collect::<Vec<_>>();
-        if self.has_implicit_shared_scope_prefix(&segment_queries)
-            || self.has_implicit_shared_geo_suffix(&segment_queries)
-        {
-            return None;
-        }
-        segment_queries
-            .iter()
-            .all(|branch| self.branch_has_search_anchor(branch))
-            .then_some(segment_queries)
+        Some(segment_queries)
     }
 
-    fn should_coalesce_connected_scopes(&self, branch_queries: &[String]) -> bool {
+    fn should_coalesce_connected_scopes(&self, branches: &[PreparedSearchBranch<'_>]) -> bool {
         let Some(bundle) = self.serving_bundle else {
             return false;
         };
-        if branch_queries.len() < 2 || !nonspatial_branch_constraints_compatible(branch_queries) {
+        if branches.len() < 2 || !nonspatial_branch_constraints_compatible(branches) {
             return false;
         }
-        let scopes = branch_queries
+        let scopes = branches
             .iter()
-            .map(|query| self.resolved_spatial_scope_ids(query))
+            .map(Self::resolved_spatial_scope_ids)
             .collect::<Vec<_>>();
         if scopes.iter().any(Vec::is_empty) {
             return false;
@@ -289,21 +304,18 @@ impl<'a> SearchEngine<'a> {
         connected.into_iter().all(|value| value)
     }
 
-    fn resolved_spatial_scope_ids(&self, query: &str) -> Vec<String> {
-        let mut ids = self
-            .resolved_scope_entities(query)
+    fn resolved_spatial_scope_ids(branch: &PreparedSearchBranch<'_>) -> Vec<String> {
+        let mut ids = branch
+            .serving_resolved_entities
+            .iter()
             .into_iter()
             .filter(|entity| {
                 entity.entity_type.eq_ignore_ascii_case("area")
                     || entity.entity_type.eq_ignore_ascii_case("society")
             })
-            .map(|entity| entity.entity_id)
+            .map(|entity| entity.entity_id.clone())
             .collect::<Vec<_>>();
-        let plan = query_plan::compile_query_plan(query);
-        if let Some(geo_query) = self
-            .serving_bundle
-            .and_then(|bundle| bundle.geo_index.query_with_plan(&plan))
-        {
+        if let Some(geo_query) = branch.geo_query.as_ref() {
             for clause in geo_query.resolved_clauses() {
                 for entity_id in &clause.place_entity_ids {
                     push_unique_string(&mut ids, entity_id);
@@ -315,52 +327,45 @@ impl<'a> SearchEngine<'a> {
         ids
     }
 
-    fn has_implicit_shared_scope_prefix(&self, branch_queries: &[String]) -> bool {
-        let Some((first, remaining)) = branch_queries.split_first() else {
+    fn has_implicit_shared_scope_prefix(&self, branches: &[PreparedSearchBranch<'_>]) -> bool {
+        let Some((first, remaining)) = branches.split_first() else {
             return false;
         };
-        if !self.has_resolved_branch_scope(first) {
+        if !Self::has_resolved_branch_scope(first) {
             return false;
         }
         remaining
             .iter()
-            .any(|branch| self.is_unscoped_structured_alternative(branch))
+            .any(Self::is_unscoped_structured_alternative)
     }
 
-    fn has_implicit_shared_geo_suffix(&self, branch_queries: &[String]) -> bool {
-        let Some((last, preceding)) = branch_queries.split_last() else {
+    fn has_implicit_shared_geo_suffix(&self, branches: &[PreparedSearchBranch<'_>]) -> bool {
+        let Some((last, preceding)) = branches.split_last() else {
             return false;
         };
         !preceding.is_empty()
-            && self.has_resolved_geo_scope(last)
-            && preceding
-                .iter()
-                .all(|branch| self.is_bare_bhk_alternative(branch))
+            && Self::has_resolved_geo_scope(last)
+            && preceding.iter().all(Self::is_bare_bhk_alternative)
     }
 
-    fn has_resolved_geo_scope(&self, query: &str) -> bool {
-        let plan = query_plan::compile_query_plan(query);
-        self.serving_bundle
-            .and_then(|bundle| bundle.geo_index.query_with_plan(&plan))
-            .is_some()
+    fn has_resolved_geo_scope(branch: &PreparedSearchBranch<'_>) -> bool {
+        branch.geo_query.is_some()
     }
 
-    fn is_bare_bhk_alternative(&self, query: &str) -> bool {
-        let plan = query_plan::compile_query_plan(query);
-        !plan.slots.bhks.is_empty()
-            && plan.slots.budgets.is_empty()
-            && plan.areas.is_empty()
-            && plan.clauses.is_empty()
-            && plan.evidence.is_empty()
-            && self.is_unscoped_structured_alternative(query)
+    fn is_bare_bhk_alternative(branch: &PreparedSearchBranch<'_>) -> bool {
+        !branch.query_plan.slots.bhks.is_empty()
+            && branch.query_plan.slots.budgets.is_empty()
+            && branch.query_plan.areas.is_empty()
+            && branch.query_plan.clauses.is_empty()
+            && branch.query_plan.evidence.is_empty()
+            && Self::is_unscoped_structured_alternative(branch)
     }
 
-    fn is_unscoped_structured_alternative(&self, query: &str) -> bool {
-        if self.has_resolved_branch_scope(query) || self.has_unresolved_named_scope(query) {
+    fn is_unscoped_structured_alternative(branch: &PreparedSearchBranch<'_>) -> bool {
+        if Self::has_resolved_branch_scope(branch) || branch.unresolved_entity_clause.is_some() {
             return false;
         }
-        let plan = query_plan::compile_query_plan(query);
-        let intent = query_plan::project_search_intent(query, &plan);
+        let intent = &branch.compiled_query.intent;
         intent.preferences.is_empty()
             && intent.positive_preferences.is_empty()
             && intent.negative_preferences.is_empty()
@@ -374,85 +379,49 @@ impl<'a> SearchEngine<'a> {
             && intent.unsupported_inventory_types.is_empty()
     }
 
-    fn has_resolved_branch_scope(&self, query: &str) -> bool {
-        if !self.resolved_scope_entities(query).is_empty() {
-            return true;
-        }
-        let plan = query_plan::compile_query_plan(query);
-        self.serving_bundle
-            .and_then(|bundle| bundle.geo_index.query_with_plan(&plan))
-            .is_some()
+    fn has_resolved_branch_scope(branch: &PreparedSearchBranch<'_>) -> bool {
+        branch.serving_resolved_entities.iter().any(|entity| {
+            entity.polarity != "exclusion"
+                && ["area", "society", "builder"]
+                    .iter()
+                    .any(|entity_type| entity.entity_type.eq_ignore_ascii_case(entity_type))
+        }) || branch.geo_query.is_some()
     }
 
-    fn resolved_scope_entities(&self, query: &str) -> Vec<ResolvedSearchEntity> {
-        let plan = query_plan::compile_query_plan(query);
-        let intent = query_plan::project_search_intent(query, &plan);
-        resolve_serving_query_entities(query, &plan, &intent, self.serving_bundle, self.properties)
-            .into_iter()
-            .filter(|entity| {
-                entity.polarity != "exclusion"
-                    && ["area", "society", "builder"]
-                        .iter()
-                        .any(|entity_type| entity.entity_type.eq_ignore_ascii_case(entity_type))
-            })
-            .collect()
-    }
-
-    fn has_unresolved_named_scope(&self, query: &str) -> bool {
-        let plan = query_plan::compile_query_plan(query);
-        let intent = query_plan::project_search_intent(query, &plan);
-        let resolved = resolve_serving_query_entities(
-            query,
-            &plan,
-            &intent,
-            self.serving_bundle,
-            self.properties,
-        );
-        let geo_query = self
-            .serving_bundle
-            .and_then(|bundle| bundle.geo_index.query_with_plan(&plan));
-        unsupported_qualifier_clause(query, &plan).is_some()
-            || unresolved_named_entity_clause(query, &plan, &resolved, geo_query.as_ref()).is_some()
-    }
-
-    fn branch_has_search_anchor(&self, query: &str) -> bool {
-        let plan = query_plan::compile_query_plan(query);
-        if !plan.slots.bhks.is_empty()
-            || !plan.slots.budgets.is_empty()
-            || !plan.areas.is_empty()
-            || !plan.clauses.is_empty()
-            || !plan.evidence.is_empty()
+    fn branch_has_search_anchor(branch: &PreparedSearchBranch<'_>) -> bool {
+        if !branch.query_plan.slots.bhks.is_empty()
+            || !branch.query_plan.slots.budgets.is_empty()
+            || !branch.query_plan.areas.is_empty()
+            || !branch.query_plan.clauses.is_empty()
+            || !branch.query_plan.evidence.is_empty()
         {
             return true;
         }
-        let intent = query_plan::project_search_intent(query, &plan);
-        !resolve_serving_query_entities(query, &plan, &intent, self.serving_bundle, self.properties)
-            .is_empty()
+        !branch.serving_resolved_entities.is_empty()
     }
 
-    fn search_single(&self, query: &str) -> SearchEngineOutput {
-        let mut timer = SearchTimer::start();
+    fn prepare_branch<'b>(&'b self, query: &str) -> PreparedSearchBranch<'b> {
+        let query_plan = query_plan::compile_query_plan(query);
+        let parsed_intent = query_plan::project_search_intent(query, &query_plan);
+        self.prepare_branch_from_plan(query, query_plan, parsed_intent)
+    }
 
-        let query_plan = timer.measure("query_plan_compile", || {
-            query_plan::compile_query_plan(query)
-        });
-        let parsed_intent = timer.measure("intent_parse", || {
-            query_plan::project_search_intent(query, &query_plan)
-        });
-
-        let mut geo_query = timer.measure("geo_resolve", || {
-            self.serving_bundle
-                .and_then(|bundle| bundle.geo_index.query_with_plan(&query_plan))
-        });
-        let serving_resolved_entities = timer.measure("serving_entity_resolution", || {
-            resolve_serving_query_entities(
-                query,
-                &query_plan,
-                &parsed_intent,
-                self.serving_bundle,
-                self.properties,
-            )
-        });
+    fn prepare_branch_from_plan<'b>(
+        &'b self,
+        query: &str,
+        query_plan: QueryPlan,
+        parsed_intent: SearchIntent,
+    ) -> PreparedSearchBranch<'b> {
+        let geo_query = self
+            .serving_bundle
+            .and_then(|bundle| bundle.geo_index.query_with_plan(&query_plan));
+        let serving_resolved_entities = resolve_serving_query_entities(
+            query,
+            &query_plan,
+            &parsed_intent,
+            self.serving_bundle,
+            self.properties,
+        );
         let requested_societies = serving_resolved_entities
             .iter()
             .filter(|entity| {
@@ -461,16 +430,12 @@ impl<'a> SearchEngine<'a> {
             .map(|entity| entity.name.clone())
             .collect::<Vec<_>>();
         let entity_constraints = resolved_entity_constraints(query, &serving_resolved_entities);
-        let mut compiled_query = timer.measure("intent_constraints", || {
-            let intent =
-                apply_resolved_constraints(parsed_intent.clone(), &serving_resolved_entities);
-            CompiledQuery::compile(query, &query_plan, intent, &entity_constraints)
-        });
-        if let Some(query) = geo_query.as_ref() {
-            compiled_query.add_spatial_constraints(query.ast_terms());
+        let intent = apply_resolved_constraints(parsed_intent, &serving_resolved_entities);
+        let mut compiled_query =
+            CompiledQuery::compile(query, &query_plan, intent, &entity_constraints);
+        if let Some(spatial_query) = geo_query.as_ref() {
+            compiled_query.add_spatial_constraints(spatial_query.ast_terms());
         }
-        let ast_branches = vec![compiled_query.constraints.clone()];
-        let intent = &compiled_query.intent;
         let unresolved_entity_clause =
             unsupported_qualifier_clause(query, &query_plan).or_else(|| {
                 unresolved_named_entity_clause(
@@ -481,14 +446,43 @@ impl<'a> SearchEngine<'a> {
                 )
             });
         let unavailable_required_capability = self.serving_bundle.and_then(|bundle| {
-            intent
+            compiled_query
+                .intent
                 .positive_preferences
                 .iter()
-                .chain(intent.negative_preferences.iter())
+                .chain(compiled_query.intent.negative_preferences.iter())
                 .filter(|preference| preference.required)
                 .find(|preference| !bundle.search_capabilities.supports_preference(preference))
                 .map(|preference| preference.raw_text.clone())
         });
+
+        PreparedSearchBranch {
+            query: query.to_string(),
+            query_plan,
+            compiled_query,
+            geo_query,
+            serving_resolved_entities,
+            requested_societies,
+            unresolved_entity_clause,
+            unavailable_required_capability,
+        }
+    }
+
+    fn search_prepared(&self, prepared: PreparedSearchBranch<'_>) -> SearchEngineOutput {
+        let mut timer = SearchTimer::start();
+        let PreparedSearchBranch {
+            query,
+            query_plan: _,
+            compiled_query,
+            mut geo_query,
+            serving_resolved_entities,
+            requested_societies,
+            unresolved_entity_clause,
+            unavailable_required_capability,
+        } = prepared;
+        let query = query.as_str();
+        let ast_branches = vec![compiled_query.constraints.clone()];
+        let intent = &compiled_query.intent;
 
         let mut structured_candidate_ids = timer.measure("structured_recall", || {
             self.search_index.recall_ids(&compiled_query)
@@ -621,9 +615,9 @@ impl<'a> SearchEngine<'a> {
                     .collect(),
             )
         } else {
-            merge_candidate_ids(
+            merged_candidate_ids(
                 optional_non_empty(structured_candidate_ids.clone()),
-                extra_candidate_ids.clone().unwrap_or_default(),
+                extra_candidate_ids.as_deref(),
             )
         };
         let recall_set = RecallSet {
@@ -775,13 +769,10 @@ impl<'a> SearchEngine<'a> {
     }
 }
 
-fn nonspatial_branch_constraints_compatible(branch_queries: &[String]) -> bool {
-    let intents = branch_queries
+fn nonspatial_branch_constraints_compatible(branches: &[PreparedSearchBranch<'_>]) -> bool {
+    let intents = branches
         .iter()
-        .map(|query| {
-            let plan = query_plan::compile_query_plan(query);
-            query_plan::project_search_intent(query, &plan)
-        })
+        .map(|branch| &branch.compiled_query.intent)
         .collect::<Vec<_>>();
     intents.iter().enumerate().all(|(index, left)| {
         intents[index + 1..]
@@ -860,7 +851,7 @@ fn preference_signature(intent: &SearchIntent) -> Vec<String> {
 }
 
 fn combine_branch_outputs(
-    query: &str,
+    mut intent: SearchIntent,
     outputs: Vec<SearchEngineOutput>,
     total_duration_ms: f64,
 ) -> SearchEngineOutput {
@@ -875,8 +866,6 @@ fn combine_branch_outputs(
             .collect(),
         snapshot_identity,
     );
-    let mut intent =
-        query_plan::project_search_intent(query, &query_plan::compile_query_plan(query));
     let mut result_sets = Vec::new();
     let mut evidence_gaps = Vec::new();
     for (index, output) in outputs.iter().enumerate() {
@@ -892,6 +881,9 @@ fn combine_branch_outputs(
             .result_sets
             .iter()
             .flat_map(|set| set.results.iter().cloned())
+            .scan(HashSet::new(), |seen, result| {
+                seen.insert(result.card.id.clone()).then_some(result)
+            })
             .collect::<Vec<_>>();
         if branch_results.is_empty() {
             continue;
@@ -946,7 +938,6 @@ fn limit_result_sets(
     }
 
     let mut positions = vec![0usize; result_sets.len()];
-    let mut selected_by_set = vec![Vec::new(); result_sets.len()];
     let mut selected = Vec::with_capacity(result_limit);
     let mut selected_ids = HashSet::new();
 
@@ -958,7 +949,6 @@ fn limit_result_sets(
                 if !selected_ids.insert(result.card.id.clone()) {
                     continue;
                 }
-                selected_by_set[set_index].push(result.clone());
                 selected.push(result.clone());
                 made_progress = true;
                 break;
@@ -974,12 +964,13 @@ fn limit_result_sets(
 
     let limited_sets = result_sets
         .into_iter()
-        .zip(selected_by_set)
-        .filter_map(|(mut result_set, results)| {
-            if results.is_empty() {
+        .filter_map(|mut result_set| {
+            result_set
+                .results
+                .retain(|result| selected_ids.contains(&result.card.id));
+            if result_set.results.is_empty() {
                 return None;
             }
-            result_set.results = results;
             Some(result_set)
         })
         .collect();
@@ -2381,6 +2372,33 @@ mod tests {
             .results
             .iter()
             .all(|result| result.card.bhk == 3 && result.card.price <= 20_000_000));
+    }
+
+    #[test]
+    fn deduped_results_retain_membership_in_every_matching_branch() {
+        let property = test_property("shared", "Whitefield");
+        let output = run_search_for_test("3bhk", std::slice::from_ref(&property));
+        let result = output.results[0].clone();
+        let result_sets = vec![
+            SearchResultSet {
+                branch_id: "branch-1".to_string(),
+                label: "First".to_string(),
+                results: vec![result.clone()],
+            },
+            SearchResultSet {
+                branch_id: "branch-2".to_string(),
+                label: "Second".to_string(),
+                results: vec![result],
+            },
+        ];
+
+        let (limited_sets, unique_results) = limit_result_sets(result_sets, 1);
+
+        assert_eq!(unique_results.len(), 1);
+        assert_eq!(limited_sets.len(), 2);
+        assert!(limited_sets
+            .iter()
+            .all(|set| set.results[0].card.id == "shared"));
     }
 
     #[test]

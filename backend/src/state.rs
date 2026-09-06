@@ -126,6 +126,7 @@ impl SearchCacheKey {
 #[derive(Clone)]
 pub struct CachedSearchOutput {
     pub response: Arc<SearchResponse>,
+    pub compiled_plan: Arc<crate::search::CompiledSearchPlan>,
     pub ast_branches: Arc<[crate::search::ast::ConstraintExpr]>,
     pub intent_branches: Arc<[crate::search::SearchIntent]>,
     pub log_messages: Vec<SearchLogMessage>,
@@ -452,6 +453,10 @@ mod tests {
                 state: "no_matches".to_string(),
                 search_guidance: None,
             }),
+            compiled_plan: Arc::new(crate::search::CompiledSearchPlan::single(
+                crate::search::CompiledQuery::from_text(query),
+                "test-bundle",
+            )),
             ast_branches: Arc::from([]),
             intent_branches: Arc::from([]),
             log_messages: Vec::new(),

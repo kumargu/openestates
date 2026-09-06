@@ -199,7 +199,15 @@ impl QueryPlan {
 }
 
 pub(crate) fn discourse_branch_layout(query: &str) -> Option<DiscourseBranchLayout> {
-    let tokens = query_tokens_with_spans(query);
+    let plan = compile_query_plan(query);
+    discourse_branch_layout_with_plan(query, &plan)
+}
+
+pub(crate) fn discourse_branch_layout_with_plan(
+    query: &str,
+    plan: &QueryPlan,
+) -> Option<DiscourseBranchLayout> {
+    let tokens = &plan.tokens;
     let config = &search_parser_config().discourse;
     let shared_start = first_configured_phrase(&tokens, &config.shared_suffix_markers, 0)
         .map(|span| span.start)
@@ -261,8 +269,17 @@ pub(crate) fn discourse_branch_layout(query: &str) -> Option<DiscourseBranchLayo
     })
 }
 
+#[cfg(test)]
 pub(crate) fn paired_ordinal_branch_queries(query: &str) -> Option<Vec<String>> {
-    let tokens = query_tokens_with_spans(query);
+    let plan = compile_query_plan(query);
+    paired_ordinal_branch_queries_with_plan(query, &plan)
+}
+
+pub(crate) fn paired_ordinal_branch_queries_with_plan(
+    query: &str,
+    plan: &QueryPlan,
+) -> Option<Vec<String>> {
+    let tokens = &plan.tokens;
     let config = &search_parser_config().discourse;
     if config.branch_ordinals.len() < 2 {
         return None;
@@ -284,7 +301,6 @@ pub(crate) fn paired_ordinal_branch_queries(query: &str) -> Option<Vec<String>> 
             first_configured_phrase(&tokens, std::slice::from_ref(ordinal), shared_suffix.end)
         })
         .collect::<Option<Vec<_>>>()?;
-    let plan = compile_query_plan(query);
     let branch_bhks = ordinal_spans
         .iter()
         .map(|ordinal| {

@@ -694,7 +694,7 @@ fn branch_quality_cohorts_preserve_disconnected_scope_and_branch_local_proof() {
 }
 
 #[test]
-fn sourced_topology_coalesces_only_compatible_connected_spatial_scopes() {
+fn sourced_topology_never_erases_logical_spatial_branches() {
     let mut builder = FixtureBuilder::default();
     for area in ["Eastfield", "Nextfield", "Northfield"] {
         builder.add_area(area);
@@ -715,9 +715,14 @@ fn sourced_topology_coalesces_only_compatible_connected_spatial_scopes() {
         fixture.search_output("3BHK in Eastfield under 2Cr or 3BHK in Nextfield under 2Cr");
     assert_eq!(
         connected.ast_branches.len(),
-        1,
-        "compatible adjacent scopes should form one active intent branch"
+        2,
+        "topology may group presentation but must preserve both logical branches"
     );
+    assert_eq!(connected.compiled_plan.branches.len(), 2);
+    assert!(matches!(
+        connected.compiled_plan.root,
+        backend::search::BoolExpr::Any(ref branches) if branches.len() == 2
+    ));
 
     let branch_local_budget =
         fixture.search_output("3BHK in Eastfield under 2Cr or 3BHK in Nextfield under 1.5Cr");
@@ -767,12 +772,16 @@ fn connected_hard_spatial_alternatives_preserve_any_of_semantics() {
     let output = fixture.search_output(
         "3BHK within 1 km of East Anchor under 2Cr or 3BHK within 1 km of West Anchor under 2Cr",
     );
-    let [backend::search::ConstraintExpr::AnyOf { clauses }] = output.ast_branches.as_slice()
-    else {
-        panic!("connected hard alternatives must compile to one AnyOf branch")
-    };
-    assert_eq!(clauses.len(), 2);
-    assert!(clauses.iter().all(has_required_spatial_term));
+    assert_eq!(output.compiled_plan.branches.len(), 2);
+    assert!(matches!(
+        output.compiled_plan.root,
+        backend::search::BoolExpr::Any(ref branches) if branches.len() == 2
+    ));
+    assert!(output
+        .compiled_plan
+        .branches
+        .iter()
+        .all(|branch| has_required_spatial_term(&branch.predicates)));
     let ids = output
         .results
         .iter()
@@ -1134,10 +1143,9 @@ fn assert_candidate_effect(
 
 fn result_ids(output: &ObservedSearch) -> Vec<&str> {
     output
-        .result_sets
+        .ordered_result_ids
         .iter()
-        .flatten()
-        .map(|result| result.id.as_str())
+        .map(String::as_str)
         .collect()
 }
 
@@ -1579,6 +1587,7 @@ fn equivalent_home_state(actual: &str, expected: &str) -> bool {
 
 #[derive(Debug)]
 struct ObservedSearch {
+    ordered_result_ids: Vec<String>,
     result_sets: Vec<Vec<ObservedResult>>,
     warnings: Vec<String>,
     positive_preferences: Vec<String>,
@@ -2046,7 +2055,13 @@ impl MockSearchFixture {
                 matched_text: entity.matched_text.clone(),
             })
             .collect();
+        let ordered_result_ids = output
+            .results
+            .iter()
+            .map(|result| result.card.id.clone())
+            .collect();
         ObservedSearch {
+            ordered_result_ids,
             result_sets: output
                 .result_sets
                 .into_iter()

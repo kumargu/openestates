@@ -1137,7 +1137,7 @@ fn is_placeholder_display(value: &str) -> bool {
         .any(|placeholder| placeholder.eq_ignore_ascii_case(&normalized))
 }
 
-fn merged_candidate_ids(
+pub(crate) fn merged_candidate_ids(
     local_candidate_ids: Option<Vec<String>>,
     extra_candidate_ids: Option<&[String]>,
 ) -> Option<Vec<String>> {

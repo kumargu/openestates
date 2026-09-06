@@ -626,6 +626,10 @@ async fn search_cache_key_changes_with_bundle_version() {
             key_v1.clone(),
             CachedSearchOutput {
                 response: Arc::new(empty_response("3bhk whitefield")),
+                compiled_plan: Arc::new(backend::search::CompiledSearchPlan::single(
+                    backend::search::CompiledQuery::from_text("3bhk whitefield"),
+                    "bundle-v1",
+                )),
                 ast_branches: Arc::from([]),
                 intent_branches: Arc::from([]),
                 log_messages: Vec::new(),
@@ -652,6 +656,10 @@ async fn search_cache_hit_still_carries_log_metadata() {
             key.clone(),
             CachedSearchOutput {
                 response: Arc::new(empty_response("3bhk whitefield")),
+                compiled_plan: Arc::new(backend::search::CompiledSearchPlan::single(
+                    backend::search::CompiledQuery::from_text("3bhk whitefield"),
+                    "bundle-v1",
+                )),
                 ast_branches: Arc::from([]),
                 intent_branches: Arc::from([]),
                 log_messages: vec![SearchLogMessage::SearchEvent(event.clone())],

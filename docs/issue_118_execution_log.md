@@ -205,3 +205,67 @@ CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo test \
 ```
 
 Then replace raw-string branch execution with prepared compiled branches.
+
+## Checkpoint 2 — compile once and preserve logical branches
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Parent commit: `ce50c216`
+
+### Implemented
+
+- The engine compiles the top-level query once, derives its discourse layout
+  from that plan, and prepares each logical branch before recall. Prepared
+  branches carry their parsed intent, resolved serving entities, spatial query,
+  compiled predicates, and fail-closed resolution state into execution.
+- Candidate execution no longer invokes the parser, and aggregate result
+  construction no longer reparses the raw query after ranking.
+- Connected topology does not collapse `or` alternatives. Combined plans keep
+  an `Any` root, execute every branch independently, and preserve the branch's
+  local BHK, budget, evidence, and spatial predicates.
+- Result traversal remains fair and top-level result IDs remain unique, while
+  each result set retains membership in every branch the property matched.
+- Search cache entries now retain the authoritative compiled plan. Revision
+  branch counts come from that logical plan rather than result sets or legacy
+  flattened AST projections.
+- Multi-branch budget corrections fail closed unless they target an ordinal
+  branch or explicitly say `all`/`both`. The typed replacement patch records
+  the selected branch ID.
+- Fixed broad local recall accidentally bypassing config-owned spatial pruning.
+  The final candidate set applies `broad_local_recall_multiplier` and
+  `broad_local_recall_min_extra` before property-index lookup, so a 128-entity
+  named-place recall does not rank a 5,000-property structured union.
+
+### Gates
+
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check`: passed.
+- `cargo test --lib search::query_plan::tests`: 23 passed.
+- `cargo test --lib search::revision::tests`: 10 passed.
+- `cargo test --test search_efficiency_contract`: 11 passed, including the
+  10,000-property named-place cohort under its 750 ms measured search budget.
+- `cargo test --test search_conversational_semantics_contract`: 8 passed.
+- `cargo test --test search_revision_api_contract`: 3 passed.
+- `cargo test --test serving_bundle_contract`: 3 passed.
+- `cargo fmt --check` and `git diff --check`: passed.
+- Hardcoding audit: 330 findings, 28 fact-key comparisons, 0 blocked aliases;
+  delta remains zero.
+- Existing macOS compact-unwind linker warning remains unchanged.
+
+### Remaining gaps
+
+- Revision classification emits typed patches, but candidate revisions still
+  lower to a canonical query string and rerun normal search. Direct patching of
+  an authenticated compiled parent plan remains a Checkpoint 5 gap.
+- Area-only alternatives do not yet inherit one unambiguous parent branch's
+  non-spatial predicates.
+- Same-name place resolution still needs explicit area-context disambiguation,
+  including the rule that an unknown specific place cannot fall back to a
+  similarly named area.
+- Candidate East Bengaluru bundle generation, direct Parquet inspection, and
+  the topology coverage report remain pending.
+
+### Next exact command
+
+Add controlled resolver scenarios for a same-name hospital in multiple areas
+and for a missing specific place whose normalized name overlaps an area. Then
+make typed entity-family and same-branch area context resolve those cases
+deterministically and fail closed when ambiguity remains.

@@ -161,12 +161,7 @@ pub async fn revise_search(
             runtime_version,
         );
     };
-    let derived_parent_count = parent_output
-        .ast_branches
-        .iter()
-        .map(|branch| branch.flat_branches().len())
-        .sum::<usize>()
-        .max(1);
+    let derived_parent_count = parent_output.compiled_plan.branches.len().max(1);
     if request.parent_branch_count != derived_parent_count {
         return revision_error(
             StatusCode::BAD_REQUEST,
@@ -237,12 +232,7 @@ pub async fn revise_search(
             runtime_version,
         );
     };
-    let active_branch_count = candidate_output
-        .ast_branches
-        .iter()
-        .map(|branch| branch.flat_branches().len())
-        .sum::<usize>()
-        .max(1);
+    let active_branch_count = candidate_output.compiled_plan.branches.len().max(1);
     let revision_id = revision_id_for_query(
         &active_query,
         &runtime_version,

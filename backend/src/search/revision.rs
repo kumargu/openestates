@@ -42,11 +42,23 @@ pub struct SearchRevision {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SearchRevisionPatch {
-    AddPredicate { fragment: String },
-    ReplacePredicate { family: String, fragment: String },
-    RemovePredicate { family: String },
-    AddAlternative { fragment: String },
-    ReplaceIntent { query: String },
+    AddPredicate {
+        fragment: String,
+    },
+    ReplacePredicate {
+        family: String,
+        fragment: String,
+        branch_id: Option<String>,
+    },
+    RemovePredicate {
+        family: String,
+    },
+    AddAlternative {
+        fragment: String,
+    },
+    ReplaceIntent {
+        query: String,
+    },
 }
 
 /// Compiles one conversational search turn into a full candidate query.
@@ -109,10 +121,15 @@ pub fn compile_search_revision(
     }
 
     if explicitly_corrects {
-        if active_branch_count > 1 && !targets_every_branch(turn) {
-            return clarification(SearchRevisionOperation::Refine, active_branch_count);
-        }
-        if let Some(query) = replace_budget_constraint(parent, turn) {
+        let target_branch = if active_branch_count > 1 && !targets_every_branch(turn) {
+            let Some(index) = targeted_branch_index(turn, active_branch_count) else {
+                return clarification(SearchRevisionOperation::Refine, active_branch_count);
+            };
+            Some(index)
+        } else {
+            None
+        };
+        if let Some(query) = replace_budget_constraint(parent, turn, target_branch) {
             return candidate_with_patch(
                 SearchRevisionOperation::Refine,
                 query,
@@ -120,6 +137,7 @@ pub fn compile_search_revision(
                 SearchRevisionPatch::ReplacePredicate {
                     family: "price".to_string(),
                     fragment: turn.to_string(),
+                    branch_id: target_branch.map(|index| format!("branch-{}", index + 1)),
                 },
             );
         }
@@ -223,6 +241,22 @@ fn targets_every_branch(value: &str) -> bool {
     ["all", "both", "every"]
         .iter()
         .any(|target| lower.split_whitespace().any(|word| word == *target))
+}
+
+fn targeted_branch_index(value: &str, branch_count: usize) -> Option<usize> {
+    let tokens = super::parser::query_tokens(value);
+    search_parser_config()
+        .discourse
+        .branch_ordinals
+        .iter()
+        .enumerate()
+        .find(|(index, ordinal)| {
+            *index < branch_count
+                && tokens
+                    .iter()
+                    .any(|token| token.eq_ignore_ascii_case(ordinal))
+        })
+        .map(|(index, _)| index)
 }
 
 fn strip_configured_prefix<'a>(value: &'a str, prefixes: &[String]) -> Option<&'a str> {
@@ -412,7 +446,11 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
         == 0
 }
 
-fn replace_budget_constraint(parent: &str, utterance: &str) -> Option<String> {
+fn replace_budget_constraint(
+    parent: &str,
+    utterance: &str,
+    target_branch: Option<usize>,
+) -> Option<String> {
     let parent_slots = super::parser::parse_query_slots(parent);
     let replacement_slots = super::parser::parse_query_slots(utterance);
     let replacement = replacement_slots.budgets.first()?;
@@ -420,8 +458,25 @@ fn replace_budget_constraint(parent: &str, utterance: &str) -> Option<String> {
     if replacement_text.is_empty() || parent_slots.budgets.is_empty() {
         return None;
     }
+    let targeted_span = target_branch.and_then(|target| {
+        super::query_plan::discourse_branch_layout(parent)
+            .and_then(|layout| layout.segments.get(target).copied())
+    });
+    if target_branch.is_some() && targeted_span.is_none() {
+        return None;
+    }
+    let budgets = parent_slots
+        .budgets
+        .iter()
+        .filter(|budget| {
+            targeted_span.is_none_or(|span| budget.start >= span.start && budget.end <= span.end)
+        })
+        .collect::<Vec<_>>();
+    if budgets.is_empty() {
+        return None;
+    }
     let mut query = parent.to_string();
-    for budget in parent_slots.budgets.iter().rev() {
+    for budget in budgets.into_iter().rev() {
         if budget.start <= budget.end && budget.end <= query.len() {
             query.replace_range(budget.start..budget.end, replacement_text);
         }
@@ -630,6 +685,22 @@ mod tests {
         assert!(matches!(
             all.patches.as_slice(),
             [SearchRevisionPatch::ReplacePredicate { family, .. }] if family == "price"
+        ));
+
+        let second =
+            compile_search_revision(parent, "Increase the second budget to 2.4Cr", 2, LIMITS);
+        assert_eq!(second.outcome, SearchRevisionOutcome::Candidate);
+        assert_eq!(
+            second.candidate_query.as_deref(),
+            Some("3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2.4Cr")
+        );
+        assert!(matches!(
+            second.patches.as_slice(),
+            [SearchRevisionPatch::ReplacePredicate {
+                family,
+                branch_id: Some(branch_id),
+                ..
+            }] if family == "price" && branch_id == "branch-2"
         ));
     }
 }
