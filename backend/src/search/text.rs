@@ -2770,9 +2770,6 @@ pub fn compute_confidence(
     // Fact coverage: min(fact_count/configured full-coverage threshold, 1.0)
     let (coverage_score, coverage_explanation) = compute_fact_coverage(&node);
 
-    // Freshness with bulk-creation cap
-    let (freshness_score, freshness_explanation) = compute_freshness(&node);
-
     // Match quality: graph_driven_pct / 100.0
     let match_score = (graph_driven_pct / 100.0) as f64;
     let match_explanation = format!(
@@ -2780,9 +2777,8 @@ pub fn compute_confidence(
         graph_driven_pct.round() as u32
     );
 
-    // Weighted average: source 0.4, coverage 0.2, freshness 0.2, match 0.2
-    let overall =
-        source_score * 0.4 + coverage_score * 0.2 + freshness_score * 0.2 + match_score * 0.2;
+    // Observation time is provenance, not a quality signal.
+    let overall = source_score * 0.5 + coverage_score * 0.25 + match_score * 0.25;
 
     let label = confidence_label(overall);
 
@@ -2790,25 +2786,19 @@ pub fn compute_confidence(
         ConfidenceComponent {
             dimension: "source_quality".to_string(),
             score: source_score,
-            weight: 0.4,
+            weight: 0.5,
             explanation: source_explanation,
         },
         ConfidenceComponent {
             dimension: "fact_coverage".to_string(),
             score: coverage_score,
-            weight: 0.2,
+            weight: 0.25,
             explanation: coverage_explanation,
-        },
-        ConfidenceComponent {
-            dimension: "freshness".to_string(),
-            score: freshness_score,
-            weight: 0.2,
-            explanation: freshness_explanation,
         },
         ConfidenceComponent {
             dimension: "match_quality".to_string(),
             score: match_score,
-            weight: 0.2,
+            weight: 0.25,
             explanation: match_explanation,
         },
     ];
@@ -2863,26 +2853,12 @@ fn compute_confidence_from_serving_facts(
         threshold as u32
     );
 
-    let newest = rows.facts.iter().map(|fact| fact.learned_at).max()?;
-    let days_ago = (chrono::Utc::now() - newest).num_days().max(0) as u32;
-    let freshness_score = if days_ago < 7 {
-        1.0
-    } else if days_ago < 30 {
-        0.8
-    } else if days_ago < 90 {
-        0.5
-    } else {
-        0.2
-    };
-    let freshness_explanation = format!("Newest serving fact learned {days_ago} days ago");
-
     let match_score = (graph_driven_pct / 100.0) as f64;
     let match_explanation = format!(
         "{}% of scoring from serving/graph evidence",
         graph_driven_pct.round() as u32
     );
-    let overall =
-        source_score * 0.4 + coverage_score * 0.2 + freshness_score * 0.2 + match_score * 0.2;
+    let overall = source_score * 0.5 + coverage_score * 0.25 + match_score * 0.25;
 
     Some(ConfidenceScore {
         overall: (overall * 100.0).round() / 100.0,
@@ -2891,25 +2867,19 @@ fn compute_confidence_from_serving_facts(
             ConfidenceComponent {
                 dimension: "source_quality".to_string(),
                 score: source_score,
-                weight: 0.4,
+                weight: 0.5,
                 explanation: source_explanation,
             },
             ConfidenceComponent {
                 dimension: "fact_coverage".to_string(),
                 score: coverage_score,
-                weight: 0.2,
+                weight: 0.25,
                 explanation: coverage_explanation,
-            },
-            ConfidenceComponent {
-                dimension: "freshness".to_string(),
-                score: freshness_score,
-                weight: 0.2,
-                explanation: freshness_explanation,
             },
             ConfidenceComponent {
                 dimension: "match_quality".to_string(),
                 score: match_score,
-                weight: 0.2,
+                weight: 0.25,
                 explanation: match_explanation,
             },
         ],
@@ -2929,8 +2899,6 @@ pub fn compute_confidence_for_detail(
 
     let (source_score, source_explanation) = compute_source_quality(&node);
     let (coverage_score, coverage_explanation) = compute_fact_coverage(&node);
-    let (freshness_score, freshness_explanation) = compute_freshness(&node);
-
     // Fact source quality: average confidence of all facts on this node.
     // This replaces match_quality (graph_driven_pct) which is 0.0 on detail pages.
     let (fact_quality_score, fact_quality_explanation) = if let Some(n) = &node {
@@ -2952,11 +2920,7 @@ pub fn compute_confidence_for_detail(
         (0.0, "No knowledge graph data".to_string())
     };
 
-    // Weighted average: source 0.4, coverage 0.2, freshness 0.2, fact_quality 0.2
-    let overall = source_score * 0.4
-        + coverage_score * 0.2
-        + freshness_score * 0.2
-        + fact_quality_score * 0.2;
+    let overall = source_score * 0.5 + coverage_score * 0.25 + fact_quality_score * 0.25;
 
     let label = confidence_label(overall);
 
@@ -2964,25 +2928,19 @@ pub fn compute_confidence_for_detail(
         ConfidenceComponent {
             dimension: "source_quality".to_string(),
             score: source_score,
-            weight: 0.4,
+            weight: 0.5,
             explanation: source_explanation,
         },
         ConfidenceComponent {
             dimension: "fact_coverage".to_string(),
             score: coverage_score,
-            weight: 0.2,
+            weight: 0.25,
             explanation: coverage_explanation,
-        },
-        ConfidenceComponent {
-            dimension: "freshness".to_string(),
-            score: freshness_score,
-            weight: 0.2,
-            explanation: freshness_explanation,
         },
         ConfidenceComponent {
             dimension: "fact_source_quality".to_string(),
             score: fact_quality_score,
-            weight: 0.2,
+            weight: 0.25,
             explanation: fact_quality_explanation,
         },
     ];
@@ -3025,68 +2983,6 @@ fn compute_fact_coverage(node: &Option<&Node>) -> (f64, String) {
         fact_count, threshold as u32
     );
     (score, explanation)
-}
-
-/// Compute freshness score with a cap for bulk-created nodes.
-/// If all facts share the same learned_at timestamp (within 1 second), freshness
-/// is capped at 0.5 to distinguish "freshly enriched" from "bulk-seeded".
-fn compute_freshness(node: &Option<&Node>) -> (f64, String) {
-    if let Some(n) = node {
-        let most_recent_fact_ts = n.facts.iter().map(|f| f.learned_at).max();
-        let effective_ts = most_recent_fact_ts.unwrap_or(n.updated_at);
-        let days_ago = (chrono::Utc::now() - effective_ts).num_days().max(0) as u32;
-
-        let raw_score: f64 = if days_ago < 7 {
-            1.0
-        } else if days_ago < 30 {
-            0.8
-        } else if days_ago < 90 {
-            0.5
-        } else {
-            0.3
-        };
-
-        // Cap freshness at 0.5 if all facts have the same timestamp (within 1s).
-        // This catches bulk-imported and newly discovered nodes where all facts
-        // were created in a single batch, vs genuinely enriched nodes where facts
-        // were added over time by different skills.
-        let capped = if n.facts.len() >= 2 && all_facts_same_timestamp(&n.facts) {
-            raw_score.min(0.5)
-        } else {
-            raw_score
-        };
-
-        let suffix = if capped < raw_score {
-            " (bulk-created cap)"
-        } else {
-            ""
-        };
-        let label = match days_ago {
-            0..=6 => "fresh",
-            7..=29 => "recent",
-            30..=89 => "aging",
-            _ => "stale",
-        };
-
-        (
-            capped,
-            format!("Updated {} days ago ({}){}", days_ago, label, suffix),
-        )
-    } else {
-        (0.3, "No update timestamp available".to_string())
-    }
-}
-
-/// Check if all facts in a slice share the same learned_at timestamp within 1 second.
-fn all_facts_same_timestamp(facts: &[crate::knowledge::SourcedFact]) -> bool {
-    if facts.is_empty() {
-        return true;
-    }
-    let first = facts[0].learned_at;
-    facts.iter().all(|f| {
-        let diff = (f.learned_at - first).num_seconds().abs();
-        diff <= 1
-    })
 }
 
 fn confidence_label(overall: f64) -> String {
@@ -4010,8 +3906,6 @@ mod tests {
         for i in 0..10 {
             let mut fact = make_fact(&format!("fact_{}", i));
             fact.confidence = 0.8;
-            // Space out timestamps so freshness cap doesn't kick in
-            fact.learned_at = chrono::Utc::now() - chrono::Duration::hours(i as i64);
             node.add_fact(fact);
         }
         g.add_node(node);
@@ -4039,85 +3933,59 @@ mod tests {
             fsq.score
         );
 
-        // Overall should be High (RERA + good coverage + fresh + high fact quality)
+        // Overall should be High (RERA + good coverage + high fact quality)
         assert_eq!(score.label, "High");
     }
 
     #[test]
-    fn test_freshness_capped_for_bulk_created_nodes() {
-        // All facts created at the same timestamp — freshness should be capped at 0.5
+    fn test_bulk_timestamp_is_not_a_confidence_component() {
         let g = graph_with_society_node("bulk-created", Some(RootSource::Discovered), 5);
         let score = compute_confidence_for_detail(Some(&g), "bulk-created").unwrap();
-
-        let freshness = score
+        assert!(score
             .components
             .iter()
-            .find(|c| c.dimension == "freshness")
-            .unwrap();
-        assert!(
-            freshness.score <= 0.5,
-            "Bulk-created freshness should be capped at 0.5, got {}",
-            freshness.score
-        );
-        assert!(
-            freshness.explanation.contains("bulk-created cap"),
-            "Explanation should mention bulk-created cap: {}",
-            freshness.explanation
-        );
+            .all(|component| component.dimension != "freshness"));
     }
 
     #[test]
-    fn test_freshness_not_capped_after_enrichment() {
-        // Facts with different timestamps (spread over hours) — freshness should NOT be capped
+    fn test_fact_timestamps_do_not_change_detail_confidence() {
         let mut g = KnowledgeGraph::new();
-        let node_id = "society:enriched-over-time";
-        let mut node = Node::new(node_id, NodeType::Society, "enriched-over-time");
-        node.root_source = Some(RootSource::Rera);
+        let timestamp = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
+        let mut same_time = Node::new("society:same-time", NodeType::Society, "same-time");
+        same_time.root_source = Some(RootSource::Rera);
+        let mut varied_time = Node::new("society:varied-time", NodeType::Society, "varied-time");
+        varied_time.root_source = Some(RootSource::Rera);
         for i in 0..5 {
-            let mut fact = make_fact(&format!("fact_{}", i));
-            // Space facts apart by 2 seconds each
-            fact.learned_at = chrono::Utc::now() - chrono::Duration::seconds(i as i64 * 2);
-            node.add_fact(fact);
+            let mut same = make_fact(&format!("fact_{i}"));
+            same.learned_at = timestamp;
+            same_time.add_fact(same);
+            let mut varied = make_fact(&format!("fact_{i}"));
+            varied.learned_at = timestamp + chrono::Duration::days(i as i64 * 365);
+            varied_time.add_fact(varied);
         }
-        g.add_node(node);
+        g.add_node(same_time);
+        g.add_node(varied_time);
 
-        let score = compute_confidence_for_detail(Some(&g), "enriched-over-time").unwrap();
-
-        let freshness = score
-            .components
-            .iter()
-            .find(|c| c.dimension == "freshness")
-            .unwrap();
-        assert!(
-            freshness.score > 0.5,
-            "Enriched-over-time freshness should NOT be capped, got {}",
-            freshness.score
-        );
-        // Should be 1.0 since they're all within the last 7 days
-        assert!(
-            (freshness.score - 1.0).abs() < 0.01,
-            "Expected freshness ~1.0 for recent diverse timestamps, got {}",
-            freshness.score
-        );
+        let same = compute_confidence_for_detail(Some(&g), "same-time").unwrap();
+        let varied = compute_confidence_for_detail(Some(&g), "varied-time").unwrap();
+        assert_eq!(same.overall, varied.overall);
+        assert_eq!(same.label, varied.label);
+        assert_eq!(same.components.len(), varied.components.len());
+        for (left, right) in same.components.iter().zip(&varied.components) {
+            assert_eq!(left.dimension, right.dimension);
+            assert_eq!(left.score, right.score);
+            assert_eq!(left.weight, right.weight);
+        }
     }
 
     #[test]
-    fn test_freshness_single_fact_not_capped() {
-        // A node with only 1 fact should NOT be capped (need >= 2 facts for bulk detection)
+    fn test_single_fact_confidence_does_not_depend_on_timestamp() {
         let g = graph_with_society_node("single-fact", Some(RootSource::Discovered), 1);
         let score = compute_confidence_for_detail(Some(&g), "single-fact").unwrap();
-
-        let freshness = score
+        assert!(score
             .components
             .iter()
-            .find(|c| c.dimension == "freshness")
-            .unwrap();
-        // Single fact => all_facts_same_timestamp returns true, but n.facts.len() < 2 guard prevents cap
-        assert!(
-            freshness.score > 0.5,
-            "Single-fact node should not be capped, got {}",
-            freshness.score
-        );
+            .all(|component| component.dimension != "freshness"));
     }
 
     fn local_property(

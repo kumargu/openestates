@@ -185,6 +185,36 @@ bank; select compatible groups through its named suites.
 
 When fixing a search example, add regression coverage for the generic intent class, not only the named example. A query like "near Bagmane" may expose the issue, but the test should prove named-place intent, numeric constraints, source-backed preferences, and tie-break ordering continue to work for arbitrary configured dimensions.
 
+### Test investment discipline
+
+While the architecture is changing rapidly, default to high-value vertical
+contracts rather than broad unit-test coverage. The primary gates are the
+frozen query bank, focused integration or DAG-to-serving contracts, API smoke
+tests, compile/type checks, and the search hardcoding audit.
+
+- Small unit tests remain worthwhile only for compact, deterministic safety
+  invariants whose contracts are already stable, such as evidence identity,
+  row-order stability, four-state Boolean logic, and exact geometry.
+- Prefer extending an existing integration or query-bank scenario over adding
+  duplicate synthetic fixture builders. Keep existing tests; when fixture
+  plumbing changes, update the fixture without cloning it or weakening its
+  product assertion.
+- Add regression coverage when a failure exposes generic product behavior, not
+  when it only mirrors an evolving implementation detail. Record whether a new
+  test caught a real bug or merely encoded an expectation.
+- Run the narrow relevant gate plus compile/type checks after a small change.
+  Run broader suites at coherent milestones, not after every tiny checkpoint.
+- Once the architecture and contracts stabilize, add broader unit regression
+  coverage in a focused pass where its maintenance cost is justified.
+
+### Time metadata is not product logic
+
+Observation and ingestion timestamps exist for provenance, diagnostics, and
+display only. Do not use elapsed time, timestamp ordering, freshness decay, or
+age windows to change search eligibility, matching, confidence, scoring, or
+ranking. Property facts must win or fail on explicit evidence and configured
+semantics, not on when a row happened to be written.
+
 Search work must run as a proof loop, not as accumulated code:
 - Start each search-quality session with a chain audit: list the relevant local commits or touched files, map them to the current milestone, and call out anything that looks like duplicated, bypassed, or accidentally productized experimental behavior.
 - Run the current benchmark or a focused contract before changing behavior, unless the task is pure documentation. Keep the baseline artifact path in the notes.
@@ -440,7 +470,9 @@ At the start of each day of work:
 
 1. Review the previous day's output — read the code, check it compiles/runs.
 2. Accept or fix — build on solid work; fix broken work before adding scope.
-3. Checkpoint after each meaningful unit — compile, test, manual check. Don't stack 5 unverified changes.
+3. Checkpoint after each meaningful unit — compile, run the narrow relevant
+   gate, and manually check where useful. Run broader suites at coherent
+   milestones. Don't stack 5 unverified changes.
 
 Do not start fresh each day and ignore what was built. That leads to conflicting and duplicated code.
 

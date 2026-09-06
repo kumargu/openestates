@@ -4,7 +4,7 @@
 
 - Reset recorded: 2026-09-06 Asia/Kolkata
 - Continuation branch: `feat/issue-118-consolidated`
-- Continuation HEAD: `cb7db89d` (`feat: trace external listing observations`)
+- Continuation HEAD: Checkpoint 11 (`refactor: keep timestamps out of search scoring`)
 - Preserved source branch: `feat/issue-118-spatial-intent`
 - Merge base: `d1c06e2b` (`main` at the start of Issue 118 work)
 - Worktree at reset: clean
@@ -30,6 +30,10 @@ checkpoint-local next steps where they differ from the consolidated plan.
 12. `c574e092` — define and validate durable evidence identities.
 13. `820c6b95` — preserve validated observations in serving fact rows.
 14. `cb7db89d` — trace external-listing observations through the DAG.
+15. `59246b97` — qualify inventory search evidence with snapshot-owned receipts.
+16. `72fe4bb6` — focus Issue 118 test investment without weakening the query bank.
+17. Checkpoint 11 (current log commit) — remove timestamp-derived confidence
+    from search ranking.
 
 ### Pulled-forward commitment audit
 
@@ -59,6 +63,9 @@ checkpoint-local next steps where they differ from the consolidated plan.
   scoring policy, and proof destinations remain config/DAG-owned. Rust owns
   only structural Boolean, comparison, geometry, and evaluation mechanics.
 - BHK and price must be verified by the same inventory observation.
+- Observation times are provenance metadata only. Timestamp ordering, elapsed
+  time, freshness decay, and age windows cannot affect search eligibility,
+  matching, confidence, scoring, or ranking.
 - Spatial recall uses an index followed by exact geometry evaluation. Polygon
   holes and all MultiPolygon parts must survive materialization and serving.
 - A trusted point is an explicitly labelled distance fallback only. It cannot
@@ -77,9 +84,8 @@ checkpoint-local next steps where they differ from the consolidated plan.
   smoke coverage, and the hardcoding audit. Add unit tests only for compact,
   stable algorithms or safety invariants (identity validation, four-state
   Boolean logic, exact geometry), not to duplicate evolving fixture plumbing.
-  When a change breaks an old unit fixture without exposing a product defect,
-  migrate or remove that fixture instead of manufacturing data solely to keep
-  it green.
+  Keep existing tests and update shared fixtures when plumbing changes; do not
+  clone fixtures or weaken product assertions merely to make a test green.
 
 ### Remaining implementation plan
 
@@ -192,7 +198,7 @@ failure stops further stacking; honest coverage gaps do not.
 ### Current verified gate summary
 
 The detailed commands and counts remain recorded in the checkpoints below.
-Through the uncommitted Checkpoint 10 working tree, focused Rust search and
+Through committed Checkpoint 10, focused Rust search and
 serving contracts, all-target Cargo check, formatting, smoke tests, and
 `git diff --check` pass. The hardcoding audit remains at 330 findings, 28
 fact-key comparisons, and zero blocked aliases, with zero delta from the
@@ -211,6 +217,52 @@ snapshot's observed inventory options and four-state evaluation. Required BHK
 and budget predicates must accept only validated matches projected from the
 same `EvidenceRef`; preserve the frozen ordered results with observed fixture
 receipts rather than empty satisfied evaluations.
+
+## Checkpoint 11 — timestamps removed from search confidence
+
+- Parent commit: `72fe4bb6`
+- Classified issue: ranking `architecture_gap`
+
+### Implemented
+
+- Removed fact age, ingestion recency, and bulk-timestamp heuristics from graph
+  and serving confidence scores. Search ranking can no longer change as wall
+  time passes or because rows were ingested together.
+- Rebalanced the remaining source quality, evidence coverage, match quality,
+  and fact quality components to sum to one.
+- Kept observation timestamps on evidence records for provenance. Existing
+  timestamp-focused tests were retained and changed to assert that timestamps
+  do not affect confidence.
+- Recorded the integration-first test policy and the prohibition on timestamp-
+  based product logic in `AGENTS.md`.
+
+### Gates
+
+- Focused confidence/search unit gate: 24 passed.
+- Frozen conversational query bank: 10 passed with unchanged expectations.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check --all-targets`: passed.
+- Hardcoding audit: 330 findings, 28 fact-key comparisons, zero blocked aliases;
+  delta remains zero.
+- `cargo fmt` and `git diff --check`: passed.
+- The first focused run found only a test assertion type mismatch, not a
+  product bug; the production API type was left unchanged.
+
+### Candidate identity
+
+No Issue 118 candidate lake or bundle exists. No lake pointer changed.
+
+### Next exact command
+
+```bash
+sed -n '1,240p' backend/src/search/evaluation.rs
+sed -n '1,240p' backend/src/search/text.rs
+rg -n "InventoryOption::from_property|BooleanEvaluation::satisfied\(Vec::new" backend/src/search
+```
+
+Move inventory predicate evaluation and verified-match construction into the
+shared four-state evaluator. Pass the snapshot's observed inventory options
+through `TextSearch`, retain those exact matches on result cards, and remove
+the later duplicate inventory proof projection from `SearchEngine`.
 
 ## Goal and invariants
 
