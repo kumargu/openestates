@@ -2403,7 +2403,7 @@ impl FixtureBuilder {
                 &[4.5, 4.0],
             );
         }
-        self.facts.push(observed_inventory_fact(&entity_id, &spec));
+        self.facts.push(inventory_receipt_fact(&entity_id, &spec));
         self.properties.push(property(&spec, &society_id));
     }
 
@@ -2909,7 +2909,7 @@ fn serving_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFac
     }
 }
 
-fn observed_inventory_fact(entity_id: &str, spec: &HomeSpec) -> ServingFactRecord {
+fn inventory_receipt_fact(entity_id: &str, spec: &HomeSpec) -> ServingFactRecord {
     let value = serde_json::json!({
         "bhk": spec.bhk,
         "price": spec.price,

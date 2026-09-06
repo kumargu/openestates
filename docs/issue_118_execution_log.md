@@ -72,6 +72,14 @@ checkpoint-local next steps where they differ from the consolidated plan.
 - Coverage gaps are informational. Corrupt geometry, invalid merges, dangling
   or cross-snapshot evidence, invalid derivations, collector defects, and
   advertised capabilities without evaluator/proof bindings block promotion.
+- Test investment is integration-first while the architecture is moving:
+  preserve the frozen query-bank contract, one vertical DAG/serving contract,
+  smoke coverage, and the hardcoding audit. Add unit tests only for compact,
+  stable algorithms or safety invariants (identity validation, four-state
+  Boolean logic, exact geometry), not to duplicate evolving fixture plumbing.
+  When a change breaks an old unit fixture without exposing a product defect,
+  migrate or remove that fixture instead of manufacturing data solely to keep
+  it green.
 
 ### Remaining implementation plan
 
