@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use backend::graph::GraphIndex;
 use backend::knowledge::FactValue;
-use backend::models::Property;
+use backend::models::{Property, Society};
 use backend::search::geo::GeoSearchIndex;
 use backend::search::{
     compile_search_revision, SearchCapabilityIndex, SearchEngine, SearchIndex,
@@ -13,6 +14,7 @@ use backend::serving::{
     ServingEntityAliasIndex, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
     ServingSearchMetadataRecord, SpatialServingIndex, TantivyRecallIndex,
 };
+use backend::state::SearchRuntimeSnapshot;
 use chrono::{TimeZone, Utc};
 use serde::Deserialize;
 use tempfile::tempdir;
@@ -1742,7 +1744,7 @@ struct ObservedResolvedEntity {
 
 struct MockSearchFixture {
     properties: Vec<Property>,
-    bundle: LoadedServingBundle,
+    bundle: Arc<LoadedServingBundle>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -2264,28 +2266,40 @@ impl MockSearchFixture {
     fn search_output(&self, query: &str) -> backend::search::engine::SearchEngineOutput {
         let index =
             SearchIndex::build_with_serving_entities(&self.properties, &self.bundle.entities);
-        let society_names = self
-            .properties
-            .iter()
-            .map(|property| (property.society_id.clone(), property.title.clone()))
-            .collect::<HashMap<_, _>>();
-        let property_by_id = self
-            .properties
-            .iter()
-            .enumerate()
-            .map(|(index, property)| (property.id.clone(), index))
-            .collect::<HashMap<_, _>>();
-        SearchEngine {
-            properties: &self.properties,
-            search_index: &index,
-            serving_bundle: Some(&self.bundle),
-            society_names: &society_names,
-            property_by_id: Some(&property_by_id),
-            societies: &[],
-            graph: None,
-        }
-        .search(query)
+        let snapshot = SearchRuntimeSnapshot::new(
+            self.bundle.clone(),
+            self.properties.clone(),
+            mock_societies(&self.properties),
+            Vec::new(),
+            index,
+        );
+        SearchEngine::new(&snapshot).search(query)
     }
+}
+
+fn mock_societies(properties: &[Property]) -> Vec<Society> {
+    properties
+        .iter()
+        .map(|property| Society {
+            id: property.society_id.clone(),
+            name: property.title.clone(),
+            area: property.area.clone(),
+            city: property.city.clone(),
+            builder_name: property.builder_name.clone(),
+            year_built: 0,
+            total_units: 0,
+            summary: String::new(),
+            maintenance_sentiment: String::new(),
+            livability_sentiment: String::new(),
+            common_positives: Vec::new(),
+            common_complaints: Vec::new(),
+            review_summary: String::new(),
+            google_reviews_url: None,
+            future_google_place_name: String::new(),
+            future_google_place_id: None,
+            future_review_enrichment_status: String::new(),
+        })
+        .collect()
 }
 
 #[derive(Default)]
@@ -2509,7 +2523,7 @@ impl FixtureBuilder {
         };
         MockSearchFixture {
             properties: self.properties,
-            bundle,
+            bundle: Arc::new(bundle),
         }
     }
 }

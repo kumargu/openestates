@@ -4,12 +4,11 @@ use std::time::Instant;
 use serde::Serialize;
 
 use crate::dag_config::{area_alias_entries, search_resolution_config};
-use crate::knowledge::KnowledgeGraph;
-use crate::models::{Property, Society};
+use crate::models::Property;
 use crate::serving::{
     LoadedServingBundle, ServingEntityAliasIndex, ServingEntityRecord, TantivyRecallHit,
 };
-use crate::state::SEARCH_ENGINE_VERSION;
+use crate::state::{SearchRuntimeSnapshot, SEARCH_ENGINE_VERSION};
 
 use super::ast::{CompiledQuery, ConstraintExpr, ResolvedEntityConstraint};
 use super::compiled_plan::{CompiledSearchPlan, ResolvedEntityHandle};
@@ -30,13 +29,7 @@ const DIAGNOSTIC_ID_LIMIT: usize = 20;
 const DIAGNOSTIC_SCORE_LIMIT: usize = 8;
 
 pub struct SearchEngine<'a> {
-    pub properties: &'a [Property],
-    pub search_index: &'a SearchIndex,
-    pub serving_bundle: Option<&'a LoadedServingBundle>,
-    pub society_names: &'a HashMap<String, String>,
-    pub property_by_id: Option<&'a HashMap<String, usize>>,
-    pub societies: &'a [Society],
-    pub graph: Option<&'a KnowledgeGraph>,
+    snapshot: &'a SearchRuntimeSnapshot,
 }
 
 #[derive(Debug, Clone)]
@@ -177,6 +170,10 @@ struct PreparedSearchBranch<'a> {
 }
 
 impl<'a> SearchEngine<'a> {
+    pub fn new(snapshot: &'a SearchRuntimeSnapshot) -> Self {
+        Self { snapshot }
+    }
+
     pub fn search(&self, query: &str) -> SearchEngineOutput {
         let top_level_plan = query_plan::compile_query_plan(query);
         let aggregate_intent = query_plan::project_search_intent(query, &top_level_plan);
@@ -264,9 +261,7 @@ impl<'a> SearchEngine<'a> {
     }
 
     fn should_coalesce_connected_scopes(&self, branches: &[PreparedSearchBranch<'_>]) -> bool {
-        let Some(bundle) = self.serving_bundle else {
-            return false;
-        };
+        let bundle = self.snapshot.bundle.as_ref();
         if branches.len() < 2 || !nonspatial_branch_constraints_compatible(branches) {
             return false;
         }
@@ -418,18 +413,20 @@ impl<'a> SearchEngine<'a> {
             query,
             &query_plan,
             &parsed_intent,
-            self.serving_bundle,
-            self.properties,
+            Some(self.snapshot.bundle.as_ref()),
+            &self.snapshot.properties,
         );
         let area_context_ids =
             explicit_area_context_ids(query, &query_plan, &serving_resolved_entities);
-        let geo_query = self.serving_bundle.and_then(|bundle| {
-            bundle.geo_index.query_with_plan_and_area_context(
+        let geo_query = self
+            .snapshot
+            .bundle
+            .geo_index
+            .query_with_plan_and_area_context(
                 &query_plan,
-                Some(&bundle.spatial_index),
+                Some(&self.snapshot.bundle.spatial_index),
                 &area_context_ids,
-            )
-        });
+            );
         retain_relation_compatible_entities(
             query,
             &query_plan,
@@ -459,16 +456,20 @@ impl<'a> SearchEngine<'a> {
                     geo_query.as_ref(),
                 )
             });
-        let unavailable_required_capability = self.serving_bundle.and_then(|bundle| {
-            compiled_query
-                .intent
-                .positive_preferences
-                .iter()
-                .chain(compiled_query.intent.negative_preferences.iter())
-                .filter(|preference| preference.required)
-                .find(|preference| !bundle.search_capabilities.supports_preference(preference))
-                .map(|preference| preference.raw_text.clone())
-        });
+        let unavailable_required_capability = compiled_query
+            .intent
+            .positive_preferences
+            .iter()
+            .chain(compiled_query.intent.negative_preferences.iter())
+            .filter(|preference| preference.required)
+            .find(|preference| {
+                !self
+                    .snapshot
+                    .bundle
+                    .search_capabilities
+                    .supports_preference(preference)
+            })
+            .map(|preference| preference.raw_text.clone());
 
         PreparedSearchBranch {
             query: query.to_string(),
@@ -499,7 +500,7 @@ impl<'a> SearchEngine<'a> {
         let intent = &compiled_query.intent;
 
         let mut structured_candidate_ids = timer.measure("structured_recall", || {
-            self.search_index.recall_ids(&compiled_query)
+            self.snapshot.search_index.recall_ids(&compiled_query)
         });
         let structured_total_count = structured_candidate_ids.len();
         if !has_filter_intent(&compiled_query)
@@ -509,44 +510,48 @@ impl<'a> SearchEngine<'a> {
         }
         let eligible_property_ids =
             (has_filter_intent(&compiled_query) || !requested_societies.is_empty()).then(|| {
-                self.search_index
+                self.snapshot
+                    .search_index
                     .recall_constraint_ids(&compiled_query)
                     .into_iter()
                     .collect::<HashSet<_>>()
             });
 
         let tantivy_recall = timer.measure("tantivy_recall", || {
-            tantivy_candidate_ids(self.serving_bundle, query, self.search_index)
+            tantivy_candidate_ids(
+                Some(self.snapshot.bundle.as_ref()),
+                query,
+                &self.snapshot.search_index,
+            )
         });
 
         let mut geo_candidate_ids = timer.measure("geo_recall", || {
             let coordinate_candidates = geo_query
                 .as_ref()
-                .zip(self.serving_bundle)
-                .map(|(query, bundle)| {
+                .map(|query| {
                     query
                         .spatial_candidate_society_ids(
-                            &bundle.spatial_index,
-                            self.search_index,
+                            &self.snapshot.bundle.spatial_index,
+                            &self.snapshot.search_index,
                             eligible_property_ids.as_ref(),
                         )
                         .into_iter()
                         .flat_map(|entity_id| {
-                            self.search_index.property_ids_for_entity_id(&entity_id)
+                            self.snapshot
+                                .search_index
+                                .property_ids_for_entity_id(&entity_id)
                         })
                         .collect()
                 })
                 .unwrap_or_default();
             let serving_fact_candidates = geo_query
                 .as_ref()
-                .and_then(|query| {
-                    self.serving_bundle.map(|bundle| {
-                        query.serving_fact_candidate_property_ids(
-                            self.search_index,
-                            &bundle.fact_index,
-                            eligible_property_ids.as_ref(),
-                        )
-                    })
+                .map(|query| {
+                    query.serving_fact_candidate_property_ids(
+                        &self.snapshot.search_index,
+                        &self.snapshot.bundle.fact_index,
+                        eligible_property_ids.as_ref(),
+                    )
                 })
                 .unwrap_or_default();
             merge_candidate_ids(
@@ -557,15 +562,17 @@ impl<'a> SearchEngine<'a> {
         });
         let mut verified_spatial_matches = HashMap::new();
         let mut spatial_evaluation_gaps = Vec::new();
-        if let (Some(query), Some(bundle)) = (geo_query.as_ref(), self.serving_bundle) {
+        if let Some(query) = geo_query.as_ref() {
             if query.has_hard_clauses() {
                 geo_candidate_ids.retain(|property_id| {
                     let property = self
+                        .snapshot
                         .property_by_id
-                        .and_then(|by_id| by_id.get(property_id))
-                        .and_then(|index| self.properties.get(*index))
+                        .get(property_id)
+                        .and_then(|index| self.snapshot.properties.get(*index))
                         .or_else(|| {
-                            self.properties
+                            self.snapshot
+                                .properties
                                 .iter()
                                 .find(|property| property.id == *property_id)
                         });
@@ -574,10 +581,10 @@ impl<'a> SearchEngine<'a> {
                     };
                     let evaluation = query.evaluate_required_for_property(
                         property,
-                        self.search_index,
-                        &bundle.spatial_index,
-                        &bundle.fact_index,
-                        &bundle.manifest.bundle_version,
+                        &self.snapshot.search_index,
+                        &self.snapshot.bundle.spatial_index,
+                        &self.snapshot.bundle.fact_index,
+                        &self.snapshot.version_key.serving_bundle_version,
                     );
                     if evaluation.is_satisfied() {
                         verified_spatial_matches
@@ -599,8 +606,8 @@ impl<'a> SearchEngine<'a> {
         }
         if let Some(query) = geo_query.as_mut() {
             query.restrict_evidence_to_properties(
-                self.properties,
-                self.search_index,
+                &self.snapshot.properties,
+                &self.snapshot.search_index,
                 &geo_candidate_ids,
             );
         }
@@ -641,16 +648,11 @@ impl<'a> SearchEngine<'a> {
             merged_extra_candidate_ids: extra_candidate_ids,
             ranking_candidate_ids,
         };
-        let serving_facts = self.serving_bundle.map(|bundle| &bundle.fact_index);
-        let ranking_graph = if serving_facts.is_some() {
-            None
-        } else {
-            self.graph
-        };
+        let serving_facts = Some(&self.snapshot.bundle.fact_index);
         let ranking_candidate_indexes = recall_set
             .ranking_candidate_ids
             .as_ref()
-            .and_then(|ids| candidate_property_indexes(ids, self.property_by_id));
+            .and_then(|ids| candidate_property_indexes(ids, Some(&self.snapshot.property_by_id)));
 
         let mut results = timer.measure("ranking", || {
             if unresolved_entity_clause.is_some()
@@ -664,29 +666,29 @@ impl<'a> SearchEngine<'a> {
                 Vec::new()
             } else {
                 TextSearch::search(TextSearchRequest {
-                    properties: self.properties,
-                    search_index: Some(self.search_index),
+                    properties: &self.snapshot.properties,
+                    search_index: Some(&self.snapshot.search_index),
                     extra_candidate_ids: recall_set.ranking_candidate_ids.as_deref(),
                     candidate_property_indexes: ranking_candidate_indexes.clone(),
                     geo_query: geo_query.as_ref(),
                     serving_facts,
-                    society_names: self.society_names,
-                    societies: self.societies,
+                    society_names: &self.snapshot.society_names,
+                    societies: &self.snapshot.societies,
                     compiled_query: &compiled_query,
-                    graph: ranking_graph,
+                    graph: None,
                 })
             }
         });
-        let snapshot_identity = self.serving_bundle.map_or("no-serving-bundle", |bundle| {
-            bundle.manifest.bundle_version.as_str()
-        });
+        let snapshot_identity = self.snapshot.version_key.serving_bundle_version.as_str();
         for result in &mut results {
             if let Some(property) = self
+                .snapshot
                 .property_by_id
-                .and_then(|by_id| by_id.get(&result.card.id))
-                .and_then(|index| self.properties.get(*index))
+                .get(&result.card.id)
+                .and_then(|index| self.snapshot.properties.get(*index))
                 .or_else(|| {
-                    self.properties
+                    self.snapshot
+                        .properties
                         .iter()
                         .find(|property| property.id == result.card.id)
                 })
@@ -694,7 +696,7 @@ impl<'a> SearchEngine<'a> {
                 result.verified_matches.extend(verified_inventory_matches(
                     &compiled_query,
                     property,
-                    self.search_index,
+                    &self.snapshot.search_index,
                     serving_facts,
                     snapshot_identity,
                 ));
@@ -712,9 +714,9 @@ impl<'a> SearchEngine<'a> {
         let result_sets = build_result_sets(
             &compiled_query,
             &results,
-            self.properties,
-            self.property_by_id,
-            self.search_index,
+            &self.snapshot.properties,
+            Some(&self.snapshot.property_by_id),
+            &self.snapshot.search_index,
             serving_facts,
         );
         let (result_sets, results) =
@@ -740,9 +742,9 @@ impl<'a> SearchEngine<'a> {
         let mut diagnostics = SearchDiagnostics {
             layer_timings: timer.finish(),
             runtime: SearchRuntimeDiagnostics {
-                serving_bundle_version: self
-                    .serving_bundle
-                    .map(|bundle| bundle.manifest.bundle_version.clone()),
+                serving_bundle_version: Some(
+                    self.snapshot.version_key.serving_bundle_version.clone(),
+                ),
                 search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
             },
             resolved: SearchResolutionDiagnostics {
@@ -2384,16 +2386,24 @@ fn candidate_scores(results: &[SearchResultCard]) -> Vec<CandidateScore> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use std::time::Duration;
 
     use chrono::{TimeZone, Utc};
+    use tempfile::tempdir;
 
     use crate::dag_config::SearchResolutionConfig;
+    use crate::graph::GraphIndex;
     use crate::knowledge::FactValue;
+    use crate::models::Society;
+    use crate::search::geo::GeoSearchIndex;
     use crate::search::intent::SearchIntent;
+    use crate::search::SearchCapabilityIndex;
     use crate::serving::{
-        materialize_society_aliases, normalize_alias, ServingEdgeRecord, ServingEntityAliasIndex,
+        materialize_society_aliases, normalize_alias, LoadedServingBundle, ReraEvidenceIndex,
+        ServingBundleManifest, ServingEdgeRecord, ServingEntityAliasIndex,
         ServingEntityAliasRecord, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
+        SpatialServingIndex, TantivyRecallIndex,
     };
 
     use super::*;
@@ -2557,27 +2567,96 @@ mod tests {
     }
 
     fn run_search_for_test(query: &str, properties: &[Property]) -> SearchEngineOutput {
-        let search_index = SearchIndex::build(properties);
-        let society_names = properties
+        let snapshot = test_runtime_snapshot(properties);
+        SearchEngine::new(&snapshot).search(query)
+    }
+
+    fn test_runtime_snapshot(properties: &[Property]) -> SearchRuntimeSnapshot {
+        let entities = properties
             .iter()
-            .map(|property| (property.society_id.clone(), property.society_id.clone()))
-            .collect::<HashMap<_, _>>();
-        let property_by_id = properties
-            .iter()
-            .enumerate()
-            .map(|(index, property)| (property.id.clone(), index))
-            .collect::<HashMap<_, _>>();
-        let societies = Vec::new();
-        SearchEngine {
-            properties,
-            search_index: &search_index,
-            serving_bundle: None,
-            society_names: &society_names,
-            property_by_id: Some(&property_by_id),
-            societies: &societies,
-            graph: None,
-        }
-        .search(query)
+            .map(|property| ServingEntityRecord {
+                entity_id: format!("society:{}", property.society_id),
+                entity_type: "society".to_string(),
+                name: property.society_id.clone(),
+                root_source: Some("engine_test".to_string()),
+                searchable_text: property.society_id.clone(),
+            })
+            .collect::<Vec<_>>();
+        let facts = Vec::new();
+        let fact_index = ServingFactIndex::from_records(facts.clone(), Vec::new());
+        let cache_dir = tempdir().expect("temporary engine test bundle").keep();
+        let recall_index = TantivyRecallIndex::build_in_dir(&cache_dir, &entities, &facts, &[])
+            .expect("engine test recall index");
+        let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
+        let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
+        let search_index = SearchIndex::build_with_serving_entities(properties, &entities);
+        let bundle = LoadedServingBundle {
+            manifest: ServingBundleManifest {
+                bundle_version: "engine-unit-test".to_string(),
+                format_version: 1,
+                created_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+                entity_count: entities.len() as u64,
+                entity_alias_count: 0,
+                fact_count: 0,
+                search_metadata_count: 0,
+                rera_evidence_count: 0,
+                excluded_rera_evidence_society_ids: Vec::new(),
+                edge_count: 0,
+                eligibility_policy_version: 0,
+                quarantined_society_count: 0,
+                quarantine_reason_counts: Default::default(),
+                entity_parquet_key: "entities.parquet".to_string(),
+                entity_alias_parquet_key: None,
+                fact_parquet_key: "facts.parquet".to_string(),
+                search_metadata_parquet_key: "search.parquet".to_string(),
+                rera_evidence_parquet_key: None,
+                edge_parquet_key: None,
+                quarantine_report_key: None,
+                schema_key: "schema.json".to_string(),
+                trust_policy_key: "trust.json".to_string(),
+                tantivy_index_prefix: "tantivy".to_string(),
+                artifacts: Vec::new(),
+            },
+            entities,
+            entity_alias_index: ServingEntityAliasIndex::default(),
+            edges: Vec::new(),
+            graph_index: GraphIndex::default(),
+            recall_index,
+            fact_index,
+            rera_evidence_index: ReraEvidenceIndex::default(),
+            geo_index,
+            spatial_index,
+            search_capabilities: SearchCapabilityIndex::default(),
+            cache_dir,
+        };
+        SearchRuntimeSnapshot::new(
+            Arc::new(bundle),
+            properties.to_vec(),
+            properties
+                .iter()
+                .map(|property| Society {
+                    id: property.society_id.clone(),
+                    name: property.society_id.clone(),
+                    area: property.area.clone(),
+                    city: property.city.clone(),
+                    builder_name: property.builder_name.clone(),
+                    year_built: 0,
+                    total_units: 0,
+                    summary: String::new(),
+                    maintenance_sentiment: String::new(),
+                    livability_sentiment: String::new(),
+                    common_positives: Vec::new(),
+                    common_complaints: Vec::new(),
+                    review_summary: String::new(),
+                    google_reviews_url: None,
+                    future_google_place_name: String::new(),
+                    future_google_place_id: None,
+                    future_review_enrichment_status: String::new(),
+                })
+                .collect(),
+            Vec::new(),
+            search_index,
+        )
     }
 
     #[test]

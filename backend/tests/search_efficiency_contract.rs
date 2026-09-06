@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use backend::graph::GraphIndex;
 use backend::knowledge::FactValue;
-use backend::models::Property;
+use backend::models::{Property, Society};
 use backend::search::geo::GeoSearchIndex;
 use backend::search::intent::parse_intent;
 use backend::search::{
@@ -18,7 +18,7 @@ use backend::serving::{
 };
 use backend::state::{
     CachedSearchOutput, RuntimeVersionKey, SearchCacheKey, SearchLogMessage, SearchResponseCache,
-    SEARCH_ENGINE_VERSION,
+    SearchRuntimeSnapshot, SEARCH_ENGINE_VERSION,
 };
 use chrono::{TimeZone, Utc};
 use tempfile::tempdir;
@@ -151,23 +151,9 @@ fn named_place_search_uses_spatial_discovery_across_large_corpus() {
 
     let bundle = loaded_bundle(entities, facts);
     let search_index = SearchIndex::build_with_serving_entities(&properties, &bundle.entities);
-    let society_names = society_names(&properties);
-    let property_by_id = properties
-        .iter()
-        .enumerate()
-        .map(|(index, property)| (property.id.clone(), index))
-        .collect::<HashMap<_, _>>();
+    let snapshot = search_runtime_snapshot(bundle, &properties, search_index);
     let started = Instant::now();
-    let output = SearchEngine {
-        properties: &properties,
-        search_index: &search_index,
-        serving_bundle: Some(&bundle),
-        society_names: &society_names,
-        property_by_id: Some(&property_by_id),
-        societies: &[],
-        graph: None,
-    }
-    .search("3bhk near Benchmark Tech Park under 2cr");
+    let output = SearchEngine::new(&snapshot).search("3bhk near Benchmark Tech Park under 2cr");
     let elapsed = started.elapsed();
 
     assert!(!output.results.is_empty());
@@ -237,23 +223,9 @@ fn named_area_does_not_expand_to_nearby_areas() {
     ];
     let bundle = loaded_bundle(entities, facts);
     let search_index = SearchIndex::build_with_serving_entities(&properties, &bundle.entities);
-    let society_names = society_names(&properties);
-    let property_by_id = properties
-        .iter()
-        .enumerate()
-        .map(|(index, property)| (property.id.clone(), index))
-        .collect::<HashMap<_, _>>();
+    let snapshot = search_runtime_snapshot(bundle, &properties, search_index);
 
-    let output = SearchEngine {
-        properties: &properties,
-        search_index: &search_index,
-        serving_bundle: Some(&bundle),
-        society_names: &society_names,
-        property_by_id: Some(&property_by_id),
-        societies: &[],
-        graph: None,
-    }
-    .search("3BHK in Whitefield under 2Cr");
+    let output = SearchEngine::new(&snapshot).search("3BHK in Whitefield under 2Cr");
 
     assert_eq!(output.eligible_result_count, 0);
     assert!(output.results.is_empty());
@@ -288,23 +260,9 @@ fn named_project_miss_does_not_relax_the_hard_budget() {
     ];
     let bundle = loaded_bundle(entities, Vec::new());
     let search_index = SearchIndex::build_with_serving_entities(&properties, &bundle.entities);
-    let names = society_names(&properties);
-    let property_by_id = properties
-        .iter()
-        .enumerate()
-        .map(|(index, property)| (property.id.clone(), index))
-        .collect::<HashMap<_, _>>();
+    let snapshot = search_runtime_snapshot(bundle, &properties, search_index);
 
-    let output = SearchEngine {
-        properties: &properties,
-        search_index: &search_index,
-        serving_bundle: Some(&bundle),
-        society_names: &names,
-        property_by_id: Some(&property_by_id),
-        societies: &[],
-        graph: None,
-    }
-    .search("Godrej Splendour 3BHK under ₹1.4Cr");
+    let output = SearchEngine::new(&snapshot).search("Godrej Splendour 3BHK under ₹1.4Cr");
 
     assert_eq!(output.eligible_result_count, 0);
     assert!(output.results.is_empty());
@@ -371,23 +329,10 @@ fn grouped_named_projects_keep_bhk_and_budget_branches_paired() {
     ];
     let bundle = loaded_bundle(entities, Vec::new());
     let search_index = SearchIndex::build_with_serving_entities(&properties, &bundle.entities);
-    let names = society_names(&properties);
-    let property_by_id = properties
-        .iter()
-        .enumerate()
-        .map(|(index, property)| (property.id.clone(), index))
-        .collect::<HashMap<_, _>>();
+    let snapshot = search_runtime_snapshot(bundle, &properties, search_index);
 
-    let output = SearchEngine {
-        properties: &properties,
-        search_index: &search_index,
-        serving_bundle: Some(&bundle),
-        society_names: &names,
-        property_by_id: Some(&property_by_id),
-        societies: &[],
-        graph: None,
-    }
-    .search("Godrej Air 3BHK under ₹2Cr or Prestige Waterford 4BHK under ₹4Cr");
+    let output = SearchEngine::new(&snapshot)
+        .search("Godrej Air 3BHK under ₹2Cr or Prestige Waterford 4BHK under ₹4Cr");
 
     assert_eq!(
         output
@@ -472,23 +417,9 @@ fn unique_partial_society_name_is_a_hard_constraint() {
         }],
     );
     let search_index = SearchIndex::build_with_serving_entities(&properties, &bundle.entities);
-    let names = society_names(&properties);
-    let property_by_id = properties
-        .iter()
-        .enumerate()
-        .map(|(index, property)| (property.id.clone(), index))
-        .collect::<HashMap<_, _>>();
+    let snapshot = search_runtime_snapshot(bundle, &properties, search_index);
 
-    let output = SearchEngine {
-        properties: &properties,
-        search_index: &search_index,
-        serving_bundle: Some(&bundle),
-        society_names: &names,
-        property_by_id: Some(&property_by_id),
-        societies: &[],
-        graph: None,
-    }
-    .search("Waterford 4BHK");
+    let output = SearchEngine::new(&snapshot).search("Waterford 4BHK");
 
     assert_eq!(
         output
@@ -759,6 +690,45 @@ fn loaded_bundle(
     facts: Vec<ServingFactRecord>,
 ) -> LoadedServingBundle {
     loaded_bundle_with_aliases(entities, facts, Vec::new())
+}
+
+fn search_runtime_snapshot(
+    bundle: LoadedServingBundle,
+    properties: &[Property],
+    search_index: SearchIndex,
+) -> SearchRuntimeSnapshot {
+    SearchRuntimeSnapshot::new(
+        Arc::new(bundle),
+        properties.to_vec(),
+        mock_societies(properties),
+        Vec::new(),
+        search_index,
+    )
+}
+
+fn mock_societies(properties: &[Property]) -> Vec<Society> {
+    properties
+        .iter()
+        .map(|property| Society {
+            id: property.society_id.clone(),
+            name: property.title.clone(),
+            area: property.area.clone(),
+            city: property.city.clone(),
+            builder_name: property.builder_name.clone(),
+            year_built: 0,
+            total_units: 0,
+            summary: String::new(),
+            maintenance_sentiment: String::new(),
+            livability_sentiment: String::new(),
+            common_positives: Vec::new(),
+            common_complaints: Vec::new(),
+            review_summary: String::new(),
+            google_reviews_url: None,
+            future_google_place_name: String::new(),
+            future_google_place_id: None,
+            future_review_enrichment_status: String::new(),
+        })
+        .collect()
 }
 
 fn loaded_bundle_with_aliases(

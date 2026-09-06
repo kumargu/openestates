@@ -98,18 +98,7 @@ async fn society_alias_groups_survive_build_parquet_load_and_search() {
     assert!(loaded.entity_alias_index.get("Central").is_none());
 
     let snapshot = runtime_snapshot_from_serving_bundle(loaded);
-    let search = |query| {
-        SearchEngine {
-            properties: &snapshot.properties,
-            search_index: &snapshot.search_index,
-            serving_bundle: Some(&snapshot.bundle),
-            society_names: &snapshot.society_names,
-            property_by_id: Some(&snapshot.property_by_id),
-            societies: &snapshot.societies,
-            graph: None,
-        }
-        .search(query)
-    };
+    let search = |query| SearchEngine::new(&snapshot).search(query);
 
     let waterford = search("Waterford 4BHK");
     assert_eq!(waterford.results.len(), 1);

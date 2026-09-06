@@ -187,20 +187,20 @@ from the recorded base. These gates must be rerun for every touched slice.
 
 ### Exact next command
 
-The next checkpoint begins by reading the authoritative spatial predicate and
-runtime construction paths before any code change:
+The next checkpoint begins the durable evidence-identity contract:
 
 ```bash
-sed -n '1,280p' backend/src/search/compiled_plan.rs
-sed -n '1,360p' backend/src/search/evaluation.rs
-sed -n '1,520p' backend/src/search/geo.rs
-rg -n "SearchEngine::new|struct SearchRuntimeSnapshot|SpatialConstraint|VerifiedMatch|candidate_query" backend/src backend/tests
+rg -n "struct ServingFactRecord|struct ServingEdgeRecord|InventoryOption|VerifiedMatch|observation_ids|evidence_reference" backend/src backend/tests
+sed -n '1,260p' backend/src/serving/types.rs
+sed -n '1,240p' backend/src/search/evaluation.rs
+sed -n '780,930p' backend/src/search/engine.rs
+sed -n '1040,1160p' backend/src/search/geo.rs
 ```
 
-Then extend the generic spatial predicate contract with relation metric,
-optional typed bound, resolution state, and category/capability identity. The
-first implementation gate is a focused compiled-plan/evaluation contract;
-direct revision execution comes only after those evaluator inputs are complete.
+Add typed, snapshot-qualified observation/derivation references at the serving
+and evaluation boundary. First freeze rejection of fabricated, cross-subject,
+and cross-snapshot references; then migrate inventory and spatial receipts one
+producer at a time.
 
 ## Goal and invariants
 
@@ -761,3 +761,76 @@ Extend the generic spatial predicate model to retain relation metric, optional
 bound, resolution state, and category/capability identity. Then make prepared
 branch execution reconstruct only runtime indexes from those predicates; do
 not reparse buyer text or add place-family branches in Rust.
+
+## Checkpoint 6 — snapshot-only search engine construction
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Parent commit: `dcd7abbc`
+- Classified miss: `architecture_gap`
+- Baseline executable contract: `data/validation/search_query_bank.json`
+
+### Implemented
+
+- Replaced the public mixed-field `SearchEngine` assembly surface with one
+  constructor that accepts a validated `SearchRuntimeSnapshot`.
+- Search now reads properties, property lookup, local index, bundle indexes,
+  societies, society names, facts, capabilities, and runtime identity from the
+  same snapshot. The serving bundle is no longer optional on the engine path.
+- Removed the separately supplied knowledge graph from ranking. The runtime
+  graph remains a post-search context for best-effort learning-gap logs; it
+  cannot change eligibility, ordering, or proof for a pinned snapshot.
+- Migrated serving, efficiency, conversational, API, and engine fixtures to
+  construct complete snapshots. A fixture regression that omitted snapshot-
+  owned society names failed the frozen branch contract and was corrected by
+  populating typed society records rather than adding a side channel.
+- Search runtime diagnostics and verified-match snapshot identity now read the
+  snapshot version key used by the cache, instead of independently consulting
+  optional engine fields.
+
+### Gates
+
+- Baseline before the change:
+  - `cargo test --test serving_runtime_contract`: 5 passed.
+  - `cargo test --test search_conversational_semantics_contract`: 10 passed.
+  - `cargo test --test search_efficiency_contract`: 11 passed.
+- After the change:
+  - `cargo test --lib search::engine::tests`: 39 passed.
+  - `cargo test --test serving_runtime_contract`: 5 passed.
+  - `cargo test --test search_conversational_semantics_contract`: 10 passed.
+  - `cargo test --test search_efficiency_contract`: 11 passed.
+  - `cargo test --test search_revision_api_contract`: 3 passed.
+  - `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check`: passed.
+  - `./tests/smoke_test.sh`: 53 passed against local bundle
+    `waterford-osm-arrival-2026-08-31-release`.
+  - `python3 scripts/audit_search_hardcoding.py`: 330 findings, 28 fact-key
+    comparisons, zero blocked aliases; delta remains zero.
+  - `cargo fmt --check` and `git diff --check`: passed.
+- The existing macOS compact-unwind linker warning remains unchanged.
+
+### Remaining gaps
+
+- `SearchRuntimeSnapshot::new` still accepts pre-built components. That is the
+  validated snapshot boundary, not an engine bypass; candidate bundle loading
+  and reload atomically publish the completed value.
+- Dynamic graph context still exists in `compute_search` for logging only. If
+  future response fields consume it, graph generation must become snapshot-
+  owned before those fields can affect the public contract.
+- Durable observation/derivation identity, comprehensive capability bindings,
+  the unified evaluator, and typed direct revision execution remain open.
+- Candidate identity remains unchanged: no isolated Issue 118 lake or bundle
+  exists yet.
+
+### Next exact command
+
+```bash
+rg -n "struct ServingFactRecord|struct ServingEdgeRecord|InventoryOption|VerifiedMatch|observation_ids|evidence_reference" backend/src backend/tests
+sed -n '1,260p' backend/src/serving/types.rs
+sed -n '1,240p' backend/src/search/evaluation.rs
+sed -n '780,930p' backend/src/search/engine.rs
+sed -n '1040,1160p' backend/src/search/geo.rs
+```
+
+Define typed `ObservationId`, `DerivationId`, and snapshot-qualified
+`EvidenceRef` validation first. Do not rename synthesized strings into typed
+wrappers and call them durable; producers must carry provider/source lineage or
+derived input references before their receipts can verify a predicate.

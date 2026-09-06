@@ -140,16 +140,7 @@ pub(crate) fn compute_search(
     query: String,
 ) -> CachedSearchOutput {
     let serving_facts = Some(&snapshot.bundle.fact_index);
-    let engine_output = SearchEngine {
-        properties: &snapshot.properties,
-        search_index: &snapshot.search_index,
-        serving_bundle: Some(snapshot.bundle.as_ref()),
-        society_names: &snapshot.society_names,
-        property_by_id: Some(&snapshot.property_by_id),
-        societies: &snapshot.societies,
-        graph: Some(&graph),
-    }
-    .search(&query);
+    let engine_output = SearchEngine::new(&snapshot).search(&query);
     let ast_branches: Arc<[crate::search::ast::ConstraintExpr]> =
         Arc::from(engine_output.ast_branches.clone());
     let compiled_plan = Arc::new(engine_output.compiled_plan.clone());
