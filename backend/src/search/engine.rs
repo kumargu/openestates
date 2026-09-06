@@ -696,6 +696,7 @@ impl<'a> SearchEngine<'a> {
                 result.verified_matches.extend(verified_inventory_matches(
                     &compiled_query,
                     property,
+                    self.snapshot.inventory_options.get(&property.id),
                     &self.snapshot.search_index,
                     serving_facts,
                     snapshot_identity,
@@ -808,14 +809,14 @@ impl<'a> SearchEngine<'a> {
 fn verified_inventory_matches(
     query: &CompiledQuery,
     property: &Property,
+    option: Option<&InventoryOption>,
     search_index: &SearchIndex,
     serving_facts: Option<&crate::serving::ServingFactIndex>,
     snapshot_identity: &str,
 ) -> Vec<VerifiedMatch> {
-    let mut option = InventoryOption::from_property(property);
-    if let Some(society_entity_id) = search_index.society_entity_id_for_property(&property.id) {
-        option.society_id = society_entity_id.to_string();
-    }
+    let Some(option) = option else {
+        return Vec::new();
+    };
     let mut term_matches = |term: &super::ast::ConstraintTerm| {
         property_matches_constraint_term_with_index(
             property,
@@ -830,42 +831,48 @@ fn verified_inventory_matches(
         .matched_bhk_include_label(&mut term_matches)
     {
         if let Some(bhk) = option.bhk {
-            matches.push(inventory_verified_match(
-                &option,
+            if let Some(verified) = inventory_verified_match(
+                option,
                 &predicate,
                 "equals",
                 "inventory_option_bhk",
                 f64::from(bhk),
                 "bhk",
                 snapshot_identity,
-            ));
+            ) {
+                matches.push(verified);
+            }
         }
     }
     if let Some((min, max)) = query.constraints.matched_budget_bounds(&mut term_matches) {
         if let Some(min) = min {
             if let Some(option_max) = option.price_max {
-                matches.push(inventory_verified_match(
-                    &option,
+                if let Some(verified) = inventory_verified_match(
+                    option,
                     &format!("price at least {min}"),
                     "at_least",
                     "inventory_option_price_max",
                     option_max as f64,
                     "INR",
                     snapshot_identity,
-                ));
+                ) {
+                    matches.push(verified);
+                }
             }
         }
         if let Some(max) = max {
             if let Some(option_min) = option.price_min {
-                matches.push(inventory_verified_match(
-                    &option,
+                if let Some(verified) = inventory_verified_match(
+                    option,
                     &format!("price at most {max}"),
                     "at_most",
                     "inventory_option_price_min",
                     option_min as f64,
                     "INR",
                     snapshot_identity,
-                ));
+                ) {
+                    matches.push(verified);
+                }
             }
         }
     }
@@ -880,20 +887,25 @@ fn inventory_verified_match(
     value: f64,
     unit: &str,
     snapshot_identity: &str,
-) -> VerifiedMatch {
-    VerifiedMatch {
-        subject_entity_id: option.property_id.clone(),
-        target_entity_id: Some(option.society_id.clone()),
+) -> Option<VerifiedMatch> {
+    let evidence_reference = option.evidence_reference.as_ref()?;
+    evidence_reference
+        .validate_for(&option.society_id, snapshot_identity)
+        .ok()?;
+    Some(VerifiedMatch {
+        subject_entity_id: option.society_id.clone(),
+        target_entity_id: Some(option.property_id.clone()),
         predicate: predicate.to_string(),
         relation: relation.to_string(),
         metric: metric.to_string(),
         value: Some(value),
         unit: Some(unit.to_string()),
-        observation_ids: vec![option.evidence_reference.clone()],
-        algorithm_version: "inventory-option-evaluator-v1".to_string(),
+        observation_ids: Vec::new(),
+        evidence_refs: vec![evidence_reference.clone()],
+        algorithm_version: "inventory-option-evaluator-v2".to_string(),
         confidence: 1.0,
         snapshot_identity: snapshot_identity.to_string(),
-    }
+    })
 }
 
 fn push_unique_verified_match(matches: &mut Vec<VerifiedMatch>, candidate: VerifiedMatch) {
@@ -2400,10 +2412,10 @@ mod tests {
     use crate::search::intent::SearchIntent;
     use crate::search::SearchCapabilityIndex;
     use crate::serving::{
-        materialize_society_aliases, normalize_alias, LoadedServingBundle, ReraEvidenceIndex,
-        ServingBundleManifest, ServingEdgeRecord, ServingEntityAliasIndex,
+        materialize_society_aliases, normalize_alias, EvidenceRef, LoadedServingBundle,
+        ReraEvidenceIndex, ServingBundleManifest, ServingEdgeRecord, ServingEntityAliasIndex,
         ServingEntityAliasRecord, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
-        SpatialServingIndex, TantivyRecallIndex,
+        SourceObservation, SpatialServingIndex, TantivyRecallIndex,
     };
 
     use super::*;
@@ -2565,6 +2577,65 @@ mod tests {
             learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
             observation: None,
         }
+    }
+
+    #[test]
+    fn inventory_predicates_share_one_validated_evidence_reference() {
+        let subject = "society:one";
+        let snapshot = "bundle:v9";
+        let observation = SourceObservation::new(
+            "FixtureProvider",
+            "listing-one",
+            subject,
+            Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            Some("https://example.test/listing-one".to_string()),
+            vec!["asset:external-listings/v1".to_string()],
+        )
+        .unwrap();
+        let evidence = EvidenceRef::for_observation(snapshot, &observation);
+        let option = InventoryOption {
+            property_id: "property:one".to_string(),
+            society_id: subject.to_string(),
+            bhk: Some(3),
+            price_min: Some(10_000_000),
+            price_max: Some(10_000_000),
+            size_sqft: Some(1_000),
+            evidence_reference: Some(evidence.clone()),
+        };
+
+        let bhk = inventory_verified_match(
+            &option,
+            "3bhk",
+            "equals",
+            "inventory_option_bhk",
+            3.0,
+            "bhk",
+            snapshot,
+        )
+        .unwrap();
+        let price = inventory_verified_match(
+            &option,
+            "price at most 10000000",
+            "at_most",
+            "inventory_option_price_min",
+            10_000_000.0,
+            "INR",
+            snapshot,
+        )
+        .unwrap();
+
+        assert_eq!(bhk.evidence_refs, vec![evidence.clone()]);
+        assert_eq!(price.evidence_refs, vec![evidence]);
+        assert!(inventory_verified_match(
+            &option,
+            "3bhk",
+            "equals",
+            "inventory_option_bhk",
+            3.0,
+            "bhk",
+            "bundle:other",
+        )
+        .is_none());
     }
 
     fn run_search_for_test(query: &str, properties: &[Property]) -> SearchEngineOutput {

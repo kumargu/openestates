@@ -4,7 +4,7 @@
 
 - Reset recorded: 2026-09-06 Asia/Kolkata
 - Continuation branch: `feat/issue-118-consolidated`
-- Continuation HEAD: `d1203aea` (`refactor: share typed revision replacement`)
+- Continuation HEAD: `cb7db89d` (`feat: trace external listing observations`)
 - Preserved source branch: `feat/issue-118-spatial-intent`
 - Merge base: `d1c06e2b` (`main` at the start of Issue 118 work)
 - Worktree at reset: clean
@@ -29,14 +29,15 @@ checkpoint-local next steps where they differ from the consolidated plan.
 11. `88501c65` — pin search construction to one runtime snapshot.
 12. `c574e092` — define and validate durable evidence identities.
 13. `820c6b95` — preserve validated observations in serving fact rows.
+14. `cb7db89d` — trace external-listing observations through the DAG.
 
 ### Pulled-forward commitment audit
 
 | Commitment | Current state |
 |---|---|
-| Snapshot-only search construction (#123) | Partial: routes acquire a snapshot, but `SearchEngine` can still be assembled from independently supplied generations. |
+| Snapshot-only search construction (#123) | Implemented for `SearchEngine`: its only constructor input is one `SearchRuntimeSnapshot`; the lower-level parallel `TextSearch` evaluator remains to be removed. |
 | Four-state evaluation (#123) | Implemented for spatial and inventory eligibility, but parallel evaluators and empty verified matches remain. |
-| Stable spatial/price/BHK evidence references (#123) | Partial: external-listing BHK/price facts now retain one durable source observation, but search evaluation still emits synthesized inventory IDs and spatial derivations remain open. |
+| Stable spatial/price/BHK evidence references (#123) | Partial: BHK/price verified matches now share one validated, snapshot-qualified external-listing `EvidenceRef`; spatial matches still emit synthesized legacy observation strings. |
 | Semantic-contract digest (#123) | Partial: config inputs are hashed, but resolved bindings and evaluator/algorithm versions are not comprehensive. |
 | Capability/evaluator/proof bindings (#123) | Incomplete. |
 | Touched mixed-state and duplicate-path removal (#123) | Incomplete. |
@@ -183,7 +184,7 @@ failure stops further stacking; honest coverage gaps do not.
 ### Current verified gate summary
 
 The detailed commands and counts remain recorded in the checkpoints below.
-Through the uncommitted Checkpoint 9 working tree, focused Rust asset and
+Through the uncommitted Checkpoint 10 working tree, focused Rust search and
 serving contracts, all-target Cargo check, formatting, smoke tests, and
 `git diff --check` pass. The hardcoding audit remains at 330 findings, 28
 fact-key comparisons, and zero blocked aliases, with zero delta from the
@@ -192,16 +193,16 @@ recorded base. These gates must be rerun for every touched slice.
 ### Exact next command
 
 ```bash
-rg -n "InventoryOption::from_property|verified_inventory_matches|inventory_verified_match|listing_[0-9].*bhk|listing_price" backend/src/search backend/src/data_loader.rs backend/tests
-sed -n '1,130p' backend/src/search/evaluation.rs
-sed -n '800,920p' backend/src/search/engine.rs
-sed -n '350,460p' backend/src/data_loader.rs
+sed -n '3200,3420p' backend/src/search/text.rs
+sed -n '140,240p' backend/src/search/ast.rs
+rg -n "BooleanEvaluation::satisfied\(Vec::new|InventoryOption::from_property|property_matches_constraint_term" backend/src/search
 ```
 
-Replace synthesized inventory evidence with snapshot-qualified references to
-the exact external-listing observation retained on serving facts. BHK and price
-must resolve from the same observation; legacy rows remain `Unknown`, not
-verified. Baseline the focused inventory contracts before editing.
+Replace the parallel property-field inventory eligibility path with the
+snapshot's observed inventory options and four-state evaluation. Required BHK
+and budget predicates must accept only validated matches projected from the
+same `EvidenceRef`; preserve the frozen ordered results with observed fixture
+receipts rather than empty satisfied evaluations.
 
 ## Goal and invariants
 
@@ -1038,3 +1039,88 @@ Replace synthesized inventory evidence with snapshot-qualified references to
 the exact external-listing observation retained on serving facts. BHK and price
 must resolve from the same observation; legacy rows remain `Unknown`, not
 verified. Baseline the focused inventory contracts before editing.
+
+## Checkpoint 10 — snapshot-qualified inventory receipts
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Parent commit: `cb7db89d`
+- Classified miss: inventory `proof_gap` with a remaining evaluator
+  `architecture_gap`
+
+### Implemented
+
+- Added snapshot-owned inventory-option materialization from the exact
+  external-listing JSON observation retained in serving facts. An option is
+  eligible only when BHK and both price bounds agree with the runtime property
+  on one source observation.
+- Selected multiple matching observations deterministically by durable
+  observation ID, so serving-row order cannot change the chosen receipt.
+- Rejected missing, tampered, cross-subject, and snapshot-mismatched evidence
+  references before constructing a verified match. Legacy serving facts with
+  no observation remain ineligible for verified inventory receipts.
+- Added `EvidenceRef` projection to `VerifiedMatch`. Inventory BHK and price
+  matches use the same reference, with the canonical society as evidence
+  subject and the runtime property as target. The old
+  `inventory-option:{property_id}` string is no longer emitted.
+- Precomputed observed inventory options in `SearchRuntimeSnapshot`; request
+  execution only reads the pinned snapshot. Exact property society identities
+  remain usable when the serving canonical ID already equals the property node
+  ID, while canonical crosswalk mappings still take precedence.
+- Updated the controlled conversational fixture to carry genuine,
+  content-addressed inventory observations without changing recall input. The
+  frozen query bank and ordered branch results remain unchanged.
+
+### Deliberate boundary
+
+`TextSearch` still evaluates required BHK and budget predicates from projected
+`Property` fields through `InventoryOption::from_property`, and its Boolean
+compatibility path can return satisfied evaluations without verified evidence.
+This checkpoint removes fabricated proof output; it does not yet claim unified
+fail-closed inventory eligibility. Spatial matches also still carry synthesized
+legacy observation strings and no `EvidenceRef`.
+
+### Gates
+
+- `cargo test --lib search::evaluation::`: 5 passed, including row-order
+  invariance, snapshot/subject qualification, legacy rejection, and rejection
+  when BHK and price occur on different observations.
+- Focused inventory match projection test: 1 passed, proving BHK and price use
+  the same validated reference and a cross-snapshot reference cannot verify.
+- `cargo test --lib search::engine::tests`: 40 passed.
+- `cargo test --test search_conversational_semantics_contract`: 10 passed with
+  unchanged frozen ordered results and durable inventory receipt assertions.
+- `cargo test --test search_efficiency_contract`: 11 passed.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check --all-targets`: passed.
+- `./tests/smoke_test.sh`: 53 passed against the unchanged local v8 catalog
+  release after explicitly starting `openestates-api`.
+- `python3 scripts/audit_search_hardcoding.py`: 330 findings, 28 fact-key
+  comparisons, zero blocked aliases; delta remains zero.
+- `cargo fmt` and `git diff --check`: passed.
+- The repository's existing macOS compact-unwind linker warning remains.
+
+### Process note
+
+The continuation began with the inventory patch already dirty, so its focused
+baseline could not be reconstructed without discarding carried-over work. The
+patch was compiled first, then the missing focused contracts were added and
+the frozen before/after expectations were preserved. No correctness failure
+was stacked.
+
+### Candidate identity
+
+No Issue 118 candidate lake or bundle exists. The main local lake was read only
+for the legacy serving smoke test; no current pointer changed.
+
+### Next exact command
+
+```bash
+sed -n '3200,3420p' backend/src/search/text.rs
+sed -n '140,240p' backend/src/search/ast.rs
+rg -n "BooleanEvaluation::satisfied\(Vec::new|InventoryOption::from_property|property_matches_constraint_term" backend/src/search
+```
+
+Replace the parallel property-field inventory eligibility path with the
+snapshot's observed inventory options and four-state evaluation. Required BHK
+and budget predicates must accept only validated matches projected from the
+same `EvidenceRef`; preserve the frozen ordered results with observed fixture
+receipts rather than empty satisfied evaluations.

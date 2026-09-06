@@ -17,8 +17,9 @@ use crate::knowledge::KnowledgeGraph;
 use crate::knowledge::SearchEvent;
 use crate::models::{AreaProfile, Property, Society};
 use crate::recommendations::RecommendationResponse;
+use crate::routes::enrichment::society_node_id;
 use crate::scoring::scoring_policy;
-use crate::search::{SearchIndex, SearchResponse};
+use crate::search::{InventoryOption, SearchIndex, SearchResponse};
 use crate::security::security_tuning;
 use crate::security::ExecutionLanes;
 use crate::serving::LoadedServingBundle;
@@ -29,6 +30,7 @@ pub struct SearchRuntimeSnapshot {
     pub bundle: Arc<LoadedServingBundle>,
     pub properties: Arc<[Property]>,
     pub property_by_id: HashMap<String, usize>,
+    pub inventory_options: HashMap<String, InventoryOption>,
     pub search_index: SearchIndex,
     pub societies: Arc<[Society]>,
     pub society_names: HashMap<String, String>,
@@ -59,11 +61,34 @@ impl SearchRuntimeSnapshot {
             search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
             semantic_contract_digest: semantic_contract_digest().to_string(),
         };
+        let inventory_options = properties
+            .iter()
+            .filter_map(|property| {
+                let property_society_id = society_node_id(&property.society_id);
+                let society_entity_id = search_index
+                    .society_entity_id_for_property(&property.id)
+                    .map(str::to_string)
+                    .or_else(|| {
+                        bundle
+                            .fact_index
+                            .entity(&property_society_id)
+                            .map(|_| property_society_id)
+                    })?;
+                InventoryOption::from_serving_observation(
+                    property,
+                    &society_entity_id,
+                    &bundle.fact_index,
+                    &version_key.serving_bundle_version,
+                )
+                .map(|option| (property.id.clone(), option))
+            })
+            .collect();
 
         Self {
             bundle,
             properties: Arc::from(properties),
             property_by_id,
+            inventory_options,
             search_index,
             societies: Arc::from(societies),
             society_names,

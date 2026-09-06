@@ -12,7 +12,7 @@ use backend::search::{
 use backend::serving::{
     derive_proximity_records, LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest,
     ServingEntityAliasIndex, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
-    ServingSearchMetadataRecord, SpatialServingIndex, TantivyRecallIndex,
+    ServingSearchMetadataRecord, SourceObservation, SpatialServingIndex, TantivyRecallIndex,
 };
 use backend::state::SearchRuntimeSnapshot;
 use chrono::{TimeZone, Utc};
@@ -945,7 +945,7 @@ fn inside_requires_sourced_containment_and_cannot_use_nearby_coordinates() {
     let inventory_matches = output.results[0]
         .verified_matches
         .iter()
-        .filter(|matched| matched.algorithm_version == "inventory-option-evaluator-v1")
+        .filter(|matched| matched.algorithm_version == "inventory-option-evaluator-v2")
         .collect::<Vec<_>>();
     assert_eq!(inventory_matches.len(), 2);
     assert!(inventory_matches
@@ -954,9 +954,14 @@ fn inside_requires_sourced_containment_and_cannot_use_nearby_coordinates() {
     assert!(inventory_matches.iter().any(|matched| {
         matched.metric == "inventory_option_price_min" && matched.value == Some(10_000_000.0)
     }));
+    let evidence = &inventory_matches[0].evidence_refs;
+    assert_eq!(evidence.len(), 1);
     assert!(inventory_matches
         .iter()
-        .all(|matched| matched.observation_ids == ["inventory-option:sourced-inside-home"]));
+        .all(|matched| matched.evidence_refs == *evidence));
+    assert!(evidence[0]
+        .validate_for("society:sourced-inside", "conversational-semantics-mock")
+        .is_ok());
 }
 
 fn has_required_spatial_term(expression: &backend::search::ConstraintExpr) -> bool {
@@ -2398,6 +2403,7 @@ impl FixtureBuilder {
                 &[4.5, 4.0],
             );
         }
+        self.facts.push(observed_inventory_fact(&entity_id, &spec));
         self.properties.push(property(&spec, &society_id));
     }
 
@@ -2471,8 +2477,14 @@ impl FixtureBuilder {
         let fact_index = ServingFactIndex::from_records(self.facts.clone(), self.metadata);
         let entity_alias_index = ServingEntityAliasIndex::default();
         let temp_dir = tempdir().expect("temporary Tantivy directory");
+        let recall_facts = self
+            .facts
+            .iter()
+            .filter(|fact| fact.source_type != "ControlledInventoryReceipt")
+            .cloned()
+            .collect::<Vec<_>>();
         let recall_index =
-            TantivyRecallIndex::build_in_dir(temp_dir.path(), &self.entities, &self.facts, &[])
+            TantivyRecallIndex::build_in_dir(temp_dir.path(), &self.entities, &recall_facts, &[])
                 .expect("mock recall index");
         let geo_index = GeoSearchIndex::from_serving_bundle(&self.entities, &fact_index);
         let spatial_index = SpatialServingIndex::from_serving_bundle_with_edges(
@@ -2895,6 +2907,34 @@ fn serving_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFac
         learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
         observation: None,
     }
+}
+
+fn observed_inventory_fact(entity_id: &str, spec: &HomeSpec) -> ServingFactRecord {
+    let value = serde_json::json!({
+        "bhk": spec.bhk,
+        "price": spec.price,
+        "area_sqft": 1_600,
+    })
+    .to_string();
+    let mut fact = serving_fact(
+        entity_id,
+        "controlled_inventory_option",
+        FactValue::Text(value),
+    );
+    fact.source_type = "ControlledInventoryReceipt".to_string();
+    fact.source_url = Some(format!("https://example.test/listings/{}", spec.id));
+    fact.observation = Some(
+        SourceObservation::new(
+            "ControlledFixture",
+            spec.id.clone(),
+            entity_id,
+            Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            fact.source_url.clone(),
+            vec!["asset:controlled-search-fixture/v1".to_string()],
+        )
+        .unwrap(),
+    );
+    fact
 }
 
 fn slug(value: &str) -> String {

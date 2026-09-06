@@ -1141,6 +1141,7 @@ fn verified_spatial_match(
             clause.relation,
             target_entity_id.unwrap_or("category")
         )],
+        evidence_refs: Vec::new(),
         algorithm_version: "spatial-evaluator-v1".to_string(),
         confidence,
         snapshot_identity: snapshot_identity.to_string(),

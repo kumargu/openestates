@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+use std::cmp::Ordering;
+
+use crate::knowledge::FactValue;
 use crate::models::Property;
+use crate::serving::{EvidenceRef, ServingFactIndex};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -11,7 +15,8 @@ pub struct InventoryOption {
     pub price_min: Option<u64>,
     pub price_max: Option<u64>,
     pub size_sqft: Option<u32>,
-    pub evidence_reference: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evidence_reference: Option<EvidenceRef>,
 }
 
 impl InventoryOption {
@@ -24,8 +29,45 @@ impl InventoryOption {
             price_min: property.price_min.or(exact_price),
             price_max: property.price_max.or(exact_price),
             size_sqft: (property.super_builtup_sqft > 0).then_some(property.super_builtup_sqft),
-            evidence_reference: format!("inventory-option:{}", property.id),
+            evidence_reference: None,
         }
+    }
+
+    pub fn from_serving_observation(
+        property: &Property,
+        society_entity_id: &str,
+        serving_facts: &ServingFactIndex,
+        snapshot_identity: &str,
+    ) -> Option<Self> {
+        let rows = serving_facts.entity(society_entity_id)?;
+        let mut candidates = rows
+            .facts
+            .iter()
+            .filter_map(|fact| {
+                let observation = fact.observation.as_ref()?;
+                observation.validate().ok()?;
+                if fact.entity_id != society_entity_id
+                    || observation.subject_entity_id != society_entity_id
+                {
+                    return None;
+                }
+                let FactValue::Text(encoded) = &fact.value else {
+                    return None;
+                };
+                let value = serde_json::from_str::<InventoryObservationValue>(encoded).ok()?;
+                let option = value.into_option(property, society_entity_id)?;
+                Some((observation.observation_id.as_str(), observation, option))
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_by(|left, right| left.0.cmp(right.0));
+        candidates.dedup_by(|left, right| left.0 == right.0);
+        let (_, observation, mut option) = candidates.into_iter().next()?;
+        let evidence_reference = EvidenceRef::for_observation(snapshot_identity, observation);
+        evidence_reference
+            .validate_for(society_entity_id, snapshot_identity)
+            .ok()?;
+        option.evidence_reference = Some(evidence_reference);
+        Some(option)
     }
 
     pub fn matches_bhk(&self, expected: u32) -> bool {
@@ -37,6 +79,55 @@ impl InventoryOption {
             return false;
         };
         min.is_none_or(|bound| option_max >= bound) && max.is_none_or(|bound| option_min <= bound)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct InventoryObservationValue {
+    bhk: f64,
+    #[serde(default)]
+    price: Option<u64>,
+    #[serde(default)]
+    price_min: Option<u64>,
+    #[serde(default)]
+    price_max: Option<u64>,
+    #[serde(default)]
+    area_sqft: Option<u32>,
+}
+
+impl InventoryObservationValue {
+    fn into_option(self, property: &Property, society_entity_id: &str) -> Option<InventoryOption> {
+        if !self.bhk.is_finite() || self.bhk.fract().abs() > f64::EPSILON {
+            return None;
+        }
+        let bhk = self.bhk as u32;
+        let exact_price = self.price.filter(|value| *value > 0);
+        let price_min = self.price_min.or(exact_price);
+        let price_max = self.price_max.or(exact_price);
+        let option = InventoryOption {
+            property_id: property.id.clone(),
+            society_id: society_entity_id.to_string(),
+            bhk: Some(bhk),
+            price_min,
+            price_max,
+            size_sqft: self.area_sqft.filter(|value| *value > 0),
+            evidence_reference: None,
+        };
+        let property_price = (property.price > 0).then_some(property.price);
+        let property_min = property.price_min.or(property_price);
+        let property_max = property.price_max.or(property_price);
+        (option.bhk == (property.bhk > 0).then_some(property.bhk)
+            && comparable_price(option.price_min, property_min)
+            && comparable_price(option.price_max, property_max))
+        .then_some(option)
+    }
+}
+
+fn comparable_price(left: Option<u64>, right: Option<u64>) -> bool {
+    match (left, right) {
+        (Some(left), Some(right)) => left.cmp(&right) == Ordering::Equal,
+        (None, None) => true,
+        _ => false,
     }
 }
 
@@ -58,6 +149,8 @@ pub struct VerifiedMatch {
     pub unit: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub observation_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_refs: Vec<EvidenceRef>,
     pub algorithm_version: String,
     pub confidence: f32,
     pub snapshot_identity: String,
@@ -230,6 +323,167 @@ fn combine(
     BooleanEvaluation {
         state,
         verified_matches,
+    }
+}
+
+#[cfg(test)]
+mod inventory_tests {
+    use chrono::{TimeZone, Utc};
+
+    use super::*;
+    use crate::serving::{ServingFactRecord, SourceObservation};
+
+    fn property() -> Property {
+        Property {
+            id: "property:one".to_string(),
+            title: "One".to_string(),
+            area: "Test Area".to_string(),
+            area_id: "area:test".to_string(),
+            city: "Bengaluru".to_string(),
+            society_id: "society:one".to_string(),
+            builder_name: "Builder".to_string(),
+            property_type: "Apartment".to_string(),
+            listing_type: "Resale".to_string(),
+            bhk: 3,
+            price: 10_000_000,
+            price_min: None,
+            price_max: None,
+            price_per_sqft: 10_000,
+            carpet_area_sqft: 900,
+            super_builtup_sqft: 1_000,
+            floor: 1,
+            total_floors: 10,
+            facing: "East".to_string(),
+            possession_status: "Ready".to_string(),
+            metro_distance_mins: 10,
+            maintenance_cost_monthly: 5_000,
+            society_quality_score: None,
+            builder_quality_score: None,
+            document_completeness_score: None,
+            litigation_risk: None,
+            noise_score: None,
+            sunlight_score: None,
+            airport_noise_score: None,
+            waterlogging_risk_score: None,
+            traffic_score: None,
+            days_on_market: 1,
+            greenery_score: None,
+            open_space_score: None,
+            resale_strength_score: None,
+            interest_level: None,
+            saves_last_7d: None,
+            offers_last_7d: None,
+            images: Vec::new(),
+            hero_image: String::new(),
+            description_summary: String::new(),
+            transparency_tags: Vec::new(),
+            source_reference: "test".to_string(),
+        }
+    }
+
+    fn observation(subject: &str, provider_id: &str) -> SourceObservation {
+        SourceObservation::new(
+            "FixtureProvider",
+            provider_id,
+            subject,
+            Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            Some(format!("https://example.test/{provider_id}")),
+            vec!["asset:external-listings/v1".to_string()],
+        )
+        .unwrap()
+    }
+
+    fn inventory_fact(
+        entity_id: &str,
+        payload: &str,
+        observation: Option<SourceObservation>,
+    ) -> ServingFactRecord {
+        ServingFactRecord {
+            entity_id: entity_id.to_string(),
+            fact_key: "fixture_inventory".to_string(),
+            value_type: "text".to_string(),
+            value_text: Some(payload.to_string()),
+            value: FactValue::Text(payload.to_string()),
+            confidence: 0.9,
+            source_type: "ExternalListing".to_string(),
+            source_url: Some("https://example.test/listing".to_string()),
+            model: None,
+            skill_id: Some("fixture_inventory".to_string()),
+            learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            observation,
+        }
+    }
+
+    #[test]
+    fn inventory_selection_is_row_order_invariant_and_snapshot_qualified() {
+        let property = property();
+        let subject = "society:one";
+        let payload = r#"{"bhk":3,"price":10000000,"area_sqft":1000}"#;
+        let first = inventory_fact(subject, payload, Some(observation(subject, "listing-a")));
+        let second = inventory_fact(subject, payload, Some(observation(subject, "listing-b")));
+        let forward =
+            ServingFactIndex::from_records(vec![first.clone(), second.clone()], Vec::new());
+        let reverse = ServingFactIndex::from_records(vec![second, first], Vec::new());
+
+        let forward_option =
+            InventoryOption::from_serving_observation(&property, subject, &forward, "bundle:v9")
+                .unwrap();
+        let reverse_option =
+            InventoryOption::from_serving_observation(&property, subject, &reverse, "bundle:v9")
+                .unwrap();
+
+        assert_eq!(forward_option, reverse_option);
+        let evidence = forward_option.evidence_reference.unwrap();
+        assert!(evidence.validate_for(subject, "bundle:v9").is_ok());
+    }
+
+    #[test]
+    fn legacy_and_cross_subject_inventory_facts_cannot_verify() {
+        let property = property();
+        let subject = "society:one";
+        let payload = r#"{"bhk":3,"price":10000000}"#;
+        let facts = ServingFactIndex::from_records(
+            vec![
+                inventory_fact(subject, payload, None),
+                inventory_fact(
+                    subject,
+                    payload,
+                    Some(observation("society:other", "listing-cross-subject")),
+                ),
+            ],
+            Vec::new(),
+        );
+
+        assert!(
+            InventoryOption::from_serving_observation(&property, subject, &facts, "bundle:v9")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn bhk_and_price_must_coexist_on_the_same_observation() {
+        let property = property();
+        let subject = "society:one";
+        let facts = ServingFactIndex::from_records(
+            vec![
+                inventory_fact(
+                    subject,
+                    r#"{"bhk":3,"price":11000000}"#,
+                    Some(observation(subject, "listing-right-bhk")),
+                ),
+                inventory_fact(
+                    subject,
+                    r#"{"bhk":2,"price":10000000}"#,
+                    Some(observation(subject, "listing-right-price")),
+                ),
+            ],
+            Vec::new(),
+        );
+
+        assert!(
+            InventoryOption::from_serving_observation(&property, subject, &facts, "bundle:v9")
+                .is_none()
+        );
     }
 }
 
