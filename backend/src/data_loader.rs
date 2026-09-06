@@ -1998,6 +1998,7 @@ mod tests {
             to_entity_id: "area:whitefield".to_string(),
             confidence: 1.0,
             source_type: "Rera".to_string(),
+            derivation: None,
         }];
         let fact_index = ServingFactIndex::from_records(
             vec![

@@ -89,6 +89,10 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         .get_bytes(&LakeKey::new(manifest.search_metadata_parquet_key.clone()).unwrap())
         .await
         .unwrap();
+    let edge_bytes = lake
+        .get_bytes(&LakeKey::new(manifest.edge_parquet_key.clone().unwrap()).unwrap())
+        .await
+        .unwrap();
     assert_is_parquet(&entity_bytes);
     assert_is_parquet(&fact_bytes);
     assert_is_parquet(&search_metadata_bytes);
@@ -97,6 +101,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert_eq!(parquet_rows(&search_metadata_bytes), 18);
     let fact_columns = parquet_columns(&fact_bytes);
     let search_metadata_columns = parquet_columns(&search_metadata_bytes);
+    let edge_columns = parquet_columns(&edge_bytes);
     assert!(fact_columns.contains(&"value_text".to_string()));
     assert!(fact_columns.contains(&"value_number".to_string()));
     assert!(fact_columns.contains(&"value_tags".to_string()));
@@ -104,6 +109,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert!(!fact_columns.contains(&"answers_preferences_json".to_string()));
     assert!(search_metadata_columns.contains(&"answers_preferences".to_string()));
     assert!(!search_metadata_columns.contains(&"answers_preferences_json".to_string()));
+    assert!(edge_columns.contains(&"derivation_json".to_string()));
 
     let fact_records = read_facts_parquet(&fact_bytes).unwrap();
     let land_area = fact_records
@@ -131,7 +137,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/manifest.json").unwrap();
     let manifest_body = lake.get_text(&manifest_key).await.unwrap();
     let manifest_json: serde_json::Value = serde_json::from_str(&manifest_body).unwrap();
-    assert_eq!(manifest_json["format_version"], 9);
+    assert_eq!(manifest_json["format_version"], 10);
     assert!(manifest_json["entity_alias_parquet_key"]
         .as_str()
         .is_some_and(|key| key.ends_with("entity_aliases/part-00000.parquet")));
@@ -145,6 +151,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert!(schema_body.contains("\"value_number\""));
     assert!(schema_body.contains("\"answers_preferences\""));
     assert!(schema_body.contains("\"observation_json\""));
+    assert!(schema_body.contains("\"derivation_json\""));
     assert!(!schema_body.contains("value_json"));
     assert!(!schema_body.contains("answers_preferences_json"));
 
@@ -369,14 +376,11 @@ fn parquet_rows(bytes: &[u8]) -> i64 {
 }
 
 fn parquet_columns(bytes: &[u8]) -> Vec<String> {
-    let mut reader = parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(
+    let reader = parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(
         bytes::Bytes::copy_from_slice(bytes),
     )
-    .unwrap()
-    .build()
     .unwrap();
-    let batch = reader.next().unwrap().unwrap();
-    batch
+    reader
         .schema()
         .fields()
         .iter()

@@ -4883,6 +4883,7 @@ mod serving_state_tests {
                 to_entity_id: "road_segment:sample-approach".to_string(),
                 confidence: 0.82,
                 source_type: "approach_road".to_string(),
+                derivation: None,
             }]);
 
         let panels = build_source_panels(&graph, &property, Some(&serving), Some(&graph_index));
@@ -4953,6 +4954,7 @@ mod serving_state_tests {
                 to_entity_id: "road_segment:sample-approach".to_string(),
                 confidence: 0.82,
                 source_type: "approach_road".to_string(),
+                derivation: None,
             }]);
 
         let panels = build_source_panels(&graph, &property, Some(&serving), Some(&graph_index));

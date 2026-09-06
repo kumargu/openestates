@@ -510,6 +510,7 @@ fn build_bundle(case: &ScenarioCase, specs: &[PropertySpec]) -> LoadedServingBun
             to_entity_id: edge.to_entity_id.clone(),
             confidence: 1.0,
             source_type: "MockGraph".to_string(),
+            derivation: None,
         })
         .collect::<Vec<_>>();
     for target in edges

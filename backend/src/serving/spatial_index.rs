@@ -6,9 +6,9 @@ use crate::dag_config::{valid_coordinate_pair, CoordinateEntityScope};
 use crate::search::geo::haversine_km;
 
 use super::{
-    resolve_serving_coordinates, EvidenceRef, ServingEdgeRecord, ServingEntityFactRows,
-    ServingEntityRecord, ServingFactIndex, SourceObservation, SpatialGeometry,
-    SpatialGeometryIndex,
+    resolve_serving_coordinates, DerivedEvidence, EvidenceRef, ServingEdgeRecord,
+    ServingEntityFactRows, ServingEntityRecord, ServingFactIndex, SourceObservation,
+    SpatialGeometry, SpatialGeometryIndex,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -152,6 +152,20 @@ impl SpatialServingIndex {
         ids.sort();
         ids.dedup();
         ids
+    }
+
+    pub fn relation_derivation(
+        &self,
+        from_entity_id: &str,
+        relation: &str,
+        to_entity_id: &str,
+        snapshot_identity: &str,
+    ) -> Option<&DerivedEvidence> {
+        let derivation =
+            self.geometry
+                .relation_derivation(from_entity_id, relation, to_entity_id)?;
+        (derivation.snapshot_identity == snapshot_identity && derivation.validate().is_ok())
+            .then_some(derivation)
     }
 
     /// Returns whether two resolved spatial scopes are connected by sourced
@@ -463,6 +477,7 @@ mod tests {
             to_entity_id: to.to_string(),
             confidence: 0.9,
             source_type: "OpenStreetMap".to_string(),
+            derivation: None,
         }
     }
 

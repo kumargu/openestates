@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::knowledge::FactValue;
 
-use super::evidence::{EvidenceIdentityError, SourceObservation};
+use super::evidence::{DerivedEvidence, EvidenceId, EvidenceIdentityError, SourceObservation};
 
 pub const SEARCH_SERVING_BUNDLE_ASSET_ID: &str = "search_serving_bundle";
 
@@ -83,6 +83,94 @@ pub struct ServingEdgeRecord {
     pub to_entity_id: String,
     pub confidence: f32,
     pub source_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub derivation: Option<DerivedEvidence>,
+}
+
+impl ServingEdgeRecord {
+    pub fn validate_derivation(&self, snapshot_identity: &str) -> Result<(), String> {
+        let Some(derivation) = &self.derivation else {
+            return Ok(());
+        };
+        derivation.validate().map_err(|error| error.to_string())?;
+        if derivation.snapshot_identity != snapshot_identity
+            || derivation.subject_entity_id != self.from_entity_id
+            || derivation.target_entity_id.as_deref() != Some(self.to_entity_id.as_str())
+            || derivation.relation != self.edge_type
+            || derivation.confidence != self.confidence
+        {
+            return Err("edge derivation does not match its relation row".to_string());
+        }
+        Ok(())
+    }
+}
+
+pub fn validate_serving_edge_evidence<'a>(
+    edges: &[ServingEdgeRecord],
+    facts: impl IntoIterator<Item = &'a ServingFactRecord>,
+    snapshot_identity: &str,
+) -> Result<(), String> {
+    let mut evidence_subjects = HashMap::<EvidenceId, String>::new();
+    for fact in facts {
+        fact.validate_observation()
+            .map_err(|error| format!("fact {}/{}: {error}", fact.entity_id, fact.fact_key))?;
+        let Some(observation) = &fact.observation else {
+            continue;
+        };
+        insert_evidence_subject(
+            &mut evidence_subjects,
+            EvidenceId::Observation(observation.observation_id.clone()),
+            &observation.subject_entity_id,
+        )?;
+    }
+    for edge in edges {
+        edge.validate_derivation(snapshot_identity).map_err(|error| {
+            format!(
+                "edge {} -[{}]-> {} has invalid derivation: {error}",
+                edge.from_entity_id, edge.edge_type, edge.to_entity_id
+            )
+        })?;
+        if let Some(derivation) = &edge.derivation {
+            insert_evidence_subject(
+                &mut evidence_subjects,
+                EvidenceId::Derivation(derivation.derivation_id.clone()),
+                &derivation.subject_entity_id,
+            )?;
+        }
+    }
+    for edge in edges {
+        let Some(derivation) = &edge.derivation else {
+            continue;
+        };
+        for reference in &derivation.input_evidence {
+            let Some(actual_subject) = evidence_subjects.get(&reference.evidence_id) else {
+                return Err(format!(
+                    "edge {} -[{}]-> {} has a dangling input evidence reference",
+                    edge.from_entity_id, edge.edge_type, edge.to_entity_id
+                ));
+            };
+            if actual_subject != &reference.subject_entity_id {
+                return Err(format!(
+                    "edge {} -[{}]-> {} has a cross-subject input evidence reference",
+                    edge.from_entity_id, edge.edge_type, edge.to_entity_id
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn insert_evidence_subject(
+    evidence_subjects: &mut HashMap<EvidenceId, String>,
+    evidence_id: EvidenceId,
+    subject_entity_id: &str,
+) -> Result<(), String> {
+    if let Some(existing) = evidence_subjects.insert(evidence_id, subject_entity_id.to_string()) {
+        if existing != subject_entity_id {
+            return Err("one evidence identity is bound to multiple subjects".to_string());
+        }
+    }
+    Ok(())
 }
 
 /// Search-specific metadata layered over canonical fact rows.

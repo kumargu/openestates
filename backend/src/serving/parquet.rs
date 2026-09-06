@@ -708,12 +708,28 @@ impl From<parquet::errors::ParquetError> for ParquetReadError {
 }
 
 pub fn write_edges_parquet(edges: &[ServingEdgeRecord]) -> Result<Vec<u8>, ParquetWriteError> {
+    let derivations = edges
+        .iter()
+        .enumerate()
+        .map(|(row, edge)| {
+            if let Some(derivation) = &edge.derivation {
+                edge.validate_derivation(&derivation.snapshot_identity)
+                    .map_err(|message| ParquetWriteError::InvalidEvidence { row, message })?;
+            }
+            edge.derivation
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()
+                .map_err(ParquetWriteError::Json)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let schema = Arc::new(Schema::new(vec![
         Field::new("from_entity_id", DataType::Utf8, false),
         Field::new("edge_type", DataType::Utf8, false),
         Field::new("to_entity_id", DataType::Utf8, false),
         Field::new("confidence", DataType::Float32, false),
         Field::new("source_type", DataType::Utf8, false),
+        Field::new("derivation_json", DataType::Utf8, true),
     ]));
     let batch = RecordBatch::try_new(
         schema.clone(),
@@ -725,6 +741,7 @@ pub fn write_edges_parquet(edges: &[ServingEdgeRecord]) -> Result<Vec<u8>, Parqu
                 edges.iter().map(|edge| edge.confidence).collect::<Vec<_>>(),
             )) as ArrayRef,
             string_array(edges.iter().map(|edge| edge.source_type.clone())),
+            optional_string_array(derivations),
         ],
     )
     .map_err(ParquetWriteError::Arrow)?;
@@ -746,15 +763,26 @@ pub fn read_edges_parquet(bytes: &[u8]) -> Result<Vec<ServingEdgeRecord>, Parque
                 expected: "float32",
             })?;
         let source_type = string_column(&batch, "source_type")?;
+        let derivation_json = optional_string_column(&batch, "derivation_json")?;
 
         for row in 0..batch.num_rows() {
-            records.push(ServingEdgeRecord {
+            let derivation = derivation_json
+                .and_then(|column| optional_string(column, row))
+                .map(|encoded| serde_json::from_str(&encoded))
+                .transpose()?;
+            let edge = ServingEdgeRecord {
                 from_entity_id: required_string(from_entity_id, row, "from_entity_id")?,
                 edge_type: required_string(edge_type, row, "edge_type")?,
                 to_entity_id: required_string(to_entity_id, row, "to_entity_id")?,
                 confidence: confidence.value(row),
                 source_type: required_string(source_type, row, "source_type")?,
-            });
+                derivation,
+            };
+            if let Some(derivation) = &edge.derivation {
+                edge.validate_derivation(&derivation.snapshot_identity)
+                    .map_err(|message| ParquetReadError::InvalidEvidence { row, message })?;
+            }
+            records.push(edge);
         }
     }
     Ok(records)
@@ -765,7 +793,7 @@ mod tests {
     use chrono::TimeZone;
 
     use super::*;
-    use crate::serving::SourceObservation;
+    use crate::serving::{DerivedEvidence, EvidenceRef, SourceObservation};
 
     fn fact(observation: Option<SourceObservation>) -> ServingFactRecord {
         ServingFactRecord {
@@ -813,5 +841,48 @@ mod tests {
 
         assert!(matches!(error, ParquetWriteError::InvalidEvidence { .. }));
         assert!(error.to_string().contains("evidence subject mismatch"));
+    }
+
+    #[test]
+    fn edge_derivation_survives_parquet_round_trip() {
+        let subject = observation("society:one");
+        let target = SourceObservation::new(
+            "OpenStreetMap",
+            "relation/2",
+            "area:one",
+            Utc.timestamp_opt(1_699_999_000, 0).unwrap(),
+            Some("https://www.openstreetmap.org/relation/2".to_string()),
+            vec!["asset:osm/version:v1".to_string()],
+        )
+        .unwrap();
+        let derivation = DerivedEvidence::new(
+            "bundle:v1",
+            "society:one",
+            Some("area:one".to_string()),
+            "in_area",
+            "footprint_containment",
+            Some(1.0),
+            Some("boolean".to_string()),
+            "spatial-topology-v2",
+            0.9,
+            vec![
+                EvidenceRef::for_observation("bundle:v1", &subject),
+                EvidenceRef::for_observation("bundle:v1", &target),
+            ],
+        )
+        .unwrap();
+        let expected = ServingEdgeRecord {
+            from_entity_id: "society:one".to_string(),
+            edge_type: "in_area".to_string(),
+            to_entity_id: "area:one".to_string(),
+            confidence: 0.9,
+            source_type: "SpatialTopology".to_string(),
+            derivation: Some(derivation),
+        };
+
+        let bytes = write_edges_parquet(std::slice::from_ref(&expected)).unwrap();
+        let actual = read_edges_parquet(&bytes).unwrap();
+
+        assert_eq!(actual, vec![expected]);
     }
 }

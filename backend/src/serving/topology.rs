@@ -4,7 +4,8 @@ use crate::dag_config::SpatialTopologyPolicy;
 use crate::knowledge::FactValue;
 
 use super::{
-    ServingEdgeRecord, ServingEntityRecord, ServingFactIndex, SpatialGeometry, SpatialServingIndex,
+    DerivedEvidence, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex, SpatialGeometry,
+    SpatialServingIndex,
 };
 
 const IN_AREA: &str = "in_area";
@@ -21,14 +22,15 @@ pub struct SpatialTopologyReport {
 
 /// Derive generic topology before a serving bundle is promoted.
 ///
-/// Polygon overlap owns society containment. A trusted point is only used when
-/// that society has no polygon. Ambiguous geometry is reported and deliberately
-/// produces no relationship.
+/// Polygon overlap owns containment. Trusted points are reserved for labelled
+/// distance fallback and never produce containment. Ambiguous geometry is
+/// reported and deliberately produces no relationship.
 pub fn derive_spatial_topology(
     entities: &[ServingEntityRecord],
     facts: &ServingFactIndex,
     existing_edges: &[ServingEdgeRecord],
     policy: &SpatialTopologyPolicy,
+    snapshot_identity: &str,
 ) -> SpatialTopologyReport {
     let spatial =
         SpatialServingIndex::from_serving_bundle_with_edges(entities, facts, existing_edges);
@@ -48,6 +50,9 @@ pub fn derive_spatial_topology(
     let mut report = SpatialTopologyReport::default();
     let mut seen = existing_edges
         .iter()
+        .filter(|edge| {
+            edge.derivation.is_some() && edge.validate_derivation(snapshot_identity).is_ok()
+        })
         .map(|edge| {
             (
                 edge.from_entity_id.clone(),
@@ -62,16 +67,25 @@ pub fn derive_spatial_topology(
             || entity.entity_type.eq_ignore_ascii_case("place")
     }) {
         let feature = spatial.geometry().feature(&entity.entity_id);
-        let polygon_subject =
-            feature.is_some_and(|feature| !matches!(feature.geometry, SpatialGeometry::Point(_)));
-        let containing = if polygon_subject {
+        let containing = if feature
+            .is_some_and(|feature| !matches!(feature.geometry, SpatialGeometry::Point(_)))
+        {
             polygon_containment(&spatial, facts, &entity.entity_id, policy)
         } else {
-            point_containment(&spatial, facts, &entity.entity_id, policy)
+            Containment::Missing
         };
         match containing {
             Containment::Matches(matches) => {
                 for (area_id, confidence) in matches {
+                    let derivation = geometry_derivation(
+                        &spatial,
+                        snapshot_identity,
+                        &entity.entity_id,
+                        &area_id,
+                        IN_AREA,
+                        "footprint_containment",
+                        confidence,
+                    );
                     push_edge(
                         &mut report.edges,
                         &mut seen,
@@ -79,6 +93,7 @@ pub fn derive_spatial_topology(
                         IN_AREA,
                         &area_id,
                         confidence,
+                        derivation,
                     );
                 }
             }
@@ -118,6 +133,15 @@ pub fn derive_spatial_topology(
                 IN_AREA,
                 &parent.entity_id,
                 child.confidence.min(parent.confidence),
+                geometry_derivation(
+                    &spatial,
+                    snapshot_identity,
+                    &child.entity_id,
+                    &parent.entity_id,
+                    IN_AREA,
+                    "footprint_containment",
+                    child.confidence.min(parent.confidence),
+                ),
             );
         }
     }
@@ -151,6 +175,15 @@ pub fn derive_spatial_topology(
                 ADJACENT_AREA,
                 &right.entity_id,
                 confidence,
+                geometry_derivation(
+                    &spatial,
+                    snapshot_identity,
+                    &left.entity_id,
+                    &right.entity_id,
+                    ADJACENT_AREA,
+                    "same_level_adjacency",
+                    confidence,
+                ),
             );
             push_edge(
                 &mut report.edges,
@@ -159,6 +192,15 @@ pub fn derive_spatial_topology(
                 ADJACENT_AREA,
                 &left.entity_id,
                 confidence,
+                geometry_derivation(
+                    &spatial,
+                    snapshot_identity,
+                    &right.entity_id,
+                    &left.entity_id,
+                    ADJACENT_AREA,
+                    "same_level_adjacency",
+                    confidence,
+                ),
             );
         }
     }
@@ -228,59 +270,10 @@ fn polygon_containment(
     Containment::Matches(matches)
 }
 
-fn point_containment(
-    spatial: &SpatialServingIndex,
-    facts: &ServingFactIndex,
-    subject_id: &str,
-    policy: &SpatialTopologyPolicy,
-) -> Containment {
-    let Some(point) = spatial.point_for_entity(subject_id) else {
-        return Containment::Missing;
-    };
-    if point.confidence < policy.minimum_point_confidence
-        || point.source_type.as_deref().is_none_or(str::is_empty)
-    {
-        return Containment::Missing;
-    }
-    let mut containing = spatial
-        .geometry()
-        .features_containing_coordinate(point.latitude, point.longitude)
-        .into_iter()
-        .filter(|area| area.entity_type.eq_ignore_ascii_case("area"))
-        .map(|area| (area, admin_level(facts, &area.entity_id)))
-        .collect::<Vec<_>>();
-    containing.sort_by(|(left, left_level), (right, right_level)| {
-        left_level
-            .cmp(right_level)
-            .then_with(|| left.entity_id.cmp(&right.entity_id))
-    });
-    if containing.is_empty() {
-        return Containment::Missing;
-    }
-    let mut matches = Vec::new();
-    for same_level in grouped_points_by_level(&containing) {
-        if same_level.len() != 1 {
-            return Containment::Ambiguous;
-        }
-        let (area, _) = same_level[0];
-        matches.push((
-            area.entity_id.clone(),
-            area.confidence.min(point.confidence),
-        ));
-    }
-    Containment::Matches(matches)
-}
-
 fn grouped_by_level<'a>(
     values: &'a [(&'a super::SpatialFeature, f64, Option<u8>)],
 ) -> impl Iterator<Item = &'a [(&'a super::SpatialFeature, f64, Option<u8>)]> {
     values.chunk_by(|left, right| left.2 == right.2)
-}
-
-fn grouped_points_by_level<'a>(
-    values: &'a [(&'a super::SpatialFeature, Option<u8>)],
-) -> impl Iterator<Item = &'a [(&'a super::SpatialFeature, Option<u8>)]> {
-    values.chunk_by(|left, right| left.1 == right.1)
 }
 
 fn admin_level(facts: &ServingFactIndex, entity_id: &str) -> Option<u8> {
@@ -304,6 +297,7 @@ fn push_edge(
     relation: &str,
     to: &str,
     confidence: f32,
+    derivation: Option<DerivedEvidence>,
 ) {
     if seen.insert((from.to_string(), relation.to_string(), to.to_string())) {
         edges.push(ServingEdgeRecord {
@@ -312,8 +306,34 @@ fn push_edge(
             to_entity_id: to.to_string(),
             confidence,
             source_type: "SpatialTopology".to_string(),
+            derivation,
         });
     }
+}
+
+fn geometry_derivation(
+    spatial: &SpatialServingIndex,
+    snapshot_identity: &str,
+    subject_id: &str,
+    target_id: &str,
+    relation: &str,
+    metric: &str,
+    confidence: f32,
+) -> Option<DerivedEvidence> {
+    let inputs = spatial.footprint_evidence_refs(&[subject_id, target_id], snapshot_identity)?;
+    DerivedEvidence::new(
+        snapshot_identity,
+        subject_id,
+        Some(target_id.to_string()),
+        relation,
+        metric,
+        Some(1.0),
+        Some("boolean".to_string()),
+        "spatial-topology-v2",
+        confidence,
+        inputs,
+    )
+    .ok()
 }
 
 #[cfg(test)]
@@ -322,7 +342,7 @@ mod tests {
 
     use super::*;
     use crate::knowledge::FactValue;
-    use crate::serving::ServingFactRecord;
+    use crate::serving::{ServingFactRecord, SourceObservation};
 
     fn entity(id: &str, kind: &str) -> ServingEntityRecord {
         ServingEntityRecord {
@@ -335,6 +355,8 @@ mod tests {
     }
 
     fn fact(id: &str, key: &str, value: FactValue, source: &str) -> ServingFactRecord {
+        let observed_at = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
+        let source_url = Some("https://example.test/source".to_string());
         ServingFactRecord {
             entity_id: id.to_string(),
             fact_key: key.to_string(),
@@ -343,16 +365,26 @@ mod tests {
             value,
             confidence: 0.9,
             source_type: source.to_string(),
-            source_url: Some("https://example.test/source".to_string()),
+            source_url: source_url.clone(),
             model: None,
             skill_id: Some("spatial_topology_contract".to_string()),
-            learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
-            observation: None,
+            learned_at: observed_at,
+            observation: Some(
+                SourceObservation::new(
+                    "TopologyFixture",
+                    format!("source-record:{id}"),
+                    id,
+                    observed_at,
+                    source_url,
+                    vec!["asset:topology-fixture/v1".to_string()],
+                )
+                .unwrap(),
+            ),
         }
     }
 
     #[test]
-    fn society_polygon_uses_greatest_overlap_and_points_join_the_real_area() {
+    fn society_polygon_uses_greatest_overlap_without_point_containment() {
         let entities = vec![
             entity("area:east", "area"),
             entity("area:hoodi", "area"),
@@ -443,8 +475,21 @@ mod tests {
             ],
             Vec::new(),
         );
-        let report =
-            derive_spatial_topology(&entities, &facts, &[], &SpatialTopologyPolicy::default());
+        let existing_edges = vec![ServingEdgeRecord {
+            from_entity_id: "society:godrej-air".to_string(),
+            edge_type: IN_AREA.to_string(),
+            to_entity_id: "area:east".to_string(),
+            confidence: 0.9,
+            source_type: "LegacyTopology".to_string(),
+            derivation: None,
+        }];
+        let report = derive_spatial_topology(
+            &entities,
+            &facts,
+            &existing_edges,
+            &SpatialTopologyPolicy::default(),
+            "topology-fixture",
+        );
         assert!(report
             .edges
             .iter()
@@ -457,7 +502,7 @@ mod tests {
             .any(|edge| edge.from_entity_id == "society:godrej-air"
                 && edge.edge_type == IN_AREA
                 && edge.to_entity_id == "area:east"));
-        assert!(report
+        assert!(!report
             .edges
             .iter()
             .any(|edge| edge.from_entity_id == "place:metro"
@@ -479,6 +524,16 @@ mod tests {
             edge.edge_type == ADJACENT_AREA
                 && (edge.from_entity_id == "area:east" || edge.to_entity_id == "area:east")
         }));
+        assert!(report.edges.iter().all(|edge| edge
+            .derivation
+            .as_ref()
+            .is_some_and(|derivation| derivation.validate().is_ok())));
+        assert!(super::super::validate_serving_edge_evidence(
+            &report.edges,
+            facts.all_facts(),
+            "topology-fixture",
+        )
+        .is_ok());
 
         let serving =
             SpatialServingIndex::from_serving_bundle_with_edges(&entities, &facts, &report.edges);

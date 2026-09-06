@@ -970,86 +970,94 @@ impl<'a> GeoSearchQuery<'a> {
     ) -> BooleanEvaluation {
         let relation = clause.relation.to_ascii_lowercase();
         let evaluation = match relation.as_str() {
-            "inside" => {
-                if spatial_index
-                    .society_ids_inside(&place.entity_id)
-                    .iter()
-                    .any(|id| id == society_entity_id)
-                {
-                    spatial_index
-                        .footprint_evidence_refs(
-                            &[society_entity_id, &place.entity_id],
-                            snapshot_identity,
-                        )
-                        .and_then(|inputs| {
-                            verified_spatial_match(
-                                society_entity_id,
-                                Some(&place.entity_id),
-                                clause,
-                                "footprint_containment",
-                                Some(1.0),
-                                place.confidence,
-                                snapshot_identity,
-                                inputs,
-                            )
+            "inside" => spatial_index
+                .relation_derivation(
+                    society_entity_id,
+                    "in_area",
+                    &place.entity_id,
+                    snapshot_identity,
+                )
+                .and_then(|derivation| {
+                    verified_spatial_derivation_match(
+                        society_entity_id,
+                        Some(&place.entity_id),
+                        clause,
+                        derivation,
+                        snapshot_identity,
+                    )
+                })
+                .map_or_else(
+                    || {
+                        PredicateEvaluation::Unknown(EvidenceGap {
+                            predicate: format!("inside {}", place.name),
+                            reason: "no qualified containment derivation".to_string(),
                         })
-                        .map_or_else(
-                            || {
-                                PredicateEvaluation::Unknown(EvidenceGap {
-                                    predicate: format!("inside {}", place.name),
-                                    reason:
-                                        "containment inputs have no durable geometry observations"
-                                            .to_string(),
-                                })
-                            },
-                            PredicateEvaluation::Satisfied,
-                        )
-                } else {
-                    PredicateEvaluation::Unknown(EvidenceGap {
-                        predicate: format!("inside {}", place.name),
-                        reason: "no sourced containment relation".to_string(),
-                    })
-                }
-            }
+                    },
+                    PredicateEvaluation::Satisfied,
+                ),
             "adjacent" => {
                 let adjacent_area = spatial_index
                     .adjacent_area_ids(&place.entity_id)
                     .into_iter()
                     .find(|area_id| {
                         spatial_index
-                            .society_ids_inside(&area_id)
-                            .iter()
-                            .any(|id| id == society_entity_id)
+                            .relation_derivation(
+                                society_entity_id,
+                                "in_area",
+                                area_id,
+                                snapshot_identity,
+                            )
+                            .is_some()
+                            && spatial_index
+                                .relation_derivation(
+                                    area_id,
+                                    "adjacent_area",
+                                    &place.entity_id,
+                                    snapshot_identity,
+                                )
+                                .is_some()
                     });
                 if let Some(adjacent_area) = adjacent_area {
-                    spatial_index
-                        .footprint_evidence_refs(
-                            &[society_entity_id, adjacent_area.as_str(), &place.entity_id],
+                    let containment = spatial_index.relation_derivation(
+                        society_entity_id,
+                        "in_area",
+                        &adjacent_area,
+                        snapshot_identity,
+                    );
+                    let adjacency = spatial_index.relation_derivation(
+                        &adjacent_area,
+                        "adjacent_area",
+                        &place.entity_id,
+                        snapshot_identity,
+                    );
+                    match (containment, adjacency) {
+                        (Some(containment), Some(adjacency)) => verified_spatial_match(
+                            society_entity_id,
+                            Some(&place.entity_id),
+                            clause,
+                            "sourced_area_adjacency",
+                            Some(1.0),
+                            containment.confidence.min(adjacency.confidence),
                             snapshot_identity,
+                            vec![
+                                EvidenceRef::for_derivation(containment),
+                                EvidenceRef::for_derivation(adjacency),
+                            ],
                         )
-                        .and_then(|inputs| {
-                            verified_spatial_match(
-                                society_entity_id,
-                                Some(&place.entity_id),
-                                clause,
-                                "sourced_area_adjacency",
-                                Some(1.0),
-                                place.confidence,
-                                snapshot_identity,
-                                inputs,
-                            )
-                        })
                         .map_or_else(
                             || {
                                 PredicateEvaluation::Unknown(EvidenceGap {
                                     predicate: format!("adjacent to {}", place.name),
-                                    reason:
-                                        "adjacency inputs have no durable geometry observations"
-                                            .to_string(),
+                                    reason: "invalid adjacency derivation chain".to_string(),
                                 })
                             },
                             PredicateEvaluation::Satisfied,
-                        )
+                        ),
+                        _ => PredicateEvaluation::Unknown(EvidenceGap {
+                            predicate: format!("adjacent to {}", place.name),
+                            reason: "no qualified adjacency derivation chain".to_string(),
+                        }),
+                    }
                 } else {
                     PredicateEvaluation::Unknown(EvidenceGap {
                         predicate: format!("adjacent to {}", place.name),
@@ -1259,6 +1267,37 @@ fn verified_spatial_match(
         derived_evidence: Some(derivation),
         algorithm_version: "spatial-evaluator-v2".to_string(),
         confidence,
+        snapshot_identity: snapshot_identity.to_string(),
+    })
+}
+
+fn verified_spatial_derivation_match(
+    subject_entity_id: &str,
+    target_entity_id: Option<&str>,
+    clause: &ResolvedGeoClause,
+    derivation: &DerivedEvidence,
+    snapshot_identity: &str,
+) -> Option<VerifiedMatch> {
+    if derivation.subject_entity_id != subject_entity_id
+        || derivation.target_entity_id.as_deref() != target_entity_id
+        || derivation.snapshot_identity != snapshot_identity
+        || derivation.validate().is_err()
+    {
+        return None;
+    }
+    Some(VerifiedMatch {
+        subject_entity_id: subject_entity_id.to_string(),
+        target_entity_id: target_entity_id.map(str::to_string),
+        predicate: clause.target_text.clone(),
+        relation: clause.relation.clone(),
+        metric: derivation.metric.clone(),
+        value: derivation.value,
+        unit: derivation.unit.clone(),
+        observation_ids: Vec::new(),
+        evidence_refs: vec![EvidenceRef::for_derivation(derivation)],
+        derived_evidence: Some(derivation.clone()),
+        algorithm_version: derivation.algorithm_version.clone(),
+        confidence: derivation.confidence,
         snapshot_identity: snapshot_identity.to_string(),
     })
 }
@@ -1843,6 +1882,7 @@ mod tests {
             edge_type: "in_society".to_string(),
             confidence: 1.0,
             source_type: "unit-test".to_string(),
+            derivation: None,
         }];
         let search_index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
         query.restrict_evidence_to_properties(&properties, &search_index, &["near".to_string()]);

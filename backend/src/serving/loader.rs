@@ -10,10 +10,10 @@ use crate::lake::{LakeError, LakeKey, LakeStore};
 use super::{
     hydrate_tantivy_index, read_edges_parquet, read_entities_parquet, read_entity_aliases_parquet,
     read_facts_parquet, read_rera_evidence_parquet, read_search_metadata_parquet,
-    validate_society_aliases, ParquetReadError, ReraEvidenceIndex, ServingBundleManifest,
-    ServingEdgeRecord, ServingEntityAliasIndex, ServingEntityAliasRecord, ServingEntityRecord,
-    ServingFactIndex, SpatialServingIndex, TantivyIndexError, TantivyRecallIndex,
-    SEARCH_SERVING_BUNDLE_ASSET_ID,
+    validate_serving_edge_evidence, validate_society_aliases, ParquetReadError, ReraEvidenceIndex,
+    ServingBundleManifest, ServingEdgeRecord, ServingEntityAliasIndex, ServingEntityAliasRecord,
+    ServingEntityRecord, ServingFactIndex, SpatialServingIndex, TantivyIndexError,
+    TantivyRecallIndex, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 use crate::graph::GraphIndex;
 use crate::search::geo::GeoSearchIndex;
@@ -120,6 +120,8 @@ impl ServingBundleLoader {
         let edges = load_edges(&self.lake, &manifest).await?;
         let aliases = super::types::unique_society_aliases(&entities);
         let mut fact_index = load_fact_index(&self.lake, &manifest).await?;
+        validate_serving_edge_evidence(&edges, fact_index.all_facts(), &manifest.bundle_version)
+            .map_err(ServingBundleLoadError::Configuration)?;
         fact_index.add_society_aliases(&entities);
         let mut rera_evidence_index = load_rera_evidence_index(&self.lake, &manifest).await?;
         rera_evidence_index.add_aliases(&aliases);

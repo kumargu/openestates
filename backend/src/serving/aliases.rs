@@ -517,6 +517,7 @@ mod tests {
             to_entity_id: builder_id.to_string(),
             confidence: 1.0,
             source_type: "Rera".to_string(),
+            derivation: None,
         }
     }
 

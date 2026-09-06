@@ -279,6 +279,7 @@ fn test_bundle(root: &std::path::Path) -> LoadedServingBundle {
         to_entity_id: "area:hoodi".to_string(),
         confidence: 1.0,
         source_type: "OpenStreetMap".to_string(),
+        derivation: None,
     }];
     let facts = Vec::new();
     let fact_index = ServingFactIndex::from_records(facts.clone(), Vec::new());

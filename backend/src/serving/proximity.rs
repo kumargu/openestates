@@ -247,6 +247,7 @@ pub fn derive_proximity_records(
                         to_entity_id: candidate.place.point.entity_id.clone(),
                         confidence: candidate.confidence,
                         source_type: DERIVED_SOURCE_TYPE.to_string(),
+                        derivation: None,
                     });
                 }
                 if already_mentioned {
@@ -1009,6 +1010,7 @@ mod tests {
             to_entity_id: "place:generic:medical".to_string(),
             confidence: 0.9,
             source_type: "Google".to_string(),
+            derivation: None,
         }];
         let index = ServingFactIndex::from_records(facts, Vec::new());
 
@@ -1135,6 +1137,7 @@ mod tests {
             to_entity_id: "place:test".to_string(),
             confidence: 0.9,
             source_type: DERIVED_SOURCE_TYPE.to_string(),
+            derivation: None,
         }];
 
         remove_derived_proximity_records(&mut facts, &mut metadata, &mut edges);

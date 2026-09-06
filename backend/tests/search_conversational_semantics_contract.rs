@@ -934,7 +934,6 @@ fn inside_requires_sourced_containment_and_cannot_use_nearby_coordinates() {
         12.986,
         77.716,
     ));
-    builder.add_edge("society:sourced-inside", "in_area", "area:hoodi");
     let fixture = builder.build(false);
 
     let output = fixture.search_output("3BHK inside Hoodi under 2Cr");
@@ -2377,6 +2376,7 @@ impl FixtureBuilder {
             to_entity_id: to.to_string(),
             confidence: 0.9,
             source_type: "OpenStreetMap".to_string(),
+            derivation: None,
         });
     }
 
@@ -2490,6 +2490,16 @@ impl FixtureBuilder {
 
     fn build(mut self, derive_proximity: bool) -> MockSearchFixture {
         let mut edges = self.edges;
+        let topology_index =
+            ServingFactIndex::from_records(self.facts.clone(), self.metadata.clone());
+        let topology = backend::serving::derive_spatial_topology(
+            &self.entities,
+            &topology_index,
+            &edges,
+            &Default::default(),
+            "conversational-semantics-mock",
+        );
+        edges.extend(topology.edges);
         if derive_proximity {
             let base_index =
                 ServingFactIndex::from_records(self.facts.clone(), self.metadata.clone());

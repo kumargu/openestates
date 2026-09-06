@@ -1928,6 +1928,7 @@ mod tests {
             to_entity_id: "society:rera-688242e8e3711955".to_string(),
             confidence: 1.0,
             source_type: "Rera".to_string(),
+            derivation: None,
         }];
 
         let subjects = catalog_rera_subject_ids(&[membership], &entities, &edges);

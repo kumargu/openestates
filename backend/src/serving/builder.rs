@@ -22,13 +22,14 @@ use super::parquet::{
 use super::proximity::{derive_proximity_records, remove_derived_proximity_records};
 use super::tantivy_index::{TantivyIndexError, TantivyRecallIndex};
 use super::{
-    materialize_society_aliases, unique_society_aliases, BundleArtifact, BundleArtifactKind,
-    ServingBundleManifest, ServingBundleSchema, ServingColumnSchema, ServingEdgeRecord,
-    ServingEntityRecord, ServingFactRecord, ServingReraEvidenceRecord, ServingSearchMetadataRecord,
-    ServingTableSchema, SourceObservation, TrustPolicy,
+    materialize_society_aliases, unique_society_aliases, validate_serving_edge_evidence,
+    BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingBundleSchema,
+    ServingColumnSchema, ServingEdgeRecord, ServingEntityRecord, ServingFactRecord,
+    ServingReraEvidenceRecord, ServingSearchMetadataRecord, ServingTableSchema, SourceObservation,
+    TrustPolicy,
 };
 
-pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 9;
+pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 10;
 
 #[derive(Clone)]
 pub struct ServingBundleBuilder {
@@ -148,8 +149,13 @@ impl ServingBundleBuilder {
         let topology_index =
             super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
         let topology_policy = load_resolution_policies()?.spatial_topology;
-        let topology =
-            super::derive_spatial_topology(&entities, &topology_index, &edges, &topology_policy);
+        let topology = super::derive_spatial_topology(
+            &entities,
+            &topology_index,
+            &edges,
+            &topology_policy,
+            &bundle_version,
+        );
         let topology_gap_key = AssetPathBuilder::serving_bundle_key(
             &bundle_version,
             "diagnostics/spatial_topology_gaps.json",
@@ -176,7 +182,7 @@ impl ServingBundleBuilder {
             "application/json",
             Some(topology_gap_count as u64),
         ));
-        edges.extend(topology.edges);
+        merge_spatial_topology_edges(&mut edges, topology.edges);
         if derive_proximity {
             let base_index =
                 super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
@@ -205,7 +211,7 @@ impl ServingBundleBuilder {
         excluded_rera_evidence_society_ids.extend(newly_excluded_rera_evidence_society_ids);
         excluded_rera_evidence_society_ids.sort();
         excluded_rera_evidence_society_ids.dedup();
-        validate_serving_records(&entities, &facts, &search_metadata, &edges)?;
+        validate_serving_records(&entities, &facts, &search_metadata, &edges, &bundle_version)?;
         let entity_aliases = materialize_society_aliases(&entities, &edges)
             .map_err(|err| ServingBundleError::InvalidRecords(err.to_string()))?;
         if let Err(err) = write_preference_coverage_report(&entities, &facts, &search_metadata) {
@@ -373,6 +379,7 @@ fn validate_serving_records(
     facts: &[ServingFactRecord],
     search_metadata: &[ServingSearchMetadataRecord],
     edges: &[ServingEdgeRecord],
+    snapshot_identity: &str,
 ) -> Result<(), ServingBundleError> {
     let mut entity_ids = BTreeSet::new();
     for entity in entities {
@@ -448,6 +455,8 @@ fn validate_serving_records(
             )));
         }
     }
+    validate_serving_edge_evidence(edges, facts, snapshot_identity)
+        .map_err(ServingBundleError::InvalidRecords)?;
     let entity_type_by_id = entities
         .iter()
         .map(|entity| (entity.entity_id.as_str(), entity.entity_type.as_str()))
@@ -483,6 +492,31 @@ fn validate_serving_records(
         }
     }
     Ok(())
+}
+
+fn merge_spatial_topology_edges(
+    edges: &mut Vec<ServingEdgeRecord>,
+    derived_edges: Vec<ServingEdgeRecord>,
+) {
+    for derived in derived_edges {
+        let same_relation = |edge: &ServingEdgeRecord| {
+            edge.from_entity_id == derived.from_entity_id
+                && edge.edge_type.eq_ignore_ascii_case(&derived.edge_type)
+                && edge.to_entity_id == derived.to_entity_id
+        };
+        if edges
+            .iter()
+            .any(|edge| same_relation(edge) && edge.derivation.is_some())
+        {
+            continue;
+        }
+        if derived.derivation.is_some() {
+            edges.retain(|edge| !same_relation(edge));
+            edges.push(derived);
+        } else if !edges.iter().any(same_relation) {
+            edges.push(derived);
+        }
+    }
 }
 
 fn rebuild_serving_entity_searchable_text(
@@ -622,13 +656,19 @@ pub fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSch
             ServingTableSchema {
                 name: "edges".to_string(),
                 path: "edges/part-00000.parquet".to_string(),
-                columns: vec![
-                    required_column("from_entity_id", "utf8"),
-                    required_column("edge_type", "utf8"),
-                    required_column("to_entity_id", "utf8"),
-                    required_column("confidence", "float32"),
-                    required_column("source_type", "utf8"),
-                ],
+                columns: {
+                    let mut columns = vec![
+                        required_column("from_entity_id", "utf8"),
+                        required_column("edge_type", "utf8"),
+                        required_column("to_entity_id", "utf8"),
+                        required_column("confidence", "float32"),
+                        required_column("source_type", "utf8"),
+                    ];
+                    if format_version >= 10 {
+                        columns.push(optional_column("derivation_json", "json<derived_evidence>"));
+                    }
+                    columns
+                },
             },
             ServingTableSchema {
                 name: "search_metadata".to_string(),
@@ -680,6 +720,7 @@ fn serving_edge_records(edges: &[KgViewEdgeRecord]) -> Vec<ServingEdgeRecord> {
             to_entity_id: edge.to_entity_id.clone(),
             confidence: edge.weight,
             source_type: edge.source_type.clone(),
+            derivation: None,
         })
         .collect()
 }
@@ -1253,7 +1294,7 @@ mod tests {
             },
         ];
 
-        let error = validate_serving_records(&entities, &[], &[], &[]).unwrap_err();
+        let error = validate_serving_records(&entities, &[], &[], &[], "test-bundle").unwrap_err();
 
         assert!(error.to_string().contains("soc-arvind-bel-air"));
         assert!(error.to_string().contains("society:rera-first"));
@@ -1284,7 +1325,8 @@ mod tests {
             observation: None,
         }];
 
-        let error = validate_serving_records(&entities, &facts, &[], &[]).unwrap_err();
+        let error =
+            validate_serving_records(&entities, &facts, &[], &[], "test-bundle").unwrap_err();
 
         assert!(error
             .to_string()
@@ -1324,8 +1366,14 @@ mod tests {
             scoring_thresholds: vec![],
         };
 
-        validate_serving_records(&entities, &facts, &[metadata.clone(), metadata], &[])
-            .expect("repeatable facts may have multiple search metadata rows");
+        validate_serving_records(
+            &entities,
+            &facts,
+            &[metadata.clone(), metadata],
+            &[],
+            "test-bundle",
+        )
+        .expect("repeatable facts may have multiple search metadata rows");
     }
 
     #[test]
@@ -1338,7 +1386,7 @@ mod tests {
             searchable_text: String::new(),
         }];
 
-        let error = validate_serving_records(&entities, &[], &[], &[]).unwrap_err();
+        let error = validate_serving_records(&entities, &[], &[], &[], "test-bundle").unwrap_err();
 
         assert!(error
             .to_string()

@@ -1163,6 +1163,7 @@ mod tests {
                 edge_type: "built_by".to_string(),
                 confidence: 1.0,
                 source_type: "test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "society:brigade-society".to_string(),
@@ -1170,6 +1171,7 @@ mod tests {
                 edge_type: "built_by".to_string(),
                 confidence: 1.0,
                 source_type: "test".to_string(),
+                derivation: None,
             },
         ];
         let index = SearchIndex::build_with_serving_graph(&[prestige, brigade], &entities, &edges);
@@ -1274,6 +1276,7 @@ mod tests {
             to_entity_id: canonical_id.to_string(),
             confidence: 1.0,
             source_type: "test".to_string(),
+            derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&[property], &entities, &edges);
         let query = CompiledQuery {
@@ -1316,6 +1319,7 @@ mod tests {
             to_entity_id: "area:whitefield".to_string(),
             confidence: 0.9,
             source_type: "test".to_string(),
+            derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&[property], &entities, &edges);
         let query = CompiledQuery {

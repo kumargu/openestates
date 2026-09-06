@@ -4,7 +4,7 @@
 
 - Reset recorded: 2026-09-06 Asia/Kolkata
 - Continuation branch: `feat/issue-118-consolidated`
-- Continuation HEAD: Checkpoint 14 (`feat: qualify spatial evidence derivations`)
+- Continuation HEAD: Checkpoint 15 working tree (`feat: persist spatial edge derivations`)
 - Preserved source branch: `feat/issue-118-spatial-intent`
 - Merge base: `d1c06e2b` (`main` at the start of Issue 118 work)
 - Worktree at reset: clean
@@ -37,8 +37,10 @@ checkpoint-local next steps where they differ from the consolidated plan.
     snapshot-owned receipts.
 19. `c867fd5a` — remove automatic spatial success from the shared Boolean
     evaluator.
-20. Checkpoint 14 (current log commit) — qualify spatial matches with durable
-    observations and typed derivations.
+20. `1b19ac4c` — qualify spatial matches with durable observations and typed
+    derivations.
+21. Checkpoint 15 (current working tree) — persist qualified containment and
+    adjacency derivations on serving edges.
 
 ### Pulled-forward commitment audit
 
@@ -46,7 +48,7 @@ checkpoint-local next steps where they differ from the consolidated plan.
 |---|---|
 | Snapshot-only search construction (#123) | Implemented for `SearchEngine`: its only constructor input is one `SearchRuntimeSnapshot`; the lower-level parallel `TextSearch` evaluator remains to be removed. |
 | Four-state evaluation (#123) | Inventory and required spatial predicates now flow through the shared Boolean evaluator. Area/entity/evidence predicates still have empty-success paths. |
-| Stable spatial/price/BHK evidence references (#123) | BHK/price share one validated external-listing reference. Spatial matches now carry snapshot-qualified derivation references and their exact geometry/coordinate inputs; offline derivation rows remain to be materialized. |
+| Stable spatial/price/BHK evidence references (#123) | BHK/price share one validated external-listing reference. Containment and adjacency now consume snapshot-qualified offline edge derivations; footprint and point distance derivations remain runtime projections. |
 | Semantic-contract digest (#123) | Partial: config inputs are hashed, but resolved bindings and evaluator/algorithm versions are not comprehensive. |
 | Capability/evaluator/proof bindings (#123) | Incomplete. |
 | Touched mixed-state and duplicate-path removal (#123) | Inventory duplicate evaluation/projection and automatic spatial success are removed; other duplicate paths remain. |
@@ -54,7 +56,7 @@ checkpoint-local next steps where they differ from the consolidated plan.
 | Google/OSM canonical identity (#124) | Incomplete: provider-independent place/locality crosswalks are not fully materialized. |
 | Area hierarchy and topology (#124) | Implemented synthetically; not yet verified in a real candidate bundle. |
 | Footprint containment and distance (#124) | Implemented, but a separate spatial evaluation path remains. |
-| Typed spatial derivations (#124) | Partial: runtime proofs now retain typed, content-addressed derivations over durable source observations. The derivations are not yet stored as offline serving rows. |
+| Typed spatial derivations (#124) | Partial: containment and adjacency derivations are stored on v10 serving edges and survive Parquet/runtime/proof. Distance derivations are not yet stored offline. |
 
 ### Architectural lessons and non-negotiable gates
 
@@ -203,7 +205,7 @@ failure stops further stacking; honest coverage gaps do not.
 ### Current verified gate summary
 
 The detailed commands and counts remain recorded in the checkpoints below.
-Through the Checkpoint 14 working tree, focused Rust search and serving
+Through the Checkpoint 15 working tree, focused Rust search and serving
 contracts, the frozen query bank, all-target Cargo check, formatting, and
 `git diff --check` pass. The hardcoding audit remains at 330 findings, 28
 fact-key comparisons, and zero blocked aliases, with zero delta from the
@@ -214,15 +216,16 @@ inventory observations. These gates must be rerun for every touched slice.
 ### Exact next command
 
 ```bash
-sed -n '35,70p' backend/src/serving/types.rs
-sed -n '300,370p' backend/src/serving/parquet.rs
-sed -n '1,220p' backend/src/serving/topology.rs
-rg -n "derive_spatial_topology|ServingEdgeRecord|write_edges_parquet" backend/src/serving
+sed -n '1,220p' backend/src/assets/home_state.rs
+sed -n '220,560p' backend/src/assets/home_state.rs
+rg -n "signed_duration_since|date_naive|learned_at.*[<>]|max_by_key\(.*learned_at|home_age_years|project_age_years" backend/src app/config/dag backend/tests
 ```
 
-Materialize the same typed derivation lineage on offline containment and
-adjacency serving records. Keep legacy edges readable but unable to verify a
-match without source inputs; do not add time-based selection or age logic.
+Apply the user's explicit no-time-calculation rule to the remaining offline
+`home_state` product derivation. Preserve source dates as facts and timestamps
+as lineage only; do not infer age, freshness, or current delivery state from
+wall-clock comparisons. Keep existing tests but update the existing DAG
+contract rather than adding a new suite.
 
 ## Checkpoint 11 — timestamps removed from search confidence
 
@@ -447,9 +450,8 @@ facts and edges remain usable for recall only and cannot verify a match.
 
 The temporal scan was kept scoped to serving and request-path product logic.
 Operational run-duration/pacing timestamps remain operational metadata.
-Offline `home_state` date arithmetic still requires an explicit product
-decision before it is changed because it models property age rather than
-search freshness.
+The user has now made the product decision: offline `home_state` date
+arithmetic must also be removed. Source dates remain provenance facts only.
 
 ### Candidate identity
 
@@ -469,6 +471,69 @@ Materialize typed derivation lineage on offline containment and adjacency edge
 rows, preserve legacy read compatibility, and reject dangling derivation
 inputs during serving validation. Do not add a broad new unit-test suite; use
 the existing serving vertical and frozen query-bank contracts.
+
+## Checkpoint 15 — offline containment and adjacency receipts
+
+- Parent commit: `1b19ac4c`
+- Classified issue: serving-edge `proof_gap` with legacy replacement
+  `architecture_gap`
+
+### Implemented
+
+- Bumped newly built serving bundles from format 9 to format 10 and added an
+  optional `derivation_json` column to edge Parquet. Older edge tables remain
+  readable as unqualified recall relations.
+- Materialized content-addressed `spatial-topology-v2` derivations for polygon
+  containment and same-level adjacency from the exact geometry observations.
+  Point geometry no longer produces containment; it remains distance-only.
+- Replaced a same-key unqualified legacy topology edge with the qualified
+  offline relation. A malformed qualified edge is never silently repaired and
+  instead blocks build, load, and release validation.
+- Validated derivation identity, snapshot, edge subject/target/relation/
+  confidence binding, and resolution of every input observation or derivation
+  reference. Dangling and cross-subject inputs cannot reach runtime.
+- Search containment now consumes the pinned offline edge derivation directly.
+  Adjacency composes the exact qualified containment and adjacency receipts.
+- Selected duplicate qualified relation evidence by stable derivation identity,
+  never row order or timestamp.
+
+### Gates and test value
+
+- Frozen conversational query bank: 10 passed with unchanged ordered results.
+- Search efficiency contract: 11 passed.
+- Serving bundle contract: 3 passed, including v10 schema and legacy read
+  compatibility.
+- Existing topology exact-geometry test: 1 passed. Extending it with a legacy
+  same-key edge caught the real suppression bug fixed by this checkpoint.
+- Existing Parquet evidence tests: 3 passed. The one compact edge round-trip
+  assertion protects stable identity transport; it did not expose a new bug.
+- Existing release-validation tests: 2 passed.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check --all-targets`: passed.
+- Hardcoding audit: 330 findings, 28 fact-key comparisons, zero blocked aliases;
+  delta remains zero.
+- `cargo fmt`, `git diff --check`, and API smoke completed. Smoke remains 52/53
+  against the unchanged promoted v8 bundle; only `3BHK` fails because that
+  bundle has no durable inventory observations.
+- Existing macOS compact-unwind linker warning remains unchanged.
+
+### Candidate identity
+
+No Issue 118 candidate lake or bundle exists. Smoke loaded the existing
+`waterford-osm-arrival-2026-08-31-release` development bundle read-only. The
+repository main-lake pointer remains `search-proximity-category-v7-2026-09-04`
+with materialization `653cd6fd-c41e-412e-9764-208bfba07240`; no pointer changed.
+
+### Next exact command
+
+```bash
+sed -n '1,220p' backend/src/assets/home_state.rs
+sed -n '220,560p' backend/src/assets/home_state.rs
+rg -n "signed_duration_since|date_naive|learned_at.*[<>]|max_by_key\(.*learned_at|home_age_years|project_age_years" backend/src app/config/dag backend/tests
+```
+
+Remove remaining product-state and age inference from dates. Keep explicit
+source status and delay facts, preserve timestamps only as metadata, and update
+the existing home-state/DAG contracts without creating a new test suite.
 
 ## Goal and invariants
 

@@ -2622,6 +2622,7 @@ mod tests {
                 to_entity_id: "road:one".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "society:one".to_string(),
@@ -2629,6 +2630,7 @@ mod tests {
                 to_entity_id: "road:one".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "society:one".to_string(),
@@ -2636,6 +2638,7 @@ mod tests {
                 to_entity_id: "place:metro".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "society:two".to_string(),
@@ -2643,6 +2646,7 @@ mod tests {
                 to_entity_id: "road:two".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
         ];
 

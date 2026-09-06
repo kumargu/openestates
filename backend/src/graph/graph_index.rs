@@ -191,6 +191,7 @@ mod tests {
                 to_entity_id: "road:ecc-road".to_string(),
                 confidence: 0.9,
                 source_type: "Computed".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "society:prestige-waterford".to_string(),
@@ -198,6 +199,7 @@ mod tests {
                 to_entity_id: "area:whitefield".to_string(),
                 confidence: 0.8,
                 source_type: "Computed".to_string(),
+                derivation: None,
             },
         ];
         let index = GraphIndex::from_serving_edges(&edges);
@@ -214,6 +216,7 @@ mod tests {
             to_entity_id: "road_segment:rera-falcon-city-approach".to_string(),
             confidence: 0.9,
             source_type: "Computed".to_string(),
+            derivation: None,
         }];
         let mut index = GraphIndex::from_serving_edges(&edges);
         index.add_entity_aliases(&[(
@@ -239,6 +242,7 @@ mod tests {
                 to_entity_id: "area:whitefield".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "area:whitefield".to_string(),
@@ -246,6 +250,7 @@ mod tests {
                 to_entity_id: "place:metro".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "society:one".to_string(),
@@ -253,6 +258,7 @@ mod tests {
                 to_entity_id: "builder:x".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
         ];
         let index = GraphIndex::from_serving_edges(&edges);
@@ -272,6 +278,7 @@ mod tests {
                 to_entity_id: "place:metro".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "society:one".to_string(),
@@ -279,6 +286,7 @@ mod tests {
                 to_entity_id: "place:metro".to_string(),
                 confidence: 0.8,
                 source_type: "test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "society:one".to_string(),
@@ -286,6 +294,7 @@ mod tests {
                 to_entity_id: "road:one".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
         ];
 
@@ -306,6 +315,7 @@ mod tests {
                 to_entity_id: "road:one".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "society:one".to_string(),
@@ -313,6 +323,7 @@ mod tests {
                 to_entity_id: "place:metro".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "society:one".to_string(),
@@ -320,6 +331,7 @@ mod tests {
                 to_entity_id: "road:two".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
         ];
 

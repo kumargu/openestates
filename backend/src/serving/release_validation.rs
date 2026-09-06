@@ -13,9 +13,9 @@ use crate::lake::{LakeError, LakeKey, LakeStore};
 
 use super::{
     read_edges_parquet, read_entities_parquet, read_entity_aliases_parquet, read_facts_parquet,
-    read_search_metadata_parquet, validate_society_aliases, BundleArtifactKind, ParquetReadError,
-    ServingBundleManifest, ServingFactIndex, ServingFactRecord, ServingQuarantineReport,
-    SEARCH_SERVING_BUNDLE_ASSET_ID,
+    read_search_metadata_parquet, validate_serving_edge_evidence, validate_society_aliases,
+    BundleArtifactKind, ParquetReadError, ServingBundleManifest, ServingFactIndex,
+    ServingFactRecord, ServingQuarantineReport, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 
 const PUBLIC_MEDIA_PREFIX: &str = "/societies/";
@@ -380,7 +380,14 @@ pub async fn validate_search_serving_candidate(
         edges.len(),
     );
 
-    validate_record_relations(&entities, &facts, &metadata, &edges, &mut issues);
+    validate_record_relations(
+        &entities,
+        &facts,
+        &metadata,
+        &edges,
+        &manifest.bundle_version,
+        &mut issues,
+    );
     if let Err(error) = validate_society_aliases(&entity_aliases, &entities) {
         issue(
             &mut issues,
@@ -612,6 +619,7 @@ fn validate_record_relations(
     facts: &[ServingFactRecord],
     metadata: &[super::ServingSearchMetadataRecord],
     edges: &[super::ServingEdgeRecord],
+    snapshot_identity: &str,
     issues: &mut Vec<ServingBundleValidationIssue>,
 ) {
     let mut entity_ids = BTreeSet::new();
@@ -716,6 +724,9 @@ fn validate_record_relations(
                     .insert(&edge.to_entity_id);
             }
         }
+    }
+    if let Err(error) = validate_serving_edge_evidence(edges, facts, snapshot_identity) {
+        issue(issues, "invalid_edge_evidence", error, None);
     }
     for property in entities
         .iter()
@@ -1144,6 +1155,7 @@ mod tests {
             &facts,
             &[metadata.clone(), metadata],
             &[],
+            "test-bundle",
             &mut issues,
         );
 

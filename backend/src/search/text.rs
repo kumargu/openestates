@@ -4422,6 +4422,7 @@ mod tests {
             edge_type: "in_area".to_string(),
             confidence: 1.0,
             source_type: "unit-test".to_string(),
+            derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
         let compiled_query = CompiledQuery {
@@ -4479,6 +4480,7 @@ mod tests {
             edge_type: "in_society".to_string(),
             confidence: 1.0,
             source_type: "unit-test".to_string(),
+            derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
         let serving_facts = ServingFactIndex::from_records(
@@ -4599,6 +4601,7 @@ mod tests {
                 edge_type: "in_society".to_string(),
                 confidence: 1.0,
                 source_type: "unit-test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "property:incomplete-unknown-price".to_string(),
@@ -4606,6 +4609,7 @@ mod tests {
                 edge_type: "in_society".to_string(),
                 confidence: 1.0,
                 source_type: "unit-test".to_string(),
+                derivation: None,
             },
         ];
         let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
@@ -7472,6 +7476,7 @@ mod tests {
             edge_type: "in_area".to_string(),
             confidence: 1.0,
             source_type: "unit-test".to_string(),
+            derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
         let serving_facts = ServingFactIndex::from_records(
@@ -8735,6 +8740,7 @@ mod tests {
             edge_type: "built_by".to_string(),
             confidence: 1.0,
             source_type: "unit-test".to_string(),
+            derivation: None,
         })
         .collect::<Vec<_>>();
         let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);

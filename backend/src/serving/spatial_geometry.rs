@@ -9,7 +9,9 @@ use rstar::{RTree, RTreeObject, AABB};
 
 use crate::knowledge::FactValue;
 
-use super::{ServingEdgeRecord, ServingEntityRecord, ServingFactIndex, SourceObservation};
+use super::{
+    DerivedEvidence, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex, SourceObservation,
+};
 
 const GEOMETRY_FACT_KEY: &str = "geo.geometry_geojson";
 const AREA_EPSILON: f64 = 1e-12;
@@ -48,6 +50,7 @@ pub struct SpatialGeometryIndex {
     tree: RTree<IndexedFeature>,
     outgoing: HashMap<(String, String), Vec<String>>,
     incoming: HashMap<(String, String), Vec<String>>,
+    derivations: HashMap<(String, String, String), DerivedEvidence>,
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +90,7 @@ impl SpatialGeometryIndex {
         );
         let mut outgoing = HashMap::<(String, String), Vec<String>>::new();
         let mut incoming = HashMap::<(String, String), Vec<String>>::new();
+        let mut derivations = HashMap::<(String, String, String), DerivedEvidence>::new();
         for edge in edges {
             let relation = edge.edge_type.to_ascii_lowercase();
             push_unique(
@@ -97,10 +101,29 @@ impl SpatialGeometryIndex {
             );
             push_unique(
                 incoming
-                    .entry((edge.to_entity_id.clone(), relation))
+                    .entry((edge.to_entity_id.clone(), relation.clone()))
                     .or_default(),
                 &edge.from_entity_id,
             );
+            if let Some(derivation) = &edge.derivation {
+                let key = (
+                    edge.from_entity_id.clone(),
+                    relation,
+                    edge.to_entity_id.clone(),
+                );
+                match derivations.entry(key) {
+                    std::collections::hash_map::Entry::Occupied(mut entry)
+                        if derivation.derivation_id.as_str()
+                            < entry.get().derivation_id.as_str() =>
+                    {
+                        entry.insert(derivation.clone());
+                    }
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(derivation.clone());
+                    }
+                    _ => {}
+                }
+            }
         }
         for values in outgoing.values_mut().chain(incoming.values_mut()) {
             values.sort();
@@ -110,6 +133,7 @@ impl SpatialGeometryIndex {
             tree,
             outgoing,
             incoming,
+            derivations,
         }
     }
 
@@ -265,6 +289,19 @@ impl SpatialGeometryIndex {
             .flatten()
             .map(String::as_str)
             .collect()
+    }
+
+    pub fn relation_derivation(
+        &self,
+        from_entity_id: &str,
+        relation: &str,
+        to_entity_id: &str,
+    ) -> Option<&DerivedEvidence> {
+        self.derivations.get(&(
+            from_entity_id.to_string(),
+            relation.to_ascii_lowercase(),
+            to_entity_id.to_string(),
+        ))
     }
 }
 

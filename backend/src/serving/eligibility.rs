@@ -624,6 +624,7 @@ mod tests {
             to_entity_id: to.to_string(),
             confidence: 1.0,
             source_type: "Manual".to_string(),
+            derivation: None,
         }
     }
 
