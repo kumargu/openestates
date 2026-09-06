@@ -7,7 +7,7 @@ use crate::dag_config::{search_parser_config, search_resolution_config};
 use crate::serving::{ServingEntityAliasIndex, ServingEntityRecord};
 
 use super::ast::{PredicateFamily, PredicatePolarity};
-use super::compiled_plan::CompiledSearchPlan;
+use super::compiled_plan::{CompiledSearchPlan, IntentBranch};
 use super::intent::{parse_intent, SearchIntent};
 use super::SearchRuntimeVersion;
 
@@ -95,6 +95,10 @@ pub fn compile_search_revision_with_plan(
     let parent = parent_query.trim();
     let turn = utterance.trim();
     let discourse = &search_parser_config().discourse;
+    let fallback_plan = parent_plan
+        .is_none()
+        .then(|| compile_revision_parent_plan(parent));
+    let parent_plan = parent_plan.or(fallback_plan.as_ref());
 
     if turn.is_empty() {
         return clarification(SearchRevisionOperation::Refine, active_branch_count);
@@ -111,8 +115,7 @@ pub fn compile_search_revision_with_plan(
             };
         }
         if let Some(area_name) = area_only_alternative {
-            let Some(query) =
-                parent_plan.and_then(|plan| area_alternative_query(parent, plan, area_name))
+            let Some(query) = parent_plan.and_then(|plan| area_alternative_query(plan, area_name))
             else {
                 return clarification(SearchRevisionOperation::Expand, active_branch_count);
             };
@@ -165,7 +168,9 @@ pub fn compile_search_revision_with_plan(
         } else {
             None
         };
-        if let Some(query) = replace_budget_constraint(parent, turn, target_branch) {
+        if let Some(query) =
+            parent_plan.and_then(|plan| replace_budget_constraint(plan, turn, target_branch))
+        {
             return candidate_with_patch(
                 SearchRevisionOperation::Refine,
                 query,
@@ -284,31 +289,26 @@ pub(crate) fn resolve_area_only_alternative(
     }
 }
 
-fn area_alternative_query(
-    parent_query: &str,
-    parent_plan: &CompiledSearchPlan,
-    area_name: &str,
-) -> Option<String> {
+fn area_alternative_query(parent_plan: &CompiledSearchPlan, area_name: &str) -> Option<String> {
     let [branch] = parent_plan.branches.as_slice() else {
         return None;
     };
-    let spans = branch.predicates.source_spans_for(
+    let (alternative, replaced) = replace_branch_predicates(
+        branch,
         &[
             PredicateFamily::Area,
             PredicateFamily::Society,
             PredicateFamily::Spatial,
         ],
-        PredicatePolarity::Positive,
-    );
-    let [span] = spans.as_slice() else {
-        return None;
-    };
-    if span.start > span.end || span.end > branch.compiled_query.raw.len() {
+        area_name,
+    )?;
+    if replaced != 1 {
         return None;
     }
-    let mut alternative = branch.compiled_query.raw.clone();
-    alternative.replace_range(span.start..span.end, area_name);
-    Some(format!("{parent_query} or {alternative}"))
+    Some(format!(
+        "{} or {alternative}",
+        canonical_plan_query(parent_plan)
+    ))
 }
 
 fn candidate(
@@ -568,41 +568,85 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
 }
 
 fn replace_budget_constraint(
-    parent: &str,
+    parent_plan: &CompiledSearchPlan,
     utterance: &str,
     target_branch: Option<usize>,
 ) -> Option<String> {
-    let parent_slots = super::parser::parse_query_slots(parent);
     let replacement_slots = super::parser::parse_query_slots(utterance);
     let replacement = replacement_slots.budgets.first()?;
     let replacement_text = utterance.get(replacement.start..replacement.end)?.trim();
-    if replacement_text.is_empty() || parent_slots.budgets.is_empty() {
+    if replacement_text.is_empty()
+        || target_branch.is_some_and(|index| index >= parent_plan.branches.len())
+    {
         return None;
     }
-    let targeted_span = target_branch.and_then(|target| {
-        super::query_plan::discourse_branch_layout(parent)
-            .and_then(|layout| layout.segments.get(target).copied())
-    });
-    if target_branch.is_some() && targeted_span.is_none() {
-        return None;
-    }
-    let budgets = parent_slots
-        .budgets
-        .iter()
-        .filter(|budget| {
-            targeted_span.is_none_or(|span| budget.start >= span.start && budget.end <= span.end)
-        })
-        .collect::<Vec<_>>();
-    if budgets.is_empty() {
-        return None;
-    }
-    let mut query = parent.to_string();
-    for budget in budgets.into_iter().rev() {
-        if budget.start <= budget.end && budget.end <= query.len() {
-            query.replace_range(budget.start..budget.end, replacement_text);
+
+    let mut branch_queries = Vec::with_capacity(parent_plan.branches.len());
+    for (index, branch) in parent_plan.branches.iter().enumerate() {
+        if target_branch.is_none_or(|target| target == index) {
+            let (query, replaced) =
+                replace_branch_predicates(branch, &[PredicateFamily::Budget], replacement_text)?;
+            if replaced == 0 {
+                return None;
+            }
+            branch_queries.push(query);
+        } else {
+            branch_queries.push(normalize_query(&branch.compiled_query.raw));
         }
     }
-    Some(query.split_whitespace().collect::<Vec<_>>().join(" "))
+    Some(branch_queries.join(" or "))
+}
+
+fn replace_branch_predicates(
+    branch: &IntentBranch,
+    families: &[PredicateFamily],
+    replacement: &str,
+) -> Option<(String, usize)> {
+    let spans = branch
+        .predicates
+        .source_spans_for(families, PredicatePolarity::Positive);
+    let mut query = branch.compiled_query.raw.clone();
+    for span in spans.iter().rev() {
+        if span.start > span.end || span.end > query.len() {
+            return None;
+        }
+        query.replace_range(span.start..span.end, replacement);
+    }
+    Some((normalize_query(&query), spans.len()))
+}
+
+fn canonical_plan_query(plan: &CompiledSearchPlan) -> String {
+    plan.branches
+        .iter()
+        .map(|branch| normalize_query(&branch.compiled_query.raw))
+        .collect::<Vec<_>>()
+        .join(" or ")
+}
+
+fn normalize_query(query: &str) -> String {
+    query.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn compile_revision_parent_plan(query: &str) -> CompiledSearchPlan {
+    let snapshot = "revision-parent";
+    let Some(layout) = super::query_plan::discourse_branch_layout(query) else {
+        return CompiledSearchPlan::single(super::CompiledQuery::from_text(query), snapshot);
+    };
+    let shared_suffix = layout
+        .shared_suffix
+        .map(|span| query[span.start..span.end].trim());
+    let plans = layout
+        .segments
+        .into_iter()
+        .map(|span| {
+            let branch = query[span.start..span.end].trim();
+            let branch = shared_suffix
+                .map(|suffix| format!("{branch} {suffix}"))
+                .unwrap_or_else(|| branch.to_string());
+            CompiledSearchPlan::single(super::CompiledQuery::from_text(&branch), snapshot)
+        })
+        .collect();
+    CompiledSearchPlan::combine(plans, snapshot)
 }
 
 #[cfg(test)]

@@ -505,3 +505,57 @@ Design the smallest branch-level typed patch operation on `IntentBranch` /
 `CompiledSearchPlan`, then migrate budget replacement and alternative copying
 one at a time. Rerun direct-versus-revised ordering and proof equivalence after
 each migration; do not add predicate-family-specific AST walkers.
+
+## Checkpoint 5B — shared branch predicate replacement
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Parent commit: `e81cc950`
+
+### Implemented
+
+- Removed budget revision's independent raw-parent parser walk and branch-span
+  filtering.
+- Added one byte-safe branch replacement path driven by
+  `ConstraintExpr::source_spans_for`. Budget replacement and location-scope
+  alternatives now share the same family/polarity selection, reverse-ordered
+  source editing, bounds validation, and canonical whitespace normalization.
+- Legacy callers without an authenticated runtime plan now compile a temporary
+  branch plan through the ordinary query planner. The API route continues to
+  use the authenticated parent search's snapshot-pinned compiled plan.
+- Canonical revised queries are projected from compiled branch queries in
+  logical order. A targeted budget revision edits only its selected branch;
+  `both`/`all` requires a compatible budget predicate in every selected branch
+  and otherwise fails closed.
+
+### Simplify review
+
+The focused simplify pass found the duplicate budget parser walk as the one
+material cleanup. The typed predicate enums, compilation discriminator, and
+polarity-aware AST traversal each own distinct responsibilities and were
+retained. No speculative named-entity or fact-key abstraction was added.
+
+### Gates
+
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check`: passed.
+- `cargo test --lib search::revision::tests`: 14 passed.
+- `cargo test --test search_revision_api_contract`: 3 passed.
+- `cargo test --test search_conversational_semantics_contract`: 10 passed.
+- `cargo test --test search_efficiency_contract`: 11 passed.
+- `git diff --check`: passed.
+- Existing macOS compact-unwind linker warning remains unchanged.
+
+### Remaining architecture gap
+
+Typed revision classification and source replacement are now generic, but the
+candidate is still recompiled from the deterministic `activeQuery` projection.
+Direct mutation/execution of a compiled plan requires spatial predicates to
+carry all evaluator inputs (including bounds/metrics and generic category
+clauses), so that work must not be faked by treating the current incomplete
+spatial term as authoritative.
+
+### Next exact command
+
+Extend the generic spatial predicate model to retain relation metric, optional
+bound, resolution state, and category/capability identity. Then make prepared
+branch execution reconstruct only runtime indexes from those predicates; do
+not reparse buyer text or add place-family branches in Rust.
