@@ -26,6 +26,17 @@ OpenEstates is not trying to win by having the biggest pile of listings. The wed
 
 **Before shipping buyer-facing UI**, also run `.claude/skills/ui-critic.md` — a human product-design pass for sticky-note cards, heading clutter, duplicate facts, agent-jargon copy, and fake page jumps.
 
+### Buyer-facing UI / ThreeUI research gate
+
+Before changing buyer-facing UI:
+
+1. Read the current surface, its styles, and `.claude/skills/ui-critic.md`.
+2. Check whether ThreeUI has a directly relevant interaction pattern. Understand its source and states before implementation; never copy a demo blindly.
+3. Add a brief PR interaction note covering the borrowed pattern, user problem, rest/hover/focus/touch/reduced-motion states, and what was intentionally not borrowed.
+4. Implement the smallest coherent variant that preserves search context, the landing/detail boundary, product hierarchy, and DAG-backed facts.
+5. Attach screenshots for the resting and important interaction states, then run lint, build, tests, and `git diff --check`.
+6. Rework or stop if the result adds decorative motion, duplicates facts, invents evidence, hides the search action, or turns a landing surface into a property-detail page.
+
 ---
 
 ## 1. Working Philosophy
