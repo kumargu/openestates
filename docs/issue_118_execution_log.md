@@ -187,20 +187,15 @@ from the recorded base. These gates must be rerun for every touched slice.
 
 ### Exact next command
 
-The next checkpoint begins the durable evidence-identity contract:
-
 ```bash
-rg -n "struct ServingFactRecord|struct ServingEdgeRecord|InventoryOption|VerifiedMatch|observation_ids|evidence_reference" backend/src backend/tests
-sed -n '1,260p' backend/src/serving/types.rs
-sed -n '1,240p' backend/src/search/evaluation.rs
-sed -n '780,930p' backend/src/search/engine.rs
-sed -n '1040,1160p' backend/src/search/geo.rs
+rg -n "write_facts_parquet|read_facts_parquet|ServingBundleSchema|format_version|ServingFactRecord" backend/src/serving backend/src/assets backend/tests/serving_bundle_contract.rs
+sed -n '1,360p' backend/src/serving/parquet.rs
+sed -n '1,260p' backend/src/serving/builder.rs
 ```
 
-Add typed, snapshot-qualified observation/derivation references at the serving
-and evaluation boundary. First freeze rejection of fabricated, cross-subject,
-and cross-snapshot references; then migrate inventory and spatial receipts one
-producer at a time.
+Version the serving schema and carry validated observation identity/lineage
+without fabricating values for legacy rows. Migrate one evidence producer only
+after its Parquet round trip and candidate validation are proven.
 
 ## Goal and invariants
 
@@ -834,3 +829,65 @@ Define typed `ObservationId`, `DerivationId`, and snapshot-qualified
 `EvidenceRef` validation first. Do not rename synthesized strings into typed
 wrappers and call them durable; producers must carry provider/source lineage or
 derived input references before their receipts can verify a predicate.
+
+## Checkpoint 7 — typed evidence identity validation
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Parent commit: `88501c65`
+- Classified miss: `proof_gap` with a serving-schema `architecture_gap`
+
+### Implemented
+
+- Added opaque, content-addressed `ObservationId` and `DerivationId` types.
+- Added snapshot- and subject-qualified `EvidenceRef` with fail-closed
+  validation for expected subject and runtime snapshot.
+- Added `SourceObservation`, which requires provider identity, provider record
+  identity, subject, observation time, and non-empty asset lineage while
+  retaining its source URL.
+- Added `DerivedEvidence`, which requires subject, optional target, typed
+  relation/metric strings, algorithm version, and at least one input evidence
+  reference from the same snapshot.
+- Canonicalized derivation input order before hashing so Parquet row order
+  cannot change derivation identity.
+- Added record validation that recomputes content IDs and rejects tampered
+  identity fields. Raw deserialization alone is not proof; candidate loading
+  must call these validators when the records enter the serving schema.
+
+### Deliberate boundary
+
+Existing `VerifiedMatch.observation_ids` remain legacy synthesized strings in
+this checkpoint. They were not wrapped or relabelled as durable observations.
+Inventory, geometry, topology, and proximity producers must first emit actual
+source/derivation records with asset lineage; only then may evaluation and API
+proof switch to `EvidenceRef`.
+
+### Gates
+
+- `cargo test --lib serving::evidence::tests`: 5 passed, covering stable
+  provider-qualified observation identity, tamper rejection, subject/snapshot
+  mismatch rejection, required derivation inputs, cross-snapshot rejection,
+  and row-order-invariant derivation identity.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check`: passed.
+- `python3 scripts/audit_search_hardcoding.py`: 330 findings, 28 fact-key
+  comparisons, zero blocked aliases; delta remains zero.
+- `cargo fmt --check` and `git diff --check`: passed.
+- Existing macOS compact-unwind linker warning remains unchanged.
+
+### Candidate identity
+
+No candidate lake or bundle exists. The current main-lake pointer remains
+inspection-only and unchanged.
+
+### Next exact command
+
+```bash
+rg -n "write_facts_parquet|read_facts_parquet|ServingBundleSchema|format_version|ServingFactRecord" backend/src/serving backend/src/assets backend/tests/serving_bundle_contract.rs
+sed -n '1,360p' backend/src/serving/parquet.rs
+sed -n '1,260p' backend/src/serving/builder.rs
+```
+
+Version the serving schema and add validated observation records or explicit
+observation columns to facts/inventory without forcing fabricated identities
+onto legacy bundles. Candidate validation must reject an advertised evidence
+capability whose selected rows lack valid identity/lineage; migration coverage
+for old rows remains informational until that capability is advertised.

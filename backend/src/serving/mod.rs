@@ -8,6 +8,7 @@ pub mod aliases;
 pub mod builder;
 pub mod coordinates;
 mod eligibility;
+pub mod evidence;
 pub mod loader;
 pub mod materializer;
 pub mod parquet;
@@ -28,6 +29,10 @@ pub use aliases::{
 };
 pub use builder::{ServingBundleBuilder, ServingBundleError};
 pub use coordinates::{resolve_serving_coordinates, ServingCoordinates};
+pub use evidence::{
+    DerivationId, DerivedEvidence, EvidenceId, EvidenceIdentityError, EvidenceRef, ObservationId,
+    SourceObservation,
+};
 pub use loader::{LoadedServingBundle, ServingBundleLoadError, ServingBundleLoader};
 pub use materializer::{
     SearchServingBundleMaterialization, SearchServingBundleMaterializeError,
