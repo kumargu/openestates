@@ -269,3 +269,51 @@ Add controlled resolver scenarios for a same-name hospital in multiple areas
 and for a missing specific place whose normalized name overlaps an area. Then
 make typed entity-family and same-branch area context resolve those cases
 deterministically and fail closed when ambiguity remains.
+
+## Checkpoint 2B — topology-aware, fail-closed place resolution
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Parent commit: `529a7d24`
+
+### Implemented
+
+- Added controlled contracts with two canonical hospitals sharing the same
+  display name in different sourced areas. `Manipal Hospital in Whitefield`
+  resolves only the entity connected to Whitefield by `in_area`; the unscoped
+  name remains ambiguous and executes no candidate.
+- Specific place identity is now separated from its optional `in <area>`
+  context before lookup. Entity-family compatibility is applied before
+  topology context, and ambiguity fails closed after both steps.
+- A missing specific identity such as `Hoodi Metro` no longer falls back to
+  the `Hoodi` area or to arbitrary members of the metro family. Generic
+  requests such as `near metro` and contextual family requests such as
+  `my office in Marathahalli` retain their configured category behavior.
+- Unresolved spatial targets remain on the geo query as diagnostics. Recall
+  returns no candidate whenever any required identity remains unresolved,
+  preventing partial execution of a multi-clause spatial request.
+- Serving topology now exposes sourced, transitive area scopes for resolution.
+  It follows only `in_area` edges and never infers identity from coordinate
+  proximity or name similarity.
+- Area tokens embedded in a specific place name are no longer promoted to
+  standalone area constraints. Explicit branch area mentions and configured
+  `in <area>` context remain available for disambiguation.
+
+### Gates
+
+- `cargo test --lib search::geo::tests`: 26 passed.
+- `cargo test --lib serving::spatial_index::tests`: 5 passed.
+- `cargo test --test search_conversational_semantics_contract`: 10 passed.
+- `cargo test --test search_efficiency_contract`: 11 passed.
+- `cargo test --test search_revision_api_contract`: 3 passed.
+- `cargo test --test serving_bundle_contract`: 3 passed.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check`: passed without new
+  Rust warnings.
+- `cargo fmt`, `git diff --check`, and the hardcoding audit passed. Audit
+  remains 330 findings, 28 fact-key comparisons, and 0 blocked aliases.
+
+### Next exact command
+
+Inspect the four-state predicate contracts and freeze required `Unknown` plus
+negated `Unknown` scenarios at the compiled Boolean/evaluation boundary. Then
+ensure recall-only evidence cannot enter `VerifiedMatch`, ranking proof, or
+negation success.

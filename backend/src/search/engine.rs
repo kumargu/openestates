@@ -412,15 +412,27 @@ impl<'a> SearchEngine<'a> {
         query_plan: QueryPlan,
         parsed_intent: SearchIntent,
     ) -> PreparedSearchBranch<'b> {
-        let geo_query = self
-            .serving_bundle
-            .and_then(|bundle| bundle.geo_index.query_with_plan(&query_plan));
-        let serving_resolved_entities = resolve_serving_query_entities(
+        let mut serving_resolved_entities = resolve_serving_query_entities(
             query,
             &query_plan,
             &parsed_intent,
             self.serving_bundle,
             self.properties,
+        );
+        let area_context_ids =
+            explicit_area_context_ids(query, &query_plan, &serving_resolved_entities);
+        let geo_query = self.serving_bundle.and_then(|bundle| {
+            bundle.geo_index.query_with_plan_and_area_context(
+                &query_plan,
+                Some(&bundle.spatial_index),
+                &area_context_ids,
+            )
+        });
+        retain_relation_compatible_entities(
+            query,
+            &query_plan,
+            geo_query.as_ref(),
+            &mut serving_resolved_entities,
         );
         let requested_societies = serving_resolved_entities
             .iter()
@@ -1343,6 +1355,90 @@ fn remove_entities_only_mentioned_inside_longer_match(
         let retain = keep[index];
         index += 1;
         retain
+    });
+}
+
+fn explicit_area_context_ids(
+    query: &str,
+    plan: &QueryPlan,
+    entities: &[ResolvedSearchEntity],
+) -> Vec<String> {
+    let query_lower = query.to_ascii_lowercase();
+    let mut ids = entities
+        .iter()
+        .filter(|entity| {
+            entity.polarity != "exclusion"
+                && entity.entity_type.eq_ignore_ascii_case("area")
+                && exact_entity_match_ranges(&query_lower, &entity.matched_text)
+                    .iter()
+                    .any(|range| area_range_is_explicit_context(&query_lower, plan, *range))
+        })
+        .map(|entity| entity.entity_id.clone())
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+fn area_range_is_explicit_context(
+    query_lower: &str,
+    plan: &QueryPlan,
+    range: (usize, usize),
+) -> bool {
+    let containing_relations = plan
+        .clauses
+        .iter()
+        .filter(|clause| {
+            clause.place_family_id.is_some()
+                && clause.target_span.start <= range.0
+                && clause.target_span.end >= range.1
+        })
+        .collect::<Vec<_>>();
+    if containing_relations.is_empty() {
+        return true;
+    }
+    let prefix_text = query_lower[..range.0].trim_end();
+    search_resolution_config()
+        .named_entity_scope_prefixes
+        .iter()
+        .any(|prefix| {
+            prefix_text.strip_suffix(prefix).is_some_and(|before| {
+                before
+                    .chars()
+                    .next_back()
+                    .is_none_or(|ch| !ch.is_alphanumeric())
+            })
+        })
+}
+
+fn retain_relation_compatible_entities(
+    query: &str,
+    plan: &QueryPlan,
+    geo_query: Option<&geo::GeoSearchQuery<'_>>,
+    entities: &mut Vec<ResolvedSearchEntity>,
+) {
+    let query_lower = query.to_ascii_lowercase();
+    let resolved_place_ids = geo_query
+        .into_iter()
+        .flat_map(|query| query.resolved_places())
+        .map(|place| place.entity_id.as_str())
+        .collect::<HashSet<_>>();
+    entities.retain(|entity| {
+        let ranges = exact_entity_match_ranges(&query_lower, &entity.matched_text);
+        if entity.entity_type.eq_ignore_ascii_case("place") {
+            let belongs_to_relation = ranges.iter().any(|range| {
+                plan.clauses.iter().any(|clause| {
+                    clause.target_span.start <= range.0 && clause.target_span.end >= range.1
+                })
+            });
+            return !belongs_to_relation || resolved_place_ids.contains(entity.entity_id.as_str());
+        }
+        if entity.entity_type.eq_ignore_ascii_case("area") {
+            return ranges
+                .iter()
+                .any(|range| area_range_is_explicit_context(&query_lower, plan, *range));
+        }
+        true
     });
 }
 

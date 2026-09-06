@@ -236,7 +236,17 @@ impl GeoSearchIndex {
         self.query_with_plan(&plan)
     }
 
+    #[cfg(test)]
     pub(crate) fn query_with_plan(&self, plan: &QueryPlan) -> Option<GeoSearchQuery<'_>> {
+        self.query_with_plan_and_area_context(plan, None, &[])
+    }
+
+    pub(crate) fn query_with_plan_and_area_context(
+        &self,
+        plan: &QueryPlan,
+        spatial_index: Option<&SpatialServingIndex>,
+        area_context_ids: &[String],
+    ) -> Option<GeoSearchQuery<'_>> {
         if plan.clauses.is_empty() {
             return None;
         }
@@ -244,11 +254,20 @@ impl GeoSearchIndex {
         let mut clauses = Vec::new();
         let mut unresolved_targets = Vec::new();
         for relation in &plan.clauses {
-            let mut resolved = self
-                .resolve_query_places(&relation.target_text, relation.place_family_id.as_deref());
+            let scoped_subject = scoped_subject_text(&relation.target_text);
+            let identity_target = scoped_subject.unwrap_or(&relation.target_text);
+            let has_specific_identity = target_has_identity_tokens(identity_target);
+            let mut resolved =
+                self.resolve_query_places(identity_target, relation.place_family_id.as_deref());
+            resolved = select_unambiguous_places(
+                resolved,
+                spatial_index,
+                area_context_ids,
+                scoped_subject.is_some(),
+            );
             let resolved_from_target = !resolved.is_empty();
             let mut resolved_from_scoped_anchor = false;
-            if resolved.is_empty() {
+            if resolved.is_empty() && !has_specific_identity {
                 if let Some(scoped_anchor) = scoped_anchor_text(&relation.target_text) {
                     // A contextual anchor such as "my office in Marathahalli"
                     // resolves the area after `in`; it is not itself an office entity.
@@ -256,12 +275,10 @@ impl GeoSearchIndex {
                     resolved_from_scoped_anchor = !resolved.is_empty();
                 }
             }
-            let unresolved_named_hard_clause = relation.requirement == RelationRequirement::Hard
-                && !resolved_from_target
-                && !resolved_from_scoped_anchor
-                && target_has_identity_tokens(&relation.target_text);
+            let unresolved_specific_clause =
+                !resolved_from_target && !resolved_from_scoped_anchor && has_specific_identity;
             let allow_category_fallback = relation.place_family_id.is_some()
-                && !unresolved_named_hard_clause
+                && !unresolved_specific_clause
                 && (!resolved_from_target || resolved_from_scoped_anchor);
             let category_fact_keys = if allow_category_fallback {
                 requested_nearby_place_categories(&relation.target_text.to_ascii_lowercase())
@@ -297,7 +314,7 @@ impl GeoSearchIndex {
             });
         }
         let max_distance_km = relation_distance_limit(plan.clauses.as_slice());
-        (!clauses.is_empty()).then_some(GeoSearchQuery {
+        (!clauses.is_empty() || !unresolved_targets.is_empty()).then_some(GeoSearchQuery {
             index: self,
             places,
             clauses,
@@ -478,6 +495,9 @@ impl<'a> GeoSearchQuery<'a> {
 
     #[cfg(test)]
     pub(crate) fn candidate_property_ids(&self, properties: &[Property]) -> Vec<String> {
+        if !self.unresolved_targets.is_empty() {
+            return Vec::new();
+        }
         let mut ids = Vec::new();
         let has_hard_clauses = self.has_hard_clauses();
         for property in properties {
@@ -510,6 +530,9 @@ impl<'a> GeoSearchQuery<'a> {
         search_index: &SearchIndex,
         eligible_property_ids: Option<&HashSet<String>>,
     ) -> Vec<String> {
+        if !self.unresolved_targets.is_empty() {
+            return Vec::new();
+        }
         let hard_clauses = self
             .clauses
             .iter()
@@ -673,6 +696,9 @@ impl<'a> GeoSearchQuery<'a> {
         fact_index: &ServingFactIndex,
         eligible_property_ids: Option<&HashSet<String>>,
     ) -> Vec<String> {
+        if !self.unresolved_targets.is_empty() {
+            return Vec::new();
+        }
         let mut candidates = HashMap::new();
         for (entity_id, rows) in fact_index.rows() {
             let property_ids = search_index.property_ids_for_entity_id(entity_id);
@@ -1164,6 +1190,56 @@ fn scoped_anchor_text(target: &str) -> Option<&str> {
                 .map(|index| target[index + pattern.len()..].trim())
         })
         .find(|anchor| !anchor.is_empty())
+}
+
+fn scoped_subject_text(target: &str) -> Option<&str> {
+    let target_lower = target.to_ascii_lowercase();
+    search_resolution_config()
+        .named_entity_scope_prefixes
+        .iter()
+        .filter_map(|prefix| {
+            let pattern = format!(" {prefix} ");
+            target_lower
+                .find(&pattern)
+                .map(|index| target[..index].trim())
+        })
+        .find(|subject| !subject.is_empty())
+}
+
+fn select_unambiguous_places(
+    resolved: Vec<ResolvedGeoPlace>,
+    spatial_index: Option<&SpatialServingIndex>,
+    area_context_ids: &[String],
+    context_is_part_of_target: bool,
+) -> Vec<ResolvedGeoPlace> {
+    if resolved.is_empty() {
+        return resolved;
+    }
+    if area_context_ids.is_empty() {
+        return (resolved.len() == 1)
+            .then(|| resolved.into_iter().next().expect("one resolved place"))
+            .into_iter()
+            .collect();
+    }
+    if resolved.len() == 1 && !context_is_part_of_target {
+        return resolved;
+    }
+    let Some(spatial_index) = spatial_index else {
+        return Vec::new();
+    };
+    let mut compatible = resolved
+        .into_iter()
+        .filter(|place| {
+            spatial_index
+                .area_scope_ids(&place.entity_id)
+                .iter()
+                .any(|area_id| area_context_ids.contains(area_id))
+        })
+        .collect::<Vec<_>>();
+    (compatible.len() == 1)
+        .then(|| compatible.pop().expect("one compatible place"))
+        .into_iter()
+        .collect()
 }
 
 fn target_has_identity_tokens(target: &str) -> bool {
@@ -2129,10 +2205,14 @@ mod tests {
     fn unsupported_or_named_targets_do_not_fall_back_to_partial_category_words() {
         let index = GeoSearchIndex::default();
 
-        assert!(index.query("3bhk near a police station").is_none());
-        assert!(index
+        let unsupported = index
+            .query("3bhk near a police station")
+            .expect("unresolved identity should remain diagnostic");
+        assert_eq!(unsupported.unresolved_targets(), ["a police station"]);
+        let missing_named = index
             .query("2bhk near Basavanpura Lake under 2cr")
-            .is_none());
+            .expect("missing named place should remain diagnostic");
+        assert_eq!(missing_named.unresolved_targets(), ["basavanpura lake"]);
     }
 
     #[test]
@@ -2507,8 +2587,8 @@ mod tests {
         ];
         let candidate_ids = query.candidate_property_ids(&properties);
 
-        assert_eq!(candidate_ids, vec!["both"]);
-        assert!(query.unresolved_targets().is_empty());
+        assert!(candidate_ids.is_empty());
+        assert_eq!(query.unresolved_targets(), ["manipal hospital"]);
     }
 
     #[test]

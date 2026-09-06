@@ -173,8 +173,8 @@ impl SpatialServingIndex {
                     .iter()
                     .any(|id| id == right_id);
         }
-        let left_areas = self.scope_area_ids(left_id);
-        let right_areas = self.scope_area_ids(right_id);
+        let left_areas = self.area_scope_ids(left_id);
+        let right_areas = self.area_scope_ids(right_id);
         left_areas.iter().any(|left_area| {
             right_areas.contains(left_area)
                 || self
@@ -190,22 +190,28 @@ impl SpatialServingIndex {
             .is_some_and(|kind| kind.eq_ignore_ascii_case("area"))
     }
 
-    fn scope_area_ids(&self, entity_id: &str) -> Vec<String> {
+    /// Returns the sourced area scope for an entity, including nested area
+    /// ancestors. No coordinate or name inference is used here.
+    pub fn area_scope_ids(&self, entity_id: &str) -> Vec<String> {
         let mut ids = Vec::new();
         if self.entity_is_area(entity_id) {
             ids.push(entity_id.to_string());
         }
-        ids.extend(
-            self.geometry
-                .related(entity_id, "in_area")
-                .into_iter()
-                .filter(|area_id| {
-                    self.entity_types
-                        .get(*area_id)
-                        .is_some_and(|kind| kind.eq_ignore_ascii_case("area"))
-                })
-                .map(str::to_string),
-        );
+        let mut frontier = vec![entity_id.to_string()];
+        while let Some(subject_id) = frontier.pop() {
+            for area_id in self.geometry.related(&subject_id, "in_area") {
+                if !self
+                    .entity_types
+                    .get(area_id)
+                    .is_some_and(|kind| kind.eq_ignore_ascii_case("area"))
+                    || ids.iter().any(|existing| existing == area_id)
+                {
+                    continue;
+                }
+                ids.push(area_id.to_string());
+                frontier.push(area_id.to_string());
+            }
+        }
         ids.sort();
         ids.dedup();
         ids
@@ -527,6 +533,7 @@ mod tests {
     fn scope_connectivity_requires_sourced_containment_or_adjacency() {
         let entities = vec![
             entity("area:east", "area", "East"),
+            entity("area:bengaluru", "area", "Bengaluru"),
             entity("area:next", "area", "Next"),
             entity("area:north", "area", "North"),
             entity("place:metro", "place", "Metro"),
@@ -534,6 +541,7 @@ mod tests {
         ];
         let edges = vec![
             edge("place:metro", "in_area", "area:east"),
+            edge("area:east", "in_area", "area:bengaluru"),
             edge("society:home", "in_area", "area:next"),
             edge("area:east", "adjacent_area", "area:next"),
         ];
@@ -544,6 +552,10 @@ mod tests {
         );
 
         assert!(index.scopes_connected("place:metro", "area:east"));
+        assert_eq!(
+            index.area_scope_ids("place:metro"),
+            ["area:bengaluru", "area:east"]
+        );
         assert!(index.scopes_connected("place:metro", "society:home"));
         assert!(!index.scopes_connected("place:metro", "area:north"));
         assert!(!index.scopes_connected("area:east", "area:north"));

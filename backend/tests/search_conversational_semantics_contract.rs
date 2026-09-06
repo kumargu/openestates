@@ -791,6 +791,109 @@ fn connected_hard_spatial_alternatives_preserve_any_of_semantics() {
 }
 
 #[test]
+fn named_place_resolution_uses_sourced_area_context_and_fails_closed_without_it() {
+    let mut builder = FixtureBuilder::default();
+    builder.add_area("Whitefield");
+    builder.add_area("Hebbal");
+    builder.add_place_with_id(
+        "place:manipal-whitefield",
+        "Manipal Hospital",
+        "hospital",
+        12.9700,
+        77.7350,
+    );
+    builder.add_place_with_id(
+        "place:manipal-hebbal",
+        "Manipal Hospital",
+        "hospital",
+        13.0500,
+        77.5950,
+    );
+    builder.add_edge("place:manipal-whitefield", "in_area", "area:whitefield");
+    builder.add_edge("place:manipal-hebbal", "in_area", "area:hebbal");
+    builder.add_home(HomeSpec::new(
+        "whitefield-hospital-home",
+        "Whitefield Hospital Homes",
+        "Whitefield",
+        3,
+        10_000_000,
+        12.9705,
+        77.7355,
+    ));
+    builder.add_home(HomeSpec::new(
+        "hebbal-hospital-home",
+        "Hebbal Hospital Homes",
+        "Hebbal",
+        3,
+        10_000_000,
+        13.0505,
+        77.5955,
+    ));
+    let fixture = builder.build(false);
+
+    let scoped = fixture.search_output("3BHK near Manipal Hospital in Whitefield under 2Cr");
+    assert_eq!(
+        scoped
+            .diagnostics
+            .resolved
+            .entities
+            .iter()
+            .filter(|entity| entity.entity_type == "place")
+            .map(|entity| entity.entity_id.as_str())
+            .collect::<Vec<_>>(),
+        ["place:manipal-whitefield"]
+    );
+    assert_eq!(
+        scoped
+            .results
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>(),
+        ["whitefield-hospital-home"]
+    );
+
+    let ambiguous = fixture.search_output("3BHK near Manipal Hospital under 2Cr");
+    assert!(ambiguous.results.is_empty());
+    assert!(ambiguous
+        .diagnostics
+        .warnings
+        .iter()
+        .any(|warning| warning.to_ascii_lowercase().contains("manipal hospital")));
+}
+
+#[test]
+fn unknown_specific_place_never_falls_back_to_same_named_area_or_place_family() {
+    let mut builder = FixtureBuilder::default();
+    builder.add_area("Hoodi");
+    builder.add_place("Other Metro", "metro", 12.9000, 77.6000);
+    builder.add_home(HomeSpec::new(
+        "other-metro-home",
+        "Other Metro Homes",
+        "Elsewhere",
+        3,
+        10_000_000,
+        12.9005,
+        77.6005,
+    ));
+    let fixture = builder.build(false);
+
+    let output = fixture.search_output("3BHK near Hoodi Metro under 2Cr");
+
+    assert!(output.results.is_empty());
+    assert!(output
+        .diagnostics
+        .warnings
+        .iter()
+        .any(|warning| warning.to_ascii_lowercase().contains("hoodi metro")));
+    assert!(output
+        .diagnostics
+        .resolved
+        .entities
+        .iter()
+        .all(|entity| entity.entity_id != "area:hoodi" && entity.entity_id != "place:other-metro"));
+}
+
+#[test]
 fn inside_requires_sourced_containment_and_cannot_use_nearby_coordinates() {
     let mut builder = FixtureBuilder::default();
     builder.add_area("Hoodi");
@@ -2187,6 +2290,17 @@ impl FixtureBuilder {
 
     fn add_place(&mut self, name: &str, category: &str, latitude: f64, longitude: f64) {
         let entity_id = format!("place:{}", slug(name));
+        self.add_place_with_id(&entity_id, name, category, latitude, longitude);
+    }
+
+    fn add_place_with_id(
+        &mut self,
+        entity_id: &str,
+        name: &str,
+        category: &str,
+        latitude: f64,
+        longitude: f64,
+    ) {
         self.entities.push(entity(&entity_id, "place", name));
         self.add_fact(&entity_id, "geo.latitude", FactValue::Numeric(latitude));
         self.add_fact(&entity_id, "geo.longitude", FactValue::Numeric(longitude));
