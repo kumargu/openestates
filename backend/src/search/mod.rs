@@ -40,7 +40,7 @@ pub use revision::{
     revision_id_for_query, validated_revision_depth, SearchRevision, SearchRevisionLimits,
     SearchRevisionOperation, SearchRevisionOutcome, SearchRevisionPatch,
 };
-pub use text::{TextSearch, TextSearchRequest};
+pub use text::{InventoryEvaluationContext, TextSearch, TextSearchRequest};
 
 use serde::{Deserialize, Serialize};
 

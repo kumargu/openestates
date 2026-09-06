@@ -23,6 +23,9 @@ use backend::state::{
 use chrono::{TimeZone, Utc};
 use tempfile::tempdir;
 
+mod search_support;
+use search_support::{inventory_context, inventory_facts, inventory_options};
+
 const MATCHING_PROPERTIES: usize = 12;
 const DISTRACTORS_PER_BUCKET: usize = 800;
 const MAX_RECALL_CANDIDATE_RATIO: f64 = 0.01;
@@ -53,6 +56,7 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
         "recall ratio {recall_ratio:.4} should stay under {MAX_RECALL_CANDIDATE_RATIO:.4}"
     );
 
+    let inventory_options = inventory_options(&properties);
     let started = Instant::now();
     let compiled_query = CompiledQuery::from_text(query);
     let results = TextSearch::search(TextSearchRequest {
@@ -66,6 +70,7 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
         societies: &[],
         compiled_query: &compiled_query,
         graph: None,
+        inventory: inventory_context(&inventory_options),
     });
     let elapsed = started.elapsed();
 
@@ -449,6 +454,7 @@ fn unsupported_inventory_query_short_circuits_large_mock_corpus() {
         "plot/villa asks should be explicit unsupported inventory gaps"
     );
 
+    let inventory_options = HashMap::new();
     let started = Instant::now();
     let compiled_query = CompiledQuery::from_text(query);
     let results = TextSearch::search(TextSearchRequest {
@@ -462,6 +468,7 @@ fn unsupported_inventory_query_short_circuits_large_mock_corpus() {
         societies: &[],
         compiled_query: &compiled_query,
         graph: None,
+        inventory: inventory_context(&inventory_options),
     });
     let elapsed = started.elapsed();
 
@@ -502,6 +509,7 @@ fn candidate_ranking_preserves_order_and_corpus_tiebreaks() {
     ];
     let society_names = society_names(&properties);
     let compiled_query = CompiledQuery::from_text("3bhk whitefield under 2cr");
+    let inventory_options = inventory_options(&properties);
 
     let unrestricted = TextSearch::search(TextSearchRequest {
         properties: &properties,
@@ -514,6 +522,7 @@ fn candidate_ranking_preserves_order_and_corpus_tiebreaks() {
         societies: &[],
         compiled_query: &compiled_query,
         graph: None,
+        inventory: inventory_context(&inventory_options),
     });
     let restricted = TextSearch::search(TextSearchRequest {
         properties: &properties,
@@ -526,6 +535,7 @@ fn candidate_ranking_preserves_order_and_corpus_tiebreaks() {
         societies: &[],
         compiled_query: &compiled_query,
         graph: None,
+        inventory: inventory_context(&inventory_options),
     });
 
     assert_eq!(
@@ -694,10 +704,23 @@ fn loaded_bundle(
 }
 
 fn search_runtime_snapshot(
-    bundle: LoadedServingBundle,
+    mut bundle: LoadedServingBundle,
     properties: &[Property],
     search_index: SearchIndex,
 ) -> SearchRuntimeSnapshot {
+    let mut facts = bundle
+        .fact_index
+        .rows()
+        .flat_map(|(_, rows)| rows.facts.iter().cloned())
+        .collect::<Vec<_>>();
+    let metadata = bundle
+        .fact_index
+        .rows()
+        .flat_map(|(_, rows)| rows.search_metadata.iter().cloned())
+        .collect::<Vec<_>>();
+    facts.extend(inventory_facts(properties));
+    bundle.manifest.fact_count = facts.len() as u64;
+    bundle.fact_index = ServingFactIndex::from_records(facts, metadata);
     SearchRuntimeSnapshot::new(
         Arc::new(bundle),
         properties.to_vec(),

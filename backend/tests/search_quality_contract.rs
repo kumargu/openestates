@@ -18,6 +18,9 @@ use backend::serving::{
 use chrono::Utc;
 use tempfile::tempdir;
 
+mod search_support;
+use search_support::{inventory_context, inventory_options};
+
 const SQM_PER_ACRE: f64 = 4046.8564224;
 
 #[tokio::test]
@@ -198,6 +201,7 @@ struct SearchWorld {
     society_names: HashMap<String, String>,
     graph: KnowledgeGraph,
     index: SearchIndex,
+    inventory_options: HashMap<String, backend::search::InventoryOption>,
 }
 
 impl SearchWorld {
@@ -211,6 +215,7 @@ impl SearchWorld {
             .map(|society| (society.id.clone(), society.name.clone()))
             .collect::<HashMap<_, _>>();
         let index = SearchIndex::build(&properties);
+        let inventory_options = inventory_options(&properties);
 
         Self {
             properties,
@@ -218,6 +223,7 @@ impl SearchWorld {
             society_names,
             graph: KnowledgeGraph::new(),
             index,
+            inventory_options,
         }
     }
 
@@ -234,6 +240,7 @@ impl SearchWorld {
             societies: &self.societies,
             compiled_query: &compiled_query,
             graph: Some(&self.graph),
+            inventory: inventory_context(&self.inventory_options),
         })
     }
 
@@ -254,6 +261,7 @@ impl SearchWorld {
             societies: &self.societies,
             compiled_query: &compiled_query,
             graph: Some(&self.graph),
+            inventory: inventory_context(&self.inventory_options),
         })
     }
 

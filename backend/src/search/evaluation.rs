@@ -20,19 +20,6 @@ pub struct InventoryOption {
 }
 
 impl InventoryOption {
-    pub fn from_property(property: &Property) -> Self {
-        let exact_price = (property.price > 0).then_some(property.price);
-        Self {
-            property_id: property.id.clone(),
-            society_id: property.society_id.clone(),
-            bhk: (property.bhk > 0).then_some(property.bhk),
-            price_min: property.price_min.or(exact_price),
-            price_max: property.price_max.or(exact_price),
-            size_sqft: (property.super_builtup_sqft > 0).then_some(property.super_builtup_sqft),
-            evidence_reference: None,
-        }
-    }
-
     pub fn from_serving_observation(
         property: &Property,
         society_entity_id: &str,
@@ -70,15 +57,123 @@ impl InventoryOption {
         Some(option)
     }
 
-    pub fn matches_bhk(&self, expected: u32) -> bool {
-        self.bhk == Some(expected)
+    pub fn evaluate_bhk(
+        &self,
+        property_id: &str,
+        society_entity_id: &str,
+        expected: u32,
+        snapshot_identity: &str,
+    ) -> BooleanEvaluation {
+        let Some(actual) = self.bhk else {
+            return BooleanEvaluation::unknown();
+        };
+        let Some(verified) = self.verified_match(
+            property_id,
+            society_entity_id,
+            format!("{expected} BHK"),
+            "equals",
+            "inventory_option_bhk",
+            actual as f64,
+            "bhk",
+            snapshot_identity,
+        ) else {
+            return BooleanEvaluation::unknown();
+        };
+        if actual == expected {
+            BooleanEvaluation::satisfied(vec![verified])
+        } else {
+            BooleanEvaluation::unsatisfied_with(vec![verified])
+        }
     }
 
-    pub fn matches_budget(&self, min: Option<u64>, max: Option<u64>) -> bool {
-        let (Some(option_min), Some(option_max)) = (self.price_min, self.price_max) else {
-            return false;
+    pub fn evaluate_budget(
+        &self,
+        property_id: &str,
+        society_entity_id: &str,
+        min: Option<u64>,
+        max: Option<u64>,
+        snapshot_identity: &str,
+    ) -> BooleanEvaluation {
+        let (Some(actual_min), Some(actual_max)) = (self.price_min, self.price_max) else {
+            return BooleanEvaluation::unknown();
         };
-        min.is_none_or(|bound| option_max >= bound) && max.is_none_or(|bound| option_min <= bound)
+        let mut matches = Vec::new();
+        let mut satisfied = true;
+        if let Some(min) = min {
+            let Some(verified) = self.verified_match(
+                property_id,
+                society_entity_id,
+                format!("price at least {min}"),
+                "at_least",
+                "inventory_option_price_max",
+                actual_max as f64,
+                "INR",
+                snapshot_identity,
+            ) else {
+                return BooleanEvaluation::unknown();
+            };
+            satisfied &= actual_max >= min;
+            matches.push(verified);
+        }
+        if let Some(max) = max {
+            let Some(verified) = self.verified_match(
+                property_id,
+                society_entity_id,
+                format!("price at most {max}"),
+                "at_most",
+                "inventory_option_price_min",
+                actual_min as f64,
+                "INR",
+                snapshot_identity,
+            ) else {
+                return BooleanEvaluation::unknown();
+            };
+            satisfied &= actual_min <= max;
+            matches.push(verified);
+        }
+        if matches.is_empty() {
+            return BooleanEvaluation::unknown();
+        }
+        if satisfied {
+            BooleanEvaluation::satisfied(matches)
+        } else {
+            BooleanEvaluation::unsatisfied_with(matches)
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn verified_match(
+        &self,
+        property_id: &str,
+        society_entity_id: &str,
+        predicate: String,
+        relation: &str,
+        metric: &str,
+        value: f64,
+        unit: &str,
+        snapshot_identity: &str,
+    ) -> Option<VerifiedMatch> {
+        if self.property_id != property_id || self.society_id != society_entity_id {
+            return None;
+        }
+        let evidence_reference = self.evidence_reference.as_ref()?;
+        evidence_reference
+            .validate_for(society_entity_id, snapshot_identity)
+            .ok()?;
+        Some(VerifiedMatch {
+            subject_entity_id: society_entity_id.to_string(),
+            target_entity_id: Some(property_id.to_string()),
+            predicate,
+            relation: relation.to_string(),
+            metric: metric.to_string(),
+            value: Some(value),
+            unit: Some(unit.to_string()),
+            observation_ids: Vec::new(),
+            evidence_refs: vec![evidence_reference.clone()],
+            algorithm_version: "inventory-option-evaluator-v2".to_string(),
+            confidence: 1.0,
+            snapshot_identity: snapshot_identity.to_string(),
+        })
     }
 }
 
@@ -224,6 +319,13 @@ impl BooleanEvaluation {
 
     pub fn unsatisfied() -> Self {
         Self::from_state(EvaluationState::Unsatisfied)
+    }
+
+    pub fn unsatisfied_with(matches: Vec<VerifiedMatch>) -> Self {
+        Self {
+            state: EvaluationState::Unsatisfied,
+            verified_matches: matches,
+        }
     }
 
     pub fn unknown() -> Self {

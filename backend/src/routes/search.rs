@@ -1041,7 +1041,12 @@ mod tests {
     fn test_no_kg_node_still_matches_hard_constraints() {
         // A property whose society has no KG node should still match hard constraints
         // (area, BHK) but not receive legacy preference scoring.
-        use crate::search::{CompiledQuery, TextSearch, TextSearchRequest};
+        use crate::search::{
+            CompiledQuery, InventoryEvaluationContext, InventoryOption, TextSearch,
+            TextSearchRequest,
+        };
+        use crate::serving::{EvidenceRef, SourceObservation};
+        use chrono::{TimeZone, Utc};
 
         let graph = crate::knowledge::KnowledgeGraph::new();
 
@@ -1096,6 +1101,32 @@ mod tests {
         let societies: Vec<crate::models::Society> = vec![];
         let mut society_names = std::collections::HashMap::new();
         society_names.insert("no-kg-society".to_string(), "No KG Society".to_string());
+        let society_entity_id = "society:no-kg-society";
+        let snapshot_identity = "route-search-fixture";
+        let observation = SourceObservation::new(
+            "RouteSearchFixture",
+            "no-kg-prop",
+            society_entity_id,
+            Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            Some("https://example.test/no-kg-prop".to_string()),
+            vec!["asset:route-search-fixture/v1".to_string()],
+        )
+        .unwrap();
+        let inventory_options = std::collections::HashMap::from([(
+            "no-kg-prop".to_string(),
+            InventoryOption {
+                property_id: "no-kg-prop".to_string(),
+                society_id: society_entity_id.to_string(),
+                bhk: Some(3),
+                price_min: Some(10_000_000),
+                price_max: Some(10_000_000),
+                size_sqft: Some(1_500),
+                evidence_reference: Some(EvidenceRef::for_observation(
+                    snapshot_identity,
+                    &observation,
+                )),
+            },
+        )]);
 
         let intent = crate::search::SearchIntent {
             area: Some("TestArea".into()),
@@ -1132,6 +1163,10 @@ mod tests {
             societies: &societies,
             compiled_query: &compiled_query,
             graph: Some(&graph),
+            inventory: InventoryEvaluationContext {
+                options: &inventory_options,
+                snapshot_identity,
+            },
         });
 
         assert_eq!(

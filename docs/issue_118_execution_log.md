@@ -4,7 +4,7 @@
 
 - Reset recorded: 2026-09-06 Asia/Kolkata
 - Continuation branch: `feat/issue-118-consolidated`
-- Continuation HEAD: Checkpoint 11 (`refactor: keep timestamps out of search scoring`)
+- Continuation HEAD: Checkpoint 12 (`refactor: unify inventory predicate evaluation`)
 - Preserved source branch: `feat/issue-118-spatial-intent`
 - Merge base: `d1c06e2b` (`main` at the start of Issue 118 work)
 - Worktree at reset: clean
@@ -32,19 +32,20 @@ checkpoint-local next steps where they differ from the consolidated plan.
 14. `cb7db89d` — trace external-listing observations through the DAG.
 15. `59246b97` — qualify inventory search evidence with snapshot-owned receipts.
 16. `72fe4bb6` — focus Issue 118 test investment without weakening the query bank.
-17. Checkpoint 11 (current log commit) — remove timestamp-derived confidence
-    from search ranking.
+17. `2ea0f2ec` — remove timestamp-derived confidence from search ranking.
+18. Checkpoint 12 (current log commit) — unify inventory eligibility and proof
+    projection around snapshot-owned receipts.
 
 ### Pulled-forward commitment audit
 
 | Commitment | Current state |
 |---|---|
 | Snapshot-only search construction (#123) | Implemented for `SearchEngine`: its only constructor input is one `SearchRuntimeSnapshot`; the lower-level parallel `TextSearch` evaluator remains to be removed. |
-| Four-state evaluation (#123) | Implemented for spatial and inventory eligibility, but parallel evaluators and empty verified matches remain. |
-| Stable spatial/price/BHK evidence references (#123) | Partial: BHK/price verified matches now share one validated, snapshot-qualified external-listing `EvidenceRef`; spatial matches still emit synthesized legacy observation strings. |
+| Four-state evaluation (#123) | Inventory now has one four-state evaluator used by eligibility and proof. Spatial and other predicates still have parallel/empty-success paths. |
+| Stable spatial/price/BHK evidence references (#123) | BHK/price verified matches share one validated, snapshot-qualified external-listing `EvidenceRef`; spatial matches still emit synthesized legacy observation strings. |
 | Semantic-contract digest (#123) | Partial: config inputs are hashed, but resolved bindings and evaluator/algorithm versions are not comprehensive. |
 | Capability/evaluator/proof bindings (#123) | Incomplete. |
-| Touched mixed-state and duplicate-path removal (#123) | Incomplete. |
+| Touched mixed-state and duplicate-path removal (#123) | Inventory property-field evaluation and duplicate proof projection are removed; other duplicate paths remain. |
 | OSM locality and society geometry (#124) | Implemented and fixture-tested. |
 | Google/OSM canonical identity (#124) | Incomplete: provider-independent place/locality crosswalks are not fully materialized. |
 | Area hierarchy and topology (#124) | Implemented synthetically; not yet verified in a real candidate bundle. |
@@ -198,7 +199,7 @@ failure stops further stacking; honest coverage gaps do not.
 ### Current verified gate summary
 
 The detailed commands and counts remain recorded in the checkpoints below.
-Through committed Checkpoint 10, focused Rust search and
+Through the Checkpoint 12 working tree, focused Rust search and
 serving contracts, all-target Cargo check, formatting, smoke tests, and
 `git diff --check` pass. The hardcoding audit remains at 330 findings, 28
 fact-key comparisons, and zero blocked aliases, with zero delta from the
@@ -207,16 +208,14 @@ recorded base. These gates must be rerun for every touched slice.
 ### Exact next command
 
 ```bash
-sed -n '3200,3420p' backend/src/search/text.rs
-sed -n '140,240p' backend/src/search/ast.rs
-rg -n "BooleanEvaluation::satisfied\(Vec::new|InventoryOption::from_property|property_matches_constraint_term" backend/src/search
+sed -n '540,730p' backend/src/search/engine.rs
+sed -n '3140,3280p' backend/src/search/text.rs
+rg -n "ConstraintTerm::Spatial|BooleanEvaluation::satisfied\(Vec::new" backend/src/search
 ```
 
-Replace the parallel property-field inventory eligibility path with the
-snapshot's observed inventory options and four-state evaluation. Required BHK
-and budget predicates must accept only validated matches projected from the
-same `EvidenceRef`; preserve the frozen ordered results with observed fixture
-receipts rather than empty satisfied evaluations.
+Pass the already-computed exact spatial evaluations into the same `TextSearch`
+Boolean traversal. Remove automatic empty spatial success while preserving the
+query-bank branch ordering and exact geometry gate.
 
 ## Checkpoint 11 — timestamps removed from search confidence
 
@@ -263,6 +262,60 @@ Move inventory predicate evaluation and verified-match construction into the
 shared four-state evaluator. Pass the snapshot's observed inventory options
 through `TextSearch`, retain those exact matches on result cards, and remove
 the later duplicate inventory proof projection from `SearchEngine`.
+
+## Checkpoint 12 — unified inventory predicate evaluation
+
+- Parent commit: `2ea0f2ec`
+- Classified issue: inventory evaluator `architecture_gap`
+
+### Implemented
+
+- Added one receipt-aware BHK and budget evaluator to `InventoryOption`. It
+  validates property, canonical society, snapshot, and evidence identity before
+  returning a four-state result.
+- `TextSearch` now receives the snapshot inventory map and evaluates hard BHK
+  and budget predicates from it. Missing, mismatched, legacy, or cross-snapshot
+  receipts remain `Unknown` and cannot pass positive or negated eligibility.
+- The exact verified matches produced during eligibility now flow directly to
+  result cards. Removed the later `SearchEngine` inventory proof reconstruction
+  and the unused raw-property `InventoryOption` constructor/matchers.
+- Final branch membership uses the same receipt context, so result-set grouping
+  cannot re-admit a property using raw card fields.
+- Updated existing unit and integration fixtures to provide controlled
+  receipts through shared helpers. No tests were added or removed.
+
+### Gates and test value
+
+- Frozen conversational query bank: 10 passed with unchanged expectations.
+- Search efficiency contract: initially caught a real missing-receipt gap in
+  its `SearchRuntimeSnapshot` fixture; after fixing that shared fixture, 11
+  passed.
+- Search quality contract: 5 passed.
+- Existing `TextSearch` tests: 70 passed and two explanation tests exposed a
+  canonical society-ID mismatch in their fixture input. After aligning those
+  two inputs, both focused reruns passed.
+- Existing inventory projection and no-KG route tests passed.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check --all-targets`: passed
+  without warnings.
+- Hardcoding audit: 330 findings, 28 fact-key comparisons, zero blocked aliases;
+  delta remains zero.
+- `cargo fmt` and `git diff --check`: passed.
+
+### Candidate identity
+
+No Issue 118 candidate lake or bundle exists. No lake pointer changed.
+
+### Next exact command
+
+```bash
+sed -n '540,730p' backend/src/search/engine.rs
+sed -n '3140,3280p' backend/src/search/text.rs
+rg -n "ConstraintTerm::Spatial|BooleanEvaluation::satisfied\(Vec::new" backend/src/search
+```
+
+Pass the already-computed exact spatial evaluations into the same `TextSearch`
+Boolean traversal. Remove automatic empty spatial success while preserving the
+query-bank branch ordering and exact geometry gate.
 
 ## Goal and invariants
 

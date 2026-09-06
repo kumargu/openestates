@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::dag_config::{
     nearby_place_category_for_fact_key, requested_nearby_place_categories,
@@ -21,6 +21,7 @@ use crate::serving::{
 
 use super::analyzer;
 use super::ast::{CompiledQuery, ConstraintTerm};
+use super::evaluation::InventoryOption;
 use super::geo;
 use super::index::{
     property_matches_excluded_builder, property_matches_excluded_society, SearchIndex,
@@ -42,6 +43,12 @@ use super::{
 /// (query in, scored results out) stays the same.
 pub struct TextSearch;
 
+#[derive(Clone, Copy)]
+pub struct InventoryEvaluationContext<'a> {
+    pub options: &'a HashMap<String, InventoryOption>,
+    pub snapshot_identity: &'a str,
+}
+
 pub struct TextSearchRequest<'a, 'geo> {
     pub properties: &'a [Property],
     pub search_index: Option<&'a SearchIndex>,
@@ -53,6 +60,7 @@ pub struct TextSearchRequest<'a, 'geo> {
     pub societies: &'a [Society],
     pub compiled_query: &'a CompiledQuery,
     pub graph: Option<&'a KnowledgeGraph>,
+    pub inventory: InventoryEvaluationContext<'a>,
 }
 
 const COORDINATE_NAMED_PLACE_PROOF_RANK: u8 = 1;
@@ -71,6 +79,7 @@ impl TextSearch {
             request.societies,
             request.compiled_query,
             request.graph,
+            request.inventory,
         )
     }
 
@@ -86,6 +95,7 @@ impl TextSearch {
         societies: &[Society],
         compiled_query: &CompiledQuery,
         graph: Option<&KnowledgeGraph>,
+        inventory: InventoryEvaluationContext<'_>,
     ) -> Vec<SearchResultCard> {
         let query = compiled_query.raw.as_str();
         let intent = &compiled_query.intent;
@@ -140,17 +150,18 @@ impl TextSearch {
                 }
                 let society_entity_id = canonical_society_entity_id(p, search_index);
 
-                if !property_constraint_evaluation(
+                let constraint_evaluation = property_constraint_evaluation(
                     p,
                     compiled_query,
                     search_index,
                     serving_facts,
                     society_entity_id.as_ref(),
-                )
-                .is_satisfied()
-                {
+                    inventory,
+                );
+                if !constraint_evaluation.is_satisfied() {
                     return None;
                 }
+                let verified_matches = constraint_evaluation.verified_matches;
 
                 if !required_preferences_have_evidence(
                     p,
@@ -222,6 +233,7 @@ impl TextSearch {
                                 search_index,
                                 serving_facts,
                                 society_entity_id.as_ref(),
+                                inventory,
                             )
                         });
                 let hard_constraint_matches = match_hard_constraints(
@@ -632,6 +644,7 @@ impl TextSearch {
                     search_index,
                     serving_facts,
                     society_entity_id.as_ref(),
+                    inventory,
                 );
 
                 // Compute confidence score for this result
@@ -680,7 +693,7 @@ impl TextSearch {
                         tradeoff_label: None,
                         match_explanation,
                         proof_focuses,
-                        verified_matches: Vec::new(),
+                        verified_matches,
                         confidence_score,
                     },
                 })
@@ -3144,6 +3157,7 @@ fn property_constraint_evaluation(
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
+    inventory: InventoryEvaluationContext<'_>,
 ) -> super::evaluation::BooleanEvaluation {
     query.constraints.evaluate_states(&mut |term| {
         constraint_term_evaluation_for_society(
@@ -3152,6 +3166,7 @@ fn property_constraint_evaluation(
             search_index,
             serving_facts,
             society_entity_id,
+            inventory,
         )
     })
 }
@@ -3162,10 +3177,10 @@ fn constraint_term_evaluation_for_society(
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
+    inventory: InventoryEvaluationContext<'_>,
 ) -> super::evaluation::BooleanEvaluation {
     use super::evaluation::BooleanEvaluation;
 
-    let option = super::evaluation::InventoryOption::from_property(property);
     let known_match = |matches| {
         if matches {
             BooleanEvaluation::satisfied(Vec::new())
@@ -3174,20 +3189,31 @@ fn constraint_term_evaluation_for_society(
         }
     };
     match term {
-        ConstraintTerm::Bhk { value, .. } => option
-            .bhk
-            .map(|_| known_match(option.matches_bhk(*value)))
+        ConstraintTerm::Bhk { value, .. } => inventory
+            .options
+            .get(&property.id)
+            .map(|option| {
+                option.evaluate_bhk(
+                    &property.id,
+                    society_entity_id,
+                    *value,
+                    inventory.snapshot_identity,
+                )
+            })
             .unwrap_or_else(BooleanEvaluation::unknown),
-        ConstraintTerm::Budget { min, max, .. } => {
-            if option.price_min.is_none() || option.price_max.is_none() {
-                BooleanEvaluation::unknown()
-            } else {
-                known_match(option.matches_budget(
+        ConstraintTerm::Budget { min, max, .. } => inventory
+            .options
+            .get(&property.id)
+            .map(|option| {
+                option.evaluate_budget(
+                    &property.id,
+                    society_entity_id,
                     min.as_ref().map(|bound| bound.value),
                     max.as_ref().map(|bound| bound.value),
-                ))
-            }
-        }
+                    inventory.snapshot_identity,
+                )
+            })
+            .unwrap_or_else(BooleanEvaluation::unknown),
         ConstraintTerm::Area {
             entity_id: Some(entity_id),
             ..
@@ -3248,6 +3274,7 @@ pub(crate) fn property_matches_constraint_term_with_index(
     term: &ConstraintTerm,
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
+    inventory: InventoryEvaluationContext<'_>,
 ) -> bool {
     let society_entity_id = canonical_society_entity_id(property, search_index);
     property_matches_constraint_term_for_society(
@@ -3256,6 +3283,7 @@ pub(crate) fn property_matches_constraint_term_with_index(
         search_index,
         serving_facts,
         society_entity_id.as_ref(),
+        inventory,
     )
 }
 
@@ -3265,45 +3293,17 @@ fn property_matches_constraint_term_for_society(
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
+    inventory: InventoryEvaluationContext<'_>,
 ) -> bool {
-    match term {
-        ConstraintTerm::Bhk { value, .. } => {
-            super::evaluation::InventoryOption::from_property(property).matches_bhk(*value)
-        }
-        ConstraintTerm::Area {
-            entity_id: Some(entity_id),
-            ..
-        } => search_index.is_some_and(|index| index.entity_has_property(entity_id, &property.id)),
-        ConstraintTerm::Area { value, .. } => property_matches_area(property, value),
-        ConstraintTerm::Society {
-            entity_id,
-            display_name,
-            ..
-        } => search_index
-            .map(|index| index.entity_has_property(entity_id, &property.id))
-            .unwrap_or_else(|| property_matches_excluded_society(property, display_name)),
-        ConstraintTerm::Builder {
-            entity_id,
-            display_name,
-            ..
-        } => search_index
-            .map(|index| index.entity_has_property(entity_id, &property.id))
-            .unwrap_or_else(|| property_matches_excluded_builder(property, display_name)),
-        ConstraintTerm::Budget { min, max, .. } => {
-            super::evaluation::InventoryOption::from_property(property).matches_budget(
-                min.as_ref().map(|bound| bound.value),
-                max.as_ref().map(|bound| bound.value),
-            )
-        }
-        ConstraintTerm::Evidence { constraint, .. } => match_hard_constraints(
-            std::slice::from_ref(constraint),
-            property,
-            serving_facts,
-            society_entity_id,
-        )
-        .is_some(),
-        ConstraintTerm::Spatial { .. } => true,
-    }
+    constraint_term_evaluation_for_society(
+        property,
+        term,
+        search_index,
+        serving_facts,
+        society_entity_id,
+        inventory,
+    )
+    .is_satisfied()
 }
 
 fn property_matches_area(property: &crate::models::Property, area: &str) -> bool {
@@ -3375,6 +3375,7 @@ fn build_match_reason(
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
+    inventory: InventoryEvaluationContext<'_>,
 ) -> String {
     let intent = &query.intent;
     let mut parts = Vec::new();
@@ -3398,6 +3399,7 @@ fn build_match_reason(
             search_index,
             serving_facts,
             society_entity_id,
+            inventory,
         )
     }) {
         parts.push(label);
@@ -3409,6 +3411,7 @@ fn build_match_reason(
             search_index,
             serving_facts,
             society_entity_id,
+            inventory,
         )
     });
     if let Some((min, max)) = matched_budget {
@@ -3434,6 +3437,7 @@ fn build_match_reason(
             search_index,
             serving_facts,
             society_entity_id,
+            inventory,
         )
     }) {
         parts.push(constraint.raw_text.clone());
@@ -3604,8 +3608,8 @@ mod tests {
     use crate::knowledge::node::{Node, NodeType, RootSource};
     use crate::search::schema::SQM_PER_ACRE;
     use crate::serving::{
-        ServingEdgeRecord, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
-        ServingSearchMetadataRecord,
+        EvidenceRef, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
+        ServingSearchMetadataRecord, SourceObservation,
     };
     use chrono::{TimeZone, Utc};
 
@@ -3652,10 +3656,22 @@ mod tests {
             ..CompiledQuery::from_text("not 2BHK")
         };
 
-        let positive_evaluation =
-            property_constraint_evaluation(&property, &positive, None, None, "society:unknown-bhk");
-        let negated_evaluation =
-            property_constraint_evaluation(&property, &negated, None, None, "society:unknown-bhk");
+        let positive_evaluation = property_constraint_evaluation(
+            &property,
+            &positive,
+            None,
+            None,
+            "society:unknown-bhk",
+            empty_inventory_context(),
+        );
+        let negated_evaluation = property_constraint_evaluation(
+            &property,
+            &negated,
+            None,
+            None,
+            "society:unknown-bhk",
+            empty_inventory_context(),
+        );
 
         assert_eq!(
             positive_evaluation.state,
@@ -3720,6 +3736,7 @@ mod tests {
                 })
                 .filter(|indexes| !indexes.is_empty())
         });
+        let inventory_options = fixture_inventory_options(properties, search_index);
         TextSearch::search(TextSearchRequest {
             properties,
             search_index,
@@ -3731,6 +3748,7 @@ mod tests {
             societies,
             compiled_query: &compiled_query,
             graph,
+            inventory: fixture_inventory_context(&inventory_options),
         })
     }
 
@@ -3738,6 +3756,8 @@ mod tests {
     fn match_reason_names_the_configuration_that_matched() {
         let query = CompiledQuery::from_text("2 or 3 BHK in Whitefield");
         let property = local_property("three", "Whitefield", "soc-three", 3, 10_000_000, 10, 0.2);
+        let inventory_options = fixture_inventory_options(std::slice::from_ref(&property), None);
+        let society_entity_id = society_node_id(&property.society_id);
         let reason = build_match_reason(
             &query,
             &property,
@@ -3746,7 +3766,8 @@ mod tests {
             &[],
             None,
             None,
-            "society:soc-three",
+            &society_entity_id,
+            fixture_inventory_context(&inventory_options),
         );
         assert!(reason.contains("3 BHK"), "got {reason}");
         assert!(!reason.contains("2 or 3 BHK"), "got {reason}");
@@ -3756,6 +3777,8 @@ mod tests {
     fn match_reason_names_the_budget_branch_that_matched() {
         let query = CompiledQuery::from_text("3BHK under 2Cr or 4BHK under 4Cr");
         let property = local_property("four", "Whitefield", "soc-four", 4, 35_000_000, 10, 0.2);
+        let inventory_options = fixture_inventory_options(std::slice::from_ref(&property), None);
+        let society_entity_id = society_node_id(&property.society_id);
         let reason = build_match_reason(
             &query,
             &property,
@@ -3764,7 +3787,8 @@ mod tests {
             &[],
             None,
             None,
-            "society:soc-four",
+            &society_entity_id,
+            fixture_inventory_context(&inventory_options),
         );
 
         assert!(reason.contains("4 BHK"), "got {reason}");
@@ -3817,7 +3841,7 @@ mod tests {
         let g = graph_with_society_node("well-known", Some(RootSource::Rera), 30);
         let score = compute_confidence(Some(&g), "well-known", 80.0).unwrap();
         assert_eq!(score.label, "High");
-        // source=1.0*0.4 + coverage=1.0*0.2 + freshness~1.0*0.2 + match=0.8*0.2 = 0.96
+        // source=1.0*0.5 + coverage=1.0*0.25 + match=0.8*0.25 = 0.95
         assert!(
             score.overall >= 0.7,
             "Expected High, got overall={}",
@@ -3826,11 +3850,9 @@ mod tests {
     }
 
     #[test]
-    fn test_confidence_discovered_few_facts_bulk_created_is_low() {
+    fn test_confidence_discovered_few_facts_is_low() {
         // Discovered source (0.5) with only 2 facts and 0% graph-driven scoring.
-        // All facts have same timestamp (bulk-created), so freshness capped at 0.5.
-        // source=0.5*0.4=0.20 + coverage=(2/25)*0.2=0.016 + freshness=0.5*0.2=0.10 + match=0.0*0.2=0.0
-        // total ~ 0.316 => "Low" (< 0.4)
+        // source=0.5*0.5 + coverage=(2/25)*0.25 + match=0.0*0.25 = 0.27.
         let g = graph_with_society_node("unknown", Some(RootSource::Discovered), 2);
         let score = compute_confidence(Some(&g), "unknown", 0.0).unwrap();
         assert_eq!(score.label, "Low");
@@ -4051,6 +4073,62 @@ mod tests {
             .iter()
             .map(|p| (p.society_id.clone(), format!("{} Society", p.society_id)))
             .collect()
+    }
+
+    const FIXTURE_SNAPSHOT_IDENTITY: &str = "text-search-fixture";
+
+    fn fixture_inventory_options(
+        properties: &[Property],
+        search_index: Option<&SearchIndex>,
+    ) -> HashMap<String, InventoryOption> {
+        properties
+            .iter()
+            .filter(|property| property.bhk > 0)
+            .map(|property| {
+                let society_id = canonical_society_entity_id(property, search_index).into_owned();
+                let observation = SourceObservation::new(
+                    "TextSearchFixture",
+                    property.id.clone(),
+                    society_id.clone(),
+                    Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+                    Some(format!("https://example.test/{}", property.id)),
+                    vec!["asset:text-search-fixture/v1".to_string()],
+                )
+                .unwrap();
+                let exact_price = (property.price > 0).then_some(property.price);
+                (
+                    property.id.clone(),
+                    InventoryOption {
+                        property_id: property.id.clone(),
+                        society_id,
+                        bhk: Some(property.bhk),
+                        price_min: property.price_min.or(exact_price),
+                        price_max: property.price_max.or(exact_price),
+                        size_sqft: (property.super_builtup_sqft > 0)
+                            .then_some(property.super_builtup_sqft),
+                        evidence_reference: Some(EvidenceRef::for_observation(
+                            FIXTURE_SNAPSHOT_IDENTITY,
+                            &observation,
+                        )),
+                    },
+                )
+            })
+            .collect()
+    }
+
+    fn fixture_inventory_context(
+        options: &HashMap<String, InventoryOption>,
+    ) -> InventoryEvaluationContext<'_> {
+        InventoryEvaluationContext {
+            options,
+            snapshot_identity: FIXTURE_SNAPSHOT_IDENTITY,
+        }
+    }
+
+    fn empty_inventory_context() -> InventoryEvaluationContext<'static> {
+        static OPTIONS: std::sync::OnceLock<HashMap<String, InventoryOption>> =
+            std::sync::OnceLock::new();
+        fixture_inventory_context(OPTIONS.get_or_init(HashMap::new))
     }
 
     fn add_area_constraint(intent: &mut SearchIntent, area: &str) {
@@ -4305,6 +4383,7 @@ mod tests {
             &[],
             &query,
             None,
+            fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         );
         let ids = results
             .iter()
@@ -4359,6 +4438,10 @@ mod tests {
             societies: &[],
             compiled_query: &compiled_query,
             graph: None,
+            inventory: fixture_inventory_context(&fixture_inventory_options(
+                &properties,
+                Some(&index),
+            )),
         });
 
         assert_eq!(results.len(), 1);
@@ -4431,6 +4514,10 @@ mod tests {
             societies: &[],
             compiled_query: &compiled_query,
             graph: Some(&graph),
+            inventory: fixture_inventory_context(&fixture_inventory_options(
+                &properties,
+                Some(&index),
+            )),
         });
 
         assert_eq!(results.len(), 1);
@@ -4564,6 +4651,10 @@ mod tests {
             societies: &[],
             compiled_query: &compiled_query,
             graph: None,
+            inventory: fixture_inventory_context(&fixture_inventory_options(
+                &properties,
+                Some(&index),
+            )),
         });
 
         assert_eq!(
@@ -4623,6 +4714,7 @@ mod tests {
             societies: &[],
             compiled_query: &registration,
             graph: None,
+            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
 
         assert_eq!(registration_results.len(), 1);
@@ -4663,6 +4755,7 @@ mod tests {
             societies: &[],
             compiled_query: &legal_query,
             graph: None,
+            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert!(legal_results.is_empty());
     }
@@ -4728,6 +4821,7 @@ mod tests {
             societies: &[],
             compiled_query: &ordinary,
             graph: None,
+            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert_eq!(ordinary_results.len(), 1, "soft discovery remains lenient");
         assert!(ordinary_results[0]
@@ -4755,6 +4849,7 @@ mod tests {
             societies: &[],
             compiled_query: &required,
             graph: None,
+            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert!(required_results.is_empty());
     }
@@ -4801,6 +4896,7 @@ mod tests {
             societies: &[],
             compiled_query: &ordinary,
             graph: None,
+            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert_eq!(ordinary_results.len(), 1, "soft discovery remains lenient");
         let explanation = ordinary_results[0]
@@ -4833,6 +4929,7 @@ mod tests {
             societies: &[],
             compiled_query: &required,
             graph: None,
+            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert!(required_results.is_empty());
     }
@@ -4892,6 +4989,7 @@ mod tests {
             societies: &[],
             compiled_query: &query,
             graph: None,
+            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert_eq!(
             results
@@ -4927,6 +5025,7 @@ mod tests {
             societies: &[],
             compiled_query: &ordinary,
             graph: None,
+            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert_eq!(ordinary_results.len(), 1);
 
@@ -4942,6 +5041,7 @@ mod tests {
             societies: &[],
             compiled_query: &constrained,
             graph: None,
+            inventory: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert!(constrained_results.is_empty());
     }
@@ -8466,6 +8566,7 @@ mod tests {
             &[],
             &compiled,
             None,
+            fixture_inventory_context(&fixture_inventory_options(&properties, Some(&index))),
         );
 
         assert!(
@@ -8530,6 +8631,7 @@ mod tests {
             &[],
             &compiled,
             None,
+            fixture_inventory_context(&fixture_inventory_options(&properties, Some(&index))),
         );
 
         assert_eq!(
@@ -8684,6 +8786,10 @@ mod tests {
             societies: &[],
             compiled_query: &compiled_query,
             graph: None,
+            inventory: fixture_inventory_context(&fixture_inventory_options(
+                &properties,
+                Some(&index),
+            )),
         });
 
         assert_eq!(results.len(), 2);
