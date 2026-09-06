@@ -10,9 +10,10 @@ use backend::search::{
     SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
 };
 use backend::serving::{
-    derive_proximity_records, LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest,
-    ServingEntityAliasIndex, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
-    ServingSearchMetadataRecord, SourceObservation, SpatialServingIndex, TantivyRecallIndex,
+    derive_proximity_records, EvidenceId, LoadedServingBundle, ReraEvidenceIndex,
+    ServingBundleManifest, ServingEntityAliasIndex, ServingEntityRecord, ServingFactIndex,
+    ServingFactRecord, ServingSearchMetadataRecord, SourceObservation, SpatialServingIndex,
+    TantivyRecallIndex,
 };
 use backend::state::SearchRuntimeSnapshot;
 use chrono::{TimeZone, Utc};
@@ -916,6 +917,14 @@ fn inside_requires_sourced_containment_and_cannot_use_nearby_coordinates() {
         12.985,
         77.715,
     ));
+    builder.add_fact(
+        "society:sourced-inside",
+        "geo.geometry_geojson",
+        FactValue::Text(
+            r#"{"type":"Polygon","coordinates":[[[77.714,12.984],[77.716,12.984],[77.716,12.986],[77.714,12.986],[77.714,12.984]]]}"#
+                .to_string(),
+        ),
+    );
     builder.add_home(HomeSpec::new(
         "coordinate-only-home",
         "Coordinate Only",
@@ -942,6 +951,22 @@ fn inside_requires_sourced_containment_and_cannot_use_nearby_coordinates() {
             && matched.metric == "footprint_containment"
             && matched.target_entity_id.as_deref() == Some("area:hoodi")
     }));
+    let spatial_match = output.results[0]
+        .verified_matches
+        .iter()
+        .find(|matched| matched.metric == "footprint_containment")
+        .expect("containment match keeps its derivation");
+    assert!(spatial_match.observation_ids.is_empty());
+    assert!(matches!(
+        spatial_match.evidence_refs.as_slice(),
+        [reference] if matches!(reference.evidence_id, EvidenceId::Derivation(_))
+    ));
+    let derivation = spatial_match
+        .derived_evidence
+        .as_ref()
+        .expect("spatial proof carries its source inputs");
+    assert_eq!(derivation.input_evidence.len(), 2);
+    assert!(derivation.validate().is_ok());
     let inventory_matches = output.results[0]
         .verified_matches
         .iter()
@@ -2887,6 +2912,17 @@ fn entity(entity_id: &str, entity_type: &str, name: &str) -> ServingEntityRecord
 }
 
 fn serving_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFactRecord {
+    let observed_at = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
+    let source_url = Some(format!("https://example.test/entities/{entity_id}"));
+    let observation = SourceObservation::new(
+        "ControlledFixture",
+        format!("entity-record:{entity_id}"),
+        entity_id,
+        observed_at,
+        source_url.clone(),
+        vec!["asset:controlled-search-fixture/v1".to_string()],
+    )
+    .unwrap();
     ServingFactRecord {
         entity_id: entity_id.to_string(),
         fact_key: fact_key.to_string(),
@@ -2901,11 +2937,11 @@ fn serving_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFac
         value,
         confidence: 1.0,
         source_type: "Google".to_string(),
-        source_url: None,
+        source_url,
         model: None,
         skill_id: Some("search_conversational_semantics_contract".to_string()),
-        learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
-        observation: None,
+        learned_at: observed_at,
+        observation: Some(observation),
     }
 }
 

@@ -1117,7 +1117,12 @@ fn related_society_groundwater_fact<'a>(
         rows.facts
             .iter()
             .filter(|fact| fact.fact_key == fact_key)
-            .max_by_key(|fact| fact.learned_at)
+            .max_by(|left, right| {
+                left.confidence.total_cmp(&right.confidence).then_with(|| {
+                    left.stable_selection_key()
+                        .cmp(&right.stable_selection_key())
+                })
+            })
     })
 }
 

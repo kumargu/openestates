@@ -51,7 +51,7 @@ use crate::livability_brief::{
 
 use super::enrichment::{
     enrich_area, enrich_property_card, enrich_society, extract_area_intelligence,
-    extract_builder_trust, extract_data_freshness, extract_rera_info, kg_entity_refs_for_property,
+    extract_builder_trust, extract_rera_info, kg_entity_refs_for_property,
     overlay_project_scale_facts, rera_affidavit_only_visible, rera_decision_cards,
     rera_document_groups, society_node_id, AreaIntelligence, BuilderTrust, DataFreshness,
     ReraComplaintScopeSummary, ReraDocumentManifestItem, ReraInfo, ReraScheduleSection,
@@ -959,7 +959,12 @@ fn serving_entity_source_item(
         .facts
         .iter()
         .filter(|fact| fact.fact_key == fact_key)
-        .max_by_key(|fact| fact.learned_at)?;
+        .max_by(|left, right| {
+            left.confidence.total_cmp(&right.confidence).then_with(|| {
+                left.stable_selection_key()
+                    .cmp(&right.stable_selection_key())
+            })
+        })?;
     let display_template = rows
         .search_metadata_for_fact_key(fact_key)
         .next()
@@ -2797,8 +2802,7 @@ pub async fn get_property(
             .map(|bundle| bundle.manifest.bundle_version.clone()),
     );
 
-    // Extract data freshness from KG
-    let data_freshness = extract_data_freshness(&graph, &property.society_id);
+    let data_freshness: Option<DataFreshness> = None;
 
     // Compute confidence score for detail page (uses fact-quality instead of match_quality)
     let confidence_score = compute_confidence_for_detail(Some(&graph), &property.society_id);
@@ -4100,7 +4104,7 @@ fn rera_info_for(
         info.rera_portal_url = Some(fact.value);
     }
     info.last_verified = projection
-        .latest_learned_at_with_prefix("rera_")
+        .provenance_time_with_prefix("rera_")
         .map(|timestamp| timestamp.to_rfc3339())
         .or(info.last_verified);
     info.decision_cards = rera_decision_cards(&info);

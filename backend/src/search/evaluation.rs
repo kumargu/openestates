@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 
 use crate::knowledge::FactValue;
 use crate::models::Property;
-use crate::serving::{EvidenceRef, ServingFactIndex};
+use crate::serving::{DerivedEvidence, EvidenceRef, ServingFactIndex};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -170,6 +170,7 @@ impl InventoryOption {
             unit: Some(unit.to_string()),
             observation_ids: Vec::new(),
             evidence_refs: vec![evidence_reference.clone()],
+            derived_evidence: None,
             algorithm_version: "inventory-option-evaluator-v2".to_string(),
             confidence: 1.0,
             snapshot_identity: snapshot_identity.to_string(),
@@ -246,6 +247,8 @@ pub struct VerifiedMatch {
     pub observation_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence_refs: Vec<EvidenceRef>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub derived_evidence: Option<DerivedEvidence>,
     pub algorithm_version: String,
     pub confidence: f32,
     pub snapshot_identity: String,

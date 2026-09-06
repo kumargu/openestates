@@ -9,7 +9,7 @@ use rstar::{RTree, RTreeObject, AABB};
 
 use crate::knowledge::FactValue;
 
-use super::{ServingEdgeRecord, ServingEntityRecord, ServingFactIndex};
+use super::{ServingEdgeRecord, ServingEntityRecord, ServingFactIndex, SourceObservation};
 
 const GEOMETRY_FACT_KEY: &str = "geo.geometry_geojson";
 const AREA_EPSILON: f64 = 1e-12;
@@ -39,6 +39,7 @@ pub struct SpatialFeature {
     pub confidence: f32,
     pub source_type: String,
     pub source_url: Option<String>,
+    pub observation: Option<SourceObservation>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -310,9 +311,10 @@ fn spatial_feature(
             _ => None,
         })
         .max_by(|(left, _), (right, _)| {
-            left.confidence
-                .total_cmp(&right.confidence)
-                .then_with(|| left.learned_at.cmp(&right.learned_at))
+            left.confidence.total_cmp(&right.confidence).then_with(|| {
+                left.stable_selection_key()
+                    .cmp(&right.stable_selection_key())
+            })
         })?;
     let geometry = parse_geojson_geometry(fact.1)?;
     let bounds = geometry_bounds(&geometry)?;
@@ -325,6 +327,7 @@ fn spatial_feature(
         confidence: fact.0.confidence,
         source_type: fact.0.source_type.clone(),
         source_url: fact.0.source_url.clone(),
+        observation: fact.0.observation.clone(),
     })
 }
 

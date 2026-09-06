@@ -117,9 +117,11 @@ pub fn osm_locality_boundary_facts_input(
                 learned_at,
                 run_id: run_id.to_string(),
                 input_hash: hex_digest(&hasher.finalize()),
-                observation_provider: None,
-                provider_observation_id: None,
-                asset_lineage: Vec::new(),
+                observation_provider: Some("OpenStreetMap".to_string()),
+                provider_observation_id: Some(boundary.osm_id.clone()),
+                asset_lineage: vec![format!(
+                    "asset:{OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID}/run:{run_id}"
+                )],
             });
             if annotation_keys.insert((entity_id.clone(), fact_key.to_string())) {
                 annotations.push(SkillFactAnnotationRecord {
@@ -253,11 +255,13 @@ mod tests {
             .facts
             .iter()
             .all(|fact| fact.entity_id == "area:osm:relation-123"));
-        assert!(output
-            .facts
-            .iter()
-            .any(|fact| fact.fact_key == "geo.geometry_geojson"
-                && fact.source_type == "OpenStreetMap"));
+        assert!(output.facts.iter().any(|fact| {
+            fact.fact_key == "geo.geometry_geojson"
+                && fact.source_type == "OpenStreetMap"
+                && fact.observation_provider.as_deref() == Some("OpenStreetMap")
+                && fact.provider_observation_id.as_deref() == Some("relation/123")
+                && fact.asset_lineage == ["asset:osm_locality_boundary_facts/run:run-1"]
+        }));
         assert!(output.facts.iter().any(|fact| {
             fact.fact_key == "area.admin_level"
                 && fact.value_json

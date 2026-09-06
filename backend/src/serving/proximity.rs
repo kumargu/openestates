@@ -370,13 +370,9 @@ fn derived_nearby_fact(
         source_url: candidate.place.source_url.clone(),
         model: Some(DERIVED_MODEL.to_string()),
         skill_id: None,
-        learned_at: latest_datetime(society.learned_at, candidate.place.point.learned_at),
+        learned_at: society.learned_at,
         observation: None,
     }
-}
-
-fn latest_datetime(left: DateTime<Utc>, right: DateTime<Utc>) -> DateTime<Utc> {
-    left.max(right)
 }
 
 fn derived_search_metadata(

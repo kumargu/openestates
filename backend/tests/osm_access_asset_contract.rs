@@ -59,6 +59,11 @@ fn society_access_emits_boundary_public_corridor_and_typed_entrance() {
             && !fact.fact_key.starts_with("route.")
             && !fact.value_json.contains("ground_access")
     }));
+    assert!(facts.facts.iter().all(|fact| {
+        fact.observation_provider.as_deref() == Some("OpenStreetMap")
+            && fact.provider_observation_id.as_deref() == Some("waterford-access")
+            && fact.asset_lineage == ["asset:osm_society_access_facts/run:test-run"]
+    }));
     assert!(facts.facts.iter().any(|fact| {
         fact.entity_id == "society:prestige-waterford"
             && fact.fact_key == "geo.geometry_geojson"
@@ -99,6 +104,11 @@ fn society_access_emits_boundary_public_corridor_and_typed_entrance() {
     }));
     assert!(kg_records.entities.iter().any(|entity| {
         entity.entity_id.starts_with("place:society-entrance:") && entity.entity_type == "place"
+    }));
+    assert!(kg_records.facts.iter().all(|fact| {
+        fact.observation_provider.as_deref() == Some("OpenStreetMap")
+            && fact.provider_observation_id.as_deref() == Some("waterford-access")
+            && fact.asset_lineage == ["asset:osm_society_access_facts/run:test-run"]
     }));
 }
 

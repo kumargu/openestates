@@ -168,7 +168,7 @@ struct ObservationIdentityPayload<'a> {
     asset_lineage: &'a [String],
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DerivedEvidence {
     pub derivation_id: DerivationId,
     pub snapshot_identity: String,
@@ -176,7 +176,10 @@ pub struct DerivedEvidence {
     pub target_entity_id: Option<String>,
     pub relation: String,
     pub metric: String,
+    pub value: Option<f64>,
+    pub unit: Option<String>,
     pub algorithm_version: String,
+    pub confidence: f32,
     pub input_evidence: Vec<EvidenceRef>,
 }
 
@@ -187,7 +190,10 @@ impl DerivedEvidence {
         target_entity_id: Option<String>,
         relation: impl Into<String>,
         metric: impl Into<String>,
+        value: Option<f64>,
+        unit: Option<String>,
         algorithm_version: impl Into<String>,
+        confidence: f32,
         mut input_evidence: Vec<EvidenceRef>,
     ) -> Result<Self, EvidenceIdentityError> {
         let snapshot_identity = snapshot_identity.into();
@@ -200,6 +206,13 @@ impl DerivedEvidence {
         require_non_empty("relation", &relation)?;
         require_non_empty("metric", &metric)?;
         require_non_empty("algorithm version", &algorithm_version)?;
+        if value.is_some_and(|value| !value.is_finite())
+            || unit.as_deref().is_some_and(|unit| unit.trim().is_empty())
+            || !confidence.is_finite()
+            || !(0.0..=1.0).contains(&confidence)
+        {
+            return Err(EvidenceIdentityError::InvalidValue);
+        }
         if input_evidence.is_empty() {
             return Err(EvidenceIdentityError::MissingInputs);
         }
@@ -212,6 +225,9 @@ impl DerivedEvidence {
                 actual: mismatched.snapshot_identity.clone(),
             });
         }
+        for reference in &input_evidence {
+            reference.validate_for(&reference.subject_entity_id, &snapshot_identity)?;
+        }
         input_evidence.sort_by_key(EvidenceRef::stable_key);
         input_evidence.dedup();
         let identity_payload = DerivationIdentityPayload {
@@ -220,7 +236,10 @@ impl DerivedEvidence {
             target_entity_id: target_entity_id.as_deref(),
             relation: &relation,
             metric: &metric,
+            value,
+            unit: unit.as_deref(),
             algorithm_version: &algorithm_version,
+            confidence,
             input_evidence: &input_evidence,
         };
         let derivation_id = DerivationId(content_id("drv", &identity_payload));
@@ -231,7 +250,10 @@ impl DerivedEvidence {
             target_entity_id,
             relation,
             metric,
+            value,
+            unit,
             algorithm_version,
+            confidence,
             input_evidence,
         })
     }
@@ -243,7 +265,10 @@ impl DerivedEvidence {
             self.target_entity_id.clone(),
             self.relation.clone(),
             self.metric.clone(),
+            self.value,
+            self.unit.clone(),
             self.algorithm_version.clone(),
+            self.confidence,
             self.input_evidence.clone(),
         )?;
         if self.derivation_id != expected.derivation_id {
@@ -263,7 +288,10 @@ struct DerivationIdentityPayload<'a> {
     target_entity_id: Option<&'a str>,
     relation: &'a str,
     metric: &'a str,
+    value: Option<f64>,
+    unit: Option<&'a str>,
     algorithm_version: &'a str,
+    confidence: f32,
     input_evidence: &'a [EvidenceRef],
 }
 
@@ -271,6 +299,7 @@ struct DerivationIdentityPayload<'a> {
 pub enum EvidenceIdentityError {
     MissingField(&'static str),
     MissingInputs,
+    InvalidValue,
     InvalidId,
     IdentityMismatch { expected: String, actual: String },
     SubjectMismatch { expected: String, actual: String },
@@ -282,6 +311,7 @@ impl fmt::Display for EvidenceIdentityError {
         match self {
             Self::MissingField(field) => write!(formatter, "missing evidence identity {field}"),
             Self::MissingInputs => write!(formatter, "derived evidence requires input references"),
+            Self::InvalidValue => write!(formatter, "derived evidence has an invalid value"),
             Self::InvalidId => write!(formatter, "evidence reference has an invalid content id"),
             Self::IdentityMismatch { expected, actual } => write!(
                 formatter,
@@ -396,7 +426,10 @@ mod tests {
             Some("area:one".to_string()),
             "inside",
             "footprint_containment",
+            Some(1.0),
+            Some("boolean".to_string()),
             "spatial-evaluator-v2",
+            0.9,
             vec![subject.clone(), target.clone()],
         )
         .unwrap();
@@ -406,7 +439,10 @@ mod tests {
             Some("area:one".to_string()),
             "inside",
             "footprint_containment",
+            Some(1.0),
+            Some("boolean".to_string()),
             "spatial-evaluator-v2",
+            0.9,
             vec![target, subject],
         )
         .unwrap();
@@ -428,7 +464,10 @@ mod tests {
                 None,
                 "near",
                 "footprint_distance",
+                Some(1.0),
+                Some("km".to_string()),
                 "spatial-evaluator-v2",
+                0.9,
                 Vec::new(),
             ),
             Err(EvidenceIdentityError::MissingInputs)
@@ -443,7 +482,10 @@ mod tests {
                 None,
                 "near",
                 "footprint_distance",
+                Some(1.0),
+                Some("km".to_string()),
                 "spatial-evaluator-v2",
+                0.9,
                 vec![wrong_snapshot],
             ),
             Err(EvidenceIdentityError::SnapshotMismatch { .. })

@@ -51,6 +51,28 @@ impl ServingFactRecord {
         }
         Ok(())
     }
+
+    pub(crate) fn stable_selection_key(&self) -> String {
+        let value = serde_json::to_string(&self.value).unwrap_or_default();
+        self.observation.as_ref().map_or_else(
+            || {
+                format!(
+                    "{}|{}|{}|{}|{value}",
+                    self.source_type,
+                    self.source_url.as_deref().unwrap_or_default(),
+                    self.skill_id.as_deref().unwrap_or_default(),
+                    self.fact_key
+                )
+            },
+            |observation| {
+                format!(
+                    "{}|{}|{value}",
+                    observation.observation_id.as_str(),
+                    self.fact_key
+                )
+            },
+        )
+    }
 }
 
 /// One graph edge row in the request-path bundle.

@@ -8,8 +8,9 @@ use crate::dag_config::{
 use crate::knowledge::FactValue;
 use crate::models::Property;
 use crate::serving::{
-    resolve_serving_coordinates, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
-    ServingSearchMetadataRecord, SpatialGeometryIndex, SpatialServingIndex,
+    resolve_serving_coordinates, DerivedEvidence, EvidenceRef, ServingEntityRecord,
+    ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord, SpatialGeometryIndex,
+    SpatialServingIndex,
 };
 
 use super::analyzer;
@@ -756,13 +757,22 @@ impl<'a> GeoSearchQuery<'a> {
         rows: &crate::serving::ServingEntityFactRows,
         clause: &ResolvedGeoClause,
     ) -> Option<f64> {
+        self.society_rows_match_clause_distance_fact(rows, clause)
+            .map(|(distance, _)| distance)
+    }
+
+    fn society_rows_match_clause_distance_fact<'facts>(
+        &self,
+        rows: &'facts crate::serving::ServingEntityFactRows,
+        clause: &ResolvedGeoClause,
+    ) -> Option<(f64, &'facts ServingFactRecord)> {
         rows.facts
             .iter()
             .filter(|fact| {
                 fact.confidence >= schema::ranking_policy().min_support_evidence_confidence
             })
             .filter_map(|fact| {
-                clause
+                let distance = clause
                     .category_fact_keys
                     .iter()
                     .find_map(|fact_key| {
@@ -790,9 +800,10 @@ impl<'a> GeoSearchQuery<'a> {
                                 })
                             })
                             .min_by(f64::total_cmp)
-                    })
+                    })?;
+                Some((distance, fact))
             })
-            .min_by(f64::total_cmp)
+            .min_by(|left, right| left.0.total_cmp(&right.0))
     }
 
     pub(crate) fn evidence_for_society(&self, society_id: &str) -> Vec<HaversineEvidence> {
@@ -918,19 +929,30 @@ impl<'a> GeoSearchQuery<'a> {
 
         let fact_distance = fact_index
             .entity(society_entity_id)
-            .and_then(|rows| self.society_rows_match_clause_distance(rows, clause));
+            .and_then(|rows| self.society_rows_match_clause_distance_fact(rows, clause));
         match fact_distance {
-            Some(distance_km) => BooleanEvaluation::from_predicate(PredicateEvaluation::Satisfied(
+            Some((distance_km, fact)) => match fact.observation.as_ref().and_then(|observation| {
                 verified_spatial_match(
                     society_entity_id,
                     None,
                     clause,
                     "serving_distance_fact",
                     Some(distance_km),
-                    1.0,
+                    fact.confidence,
                     snapshot_identity,
-                ),
-            )),
+                    vec![EvidenceRef::for_observation(snapshot_identity, observation)],
+                )
+            }) {
+                Some(matched) => {
+                    BooleanEvaluation::from_predicate(PredicateEvaluation::Satisfied(matched))
+                }
+                None => {
+                    BooleanEvaluation::from_predicate(PredicateEvaluation::Unknown(EvidenceGap {
+                        predicate: clause.target_text.clone(),
+                        reason: "spatial fact has no durable source observation".to_string(),
+                    }))
+                }
+            },
             None => BooleanEvaluation::from_predicate(PredicateEvaluation::Unknown(EvidenceGap {
                 predicate: clause.target_text.clone(),
                 reason: "no compatible sourced spatial observation".to_string(),
@@ -954,15 +976,34 @@ impl<'a> GeoSearchQuery<'a> {
                     .iter()
                     .any(|id| id == society_entity_id)
                 {
-                    PredicateEvaluation::Satisfied(verified_spatial_match(
-                        society_entity_id,
-                        Some(&place.entity_id),
-                        clause,
-                        "footprint_containment",
-                        Some(1.0),
-                        place.confidence,
-                        snapshot_identity,
-                    ))
+                    spatial_index
+                        .footprint_evidence_refs(
+                            &[society_entity_id, &place.entity_id],
+                            snapshot_identity,
+                        )
+                        .and_then(|inputs| {
+                            verified_spatial_match(
+                                society_entity_id,
+                                Some(&place.entity_id),
+                                clause,
+                                "footprint_containment",
+                                Some(1.0),
+                                place.confidence,
+                                snapshot_identity,
+                                inputs,
+                            )
+                        })
+                        .map_or_else(
+                            || {
+                                PredicateEvaluation::Unknown(EvidenceGap {
+                                    predicate: format!("inside {}", place.name),
+                                    reason:
+                                        "containment inputs have no durable geometry observations"
+                                            .to_string(),
+                                })
+                            },
+                            PredicateEvaluation::Satisfied,
+                        )
                 } else {
                     PredicateEvaluation::Unknown(EvidenceGap {
                         predicate: format!("inside {}", place.name),
@@ -971,25 +1012,44 @@ impl<'a> GeoSearchQuery<'a> {
                 }
             }
             "adjacent" => {
-                let matches = spatial_index
+                let adjacent_area = spatial_index
                     .adjacent_area_ids(&place.entity_id)
                     .into_iter()
-                    .any(|area_id| {
+                    .find(|area_id| {
                         spatial_index
                             .society_ids_inside(&area_id)
                             .iter()
                             .any(|id| id == society_entity_id)
                     });
-                if matches {
-                    PredicateEvaluation::Satisfied(verified_spatial_match(
-                        society_entity_id,
-                        Some(&place.entity_id),
-                        clause,
-                        "sourced_area_adjacency",
-                        Some(1.0),
-                        place.confidence,
-                        snapshot_identity,
-                    ))
+                if let Some(adjacent_area) = adjacent_area {
+                    spatial_index
+                        .footprint_evidence_refs(
+                            &[society_entity_id, adjacent_area.as_str(), &place.entity_id],
+                            snapshot_identity,
+                        )
+                        .and_then(|inputs| {
+                            verified_spatial_match(
+                                society_entity_id,
+                                Some(&place.entity_id),
+                                clause,
+                                "sourced_area_adjacency",
+                                Some(1.0),
+                                place.confidence,
+                                snapshot_identity,
+                                inputs,
+                            )
+                        })
+                        .map_or_else(
+                            || {
+                                PredicateEvaluation::Unknown(EvidenceGap {
+                                    predicate: format!("adjacent to {}", place.name),
+                                    reason:
+                                        "adjacency inputs have no durable geometry observations"
+                                            .to_string(),
+                                })
+                            },
+                            PredicateEvaluation::Satisfied,
+                        )
                 } else {
                     PredicateEvaluation::Unknown(EvidenceGap {
                         predicate: format!("adjacent to {}", place.name),
@@ -997,7 +1057,11 @@ impl<'a> GeoSearchQuery<'a> {
                     })
                 }
             }
-            "near" => match spatial_index.distance_between(society_entity_id, &place.entity_id) {
+            "near" => match spatial_index.distance_between(
+                society_entity_id,
+                &place.entity_id,
+                snapshot_identity,
+            ) {
                 Some(distance) => {
                     if clause
                         .distance_limit_km
@@ -1011,7 +1075,7 @@ impl<'a> GeoSearchQuery<'a> {
                             ),
                         })
                     } else {
-                        PredicateEvaluation::Satisfied(verified_spatial_match(
+                        verified_spatial_match(
                             society_entity_id,
                             Some(&place.entity_id),
                             clause,
@@ -1019,7 +1083,18 @@ impl<'a> GeoSearchQuery<'a> {
                             Some(distance.distance_km),
                             distance.confidence,
                             snapshot_identity,
-                        ))
+                            distance.evidence_refs,
+                        )
+                        .map_or_else(
+                            || {
+                                PredicateEvaluation::Unknown(EvidenceGap {
+                                    predicate: format!("near {}", place.name),
+                                    reason: "distance inputs have no durable observations"
+                                        .to_string(),
+                                })
+                            },
+                            PredicateEvaluation::Satisfied,
+                        )
                     }
                 }
                 None => PredicateEvaluation::Unknown(EvidenceGap {
@@ -1147,33 +1222,45 @@ fn verified_spatial_match(
     value: Option<f64>,
     confidence: f32,
     snapshot_identity: &str,
-) -> VerifiedMatch {
-    VerifiedMatch {
+    input_evidence: Vec<EvidenceRef>,
+) -> Option<VerifiedMatch> {
+    let unit = value.map(|_| {
+        if metric.contains("distance") {
+            "km"
+        } else {
+            "boolean"
+        }
+        .to_string()
+    });
+    let derivation = DerivedEvidence::new(
+        snapshot_identity,
+        subject_entity_id,
+        target_entity_id.map(str::to_string),
+        &clause.relation,
+        metric,
+        value,
+        unit.clone(),
+        "spatial-evaluator-v2",
+        confidence,
+        input_evidence,
+    )
+    .ok()?;
+    let evidence_reference = EvidenceRef::for_derivation(&derivation);
+    Some(VerifiedMatch {
         subject_entity_id: subject_entity_id.to_string(),
         target_entity_id: target_entity_id.map(str::to_string),
         predicate: clause.target_text.clone(),
         relation: clause.relation.clone(),
         metric: metric.to_string(),
         value,
-        unit: value.map(|_| {
-            if metric.contains("distance") {
-                "km"
-            } else {
-                "boolean"
-            }
-            .to_string()
-        }),
-        observation_ids: vec![format!(
-            "spatial:{}:{}:{}",
-            subject_entity_id,
-            clause.relation,
-            target_entity_id.unwrap_or("category")
-        )],
-        evidence_refs: Vec::new(),
-        algorithm_version: "spatial-evaluator-v1".to_string(),
+        unit,
+        observation_ids: Vec::new(),
+        evidence_refs: vec![evidence_reference],
+        derived_evidence: Some(derivation),
+        algorithm_version: "spatial-evaluator-v2".to_string(),
         confidence,
         snapshot_identity: snapshot_identity.to_string(),
-    }
+    })
 }
 
 fn ranked_distance_candidates(
@@ -1382,21 +1469,24 @@ fn place_category_for_entity(fact_index: &ServingFactIndex, entity_id: &str) -> 
         .iter()
         .filter(|fact| fact.fact_key.eq_ignore_ascii_case("place.category"))
         .filter_map(|fact| match &fact.value {
-            FactValue::Text(value) if !value.trim().is_empty() => {
-                Some((value.trim(), fact.confidence, fact.learned_at))
-            }
+            FactValue::Text(value) if !value.trim().is_empty() => Some((value.trim(), fact)),
             FactValue::Tags(values) => values
                 .iter()
                 .find(|value| !value.trim().is_empty())
-                .map(|value| (value.trim(), fact.confidence, fact.learned_at)),
+                .map(|value| (value.trim(), fact)),
             _ => None,
         })
         .max_by(|left, right| {
             left.1
-                .total_cmp(&right.1)
-                .then_with(|| left.2.cmp(&right.2))
+                .confidence
+                .total_cmp(&right.1.confidence)
+                .then_with(|| {
+                    left.1
+                        .stable_selection_key()
+                        .cmp(&right.1.stable_selection_key())
+                })
         })
-        .map(|(category, _, _)| category.to_string())
+        .map(|(category, _)| category.to_string())
 }
 
 fn remove_exact_places_contained_in_longer_match(places: &mut Vec<ResolvedGeoPlace>) {

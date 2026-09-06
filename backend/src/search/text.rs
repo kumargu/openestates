@@ -11,7 +11,7 @@ use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::models::{KgEntityRefs, Property, Society};
 use crate::proof_focus::ProofFocus;
 use crate::routes::enrichment::{
-    area_node_id, enrich_property_card, property_node_id, society_node_id, DataFreshness,
+    area_node_id, enrich_property_card, property_node_id, society_node_id,
 };
 use crate::scoring::BestEffortRankingTier;
 use crate::serving::{
@@ -621,7 +621,6 @@ impl TextSearch {
                     );
                     enrich_card_from_serving_context(
                         &mut card,
-                        serving_facts,
                         search_index,
                         p,
                         society_entity_id.as_ref(),
@@ -1084,7 +1083,6 @@ pub(crate) fn enrich_card_from_serving_facts(
 
 fn enrich_card_from_serving_context(
     card: &mut crate::models::PropertyCard,
-    serving_facts: &ServingFactIndex,
     search_index: Option<&SearchIndex>,
     property: &Property,
     society_entity_id: &str,
@@ -1095,32 +1093,6 @@ fn enrich_card_from_serving_context(
     {
         card.root_source = Some(root_source.to_string());
     }
-    if let Some(rows) = serving_facts.entity(society_entity_id) {
-        let newest = rows.facts.iter().map(|fact| fact.learned_at).max();
-        if let Some(newest) = newest {
-            let days_ago = (chrono::Utc::now() - newest).num_days().max(0) as u32;
-            let freshness_label = match days_ago {
-                0..=6 => "Fresh",
-                7..=29 => "Recent",
-                30..=89 => "Stale",
-                _ => "Very stale",
-            };
-            let mut source_breakdown = std::collections::HashMap::new();
-            for fact in &rows.facts {
-                *source_breakdown
-                    .entry(fact.source_type.clone())
-                    .or_insert(0) += 1;
-            }
-            card.data_freshness = Some(DataFreshness {
-                last_enriched: newest.to_rfc3339(),
-                days_ago,
-                freshness_label: freshness_label.to_string(),
-                fact_count: rows.facts.len() as u32,
-                source_breakdown,
-            });
-        }
-    }
-
     let Some(builder_entity_id) =
         search_index.and_then(|index| index.builder_entity_id_for_property(&property.id))
     else {
@@ -8837,7 +8809,7 @@ mod tests {
             .iter()
             .any(|r| r.preference == "reliable builder" && r.fact_key == "builder_quality_score"));
         assert_eq!(results[0].card.root_source.as_deref(), Some("Rera"));
-        assert!(results[0].card.data_freshness.is_some());
+        assert!(results[0].card.data_freshness.is_none());
         assert_eq!(
             results[0].card.kg_entity_refs.builder_entity_id.as_deref(),
             Some("builder:stronger")

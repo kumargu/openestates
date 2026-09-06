@@ -6,8 +6,9 @@ use crate::dag_config::{valid_coordinate_pair, CoordinateEntityScope};
 use crate::search::geo::haversine_km;
 
 use super::{
-    resolve_serving_coordinates, ServingEdgeRecord, ServingEntityFactRows, ServingEntityRecord,
-    ServingFactIndex, SpatialGeometryIndex,
+    resolve_serving_coordinates, EvidenceRef, ServingEdgeRecord, ServingEntityFactRows,
+    ServingEntityRecord, ServingFactIndex, SourceObservation, SpatialGeometry,
+    SpatialGeometryIndex,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -28,6 +29,7 @@ pub struct SpatialPoint {
     pub confidence: f32,
     pub source_type: Option<String>,
     pub source_url: Option<String>,
+    pub observations: Vec<SourceObservation>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37,6 +39,7 @@ pub struct SpatialDistance {
     pub confidence: f32,
     pub source_type: Option<String>,
     pub source_url: Option<String>,
+    pub evidence_refs: Vec<EvidenceRef>,
 }
 
 #[derive(Debug, Clone)]
@@ -227,20 +230,29 @@ impl SpatialServingIndex {
     /// Prefer sourced footprint geometry. A coordinate fallback is explicit in
     /// the returned metric and must never be used to prove containment or
     /// adjacency.
-    pub fn distance_between(&self, left_id: &str, right_id: &str) -> Option<SpatialDistance> {
+    pub fn distance_between(
+        &self,
+        left_id: &str,
+        right_id: &str,
+        snapshot_identity: &str,
+    ) -> Option<SpatialDistance> {
         if let Some(distance_km) = self.geometry.distance_km(left_id, right_id) {
             let left = self.geometry.feature(left_id)?;
             let right = self.geometry.feature(right_id)?;
+            let evidence_refs =
+                self.footprint_evidence_refs(&[left_id, right_id], snapshot_identity)?;
             return Some(SpatialDistance {
                 distance_km,
                 metric: "footprint_distance",
                 confidence: left.confidence.min(right.confidence),
                 source_type: Some(format!("{}+{}", left.source_type, right.source_type)),
                 source_url: left.source_url.clone().or_else(|| right.source_url.clone()),
+                evidence_refs,
             });
         }
         let left = self.point_for_entity(left_id)?;
         let right = self.point_for_entity(right_id)?;
+        let evidence_refs = point_evidence_refs([left, right], snapshot_identity)?;
         Some(SpatialDistance {
             distance_km: haversine_km(
                 left.latitude,
@@ -255,7 +267,27 @@ impl SpatialServingIndex {
                 .clone()
                 .or_else(|| right.source_type.clone()),
             source_url: left.source_url.clone().or_else(|| right.source_url.clone()),
+            evidence_refs,
         })
+    }
+
+    pub fn footprint_evidence_refs(
+        &self,
+        entity_ids: &[&str],
+        snapshot_identity: &str,
+    ) -> Option<Vec<EvidenceRef>> {
+        let references = entity_ids
+            .iter()
+            .map(|entity_id| {
+                let feature = self.geometry.feature(entity_id)?;
+                if matches!(feature.geometry, SpatialGeometry::Point(_)) {
+                    return None;
+                }
+                let observation = feature.observation.as_ref()?;
+                Some(EvidenceRef::for_observation(snapshot_identity, observation))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        (!references.is_empty()).then_some(references)
     }
 
     pub fn points(&self) -> &[SpatialPoint] {
@@ -360,17 +392,28 @@ fn spatial_point_from_rows(
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
         confidence: coordinates.confidence,
-        source_type: rows
-            .facts
+        source_type: Some(coordinates.source_type.clone()),
+        source_url: coordinates
+            .observations
             .iter()
-            .find(|fact| fact.fact_key.eq_ignore_ascii_case("geo.latitude"))
-            .map(|fact| fact.source_type.clone()),
-        source_url: rows
-            .facts
-            .iter()
-            .find(|fact| fact.fact_key.eq_ignore_ascii_case("geo.latitude"))
-            .and_then(|fact| fact.source_url.clone()),
+            .find_map(|observation| observation.source_url.clone()),
+        observations: coordinates.observations,
     })
+}
+
+fn point_evidence_refs<const N: usize>(
+    points: [&SpatialPoint; N],
+    snapshot_identity: &str,
+) -> Option<Vec<EvidenceRef>> {
+    if points.iter().any(|point| point.observations.is_empty()) {
+        return None;
+    }
+    let references = points
+        .into_iter()
+        .flat_map(|point| &point.observations)
+        .map(|observation| EvidenceRef::for_observation(snapshot_identity, observation))
+        .collect::<Vec<_>>();
+    (!references.is_empty()).then_some(references)
 }
 
 #[cfg(test)]

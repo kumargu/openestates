@@ -736,7 +736,7 @@ fn current_serving_facts(facts: &[KgViewFactRecord]) -> Vec<KgViewFactRecord> {
                     || (fact.fact_version == existing.fact_version
                         && (fact.confidence > existing.confidence
                             || ((fact.confidence - existing.confidence).abs() < f32::EPSILON
-                                && fact.learned_at > existing.learned_at))) =>
+                                && stable_fact_tiebreak(fact, existing).is_gt()))) =>
             {
                 current.insert(key, fact);
             }
@@ -747,6 +747,19 @@ fn current_serving_facts(facts: &[KgViewFactRecord]) -> Vec<KgViewFactRecord> {
         }
     }
     current.into_values().cloned().collect()
+}
+
+fn stable_fact_tiebreak(left: &KgViewFactRecord, right: &KgViewFactRecord) -> std::cmp::Ordering {
+    left.value_json
+        .cmp(&right.value_json)
+        .then_with(|| left.observation_provider.cmp(&right.observation_provider))
+        .then_with(|| {
+            left.provider_observation_id
+                .cmp(&right.provider_observation_id)
+        })
+        .then_with(|| left.asset_lineage.cmp(&right.asset_lineage))
+        .then_with(|| left.model.cmp(&right.model))
+        .then_with(|| left.triggered_by.cmp(&right.triggered_by))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

@@ -535,9 +535,11 @@ fn push_fact_with_source(
                 format!("{entity_id}:{fact_key}:{}:{value_json}", record.access_id).as_bytes()
             )
         ),
-        observation_provider: None,
-        provider_observation_id: None,
-        asset_lineage: Vec::new(),
+        observation_provider: Some("OpenStreetMap".to_string()),
+        provider_observation_id: Some(record.access_id.clone()),
+        asset_lineage: vec![format!(
+            "asset:{OSM_SOCIETY_ACCESS_FACTS_ASSET_ID}/run:{run_id}"
+        )],
     });
     if annotation_keys.insert((entity_id.to_string(), fact_key.to_string())) {
         annotations.push(SkillFactAnnotationRecord {

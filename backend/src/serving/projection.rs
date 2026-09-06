@@ -78,13 +78,18 @@ impl<'a> SocietyFactProjection<'a> {
         })
     }
 
-    pub fn latest_learned_at_with_prefix(&self, fact_key_prefix: &str) -> Option<DateTime<Utc>> {
+    pub fn provenance_time_with_prefix(&self, fact_key_prefix: &str) -> Option<DateTime<Utc>> {
         self.rows
             .iter()
             .flat_map(|rows| rows.facts.iter())
             .filter(|fact| fact.fact_key.starts_with(fact_key_prefix))
+            .max_by(|left, right| {
+                left.confidence.total_cmp(&right.confidence).then_with(|| {
+                    left.stable_selection_key()
+                        .cmp(&right.stable_selection_key())
+                })
+            })
             .map(|fact| fact.learned_at)
-            .max()
     }
 
     pub fn latest_record(&self, fact_key: &str) -> Option<&'a ServingFactRecord> {
@@ -92,7 +97,12 @@ impl<'a> SocietyFactProjection<'a> {
             .iter()
             .flat_map(|rows| rows.facts.iter())
             .filter(|fact| fact.fact_key == fact_key)
-            .max_by_key(|fact| fact.learned_at)
+            .max_by(|left, right| {
+                left.confidence.total_cmp(&right.confidence).then_with(|| {
+                    left.stable_selection_key()
+                        .cmp(&right.stable_selection_key())
+                })
+            })
     }
 
     pub fn records(&self, fact_key: &str) -> Vec<&'a ServingFactRecord> {
@@ -103,10 +113,10 @@ impl<'a> SocietyFactProjection<'a> {
             .filter(|fact| fact.fact_key == fact_key)
             .collect::<Vec<_>>();
         facts.sort_by(|left, right| {
-            right
-                .learned_at
-                .cmp(&left.learned_at)
-                .then_with(|| left.source_url.cmp(&right.source_url))
+            right.confidence.total_cmp(&left.confidence).then_with(|| {
+                left.stable_selection_key()
+                    .cmp(&right.stable_selection_key())
+            })
         });
         facts
     }
@@ -221,7 +231,12 @@ impl<'a> SocietyFactProjection<'a> {
             .filter(|fact| fact.fact_key == fact_key)
             .filter(|fact| include(fact))
             .filter_map(|fact| parse(&fact.value).map(|value| (fact, value)))
-            .max_by_key(|(fact, _)| fact.learned_at)
+            .max_by(|(left, _), (right, _)| {
+                left.confidence.total_cmp(&right.confidence).then_with(|| {
+                    left.stable_selection_key()
+                        .cmp(&right.stable_selection_key())
+                })
+            })
             .map(|(fact, value)| projected_fact(fact, value))
     }
 }

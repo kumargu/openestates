@@ -4,7 +4,7 @@
 
 - Reset recorded: 2026-09-06 Asia/Kolkata
 - Continuation branch: `feat/issue-118-consolidated`
-- Continuation HEAD: Checkpoint 13 (`refactor: require exact spatial evaluations`)
+- Continuation HEAD: Checkpoint 14 (`feat: qualify spatial evidence derivations`)
 - Preserved source branch: `feat/issue-118-spatial-intent`
 - Merge base: `d1c06e2b` (`main` at the start of Issue 118 work)
 - Worktree at reset: clean
@@ -35,8 +35,10 @@ checkpoint-local next steps where they differ from the consolidated plan.
 17. `2ea0f2ec` — remove timestamp-derived confidence from search ranking.
 18. `0df8f26c` — unify inventory eligibility and proof projection around
     snapshot-owned receipts.
-19. Checkpoint 13 (current log commit) — remove automatic spatial success from
-    the shared Boolean evaluator.
+19. `c867fd5a` — remove automatic spatial success from the shared Boolean
+    evaluator.
+20. Checkpoint 14 (current log commit) — qualify spatial matches with durable
+    observations and typed derivations.
 
 ### Pulled-forward commitment audit
 
@@ -44,7 +46,7 @@ checkpoint-local next steps where they differ from the consolidated plan.
 |---|---|
 | Snapshot-only search construction (#123) | Implemented for `SearchEngine`: its only constructor input is one `SearchRuntimeSnapshot`; the lower-level parallel `TextSearch` evaluator remains to be removed. |
 | Four-state evaluation (#123) | Inventory and required spatial predicates now flow through the shared Boolean evaluator. Area/entity/evidence predicates still have empty-success paths. |
-| Stable spatial/price/BHK evidence references (#123) | BHK/price verified matches share one validated, snapshot-qualified external-listing `EvidenceRef`; spatial matches still emit synthesized legacy observation strings. |
+| Stable spatial/price/BHK evidence references (#123) | BHK/price share one validated external-listing reference. Spatial matches now carry snapshot-qualified derivation references and their exact geometry/coordinate inputs; offline derivation rows remain to be materialized. |
 | Semantic-contract digest (#123) | Partial: config inputs are hashed, but resolved bindings and evaluator/algorithm versions are not comprehensive. |
 | Capability/evaluator/proof bindings (#123) | Incomplete. |
 | Touched mixed-state and duplicate-path removal (#123) | Inventory duplicate evaluation/projection and automatic spatial success are removed; other duplicate paths remain. |
@@ -52,7 +54,7 @@ checkpoint-local next steps where they differ from the consolidated plan.
 | Google/OSM canonical identity (#124) | Incomplete: provider-independent place/locality crosswalks are not fully materialized. |
 | Area hierarchy and topology (#124) | Implemented synthetically; not yet verified in a real candidate bundle. |
 | Footprint containment and distance (#124) | Implemented, but a separate spatial evaluation path remains. |
-| Typed spatial derivations (#124) | Partial: durable lineage and observation identities are missing. |
+| Typed spatial derivations (#124) | Partial: runtime proofs now retain typed, content-addressed derivations over durable source observations. The derivations are not yet stored as offline serving rows. |
 
 ### Architectural lessons and non-negotiable gates
 
@@ -201,24 +203,26 @@ failure stops further stacking; honest coverage gaps do not.
 ### Current verified gate summary
 
 The detailed commands and counts remain recorded in the checkpoints below.
-Through the Checkpoint 13 working tree, focused Rust search and serving
+Through the Checkpoint 14 working tree, focused Rust search and serving
 contracts, the frozen query bank, all-target Cargo check, formatting, and
 `git diff --check` pass. The hardcoding audit remains at 330 findings, 28
 fact-key comparisons, and zero blocked aliases, with zero delta from the
-recorded base. These gates must be rerun for every touched slice.
+recorded base. The legacy v8 API smoke suite passes 52/53; its `3BHK` check
+correctly returns no result because that promoted bundle predates durable
+inventory observations. These gates must be rerun for every touched slice.
 
 ### Exact next command
 
 ```bash
-sed -n '180,330p' backend/src/serving/evidence.rs
-sed -n '1,240p' backend/src/serving/topology.rs
-sed -n '1080,1150p' backend/src/search/geo.rs
-rg -n "observation_ids|evidence_refs|DerivedEvidence" backend/src/serving backend/src/search
+sed -n '35,70p' backend/src/serving/types.rs
+sed -n '300,370p' backend/src/serving/parquet.rs
+sed -n '1,220p' backend/src/serving/topology.rs
+rg -n "derive_spatial_topology|ServingEdgeRecord|write_edges_parquet" backend/src/serving
 ```
 
-Replace synthesized spatial observation strings with snapshot-qualified
-`DerivedEvidence` references backed by the exact input geometry observations.
-Keep containment, adjacency, footprint distance, and point fallback distinct.
+Materialize the same typed derivation lineage on offline containment and
+adjacency serving records. Keep legacy edges readable but unable to verify a
+match without source inputs; do not add time-based selection or age logic.
 
 ## Checkpoint 11 — timestamps removed from search confidence
 
@@ -376,6 +380,95 @@ rg -n "observation_ids|evidence_refs|DerivedEvidence" backend/src/serving backen
 Replace synthesized spatial observation strings with snapshot-qualified
 `DerivedEvidence` references backed by the exact input geometry observations.
 Keep containment, adjacency, footprint distance, and point fallback distinct.
+
+## Checkpoint 14 — snapshot-qualified spatial derivations
+
+- Parent commit: `c867fd5a`
+- Classified issue: spatial `proof_gap` plus timestamp-selection
+  `architecture_gap`
+
+### Implemented
+
+- Replaced synthesized `spatial:{subject}:{relation}:{target}` strings with a
+  content-addressed `DerivedEvidence` record. The record retains subject,
+  target, relation, metric, typed value/unit, confidence, evaluator version,
+  snapshot identity, and sorted source inputs.
+- Spatial `VerifiedMatch` now exposes one derivation reference plus the full
+  derivation needed to resolve its source observations. Missing, invalid,
+  cross-snapshot, or legacy source inputs produce `Unknown`; they cannot verify
+  containment, adjacency, footprint distance, point fallback, or a serving
+  distance fact.
+- Propagated real OSM locality and society-access observation identity into the
+  existing skill-fact -> KG-view -> serving-fact path. Provider record identity
+  and asset/run lineage are retained; no ID is made from only an entity, fact
+  key, or query.
+- Kept footprint, adjacency, and point-fallback inputs distinct. Containment
+  requires two footprint observations; adjacency requires the society,
+  containing area, and target-area footprints; point distance requires
+  observations for both points.
+- Removed timestamp tie-breaking from coordinate, geometry, category, serving
+  projection, bundle de-duplication, property-source, and map-source selection.
+  Stable evidence/content identity now breaks equal-confidence ties.
+- Removed request-path `days ago` and `Fresh/Recent/Stale` calculations from
+  search cards and property details. The optional legacy response field remains
+  absent for compatibility; timestamps remain provenance metadata only.
+- Kept all existing tests. Extended the frozen containment scenario and the
+  existing OSM vertical contract instead of adding another test suite.
+
+### Gates and test value
+
+- Frozen conversational query bank: 10 passed. Its existing containment
+  scenario now proves the API match carries a valid derivation with two source
+  observations and no synthesized observation string.
+- OSM access vertical contract: 3 passed, including observation identity and
+  lineage through KG-view rows.
+- Search efficiency contract: 11 passed.
+- Existing evidence identity tests: 5 passed; existing coordinate-selection
+  tests: 3 passed; existing locality lineage test: 1 passed. These confirmed
+  stable invariants but did not expose a production bug in this slice.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check --all-targets`: passed
+  without code warnings.
+- Hardcoding audit: 330 findings, 28 fact-key comparisons, zero blocked aliases;
+  delta remains zero.
+- `cargo fmt --check` and `git diff --check`: passed.
+- API smoke: 52/53 passed against the unchanged promoted v8 bundle. The sole
+  `3BHK` failure is an honest coverage gap: v8 has no durable inventory
+  observations and therefore cannot satisfy the current fail-closed predicate.
+  No matcher or smoke assertion was weakened.
+- Existing macOS compact-unwind linker warning remains unchanged.
+
+### Deliberate boundary
+
+The spatial derivation is content-addressed and fully projected in runtime
+proof, but it is currently constructed from offline relation results and their
+source observations when the pinned snapshot is evaluated. Containment and
+adjacency edge rows do not yet store that derivation in Parquet. Legacy spatial
+facts and edges remain usable for recall only and cannot verify a match.
+
+The temporal scan was kept scoped to serving and request-path product logic.
+Operational run-duration/pacing timestamps remain operational metadata.
+Offline `home_state` date arithmetic still requires an explicit product
+decision before it is changed because it models property age rather than
+search freshness.
+
+### Candidate identity
+
+No Issue 118 candidate lake or bundle exists. The main local lake was used only
+for a read-only v8 smoke test; no current pointer changed.
+
+### Next exact command
+
+```bash
+sed -n '35,70p' backend/src/serving/types.rs
+sed -n '300,370p' backend/src/serving/parquet.rs
+sed -n '1,220p' backend/src/serving/topology.rs
+rg -n "derive_spatial_topology|ServingEdgeRecord|write_edges_parquet" backend/src/serving
+```
+
+Materialize typed derivation lineage on offline containment and adjacency edge
+rows, preserve legacy read compatibility, and reject dangling derivation
+inputs during serving validation. Do not add a broad new unit-test suite; use
+the existing serving vertical and frozen query-bank contracts.
 
 ## Goal and invariants
 
