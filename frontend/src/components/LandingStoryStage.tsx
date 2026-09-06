@@ -156,8 +156,9 @@ function LandingPagedRail({
   const safeLeadingIndex = Math.min(leadingIndex, lastPageStart);
   const trailingSlots = pageCount * pageSize - items.length;
   const showHead = Boolean(label) || pageCount > 1;
+  const activeCardGrowthRem = pageSize > 1 ? ACTIVE_CARD_GROWTH_REM : 0;
   const inactiveCardShrinkRem = pageSize > 1
-    ? ACTIVE_CARD_GROWTH_REM / (pageSize - 1)
+    ? activeCardGrowthRem / (pageSize - 1)
     : 0;
 
   const setScroller = useCallback((node: HTMLDivElement | null) => {
@@ -213,7 +214,7 @@ function LandingPagedRail({
       className={`landing-featured__rail${spatial ? " landing-featured__rail--spatial" : ""}`}
       style={{
         "--landing-rail-cols": String(pageSize),
-        "--landing-active-card-growth": `${ACTIVE_CARD_GROWTH_REM}rem`,
+        "--landing-active-card-growth": `${activeCardGrowthRem}rem`,
         "--landing-inactive-card-shrink": `${inactiveCardShrinkRem}rem`,
       } as CSSProperties}
     >
@@ -276,7 +277,7 @@ function LandingPagedRail({
                 onFocusCapture={() => setActiveId(item.id)}
                 onPointerDownCapture={(event) => {
                   if (event.pointerType !== "touch" || active) return;
-                  if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+                  if (event.target instanceof Element && event.target.closest("button")) return;
                   pendingTouchPreviewRef.current = {
                     id: item.id,
                     startX: event.clientX,
