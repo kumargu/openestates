@@ -531,6 +531,7 @@ mod tests {
             model: None,
             skill_id: Some("fetch_rera".to_string()),
             learned_at: chrono::Utc.timestamp_opt(1, 0).single().unwrap(),
+            observation: None,
         }
     }
 }

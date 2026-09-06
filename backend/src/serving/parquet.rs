@@ -131,6 +131,22 @@ pub fn read_entity_aliases_parquet(
 }
 
 pub fn write_facts_parquet(facts: &[ServingFactRecord]) -> Result<Vec<u8>, ParquetWriteError> {
+    let observation_json = facts
+        .iter()
+        .enumerate()
+        .map(|(row, fact)| {
+            fact.validate_observation()
+                .map_err(|error| ParquetWriteError::InvalidEvidence {
+                    row,
+                    message: error.to_string(),
+                })?;
+            fact.observation
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()
+                .map_err(ParquetWriteError::Json)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let typed_values = facts
         .iter()
         .map(|fact| {
@@ -152,6 +168,7 @@ pub fn write_facts_parquet(facts: &[ServingFactRecord]) -> Result<Vec<u8>, Parqu
         Field::new("model", DataType::Utf8, true),
         Field::new("skill_id", DataType::Utf8, true),
         Field::new("learned_at", DataType::Utf8, false),
+        Field::new("observation_json", DataType::Utf8, true),
     ]);
     let schema = Arc::new(Schema::new(fields));
 
@@ -170,6 +187,7 @@ pub fn write_facts_parquet(facts: &[ServingFactRecord]) -> Result<Vec<u8>, Parqu
         optional_string_array(facts.iter().map(|fact| fact.model.clone()).collect()),
         optional_string_array(facts.iter().map(|fact| fact.skill_id.clone()).collect()),
         string_array(facts.iter().map(|fact| fact.learned_at.to_rfc3339())),
+        optional_string_array(observation_json),
     ]);
 
     let batch = RecordBatch::try_new(schema.clone(), columns).map_err(ParquetWriteError::Arrow)?;
@@ -245,6 +263,7 @@ pub fn read_facts_parquet(bytes: &[u8]) -> Result<Vec<ServingFactRecord>, Parque
         let model = string_column(&batch, "model")?;
         let skill_id = string_column(&batch, "skill_id")?;
         let learned_at = string_column(&batch, "learned_at")?;
+        let observation_json = optional_string_column(&batch, "observation_json")?;
 
         for row in 0..batch.num_rows() {
             let value_type = required_string(value_type, row, "value_type")?;
@@ -252,7 +271,11 @@ pub fn read_facts_parquet(bytes: &[u8]) -> Result<Vec<ServingFactRecord>, Parque
             let value =
                 fact_value_from_batch(typed_value.as_ref(), legacy_value_json, row, &value_type)?;
             let typed_value_text = typed_value.and_then(|value| value.value_text);
-            records.push(ServingFactRecord {
+            let observation = observation_json
+                .and_then(|column| optional_string(column, row))
+                .map(|encoded| serde_json::from_str(&encoded))
+                .transpose()?;
+            let record = ServingFactRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 fact_key: required_string(fact_key, row, "fact_key")?,
                 value_type,
@@ -271,7 +294,15 @@ pub fn read_facts_parquet(bytes: &[u8]) -> Result<Vec<ServingFactRecord>, Parque
                     "learned_at",
                 )?)?
                 .with_timezone(&Utc),
-            });
+                observation,
+            };
+            record
+                .validate_observation()
+                .map_err(|error| ParquetReadError::InvalidEvidence {
+                    row,
+                    message: error.to_string(),
+                })?;
+            records.push(record);
         }
     }
     Ok(records)
@@ -560,6 +591,10 @@ pub enum ParquetWriteError {
         value_type: String,
         actual_type: String,
     },
+    InvalidEvidence {
+        row: usize,
+        message: String,
+    },
     Json(serde_json::Error),
     Parquet(parquet::errors::ParquetError),
 }
@@ -575,6 +610,9 @@ impl fmt::Display for ParquetWriteError {
                 f,
                 "serving fact value_type {value_type} does not match fact value type {actual_type}"
             ),
+            Self::InvalidEvidence { row, message } => {
+                write!(f, "invalid serving evidence at row {row}: {message}")
+            }
             Self::Json(err) => write!(f, "serving Parquet JSON serialization error: {err}"),
             Self::Parquet(err) => write!(f, "Parquet write error: {err}"),
         }
@@ -592,6 +630,10 @@ pub enum ParquetReadError {
         expected: &'static str,
     },
     InvalidTypedValue {
+        row: usize,
+        message: String,
+    },
+    InvalidEvidence {
         row: usize,
         message: String,
     },
@@ -618,6 +660,9 @@ impl fmt::Display for ParquetReadError {
             }
             Self::InvalidTypedValue { row, message } => {
                 write!(f, "invalid typed fact value at row {row}: {message}")
+            }
+            Self::InvalidEvidence { row, message } => {
+                write!(f, "invalid serving evidence at row {row}: {message}")
             }
             Self::InvalidReraEvidenceSociety {
                 row,
@@ -713,4 +758,60 @@ pub fn read_edges_parquet(bytes: &[u8]) -> Result<Vec<ServingEdgeRecord>, Parque
         }
     }
     Ok(records)
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+
+    use super::*;
+    use crate::serving::SourceObservation;
+
+    fn fact(observation: Option<SourceObservation>) -> ServingFactRecord {
+        ServingFactRecord {
+            entity_id: "society:one".to_string(),
+            fact_key: "test_fact".to_string(),
+            value_type: "text".to_string(),
+            value_text: Some("value".to_string()),
+            value: FactValue::Text("value".to_string()),
+            confidence: 0.9,
+            source_type: "OpenStreetMap".to_string(),
+            source_url: Some("https://www.openstreetmap.org/way/1".to_string()),
+            model: None,
+            skill_id: Some("test".to_string()),
+            learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            observation,
+        }
+    }
+
+    fn observation(subject: &str) -> SourceObservation {
+        SourceObservation::new(
+            "OpenStreetMap",
+            "way/1",
+            subject,
+            Utc.timestamp_opt(1_699_999_000, 0).unwrap(),
+            Some("https://www.openstreetmap.org/way/1".to_string()),
+            vec!["asset:osm/version:v1".to_string()],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn fact_observation_survives_parquet_round_trip() {
+        let expected = fact(Some(observation("society:one")));
+
+        let bytes = write_facts_parquet(std::slice::from_ref(&expected)).unwrap();
+        let actual = read_facts_parquet(&bytes).unwrap();
+
+        assert_eq!(actual, vec![expected]);
+    }
+
+    #[test]
+    fn fact_observation_must_reference_the_fact_subject() {
+        let error = write_facts_parquet(&[fact(Some(observation("society:other")))])
+            .expect_err("cross-subject evidence must fail closed");
+
+        assert!(matches!(error, ParquetWriteError::InvalidEvidence { .. }));
+        assert!(error.to_string().contains("evidence subject mismatch"));
+    }
 }

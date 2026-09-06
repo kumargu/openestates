@@ -131,7 +131,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/manifest.json").unwrap();
     let manifest_body = lake.get_text(&manifest_key).await.unwrap();
     let manifest_json: serde_json::Value = serde_json::from_str(&manifest_body).unwrap();
-    assert_eq!(manifest_json["format_version"], 8);
+    assert_eq!(manifest_json["format_version"], 9);
     assert!(manifest_json["entity_alias_parquet_key"]
         .as_str()
         .is_some_and(|key| key.ends_with("entity_aliases/part-00000.parquet")));
@@ -144,6 +144,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert!(schema_body.contains("\"entity_aliases\""));
     assert!(schema_body.contains("\"value_number\""));
     assert!(schema_body.contains("\"answers_preferences\""));
+    assert!(schema_body.contains("\"observation_json\""));
     assert!(!schema_body.contains("value_json"));
     assert!(!schema_body.contains("answers_preferences_json"));
 

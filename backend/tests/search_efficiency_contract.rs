@@ -682,6 +682,7 @@ fn serving_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFac
         model: None,
         skill_id: Some("search_efficiency_contract".to_string()),
         learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+        observation: None,
     }
 }
 

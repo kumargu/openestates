@@ -244,6 +244,7 @@ mod tests {
             model: None,
             skill_id: Some("coordinate-test".to_string()),
             learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+            observation: None,
         }
     }
 }

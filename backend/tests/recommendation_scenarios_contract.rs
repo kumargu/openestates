@@ -614,6 +614,7 @@ fn serving_fact(entity_id: &str, fact: &FactSpec) -> ServingFactRecord {
         model: None,
         skill_id: Some("recommendation_scenarios_contract".to_string()),
         learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+        observation: None,
     }
 }
 
@@ -630,6 +631,7 @@ fn numeric_fact(entity_id: &str, key: &str, value: f64, source: &str) -> Serving
         model: None,
         skill_id: Some("recommendation_scenarios_contract".to_string()),
         learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+        observation: None,
     }
 }
 

@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::knowledge::FactValue;
 
+use super::evidence::{EvidenceIdentityError, SourceObservation};
+
 pub const SEARCH_SERVING_BUNDLE_ASSET_ID: &str = "search_serving_bundle";
 
 /// One entity row in the request-path bundle.
@@ -31,6 +33,24 @@ pub struct ServingFactRecord {
     pub model: Option<String>,
     pub skill_id: Option<String>,
     pub learned_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observation: Option<SourceObservation>,
+}
+
+impl ServingFactRecord {
+    pub fn validate_observation(&self) -> Result<(), EvidenceIdentityError> {
+        let Some(observation) = &self.observation else {
+            return Ok(());
+        };
+        observation.validate()?;
+        if observation.subject_entity_id != self.entity_id {
+            return Err(EvidenceIdentityError::SubjectMismatch {
+                expected: self.entity_id.clone(),
+                actual: observation.subject_entity_id.clone(),
+            });
+        }
+        Ok(())
+    }
 }
 
 /// One graph edge row in the request-path bundle.
@@ -298,6 +318,7 @@ mod tests {
                 model: None,
                 skill_id: None,
                 learned_at,
+                observation: None,
             }],
             Vec::new(),
         );

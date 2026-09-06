@@ -347,6 +347,7 @@ mod tests {
             model: None,
             skill_id: Some("spatial_topology_contract".to_string()),
             learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            observation: None,
         }
     }
 

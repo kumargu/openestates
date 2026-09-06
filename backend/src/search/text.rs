@@ -4225,6 +4225,7 @@ mod tests {
             model: None,
             skill_id: Some("unit-test".to_string()),
             learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+            observation: None,
         }
     }
 
@@ -4308,6 +4309,7 @@ mod tests {
             model: None,
             skill_id: Some("unit-test".to_string()),
             learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+            observation: None,
         }
     }
 

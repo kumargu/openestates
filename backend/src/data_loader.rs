@@ -2707,6 +2707,7 @@ mod tests {
             model: None,
             skill_id: Some("test".to_string()),
             learned_at: Utc.timestamp_opt(1, 0).unwrap(),
+            observation: None,
         }
     }
 

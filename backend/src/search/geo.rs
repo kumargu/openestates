@@ -1857,6 +1857,7 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at: chrono::Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+            observation: None,
         }
     }
 
@@ -1878,6 +1879,7 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at: chrono::Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+            observation: None,
         }
     }
 

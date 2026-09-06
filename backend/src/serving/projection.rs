@@ -563,6 +563,7 @@ mod tests {
             model: None,
             skill_id: skill_id.map(str::to_string),
             learned_at: Utc.timestamp_opt(learned_at_seconds, 0).unwrap(),
+            observation: None,
         }
     }
 }

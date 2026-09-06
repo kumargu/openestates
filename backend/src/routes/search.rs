@@ -1000,6 +1000,7 @@ mod tests {
             model: None,
             skill_id: Some("reddit_resident_facts".to_string()),
             learned_at: Utc::now(),
+            observation: None,
         };
 
         let empty = ServingFactIndex::from_records(

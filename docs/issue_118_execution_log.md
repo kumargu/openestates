@@ -25,6 +25,9 @@ checkpoint-local next steps where they differ from the consolidated plan.
 7. `0461a73c` — fail closed on unknown inventory predicates.
 8. `e81cc950` — generalize predicate-family revision selection.
 9. `d1203aea` — share typed branch predicate replacement.
+10. `dcd7abbc` — consolidate Issue 118 execution memory.
+11. `88501c65` — pin search construction to one runtime snapshot.
+12. `c574e092` — define and validate durable evidence identities.
 
 ### Pulled-forward commitment audit
 
@@ -179,23 +182,25 @@ failure stops further stacking; honest coverage gaps do not.
 ### Current verified gate summary
 
 The detailed commands and counts remain recorded in the checkpoints below.
-At `d1203aea`, focused Rust search/revision/serving contracts, Cargo check,
-formatting, the Python OSM fixture tests, smoke tests, and `git diff --check`
-have passed at their relevant checkpoints. The hardcoding audit remains at 330
-findings, 28 fact-key comparisons, and zero blocked aliases, with zero delta
-from the recorded base. These gates must be rerun for every touched slice.
+Through the uncommitted Checkpoint 8 working tree, focused Rust evidence and
+serving contracts, all-target Cargo check, formatting, smoke tests, and
+`git diff --check` pass. The hardcoding audit remains at 330 findings, 28
+fact-key comparisons, and zero blocked aliases, with zero delta from the
+recorded base. These gates must be rerun for every touched slice.
 
 ### Exact next command
 
 ```bash
-rg -n "write_facts_parquet|read_facts_parquet|ServingBundleSchema|format_version|ServingFactRecord" backend/src/serving backend/src/assets backend/tests/serving_bundle_contract.rs
-sed -n '1,360p' backend/src/serving/parquet.rs
-sed -n '1,260p' backend/src/serving/builder.rs
+rg -n "KgViewFactRecord|write_facts_parquet|read_facts_parquet|source_url|learned_at" backend/src/assets/kg_view.rs backend/src/assets/compaction.rs backend/src/assets/skill_facts.rs
+sed -n '360,520p' backend/src/assets/kg_view.rs
+sed -n '660,760p' backend/src/assets/kg_view.rs
+sed -n '880,990p' backend/src/assets/kg_view.rs
 ```
 
-Version the serving schema and carry validated observation identity/lineage
-without fabricating values for legacy rows. Migrate one evidence producer only
-after its Parquet round trip and candidate validation are proven.
+Trace upstream fact provenance into `KgViewFactRecord` and identify the first
+producer that already has a genuine provider record ID and asset lineage.
+Migrate that producer through the v9 observation column without deriving an ID
+from only entity/fact/query strings. Keep all other facts explicitly `None`.
 
 ## Goal and invariants
 
@@ -891,3 +896,67 @@ observation columns to facts/inventory without forcing fabricated identities
 onto legacy bundles. Candidate validation must reject an advertised evidence
 capability whose selected rows lack valid identity/lineage; migration coverage
 for old rows remains informational until that capability is advertised.
+
+## Checkpoint 8 — serving fact observation schema
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Parent commit: `c574e092`
+- Classified miss: serving-schema `architecture_gap`
+
+### Implemented
+
+- Bumped newly built serving bundles from format 8 to format 9.
+- Added an optional validated `SourceObservation` to `ServingFactRecord` and an
+  `observation_json` Parquet column declared as a source-observation record in
+  the v9 schema descriptor.
+- Revalidated content identity and fact-subject binding before Parquet writes,
+  after Parquet reads, and during serving-record construction. Invalid or
+  cross-subject identities now block bundle construction/loading.
+- Preserved backward compatibility: v8 and legacy Parquet omit the new column
+  and load with `observation: None`. Existing fixtures and producers were
+  migrated to explicit `None`; no synthetic legacy identifier was promoted.
+- Proved a provider-qualified source observation survives a fact Parquet round
+  trip unchanged and that cross-subject observation binding fails closed.
+
+### Deliberate boundary
+
+Format 9 provides the validated transport but does not advertise evidence
+capabilities and does not fabricate coverage. The current graph-to-serving
+projection lacks provider record identity plus asset lineage, so it still emits
+`None`. The first real producer must be migrated upstream before runtime
+evaluation or API proof may consume `EvidenceRef` from these rows.
+
+### Gates
+
+- Baseline `cargo test --test serving_bundle_contract`: 3 passed.
+- `cargo test --lib serving::parquet::tests`: 2 passed.
+- `cargo test --test serving_bundle_contract`: 3 passed, including legacy
+  compatibility and a newly built format 9 bundle.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check --all-targets`: passed.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check`: passed.
+- `./tests/smoke_test.sh`: 53 passed against the local
+  `waterford-osm-arrival-2026-08-31-release` v8 bundle, proving old bundles
+  remain loadable.
+- `python3 scripts/audit_search_hardcoding.py`: 330 findings, 28 fact-key
+  comparisons, zero blocked aliases; delta remains zero.
+- `cargo fmt --check` and `git diff --check`: passed.
+- Existing macOS compact-unwind linker warning remains unchanged.
+
+### Candidate identity
+
+No candidate lake or bundle exists. The main local lake was read only for the
+v8 smoke test and its serving pointer remains unchanged.
+
+### Next exact command
+
+```bash
+rg -n "KgViewFactRecord|write_facts_parquet|read_facts_parquet|source_url|learned_at" backend/src/assets/kg_view.rs backend/src/assets/compaction.rs backend/src/assets/skill_facts.rs
+sed -n '360,520p' backend/src/assets/kg_view.rs
+sed -n '660,760p' backend/src/assets/kg_view.rs
+sed -n '880,990p' backend/src/assets/kg_view.rs
+```
+
+Trace upstream fact provenance into `KgViewFactRecord` and identify the first
+producer that already has a genuine provider record ID and asset lineage.
+Migrate that producer through the v9 observation column without deriving an ID
+from only entity/fact/query strings. Keep all other facts explicitly `None`.

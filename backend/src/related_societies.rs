@@ -174,6 +174,7 @@ mod tests {
                 model: None,
                 skill_id: None,
                 learned_at: Utc.timestamp_opt(10, 0).unwrap(),
+                observation: None,
             }],
             Vec::new(),
         );
@@ -261,6 +262,7 @@ mod tests {
                     model: None,
                     skill_id: None,
                     learned_at: Utc.timestamp_opt(10, 0).unwrap(),
+                    observation: None,
                 },
                 ServingFactRecord {
                     entity_id: "society:rera-godrej-air".to_string(),
@@ -274,6 +276,7 @@ mod tests {
                     model: None,
                     skill_id: None,
                     learned_at: Utc.timestamp_opt(10, 0).unwrap(),
+                    observation: None,
                 },
             ],
             Vec::new(),

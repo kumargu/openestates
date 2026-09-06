@@ -371,6 +371,7 @@ fn derived_nearby_fact(
         model: Some(DERIVED_MODEL.to_string()),
         skill_id: None,
         learned_at: latest_datetime(society.learned_at, candidate.place.point.learned_at),
+        observation: None,
     }
 }
 
@@ -1223,6 +1224,7 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at: Utc.with_ymd_and_hms(2026, 7, 27, 0, 0, 0).unwrap(),
+            observation: None,
         }
     }
 }

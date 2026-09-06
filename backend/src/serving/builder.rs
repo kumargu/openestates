@@ -28,7 +28,7 @@ use super::{
     ServingTableSchema, TrustPolicy,
 };
 
-pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 8;
+pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 9;
 
 #[derive(Clone)]
 pub struct ServingBundleBuilder {
@@ -412,6 +412,12 @@ fn validate_serving_records(
                 fact.entity_id, fact.fact_key
             )));
         }
+        fact.validate_observation().map_err(|error| {
+            ServingBundleError::InvalidRecords(format!(
+                "fact {}/{} has invalid observation identity: {error}",
+                fact.entity_id, fact.fact_key
+            ))
+        })?;
         fact_pairs.insert((fact.entity_id.as_str(), fact.fact_key.as_str()));
     }
 
@@ -586,23 +592,32 @@ pub fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSch
             ServingTableSchema {
                 name: "facts".to_string(),
                 path: "facts/part-00000.parquet".to_string(),
-                columns: vec![
-                    required_column("entity_id", "utf8"),
-                    required_column("fact_key", "utf8"),
-                    required_column("value_type", "utf8"),
-                    optional_column("value_text", "utf8"),
-                    optional_column("value_number", "float64"),
-                    optional_column("value_bool", "bool"),
-                    optional_column("value_tags", "list<utf8>"),
-                    optional_column("value_score", "float64"),
-                    optional_column("value_score_explanation", "utf8"),
-                    required_column("confidence", "float32"),
-                    required_column("source_type", "utf8"),
-                    optional_column("source_url", "utf8"),
-                    optional_column("model", "utf8"),
-                    optional_column("skill_id", "utf8"),
-                    required_column("learned_at", "timestamp_rfc3339"),
-                ],
+                columns: {
+                    let mut columns = vec![
+                        required_column("entity_id", "utf8"),
+                        required_column("fact_key", "utf8"),
+                        required_column("value_type", "utf8"),
+                        optional_column("value_text", "utf8"),
+                        optional_column("value_number", "float64"),
+                        optional_column("value_bool", "bool"),
+                        optional_column("value_tags", "list<utf8>"),
+                        optional_column("value_score", "float64"),
+                        optional_column("value_score_explanation", "utf8"),
+                        required_column("confidence", "float32"),
+                        required_column("source_type", "utf8"),
+                        optional_column("source_url", "utf8"),
+                        optional_column("model", "utf8"),
+                        optional_column("skill_id", "utf8"),
+                        required_column("learned_at", "timestamp_rfc3339"),
+                    ];
+                    if format_version >= 9 {
+                        columns.push(optional_column(
+                            "observation_json",
+                            "json<source_observation>",
+                        ));
+                    }
+                    columns
+                },
             },
             ServingTableSchema {
                 name: "edges".to_string(),
@@ -789,6 +804,7 @@ fn serving_fact_records(
                 model: fact.model.clone(),
                 skill_id: fact.skill_id.clone(),
                 learned_at: fact.learned_at,
+                observation: None,
             })
         })
         .collect()
@@ -1187,6 +1203,7 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at: Utc::now(),
+            observation: None,
         }];
 
         let error = validate_serving_records(&entities, &facts, &[], &[]).unwrap_err();
@@ -1217,6 +1234,7 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at: Utc::now(),
+            observation: None,
         }];
         let metadata = ServingSearchMetadataRecord {
             entity_id: "society:one".to_string(),
