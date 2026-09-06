@@ -25,7 +25,7 @@ use super::{
     materialize_society_aliases, unique_society_aliases, BundleArtifact, BundleArtifactKind,
     ServingBundleManifest, ServingBundleSchema, ServingColumnSchema, ServingEdgeRecord,
     ServingEntityRecord, ServingFactRecord, ServingReraEvidenceRecord, ServingSearchMetadataRecord,
-    ServingTableSchema, TrustPolicy,
+    ServingTableSchema, SourceObservation, TrustPolicy,
 };
 
 pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 9;
@@ -787,11 +787,12 @@ fn serving_fact_text_by_entity(facts: &[KgViewFactRecord]) -> HashMap<String, St
 
 fn serving_fact_records(
     facts: &[KgViewFactRecord],
-) -> Result<Vec<ServingFactRecord>, serde_json::Error> {
+) -> Result<Vec<ServingFactRecord>, ServingBundleError> {
     facts
         .iter()
         .map(|fact| {
             let value = serde_json::from_str::<FactValue>(&fact.value_json)?;
+            let observation = source_observation_for_fact(fact)?;
             Ok(ServingFactRecord {
                 entity_id: fact.entity_id.clone(),
                 fact_key: fact.fact_key.clone(),
@@ -804,10 +805,41 @@ fn serving_fact_records(
                 model: fact.model.clone(),
                 skill_id: fact.skill_id.clone(),
                 learned_at: fact.learned_at,
-                observation: None,
+                observation,
             })
         })
         .collect()
+}
+
+fn source_observation_for_fact(
+    fact: &KgViewFactRecord,
+) -> Result<Option<SourceObservation>, ServingBundleError> {
+    match (
+        fact.observation_provider.as_deref(),
+        fact.provider_observation_id.as_deref(),
+        fact.asset_lineage.is_empty(),
+    ) {
+        (None, None, true) => Ok(None),
+        (Some(provider), Some(provider_observation_id), false) => SourceObservation::new(
+            provider,
+            provider_observation_id,
+            &fact.entity_id,
+            fact.learned_at,
+            fact.source_url.clone(),
+            fact.asset_lineage.clone(),
+        )
+        .map(Some)
+        .map_err(|error| {
+            ServingBundleError::InvalidRecords(format!(
+                "fact {}/{} has invalid source observation: {error}",
+                fact.entity_id, fact.fact_key
+            ))
+        }),
+        _ => Err(ServingBundleError::InvalidRecords(format!(
+            "fact {}/{} has partial source observation provenance",
+            fact.entity_id, fact.fact_key
+        ))),
+    }
 }
 
 fn serving_search_metadata_records(
@@ -1141,6 +1173,39 @@ impl From<DagConfigError> for ServingBundleError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn kg_fact_provenance_becomes_a_validated_source_observation() {
+        let fact = KgViewFactRecord {
+            entity_id: "society:one".to_string(),
+            fact_key: "listing_3bhk".to_string(),
+            fact_version: 1,
+            value_type: "numeric".to_string(),
+            value_text: Some("2".to_string()),
+            value_json: serde_json::to_string(&FactValue::Numeric(2.0)).unwrap(),
+            confidence: 0.8,
+            source_type: "ExternalListing".to_string(),
+            source_url: Some("https://example.test/listing/one".to_string()),
+            model: None,
+            skill_id: Some("external_listing_facts".to_string()),
+            triggered_by: Some("asset_dag".to_string()),
+            learned_at: Utc::now(),
+            observation_provider: Some("Magicbricks".to_string()),
+            provider_observation_id: Some("external_listing_record:sha256:abc".to_string()),
+            asset_lineage: vec!["materialization:raw-one".to_string()],
+        };
+
+        let records = serving_fact_records(&[fact]).unwrap();
+        let observation = records[0].observation.as_ref().unwrap();
+
+        assert_eq!(observation.provider, "Magicbricks");
+        assert_eq!(observation.subject_entity_id, "society:one");
+        assert_eq!(
+            observation.provider_observation_id,
+            "external_listing_record:sha256:abc"
+        );
+        assert!(observation.validate().is_ok());
+    }
 
     fn evidence(society_id: &str) -> ServingReraEvidenceRecord {
         ServingReraEvidenceRecord {

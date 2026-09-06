@@ -28,6 +28,7 @@ checkpoint-local next steps where they differ from the consolidated plan.
 10. `dcd7abbc` — consolidate Issue 118 execution memory.
 11. `88501c65` — pin search construction to one runtime snapshot.
 12. `c574e092` — define and validate durable evidence identities.
+13. `820c6b95` — preserve validated observations in serving fact rows.
 
 ### Pulled-forward commitment audit
 
@@ -35,7 +36,7 @@ checkpoint-local next steps where they differ from the consolidated plan.
 |---|---|
 | Snapshot-only search construction (#123) | Partial: routes acquire a snapshot, but `SearchEngine` can still be assembled from independently supplied generations. |
 | Four-state evaluation (#123) | Implemented for spatial and inventory eligibility, but parallel evaluators and empty verified matches remain. |
-| Stable spatial/price/BHK evidence references (#123) | Partial: receipts often use synthesized identifiers rather than durable source observations. |
+| Stable spatial/price/BHK evidence references (#123) | Partial: external-listing BHK/price facts now retain one durable source observation, but search evaluation still emits synthesized inventory IDs and spatial derivations remain open. |
 | Semantic-contract digest (#123) | Partial: config inputs are hashed, but resolved bindings and evaluator/algorithm versions are not comprehensive. |
 | Capability/evaluator/proof bindings (#123) | Incomplete. |
 | Touched mixed-state and duplicate-path removal (#123) | Incomplete. |
@@ -182,7 +183,7 @@ failure stops further stacking; honest coverage gaps do not.
 ### Current verified gate summary
 
 The detailed commands and counts remain recorded in the checkpoints below.
-Through the uncommitted Checkpoint 8 working tree, focused Rust evidence and
+Through the uncommitted Checkpoint 9 working tree, focused Rust asset and
 serving contracts, all-target Cargo check, formatting, smoke tests, and
 `git diff --check` pass. The hardcoding audit remains at 330 findings, 28
 fact-key comparisons, and zero blocked aliases, with zero delta from the
@@ -191,16 +192,16 @@ recorded base. These gates must be rerun for every touched slice.
 ### Exact next command
 
 ```bash
-rg -n "KgViewFactRecord|write_facts_parquet|read_facts_parquet|source_url|learned_at" backend/src/assets/kg_view.rs backend/src/assets/compaction.rs backend/src/assets/skill_facts.rs
-sed -n '360,520p' backend/src/assets/kg_view.rs
-sed -n '660,760p' backend/src/assets/kg_view.rs
-sed -n '880,990p' backend/src/assets/kg_view.rs
+rg -n "InventoryOption::from_property|verified_inventory_matches|inventory_verified_match|listing_[0-9].*bhk|listing_price" backend/src/search backend/src/data_loader.rs backend/tests
+sed -n '1,130p' backend/src/search/evaluation.rs
+sed -n '800,920p' backend/src/search/engine.rs
+sed -n '350,460p' backend/src/data_loader.rs
 ```
 
-Trace upstream fact provenance into `KgViewFactRecord` and identify the first
-producer that already has a genuine provider record ID and asset lineage.
-Migrate that producer through the v9 observation column without deriving an ID
-from only entity/fact/query strings. Keep all other facts explicitly `None`.
+Replace synthesized inventory evidence with snapshot-qualified references to
+the exact external-listing observation retained on serving facts. BHK and price
+must resolve from the same observation; legacy rows remain `Unknown`, not
+verified. Baseline the focused inventory contracts before editing.
 
 ## Goal and invariants
 
@@ -960,3 +961,80 @@ Trace upstream fact provenance into `KgViewFactRecord` and identify the first
 producer that already has a genuine provider record ID and asset lineage.
 Migrate that producer through the v9 observation column without deriving an ID
 from only entity/fact/query strings. Keep all other facts explicitly `None`.
+
+## Checkpoint 9 — external listing observation lineage
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Parent commit: `820c6b95`
+- Classified miss: `proof_gap` in the offline fact lineage chain
+
+### Implemented
+
+- Versioned skill-fact and KG-view fact schemas from format 2 to format 3 with
+  optional observation provider, provider observation ID, and asset-lineage
+  columns. Older Parquet rows remain readable as explicit empty provenance.
+- Defined an immutable external-listing source-record identity from the full
+  raw observation payload, including provider, source URL, values, and
+  observation time. It is not derived from a property ID, fact key, or query.
+- Attached the raw listing materialization ID and each hashed raw artifact to
+  every fact derived from that listing observation.
+- Preserved those fields through skill-fact Parquet, current-project-fact
+  compaction, KG-view Parquet, and serving construction. Partial provenance now
+  blocks serving construction instead of silently becoming evidence.
+- Constructed a validated `SourceObservation` only after the complete tuple
+  reaches the serving builder. Other producers remain explicit `None`.
+- Extended the vertical DAG contract to prove BHK and price facts reach the
+  loaded serving bundle with the same observation ID and intact artifact and
+  materialization lineage.
+
+### Deliberate boundary
+
+Search `InventoryOption` still fabricates `inventory-option:{property_id}` and
+`VerifiedMatch.observation_ids` is still a legacy string vector. This checkpoint
+establishes the durable fact source needed to remove that path; it does not
+mislabel the old evaluator output as verified evidence. Spatial derivations are
+also unchanged.
+
+### Gates
+
+- `cargo check --all-targets`: passed.
+- Asset provenance unit tests: 5 passed across external-listing emission,
+  skill-fact Parquet, KG-view Parquet, and serving observation construction.
+- `cargo test --test skill_facts_asset_contract`: 5 passed.
+- `cargo test --test project_enrichment_vertical_contract`: 1 passed with the
+  new complete observation-lineage assertion.
+- `cargo test --test kg_society_view_contract`: 2 passed.
+- `cargo test --test serving_bundle_contract`: 3 passed.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check`: passed.
+- `./tests/smoke_test.sh`: 53 passed against the unchanged local v8 serving
+  release.
+- `python3 scripts/audit_search_hardcoding.py`: 330 findings, 28 fact-key
+  comparisons, zero blocked aliases; delta remains zero.
+- `cargo fmt --check` and `git diff --check`: passed.
+- Existing macOS compact-unwind linker warning remains unchanged.
+
+### Process note
+
+The serving v9 contract from Checkpoint 8 was the baseline for this lineage
+slice, but the focused upstream asset contracts were first run after the edit.
+The next inventory-evaluator checkpoint must run its focused baseline before
+any code change.
+
+### Candidate identity
+
+No candidate lake or bundle exists. The main local lake was read only for the
+legacy serving smoke test; no current pointer changed.
+
+### Next exact command
+
+```bash
+rg -n "InventoryOption::from_property|verified_inventory_matches|inventory_verified_match|listing_[0-9].*bhk|listing_price" backend/src/search backend/src/data_loader.rs backend/tests
+sed -n '1,130p' backend/src/search/evaluation.rs
+sed -n '800,920p' backend/src/search/engine.rs
+sed -n '350,460p' backend/src/data_loader.rs
+```
+
+Replace synthesized inventory evidence with snapshot-qualified references to
+the exact external-listing observation retained on serving facts. BHK and price
+must resolve from the same observation; legacy rows remain `Unknown`, not
+verified. Baseline the focused inventory contracts before editing.

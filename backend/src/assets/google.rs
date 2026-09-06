@@ -572,6 +572,9 @@ fn push_nearby_society_fact(
             "sha256:{}",
             sha256_hex(format!("{entity_id}:{fact_key}:{}:{display}", row.place_url).as_bytes())
         ),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     });
     Ok(())
 }
@@ -751,6 +754,9 @@ fn push_nearby_place_fact_once(
             "sha256:{}",
             sha256_hex(format!("{entity_id}:{fact_key}:{value_json}").as_bytes())
         ),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     });
     annotations.push(SkillFactAnnotationRecord {
         entity_id: entity_id.to_string(),
@@ -1108,6 +1114,9 @@ fn push_fact(
             "sha256:{}",
             sha256_hex(format!("{}:{fact_key}:{value_json}", row.entity_id).as_bytes())
         ),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     });
     annotations.push(SkillFactAnnotationRecord {
         entity_id: row.entity_id.clone(),

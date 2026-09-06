@@ -34,7 +34,7 @@ use super::{
 };
 
 pub const KG_SOCIETY_VIEW_ASSET_ID: &str = "kg_society_view";
-const KG_SOCIETY_VIEW_FORMAT_VERSION: u32 = 2;
+const KG_SOCIETY_VIEW_FORMAT_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KgViewEntityRecord {
@@ -62,6 +62,12 @@ pub struct KgViewFactRecord {
     pub skill_id: Option<String>,
     pub triggered_by: Option<String>,
     pub learned_at: DateTime<Utc>,
+    #[serde(default)]
+    pub observation_provider: Option<String>,
+    #[serde(default)]
+    pub provider_observation_id: Option<String>,
+    #[serde(default)]
+    pub asset_lineage: Vec<String>,
 }
 
 /// Optional annotations layered over canonical facts.
@@ -137,6 +143,9 @@ impl KgViewRecords {
                     skill_id: fact.source.skill_id.clone(),
                     triggered_by: fact.source.triggered_by.clone(),
                     learned_at: fact.learned_at,
+                    observation_provider: None,
+                    provider_observation_id: None,
+                    asset_lineage: Vec::new(),
                 });
 
                 let scoring_direction = fact
@@ -383,6 +392,9 @@ impl KgViewRecords {
                 skill_id: fact.skill_id.clone(),
                 triggered_by: fact.triggered_by.clone(),
                 learned_at: fact.learned_at,
+                observation_provider: fact.observation_provider.clone(),
+                provider_observation_id: fact.provider_observation_id.clone(),
+                asset_lineage: fact.asset_lineage.clone(),
             };
             support_fact_keys.insert((record.entity_id.clone(), record.fact_key.clone()));
             support_fact_records.push(record);
@@ -1095,6 +1107,9 @@ fn write_facts_parquet(
         Field::new("skill_id", DataType::Utf8, true),
         Field::new("triggered_by", DataType::Utf8, true),
         Field::new("learned_at", DataType::Utf8, false),
+        Field::new("observation_provider", DataType::Utf8, true),
+        Field::new("provider_observation_id", DataType::Utf8, true),
+        string_list_field("asset_lineage", false),
     ]);
     let schema = Arc::new(Schema::new(fields));
 
@@ -1120,6 +1135,13 @@ fn write_facts_parquet(
         optional_string_array(facts.iter().map(|fact| fact.skill_id.clone())),
         optional_string_array(facts.iter().map(|fact| fact.triggered_by.clone())),
         string_array(facts.iter().map(|fact| fact.learned_at.to_rfc3339())),
+        optional_string_array(facts.iter().map(|fact| fact.observation_provider.clone())),
+        optional_string_array(
+            facts
+                .iter()
+                .map(|fact| fact.provider_observation_id.clone()),
+        ),
+        string_list_array(facts.iter().map(|fact| Some(fact.asset_lineage.clone()))),
     ]);
 
     let batch = RecordBatch::try_new(schema.clone(), columns)
@@ -1261,6 +1283,8 @@ fn read_facts_parquet(
         let skill_id = string_column(&batch, "skill_id")?;
         let triggered_by = string_column(&batch, "triggered_by")?;
         let learned_at = string_column(&batch, "learned_at")?;
+        let observation_provider = optional_string_column(&batch, "observation_provider")?;
+        let provider_observation_id = optional_string_column(&batch, "provider_observation_id")?;
         for row in 0..batch.num_rows() {
             let value_type = required_string(value_type, row, "value_type")?;
             let typed = typed_value_from_batch(&batch, row).ok_or_else(|| {
@@ -1287,6 +1311,11 @@ fn read_facts_parquet(
                 skill_id: optional_string(skill_id, row),
                 triggered_by: optional_string(triggered_by, row),
                 learned_at: parse_timestamp(&required_string(learned_at, row, "learned_at")?)?,
+                observation_provider: observation_provider
+                    .and_then(|column| optional_string(column, row)),
+                provider_observation_id: provider_observation_id
+                    .and_then(|column| optional_string(column, row)),
+                asset_lineage: optional_string_list(&batch, "asset_lineage", row)?,
             });
         }
     }
@@ -1379,6 +1408,21 @@ fn string_column<'a>(
         .ok_or_else(|| KgSocietyViewMaterializeError::Read(format!("{name} is not Utf8")))
 }
 
+fn optional_string_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<Option<&'a StringArray>, KgSocietyViewMaterializeError> {
+    let Ok(index) = batch.schema().index_of(name) else {
+        return Ok(None);
+    };
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .map(Some)
+        .ok_or_else(|| KgSocietyViewMaterializeError::Read(format!("{name} is not Utf8")))
+}
+
 fn float32_column<'a>(
     batch: &'a RecordBatch,
     name: &str,
@@ -1468,6 +1512,19 @@ fn required_string_list(
         OptionalListColumn::Missing | OptionalListColumn::Null => Err(
             KgSocietyViewMaterializeError::Read(format!("{column} is missing at row {row}")),
         ),
+    }
+}
+
+fn optional_string_list(
+    batch: &RecordBatch,
+    column: &str,
+    row: usize,
+) -> Result<Vec<String>, KgSocietyViewMaterializeError> {
+    match optional_string_list_column_value(batch, column, row)
+        .map_err(KgSocietyViewMaterializeError::Read)?
+    {
+        OptionalListColumn::Values(values) => Ok(values),
+        OptionalListColumn::Missing | OptionalListColumn::Null => Ok(Vec::new()),
     }
 }
 
@@ -1812,6 +1869,33 @@ mod tests {
     use crate::knowledge::{FactValue, SourcedFact};
 
     #[test]
+    fn kg_fact_provenance_survives_parquet_round_trip() {
+        let expected = KgViewFactRecord {
+            entity_id: "society:one".to_string(),
+            fact_key: "listing_3bhk".to_string(),
+            fact_version: 1,
+            value_type: "numeric".to_string(),
+            value_text: Some("2".to_string()),
+            value_json: serde_json::to_string(&FactValue::Numeric(2.0)).unwrap(),
+            confidence: 0.8,
+            source_type: "ExternalListing".to_string(),
+            source_url: Some("https://example.test/listing/one".to_string()),
+            model: None,
+            skill_id: Some("external_listing_facts".to_string()),
+            triggered_by: Some("asset_dag".to_string()),
+            learned_at: Utc::now(),
+            observation_provider: Some("Magicbricks".to_string()),
+            provider_observation_id: Some("external_listing_record:sha256:abc".to_string()),
+            asset_lineage: vec!["materialization:raw-one".to_string()],
+        };
+
+        let bytes = write_facts_parquet(std::slice::from_ref(&expected)).unwrap();
+        let actual = read_facts_parquet(&bytes).unwrap();
+
+        assert_eq!(actual, vec![expected]);
+    }
+
+    #[test]
     fn duplicate_canonical_society_names_fail_before_kg_merge() {
         let learned_at = Utc.with_ymd_and_hms(2026, 8, 16, 7, 0, 0).unwrap();
         let canonical_entities = [
@@ -2098,6 +2182,9 @@ mod tests {
             learned_at,
             run_id: "test-run".to_string(),
             input_hash: format!("{entity_id}:{fact_key}"),
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         }
     }
 

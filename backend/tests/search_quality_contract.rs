@@ -407,6 +407,9 @@ async fn serving_index_with_resident_fact_metadata(
                 learned_at: Utc::now(),
                 run_id: "run-reddit-support-2026-07-13".to_string(),
                 input_hash: "sha256:reddit-green".to_string(),
+                observation_provider: None,
+                provider_observation_id: None,
+                asset_lineage: Vec::new(),
             }],
             &[SkillFactAnnotationRecord {
                 entity_id: "society:large-green".to_string(),
@@ -491,6 +494,9 @@ async fn serving_index_with_rera_land_facts(graph: &KnowledgeGraph) -> ServingFa
         learned_at: now,
         run_id: "run-rera-proof-2026-07-13".to_string(),
         input_hash: format!("sha256:{entity_id}"),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     })
     .collect::<Vec<_>>();
     let annotations = facts

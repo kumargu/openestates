@@ -1702,6 +1702,9 @@ async fn seed_skill_fact_current(
         learned_at,
         run_id: run_id.to_string(),
         input_hash: format!("sha256:{run_id}"),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     };
     let annotation = SkillFactAnnotationRecord {
         entity_id: "society:green-acre-whitefield".to_string(),
@@ -2198,6 +2201,9 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                 learned_at: now + Duration::minutes(1),
                 run_id: "skill-run-reddit-greenery".to_string(),
                 input_hash: "sha256:reddit-greenery".to_string(),
+                observation_provider: None,
+                provider_observation_id: None,
+                asset_lineage: Vec::new(),
             }],
             fact_annotations: vec![SkillFactAnnotationRecord {
                 entity_id: "society:green-acre-whitefield".to_string(),
@@ -2441,6 +2447,9 @@ fn mock_rera_input(now: chrono::DateTime<Utc>) -> ReraRegistryMonthlyInput {
             learned_at: now,
             run_id: "rera-fixture".to_string(),
             input_hash: "sha256:rera-green-acre-coordinate".to_string(),
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         }],
         detail_fact_annotations: vec![SkillFactAnnotationRecord {
             entity_id: "society:green-acre-whitefield".to_string(),

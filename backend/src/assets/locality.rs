@@ -117,6 +117,9 @@ pub fn osm_locality_boundary_facts_input(
                 learned_at,
                 run_id: run_id.to_string(),
                 input_hash: hex_digest(&hasher.finalize()),
+                observation_provider: None,
+                provider_observation_id: None,
+                asset_lineage: Vec::new(),
             });
             if annotation_keys.insert((entity_id.clone(), fact_key.to_string())) {
                 annotations.push(SkillFactAnnotationRecord {

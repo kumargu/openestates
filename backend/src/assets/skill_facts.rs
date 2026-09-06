@@ -30,7 +30,7 @@ use super::{
 pub const REDDIT_RESIDENT_FACTS_ASSET_ID: &str = "reddit_resident_facts";
 pub const GOOGLE_REVIEW_FACTS_ASSET_ID: &str = "google_review_facts";
 pub const GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID: &str = "google_nearby_place_facts";
-const SKILL_FACT_FORMAT_VERSION: u32 = 2;
+const SKILL_FACT_FORMAT_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SkillFactRecord {
@@ -47,6 +47,12 @@ pub struct SkillFactRecord {
     pub learned_at: DateTime<Utc>,
     pub run_id: String,
     pub input_hash: String,
+    #[serde(default)]
+    pub observation_provider: Option<String>,
+    #[serde(default)]
+    pub provider_observation_id: Option<String>,
+    #[serde(default)]
+    pub asset_lineage: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -354,6 +360,9 @@ pub(crate) fn write_facts_parquet(
         Field::new("learned_at", DataType::Utf8, false),
         Field::new("run_id", DataType::Utf8, false),
         Field::new("input_hash", DataType::Utf8, false),
+        Field::new("observation_provider", DataType::Utf8, true),
+        Field::new("provider_observation_id", DataType::Utf8, true),
+        string_list_field("asset_lineage", false),
     ]);
     let schema = Arc::new(Schema::new(fields));
 
@@ -375,6 +384,13 @@ pub(crate) fn write_facts_parquet(
         string_array(facts.iter().map(|fact| fact.learned_at.to_rfc3339())),
         string_array(facts.iter().map(|fact| fact.run_id.clone())),
         string_array(facts.iter().map(|fact| fact.input_hash.clone())),
+        optional_string_array(facts.iter().map(|fact| fact.observation_provider.clone())),
+        optional_string_array(
+            facts
+                .iter()
+                .map(|fact| fact.provider_observation_id.clone()),
+        ),
+        string_list_array(facts.iter().map(|fact| Some(fact.asset_lineage.clone()))),
     ]);
 
     let batch =
@@ -402,6 +418,8 @@ pub(crate) fn read_facts_parquet_records(
         let learned_at = string_column(&batch, "learned_at")?;
         let run_id = string_column(&batch, "run_id")?;
         let input_hash = string_column(&batch, "input_hash")?;
+        let observation_provider = optional_string_column(&batch, "observation_provider")?;
+        let provider_observation_id = optional_string_column(&batch, "provider_observation_id")?;
 
         for row in 0..batch.num_rows() {
             let value_type = required_string(value_type, row, "value_type")?;
@@ -428,6 +446,11 @@ pub(crate) fn read_facts_parquet_records(
                 .with_timezone(&Utc),
                 run_id: required_string(run_id, row, "run_id")?,
                 input_hash: required_string(input_hash, row, "input_hash")?,
+                observation_provider: observation_provider
+                    .and_then(|column| optional_string(column, row)),
+                provider_observation_id: provider_observation_id
+                    .and_then(|column| optional_string(column, row)),
+                asset_lineage: optional_string_list(&batch, "asset_lineage", row)?,
             });
         }
     }
@@ -583,6 +606,19 @@ fn validate_fact_value_type(
         "value_type {value_type} does not match fact value type {}",
         TypedFactValue::value_type_for(value)
     )))
+}
+
+fn optional_string_list(
+    batch: &RecordBatch,
+    column: &str,
+    row: usize,
+) -> Result<Vec<String>, SkillFactMaterializeError> {
+    match optional_string_list_column_value(batch, column, row)
+        .map_err(SkillFactMaterializeError::InvalidParquet)?
+    {
+        OptionalListColumn::Values(values) => Ok(values),
+        OptionalListColumn::Missing | OptionalListColumn::Null => Ok(Vec::new()),
+    }
 }
 
 fn list_json_from_batch(
@@ -947,6 +983,33 @@ impl From<parquet::errors::ParquetError> for SkillFactMaterializeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn skill_fact_provenance_survives_parquet_round_trip() {
+        let expected = SkillFactRecord {
+            entity_id: "society:one".to_string(),
+            fact_key: "listing_3bhk".to_string(),
+            value_type: "numeric".to_string(),
+            value_json: serde_json::to_string(&crate::knowledge::FactValue::Numeric(2.0)).unwrap(),
+            confidence: 0.8,
+            source_type: "ExternalListing".to_string(),
+            source_url: Some("https://example.test/listing/one".to_string()),
+            model: None,
+            skill_id: Some("external_listing_facts".to_string()),
+            triggered_by: Some("asset_dag".to_string()),
+            learned_at: Utc::now(),
+            run_id: "run-one".to_string(),
+            input_hash: "input-one".to_string(),
+            observation_provider: Some("Magicbricks".to_string()),
+            provider_observation_id: Some("external_listing_record:sha256:abc".to_string()),
+            asset_lineage: vec!["materialization:raw-one".to_string()],
+        };
+
+        let bytes = write_facts_parquet(std::slice::from_ref(&expected)).unwrap();
+        let actual = read_facts_parquet_records(bytes).unwrap();
+
+        assert_eq!(actual, vec![expected]);
+    }
 
     #[test]
     fn empty_skill_fact_batches_require_explicit_empty_or_skipped_watermark() {

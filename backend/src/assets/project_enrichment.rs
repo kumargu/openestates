@@ -203,10 +203,28 @@ pub async fn external_listing_facts_input_with_aliases(
         .collect::<HashMap<_, _>>();
     let mut facts = Vec::new();
     let mut annotations = Vec::new();
+    let asset_lineage = external_listing_asset_lineage(listing_record)?;
     for row in rows {
-        append_listing_facts(&row, &row.entity_id, run_id, &mut facts, &mut annotations)?;
+        let provider_observation_id = external_listing_observation_id(&row)?;
+        append_listing_facts_with_provenance(
+            &row,
+            &row.entity_id,
+            run_id,
+            &provider_observation_id,
+            &asset_lineage,
+            &mut facts,
+            &mut annotations,
+        )?;
         if let Some(alias) = aliases.get(&row.entity_id) {
-            append_listing_facts(&row, alias, run_id, &mut facts, &mut annotations)?;
+            append_listing_facts_with_provenance(
+                &row,
+                alias,
+                run_id,
+                &provider_observation_id,
+                &asset_lineage,
+                &mut facts,
+                &mut annotations,
+            )?;
         }
     }
     Ok(SkillFactsInput {
@@ -216,6 +234,61 @@ pub async fn external_listing_facts_input_with_aliases(
         fact_annotations: annotations,
         source_watermarks: listing_record.source_watermarks.clone(),
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_listing_facts_with_provenance(
+    row: &ExternalListingObservationRecord,
+    entity_id: &str,
+    run_id: &MaterializationId,
+    provider_observation_id: &str,
+    asset_lineage: &[String],
+    facts: &mut Vec<SkillFactRecord>,
+    annotations: &mut Vec<SkillFactAnnotationRecord>,
+) -> Result<(), ProjectEnrichmentAssetError> {
+    let first_new_fact = facts.len();
+    append_listing_facts(row, entity_id, run_id, facts, annotations)?;
+    for fact in &mut facts[first_new_fact..] {
+        fact.observation_provider = Some(row.source_name.clone());
+        fact.provider_observation_id = Some(provider_observation_id.to_string());
+        fact.asset_lineage = asset_lineage.to_vec();
+    }
+    Ok(())
+}
+
+fn external_listing_observation_id(
+    row: &ExternalListingObservationRecord,
+) -> Result<String, ProjectEnrichmentAssetError> {
+    let encoded = serde_json::to_vec(row)?;
+    Ok(format!(
+        "external_listing_record:sha256:{}",
+        sha256_hex(&encoded)
+    ))
+}
+
+fn external_listing_asset_lineage(
+    record: &MaterializationRecord,
+) -> Result<Vec<String>, ProjectEnrichmentAssetError> {
+    if record.artifacts.is_empty() {
+        return Err(ProjectEnrichmentAssetError::InvalidInput(format!(
+            "external listing materialization {} has no artifact lineage",
+            record.materialization_id
+        )));
+    }
+    let mut lineage = record
+        .artifacts
+        .iter()
+        .map(|artifact| {
+            format!(
+                "artifact:{}#{}:{}",
+                artifact.key, artifact.hash_algorithm, artifact.content_hash
+            )
+        })
+        .collect::<Vec<_>>();
+    lineage.push(format!("materialization:{}", record.materialization_id));
+    lineage.sort();
+    lineage.dedup();
+    Ok(lineage)
 }
 
 pub async fn builder_rera_aggregate_facts_input(
@@ -1031,6 +1104,9 @@ fn append_derived_fact(
         learned_at,
         run_id: run_id.to_string(),
         input_hash: sha256_hex(format!("{entity_id}:{fact_key}:{value_json}").as_bytes()),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     });
     annotations.push(SkillFactAnnotationRecord {
         entity_id: entity_id.to_string(),
@@ -1468,6 +1544,35 @@ from_error!(crate::lake::keys::KeyError, Key);
 mod tests {
     use super::*;
 
+    fn listing_row(price: f64) -> ExternalListingObservationRecord {
+        ExternalListingObservationRecord {
+            entity_id: "society:one".to_string(),
+            project_key: Some("project-one".to_string()),
+            source_name: "Magicbricks".to_string(),
+            source_url: Some("https://example.test/listing/one".to_string()),
+            listing_type: Some("sale".to_string()),
+            price: Some(price),
+            price_min: None,
+            price_max: None,
+            area_sqft: Some(1_400.0),
+            area_sqft_min: None,
+            area_sqft_max: None,
+            price_per_sqft_min: None,
+            price_per_sqft_max: None,
+            price_display: Some("INR 2 Cr".to_string()),
+            area_display: Some("1,400 sq ft".to_string()),
+            price_per_sqft_display: None,
+            configuration: Some("3 BHK".to_string()),
+            area_type: Some("super built-up".to_string()),
+            bhk: Some(3.0),
+            bathrooms: Some(2.0),
+            floor: Some("8".to_string()),
+            society: Some("One".to_string()),
+            locality: Some("Test Area".to_string()),
+            observed_at: Utc::now(),
+        }
+    }
+
     #[test]
     fn empty_source_snapshots_require_an_explicit_empty_watermark() {
         let listings = ExternalListingsWeeklyInput {
@@ -1491,5 +1596,55 @@ mod tests {
             }],
         };
         assert!(validate_external_listing_input(&empty_with_coverage).is_ok());
+    }
+
+    #[test]
+    fn external_listing_facts_retain_raw_observation_identity_and_lineage() {
+        let row = listing_row(20_000_000.0);
+        let provider_observation_id = external_listing_observation_id(&row).unwrap();
+        assert_ne!(
+            provider_observation_id,
+            external_listing_observation_id(&listing_row(21_000_000.0)).unwrap()
+        );
+
+        let record = MaterializationRecord::succeeded(
+            AssetId::new(EXTERNAL_LISTINGS_WEEKLY_ASSET_ID).unwrap(),
+            AssetStage::Raw,
+            AssetPartition::global(),
+            "2026-09-06",
+            vec![ArtifactRef {
+                key: "raw/external-listings.parquet".to_string(),
+                content_hash: "abc123".to_string(),
+                hash_algorithm: "sha256".to_string(),
+                size_bytes: 10,
+                content_type: "application/vnd.apache.parquet".to_string(),
+            }],
+        );
+        let lineage = external_listing_asset_lineage(&record).unwrap();
+        let mut facts = Vec::new();
+        let mut annotations = Vec::new();
+        append_listing_facts_with_provenance(
+            &row,
+            &row.entity_id,
+            &MaterializationId::new(),
+            &provider_observation_id,
+            &lineage,
+            &mut facts,
+            &mut annotations,
+        )
+        .unwrap();
+
+        assert!(!facts.is_empty());
+        assert!(facts.iter().all(|fact| {
+            fact.observation_provider.as_deref() == Some("Magicbricks")
+                && fact.provider_observation_id.as_deref() == Some(provider_observation_id.as_str())
+                && fact.asset_lineage == lineage
+        }));
+        assert!(lineage
+            .iter()
+            .any(|entry| entry == "artifact:raw/external-listings.parquet#sha256:abc123"));
+        assert!(lineage
+            .iter()
+            .any(|entry| entry == &format!("materialization:{}", record.materialization_id)));
     }
 }

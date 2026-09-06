@@ -358,6 +358,9 @@ fn source_entity_coordinate_fact(
         learned_at,
         run_id: run_id.to_string(),
         input_hash: input_hash.to_string(),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     }
 }
 
@@ -731,6 +734,9 @@ mod coordinate_tests {
             learned_at,
             run_id: observation.to_string(),
             input_hash: observation.to_string(),
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         }
     }
 
@@ -785,6 +791,9 @@ mod tests {
             learned_at: Utc.timestamp_opt(learned_at, 0).unwrap(),
             run_id: "run".to_string(),
             input_hash: "hash".to_string(),
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         }
     }
 

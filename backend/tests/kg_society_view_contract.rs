@@ -28,7 +28,7 @@ async fn kg_society_view_materializes_gold_parquet_and_serving_lineage() {
         .unwrap();
 
     assert_eq!(kg_materialization.manifest.entity_count, 2);
-    assert_eq!(kg_materialization.manifest.format_version, 2);
+    assert_eq!(kg_materialization.manifest.format_version, 3);
     assert_eq!(kg_materialization.manifest.fact_count, 3);
     assert_eq!(kg_materialization.manifest.fact_annotation_count, 3);
     assert_eq!(kg_materialization.manifest.edge_count, 1);
@@ -176,6 +176,9 @@ async fn kg_support_fact_merge_preserves_canonical_fact_versions() {
         learned_at: Utc::now(),
         run_id: "run-reddit-facts-2026-07-13".to_string(),
         input_hash: "sha256:reddit-alpha".to_string(),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     };
     let support_annotations = vec![
         SkillFactAnnotationRecord {

@@ -247,6 +247,9 @@ fn push_fact(
         learned_at,
         run_id: run_id.to_string(),
         input_hash: station_fact_hash(station, fact_key),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     });
     let key = (entity_id.to_string(), fact_key.to_string());
     if annotation_keys.insert(key) {

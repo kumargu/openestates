@@ -1138,6 +1138,9 @@ fn append_fact(
         learned_at,
         run_id: run_id.to_string(),
         input_hash,
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     });
     sink.annotations.push(SkillFactAnnotationRecord {
         entity_id: entity_id.to_string(),

@@ -119,6 +119,35 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
             listing_source_name.value,
             FactValue::Text("MagicBricks".to_string())
         );
+        let listing_price = rows
+            .facts
+            .iter()
+            .find(|fact| fact.fact_key == "listing_price_3bhk")
+            .expect("listing price should retain its source observation");
+        let listing_bhk = rows
+            .facts
+            .iter()
+            .find(|fact| fact.fact_key == "listing_3bhk")
+            .expect("listing option should retain its source observation");
+        let price_observation = listing_price.observation.as_ref().unwrap();
+        let bhk_observation = listing_bhk.observation.as_ref().unwrap();
+        assert_eq!(price_observation.provider, "MagicBricks");
+        assert!(price_observation
+            .provider_observation_id
+            .starts_with("external_listing_record:sha256:"));
+        assert_eq!(
+            price_observation.observation_id, bhk_observation.observation_id,
+            "BHK and price must retain the same raw listing observation"
+        );
+        assert!(price_observation.validate().is_ok());
+        assert!(price_observation
+            .asset_lineage
+            .iter()
+            .any(|entry| entry.starts_with("materialization:")));
+        assert!(price_observation
+            .asset_lineage
+            .iter()
+            .any(|entry| entry.starts_with("artifact:")));
     }
 
     let builder_rows = loaded
@@ -206,6 +235,9 @@ fn source_inputs(
                     learned_at: observed_at,
                     run_id: "rera-fixture".to_string(),
                     input_hash: format!("sha256:{}", project.registration),
+                    observation_provider: None,
+                    provider_observation_id: None,
+                    asset_lineage: Vec::new(),
                 });
                 detail_fact_annotations.push(SkillFactAnnotationRecord {
                     entity_id,

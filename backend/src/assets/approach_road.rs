@@ -350,6 +350,9 @@ fn rows_from_upstream(
             learned_at,
             run_id: run_id.to_string(),
             input_hash: quality.input_hash,
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         });
         annotations.push(SkillFactAnnotationRecord {
             entity_id: road_entity_id.clone(),
@@ -381,6 +384,9 @@ fn rows_from_upstream(
                 learned_at,
                 run_id: run_id.to_string(),
                 input_hash: media.input_hash,
+                observation_provider: None,
+                provider_observation_id: None,
+                asset_lineage: Vec::new(),
             });
             annotations.push(SkillFactAnnotationRecord {
                 entity_id: road_entity_id,
@@ -1464,6 +1470,9 @@ mod tests {
             learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
             run_id: "test".to_string(),
             input_hash: "test".to_string(),
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         }
     }
 }
