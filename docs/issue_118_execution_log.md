@@ -147,3 +147,61 @@ sed -n '150,940p' backend/src/search/engine.rs
 Compile branch structure before candidate recall, execute prepared branches,
 and keep topology grouping presentation-only so the logical root remains
 `Any`.
+
+## Checkpoint 3A — OSM society footprints and offline topology
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Parent commit: `2f0aefba`
+
+### Implemented
+
+- Converged OSM society footprint materialization from the legacy
+  `society.boundary_geojson` key onto canonical `geo.geometry_geojson`.
+  Fact-registry scopes and the existing scene anchor now consume the same fact.
+- Corrected society Overpass collection to request `out body center geom`, so
+  multipolygon member ways are present for assembly.
+- Added config-owned topology thresholds for society overlap, area
+  containment, point confidence, ambiguity, and same-level adjacency.
+- Topology candidate recall now uses the geometry R-tree and exact polygon
+  operations. It derives society/place memberships, nested area ancestry, and
+  same-admin-level adjacency without treating nested areas as adjacent.
+- Society containment preserves valid memberships at multiple administrative
+  levels while failing closed on competing same-level ambiguity.
+- Nearby-place materialization uses society footprint bounds for R-tree recall
+  and exact footprint-to-point distance when a polygon exists. Trusted
+  coordinate distance remains the explicit fallback when no footprint exists.
+- Spatial topology diagnostics now record missing administrative levels in
+  addition to missing geometry and ambiguous relationships.
+
+### Gates
+
+- `python3 -m unittest pipeline.test_osm_access_corridors pipeline.test_osm_locality_boundaries`:
+  16 passed.
+- `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check`: passed.
+- `cargo test --lib serving::`: 50 passed.
+- `cargo test --test osm_access_asset_contract`: 3 passed.
+- `git diff --check`: passed.
+- Hardcoding audit: 330 findings, 28 fact-key comparisons, 0 blocked aliases;
+  delta remains zero.
+
+### Proof and remaining gap
+
+- A regression uses a society polygon whose point anchor is outside the
+  configured nearby radius. The R-tree envelope recall plus exact footprint
+  distance still derives the edge-place relationship at 0.5 km.
+- Collection remains enrichment-limited: OSM may not contain a named polygon
+  for every canonical society. Those societies retain trusted point fallback
+  and are reported as coverage gaps; no footprint is fabricated.
+- Candidate East Bengaluru bundle generation and direct Parquet inspection
+  remain pending.
+
+### Next exact command
+
+```bash
+cd backend
+CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo test \
+  --test search_conversational_semantics_contract \
+  --test serving_bundle_contract
+```
+
+Then replace raw-string branch execution with prepared compiled branches.

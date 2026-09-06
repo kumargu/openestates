@@ -8,7 +8,8 @@ use crate::assets::{
     AssetPathBuilder, KgViewEdgeRecord, KgViewFactAnnotationRecord, KgViewFactRecord, KgViewRecords,
 };
 use crate::dag_config::{
-    load_fact_registry_index, load_serving_eligibility, scoring_direction_from_hint, DagConfigError,
+    load_fact_registry_index, load_resolution_policies, load_serving_eligibility,
+    scoring_direction_from_hint, DagConfigError,
 };
 use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
@@ -146,13 +147,16 @@ impl ServingBundleBuilder {
         let mut artifacts = Vec::new();
         let topology_index =
             super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
-        let topology = super::derive_spatial_topology(&entities, &topology_index, &edges);
+        let topology_policy = load_resolution_policies()?.spatial_topology;
+        let topology =
+            super::derive_spatial_topology(&entities, &topology_index, &edges, &topology_policy);
         let topology_gap_key = AssetPathBuilder::serving_bundle_key(
             &bundle_version,
             "diagnostics/spatial_topology_gaps.json",
         );
-        let topology_gap_count =
-            topology.ambiguous_entity_ids.len() + topology.missing_geometry_entity_ids.len();
+        let topology_gap_count = topology.ambiguous_entity_ids.len()
+            + topology.missing_geometry_entity_ids.len()
+            + topology.missing_admin_level_entity_ids.len();
         let topology_gap_meta = self
             .lake
             .put_json(
@@ -162,6 +166,7 @@ impl ServingBundleBuilder {
                     "classification": "data_gap",
                     "ambiguous_entity_ids": topology.ambiguous_entity_ids,
                     "missing_geometry_entity_ids": topology.missing_geometry_entity_ids,
+                    "missing_admin_level_entity_ids": topology.missing_admin_level_entity_ids,
                 }),
             )
             .await?;

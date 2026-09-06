@@ -991,6 +991,7 @@ fn resolution_policies() -> &'static ResolutionPoliciesFile {
             never_default_fact_prefixes: Vec::new(),
             source_caps: HashMap::new(),
             coordinate_sources: HashMap::new(),
+            spatial_topology: Default::default(),
             overrides: HashMap::new(),
         })
     })

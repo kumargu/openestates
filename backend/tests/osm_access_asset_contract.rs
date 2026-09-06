@@ -61,7 +61,7 @@ fn society_access_emits_boundary_public_corridor_and_typed_entrance() {
     }));
     assert!(facts.facts.iter().any(|fact| {
         fact.entity_id == "society:prestige-waterford"
-            && fact.fact_key == "society.boundary_geojson"
+            && fact.fact_key == "geo.geometry_geojson"
             && fact.source_url.as_deref() == Some("https://www.openstreetmap.org/way/133630420")
     }));
     assert!(facts.facts.iter().any(|fact| {

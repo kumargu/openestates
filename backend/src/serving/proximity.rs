@@ -14,7 +14,8 @@ use crate::search::{analyzer, schema};
 
 use super::{
     resolve_serving_coordinates, ServingEdgeRecord, ServingEntityFactRows, ServingEntityRecord,
-    ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
+    ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord, SpatialBounds,
+    SpatialGeometryIndex,
 };
 
 const NEAR_PLACE_EDGE: &str = "near_place";
@@ -157,6 +158,8 @@ pub fn derive_proximity_records(
     }
 
     let existing_mentions = existing_nearby_mentions(fact_index, &specs);
+    let geometry_index =
+        SpatialGeometryIndex::from_serving_bundle(entities, fact_index, existing_edges);
     let mut output = DerivedProximityRecords::default();
     let mut seen_edges = existing_near_place_edges(existing_edges);
     let place_index = indexed_places(&places);
@@ -168,13 +171,32 @@ pub fn derive_proximity_records(
 
     for target in &target_entities {
         let mut by_fact_key = HashMap::<&str, Vec<NearbyPlaceCandidate<'_>>>::new();
-        for place in nearest_candidate_places(target, &places, &place_index, max_distance_km) {
-            let distance_km = haversine_km(
-                target.latitude,
-                target.longitude,
-                place.point.latitude,
-                place.point.longitude,
-            );
+        let target_bounds = geometry_index.bounds(&target.entity_id);
+        for place in nearest_candidate_places(
+            target,
+            target_bounds,
+            &places,
+            &place_index,
+            max_distance_km,
+        ) {
+            let distance_km = geometry_index
+                .has_footprint(&target.entity_id)
+                .then(|| {
+                    geometry_index.distance_to_coordinate_km(
+                        &target.entity_id,
+                        place.point.latitude,
+                        place.point.longitude,
+                    )
+                })
+                .flatten()
+                .unwrap_or_else(|| {
+                    haversine_km(
+                        target.latitude,
+                        target.longitude,
+                        place.point.latitude,
+                        place.point.longitude,
+                    )
+                });
             if !distance_km.is_finite() || distance_km < 0.0 {
                 continue;
             }
@@ -290,6 +312,7 @@ fn indexed_places(places: &[PlacePoint]) -> RTree<IndexedPlace> {
 
 fn nearest_candidate_places<'a>(
     target: &EntityPoint,
+    target_bounds: Option<SpatialBounds>,
     places: &'a [PlacePoint],
     place_index: &RTree<IndexedPlace>,
     max_distance_km: f64,
@@ -297,13 +320,27 @@ fn nearest_candidate_places<'a>(
     if max_distance_km <= 0.0 {
         return Vec::new();
     }
+    let target_bounds = target_bounds.unwrap_or(SpatialBounds {
+        min_longitude: target.longitude,
+        min_latitude: target.latitude,
+        max_longitude: target.longitude,
+        max_latitude: target.latitude,
+    });
+    let reference_latitude = (target_bounds.min_latitude + target_bounds.max_latitude) / 2.0;
     let lat_delta = km_to_lat_degrees(max_distance_km);
-    let lng_delta = km_to_lng_degrees(max_distance_km, target.latitude);
-    let max_planar_distance_2 = lat_delta.mul_add(lat_delta, lng_delta * lng_delta);
-    let target_point = [target.longitude, target.latitude];
+    let lng_delta = km_to_lng_degrees(max_distance_km, reference_latitude);
+    let envelope = AABB::from_corners(
+        [
+            target_bounds.min_longitude - lng_delta,
+            target_bounds.min_latitude - lat_delta,
+        ],
+        [
+            target_bounds.max_longitude + lng_delta,
+            target_bounds.max_latitude + lat_delta,
+        ],
+    );
     place_index
-        .nearest_neighbor_iter(&target_point)
-        .take_while(|indexed| indexed.distance_2(&target_point) <= max_planar_distance_2)
+        .locate_in_envelope_intersecting(&envelope)
         .filter_map(|indexed| places.get(indexed.index))
         .collect()
 }
@@ -908,6 +945,47 @@ mod tests {
         assert!(hospital_facts.len() >= 2);
         assert!(hospital_facts[0].contains("Near Hospital"));
         assert!(hospital_facts[1].contains("Far Hospital"));
+    }
+
+    #[test]
+    fn society_footprint_drives_nearby_distance_and_rtree_recall() {
+        let entities = vec![
+            entity("society:test", "society", "Test Society"),
+            entity("place:hospital:edge", "place", "Edge Hospital"),
+        ];
+        let mut footprint = text(
+            "society:test",
+            "geo.geometry_geojson",
+            r#"{"type":"Polygon","coordinates":[[[77.700,12.980],[77.750,12.980],[77.750,12.990],[77.700,12.990],[77.700,12.980]]]}"#,
+        );
+        footprint.source_type = "OpenStreetMap".to_string();
+        let facts = vec![
+            coord("society:test", "geo.latitude", 12.985),
+            coord("society:test", "geo.longitude", 77.700),
+            footprint,
+            coord("place:hospital:edge", "geo.latitude", 12.985),
+            coord("place:hospital:edge", "geo.longitude", 77.755),
+            text("place:hospital:edge", "place.name", "Edge Hospital"),
+            tags("place:hospital:edge", "place.types", &["hospital"]),
+        ];
+        let index = ServingFactIndex::from_records(facts, Vec::new());
+
+        let derived = derive_proximity_records(&entities, &index, &[]).unwrap();
+        let distance = derived
+            .facts
+            .iter()
+            .find(|fact| {
+                fact.entity_id == "society:test"
+                    && fact.fact_key == "nearby_hospitals"
+                    && fact
+                        .value_text
+                        .as_deref()
+                        .is_some_and(|text| text.contains("Edge Hospital"))
+            })
+            .and_then(|fact| fact.value_text.as_deref())
+            .expect("the place is near the society footprint, not its point anchor");
+
+        assert!(distance.contains("(0.5 km)"), "{distance}");
     }
 
     #[test]

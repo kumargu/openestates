@@ -216,7 +216,7 @@
         "approach_road",
         "approach_road_entity",
         "society.entrance_entity",
-        "society.boundary_geojson"
+        "geo.geometry_geojson"
       ],
       "traversal": [
         "property -> in_society -> society",
@@ -234,7 +234,7 @@
     "scene": {
       "anchor": {
         "entityRef": "society",
-        "boundaryFactKey": "society.boundary_geojson"
+        "boundaryFactKey": "geo.geometry_geojson"
       },
       "experience": {
         "revealDurationMs": 7000,

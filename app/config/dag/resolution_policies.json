@@ -1,6 +1,6 @@
 {
   "_comment": "SOURCE CONFLICT RULES — which source tier wins, confidence caps per source_type, never_default prefixes for risk/operating facts.",
-  "version": 1,
+  "version": 2,
   "default_strategy": "prefer_highest_confidence",
   "source_tiers": [
     "source_entity_seed",
@@ -39,6 +39,13 @@
       "denied_sources": ["rera"],
       "source_priority": ["source_entity_seed", "google", "openstreetmap"]
     }
+  },
+  "spatial_topology": {
+    "minimum_society_overlap_ratio": 0.5,
+    "minimum_area_containment_ratio": 0.99,
+    "minimum_point_confidence": 0.5,
+    "ambiguity_epsilon": 1e-9,
+    "require_matching_admin_level_for_adjacency": true
   },
   "overrides": {
     "legal.rera_registered": {

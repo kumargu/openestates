@@ -151,6 +151,27 @@ impl SpatialGeometryIndex {
         matches
     }
 
+    pub fn features_containing_coordinate(
+        &self,
+        latitude: f64,
+        longitude: f64,
+    ) -> Vec<&SpatialFeature> {
+        let point = AABB::from_point([longitude, latitude]);
+        let mut matches = self
+            .tree
+            .locate_in_envelope_intersecting(&point)
+            .filter_map(|indexed| self.features.get(indexed.index))
+            .filter(|candidate| {
+                geometry_contains_point(
+                    &candidate.geometry,
+                    &SpatialGeometry::Point(Point::new(longitude, latitude)),
+                )
+            })
+            .collect::<Vec<_>>();
+        matches.sort_by(|left, right| left.entity_id.cmp(&right.entity_id));
+        matches
+    }
+
     /// Boundary points count as contained. This is the useful buyer/search
     /// interpretation and avoids dropping homes whose trusted coordinate lies
     /// exactly on an administrative boundary.
@@ -191,19 +212,40 @@ impl SpatialGeometryIndex {
     pub fn distance_km(&self, left_id: &str, right_id: &str) -> Option<f64> {
         let left = self.feature(left_id)?;
         let right = self.feature(right_id)?;
-        let reference_latitude = (left.bounds.min_latitude
-            + left.bounds.max_latitude
-            + right.bounds.min_latitude
-            + right.bounds.max_latitude)
-            / 4.0;
-        let longitude_scale = 111.32 * reference_latitude.to_radians().cos().abs().max(0.01);
-        let project = |coordinate: geo::Coord<f64>| geo::Coord {
-            x: coordinate.x * longitude_scale,
-            y: coordinate.y * 110.574,
+        projected_geometry_distance_km(&left.geometry, left.bounds, &right.geometry, right.bounds)
+    }
+
+    pub fn distance_to_coordinate_km(
+        &self,
+        entity_id: &str,
+        latitude: f64,
+        longitude: f64,
+    ) -> Option<f64> {
+        if !latitude.is_finite()
+            || !longitude.is_finite()
+            || !(-90.0..=90.0).contains(&latitude)
+            || !(-180.0..=180.0).contains(&longitude)
+        {
+            return None;
+        }
+        let feature = self.feature(entity_id)?;
+        let point = SpatialGeometry::Point(Point::new(longitude, latitude));
+        let point_bounds = SpatialBounds {
+            min_longitude: longitude,
+            min_latitude: latitude,
+            max_longitude: longitude,
+            max_latitude: latitude,
         };
-        let left = geometry_value(&left.geometry).map_coords(project);
-        let right = geometry_value(&right.geometry).map_coords(project);
-        Some(Euclidean.distance(&left, &right))
+        projected_geometry_distance_km(&feature.geometry, feature.bounds, &point, point_bounds)
+    }
+
+    pub fn bounds(&self, entity_id: &str) -> Option<SpatialBounds> {
+        self.feature(entity_id).map(|feature| feature.bounds)
+    }
+
+    pub fn has_footprint(&self, entity_id: &str) -> bool {
+        self.feature(entity_id)
+            .is_some_and(|feature| !matches!(feature.geometry, SpatialGeometry::Point(_)))
     }
 
     pub fn related(&self, entity_id: &str, relation: &str) -> Vec<&str> {
@@ -223,6 +265,27 @@ impl SpatialGeometryIndex {
             .map(String::as_str)
             .collect()
     }
+}
+
+fn projected_geometry_distance_km(
+    left: &SpatialGeometry,
+    left_bounds: SpatialBounds,
+    right: &SpatialGeometry,
+    right_bounds: SpatialBounds,
+) -> Option<f64> {
+    let reference_latitude = (left_bounds.min_latitude
+        + left_bounds.max_latitude
+        + right_bounds.min_latitude
+        + right_bounds.max_latitude)
+        / 4.0;
+    let longitude_scale = 111.32 * reference_latitude.to_radians().cos().abs().max(0.01);
+    let project = |coordinate: geo::Coord<f64>| geo::Coord {
+        x: coordinate.x * longitude_scale,
+        y: coordinate.y * 110.574,
+    };
+    let left = geometry_value(left).map_coords(project);
+    let right = geometry_value(right).map_coords(project);
+    Some(Euclidean.distance(&left, &right))
 }
 
 fn geometry_value(geometry: &SpatialGeometry) -> Geometry<f64> {

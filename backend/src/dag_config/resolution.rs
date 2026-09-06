@@ -18,7 +18,35 @@ pub struct ResolutionPoliciesFile {
     #[serde(default)]
     pub coordinate_sources: HashMap<String, CoordinateSourcePolicy>,
     #[serde(default)]
+    pub spatial_topology: SpatialTopologyPolicy,
+    #[serde(default)]
     pub overrides: HashMap<String, ResolutionOverride>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpatialTopologyPolicy {
+    pub minimum_society_overlap_ratio: f64,
+    pub minimum_area_containment_ratio: f64,
+    pub minimum_point_confidence: f32,
+    pub ambiguity_epsilon: f64,
+    #[serde(default = "default_true")]
+    pub require_matching_admin_level_for_adjacency: bool,
+}
+
+impl Default for SpatialTopologyPolicy {
+    fn default() -> Self {
+        Self {
+            minimum_society_overlap_ratio: 0.5,
+            minimum_area_containment_ratio: 0.99,
+            minimum_point_confidence: 0.5,
+            ambiguity_epsilon: 1e-9,
+            require_matching_admin_level_for_adjacency: true,
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -75,7 +103,19 @@ pub fn resolution_policies_path() -> std::path::PathBuf {
 }
 
 pub fn load_resolution_policies() -> Result<ResolutionPoliciesFile, DagConfigError> {
-    load_json(&resolution_policies_path())
+    let policies: ResolutionPoliciesFile = load_json(&resolution_policies_path())?;
+    let topology = &policies.spatial_topology;
+    if !(0.0..=1.0).contains(&topology.minimum_society_overlap_ratio)
+        || !(0.0..=1.0).contains(&topology.minimum_area_containment_ratio)
+        || !(0.0..=1.0).contains(&topology.minimum_point_confidence)
+        || !topology.ambiguity_epsilon.is_finite()
+        || topology.ambiguity_epsilon < 0.0
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "spatial topology thresholds must be finite ratios".to_string(),
+        ));
+    }
+    Ok(policies)
 }
 
 pub fn source_tier_rank(source_type: &str, policies: &ResolutionPoliciesFile) -> u32 {

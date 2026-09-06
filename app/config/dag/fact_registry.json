@@ -4254,44 +4254,24 @@
       }
     },
     {
-      "fact_key": "society.boundary_geojson",
-      "bucket": "geo",
-      "label": "society boundary",
-      "lens": "proof",
-      "polarity": "neutral",
-      "scopes": [
-        "society"
-      ],
-      "enrichment_terms": [],
-      "answers_preferences": [
-        "society boundary",
-        "site outline",
-        "project footprint"
-      ],
-      "never_default": true,
-      "source_types": [
-        "OpenStreetMap"
-      ],
-      "display_template": null,
-      "scoring_hint": {
-        "direction": "text_match",
-        "weight": 0.0
-      }
-    },
-    {
       "fact_key": "geo.geometry_geojson",
       "bucket": "geo",
       "label": "geometry GeoJSON",
       "lens": "proof",
       "polarity": "neutral",
       "scopes": [
-        "place"
+        "area",
+        "place",
+        "society"
       ],
       "enrichment_terms": [],
       "answers_preferences": [
         "map overlay",
         "geometry",
-        "geojson"
+        "geojson",
+        "society boundary",
+        "site outline",
+        "project footprint"
       ],
       "never_default": true,
       "source_types": [
