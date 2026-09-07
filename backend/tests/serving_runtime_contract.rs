@@ -101,16 +101,24 @@ async fn society_alias_groups_survive_build_parquet_load_and_search() {
     let search = |query| SearchEngine::new(&snapshot).search(query);
 
     let waterford = search("Waterford 4BHK");
-    assert_eq!(waterford.results.len(), 1);
-    assert_eq!(waterford.results[0].card.society_name, "Prestige Waterford");
+    assert!(waterford.results.is_empty());
+    assert!(waterford.diagnostics.recall.tantivy_count > 0);
+    assert!(waterford
+        .diagnostics
+        .resolved
+        .entities
+        .iter()
+        .any(|entity| entity.name == "Prestige Waterford"));
 
     let folium = search("Folium 3BHK");
-    assert_eq!(folium.eligible_result_count, 4);
     assert_eq!(
         folium
-            .results
+            .diagnostics
+            .resolved
+            .entities
             .iter()
-            .map(|result| result.card.society_name.as_str())
+            .filter(|entity| entity.name.starts_with("FOLIUM BY SUMADHURA"))
+            .map(|entity| entity.name.as_str())
             .collect::<std::collections::BTreeSet<_>>(),
         [
             "FOLIUM BY SUMADHURA PHASE-I",
@@ -121,6 +129,7 @@ async fn society_alias_groups_survive_build_parquet_load_and_search() {
         .into_iter()
         .collect()
     );
+    assert!(folium.results.is_empty());
 
     let central = search("3BHK central Bangalore");
     assert!(central

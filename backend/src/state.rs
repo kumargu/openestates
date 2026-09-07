@@ -32,6 +32,7 @@ pub struct SearchRuntimeSnapshot {
     pub property_by_id: HashMap<String, usize>,
     pub inventory_options: HashMap<String, InventoryOption>,
     pub search_index: SearchIndex,
+    pub geo_topology: crate::search::GeoTopologyIndex,
     pub societies: Arc<[Society]>,
     pub society_names: HashMap<String, String>,
     pub areas: Arc<[AreaProfile]>,
@@ -88,6 +89,11 @@ impl SearchRuntimeSnapshot {
                 .map(|option| (property.id.clone(), option))
             })
             .collect();
+        let geo_topology = crate::search::GeoTopologyIndex::build(
+            &bundle.entities,
+            &bundle.edges,
+            &version_key.serving_bundle_version,
+        );
 
         Self {
             bundle,
@@ -95,6 +101,7 @@ impl SearchRuntimeSnapshot {
             property_by_id,
             inventory_options,
             search_index,
+            geo_topology,
             societies: Arc::from(societies),
             society_names,
             areas: Arc::from(areas),
@@ -159,8 +166,6 @@ impl SearchCacheKey {
 pub struct CachedSearchOutput {
     pub response: Arc<SearchResponse>,
     pub compiled_plan: Arc<crate::search::CompiledSearchPlan>,
-    pub ast_branches: Arc<[crate::search::ast::ConstraintExpr]>,
-    pub intent_branches: Arc<[crate::search::SearchIntent]>,
     pub log_messages: Vec<SearchLogMessage>,
 }
 
@@ -489,8 +494,6 @@ mod tests {
                 crate::search::CompiledQuery::from_text(query),
                 "test-bundle",
             )),
-            ast_branches: Arc::from([]),
-            intent_branches: Arc::from([]),
             log_messages: Vec::new(),
         }
     }

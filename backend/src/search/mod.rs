@@ -20,7 +20,7 @@ pub use ast::{CompiledQuery, ConstraintExpr, ConstraintTerm, PredicateFamily, Pr
 pub use capabilities::SearchCapabilityIndex;
 pub use compiled_plan::{
     BoolExpr, BranchId, CompiledSearchPlan, GeoAnchor, GeoBranch, GeoCellPath, GeoCellSearchPolicy,
-    GeoCellSeed, GeoScope, ResolvedEntityHandle,
+    GeoCellSeed, GeoScope, GeoTopologyIndex, GeoTopologyLink, ResolvedEntityHandle,
 };
 pub use engine::{
     CandidateScore, SearchDiagnostics, SearchEngine, SearchEvidenceGap, SearchLayerTiming,

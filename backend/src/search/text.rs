@@ -3050,13 +3050,6 @@ fn best_requested_area_match<'a>(
     for area in requested_areas {
         let candidate = if property.area.eq_ignore_ascii_case(area) {
             Some((0_u8, 0.0, AreaMatchKind::Exact, *area))
-        } else if area_is_nearby(&property.area, area) {
-            Some((
-                1,
-                schema::ranking_policy().nearby_area_score_penalty,
-                AreaMatchKind::Nearby,
-                *area,
-            ))
         } else {
             None
         };
@@ -3068,59 +3061,6 @@ fn best_requested_area_match<'a>(
         }
     }
     best.map(|(_, penalty, kind, area)| (penalty, kind, area))
-}
-
-/// Check if a property's area is "nearby" the canonical search area.
-/// This catches sub-areas, micro-markets, and externally assigned areas that
-/// belong to the same macro area but don't exactly match the canonical name.
-///
-/// Checks: alias list membership, substring containment, and same-city
-/// knowledge graph edges (future). Does NOT check exact match — caller does that.
-fn area_is_nearby(property_area: &str, canonical_area: &str) -> bool {
-    use crate::dag_config::area_alias_entries;
-
-    let prop_lower = property_area.trim().to_lowercase();
-    let canon_lower = canonical_area.trim().to_lowercase();
-    if prop_lower.is_empty() || canon_lower.is_empty() {
-        return false;
-    }
-
-    // 1. Property area is a known alias of the canonical area
-    for entry in area_alias_entries() {
-        if !entry.canonical.eq_ignore_ascii_case(canonical_area) {
-            continue;
-        }
-        for alias in &entry.aliases {
-            if prop_lower.contains(alias) || alias.contains(prop_lower.as_str()) {
-                return true;
-            }
-        }
-        break;
-    }
-
-    // 2. Property area maps to the same canonical area via its own aliases
-    //    e.g. property area "Varthur" → canonical "Whitefield", search area is "Whitefield"
-    for entry in area_alias_entries() {
-        if !entry.canonical.eq_ignore_ascii_case(canonical_area) {
-            continue;
-        }
-        // Check if any word in the property area matches an alias
-        for word in prop_lower.split_whitespace() {
-            for alias in &entry.aliases {
-                if alias == word {
-                    return true;
-                }
-            }
-        }
-        break;
-    }
-
-    // 3. Substring containment (handles "East Whitefield" matching "Whitefield")
-    if prop_lower.contains(&canon_lower) || canon_lower.contains(&prop_lower) {
-        return true;
-    }
-
-    false
 }
 
 fn canonical_society_entity_id<'a>(
@@ -3297,7 +3237,7 @@ fn property_matches_constraint_term_for_society(
 }
 
 fn property_matches_area(property: &crate::models::Property, area: &str) -> bool {
-    property.area.eq_ignore_ascii_case(area) || area_is_nearby(&property.area, area)
+    property.area.eq_ignore_ascii_case(area)
 }
 
 fn match_label_from_score_and_coverage(
@@ -3344,7 +3284,6 @@ fn match_label_from_score_and_coverage(
 #[derive(Clone, Copy)]
 enum AreaMatchKind {
     Exact,
-    Nearby,
 }
 
 fn budget_display_label(value: u64) -> String {
@@ -3374,14 +3313,8 @@ fn build_match_reason(
     parts.extend(verified_spatial_match_reasons(verified_matches));
 
     if let Some(area) = matched_area {
-        match area_match_kind {
-            Some(AreaMatchKind::Nearby) => {
-                parts.push(format!("Near {} ({})", area, property.area));
-            }
-            Some(AreaMatchKind::Exact) | None => {
-                parts.push(format!("Matches {}", area));
-            }
-        }
+        let _ = area_match_kind;
+        parts.push(format!("Matches {}", area));
     }
     if let Some(label) = query.constraints.matched_bhk_include_label(&mut |term| {
         property_matches_constraint_term_for_society(
@@ -8316,7 +8249,7 @@ mod tests {
     }
 
     #[test]
-    fn nearby_area_result_does_not_claim_an_exact_area_match() {
+    fn raw_property_area_alias_does_not_create_geography_evidence() {
         let property = local_property(
             "nearby-area",
             "East Bangalore",
@@ -8339,18 +8272,7 @@ mod tests {
             None,
         );
 
-        assert_eq!(results.len(), 1);
-        assert!(results[0]
-            .match_reason
-            .contains("Near East Bengaluru (East Bangalore)"));
-        assert!(!results[0].match_reason.contains("Matches East Bengaluru"));
-    }
-
-    #[test]
-    fn blank_property_area_is_not_treated_as_nearby() {
-        assert!(!area_is_nearby("", "Whitefield"));
-        assert!(!area_is_nearby("   ", "Whitefield"));
-        assert!(!area_is_nearby("Varthur", ""));
+        assert!(results.is_empty());
     }
 
     #[test]

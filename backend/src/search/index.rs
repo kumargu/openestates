@@ -191,20 +191,6 @@ impl SearchIndex {
             self.by_area.entry(normalize(&property.area)).or_default(),
             &property.id,
         );
-        for area_slug in [
-            super::resolver::slug(&property.area),
-            property.area_id.trim().to_string(),
-        ] {
-            if area_slug.is_empty() {
-                continue;
-            }
-            push_unique(
-                self.by_entity_node
-                    .entry(format!("area:{area_slug}"))
-                    .or_default(),
-                &property.id,
-            );
-        }
         push_unique(self.by_bhk.entry(property.bhk).or_default(), &property.id);
         self.by_property_node
             .insert(format!("property:{}", property.id), property.id.clone());

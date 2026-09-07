@@ -577,6 +577,33 @@ fn unique_partial_society_name_is_only_a_geographic_anchor() {
 }
 
 #[test]
+fn tantivy_candidates_reach_branch_ranking_without_satisfying_hard_inventory() {
+    let mut lexical = property("lexical-only".to_string(), "Whitefield", 2, 18_000_000);
+    lexical.society_id = "lexical-only".to_string();
+    let properties = vec![lexical];
+    let entities = vec![ServingEntityRecord {
+        entity_id: "society:lexical-only".to_string(),
+        entity_type: "society".to_string(),
+        name: "Lexical Only".to_string(),
+        root_source: Some("serving_bundle".to_string()),
+        visibility: Default::default(),
+        searchable_text: "quiet 3BHK".to_string(),
+    }];
+    let bundle = loaded_bundle(entities.clone(), Vec::new());
+    let search_index = SearchIndex::build_with_serving_entities(&properties, &entities);
+    let snapshot = search_runtime_snapshot(bundle, &properties, search_index);
+
+    let output = SearchEngine::new(&snapshot).search("quiet 3BHK");
+
+    assert!(output.diagnostics.recall.tantivy_count > 0);
+    assert_eq!(output.diagnostics.recall.tantivy_branch_additions, 1);
+    assert!(
+        output.results.is_empty(),
+        "lexical recall must not turn the durable 2BHK option into a hard 3BHK match"
+    );
+}
+
+#[test]
 fn unsupported_inventory_query_short_circuits_large_mock_corpus() {
     let properties = mock_property_corpus();
     let society_names = society_names(&properties);
@@ -707,8 +734,6 @@ async fn search_cache_key_changes_with_bundle_version() {
                     backend::search::CompiledQuery::from_text("3bhk whitefield"),
                     "bundle-v1",
                 )),
-                ast_branches: Arc::from([]),
-                intent_branches: Arc::from([]),
                 log_messages: Vec::new(),
             },
         )
@@ -737,8 +762,6 @@ async fn search_cache_hit_still_carries_log_metadata() {
                     backend::search::CompiledQuery::from_text("3bhk whitefield"),
                     "bundle-v1",
                 )),
-                ast_branches: Arc::from([]),
-                intent_branches: Arc::from([]),
                 log_messages: vec![SearchLogMessage::SearchEvent(event.clone())],
             },
         )

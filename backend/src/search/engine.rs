@@ -20,7 +20,7 @@ use super::intent::{SearchIntent, SourceSpan};
 use super::query_plan::{self, QueryPlan};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text, slug};
 use super::schema;
-use super::text::{merged_candidate_ids, SearchEvaluationContext};
+use super::text::SearchEvaluationContext;
 use super::{
     GeographyMatch, GeographyMatchKind, SearchResultCard, SearchResultSet, TextSearch,
     TextSearchRequest,
@@ -37,8 +37,6 @@ pub struct SearchEngine<'a> {
 #[derive(Debug, Clone)]
 pub struct SearchEngineOutput {
     pub compiled_plan: CompiledSearchPlan,
-    pub ast_branches: Vec<ConstraintExpr>,
-    pub intent_branches: Vec<SearchIntent>,
     pub intent: SearchIntent,
     pub results: Vec<SearchResultCard>,
     pub result_sets: Vec<SearchResultSet>,
@@ -53,7 +51,6 @@ pub struct RecallSet {
     pub structured_total_count: usize,
     pub tantivy_candidate_ids: Vec<String>,
     pub merged_extra_candidate_ids: Option<Vec<String>>,
-    pub ranking_candidate_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -111,6 +108,7 @@ pub struct SearchRecallDiagnostics {
     pub structured_total_count: usize,
     pub structured_count: usize,
     pub tantivy_count: usize,
+    pub tantivy_branch_additions: usize,
     pub merged_extra_count: usize,
     pub structured_sample: Vec<String>,
     pub tantivy_sample: Vec<String>,
@@ -345,19 +343,13 @@ impl<'a> SearchEngine<'a> {
             compiled_query.clone(),
             snapshot_identity,
             &resolved_entities,
-            &self.snapshot.bundle.entities,
-            &self.snapshot.bundle.edges,
+            &self.snapshot.geo_topology,
             Some(&self.snapshot.bundle.spatial_index),
             GeoCellSearchPolicy {
                 max_hops: self.snapshot.geo_cell_max_hops,
                 max_distance_km: self.snapshot.geo_cell_max_distance_km,
             },
         );
-        let ast_branches = compiled_plan
-            .branches
-            .iter()
-            .map(|branch| branch.predicates.clone())
-            .collect::<Vec<_>>();
         let intent = &compiled_query.intent;
 
         let structured_candidate_ids = timer.measure("structured_recall", || {
@@ -417,7 +409,6 @@ impl<'a> SearchEngine<'a> {
             .unwrap_or_default()
         });
         let mut verified_spatial_matches = HashMap::new();
-        let spatial_evaluation_gaps = Vec::new();
         if let Some(query) = geo_query.as_ref() {
             for property_id in &geo_candidate_ids {
                 let property = self
@@ -465,51 +456,13 @@ impl<'a> SearchEngine<'a> {
                 geo_candidate_ids.clone(),
             )
         };
-        let ranking_candidate_ids = if resolved_geo_constraint {
-            Some(
-                geo_candidate_ids
-                    .iter()
-                    .filter(|property_id| {
-                        eligible_property_ids
-                            .as_ref()
-                            .is_none_or(|eligible| eligible.contains(*property_id))
-                    })
-                    .cloned()
-                    .collect(),
-            )
-        } else {
-            merged_candidate_ids(
-                optional_non_empty(structured_candidate_ids.clone()),
-                extra_candidate_ids.as_deref(),
-            )
-        };
         let recall_set = RecallSet {
             structured_candidate_ids,
             structured_total_count,
             tantivy_candidate_ids: tantivy_recall.property_ids.clone(),
             merged_extra_candidate_ids: extra_candidate_ids,
-            ranking_candidate_ids,
         };
         let serving_facts = Some(&self.snapshot.bundle.fact_index);
-        let geography_edges_by_subject = self
-            .snapshot
-            .bundle
-            .edges
-            .iter()
-            .filter(|edge| {
-                edge.edge_type.eq_ignore_ascii_case("in_market_locality")
-                    || edge.edge_type.eq_ignore_ascii_case("occupies_geo_cell")
-            })
-            .fold(
-                HashMap::<&str, Vec<&crate::serving::ServingEdgeRecord>>::new(),
-                |mut by_subject, edge| {
-                    by_subject
-                        .entry(edge.from_entity_id.as_str())
-                        .or_default()
-                        .push(edge);
-                    by_subject
-                },
-            );
         let branch_candidates = compiled_plan
             .branches
             .iter()
@@ -517,7 +470,20 @@ impl<'a> SearchEngine<'a> {
                 let mut ids = self
                     .snapshot
                     .search_index
-                    .recall_constraint_ids(&branch.compiled_query);
+                    .recall_ids(&branch.compiled_query);
+                let mut tantivy_additions = 0;
+                for property_id in tantivy_recall
+                    .property_ids
+                    .iter()
+                    .chain(geo_candidate_ids.iter())
+                {
+                    if !ids.contains(property_id) {
+                        if tantivy_recall.property_ids.contains(property_id) {
+                            tantivy_additions += 1;
+                        }
+                        ids.push(property_id.clone());
+                    }
+                }
                 if branch_has_required_spatial_predicate(&branch.predicates) {
                     let spatial = geo_candidate_ids.iter().collect::<HashSet<_>>();
                     ids.retain(|property_id| spatial.contains(property_id));
@@ -547,10 +513,7 @@ impl<'a> SearchEngine<'a> {
                         let Some(geography_match) = geography_match_for_property(
                             &branch.geo_scope,
                             &society_id,
-                            geography_edges_by_subject
-                                .get(society_id.as_str())
-                                .map(Vec::as_slice)
-                                .unwrap_or_default(),
+                            &self.snapshot.geo_topology,
                             &self.snapshot.bundle.spatial_index,
                             snapshot_identity,
                         ) else {
@@ -560,7 +523,7 @@ impl<'a> SearchEngine<'a> {
                         true
                     });
                 }
-                (ids, geography_matches)
+                (ids, geography_matches, tantivy_additions)
             })
             .collect::<Vec<_>>();
 
@@ -572,7 +535,7 @@ impl<'a> SearchEngine<'a> {
                     .branches
                     .iter()
                     .zip(&branch_candidates)
-                    .map(|(branch, (candidate_ids, geography_matches))| {
+                    .map(|(branch, (candidate_ids, geography_matches, _))| {
                         let candidate_indexes = candidate_property_indexes(
                             candidate_ids,
                             Some(&self.snapshot.property_by_id),
@@ -618,7 +581,6 @@ impl<'a> SearchEngine<'a> {
             .len();
         let mut evidence_gaps = Vec::new();
         evidence_gaps.extend(unresolved_proximity_gaps(geo_query.as_ref()));
-        evidence_gaps.extend(spatial_evaluation_gaps);
         let result_sets = build_result_sets(&compiled_plan, branch_results);
         let (result_sets, results) =
             limit_result_sets(result_sets, schema::ranking_policy().result_limit);
@@ -655,6 +617,7 @@ impl<'a> SearchEngine<'a> {
                 structured_total_count: recall_set.structured_total_count,
                 structured_count: recall_set.structured_candidate_ids.len(),
                 tantivy_count: recall_set.tantivy_candidate_ids.len(),
+                tantivy_branch_additions: branch_candidates.iter().map(|(_, _, count)| count).sum(),
                 merged_extra_count: recall_set
                     .merged_extra_candidate_ids
                     .as_ref()
@@ -687,15 +650,8 @@ impl<'a> SearchEngine<'a> {
             }
         }
 
-        let intent_branches = compiled_plan
-            .branches
-            .iter()
-            .map(|branch| branch.constraints.clone())
-            .collect();
         SearchEngineOutput {
             compiled_plan,
-            ast_branches,
-            intent_branches,
             intent: intent.clone(),
             results,
             result_sets,
@@ -782,7 +738,7 @@ fn sort_geography_cohorts(results: &mut [SearchResultCard]) {
 fn geography_match_for_property(
     scope: &GeoScope,
     society_id: &str,
-    edges: &[&crate::serving::ServingEdgeRecord],
+    topology: &super::compiled_plan::GeoTopologyIndex,
     spatial_index: &crate::serving::SpatialServingIndex,
     snapshot_identity: &str,
 ) -> Option<GeographyMatch> {
@@ -801,27 +757,21 @@ fn geography_match_for_property(
         anchor.entity_type.eq_ignore_ascii_case("society") && anchor.entity_id == society_id
     });
 
-    let market_membership = edges.iter().find_map(|edge| {
-        (edge.edge_type.eq_ignore_ascii_case("in_market_locality")
-            && edge.from_entity_id == society_id
-            && market_locality_ids.contains(&edge.to_entity_id))
-        .then(|| validated_runtime_edge_evidence(edge, snapshot_identity))?
-    });
-    let occupied_paths = edges
+    let market_membership = topology
+        .market_memberships(society_id)
         .iter()
-        .filter_map(|edge| {
-            if !edge.edge_type.eq_ignore_ascii_case("occupies_geo_cell")
-                || edge.from_entity_id != society_id
-            {
-                return None;
-            }
-            let occupancy_evidence = validated_runtime_edge_evidence(edge, snapshot_identity)?;
+        .find(|membership| market_locality_ids.contains(&membership.target_entity_id))
+        .map(|membership| membership.evidence_refs.clone());
+    let occupied_paths = topology
+        .occupied_cells(society_id)
+        .iter()
+        .filter_map(|occupancy| {
             let path = expanded_cell_paths.iter().find(|path| {
                 path.cell_ids
                     .last()
-                    .is_some_and(|cell| cell == &edge.to_entity_id)
+                    .is_some_and(|cell| cell == &occupancy.target_entity_id)
             })?;
-            Some((path, occupancy_evidence))
+            Some((path, occupancy.evidence_refs.clone()))
         })
         .collect::<Vec<_>>();
     let best_path = occupied_paths.iter().min_by(|(left, _), (right, _)| {
@@ -910,17 +860,6 @@ fn geography_candidate_distance(
             spatial_index.distance_from_entity_to_area(society_id, &seed.cell_id, snapshot_identity)
         })
         .min_by(|left, right| left.distance_km.total_cmp(&right.distance_km))
-}
-
-fn validated_runtime_edge_evidence(
-    edge: &crate::serving::ServingEdgeRecord,
-    snapshot_identity: &str,
-) -> Option<Vec<crate::serving::EvidenceRef>> {
-    let derivation = edge.derivation.as_ref()?;
-    edge.validate_derivation(snapshot_identity).ok()?;
-    Some(vec![crate::serving::EvidenceRef::for_derivation(
-        derivation,
-    )])
 }
 
 fn extend_unique_refs(
@@ -1115,9 +1054,9 @@ fn resolve_serving_query_entities(
     plan: &QueryPlan,
     intent: &SearchIntent,
     serving_bundle: Option<&LoadedServingBundle>,
-    properties: &[Property],
+    _properties: &[Property],
 ) -> Vec<ResolvedSearchEntity> {
-    let mut entities = resolve_runtime_area_query_entities(query, intent, properties);
+    let mut entities = Vec::new();
     let Some(bundle) = serving_bundle else {
         return entities;
     };
@@ -1412,62 +1351,6 @@ fn unresolved_proximity_gaps(
             ),
         })
         .collect()
-}
-
-fn resolve_runtime_area_query_entities(
-    query: &str,
-    intent: &SearchIntent,
-    properties: &[Property],
-) -> Vec<ResolvedSearchEntity> {
-    let resolution_config = search_resolution_config();
-    let query_lower = query.to_ascii_lowercase();
-    let mut entities = Vec::new();
-    let mut area_names = properties
-        .iter()
-        .filter_map(|property| {
-            let area = property.area.trim();
-            (!area.is_empty()).then_some(area)
-        })
-        .collect::<Vec<_>>();
-    area_names.sort_unstable_by_key(|area| area.to_ascii_lowercase());
-    area_names.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
-
-    for area in area_names {
-        if !is_resolvable_entity_name(area, resolution_config) {
-            continue;
-        }
-        for (start, end) in exact_entity_match_ranges(&query_lower, area) {
-            let polarity = if match_has_exclusion_prefix(&query_lower, start) {
-                "exclusion"
-            } else {
-                "positive"
-            };
-            if polarity == "positive"
-                && intent
-                    .excluded_areas
-                    .iter()
-                    .any(|excluded| excluded.eq_ignore_ascii_case(area))
-            {
-                continue;
-            }
-            entities.push(ResolvedSearchEntity {
-                entity_id: format!("area:{}", slug(area)),
-                entity_type: "area".to_string(),
-                name: area.to_string(),
-                match_kind: "runtime_area_name".to_string(),
-                match_source: "serving_entity".to_string(),
-                matched_text: query[start..end].to_string(),
-                polarity: polarity.to_string(),
-                source_span: Some(SourceSpan {
-                    start,
-                    end,
-                    raw_text: query[start..end].to_string(),
-                }),
-            });
-        }
-    }
-
-    entities
 }
 
 fn resolve_serving_query_entities_from_records_with_alias_index(
@@ -3102,7 +2985,6 @@ mod tests {
     #[test]
     fn serving_resolution_suppresses_area_only_mentioned_inside_place_name() {
         let intent = empty_intent();
-        let properties = vec![test_property("one", "Banashankari")];
         let bundle_entities = vec![
             serving_entity("area:banashankari", "area", "Banashankari"),
             serving_entity(
@@ -3111,11 +2993,7 @@ mod tests {
                 "Sri Banashankari Hospital",
             ),
         ];
-        let mut resolved = resolve_runtime_area_query_entities(
-            "homes near Sri Banashankari Hospital",
-            &intent,
-            &properties,
-        );
+        let mut resolved = Vec::new();
         for entity in resolve_serving_query_entities_from_records(
             "homes near Sri Banashankari Hospital",
             &intent,
@@ -3380,34 +3258,6 @@ mod tests {
         assert!(resolved.is_empty());
         assert_eq!(effective.area, None);
         assert!(effective.excluded_areas.is_empty());
-    }
-
-    #[test]
-    fn runtime_area_resolution_uses_serving_derived_property_areas() {
-        let intent = empty_intent();
-        let properties = vec![
-            test_property("one", "Whitefield"),
-            test_property("two", "Electronic City"),
-        ];
-
-        let positive = resolve_runtime_area_query_entities(
-            "Whitefield 2BHK under 1.5cr",
-            &intent,
-            &properties,
-        );
-        let effective = apply_resolved_constraints(intent.clone(), &positive);
-        assert_eq!(effective.area.as_deref(), Some("Whitefield"));
-        assert_eq!(positive[0].match_source, "serving_entity");
-
-        let negative =
-            resolve_runtime_area_query_entities("not Electronic City 3BHK", &intent, &properties);
-        let effective = apply_resolved_constraints(intent, &negative);
-        assert_eq!(effective.area, None);
-        assert_eq!(
-            effective.excluded_areas,
-            vec!["Electronic City".to_string()]
-        );
-        assert_eq!(negative[0].polarity, "exclusion");
     }
 
     fn test_unresolved_named_entity_clause(

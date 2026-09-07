@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +38,164 @@ pub struct GeoCellPath {
 pub struct GeoCellSearchPolicy {
     pub max_hops: u8,
     pub max_distance_km: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GeoTopologyLink {
+    pub target_entity_id: String,
+    pub evidence_refs: Vec<EvidenceRef>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct GeoTopologyIndex {
+    entity_types: HashMap<String, String>,
+    market_area_ids: HashSet<String>,
+    market_memberships: HashMap<String, Vec<GeoTopologyLink>>,
+    cell_occupancies: HashMap<String, Vec<GeoTopologyLink>>,
+    market_cell_coverage: HashMap<String, Vec<GeoTopologyLink>>,
+    cell_adjacency: HashMap<String, Vec<GeoTopologyLink>>,
+    internal_cell_ids: HashSet<String>,
+}
+
+impl GeoTopologyIndex {
+    pub fn build(
+        entities: &[ServingEntityRecord],
+        edges: &[ServingEdgeRecord],
+        snapshot_identity: &str,
+    ) -> Self {
+        let entity_types = entities
+            .iter()
+            .map(|entity| (entity.entity_id.clone(), entity.entity_type.clone()))
+            .collect();
+        let internal_cell_ids = entities
+            .iter()
+            .filter(|entity| !entity.visibility.is_searchable())
+            .map(|entity| entity.entity_id.clone())
+            .collect();
+        let mut index = Self {
+            entity_types,
+            internal_cell_ids,
+            ..Self::default()
+        };
+        for edge in edges {
+            let Some(evidence_refs) = validated_edge_evidence(edge, snapshot_identity) else {
+                continue;
+            };
+            let link = GeoTopologyLink {
+                target_entity_id: edge.to_entity_id.clone(),
+                evidence_refs: evidence_refs.clone(),
+            };
+            match edge.edge_type.as_str() {
+                "in_market_locality" => {
+                    index.market_area_ids.insert(edge.to_entity_id.clone());
+                    push_topology_link(
+                        index
+                            .market_memberships
+                            .entry(edge.from_entity_id.clone())
+                            .or_default(),
+                        link,
+                    );
+                }
+                "occupies_geo_cell" => {
+                    push_topology_link(
+                        index
+                            .cell_occupancies
+                            .entry(edge.from_entity_id.clone())
+                            .or_default(),
+                        link,
+                    );
+                }
+                "covers_geo_cell" => {
+                    index.market_area_ids.insert(edge.from_entity_id.clone());
+                    push_topology_link(
+                        index
+                            .market_cell_coverage
+                            .entry(edge.from_entity_id.clone())
+                            .or_default(),
+                        link,
+                    );
+                }
+                "adjacent_area" => {
+                    push_topology_link(
+                        index
+                            .cell_adjacency
+                            .entry(edge.from_entity_id.clone())
+                            .or_default(),
+                        link,
+                    );
+                    push_topology_link(
+                        index
+                            .cell_adjacency
+                            .entry(edge.to_entity_id.clone())
+                            .or_default(),
+                        GeoTopologyLink {
+                            target_entity_id: edge.from_entity_id.clone(),
+                            evidence_refs,
+                        },
+                    );
+                }
+                _ => {}
+            }
+        }
+        index
+    }
+
+    pub fn entity_type(&self, entity_id: &str) -> Option<&str> {
+        self.entity_types.get(entity_id).map(String::as_str)
+    }
+
+    pub fn is_market_area(&self, entity_id: &str) -> bool {
+        self.market_area_ids.contains(entity_id)
+    }
+
+    pub fn market_memberships(&self, entity_id: &str) -> &[GeoTopologyLink] {
+        self.market_memberships
+            .get(entity_id)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    pub fn occupied_cells(&self, entity_id: &str) -> &[GeoTopologyLink] {
+        self.cell_occupancies
+            .get(entity_id)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    pub fn covered_cells(&self, market_id: &str) -> &[GeoTopologyLink] {
+        self.market_cell_coverage
+            .get(market_id)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    pub fn adjacent_cells(&self, cell_id: &str) -> &[GeoTopologyLink] {
+        self.cell_adjacency
+            .get(cell_id)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    pub fn are_adjacent(&self, left: &str, right: &str) -> bool {
+        self.adjacent_cells(left)
+            .iter()
+            .any(|link| link.target_entity_id == right)
+    }
+
+    pub fn is_internal_cell(&self, entity_id: &str) -> bool {
+        self.internal_cell_ids.contains(entity_id)
+    }
+}
+
+fn push_topology_link(links: &mut Vec<GeoTopologyLink>, link: GeoTopologyLink) {
+    if links
+        .iter()
+        .any(|existing| existing.target_entity_id == link.target_entity_id)
+    {
+        return;
+    }
+    links.push(link);
+    links.sort_by(|left, right| left.target_entity_id.cmp(&right.target_entity_id));
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,16 +326,11 @@ impl CompiledSearchPlan {
         compiled_query: CompiledQuery,
         snapshot_identity: impl Into<String>,
         resolved_entities: &[ResolvedEntityHandle],
-        entities: &[ServingEntityRecord],
-        edges: &[ServingEdgeRecord],
+        topology: &GeoTopologyIndex,
         spatial_index: Option<&SpatialServingIndex>,
         geo_cell_policy: GeoCellSearchPolicy,
     ) -> Self {
         let snapshot_identity = snapshot_identity.into();
-        let entity_types = entities
-            .iter()
-            .map(|entity| (entity.entity_id.as_str(), entity.entity_type.as_str()))
-            .collect::<HashMap<_, _>>();
         let mut resolution_gaps = Vec::new();
         let mut branches = compiled_query
             .branches
@@ -199,8 +352,7 @@ impl CompiledSearchPlan {
                     .collect::<Vec<_>>();
                 let geo_scope = compile_geo_scope(
                     &predicates,
-                    &entity_types,
-                    edges,
+                    topology,
                     spatial_index,
                     geo_cell_policy,
                     &snapshot_identity,
@@ -236,7 +388,7 @@ impl CompiledSearchPlan {
                 }
             })
             .collect::<Vec<_>>();
-        assign_geo_clusters(&mut branches, edges, &snapshot_identity);
+        assign_geo_clusters(&mut branches, topology);
         let root = root_for(&branches);
         let predicates = branches
             .iter()
@@ -271,8 +423,7 @@ fn root_for(branches: &[GeoBranch]) -> BoolExpr<BranchId> {
 
 fn compile_geo_scope<'a>(
     predicates: &'a ConstraintExpr,
-    entity_types: &HashMap<&str, &str>,
-    edges: &[ServingEdgeRecord],
+    topology: &GeoTopologyIndex,
     spatial_index: Option<&SpatialServingIndex>,
     policy: GeoCellSearchPolicy,
     snapshot_identity: &str,
@@ -283,43 +434,28 @@ fn compile_geo_scope<'a>(
     collect_geo_anchors(
         predicates,
         false,
-        entity_types,
+        topology,
         &mut explicit_area_ids,
         &mut anchors,
     );
-    let market_area_ids = edges
-        .iter()
-        .filter(|edge| {
-            edge.edge_type.eq_ignore_ascii_case("in_market_locality")
-                || edge.edge_type.eq_ignore_ascii_case("covers_geo_cell")
-        })
-        .map(|edge| {
-            if edge.edge_type.eq_ignore_ascii_case("covers_geo_cell") {
-                edge.from_entity_id.as_str()
-            } else {
-                edge.to_entity_id.as_str()
-            }
-        })
-        .collect::<BTreeSet<_>>();
-    explicit_area_ids.retain(|area_id| market_area_ids.contains(area_id));
+    explicit_area_ids.retain(|area_id| topology.is_market_area(area_id));
 
     let mut market_locality_ids = explicit_area_ids
         .iter()
         .map(|id| (*id).to_string())
         .collect::<BTreeSet<_>>();
     let mut supporting_evidence = Vec::new();
-    for edge in edges.iter().filter(|edge| {
-        edge.edge_type.eq_ignore_ascii_case("in_market_locality")
-            && anchors.contains(edge.from_entity_id.as_str())
-            && entity_types
-                .get(edge.to_entity_id.as_str())
+    for anchor in &anchors {
+        for membership in topology.market_memberships(anchor) {
+            if !topology
+                .entity_type(&membership.target_entity_id)
                 .is_some_and(|kind| kind.eq_ignore_ascii_case("area"))
-    }) {
-        let Some(evidence) = validated_edge_evidence(edge, snapshot_identity) else {
-            continue;
-        };
-        market_locality_ids.insert(edge.to_entity_id.clone());
-        extend_unique(&mut supporting_evidence, evidence);
+            {
+                continue;
+            }
+            market_locality_ids.insert(membership.target_entity_id.clone());
+            extend_unique(&mut supporting_evidence, membership.evidence_refs.clone());
+        }
     }
 
     let mut scope_anchors = explicit_area_ids
@@ -331,7 +467,7 @@ fn compile_geo_scope<'a>(
         .chain(anchors.iter().filter_map(|id| {
             Some(GeoAnchor {
                 entity_id: (*id).to_string(),
-                entity_type: (*entity_types.get(id)?).to_string(),
+                entity_type: topology.entity_type(id)?.to_string(),
             })
         }))
         .collect::<Vec<_>>();
@@ -339,21 +475,25 @@ fn compile_geo_scope<'a>(
     scope_anchors.dedup_by(|left, right| left.entity_id == right.entity_id);
 
     let mut seed_cells_by_id = BTreeMap::<String, Vec<EvidenceRef>>::new();
-    for edge in edges.iter().filter(|edge| {
-        (edge.edge_type.eq_ignore_ascii_case("occupies_geo_cell")
-            && anchors.contains(edge.from_entity_id.as_str()))
-            || (edge.edge_type.eq_ignore_ascii_case("covers_geo_cell")
-                && market_locality_ids.contains(&edge.from_entity_id))
-    }) {
-        let Some(evidence) = validated_edge_evidence(edge, snapshot_identity) else {
-            continue;
-        };
-        extend_unique(
-            seed_cells_by_id
-                .entry(edge.to_entity_id.clone())
-                .or_default(),
-            evidence,
-        );
+    for anchor in &anchors {
+        for occupancy in topology.occupied_cells(anchor) {
+            extend_unique(
+                seed_cells_by_id
+                    .entry(occupancy.target_entity_id.clone())
+                    .or_default(),
+                occupancy.evidence_refs.clone(),
+            );
+        }
+    }
+    for market_id in &market_locality_ids {
+        for coverage in topology.covered_cells(market_id) {
+            extend_unique(
+                seed_cells_by_id
+                    .entry(coverage.target_entity_id.clone())
+                    .or_default(),
+                coverage.evidence_refs.clone(),
+            );
+        }
     }
 
     if scope_anchors.is_empty() {
@@ -387,7 +527,7 @@ fn compile_geo_scope<'a>(
     let expanded_cell_paths = expand_geo_cells(
         &scope_anchors,
         &seed_cells,
-        edges,
+        topology,
         spatial_index,
         policy,
         snapshot_identity,
@@ -405,33 +545,11 @@ fn compile_geo_scope<'a>(
 fn expand_geo_cells(
     anchors: &[GeoAnchor],
     seed_cells: &[GeoCellSeed],
-    edges: &[ServingEdgeRecord],
+    topology: &GeoTopologyIndex,
     spatial_index: &SpatialServingIndex,
     policy: GeoCellSearchPolicy,
     snapshot_identity: &str,
 ) -> Vec<GeoCellPath> {
-    let mut adjacency = HashMap::<String, Vec<(String, Vec<EvidenceRef>)>>::new();
-    for edge in edges
-        .iter()
-        .filter(|edge| edge.edge_type.eq_ignore_ascii_case("adjacent_area"))
-    {
-        let Some(evidence) = validated_edge_evidence(edge, snapshot_identity) else {
-            continue;
-        };
-        adjacency
-            .entry(edge.from_entity_id.clone())
-            .or_default()
-            .push((edge.to_entity_id.clone(), evidence.clone()));
-        adjacency
-            .entry(edge.to_entity_id.clone())
-            .or_default()
-            .push((edge.from_entity_id.clone(), evidence));
-    }
-    for neighbors in adjacency.values_mut() {
-        neighbors.sort_by(|left, right| left.0.cmp(&right.0));
-        neighbors.dedup_by(|left, right| left.0 == right.0);
-    }
-
     let non_area_anchors = anchors
         .iter()
         .filter(|anchor| !anchor.entity_type.eq_ignore_ascii_case("area"))
@@ -461,7 +579,8 @@ fn expand_geo_cells(
         let Some(current) = path.cell_ids.last() else {
             continue;
         };
-        for (next, adjacency_evidence) in adjacency.get(current).into_iter().flatten() {
+        for adjacency in topology.adjacent_cells(current) {
+            let next = &adjacency.target_entity_id;
             if path.cell_ids.contains(next) {
                 continue;
             }
@@ -484,7 +603,7 @@ fn expand_geo_cells(
             candidate.cell_ids.push(next.clone());
             extend_unique(
                 &mut candidate.supporting_evidence,
-                adjacency_evidence.clone(),
+                adjacency.evidence_refs.clone(),
             );
             extend_unique(&mut candidate.supporting_evidence, distance.evidence_refs);
             let replace = paths.get(next).is_none_or(|existing| {
@@ -535,18 +654,18 @@ fn validated_edge_evidence(
 fn collect_geo_anchors<'a>(
     expression: &'a ConstraintExpr,
     negated: bool,
-    entity_types: &HashMap<&str, &str>,
+    topology: &GeoTopologyIndex,
     explicit_area_ids: &mut BTreeSet<&'a str>,
     anchors: &mut BTreeSet<&'a str>,
 ) {
     match expression {
         ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
             for clause in clauses {
-                collect_geo_anchors(clause, negated, entity_types, explicit_area_ids, anchors);
+                collect_geo_anchors(clause, negated, topology, explicit_area_ids, anchors);
             }
         }
         ConstraintExpr::Not { clause } => {
-            collect_geo_anchors(clause, !negated, entity_types, explicit_area_ids, anchors)
+            collect_geo_anchors(clause, !negated, topology, explicit_area_ids, anchors)
         }
         ConstraintExpr::Term { term } if !negated => match term {
             ConstraintTerm::Area {
@@ -562,8 +681,8 @@ fn collect_geo_anchors<'a>(
                 if entity_id.is_empty() {
                     return;
                 }
-                if entity_types
-                    .get(entity_id.as_str())
+                if topology
+                    .entity_type(entity_id)
                     .is_some_and(|kind| kind.eq_ignore_ascii_case("area"))
                 {
                     explicit_area_ids.insert(entity_id);
@@ -577,17 +696,7 @@ fn collect_geo_anchors<'a>(
     }
 }
 
-fn assign_geo_clusters(
-    branches: &mut [GeoBranch],
-    edges: &[ServingEdgeRecord],
-    snapshot_identity: &str,
-) {
-    let adjacency = edges
-        .iter()
-        .filter(|edge| edge.edge_type.eq_ignore_ascii_case("adjacent_area"))
-        .filter(|edge| validated_edge_evidence(edge, snapshot_identity).is_some())
-        .map(|edge| (edge.from_entity_id.as_str(), edge.to_entity_id.as_str()))
-        .collect::<BTreeSet<_>>();
+fn assign_geo_clusters(branches: &mut [GeoBranch], topology: &GeoTopologyIndex) {
     let mut clusters: Vec<Vec<usize>> = Vec::new();
     for branch_index in 0..branches.len() {
         let cluster = clusters.iter_mut().find(|members| {
@@ -595,7 +704,7 @@ fn assign_geo_clusters(
                 directly_connected_scopes(
                     &branches[*member].geo_scope,
                     &branches[branch_index].geo_scope,
-                    &adjacency,
+                    topology,
                 )
             })
         });
@@ -615,7 +724,7 @@ fn assign_geo_clusters(
 fn directly_connected_scopes(
     left: &GeoScope,
     right: &GeoScope,
-    adjacency: &BTreeSet<(&str, &str)>,
+    topology: &GeoTopologyIndex,
 ) -> bool {
     if left.is_bundle_wide() || right.is_bundle_wide() {
         return left.is_bundle_wide() && right.is_bundle_wide();
@@ -636,8 +745,7 @@ fn directly_connected_scopes(
     left_seeds.iter().any(|left_seed| {
         right_seeds.iter().any(|right_seed| {
             left_seed.cell_id == right_seed.cell_id
-                || adjacency.contains(&(left_seed.cell_id.as_str(), right_seed.cell_id.as_str()))
-                || adjacency.contains(&(right_seed.cell_id.as_str(), left_seed.cell_id.as_str()))
+                || topology.are_adjacent(&left_seed.cell_id, &right_seed.cell_id)
         })
     })
 }
@@ -1091,6 +1199,7 @@ mod tests {
         edges: &[ServingEdgeRecord],
     ) -> CompiledSearchPlan {
         let constraints = ConstraintExpr::any_of(branches.clone());
+        let topology = GeoTopologyIndex::build(entities, edges, "test-snapshot");
         CompiledSearchPlan::compile_for_snapshot(
             CompiledQuery {
                 raw: "Air 2BHK Waterford 3BHK Song 4BHK".to_string(),
@@ -1100,8 +1209,7 @@ mod tests {
             },
             "test-snapshot",
             &[],
-            entities,
-            edges,
+            &topology,
             Some(&SpatialServingIndex::from_serving_bundle_with_edges(
                 entities,
                 &ServingFactIndex::from_records(facts.to_vec(), Vec::new()),

@@ -101,6 +101,34 @@
   findings, 28 fact-key comparisons, and zero blocked aliases; this checkpoint
   introduces no production search-vocabulary finding.
 
+## Snapshot geography and branch recall checkpoint — 2026-09-08
+
+- Classification: `architecture_gap` removed. `SearchRuntimeSnapshot` now owns
+  one validated `GeoTopologyIndex` for market membership, cell occupancy,
+  market coverage, adjacency, internal-cell identity, and evidence references.
+  Plan compilation and result cohort projection consume that index; they no
+  longer scan or rebuild topology from the full edge bundle per request.
+- Tantivy property hits are unioned into each compiled branch alongside
+  structured and spatial recall before ranking. They remain candidate IDs
+  only: the shared four-state evaluator still requires durable inventory,
+  spatial, exclusion, and evidence matches before a result can survive.
+- Removed the unused global `ranking_candidate_ids`, permanently empty
+  `spatial_evaluation_gaps`, duplicate `ast_branches`/`intent_branches`
+  projections, raw-property `area:<slug>` index synthesis, runtime property
+  area entity synthesis, and `area_is_nearby` alias/substring guessing.
+  Branch predicates and intents now have one owner: `CompiledSearchPlan`.
+- The efficiency contract now reports and asserts branch-level Tantivy
+  additions. Its lexical-only 2BHK candidate reaches a hard 3BHK branch and is
+  rejected by durable inventory evidence, proving recall cannot manufacture
+  eligibility. The serving-runtime alias contract was also corrected so
+  hand-built RERA listing blobs test alias resolution without posing as buyer
+  inventory proof.
+- Protecting gates passed: conversational semantics 13/13, efficiency 12/12,
+  revision API 3/3, serving runtime 5/5, serving bundle 4/4, recommendations
+  2/2, and the asset-DAG vertical 12/12. `cargo check --all-targets`, formatting,
+  and `git diff --check` pass. The hardcoding audit remains unchanged at 330
+  warning-only findings, 28 fact-key comparisons, and zero blocked aliases.
+
 ## OSM geo-cell search checkpoint — 2026-09-07
 
 - Starting HEAD: `feba1670` on `feat/issue-118-consolidated`; worktree clean.

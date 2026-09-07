@@ -516,15 +516,19 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
                     .any(|result| result.card.price > 25_000_000));
             }
             "SPATIAL-REVISION-KADUGODI" | "SPATIAL-REVISION-HOODI-BRANCH" => {
-                assert_eq!(output.ast_branches.len(), 2);
-                assert_eq!(output.intent_branches.len(), 2);
+                assert_eq!(output.compiled_plan.branches.len(), 2);
             }
             "SPATIAL-REVISION-EXCLUDE" => {
                 assert!(output
                     .results
                     .iter()
                     .all(|result| result.card.area != "Varthur"));
-                assert!(output.ast_branches.iter().any(contains_negated_area));
+                assert!(output
+                    .compiled_plan
+                    .branches
+                    .iter()
+                    .map(|branch| &branch.predicates)
+                    .any(contains_negated_area));
             }
             "SPATIAL-REVISION-REPLACE" => {
                 assert!(output
@@ -542,14 +546,8 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
             "SPATIAL-REVISION-REPHRASE" => {
                 let direct = fixture.search_output(&case.parent_query);
                 assert_eq!(
-                    backend::search::ast::semantic_search_fingerprint(
-                        &output.ast_branches,
-                        &output.intent_branches,
-                    ),
-                    backend::search::ast::semantic_search_fingerprint(
-                        &direct.ast_branches,
-                        &direct.intent_branches,
-                    )
+                    output.compiled_plan.semantic_fingerprint,
+                    direct.compiled_plan.semantic_fingerprint
                 );
                 assert_eq!(
                     output
@@ -703,11 +701,10 @@ fn branch_quality_cohorts_preserve_disconnected_scope_and_branch_local_proof() {
     for cohort in [3, 8, 16] {
         let output = fixture.search_output(&branches[..cohort].join(" or "));
         assert_eq!(
-            output.ast_branches.len(),
+            output.compiled_plan.branches.len(),
             cohort,
             "the {cohort}-branch cohort collapsed disconnected scopes"
         );
-        assert_eq!(output.intent_branches.len(), cohort);
         assert_eq!(
             output.result_sets.len(),
             cohort,
@@ -756,7 +753,7 @@ fn sourced_topology_never_erases_logical_spatial_branches() {
     let connected =
         fixture.search_output("3BHK in Eastfield under 2Cr or 3BHK in Nextfield under 2Cr");
     assert_eq!(
-        connected.ast_branches.len(),
+        connected.compiled_plan.branches.len(),
         2,
         "topology may group presentation but must preserve both logical branches"
     );
@@ -769,7 +766,7 @@ fn sourced_topology_never_erases_logical_spatial_branches() {
     let branch_local_budget =
         fixture.search_output("3BHK in Eastfield under 2Cr or 3BHK in Nextfield under 1.5Cr");
     assert_eq!(
-        branch_local_budget.ast_branches.len(),
+        branch_local_budget.compiled_plan.branches.len(),
         2,
         "different budgets must remain independently explainable"
     );
@@ -777,7 +774,7 @@ fn sourced_topology_never_erases_logical_spatial_branches() {
     let disconnected =
         fixture.search_output("3BHK in Eastfield under 2Cr or 3BHK in Northfield under 2Cr");
     assert_eq!(
-        disconnected.ast_branches.len(),
+        disconnected.compiled_plan.branches.len(),
         2,
         "disconnected spatial intent must not collapse"
     );
