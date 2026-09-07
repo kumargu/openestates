@@ -2012,3 +2012,89 @@ CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo test --test search_conversational_
 - The hardcoding audit remains identical to baseline: 330 warning-only
   findings, 28 fact-key comparisons, and zero blocked aliases. No frontend or
   buyer-copy change was made.
+
+## Area-topology backfill checkpoint — 2026-09-07
+
+- Starting HEAD: `9268af84` on `feat/issue-118-consolidated`; worktree clean.
+- Classification: `data_gap` plus `architecture_gap`. Candidate
+  `880a4181-5ae3-4924-a1b1-db11fc445c47` has no area entities or durable
+  `in_area`/`adjacent_area` topology, although it retains explicit
+  source-entity area observations and at least one sourced society footprint.
+- Candidate lake remains isolated at
+  `/tmp/openestates-issue118-whitefield-add30-lake`; neither the main lake nor
+  any production pointer will be changed.
+- Config read before implementation: `app/config/dag/manifest.json`,
+  `asset_registry.json`, `resolution_policies.json`,
+  `source_adapters/openstreetmap_locality_boundaries.json`, and
+  `osm_access_corridors.json`.
+- Chain audit: `ce50c216` added polygon-backed topology; `c867fd5a`,
+  `1b19ac4c`, and `9b9d9820` qualified and persisted its evidence;
+  `9268af84` made that topology authoritative for geography-first search.
+  The serving builder already orders topology before proximity. Missing
+  topology inputs are currently tolerated, source-input resume omits the
+  locality-boundary asset, and the serving rebuild command cannot add sourced
+  area records.
+- Baseline artifacts: candidate serving Parquet under
+  `serving/search_bundle/version=issue-118-whitefield-115-plus-27-canonical-spatial-2026-09-07-r1`
+  and `data/validation/search_query_bank.json`.
+- Implementation boundary: add a generic offline child-bundle topology
+  backfill, accept only observation-backed canonical area polygons and trusted
+  explicit area references, fail closed on ambiguous names or dirty listing
+  locality, and preserve the candidate inventory and evidence identities.
+
+### Verified topology-backfill implementation checkpoint
+
+- Added an offline `backfill-area-topology` catalog-release command. It reads
+  one immutable serving candidate, one pinned OSM locality-boundary asset, one
+  pinned OSM society-access asset, and one hashed source-entity seed file, then
+  writes an unpromoted child serving materialization.
+- Added config-owned explicit-area binding through
+  `geo.explicit_area_name`. Only configured source types, minimum confidence,
+  complete source observations, and an exact normalized match to one uniquely
+  named sourced area are admitted. Listing locality, coordinates, runtime
+  aliases, society names, and fuzzy matching are not consulted.
+- Legacy `society.boundary_geojson` rows are migrated only offline to
+  `geo.geometry_geojson`; missing observation fields are reconstructed only
+  when the source URL, skill id, run id, input hash, and learned-at provenance
+  are complete. Societies with a qualified polygon do not receive an explicit
+  seed-area fact, leaving containment to polygon overlap.
+- Spatial topology diagnostics now state area, `in_area`, and adjacency counts
+  and explicitly mark zero-area topology. Child rebuilds discard and recompute
+  prior derived topology edges under the new bundle identity.
+- `resume_collection_plan` now includes the OSM locality-boundary companion for
+  a resumed current-project materialization.
+- Focused verification passed:
+  `cargo test --lib serving::topology` (3 tests, including the backfill
+  contract) and `cargo test --lib assets::source_inputs::tests` (3 tests).
+  The contract verifies polygon containment, explicit seed binding, unmatched
+  fail-closed behavior, and valid evidence references.
+
+### Final isolated Parquet validation
+
+- Validation remained isolated under
+  `/tmp/openestates-issue118-topology-backfill-lake`; no main-lake artifact or
+  current serving pointer was changed. The final unpromoted child is
+  `08ef2b9b-cca7-4117-8050-b4a8277e8cc8`, version
+  `issue-118-whitefield-115-plus-27-area-topology-2026-09-07-r4`.
+- Direct Parquet inspection found 2,102 entities, 22,763 facts, 8,994 edges,
+  31,878 search-metadata rows, and all 169 input homes preserved.
+- The child contains 748 sourced areas, 3,544 sourced adjacency edges, and 37
+  derived `in_area` edges. Every area name has a source observation. Of the
+  requested society references, 36 bind exactly to the sourced Whitefield
+  area and Prestige Waterford binds by polygon containment to S.M Krishna
+  Ward, which is directly adjacent to Whitefield.
+- There are zero unresolved or ambiguous requested references and zero
+  `listing_locality` derivations. Conflicting duplicate seed assertions are
+  rejected rather than guessed.
+- Candidate release validation completed as
+  `dee51eb1-413f-48ba-a5b5-3c51e20b65e3`. Its strict gate reports the same 186
+  pre-existing inventory eligibility issues as the base candidate, with the
+  same examples; the topology child introduced no new eligibility regression.
+- Tantivy output finalization now waits for merge threads and excludes writer
+  lock files, removing the materialization race encountered during isolated
+  validation.
+- Final gates passed: topology tests 3/3, resumed-source-input tests 3/3,
+  `cargo check --all-targets`, `cargo fmt --all -- --check`, config JSON
+  parsing, and `git diff --check`. The hardcoding audit remains at its baseline
+  of 330 warning-only findings, 28 fact-key comparisons, and zero blocked
+  aliases.

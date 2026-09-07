@@ -45,7 +45,11 @@
     "minimum_area_containment_ratio": 0.99,
     "minimum_point_confidence": 0.5,
     "ambiguity_epsilon": 1e-9,
-    "require_matching_admin_level_for_adjacency": true
+    "require_matching_admin_level_for_adjacency": true,
+    "explicit_area_name_fact_keys": ["geo.explicit_area_name"],
+    "explicit_area_name_allowed_sources": ["source_entity_seed"],
+    "minimum_explicit_area_confidence": 0.8,
+    "area_name_fact_key": "place.name"
   },
   "overrides": {
     "legal.rera_registered": {

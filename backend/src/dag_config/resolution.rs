@@ -31,6 +31,14 @@ pub struct SpatialTopologyPolicy {
     pub ambiguity_epsilon: f64,
     #[serde(default = "default_true")]
     pub require_matching_admin_level_for_adjacency: bool,
+    #[serde(default)]
+    pub explicit_area_name_fact_keys: Vec<String>,
+    #[serde(default)]
+    pub explicit_area_name_allowed_sources: Vec<String>,
+    #[serde(default = "default_minimum_explicit_area_confidence")]
+    pub minimum_explicit_area_confidence: f32,
+    #[serde(default = "default_area_name_fact_key")]
+    pub area_name_fact_key: String,
 }
 
 impl Default for SpatialTopologyPolicy {
@@ -41,8 +49,20 @@ impl Default for SpatialTopologyPolicy {
             minimum_point_confidence: 0.5,
             ambiguity_epsilon: 1e-9,
             require_matching_admin_level_for_adjacency: true,
+            explicit_area_name_fact_keys: Vec::new(),
+            explicit_area_name_allowed_sources: Vec::new(),
+            minimum_explicit_area_confidence: 0.8,
+            area_name_fact_key: "place.name".to_string(),
         }
     }
+}
+
+fn default_minimum_explicit_area_confidence() -> f32 {
+    0.8
+}
+
+fn default_area_name_fact_key() -> String {
+    "place.name".to_string()
 }
 
 fn default_true() -> bool {
@@ -108,8 +128,18 @@ pub fn load_resolution_policies() -> Result<ResolutionPoliciesFile, DagConfigErr
     if !(0.0..=1.0).contains(&topology.minimum_society_overlap_ratio)
         || !(0.0..=1.0).contains(&topology.minimum_area_containment_ratio)
         || !(0.0..=1.0).contains(&topology.minimum_point_confidence)
+        || !(0.0..=1.0).contains(&topology.minimum_explicit_area_confidence)
         || !topology.ambiguity_epsilon.is_finite()
         || topology.ambiguity_epsilon < 0.0
+        || topology.area_name_fact_key.trim().is_empty()
+        || topology
+            .explicit_area_name_fact_keys
+            .iter()
+            .any(|key| key.trim().is_empty())
+        || topology
+            .explicit_area_name_allowed_sources
+            .iter()
+            .any(|source| source.trim().is_empty())
     {
         return Err(DagConfigError::InvalidConfig(
             "spatial topology thresholds must be finite ratios".to_string(),

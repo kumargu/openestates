@@ -2,21 +2,25 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
 
+use chrono::Utc;
+use sha2::{Digest, Sha256};
+
 use backend::assets::{
-    AssetId, AssetMaterializationStore, CatalogEnvironment, CatalogMembership, CatalogRelease,
-    CatalogReleaseId, CatalogReleaseStore, CatalogTombstone, CatalogValidationStatus,
-    DerivedCatalogAssets, MaterializationId, MaterializationRecord, PinnedMaterialization,
-    PromoteCatalogReleaseOptions, SourceWatermark, IMAGE_MEDIA_FACTS_ASSET_ID,
-    KG_SOCIETY_VIEW_ASSET_ID, RERA_CLAIMS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
+    read_skill_fact_artifact_rows, AssetId, AssetMaterializationStore, AssetSourceInputs,
+    CatalogEnvironment, CatalogMembership, CatalogRelease, CatalogReleaseId, CatalogReleaseStore,
+    CatalogTombstone, CatalogValidationStatus, DerivedCatalogAssets, MaterializationId,
+    MaterializationRecord, PinnedMaterialization, PromoteCatalogReleaseOptions, SourceWatermark,
+    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
+    OSM_SOCIETY_ACCESS_FACTS_ASSET_ID, RERA_CLAIMS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
     RERA_RECEIPTS_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
 };
 use backend::data_loader::properties_from_serving_bundle;
 use backend::lake::{LakeKey, LakeStore, LakeStoreLocation, LAKE_URL_ENV};
 use backend::serving::{
-    read_edges_parquet, read_entities_parquet, read_facts_parquet, read_rera_evidence_parquet,
-    read_search_metadata_parquet, validate_search_serving_candidate, write_frontend_media_manifest,
-    SearchServingBundleMaterializer, ServingBundleLoader, ServingBundleManifest,
-    SEARCH_SERVING_BUNDLE_ASSET_ID,
+    backfill_area_topology, read_edges_parquet, read_entities_parquet, read_facts_parquet,
+    read_rera_evidence_parquet, read_search_metadata_parquet, validate_search_serving_candidate,
+    write_frontend_media_manifest, AreaTopologyBackfillInput, SearchServingBundleMaterializer,
+    ServingBundleLoader, ServingBundleManifest, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 
 #[tokio::main]
@@ -173,6 +177,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }))?
             );
         }
+        Command::BackfillAreaTopology(options) => {
+            let (materialization, report) = backfill_area_topology_serving(&lake, options).await?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "backfill_report": report,
+                    "manifest": materialization.manifest,
+                    "record": materialization.record,
+                }))?
+            );
+        }
     }
     Ok(())
 }
@@ -259,10 +274,19 @@ enum Command {
     RebaseRera(RebaseReraOptions),
     ExtendServing(ExtendServingOptions),
     RebuildServing(RebuildServingOptions),
+    BackfillAreaTopology(BackfillAreaTopologyOptions),
 }
 
 struct RebuildServingOptions {
     serving_materialization_id: MaterializationId,
+    version: String,
+}
+
+struct BackfillAreaTopologyOptions {
+    serving_materialization_id: MaterializationId,
+    area_boundaries_materialization_id: MaterializationId,
+    society_geometry_materialization_id: MaterializationId,
+    source_entity_seeds: Vec<PathBuf>,
     version: String,
 }
 
@@ -366,12 +390,77 @@ fn parse_command(command: &str, args: Vec<String>) -> Result<Command, String> {
         "rebase-rera" => parse_rebase_rera(args).map(Command::RebaseRera),
         "extend-serving" => parse_extend_serving(args).map(Command::ExtendServing),
         "rebuild-serving" => parse_rebuild_serving(args).map(Command::RebuildServing),
+        "backfill-area-topology" => {
+            parse_backfill_area_topology(args).map(Command::BackfillAreaTopology)
+        }
         "--help" | "-h" => {
             print_help();
             std::process::exit(0);
         }
         other => Err(format!("unknown command: {other}")),
     }
+}
+
+fn parse_backfill_area_topology(args: Vec<String>) -> Result<BackfillAreaTopologyOptions, String> {
+    let mut cursor = 0usize;
+    let mut serving_materialization_id = None;
+    let mut area_boundaries_materialization_id = None;
+    let mut society_geometry_materialization_id = None;
+    let mut source_entity_seeds = Vec::new();
+    let mut version = None;
+    while cursor < args.len() {
+        match args[cursor].as_str() {
+            "--serving" => {
+                cursor += 1;
+                serving_materialization_id = Some(parse_materialization_id(take_value(
+                    &args,
+                    &mut cursor,
+                    "--serving",
+                )?)?);
+            }
+            "--area-boundaries" => {
+                cursor += 1;
+                area_boundaries_materialization_id = Some(parse_materialization_id(take_value(
+                    &args,
+                    &mut cursor,
+                    "--area-boundaries",
+                )?)?);
+            }
+            "--society-geometry" => {
+                cursor += 1;
+                society_geometry_materialization_id = Some(parse_materialization_id(take_value(
+                    &args,
+                    &mut cursor,
+                    "--society-geometry",
+                )?)?);
+            }
+            "--source-entity-seeds" => {
+                cursor += 1;
+                source_entity_seeds.push(PathBuf::from(take_value(
+                    &args,
+                    &mut cursor,
+                    "--source-entity-seeds",
+                )?));
+            }
+            "--version" => {
+                cursor += 1;
+                version = Some(take_value(&args, &mut cursor, "--version")?);
+            }
+            other => return Err(format!("unknown backfill-area-topology argument: {other}")),
+        }
+    }
+    Ok(BackfillAreaTopologyOptions {
+        serving_materialization_id: serving_materialization_id
+            .ok_or_else(|| "backfill-area-topology requires --serving".to_string())?,
+        area_boundaries_materialization_id: area_boundaries_materialization_id
+            .ok_or_else(|| "backfill-area-topology requires --area-boundaries".to_string())?,
+        society_geometry_materialization_id: society_geometry_materialization_id
+            .ok_or_else(|| "backfill-area-topology requires --society-geometry".to_string())?,
+        source_entity_seeds: (!source_entity_seeds.is_empty())
+            .then_some(source_entity_seeds)
+            .ok_or_else(|| "backfill-area-topology requires --source-entity-seeds".to_string())?,
+        version: version.ok_or_else(|| "backfill-area-topology requires --version".to_string())?,
+    })
 }
 
 fn parse_rebuild_serving(args: Vec<String>) -> Result<RebuildServingOptions, String> {
@@ -1832,6 +1921,153 @@ async fn rebuild_serving(
         .map_err(Into::into)
 }
 
+async fn backfill_area_topology_serving(
+    lake: &LakeStore,
+    options: BackfillAreaTopologyOptions,
+) -> Result<
+    (
+        backend::serving::SearchServingBundleMaterialization,
+        backend::serving::AreaTopologyBackfillReport,
+    ),
+    Box<dyn std::error::Error>,
+> {
+    let materializations = AssetMaterializationStore::new(lake.clone());
+    let (serving_record, manifest) =
+        serving_record_and_manifest(lake, &materializations, &options.serving_materialization_id)
+            .await?;
+    let area_record = required_materialization_record(
+        &materializations,
+        OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
+        &options.area_boundaries_materialization_id,
+    )
+    .await?;
+    let society_geometry_record = required_materialization_record(
+        &materializations,
+        OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
+        &options.society_geometry_materialization_id,
+    )
+    .await?;
+    let area_rows = read_skill_fact_artifact_rows(lake, std::slice::from_ref(&area_record)).await?;
+    let society_geometry_rows =
+        read_skill_fact_artifact_rows(lake, std::slice::from_ref(&society_geometry_record)).await?;
+
+    let mut seed_paths = options.source_entity_seeds.clone();
+    seed_paths.sort();
+    let mut source_entity_seeds = Vec::new();
+    let mut seed_hasher = Sha256::new();
+    for seed_path in seed_paths {
+        let seed_bytes = fs::read(&seed_path)
+            .map_err(|error| format!("failed to read {}: {error}", seed_path.display()))?;
+        let seed_inputs: AssetSourceInputs = serde_json::from_slice(&seed_bytes)?;
+        seed_hasher.update((seed_bytes.len() as u64).to_le_bytes());
+        seed_hasher.update(&seed_bytes);
+        source_entity_seeds.extend(seed_inputs.source_entities);
+    }
+    let seed_digest = hex_bytes(&seed_hasher.finalize());
+    let entities = read_entities_parquet(
+        &lake
+            .get_bytes(&LakeKey::new(manifest.entity_parquet_key.clone())?)
+            .await?,
+    )?;
+    let facts = read_facts_parquet(
+        &lake
+            .get_bytes(&LakeKey::new(manifest.fact_parquet_key.clone())?)
+            .await?,
+    )?;
+    let search_metadata = read_search_metadata_parquet(
+        &lake
+            .get_bytes(&LakeKey::new(manifest.search_metadata_parquet_key.clone())?)
+            .await?,
+    )?;
+    let edges = match manifest.edge_parquet_key.as_ref() {
+        Some(key) => read_edges_parquet(&lake.get_bytes(&LakeKey::new(key.clone())?).await?)?,
+        None => Vec::new(),
+    };
+    let rera_evidence = match manifest.rera_evidence_parquet_key.as_ref() {
+        Some(key) => {
+            read_rera_evidence_parquet(&lake.get_bytes(&LakeKey::new(key.clone())?).await?)?
+        }
+        None => Vec::new(),
+    };
+
+    let records = backfill_area_topology(AreaTopologyBackfillInput {
+        entities,
+        facts,
+        search_metadata,
+        edges,
+        rera_evidence,
+        excluded_rera_evidence_society_ids: manifest.excluded_rera_evidence_society_ids,
+        area_facts: area_rows.facts,
+        society_geometry_facts: society_geometry_rows.facts,
+        source_entity_seeds,
+        source_entity_seed_lineage: format!("source_entity_seed:file:sha256:{seed_digest}"),
+        imported_at: Utc::now(),
+    })?;
+    let report = records.report.clone();
+    let source_watermarks = vec![
+        SourceWatermark {
+            source: "area_topology_base_serving".to_string(),
+            high_watermark: options.serving_materialization_id.to_string(),
+        },
+        SourceWatermark {
+            source: OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID.to_string(),
+            high_watermark: options.area_boundaries_materialization_id.to_string(),
+        },
+        SourceWatermark {
+            source: OSM_SOCIETY_ACCESS_FACTS_ASSET_ID.to_string(),
+            high_watermark: options.society_geometry_materialization_id.to_string(),
+        },
+        SourceWatermark {
+            source: "source_entity_seed_file_sha256".to_string(),
+            high_watermark: seed_digest,
+        },
+    ];
+    let parent_materializations = vec![
+        serving_record.materialization_id,
+        area_record.materialization_id,
+        society_geometry_record.materialization_id,
+    ];
+    let materialization = SearchServingBundleMaterializer::new(lake.clone())
+        .materialize_child_from_serving_records_with_rera_preserving_entities_for_run(
+            records.entities,
+            records.facts,
+            records.search_metadata,
+            records.edges,
+            records.rera_evidence,
+            records.excluded_rera_evidence_society_ids,
+            records.prevalidated_entity_ids,
+            options.version,
+            source_watermarks,
+            parent_materializations,
+            MaterializationId::new(),
+        )
+        .await?;
+    Ok((materialization, report))
+}
+
+async fn required_materialization_record(
+    materializations: &AssetMaterializationStore,
+    asset_id: &str,
+    materialization_id: &MaterializationId,
+) -> Result<MaterializationRecord, Box<dyn std::error::Error>> {
+    let asset_id = AssetId::new(asset_id)?;
+    materializations
+        .record_by_id_for_asset(&asset_id, materialization_id)
+        .await?
+        .ok_or_else(|| {
+            format!(
+                "{} materialization {} was not found",
+                asset_id.as_str(),
+                materialization_id
+            )
+            .into()
+        })
+}
+
+fn hex_bytes(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 fn default_project_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -1854,6 +2090,7 @@ fn print_help() {
     println!("  cargo run --bin openestates-catalog-release -- rebase-rera --base-release <uuid> --evidence-serving <uuid> --version <version>");
     println!("  cargo run --bin openestates-catalog-release -- extend-serving --base-release <uuid> --candidate-serving <uuid> --society <canonical-id> --version <version>");
     println!("  cargo run --bin openestates-catalog-release -- rebuild-serving --serving <uuid> --version <version>");
+    println!("  cargo run --bin openestates-catalog-release -- backfill-area-topology --serving <uuid> --area-boundaries <uuid> --society-geometry <uuid> --source-entity-seeds <path>... --version <version>");
     println!();
     println!("Options:");
     println!("  --project-root <path>       Project root used for local lake resolution");

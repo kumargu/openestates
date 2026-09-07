@@ -145,6 +145,7 @@ impl ServingBundleBuilder {
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         remove_derived_proximity_records(&mut facts, &mut search_metadata, &mut edges);
+        super::topology::remove_derived_spatial_topology_edges(&mut edges);
         rebuild_serving_entity_searchable_text(&mut entities, &facts);
         self.build_from_serving_records(
             entities,
@@ -221,6 +222,20 @@ impl ServingBundleBuilder {
             &topology_policy,
             &bundle_version,
         );
+        let area_entity_count = entities
+            .iter()
+            .filter(|entity| entity.entity_type.eq_ignore_ascii_case("area"))
+            .count();
+        let in_area_edge_count = edges
+            .iter()
+            .chain(topology.edges.iter())
+            .filter(|edge| edge.edge_type.eq_ignore_ascii_case("in_area"))
+            .count();
+        let adjacent_area_edge_count = edges
+            .iter()
+            .chain(topology.edges.iter())
+            .filter(|edge| edge.edge_type.eq_ignore_ascii_case("adjacent_area"))
+            .count();
         let topology_gap_key = AssetPathBuilder::serving_bundle_key(
             &bundle_version,
             "diagnostics/spatial_topology_gaps.json",
@@ -235,6 +250,13 @@ impl ServingBundleBuilder {
                 &serde_json::json!({
                     "format_version": 1,
                     "classification": "data_gap",
+                    "area_entity_count": area_entity_count,
+                    "in_area_edge_count": in_area_edge_count,
+                    "adjacent_area_edge_count": adjacent_area_edge_count,
+                    "zero_area_topology": area_entity_count == 0 || in_area_edge_count == 0,
+                    "explicit_area_bound_entity_ids": topology.explicit_area_bound_entity_ids,
+                    "unresolved_explicit_area_entity_ids": topology.unresolved_explicit_area_entity_ids,
+                    "ambiguous_explicit_area_entity_ids": topology.ambiguous_explicit_area_entity_ids,
                     "ambiguous_entity_ids": topology.ambiguous_entity_ids,
                     "missing_geometry_entity_ids": topology.missing_geometry_entity_ids,
                     "missing_admin_level_entity_ids": topology.missing_admin_level_entity_ids,
@@ -1163,7 +1185,12 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), ServingBundle
         let path = entry.path();
         if path.is_dir() {
             collect_files(&path, out)?;
-        } else if path.is_file() {
+        } else if path.is_file()
+            && !path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with(".lock"))
+        {
             out.push(path);
         }
     }

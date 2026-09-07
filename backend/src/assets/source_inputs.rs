@@ -246,6 +246,7 @@ impl AssetSourceInputs {
         );
         for raw_asset_id in [
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+            super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
             OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
             STORMWATER_DRAIN_FACTS_ASSET_ID,
@@ -395,6 +396,8 @@ mod tests {
 
         for asset_id in [
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+            super::super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
+            OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
             STORMWATER_DRAIN_FACTS_ASSET_ID,
         ] {

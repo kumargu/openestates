@@ -4254,6 +4254,28 @@
       }
     },
     {
+      "fact_key": "geo.explicit_area_name",
+      "bucket": "geo",
+      "label": "explicit area reference",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "society",
+        "place"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "SourceEntitySeed"
+      ],
+      "display_template": null,
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
       "fact_key": "geo.geometry_geojson",
       "bucket": "geo",
       "label": "geometry GeoJSON",
@@ -8116,7 +8138,7 @@
       }
     }
   ],
-  "fact_count": 139,
+  "fact_count": 141,
   "excluded_search_fact_keys": [
     "google_review_cards",
     "google_review_snippets"

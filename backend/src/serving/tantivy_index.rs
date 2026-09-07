@@ -73,6 +73,9 @@ impl TantivyRecallIndex {
         }
 
         writer.commit().map_err(TantivyIndexError::Tantivy)?;
+        writer
+            .wait_merging_threads()
+            .map_err(TantivyIndexError::Tantivy)?;
         let reader = index
             .reader_builder()
             .reload_policy(ReloadPolicy::Manual)

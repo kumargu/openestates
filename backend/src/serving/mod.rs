@@ -21,6 +21,7 @@ pub mod spatial_identity;
 pub mod spatial_index;
 pub mod tantivy_index;
 pub mod topology;
+pub mod topology_backfill;
 pub mod types;
 
 pub use aliases::{
@@ -69,6 +70,10 @@ pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,
 };
 pub use topology::{derive_spatial_topology, SpatialTopologyReport};
+pub use topology_backfill::{
+    backfill_area_topology, AreaTopologyBackfillInput, AreaTopologyBackfillRecords,
+    AreaTopologyBackfillReport,
+};
 pub use types::{
     unique_society_aliases, validate_serving_edge_evidence, BundleArtifact, BundleArtifactKind,
     QuarantinedSociety, ServingBundleManifest, ServingBundleSchema, ServingColumnSchema,
