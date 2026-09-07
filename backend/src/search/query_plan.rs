@@ -216,11 +216,6 @@ impl QueryPlan {
     }
 }
 
-pub(crate) fn discourse_branch_layout(query: &str) -> Option<DiscourseBranchLayout> {
-    let plan = compile_query_plan(query);
-    discourse_branch_layout_with_plan(query, &plan)
-}
-
 pub(crate) fn discourse_branch_layout_with_plan(
     query: &str,
     plan: &QueryPlan,
@@ -306,6 +301,7 @@ pub(crate) fn paired_ordinal_branch_layout(plan: &QueryPlan) -> Option<PairedOrd
     let ordinal_spans = config
         .branch_ordinals
         .iter()
+        .take(2)
         .map(|ordinal| {
             first_configured_phrase(
                 &plan.tokens,
@@ -464,6 +460,7 @@ pub(crate) fn project_search_intent(query: &str, plan: &QueryPlan) -> SearchInte
         .iter()
         .filter(|slot| slot.end > slot.start)
         .map(|slot| SourceSpan {
+            source_turn_id: String::new(),
             start: slot.start,
             end: slot.end,
             raw_text: slot.raw_text.clone(),
@@ -1909,6 +1906,7 @@ mod tests {
             .bhks
             .iter()
             .map(|slot| SourceSpan {
+                source_turn_id: String::new(),
                 start: slot.start,
                 end: slot.end,
                 raw_text: slot.raw_text.clone(),

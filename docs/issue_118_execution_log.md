@@ -142,6 +142,70 @@
   the required git registry protocol after the environment blocked the sparse
   index host.
 
+## Typed compiled-plan revision checkpoint — 2026-09-08
+
+- Classification: `architecture_gap` removed. Revision execution is split into
+  `compile_initial`, `compile_fragment`, typed `apply_patch`, and
+  `execute_plan`. Only the new utterance is parsed; the authenticated parent
+  plan is never rendered and reparsed. `activeQuery` is presentation output and
+  cannot alter execution semantics.
+- Revisions use typed add, replace, remove, alternative, and replace-intent
+  patches. Initial, refine, expand, replace, rephrase, exclude, correct, undo,
+  and fresh operations are represented explicitly. BHK, budget, and selected
+  spatial-target overwrites replace their predicate families while retaining
+  unrelated parent constraints; ambiguous multi-branch corrections require
+  clarification.
+- Source spans carry a source-turn identity and remain byte-exact after
+  configured prefix removal. Branch and predicate bindings are serialized in
+  the compiled plan. Replacements retain predicate IDs even when patching moves
+  their AST paths; additions derive IDs from their source turn and new path,
+  while alternatives derive branch IDs from the parent revision.
+- Optional named-place terms remain in the authoritative plan for branch recall
+  and proof projection but are removed from the hard eligibility query. Tantivy
+  and optional geography can therefore add candidates without satisfying a
+  buyer predicate.
+- Deleted the reconstructed-query revision compiler, string-fragment patches,
+  the inert `CompiledSearchPlan::compile`, and the legacy `switch` operation.
+  The unified frozen bank now contains 15 typed spatial-revision cases,
+  including BHK/budget overwrite, third/eighth branch targeting, undo, and
+  fresh search. Controlled journeys execute patched plans instead of candidate
+  query strings.
+
+## Stateless signed revision API checkpoint — 2026-09-08
+
+- `GET /api/search` now returns an initial revision descriptor with the active
+  plan fingerprint, runtime, buyer-safe intent projection, and opaque signed
+  context. `POST /api/search/revisions` accepts only `parentContext`, the new
+  utterance, a client idempotency key, and optional undo/selected-property
+  context; unknown legacy parent-query, branch-count, and runtime fields fail
+  deserialization.
+- Signed contexts carry the compiled plan, lineage, runtime identity, bounded
+  ordered result membership, and fingerprints. Decoding verifies the HMAC,
+  plan and result fingerprints, revision identity, snapshot identity, and
+  evidence-reference identities before execution. Undo accepts only the signed
+  direct parent. An unavailable runtime returns `runtimeUnavailable` without
+  activating a candidate.
+- Equivalent compiled plans share a bounded semantic execution cache keyed by
+  plan fingerprint and runtime. A separate bounded idempotency cache is keyed
+  by parent revision and client key: exact retries return the original response
+  without duplicate execution, while conflicting reuse returns `409`.
+- Responses identify the active revision, active results, attempted candidate,
+  structured delta, candidate count, guidance, and selected-property
+  consequence. A zero-result candidate returns `preserveParent`; the signed
+  parent remains active and the attempted typed plan remains inspectable.
+- Protecting focused gates pass: conversational semantics 13/13, search
+  efficiency 12/12, revision API 3/3, and search quality 5/5, alongside asset
+  DAG executor 12/12, KG society view 2/2, recommendations 2/2, serving bundle
+  4/4, serving runtime 5/5, and the live geo-cell contract explicitly ignored.
+  `cargo check --all-targets`, Rust formatting, config/query-bank JSON parsing,
+  and `git diff --check` pass. The hardcoding audit remains unchanged at 330
+  warning-only findings, 28 fact-key comparisons, and zero blocked aliases.
+- Non-gating disclosure: a broad `cargo test --lib search::` run currently has
+  11 failures among 352 tests in older named-place, reason-projection, and mock
+  inventory fixtures. Those tests were not weakened, and this log does not
+  claim that broad suite as passing; the Issue 118 frozen and vertical gates
+  above are the verified completion boundary.
+
 ## OSM geo-cell search checkpoint — 2026-09-07
 
 - Starting HEAD: `feba1670` on `feat/issue-118-consolidated`; worktree clean.

@@ -105,6 +105,14 @@ pub struct DiscourseParserConfig {
     #[serde(default)]
     pub revision_correction_prefixes: Vec<String>,
     #[serde(default)]
+    pub revision_overwrite_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_undo_phrases: Vec<String>,
+    #[serde(default)]
+    pub revision_fresh_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_exclusion_prefixes: Vec<String>,
+    #[serde(default)]
     pub revision_ambiguous_spatial_refinements: Vec<String>,
 }
 
@@ -393,6 +401,38 @@ fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
         config
             .discourse
             .revision_correction_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_overwrite_prefixes",
+        config
+            .discourse
+            .revision_overwrite_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_undo_phrases",
+        config
+            .discourse
+            .revision_undo_phrases
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_fresh_prefixes",
+        config
+            .discourse
+            .revision_fresh_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_exclusion_prefixes",
+        config
+            .discourse
+            .revision_exclusion_prefixes
             .iter()
             .map(String::as_str),
     )?;

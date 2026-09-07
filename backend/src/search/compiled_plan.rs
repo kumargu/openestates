@@ -11,6 +11,18 @@ use super::intent::{SearchIntent, SourceSpan};
 
 pub type BranchId = String;
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompiledPredicateBinding {
+    pub predicate_id: String,
+    pub path: Vec<usize>,
+    pub family: super::ast::PredicateFamily,
+    pub polarity: super::ast::PredicatePolarity,
+    pub semantic_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_span: Option<SourceSpan>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GeoAnchor {
@@ -259,13 +271,15 @@ impl GeoScope {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeoBranch {
     pub branch_id: BranchId,
     pub geo_cluster_id: String,
     pub source_spans: Vec<SourceSpan>,
     pub geo_scope: GeoScope,
     pub predicates: ConstraintExpr,
+    #[serde(default)]
+    pub predicate_bindings: Vec<CompiledPredicateBinding>,
     pub resolved_entities: Vec<ResolvedEntityHandle>,
     pub constraints: SearchIntent,
     pub buyer_summary: String,
@@ -273,55 +287,78 @@ pub struct GeoBranch {
     pub compiled_query: CompiledQuery,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompiledSearchPlan {
     pub root: BoolExpr<BranchId>,
     pub branches: Vec<GeoBranch>,
     pub resolution_gaps: Vec<String>,
+    pub aggregate_intent: SearchIntent,
     pub semantic_fingerprint: String,
     pub snapshot_identity: String,
 }
 
 impl CompiledSearchPlan {
-    /// Compile without serving topology for inert cache/test values. Search
-    /// execution always uses `compile_for_snapshot`.
-    pub fn compile(compiled_query: CompiledQuery, snapshot_identity: impl Into<String>) -> Self {
-        let snapshot_identity = snapshot_identity.into();
-        let branches = compiled_query
-            .branches
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(index, predicates)| GeoBranch {
-                branch_id: format!("branch-{}", index + 1),
-                geo_cluster_id: format!("geo-cluster-{}", index + 1),
-                source_spans: all_source_spans(&predicates),
-                geo_scope: GeoScope::BundleWide,
-                buyer_summary: predicates.buyer_label(),
-                source_query: compiled_query.raw.clone(),
-                predicates: predicates.clone(),
-                resolved_entities: Vec::new(),
-                constraints: compiled_query.intent.clone(),
-                compiled_query: compiled_query.for_branch(predicates),
-            })
-            .collect::<Vec<_>>();
-        let predicates = branches
-            .iter()
-            .map(|branch| branch.predicates.clone())
-            .collect::<Vec<_>>();
-        let constraints = branches
-            .iter()
-            .map(|branch| branch.constraints.clone())
-            .collect::<Vec<_>>();
-        Self {
-            root: root_for(&branches),
-            branches,
-            resolution_gaps: Vec::new(),
-            semantic_fingerprint: semantic_search_fingerprint(&predicates, &constraints),
-            snapshot_identity,
+    pub fn assign_source_turn(&mut self, source_turn_id: &str) {
+        self.aggregate_intent
+            .bhk_spans
+            .iter_mut()
+            .for_each(|span| assign_span_turn(span, source_turn_id));
+        for branch in &mut self.branches {
+            branch
+                .source_spans
+                .iter_mut()
+                .for_each(|span| assign_span_turn(span, source_turn_id));
+            branch
+                .resolved_entities
+                .iter_mut()
+                .filter_map(|entity| entity.source_span.as_mut())
+                .for_each(|span| assign_span_turn(span, source_turn_id));
+            assign_expression_turn(&mut branch.predicates, source_turn_id);
+            assign_expression_turn(&mut branch.compiled_query.constraints, source_turn_id);
+            branch
+                .compiled_query
+                .branches
+                .iter_mut()
+                .for_each(|expression| assign_expression_turn(expression, source_turn_id));
+            branch
+                .constraints
+                .bhk_spans
+                .iter_mut()
+                .for_each(|span| assign_span_turn(span, source_turn_id));
         }
+        refresh_predicate_bindings(&mut self.branches, None);
     }
 
+    pub fn shift_source_spans(&mut self, offset: usize) {
+        self.aggregate_intent
+            .bhk_spans
+            .iter_mut()
+            .for_each(|span| shift_span(span, offset));
+        for branch in &mut self.branches {
+            branch
+                .source_spans
+                .iter_mut()
+                .for_each(|span| shift_span(span, offset));
+            branch
+                .resolved_entities
+                .iter_mut()
+                .filter_map(|entity| entity.source_span.as_mut())
+                .for_each(|span| shift_span(span, offset));
+            shift_expression_spans(&mut branch.predicates, offset);
+            shift_expression_spans(&mut branch.compiled_query.constraints, offset);
+            branch
+                .compiled_query
+                .branches
+                .iter_mut()
+                .for_each(|expression| shift_expression_spans(expression, offset));
+            branch
+                .constraints
+                .bhk_spans
+                .iter_mut()
+                .for_each(|span| shift_span(span, offset));
+        }
+        refresh_predicate_bindings(&mut self.branches, None);
+    }
     pub fn compile_for_snapshot(
         compiled_query: CompiledQuery,
         snapshot_identity: impl Into<String>,
@@ -367,6 +404,7 @@ impl CompiledSearchPlan {
                 let mut eligibility_predicates = predicates.clone();
                 eligibility_predicates.drop_society_includes();
                 eligibility_predicates.drop_area_includes();
+                eligibility_predicates.drop_optional_spatial_includes();
                 let mut branch_query = compiled_query.for_branch(eligibility_predicates.clone());
                 branch_query.raw =
                     scoring_query(&branch_query.raw, &source_spans, &geography_spans);
@@ -382,6 +420,7 @@ impl CompiledSearchPlan {
                     buyer_summary: eligibility_predicates.buyer_label(),
                     source_query: compiled_query.raw.clone(),
                     predicates,
+                    predicate_bindings: Vec::new(),
                     resolved_entities: branch_entities,
                     constraints,
                     compiled_query: branch_query,
@@ -389,6 +428,7 @@ impl CompiledSearchPlan {
             })
             .collect::<Vec<_>>();
         assign_geo_clusters(&mut branches, topology);
+        refresh_predicate_bindings(&mut branches, None);
         let root = root_for(&branches);
         let predicates = branches
             .iter()
@@ -402,10 +442,195 @@ impl CompiledSearchPlan {
             root,
             branches,
             resolution_gaps,
+            aggregate_intent: compiled_query.intent,
             semantic_fingerprint: semantic_search_fingerprint(&predicates, &constraints),
             snapshot_identity,
         }
     }
+
+    pub fn recompile_for_snapshot(
+        &self,
+        branch_predicates: Vec<(BranchId, ConstraintExpr)>,
+        aggregate_intent: SearchIntent,
+        resolved_entities: Vec<ResolvedEntityHandle>,
+        active_query: &str,
+        topology: &GeoTopologyIndex,
+        spatial_index: Option<&SpatialServingIndex>,
+        geo_cell_policy: GeoCellSearchPolicy,
+    ) -> Self {
+        let compiled_query = CompiledQuery {
+            raw: active_query.to_string(),
+            constraints: ConstraintExpr::any_of(
+                branch_predicates
+                    .iter()
+                    .map(|(_, predicates)| predicates.clone())
+                    .collect(),
+            ),
+            branches: branch_predicates
+                .iter()
+                .map(|(_, predicates)| predicates.clone())
+                .collect(),
+            intent: aggregate_intent,
+        };
+        let mut recompiled = Self::compile_for_snapshot(
+            compiled_query,
+            self.snapshot_identity.clone(),
+            &resolved_entities,
+            topology,
+            spatial_index,
+            geo_cell_policy,
+        );
+        for (branch, (branch_id, _)) in recompiled.branches.iter_mut().zip(&branch_predicates) {
+            branch.branch_id.clone_from(branch_id);
+        }
+        recompiled.root = root_for(&recompiled.branches);
+        refresh_predicate_bindings(&mut recompiled.branches, Some(&self.branches));
+        recompiled
+    }
+}
+
+fn refresh_predicate_bindings(branches: &mut [GeoBranch], prior: Option<&[GeoBranch]>) {
+    for branch in branches {
+        let mut bindings = Vec::new();
+        collect_predicate_bindings(
+            &branch.predicates,
+            false,
+            &mut Vec::new(),
+            &branch.branch_id,
+            &mut bindings,
+        );
+        if let Some(previous) = prior.and_then(|branches| {
+            branches
+                .iter()
+                .find(|previous| previous.branch_id == branch.branch_id)
+        }) {
+            for binding in &mut bindings {
+                if let Some(existing) = previous.predicate_bindings.iter().find(|existing| {
+                    existing.family == binding.family
+                        && existing.polarity == binding.polarity
+                        && (existing.semantic_key == binding.semantic_key
+                            || (existing.source_span.is_some()
+                                && existing.source_span == binding.source_span)
+                            || existing.path == binding.path)
+                }) {
+                    binding.predicate_id.clone_from(&existing.predicate_id);
+                }
+            }
+        }
+        branch.predicate_bindings = bindings;
+    }
+}
+
+fn collect_predicate_bindings(
+    expression: &ConstraintExpr,
+    negated: bool,
+    path: &mut Vec<usize>,
+    branch_id: &str,
+    bindings: &mut Vec<CompiledPredicateBinding>,
+) {
+    match expression {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
+            for (index, clause) in clauses.iter().enumerate() {
+                path.push(index);
+                collect_predicate_bindings(clause, negated, path, branch_id, bindings);
+                path.pop();
+            }
+        }
+        ConstraintExpr::Not { clause } => {
+            path.push(0);
+            collect_predicate_bindings(clause, !negated, path, branch_id, bindings);
+            path.pop();
+        }
+        ConstraintExpr::Term { term } => {
+            let source_span = term.source_span().cloned();
+            let turn_id = source_span
+                .as_ref()
+                .filter(|span| !span.source_turn_id.is_empty())
+                .map(|span| span.source_turn_id.as_str())
+                .unwrap_or("root");
+            bindings.push(CompiledPredicateBinding {
+                predicate_id: format!(
+                    "predicate:{turn_id}:{branch_id}:{}",
+                    path.iter()
+                        .map(usize::to_string)
+                        .collect::<Vec<_>>()
+                        .join(".")
+                ),
+                path: path.clone(),
+                family: term.predicate_family(),
+                polarity: if negated {
+                    super::ast::PredicatePolarity::Negated
+                } else {
+                    super::ast::PredicatePolarity::Positive
+                },
+                semantic_key: predicate_semantic_key(term),
+                source_span,
+            });
+        }
+    }
+}
+
+fn predicate_semantic_key(term: &super::ast::ConstraintTerm) -> String {
+    let mut value = serde_json::to_value(term).expect("constraint terms serialize");
+    if let serde_json::Value::Object(fields) = &mut value {
+        fields.remove("span");
+    }
+    serde_json::to_string(&value).expect("constraint term identity serializes")
+}
+
+fn assign_expression_turn(expression: &mut ConstraintExpr, source_turn_id: &str) {
+    match expression {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => clauses
+            .iter_mut()
+            .for_each(|clause| assign_expression_turn(clause, source_turn_id)),
+        ConstraintExpr::Not { clause } => assign_expression_turn(clause, source_turn_id),
+        ConstraintExpr::Term { term } => {
+            if let Some(span) = match term {
+                ConstraintTerm::Bhk { span, .. }
+                | ConstraintTerm::Area { span, .. }
+                | ConstraintTerm::Society { span, .. }
+                | ConstraintTerm::Builder { span, .. }
+                | ConstraintTerm::Budget { span, .. }
+                | ConstraintTerm::Evidence { span, .. }
+                | ConstraintTerm::Spatial { span, .. } => span.as_mut(),
+            } {
+                assign_span_turn(span, source_turn_id);
+            }
+        }
+    }
+}
+
+fn assign_span_turn(span: &mut SourceSpan, source_turn_id: &str) {
+    if span.source_turn_id.is_empty() {
+        span.source_turn_id = source_turn_id.to_string();
+    }
+}
+
+fn shift_expression_spans(expression: &mut ConstraintExpr, offset: usize) {
+    match expression {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => clauses
+            .iter_mut()
+            .for_each(|clause| shift_expression_spans(clause, offset)),
+        ConstraintExpr::Not { clause } => shift_expression_spans(clause, offset),
+        ConstraintExpr::Term { term } => {
+            if let Some(span) = match term {
+                ConstraintTerm::Bhk { span, .. }
+                | ConstraintTerm::Area { span, .. }
+                | ConstraintTerm::Society { span, .. }
+                | ConstraintTerm::Builder { span, .. }
+                | ConstraintTerm::Budget { span, .. }
+                | ConstraintTerm::Evidence { span, .. }
+                | ConstraintTerm::Spatial { span, .. } => span.as_mut(),
+            } {
+                shift_span(span, offset);
+            }
+        }
+    }
+}
+
+fn shift_span(span: &mut SourceSpan, offset: usize) {
+    span.start += offset;
+    span.end += offset;
 }
 
 fn root_for(branches: &[GeoBranch]) -> BoolExpr<BranchId> {
@@ -817,7 +1042,7 @@ fn collect_positive_geography_spans(
 }
 
 fn scoring_query(
-    query: &str,
+    _query: &str,
     branch_spans: &[SourceSpan],
     geography_spans: &[SourceSpan],
 ) -> String {
@@ -828,12 +1053,18 @@ fn scoring_query(
                 .iter()
                 .any(|geography| spans_overlap(span, geography))
         })
-        .filter_map(|span| query.get(span.start..span.end))
+        .map(|span| span.raw_text.as_str())
         .collect::<Vec<_>>()
         .join(" ")
 }
 
 fn spans_overlap(left: &SourceSpan, right: &SourceSpan) -> bool {
+    if !left.source_turn_id.is_empty()
+        && !right.source_turn_id.is_empty()
+        && left.source_turn_id != right.source_turn_id
+    {
+        return false;
+    }
     left.start < right.end && right.start < left.end
 }
 
@@ -1041,6 +1272,8 @@ mod tests {
                     entity_id: "place:metro".to_string(),
                     display_name: "Metro".to_string(),
                     required: true,
+                    category_fact_keys: Vec::new(),
+                    distance_limit_km: None,
                     span: Some(span(0, 5, "Metro")),
                 }),
                 vec!["area:alpha"],
@@ -1181,6 +1414,8 @@ mod tests {
                     entity_id: "place:metro".to_string(),
                     display_name: "Metro".to_string(),
                     required: true,
+                    category_fact_keys: Vec::new(),
+                    distance_limit_km: None,
                     span: Some(span(0, 5, "Metro")),
                 })],
                 &entities,
@@ -1346,6 +1581,7 @@ mod tests {
 
     fn span(start: usize, end: usize, raw_text: &str) -> SourceSpan {
         SourceSpan {
+            source_turn_id: String::new(),
             start,
             end,
             raw_text: raw_text.to_string(),

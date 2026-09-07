@@ -14,7 +14,7 @@ use backend::knowledge::{FactValue, KnowledgeGraph};
 use backend::lake::LakeStore;
 use backend::models::Property;
 use backend::search::geo::GeoSearchIndex;
-use backend::search::{SearchCapabilityIndex, SearchIndex};
+use backend::search::{decode_signed_search_context, SearchCapabilityIndex, SearchIndex};
 use backend::security::ExecutionLanes;
 use backend::serving::{
     DerivedEvidence, EvidenceRef, LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest,
@@ -34,7 +34,9 @@ async fn stateless_revision_route_enforces_runtime_parent_and_safe_outcomes() {
     let parent_query = "3BHK in Hoodi under 2.4 Cr";
     let parent = get_search(&app, parent_query, 21).await;
     assert_eq!(parent.0, StatusCode::OK);
-    let runtime = parent.1["runtimeVersion"].clone();
+    let parent_context = parent.1["revision"]["context"]
+        .as_str()
+        .expect("direct search issues a signed compiled context");
     let parent_revision = parent.1["revisionId"]
         .as_str()
         .expect("direct search issues a revision correlation id");
@@ -45,13 +47,7 @@ async fn stateless_revision_route_enforces_runtime_parent_and_safe_outcomes() {
 
     let candidate = post_revision(
         &app,
-        revision_request(
-            parent_revision,
-            parent_query,
-            1,
-            runtime.clone(),
-            "Make it ready to move",
-        ),
+        revision_request(parent_context, "Make it under 2.5Cr", "budget-refine"),
         22,
     )
     .await;
@@ -59,91 +55,141 @@ async fn stateless_revision_route_enforces_runtime_parent_and_safe_outcomes() {
     assert_eq!(candidate.1["outcome"], "candidate");
     assert_eq!(candidate.1["operation"], "refine");
     assert!(candidate.1["search"].is_object());
+    assert!(!candidate.1["preserveParent"].as_bool().unwrap());
     assert_eq!(
         candidate.1["revisionId"], candidate.1["search"]["revisionId"],
         "nested ordinary search must expose the same server-issued revision"
     );
+    let direct_budget = get_search(&app, "3BHK in Hoodi under 2.5Cr", 34).await;
+    assert_eq!(
+        candidate.1["search"]["astFingerprint"], direct_budget.1["astFingerprint"],
+        "response={}",
+        candidate.1
+    );
+    assert_eq!(
+        candidate.1["search"]["orderedResultIds"],
+        direct_budget.1["orderedResultIds"]
+    );
+    let candidate_context = candidate.1["activeRevision"]["context"].as_str().unwrap();
+    let undo = post_revision(
+        &app,
+        json!({
+            "parentContext": candidate_context,
+            "utterance": "undo",
+            "clientIdempotencyKey": "undo-budget",
+            "undoContext": parent_context
+        }),
+        32,
+    )
+    .await;
+    assert_eq!(undo.0, StatusCode::OK);
+    assert_eq!(undo.1["operation"], "undo");
+    assert_eq!(undo.1["revisionId"], parent.1["revisionId"]);
 
     let area_alternative = post_revision(
         &app,
-        revision_request(
-            parent_revision,
-            parent_query,
-            1,
-            runtime.clone(),
-            "Also consider Sarjapur",
-        ),
+        revision_request(parent_context, "Also consider Sarjapur", "area-alternative"),
         28,
     )
     .await;
     assert_eq!(area_alternative.0, StatusCode::OK);
     assert_eq!(area_alternative.1["outcome"], "candidate");
     assert_eq!(area_alternative.1["operation"], "expand");
+    assert!(!area_alternative.1["preserveParent"].as_bool().unwrap());
     assert_eq!(area_alternative.1["activeBranchCount"], 2);
     assert_eq!(
-        area_alternative.1["activeQuery"],
-        "3BHK in Hoodi under 2.4 Cr or 3BHK in Sarjapur under 2.4 Cr"
+        area_alternative.1["activeRevision"]["buyerIntent"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
     );
 
-    let mut stale_runtime = runtime.clone();
-    stale_runtime["searchEngineVersion"] = Value::String("stale-engine".to_string());
-    let stale = post_revision(
+    let zero = post_revision(
         &app,
-        revision_request(
-            parent_revision,
-            parent_query,
-            1,
-            stale_runtime,
-            "Make it ready to move",
-        ),
-        23,
+        revision_request(parent_context, "Only 4BHK", "zero-result"),
+        31,
     )
     .await;
-    assert_eq!(stale.0, StatusCode::CONFLICT);
-    assert_eq!(stale.1["code"], "runtime_version_changed");
+    assert_eq!(zero.0, StatusCode::OK);
+    assert!(zero.1["preserveParent"].as_bool().unwrap());
+    assert_eq!(zero.1["revisionId"], parent.1["revisionId"]);
+    assert!(zero.1.get("search").is_none());
+    let attempted =
+        decode_signed_search_context(zero.1["attemptedCandidate"]["context"].as_str().unwrap())
+            .expect("attempted zero-result plan remains inspectable");
+    assert_eq!(attempted.plan.branches[0].constraints.requested_bhks(), [4]);
+    assert!(attempted.plan.branches[0]
+        .predicates
+        .contains_family(backend::search::PredicateFamily::Area));
 
-    let mismatch = post_revision(
+    let bhk_budget_zero = post_revision(
         &app,
         revision_request(
-            parent_revision,
-            parent_query,
-            2,
-            runtime.clone(),
-            "Make it ready to move",
+            parent_context,
+            "Make it 2BHK under 1.6Cr",
+            "bhk-budget-overwrite",
         ),
-        24,
+        35,
     )
     .await;
-    assert_eq!(mismatch.0, StatusCode::BAD_REQUEST);
-    assert_eq!(mismatch.1["code"], "parent_branch_count_mismatch");
+    assert!(bhk_budget_zero.1["preserveParent"].as_bool().unwrap());
+    let attempted = decode_signed_search_context(
+        bhk_budget_zero.1["attemptedCandidate"]["context"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(attempted.plan.branches[0].constraints.requested_bhks(), [2]);
+    assert_eq!(
+        attempted.plan.branches[0].constraints.budget_max,
+        Some(16_000_000)
+    );
+    assert!(attempted.plan.branches[0]
+        .predicates
+        .contains_family(backend::search::PredicateFamily::Area));
 
+    let fresh = post_revision(
+        &app,
+        revision_request(
+            parent_context,
+            "New search 3BHK in Hoodi under 2.5Cr",
+            "fresh-search",
+        ),
+        33,
+    )
+    .await;
+    assert_eq!(fresh.0, StatusCode::OK);
+    assert_eq!(fresh.1["operation"], "fresh");
+
+    let mut spoofed_context = parent_context.to_string();
+    let replacement = if spoofed_context.ends_with('0') {
+        "1"
+    } else {
+        "0"
+    };
+    spoofed_context.replace_range(spoofed_context.len() - 1.., replacement);
     let spoofed = post_revision(
         &app,
-        revision_request(
-            "rev-000-caller-controlled",
-            parent_query,
-            1,
-            runtime.clone(),
-            "Make it ready to move",
-        ),
+        revision_request(&spoofed_context, "Make it under 2.5Cr", "spoofed"),
         25,
     )
     .await;
     assert_eq!(spoofed.0, StatusCode::BAD_REQUEST);
-    assert_eq!(spoofed.1["code"], "invalid_parent_revision");
+    assert_eq!(spoofed.1["code"], "invalid_parent_context");
 
-    let empty = post_revision(
-        &app,
-        revision_request(parent_revision, parent_query, 1, runtime.clone(), "   "),
-        26,
-    )
-    .await;
+    let empty = post_revision(&app, revision_request(parent_context, "   ", "empty"), 26).await;
     assert_eq!(empty.0, StatusCode::BAD_REQUEST);
     assert_eq!(empty.1["code"], "invalid_revision_request");
 
+    let mut legacy_shape = revision_request(parent_context, "Only 4BHK", "legacy-shape");
+    legacy_shape["parentQuery"] = json!(parent_query);
+    let rejected_legacy_shape = post_revision(&app, legacy_shape, 36).await;
+    assert_eq!(rejected_legacy_shape.0, StatusCode::UNPROCESSABLE_ENTITY);
+
     let clarification = post_revision(
         &app,
-        revision_request(parent_revision, parent_query, 1, runtime, "Make it closer"),
+        revision_request(parent_context, "Make it closer", "clarify"),
         27,
     )
     .await;
@@ -152,24 +198,21 @@ async fn stateless_revision_route_enforces_runtime_parent_and_safe_outcomes() {
     assert!(clarification.1.get("search").is_none());
     assert_eq!(clarification.1["activeQuery"], parent_query);
 
-    let multi_parent_query = "3BHK in Hoodi under 2.4 Cr or 2BHK in Sarjapur under 1.8 Cr";
-    let multi_parent = get_search(&app, multi_parent_query, 29).await;
-    let ambiguous_area = post_revision(
+    let retry = post_revision(
         &app,
-        revision_request(
-            multi_parent.1["revisionId"].as_str().unwrap(),
-            multi_parent_query,
-            2,
-            multi_parent.1["runtimeVersion"].clone(),
-            "Also consider Hoodi",
-        ),
+        revision_request(parent_context, "Make it under 2.5Cr", "budget-refine"),
+        29,
+    )
+    .await;
+    assert_eq!(retry, candidate, "an exact retry returns the same response");
+    let conflict = post_revision(
+        &app,
+        revision_request(parent_context, "Only 4BHK", "budget-refine"),
         30,
     )
     .await;
-    assert_eq!(ambiguous_area.0, StatusCode::OK);
-    assert_eq!(ambiguous_area.1["outcome"], "requireClarification");
-    assert!(ambiguous_area.1.get("search").is_none());
-    assert_eq!(ambiguous_area.1["activeQuery"], multi_parent_query);
+    assert_eq!(conflict.0, StatusCode::CONFLICT);
+    assert_eq!(conflict.1["code"], "idempotency_key_conflict");
 }
 
 #[tokio::test]
@@ -185,20 +228,22 @@ async fn equivalent_direct_and_revised_searches_share_ast_results_and_proofs() {
     let revised = post_revision(
         &app,
         revision_request(
-            parent.1["revisionId"].as_str().unwrap(),
-            parent_query,
-            1,
-            parent.1["runtimeVersion"].clone(),
+            parent.1["revision"]["context"].as_str().unwrap(),
             equivalent_query,
+            "equivalent",
         ),
         33,
     )
     .await;
     assert_eq!(revised.0, StatusCode::OK);
-    assert_eq!(revised.1["operation"], "rephrase");
+    assert_eq!(revised.1["operation"], "rephrase", "response={}", revised.1);
     assert_eq!(revised.1["outcome"], "candidate");
     let search = &revised.1["search"];
-    assert_eq!(search["astFingerprint"], direct.1["astFingerprint"]);
+    assert_eq!(
+        search["astFingerprint"], direct.1["astFingerprint"],
+        "response={}",
+        revised.1
+    );
     assert_eq!(search["orderedResultIds"], direct.1["orderedResultIds"]);
     assert_eq!(search["resultSets"], direct.1["resultSets"]);
 }
@@ -212,11 +257,9 @@ async fn ninth_branch_requires_checkpoint_without_executing_a_candidate() {
     let checkpoint = post_revision(
         &app,
         revision_request(
-            parent.1["revisionId"].as_str().unwrap(),
-            parent_query,
-            8,
-            parent.1["runtimeVersion"].clone(),
+            parent.1["revision"]["context"].as_str().unwrap(),
             "Also consider Sarjapur",
+            "ninth-branch",
         ),
         42,
     )
@@ -275,7 +318,7 @@ fn test_bundle(root: &std::path::Path) -> LoadedServingBundle {
         serving_entity("area:cell:sarjapur", "area", "Internal search cell"),
         serving_entity("society:fixture-home", "society", "Fixture Home"),
     ];
-    let facts = vec![
+    let mut facts = vec![
         topology_fact(
             "area:cell:hoodi",
             "geo.geometry_geojson",
@@ -297,6 +340,11 @@ fn test_bundle(root: &std::path::Path) -> LoadedServingBundle {
             FactValue::Numeric(77.715),
         ),
     ];
+    facts.push(topology_fact(
+        "society:fixture-home",
+        "controlled_inventory_option",
+        FactValue::Text(json!({"bhk": 3, "price": 23_000_000, "area_sqft": 1_550}).to_string()),
+    ));
     let edges = vec![
         topology_edge(
             "society:fixture-home",
@@ -519,20 +567,11 @@ fn test_property() -> Property {
     }
 }
 
-fn revision_request(
-    parent_revision_id: &str,
-    parent_query: &str,
-    parent_branch_count: usize,
-    runtime: Value,
-    utterance: &str,
-) -> Value {
+fn revision_request(parent_context: &str, utterance: &str, key: &str) -> Value {
     json!({
-        "parentRevisionId": parent_revision_id,
-        "parentQuery": parent_query,
-        "parentBranchCount": parent_branch_count,
-        "expectedRuntimeVersion": runtime,
+        "parentContext": parent_context,
         "utterance": utterance,
-        "clientIdempotencyKey": "contract-turn"
+        "clientIdempotencyKey": key
     })
 }
 
@@ -582,11 +621,15 @@ async fn send(
     let bytes = to_bytes(response.into_body(), 4 * 1024 * 1024)
         .await
         .expect("response body is readable");
-    let value = serde_json::from_slice(&bytes).unwrap_or_else(|error| {
-        panic!(
+    let value = match serde_json::from_slice(&bytes) {
+        Ok(value) => value,
+        Err(_) if status == StatusCode::UNPROCESSABLE_ENTITY => {
+            Value::String(String::from_utf8_lossy(&bytes).into_owned())
+        }
+        Err(error) => panic!(
             "response is JSON: {error}; body={}",
             String::from_utf8_lossy(&bytes)
-        )
-    });
+        ),
+    };
     (status, value)
 }

@@ -5,6 +5,10 @@ use super::query_plan;
 /// Byte span in the original buyer query, preserved for safe query editing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceSpan {
+    /// Stable identity of the utterance that owns this byte range. Initial
+    /// searches use `root`; revision fragments use their signed revision id.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub source_turn_id: String,
     pub start: usize,
     pub end: usize,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -108,7 +112,7 @@ pub enum Polarity {
     Negative,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PreferenceSignal {
     pub raw_text: String,
     pub polarity: Polarity,

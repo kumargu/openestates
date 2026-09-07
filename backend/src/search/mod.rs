@@ -37,9 +37,11 @@ pub use guard::{
 pub use index::SearchIndex;
 pub use intent::{SearchIntent, SourceSpan};
 pub use revision::{
-    compile_search_revision, compile_search_revision_with_plan, compiled_branch_count,
-    revision_id_for_query, validated_revision_depth, SearchRevision, SearchRevisionLimits,
-    SearchRevisionOperation, SearchRevisionOutcome, SearchRevisionPatch,
+    apply_typed_revision, compile_typed_revision, decode_signed_search_context,
+    issue_signed_search_context, render_revision_active_query, revision_id_for_query,
+    validated_revision_depth, BuyerIntentBranchProjection, SearchRevisionDescriptor,
+    SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome, SignedSearchContext,
+    TypedSearchRevision, TypedSearchRevisionPatch,
 };
 pub use text::{SearchEvaluationContext, TextSearch, TextSearchRequest};
 
@@ -212,6 +214,8 @@ pub struct SearchResponse {
     pub query: String,
     /// Stateless server-issued correlation ID for the active search intent.
     pub revision_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision: Option<SearchRevisionDescriptor>,
     /// Fingerprint of the semantic AST actually executed by SearchEngine.
     pub ast_fingerprint: String,
     pub result_sets: Vec<SearchResultSet>,

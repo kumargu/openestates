@@ -14,7 +14,7 @@ use crate::serving::{
 };
 
 use super::analyzer;
-use super::ast::ConstraintTerm;
+use super::ast::{ConstraintExpr, ConstraintTerm};
 use super::evaluation::{
     BooleanEvaluation, EvaluationEvidence, EvidenceGap, PredicateEvaluation, VerifiedMatch,
 };
@@ -331,6 +331,7 @@ impl GeoSearchIndex {
                 relation: relation.relation.clone(),
                 target_text: relation.target_text.clone(),
                 target_span: SourceSpan {
+                    source_turn_id: String::new(),
                     start: relation.target_span.start,
                     end: relation.target_span.end,
                     raw_text: relation.target_text.clone(),
@@ -347,6 +348,117 @@ impl GeoSearchIndex {
             places,
             clauses,
             unresolved_targets,
+            max_distance_km,
+            allowed_society_ids: None,
+        })
+    }
+
+    /// Rehydrate spatial evaluation directly from the authenticated compiled
+    /// predicates. This deliberately performs no buyer-text parsing or fuzzy
+    /// resolution; every entity id was already resolved when its source turn
+    /// was compiled.
+    pub(crate) fn query_from_constraints(
+        &self,
+        constraints: &ConstraintExpr,
+    ) -> Option<GeoSearchQuery<'_>> {
+        let mut terms = Vec::new();
+        collect_compiled_spatial_terms(constraints, &mut terms);
+        if terms.is_empty() {
+            return None;
+        }
+
+        let mut places = Vec::new();
+        let mut clauses = Vec::<ResolvedGeoClause>::new();
+        for term in terms {
+            let ConstraintTerm::Spatial {
+                relation,
+                entity_id,
+                display_name,
+                required,
+                category_fact_keys,
+                distance_limit_km,
+                span,
+            } = term
+            else {
+                continue;
+            };
+            let target_span = span.clone().unwrap_or_else(|| SourceSpan {
+                source_turn_id: String::new(),
+                start: 0,
+                end: 0,
+                raw_text: display_name.clone(),
+            });
+            let clause_index = clauses.iter().position(|clause| {
+                clause.relation == *relation
+                    && clause.target_span == target_span
+                    && clause.category_fact_keys == *category_fact_keys
+                    && clause.distance_limit_km == *distance_limit_km
+                    && clause.requirement
+                        == if *required {
+                            RelationRequirement::Hard
+                        } else {
+                            RelationRequirement::Coverage
+                        }
+            });
+            let index = clause_index.unwrap_or_else(|| {
+                clauses.push(ResolvedGeoClause {
+                    relation: relation.clone(),
+                    target_text: display_name.clone(),
+                    target_span,
+                    place_entity_ids: Vec::new(),
+                    category_fact_keys: category_fact_keys.clone(),
+                    distance_limit_km: *distance_limit_km,
+                    requirement: if *required {
+                        RelationRequirement::Hard
+                    } else {
+                        RelationRequirement::Coverage
+                    },
+                });
+                clauses.len() - 1
+            });
+            if entity_id.is_empty() {
+                continue;
+            }
+            let Some(place) = self
+                .places
+                .iter()
+                .find(|place| place.entity_id == *entity_id)
+            else {
+                continue;
+            };
+            if !clauses[index].place_entity_ids.contains(entity_id) {
+                clauses[index].place_entity_ids.push(entity_id.clone());
+            }
+            if !places
+                .iter()
+                .any(|existing: &ResolvedGeoPlace| existing.entity_id == *entity_id)
+            {
+                places.push(ResolvedGeoPlace {
+                    entity_id: place.entity_id.clone(),
+                    name: place.name.clone(),
+                    category: place.category.clone(),
+                    latitude: place.latitude,
+                    longitude: place.longitude,
+                    confidence: place.confidence,
+                    match_score: 1.0,
+                });
+            }
+        }
+        clauses.retain(|clause| {
+            !clause.place_entity_ids.is_empty() || !clause.category_fact_keys.is_empty()
+        });
+        if clauses.is_empty() {
+            return None;
+        }
+        let max_distance_km = clauses
+            .iter()
+            .filter_map(|clause| clause.distance_limit_km)
+            .min_by(|left, right| left.total_cmp(right));
+        Some(GeoSearchQuery {
+            index: self,
+            places,
+            clauses,
+            unresolved_targets: Vec::new(),
             max_distance_km,
             allowed_society_ids: None,
         })
@@ -444,6 +556,24 @@ impl GeoSearchIndex {
                     .ok()
                     .and_then(|index| self.society_coordinates.get(index))
             })
+    }
+}
+
+fn collect_compiled_spatial_terms<'a>(
+    expression: &'a ConstraintExpr,
+    terms: &mut Vec<&'a ConstraintTerm>,
+) {
+    match expression {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
+            for clause in clauses {
+                collect_compiled_spatial_terms(clause, terms);
+            }
+        }
+        ConstraintExpr::Not { clause } => collect_compiled_spatial_terms(clause, terms),
+        ConstraintExpr::Term {
+            term: term @ ConstraintTerm::Spatial { .. },
+        } => terms.push(term),
+        ConstraintExpr::Term { .. } => {}
     }
 }
 
@@ -1104,6 +1234,8 @@ impl<'a> GeoSearchQuery<'a> {
                     entity_id: place.entity_id.clone(),
                     display_name: place.name.clone(),
                     required: clause.requirement == RelationRequirement::Hard,
+                    category_fact_keys: clause.category_fact_keys.clone(),
+                    distance_limit_km: clause.distance_limit_km,
                     span: Some(clause.target_span.clone()),
                 });
             }
@@ -1113,6 +1245,8 @@ impl<'a> GeoSearchQuery<'a> {
                     entity_id: String::new(),
                     display_name: clause.target_text.clone(),
                     required: clause.requirement == RelationRequirement::Hard,
+                    category_fact_keys: clause.category_fact_keys.clone(),
+                    distance_limit_km: clause.distance_limit_km,
                     span: Some(clause.target_span.clone()),
                 });
             }

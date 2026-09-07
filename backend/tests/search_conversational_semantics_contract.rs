@@ -6,8 +6,9 @@ use backend::knowledge::FactValue;
 use backend::models::{Property, Society};
 use backend::search::geo::GeoSearchIndex;
 use backend::search::{
-    compile_search_revision, SearchCapabilityIndex, SearchEngine, SearchIndex,
-    SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
+    apply_typed_revision, compile_typed_revision, render_revision_active_query,
+    SearchCapabilityIndex, SearchEngine, SearchIndex, SearchRevisionLimits,
+    SearchRevisionOperation, SearchRevisionOutcome,
 };
 use backend::serving::{
     derive_proximity_records, materialize_canonical_spatial_identities, DerivedEvidence,
@@ -178,8 +179,11 @@ enum JourneyOperation {
     Refine,
     Rephrase,
     Expand,
-    Switch,
     Replace,
+    Exclude,
+    Correct,
+    Undo,
+    Fresh,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -396,13 +400,25 @@ fn issue_118_revision_scenarios_are_frozen_in_the_unified_bank() {
                 .expect("spatial revision case follows the typed contract")
         })
         .collect::<Vec<_>>();
-    assert_eq!(cases.len(), 10, "Issue 118 revision bank size changed");
+    assert_eq!(cases.len(), 15, "Issue 118 revision bank size changed");
 
+    let fixture = issue_118_fixture();
+    let snapshot = fixture.runtime_snapshot();
+    let engine = SearchEngine::new(&snapshot);
     for case in cases {
-        let revision = compile_search_revision(
-            &case.parent_query,
-            &case.utterance,
+        let parent = engine.compile_initial(&case.parent_query, "root");
+        assert_eq!(
+            parent.branches.len(),
             case.parent_branch_count,
+            "{}",
+            case.id
+        );
+        let fragment = engine.compile_fragment(&case.utterance, "turn-2", &parent);
+        let revision = compile_typed_revision(
+            &parent,
+            &fragment,
+            &case.utterance,
+            "rev-parent",
             SearchRevisionLimits {
                 max_active_branches: 8,
             },
@@ -428,9 +444,18 @@ fn issue_118_revision_scenarios_are_frozen_in_the_unified_bank() {
             case.id
         );
         assert_eq!(
-            revision.candidate_query.as_deref(),
+            (revision.outcome == SearchRevisionOutcome::Candidate
+                && revision.operation != SearchRevisionOperation::Undo)
+                .then(|| {
+                    render_revision_active_query(
+                        &case.parent_query,
+                        &case.utterance,
+                        revision.operation,
+                    )
+                })
+                .as_deref(),
             case.expected_active_query.as_deref(),
-            "{} compiled the wrong active query",
+            "{} rendered the wrong active query",
             case.id
         );
     }
@@ -449,21 +474,43 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
         .map(|case| serde_json::from_value::<SpatialRevisionCase>(case.clone()).unwrap())
         .collect::<Vec<_>>();
     let fixture = issue_118_fixture();
+    let snapshot = fixture.runtime_snapshot();
+    let engine = SearchEngine::new(&snapshot);
     let mut executed = 0;
     for case in &cases {
-        let revision = compile_search_revision(
-            &case.parent_query,
+        let parent = engine.compile_initial(&case.parent_query, "root");
+        let fragment = engine.compile_fragment(&case.utterance, "turn-2", &parent);
+        let revision = compile_typed_revision(
+            &parent,
+            &fragment,
             &case.utterance,
-            case.parent_branch_count,
+            "rev-parent",
             SearchRevisionLimits {
                 max_active_branches: 8,
             },
         );
-        let Some(candidate_query) = revision.candidate_query.as_deref() else {
+        if revision.outcome != SearchRevisionOutcome::Candidate {
             continue;
-        };
+        }
         executed += 1;
-        let output = fixture.search_output(candidate_query);
+        let active_query =
+            render_revision_active_query(&case.parent_query, &case.utterance, revision.operation);
+        let candidate = apply_typed_revision(
+            &parent,
+            &fragment,
+            &revision,
+            &active_query,
+            &snapshot.geo_topology,
+            Some(&snapshot.bundle.spatial_index),
+            backend::search::GeoCellSearchPolicy {
+                max_hops: snapshot.geo_cell_max_hops,
+                max_distance_km: snapshot.geo_cell_max_distance_km,
+            },
+        )
+        .expect("candidate patch applies");
+        let output = engine
+            .execute_plan(candidate, &active_query)
+            .expect("candidate executes against its pinned snapshot");
         match case.id.as_str() {
             "SPATIAL-REVISION-READY" => assert!(output.results.iter().all(|result| {
                 result
@@ -562,10 +609,37 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
                         .collect::<Vec<_>>()
                 );
             }
+            "SPATIAL-REVISION-OVERWRITE-BHK-BUDGET" => {
+                assert_eq!(output.intent.requested_bhks(), [2]);
+                assert_eq!(output.intent.budget_max, Some(16_000_000));
+                assert_eq!(output.intent.requested_areas(), ["Whitefield"]);
+            }
+            "SPATIAL-REVISION-THIRD-BRANCH" => {
+                assert_eq!(
+                    output.compiled_plan.branches[2].constraints.budget_max,
+                    Some(22_000_000)
+                );
+            }
+            "SPATIAL-REVISION-EIGHTH-BRANCH" => {
+                assert_eq!(
+                    output.compiled_plan.branches[7].constraints.budget_max,
+                    Some(14_000_000)
+                );
+            }
+            "SPATIAL-REVISION-UNDO" => {
+                assert_eq!(
+                    output.compiled_plan.semantic_fingerprint,
+                    parent.semantic_fingerprint
+                );
+            }
+            "SPATIAL-REVISION-FRESH" => {
+                assert_eq!(output.intent.requested_bhks(), [2]);
+                assert_eq!(output.intent.requested_areas(), ["Hoodi"]);
+            }
             other => panic!("unexpected candidate revision case {other}"),
         }
     }
-    assert_eq!(executed, 8, "every candidate scenario must execute");
+    assert_eq!(executed, 13, "every candidate scenario must execute");
 }
 
 fn contains_negated_area(expression: &backend::search::ConstraintExpr) -> bool {
@@ -1397,6 +1471,8 @@ fn run_controlled_journey(
         journey.id
     );
     let fixture = MockSearchFixture::for_kind(journey.fixture);
+    let snapshot = fixture.runtime_snapshot();
+    let engine = SearchEngine::new(&snapshot);
     let mut active_case = atomic_case(atomic_cases, &journey.initial_case_id, journey);
     assert_eq!(
         active_case.fixture, journey.fixture,
@@ -1405,7 +1481,7 @@ fn run_controlled_journey(
     );
     let mut active_output = fixture.search(&active_case.query);
     let mut active_query = active_case.query.clone();
-    let mut active_branch_count = active_output.result_sets.len().max(1);
+    let mut active_plan = engine.compile_initial(&active_query, "root");
     assert_controlled_expectation(active_case, &active_output);
     assert_branch_limit(&journey.id, &active_output, limits.max_active_branches);
 
@@ -1415,10 +1491,16 @@ fn run_controlled_journey(
             "{} has an empty turn",
             journey.id
         );
-        let revision = compile_search_revision(
-            &active_query,
+        let fragment = engine.compile_fragment(
             &turn.utterance,
-            active_branch_count,
+            &format!("turn-{}", turn_index + 2),
+            &active_plan,
+        );
+        let revision = compile_typed_revision(
+            &active_plan,
+            &fragment,
+            &turn.utterance,
+            &format!("rev-parent-{turn_index}"),
             SearchRevisionLimits {
                 max_active_branches: limits.max_active_branches,
             },
@@ -1429,7 +1511,29 @@ fn run_controlled_journey(
             "{} turn {turn_index} compiled the wrong operation",
             journey.id
         );
+        let candidate_query =
+            render_revision_active_query(&active_query, &turn.utterance, revision.operation);
+        let candidate_plan = apply_typed_revision(
+            &active_plan,
+            &fragment,
+            &revision,
+            &candidate_query,
+            &snapshot.geo_topology,
+            Some(&snapshot.bundle.spatial_index),
+            backend::search::GeoCellSearchPolicy {
+                max_hops: snapshot.geo_cell_max_hops,
+                max_distance_km: snapshot.geo_cell_max_distance_km,
+            },
+        );
         let candidate = turn.candidate_case_id.as_deref().map(|case_id| {
+            let output = engine
+                .execute_plan(
+                    candidate_plan
+                        .clone()
+                        .expect("candidate turn must compile a typed plan"),
+                    &candidate_query,
+                )
+                .expect("typed candidate runs against the pinned snapshot");
             evaluate_candidate(
                 journey,
                 turn_index,
@@ -1438,10 +1542,8 @@ fn run_controlled_journey(
                 &fixture,
                 &active_output,
                 case_id,
-                revision
-                    .candidate_query
-                    .as_deref()
-                    .expect("candidate turn must compile a query"),
+                &candidate_query,
+                fixture.observe_output(output),
             )
         });
         assert_revision_outcome(journey, turn_index, turn.outcome, revision.outcome);
@@ -1456,10 +1558,8 @@ fn run_controlled_journey(
             let (candidate_case, candidate_output) = candidate.expect("candidate was checked");
             active_case = candidate_case;
             active_output = candidate_output;
-            active_query = revision
-                .candidate_query
-                .expect("activated turn retains its compiled query");
-            active_branch_count = revision.candidate_branch_count;
+            active_query = candidate_query;
+            active_plan = candidate_plan.expect("activated turn retains its compiled plan");
             assert_branch_limit(&journey.id, &active_output, limits.max_active_branches);
         }
     }
@@ -1474,6 +1574,7 @@ fn evaluate_candidate<'a>(
     active_output: &ObservedSearch,
     case_id: &str,
     candidate_query: &str,
+    output: ObservedSearch,
 ) -> (&'a ControlledQueryCase, ObservedSearch) {
     let candidate_case = atomic_case(atomic_cases, case_id, journey);
     assert_eq!(
@@ -1481,7 +1582,6 @@ fn evaluate_candidate<'a>(
         "{} turn {turn_index} crosses controlled fixtures",
         journey.id
     );
-    let output = fixture.search(candidate_query);
     assert_controlled_expectation(candidate_case, &output);
     let reference_output = fixture.search(&candidate_case.query);
     assert_same_search_observation(
@@ -1539,8 +1639,12 @@ fn observed_operation(operation: SearchRevisionOperation) -> JourneyOperation {
         SearchRevisionOperation::Refine => JourneyOperation::Refine,
         SearchRevisionOperation::Rephrase => JourneyOperation::Rephrase,
         SearchRevisionOperation::Expand => JourneyOperation::Expand,
-        SearchRevisionOperation::Switch => JourneyOperation::Switch,
         SearchRevisionOperation::Replace => JourneyOperation::Replace,
+        SearchRevisionOperation::Initial => JourneyOperation::Replace,
+        SearchRevisionOperation::Exclude => JourneyOperation::Exclude,
+        SearchRevisionOperation::Correct => JourneyOperation::Correct,
+        SearchRevisionOperation::Undo => JourneyOperation::Undo,
+        SearchRevisionOperation::Fresh => JourneyOperation::Fresh,
     }
 }
 
@@ -1591,7 +1695,8 @@ fn assert_same_search_observation(
         "{journey_id} turn {turn_index} compiled different branches: {candidate_query}"
     );
     assert_eq!(
-        actual.areas, expected.areas,
+        actual.areas.iter().collect::<HashSet<_>>(),
+        expected.areas.iter().collect::<HashSet<_>>(),
         "{journey_id} turn {turn_index}"
     );
     assert_eq!(actual.bhks, expected.bhks, "{journey_id} turn {turn_index}");
@@ -2672,6 +2777,13 @@ impl MockSearchFixture {
 
     fn search(&self, query: &str) -> ObservedSearch {
         let output = self.search_output(query);
+        self.observe_output(output)
+    }
+
+    fn observe_output(
+        &self,
+        output: backend::search::engine::SearchEngineOutput,
+    ) -> ObservedSearch {
         let negative_preferences = output
             .intent
             .negative_preferences
@@ -2806,19 +2918,23 @@ impl MockSearchFixture {
     }
 
     fn search_output(&self, query: &str) -> backend::search::engine::SearchEngineOutput {
+        let snapshot = self.runtime_snapshot();
+        SearchEngine::new(&snapshot).search(query)
+    }
+
+    fn runtime_snapshot(&self) -> SearchRuntimeSnapshot {
         let index = SearchIndex::build_with_serving_graph(
             &self.properties,
             &self.bundle.entities,
             &self.bundle.edges,
         );
-        let snapshot = SearchRuntimeSnapshot::new(
+        SearchRuntimeSnapshot::new(
             self.bundle.clone(),
             self.properties.clone(),
             mock_societies(&self.properties),
             Vec::new(),
             index,
-        );
-        SearchEngine::new(&snapshot).search(query)
+        )
     }
 }
 

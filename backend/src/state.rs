@@ -476,6 +476,7 @@ mod tests {
             response: Arc::new(SearchResponse {
                 query: query.to_string(),
                 revision_id: "rev-001-test".to_string(),
+                revision: None,
                 ast_fingerprint: "sha256:test".to_string(),
                 result_sets: Vec::new(),
                 ordered_result_ids: Vec::new(),
@@ -490,9 +491,16 @@ mod tests {
                 state: "no_matches".to_string(),
                 search_guidance: None,
             }),
-            compiled_plan: Arc::new(crate::search::CompiledSearchPlan::compile(
+            compiled_plan: Arc::new(crate::search::CompiledSearchPlan::compile_for_snapshot(
                 crate::search::CompiledQuery::from_text(query),
                 "test-bundle",
+                &[],
+                &crate::search::GeoTopologyIndex::default(),
+                None,
+                crate::search::GeoCellSearchPolicy {
+                    max_hops: 2,
+                    max_distance_km: 4.0,
+                },
             )),
             log_messages: Vec::new(),
         }

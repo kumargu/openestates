@@ -1,27 +1,33 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::sync::OnceLock;
 
-use crate::dag_config::{search_parser_config, search_resolution_config};
-use crate::serving::{ServingEntityAliasIndex, ServingEntityRecord};
+use crate::dag_config::search_parser_config;
+use crate::serving::SpatialServingIndex;
 
-use super::ast::{PredicateFamily, PredicatePolarity};
-use super::compiled_plan::{CompiledSearchPlan, GeoBranch};
-use super::intent::{parse_intent, SearchIntent};
+use super::ast::{semantic_search_fingerprint, ConstraintExpr, PredicateFamily};
+use super::compiled_plan::{
+    CompiledSearchPlan, GeoCellSearchPolicy, GeoTopologyIndex, ResolvedEntityHandle,
+};
+use super::intent::SearchIntent;
 use super::SearchRuntimeVersion;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SearchRevisionOperation {
+    Initial,
     Refine,
     Rephrase,
     Expand,
-    Switch,
     Replace,
+    Exclude,
+    Correct,
+    Undo,
+    Fresh,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SearchRevisionOutcome {
     Candidate,
@@ -34,328 +40,600 @@ pub struct SearchRevisionLimits {
     pub max_active_branches: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SearchRevision {
-    pub operation: SearchRevisionOperation,
-    pub outcome: SearchRevisionOutcome,
-    pub candidate_query: Option<String>,
-    pub candidate_branch_count: usize,
-    pub patches: Vec<SearchRevisionPatch>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SearchRevisionPatch {
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum TypedSearchRevisionPatch {
     AddPredicate {
-        fragment: String,
+        branch_ids: Vec<String>,
+        expression: super::ast::ConstraintExpr,
     },
     ReplacePredicate {
-        family: PredicateFamily,
-        fragment: String,
-        branch_id: Option<String>,
+        branch_ids: Vec<String>,
+        families: Vec<PredicateFamily>,
+        expression: super::ast::ConstraintExpr,
     },
     RemovePredicate {
-        family: PredicateFamily,
+        branch_ids: Vec<String>,
+        families: Vec<PredicateFamily>,
     },
     AddAlternative {
-        fragment: String,
+        branch_id: String,
+        expression: super::ast::ConstraintExpr,
     },
-    ReplaceIntent {
-        query: String,
-    },
+    ReplaceIntent,
 }
 
-/// Compiles one conversational search turn into a full candidate query.
-///
-/// This layer only owns revision mechanics. The ordinary parser, serving
-/// resolver, AST, and ranker remain authoritative when the candidate runs.
-pub fn compile_search_revision(
-    parent_query: &str,
-    utterance: &str,
-    active_branch_count: usize,
-    limits: SearchRevisionLimits,
-) -> SearchRevision {
-    compile_search_revision_with_plan(
-        parent_query,
-        utterance,
-        active_branch_count,
-        limits,
-        None,
-        None,
-    )
+#[derive(Debug, Clone)]
+pub struct TypedSearchRevision {
+    pub operation: SearchRevisionOperation,
+    pub outcome: SearchRevisionOutcome,
+    pub patches: Vec<TypedSearchRevisionPatch>,
 }
 
-pub fn compile_search_revision_with_plan(
-    parent_query: &str,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedSearchContext {
+    pub revision_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_revision_id: Option<String>,
+    pub operation: SearchRevisionOperation,
+    pub depth: usize,
+    pub active_query: String,
+    pub plan_fingerprint: String,
+    pub runtime_version: SearchRuntimeVersion,
+    pub plan: CompiledSearchPlan,
+    pub ordered_result_ids: Vec<String>,
+    pub result_fingerprint: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuyerIntentBranchProjection {
+    pub branch_id: String,
+    pub summary: String,
+    pub source_spans: Vec<super::intent::SourceSpan>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchRevisionDescriptor {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    pub operation: SearchRevisionOperation,
+    pub depth: usize,
+    pub active_query: String,
+    pub plan_fingerprint: String,
+    pub runtime_version: SearchRuntimeVersion,
+    pub buyer_intent: Vec<BuyerIntentBranchProjection>,
+    pub context: String,
+}
+
+/// Classify a single newly compiled utterance against an authenticated parent
+/// plan. Parent buyer text is never parsed on this path.
+pub fn compile_typed_revision(
+    parent: &CompiledSearchPlan,
+    fragment: &CompiledSearchPlan,
     utterance: &str,
-    active_branch_count: usize,
+    parent_revision_id: &str,
     limits: SearchRevisionLimits,
-    parent_plan: Option<&CompiledSearchPlan>,
-    area_only_alternative: Option<&str>,
-) -> SearchRevision {
-    let parent = parent_query.trim();
+) -> TypedSearchRevision {
     let turn = utterance.trim();
     let discourse = &search_parser_config().discourse;
-    let fallback_plan = parent_plan
-        .is_none()
-        .then(|| compile_revision_parent_plan(parent));
-    let parent_plan = parent_plan.or(fallback_plan.as_ref());
-
     if turn.is_empty() {
-        return clarification(SearchRevisionOperation::Refine, active_branch_count);
+        return typed_clarification(SearchRevisionOperation::Refine);
+    }
+    if discourse
+        .revision_undo_phrases
+        .iter()
+        .any(|phrase| turn.eq_ignore_ascii_case(phrase))
+    {
+        return TypedSearchRevision {
+            operation: SearchRevisionOperation::Undo,
+            outcome: SearchRevisionOutcome::Candidate,
+            patches: Vec::new(),
+        };
     }
 
-    if let Some(clause) = strip_configured_prefix(turn, &discourse.revision_expand_prefixes) {
-        if active_branch_count >= limits.max_active_branches {
-            return SearchRevision {
+    let fresh = strip_configured_prefix(turn, &discourse.revision_fresh_prefixes).is_some();
+    let expand = strip_configured_prefix(turn, &discourse.revision_expand_prefixes).is_some();
+    let correction = strip_configured_prefix(turn, &discourse.revision_correction_prefixes)
+        .or_else(|| strip_configured_prefix(turn, &discourse.revision_overwrite_prefixes))
+        .is_some();
+    let exclusion = strip_configured_prefix(turn, &discourse.revision_exclusion_prefixes).is_some();
+    let Some(fragment_branch) = fragment.branches.first() else {
+        return typed_clarification(if fresh {
+            SearchRevisionOperation::Fresh
+        } else {
+            SearchRevisionOperation::Refine
+        });
+    };
+    if fresh {
+        return TypedSearchRevision {
+            operation: SearchRevisionOperation::Fresh,
+            outcome: SearchRevisionOutcome::Candidate,
+            patches: vec![TypedSearchRevisionPatch::ReplaceIntent],
+        };
+    }
+    if expand {
+        if parent.branches.len() >= limits.max_active_branches {
+            return TypedSearchRevision {
                 operation: SearchRevisionOperation::Expand,
                 outcome: SearchRevisionOutcome::RequireCheckpoint,
-                candidate_query: None,
-                candidate_branch_count: active_branch_count,
                 patches: Vec::new(),
             };
         }
-        if let Some(area_name) = area_only_alternative {
-            let Some(query) = parent_plan.and_then(|plan| area_alternative_query(plan, area_name))
-            else {
-                return clarification(SearchRevisionOperation::Expand, active_branch_count);
-            };
-            return candidate_with_patch(
-                SearchRevisionOperation::Expand,
-                query,
-                active_branch_count + 1,
-                SearchRevisionPatch::AddAlternative {
-                    fragment: area_name.to_string(),
-                },
-            );
+        if !fragment_branch.predicates.has_terms() {
+            return typed_clarification(SearchRevisionOperation::Expand);
         }
-        if clause.is_empty() || !has_structured_search_anchor(clause) {
-            return clarification(SearchRevisionOperation::Expand, active_branch_count);
-        }
-        return candidate_with_patch(
-            SearchRevisionOperation::Expand,
-            format!("{parent} or {clause}"),
-            active_branch_count + 1,
-            SearchRevisionPatch::AddAlternative {
-                fragment: clause.to_string(),
-            },
-        );
-    }
-
-    let standalone_intent = parse_intent(turn);
-    let is_complete = is_complete_search(&standalone_intent);
-    let explicitly_switches = contains_configured_phrase(turn, &discourse.revision_switch_prefixes);
-    let explicitly_replaces = contains_configured_phrase(turn, &discourse.revision_replace_markers);
-    let explicitly_corrects =
-        strip_configured_prefix(turn, &discourse.revision_correction_prefixes).is_some();
-
-    if discourse
-        .revision_ambiguous_spatial_refinements
-        .iter()
-        .any(|phrase| contains_configured_phrase(turn, std::slice::from_ref(phrase)))
-        && super::parser::parse_query_slots(turn)
-            .distance_limit
-            .is_none()
-    {
-        return clarification(SearchRevisionOperation::Refine, active_branch_count);
-    }
-
-    if explicitly_corrects {
-        let target_branch = if active_branch_count > 1 && !targets_every_branch(turn) {
-            let Some(index) = targeted_branch_index(turn, active_branch_count) else {
-                return clarification(SearchRevisionOperation::Refine, active_branch_count);
-            };
-            Some(index)
-        } else {
-            None
+        return TypedSearchRevision {
+            operation: SearchRevisionOperation::Expand,
+            outcome: SearchRevisionOutcome::Candidate,
+            patches: vec![TypedSearchRevisionPatch::AddAlternative {
+                branch_id: format!("branch:{parent_revision_id}:1"),
+                expression: fragment_branch.predicates.clone(),
+            }],
         };
-        if let Some(query) =
-            parent_plan.and_then(|plan| replace_budget_constraint(plan, turn, target_branch))
+    }
+
+    let families = expression_families(&fragment_branch.predicates);
+    if families.is_empty() {
+        if fragment.aggregate_intent.positive_preferences.is_empty()
+            && fragment.aggregate_intent.negative_preferences.is_empty()
+            && fragment.aggregate_intent.ranking_priorities.is_empty()
         {
-            return candidate_with_patch(
-                SearchRevisionOperation::Refine,
-                query,
-                active_branch_count,
-                SearchRevisionPatch::ReplacePredicate {
-                    family: PredicateFamily::Budget,
-                    fragment: turn.to_string(),
-                    branch_id: target_branch.map(|index| format!("branch-{}", index + 1)),
-                },
-            );
+            return typed_clarification(SearchRevisionOperation::Refine);
         }
-    }
-
-    if is_complete && explicitly_replaces {
-        return candidate(
-            SearchRevisionOperation::Replace,
-            turn.to_string(),
-            standalone_branch_count(turn),
-        );
-    }
-    if is_complete {
-        let operation =
-            if explicitly_switches && !standalone_intent.unsupported_inventory_types.is_empty() {
-                SearchRevisionOperation::Replace
-            } else if !explicitly_switches
-                && equivalent_search_shape(parent, &parse_intent(parent), turn, &standalone_intent)
-            {
-                SearchRevisionOperation::Rephrase
-            } else {
-                SearchRevisionOperation::Switch
-            };
-        return candidate(operation, turn.to_string(), standalone_branch_count(turn));
-    }
-    if explicitly_switches || explicitly_replaces || explicitly_corrects {
-        let operation = if explicitly_switches {
-            SearchRevisionOperation::Switch
-        } else {
-            SearchRevisionOperation::Replace
+        return TypedSearchRevision {
+            operation: SearchRevisionOperation::Refine,
+            outcome: SearchRevisionOutcome::Candidate,
+            patches: vec![TypedSearchRevisionPatch::AddPredicate {
+                branch_ids: parent
+                    .branches
+                    .iter()
+                    .map(|branch| branch.branch_id.clone())
+                    .collect(),
+                expression: ConstraintExpr::and(Vec::new()),
+            }],
         };
-        return clarification(operation, active_branch_count);
     }
-
-    let refinement = strip_configured_prefixes(turn, &discourse.revision_continuity_prefixes);
-    if refinement.is_empty() {
-        return clarification(SearchRevisionOperation::Refine, active_branch_count);
-    }
-    candidate_with_patch(
-        if explicitly_replaces {
-            SearchRevisionOperation::Replace
+    let target_ids = if parent.branches.len() == 1 || targets_every_branch(turn) {
+        parent
+            .branches
+            .iter()
+            .map(|branch| branch.branch_id.clone())
+            .collect::<Vec<_>>()
+    } else if let Some(index) = targeted_branch_index(turn, parent.branches.len()) {
+        vec![parent.branches[index].branch_id.clone()]
+    } else if correction || families.iter().any(is_overwrite_family) {
+        return typed_clarification(if correction {
+            SearchRevisionOperation::Correct
         } else {
             SearchRevisionOperation::Refine
-        },
-        format!("{parent} {refinement}"),
-        active_branch_count,
-        SearchRevisionPatch::AddPredicate {
-            fragment: refinement.to_string(),
-        },
-    )
-}
-
-pub(crate) fn revision_expansion_fragment(value: &str) -> Option<&str> {
-    strip_configured_prefix(
-        value.trim(),
-        &search_parser_config().discourse.revision_expand_prefixes,
-    )
-}
-
-pub(crate) fn resolve_area_only_alternative(
-    fragment: &str,
-    entities: &[ServingEntityRecord],
-    aliases: &ServingEntityAliasIndex,
-) -> Option<String> {
-    let candidate = strip_configured_prefix(
-        fragment.trim(),
-        &search_resolution_config().named_entity_scope_prefixes,
-    )
-    .unwrap_or(fragment.trim())
-    .trim_matches([',', ':', '-', ' ']);
-    if candidate.is_empty() {
-        return None;
-    }
-    let intent = parse_intent(candidate);
-    if !intent.requested_bhks().is_empty()
-        || intent.budget_min.is_some()
-        || intent.budget_max.is_some()
-        || !intent.hard_constraints.is_empty()
-    {
-        return None;
-    }
-    let mut matches = entities
-        .iter()
-        .filter(|entity| {
-            entity.entity_type.eq_ignore_ascii_case("area")
-                && entity.name.trim().eq_ignore_ascii_case(candidate)
-        })
-        .map(|entity| (entity.entity_id.as_str(), entity.name.as_str()))
-        .collect::<Vec<_>>();
-    if let Some(group) = aliases.get(candidate) {
-        matches.extend(
-            group
-                .members
-                .iter()
-                .filter(|record| record.entity_type.eq_ignore_ascii_case("area"))
-                .map(|record| (record.entity_id.as_str(), record.entity_name.as_str())),
-        );
-    }
-    matches.sort_unstable();
-    matches.dedup_by(|left, right| left.0 == right.0);
-    match matches.as_slice() {
-        [(_, name)] => Some((*name).to_string()),
-        [] => intent
-            .requested_areas()
-            .first()
-            .map(|area| (*area).to_string()),
-        _ => None,
-    }
-}
-
-fn area_alternative_query(parent_plan: &CompiledSearchPlan, area_name: &str) -> Option<String> {
-    let [branch] = parent_plan.branches.as_slice() else {
-        return None;
+        });
+    } else {
+        parent
+            .branches
+            .iter()
+            .map(|branch| branch.branch_id.clone())
+            .collect::<Vec<_>>()
     };
-    let (alternative, replaced) = replace_branch_predicates(
-        branch,
-        &[
+
+    if exclusion {
+        return TypedSearchRevision {
+            operation: SearchRevisionOperation::Exclude,
+            outcome: SearchRevisionOutcome::Candidate,
+            patches: vec![TypedSearchRevisionPatch::AddPredicate {
+                branch_ids: target_ids,
+                expression: fragment_branch.predicates.clone(),
+            }],
+        };
+    }
+    if fragment.semantic_fingerprint == parent.semantic_fingerprint {
+        return TypedSearchRevision {
+            operation: SearchRevisionOperation::Rephrase,
+            outcome: SearchRevisionOutcome::Candidate,
+            patches: vec![TypedSearchRevisionPatch::ReplaceIntent],
+        };
+    }
+    let explicit_replace = strip_configured_prefix(turn, &discourse.revision_switch_prefixes)
+        .is_some()
+        || (families.len() >= 2
+            && strip_configured_prefix(turn, &discourse.revision_continuity_prefixes).is_none()
+            && !correction);
+    if explicit_replace {
+        return TypedSearchRevision {
+            operation: SearchRevisionOperation::Replace,
+            outcome: SearchRevisionOutcome::Candidate,
+            patches: vec![TypedSearchRevisionPatch::ReplaceIntent],
+        };
+    }
+
+    let mut replace_families = families
+        .iter()
+        .copied()
+        .filter(|family| is_overwrite_family(family))
+        .collect::<Vec<_>>();
+    if correction && families.contains(&PredicateFamily::Spatial) {
+        replace_families.extend([
             PredicateFamily::Area,
             PredicateFamily::Society,
             PredicateFamily::Spatial,
-        ],
-        area_name,
-        true,
-    )?;
-    if replaced != 1 {
-        return None;
+        ]);
+        replace_families.sort_by_key(|family| *family as u8);
+        replace_families.dedup();
     }
-    Some(format!(
-        "{} or {alternative}",
-        canonical_plan_query(parent_plan)
-    ))
-}
-
-fn candidate(
-    operation: SearchRevisionOperation,
-    query: String,
-    branch_count: usize,
-) -> SearchRevision {
-    let patch = match operation {
-        SearchRevisionOperation::Expand => SearchRevisionPatch::AddAlternative {
-            fragment: query.clone(),
-        },
-        SearchRevisionOperation::Refine => SearchRevisionPatch::AddPredicate {
-            fragment: query.clone(),
-        },
-        SearchRevisionOperation::Rephrase
-        | SearchRevisionOperation::Switch
-        | SearchRevisionOperation::Replace => SearchRevisionPatch::ReplaceIntent {
-            query: query.clone(),
-        },
+    let operation = if correction {
+        SearchRevisionOperation::Correct
+    } else {
+        SearchRevisionOperation::Refine
     };
-    candidate_with_patch(operation, query, branch_count, patch)
-}
-
-fn candidate_with_patch(
-    operation: SearchRevisionOperation,
-    query: String,
-    branch_count: usize,
-    patch: SearchRevisionPatch,
-) -> SearchRevision {
-    SearchRevision {
+    let mut patches = Vec::new();
+    if !replace_families.is_empty() {
+        patches.push(TypedSearchRevisionPatch::ReplacePredicate {
+            branch_ids: target_ids.clone(),
+            families: replace_families.clone(),
+            expression: fragment_branch
+                .predicates
+                .select_families(&replace_families),
+        });
+    }
+    let add_families = families
+        .into_iter()
+        .filter(|family| !replace_families.contains(family))
+        .collect::<Vec<_>>();
+    if !add_families.is_empty() {
+        patches.push(TypedSearchRevisionPatch::AddPredicate {
+            branch_ids: target_ids,
+            expression: fragment_branch.predicates.select_families(&add_families),
+        });
+    }
+    TypedSearchRevision {
         operation,
         outcome: SearchRevisionOutcome::Candidate,
-        candidate_query: Some(query),
-        candidate_branch_count: branch_count,
-        patches: vec![patch],
+        patches,
     }
 }
 
-fn clarification(operation: SearchRevisionOperation, branch_count: usize) -> SearchRevision {
-    SearchRevision {
+pub fn apply_typed_revision(
+    parent: &CompiledSearchPlan,
+    fragment: &CompiledSearchPlan,
+    revision: &TypedSearchRevision,
+    active_query: &str,
+    topology: &GeoTopologyIndex,
+    spatial_index: Option<&SpatialServingIndex>,
+    geo_cell_policy: GeoCellSearchPolicy,
+) -> Option<CompiledSearchPlan> {
+    if revision.outcome != SearchRevisionOutcome::Candidate {
+        return None;
+    }
+    if revision.operation == SearchRevisionOperation::Undo {
+        return Some(parent.clone());
+    }
+    if revision
+        .patches
+        .iter()
+        .any(|patch| matches!(patch, TypedSearchRevisionPatch::ReplaceIntent))
+    {
+        return Some(fragment.clone());
+    }
+
+    let mut branches = parent
+        .branches
+        .iter()
+        .map(|branch| (branch.branch_id.clone(), branch.predicates.clone()))
+        .collect::<Vec<_>>();
+    for patch in &revision.patches {
+        match patch {
+            TypedSearchRevisionPatch::AddPredicate {
+                branch_ids,
+                expression,
+            } => {
+                for (branch_id, predicates) in &mut branches {
+                    if branch_ids.contains(branch_id) {
+                        *predicates = conjoin(predicates.clone(), expression.clone());
+                    }
+                }
+            }
+            TypedSearchRevisionPatch::ReplacePredicate {
+                branch_ids,
+                families,
+                expression,
+            } => {
+                for (branch_id, predicates) in &mut branches {
+                    if branch_ids.contains(branch_id) {
+                        predicates.remove_positive_families(families);
+                        *predicates = conjoin(predicates.clone(), expression.clone());
+                    }
+                }
+            }
+            TypedSearchRevisionPatch::RemovePredicate {
+                branch_ids,
+                families,
+            } => {
+                for (branch_id, predicates) in &mut branches {
+                    if branch_ids.contains(branch_id) {
+                        predicates.remove_positive_families(families);
+                    }
+                }
+            }
+            TypedSearchRevisionPatch::AddAlternative {
+                branch_id,
+                expression,
+            } => {
+                let geo_families = [
+                    PredicateFamily::Area,
+                    PredicateFamily::Society,
+                    PredicateFamily::Spatial,
+                ];
+                let expression_families = expression_families(expression);
+                let alternative = if expression_families
+                    .iter()
+                    .all(|family| geo_families.contains(family))
+                {
+                    let mut inherited = parent.branches.first()?.predicates.clone();
+                    inherited.remove_positive_families(&geo_families);
+                    conjoin(inherited, expression.clone())
+                } else {
+                    expression.clone()
+                };
+                branches.push((branch_id.clone(), alternative));
+            }
+            TypedSearchRevisionPatch::ReplaceIntent => {}
+        }
+    }
+    let mut resolved_entities = parent
+        .branches
+        .iter()
+        .chain(fragment.branches.iter())
+        .flat_map(|branch| branch.resolved_entities.iter().cloned())
+        .fold(
+            Vec::<ResolvedEntityHandle>::new(),
+            |mut entities, entity| {
+                if !entities
+                    .iter()
+                    .any(|existing| existing.entity_id == entity.entity_id)
+                {
+                    entities.push(entity);
+                }
+                entities
+            },
+        );
+    resolved_entities.sort_by(|left, right| left.entity_id.cmp(&right.entity_id));
+    let mut aggregate_intent =
+        merge_revision_intent(&parent.aggregate_intent, &fragment.aggregate_intent);
+    for patch in &revision.patches {
+        match patch {
+            TypedSearchRevisionPatch::ReplacePredicate { families, .. } => {
+                if families.contains(&PredicateFamily::Bhk) {
+                    aggregate_intent.bhk = fragment.aggregate_intent.bhk;
+                    aggregate_intent
+                        .bhks
+                        .clone_from(&fragment.aggregate_intent.bhks);
+                    aggregate_intent
+                        .bhk_spans
+                        .clone_from(&fragment.aggregate_intent.bhk_spans);
+                }
+                if families.contains(&PredicateFamily::Budget) {
+                    aggregate_intent.budget_min = fragment.aggregate_intent.budget_min;
+                    aggregate_intent.budget_max = fragment.aggregate_intent.budget_max;
+                }
+            }
+            TypedSearchRevisionPatch::RemovePredicate { families, .. } => {
+                if families.contains(&PredicateFamily::Bhk) {
+                    aggregate_intent.bhk = None;
+                    aggregate_intent.bhks.clear();
+                    aggregate_intent.bhk_spans.clear();
+                }
+                if families.contains(&PredicateFamily::Budget) {
+                    aggregate_intent.budget_min = None;
+                    aggregate_intent.budget_max = None;
+                }
+            }
+            TypedSearchRevisionPatch::AddAlternative { .. } => {
+                for area in &fragment.aggregate_intent.areas {
+                    if !aggregate_intent
+                        .areas
+                        .iter()
+                        .any(|existing| existing.eq_ignore_ascii_case(area))
+                    {
+                        aggregate_intent.areas.push(area.clone());
+                    }
+                }
+                aggregate_intent.area =
+                    (aggregate_intent.areas.len() == 1).then(|| aggregate_intent.areas[0].clone());
+                for bhk in &fragment.aggregate_intent.bhks {
+                    if !aggregate_intent.bhks.contains(bhk) {
+                        aggregate_intent.bhks.push(*bhk);
+                    }
+                }
+                aggregate_intent.bhk =
+                    (aggregate_intent.bhks.len() == 1).then_some(aggregate_intent.bhks[0]);
+            }
+            _ => {}
+        }
+    }
+    let mut recompiled = parent.recompile_for_snapshot(
+        branches,
+        aggregate_intent,
+        resolved_entities,
+        active_query,
+        topology,
+        spatial_index,
+        geo_cell_policy,
+    );
+    retain_replaced_predicate_ids(parent, &mut recompiled, &revision.patches);
+    Some(recompiled)
+}
+
+fn retain_replaced_predicate_ids(
+    parent: &CompiledSearchPlan,
+    candidate: &mut CompiledSearchPlan,
+    patches: &[TypedSearchRevisionPatch],
+) {
+    for patch in patches {
+        let TypedSearchRevisionPatch::ReplacePredicate {
+            branch_ids,
+            families,
+            ..
+        } = patch
+        else {
+            continue;
+        };
+        for branch_id in branch_ids {
+            let Some(previous) = parent
+                .branches
+                .iter()
+                .find(|branch| branch.branch_id == *branch_id)
+            else {
+                continue;
+            };
+            let Some(replaced) = candidate
+                .branches
+                .iter_mut()
+                .find(|branch| branch.branch_id == *branch_id)
+            else {
+                continue;
+            };
+            let previous_ids = previous
+                .predicate_bindings
+                .iter()
+                .filter(|binding| {
+                    binding.polarity == super::ast::PredicatePolarity::Positive
+                        && families.contains(&binding.family)
+                })
+                .map(|binding| binding.predicate_id.clone())
+                .collect::<Vec<_>>();
+            for (binding, predicate_id) in replaced
+                .predicate_bindings
+                .iter_mut()
+                .filter(|binding| {
+                    binding.polarity == super::ast::PredicatePolarity::Positive
+                        && families.contains(&binding.family)
+                })
+                .zip(previous_ids)
+            {
+                binding.predicate_id = predicate_id;
+            }
+        }
+    }
+}
+
+fn expression_families(expression: &ConstraintExpr) -> Vec<PredicateFamily> {
+    const ALL: [PredicateFamily; 7] = [
+        PredicateFamily::Bhk,
+        PredicateFamily::Area,
+        PredicateFamily::Society,
+        PredicateFamily::Builder,
+        PredicateFamily::Budget,
+        PredicateFamily::Evidence,
+        PredicateFamily::Spatial,
+    ];
+    ALL.into_iter()
+        .filter(|family| expression.contains_family(*family))
+        .collect()
+}
+
+fn conjoin(left: ConstraintExpr, right: ConstraintExpr) -> ConstraintExpr {
+    let mut clauses = match left {
+        ConstraintExpr::And { clauses } => clauses,
+        other => vec![other],
+    };
+    match right {
+        ConstraintExpr::And {
+            clauses: right_clauses,
+        } => clauses.extend(right_clauses),
+        other => clauses.push(other),
+    }
+    ConstraintExpr::and(clauses)
+}
+
+fn is_overwrite_family(family: &PredicateFamily) -> bool {
+    matches!(
+        family,
+        PredicateFamily::Bhk | PredicateFamily::Budget | PredicateFamily::Spatial
+    )
+}
+
+fn typed_clarification(operation: SearchRevisionOperation) -> TypedSearchRevision {
+    TypedSearchRevision {
         operation,
         outcome: SearchRevisionOutcome::RequireClarification,
-        candidate_query: None,
-        candidate_branch_count: branch_count,
         patches: Vec::new(),
     }
+}
+
+/// Render buyer-visible journey text. This string is presentation-only;
+/// execution always consumes the patched `CompiledSearchPlan`.
+pub fn render_revision_active_query(
+    parent_active_query: &str,
+    utterance: &str,
+    operation: SearchRevisionOperation,
+) -> String {
+    let utterance = utterance.trim();
+    if matches!(
+        operation,
+        SearchRevisionOperation::Fresh
+            | SearchRevisionOperation::Replace
+            | SearchRevisionOperation::Rephrase
+    ) {
+        return search_parser_config()
+            .discourse
+            .revision_fresh_prefixes
+            .iter()
+            .filter_map(|prefix| strip_prefix_case_insensitive(utterance, prefix))
+            .next()
+            .unwrap_or(utterance)
+            .trim_matches([',', ':', '-', ' '])
+            .to_string();
+    }
+    let utterance = if operation == SearchRevisionOperation::Expand {
+        strip_configured_prefix(
+            utterance,
+            &search_parser_config().discourse.revision_expand_prefixes,
+        )
+        .unwrap_or(utterance)
+    } else {
+        utterance
+    };
+    let separator = if operation == SearchRevisionOperation::Expand {
+        " or "
+    } else {
+        " · "
+    };
+    format!("{parent_active_query}{separator}{utterance}")
+}
+
+fn merge_revision_intent(parent: &SearchIntent, fragment: &SearchIntent) -> SearchIntent {
+    let mut merged = parent.clone();
+    for preference in &fragment.positive_preferences {
+        if !merged.positive_preferences.contains(preference) {
+            merged.positive_preferences.push(preference.clone());
+        }
+    }
+    for preference in &fragment.negative_preferences {
+        if !merged.negative_preferences.contains(preference) {
+            merged.negative_preferences.push(preference.clone());
+        }
+    }
+    for priority in &fragment.ranking_priorities {
+        if !merged.ranking_priorities.contains(priority) {
+            merged.ranking_priorities.push(priority.clone());
+        }
+    }
+    merged.positive_preferences.sort_by_key(|preference| {
+        super::schema::positive_preference_patterns()
+            .iter()
+            .position(|pattern| pattern.label.eq_ignore_ascii_case(&preference.raw_text))
+            .unwrap_or(usize::MAX)
+    });
+    merged.negative_preferences.sort_by_key(|preference| {
+        super::schema::negative_preference_patterns()
+            .iter()
+            .position(|pattern| pattern.label.eq_ignore_ascii_case(&preference.raw_text))
+            .unwrap_or(usize::MAX)
+    });
+    merged
 }
 
 fn targets_every_branch(value: &str) -> bool {
@@ -389,13 +667,6 @@ fn strip_configured_prefix<'a>(value: &'a str, prefixes: &[String]) -> Option<&'
         .map(|remainder| remainder.trim_start_matches([',', ':', '-', ' ']))
 }
 
-fn strip_configured_prefixes<'a>(mut value: &'a str, prefixes: &[String]) -> &'a str {
-    while let Some(remainder) = strip_configured_prefix(value, prefixes) {
-        value = remainder;
-    }
-    value.trim()
-}
-
 fn strip_prefix_case_insensitive<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
     value
         .get(..prefix.len())
@@ -403,74 +674,200 @@ fn strip_prefix_case_insensitive<'a>(value: &'a str, prefix: &str) -> Option<&'a
         .and_then(|_| value.get(prefix.len()..))
 }
 
-fn contains_configured_phrase(value: &str, phrases: &[String]) -> bool {
-    let lower = value.to_lowercase();
-    phrases
-        .iter()
-        .any(|phrase| lower.contains(&phrase.to_lowercase()))
+pub fn issue_signed_search_context(
+    parent_revision_id: Option<String>,
+    operation: SearchRevisionOperation,
+    depth: usize,
+    active_query: String,
+    plan: CompiledSearchPlan,
+    runtime_version: SearchRuntimeVersion,
+    ordered_result_ids: Vec<String>,
+) -> (SignedSearchContext, SearchRevisionDescriptor) {
+    let result_fingerprint = result_membership_fingerprint(&ordered_result_ids);
+    let revision_id = revision_id_for_plan(
+        parent_revision_id.as_deref(),
+        operation,
+        &plan.semantic_fingerprint,
+        &runtime_version,
+        &result_fingerprint,
+        depth,
+    );
+    let context = SignedSearchContext {
+        revision_id: revision_id.clone(),
+        parent_revision_id: parent_revision_id.clone(),
+        operation,
+        depth,
+        active_query: active_query.clone(),
+        plan_fingerprint: plan.semantic_fingerprint.clone(),
+        runtime_version: runtime_version.clone(),
+        plan,
+        ordered_result_ids,
+        result_fingerprint,
+    };
+    let encoded = encode_signed_context(&context);
+    let descriptor = SearchRevisionDescriptor {
+        id: revision_id,
+        parent_id: parent_revision_id,
+        operation,
+        depth,
+        active_query,
+        plan_fingerprint: context.plan_fingerprint.clone(),
+        runtime_version,
+        buyer_intent: context
+            .plan
+            .branches
+            .iter()
+            .map(|branch| BuyerIntentBranchProjection {
+                branch_id: branch.branch_id.clone(),
+                summary: branch.buyer_summary.clone(),
+                source_spans: branch.source_spans.clone(),
+            })
+            .collect(),
+        context: encoded,
+    };
+    (context, descriptor)
 }
 
-fn has_structured_search_anchor(query: &str) -> bool {
-    let intent = parse_intent(query);
-    !intent.requested_bhks().is_empty()
-        || intent.budget_min.is_some()
-        || intent.budget_max.is_some()
-        || !intent.requested_areas().is_empty()
-        || !intent.hard_constraints.is_empty()
-}
-
-fn is_complete_search(intent: &SearchIntent) -> bool {
-    let dimensions = [
-        !intent.requested_bhks().is_empty(),
-        intent.budget_min.is_some() || intent.budget_max.is_some(),
-        !intent.requested_areas().is_empty(),
-        !intent.hard_constraints.is_empty(),
-    ];
-    dimensions.into_iter().filter(|present| *present).count() >= 2
-}
-
-fn equivalent_search_shape(
-    left_query: &str,
-    left: &SearchIntent,
-    right_query: &str,
-    right: &SearchIntent,
-) -> bool {
-    normalized_strings(left.requested_areas()) == normalized_strings(right.requested_areas())
-        && left.requested_bhks() == right.requested_bhks()
-        && left.budget_min == right.budget_min
-        && left.budget_max == right.budget_max
-        && left.hard_constraints == right.hard_constraints
-        && left.excluded_areas == right.excluded_areas
-        && left.exclude_bhks == right.exclude_bhks
-        && unresolved_scope_signature(left_query, left)
-            == unresolved_scope_signature(right_query, right)
-}
-
-fn unresolved_scope_signature(query: &str, intent: &SearchIntent) -> Option<String> {
-    if !intent.requested_areas().is_empty() {
-        return None;
+pub fn decode_signed_search_context(value: &str) -> Result<SignedSearchContext, String> {
+    let mut parts = value.split('.');
+    if parts.next() != Some("v1") {
+        return Err("unsupported revision context version".to_string());
     }
-    let plan = super::query_plan::compile_query_plan(query);
-    super::query_plan::unresolved_named_entity_clause(query, &plan, |_| false, |_| false)
-        .or_else(|| super::query_plan::unresolved_residual_clause(query, &plan, |_| false))
-        .map(|scope| scope.to_lowercase())
+    let payload_hex = parts
+        .next()
+        .ok_or_else(|| "missing revision context payload".to_string())?;
+    let signature = parts
+        .next()
+        .ok_or_else(|| "missing revision context signature".to_string())?;
+    if parts.next().is_some() {
+        return Err("invalid revision context framing".to_string());
+    }
+    let payload = decode_hex(payload_hex)?;
+    let expected = encode_hex(&hmac_sha256(revision_signing_key(), &payload));
+    if !constant_time_eq(signature.as_bytes(), expected.as_bytes()) {
+        return Err("invalid revision context signature".to_string());
+    }
+    let context: SignedSearchContext = serde_json::from_slice(&payload)
+        .map_err(|error| format!("invalid revision context payload: {error}"))?;
+    validate_signed_search_context(&context)?;
+    Ok(context)
 }
 
-fn normalized_strings(values: Vec<&str>) -> Vec<String> {
-    let mut values = values
-        .into_iter()
-        .map(|value| value.to_lowercase())
+fn encode_signed_context(context: &SignedSearchContext) -> String {
+    let payload = serde_json::to_vec(context).expect("revision context is serializable");
+    let signature = hmac_sha256(revision_signing_key(), &payload);
+    format!("v1.{}.{}", encode_hex(&payload), encode_hex(&signature))
+}
+
+fn validate_signed_search_context(context: &SignedSearchContext) -> Result<(), String> {
+    let predicates = context
+        .plan
+        .branches
+        .iter()
+        .map(|branch| branch.predicates.clone())
         .collect::<Vec<_>>();
-    values.sort_unstable();
-    values
+    let constraints = context
+        .plan
+        .branches
+        .iter()
+        .map(|branch| branch.constraints.clone())
+        .collect::<Vec<_>>();
+    let fingerprint = semantic_search_fingerprint(&predicates, &constraints);
+    if fingerprint != context.plan.semantic_fingerprint || fingerprint != context.plan_fingerprint {
+        return Err("revision plan fingerprint mismatch".to_string());
+    }
+    if result_membership_fingerprint(&context.ordered_result_ids) != context.result_fingerprint {
+        return Err("revision result membership mismatch".to_string());
+    }
+    let expected_revision = revision_id_for_plan(
+        context.parent_revision_id.as_deref(),
+        context.operation,
+        &context.plan_fingerprint,
+        &context.runtime_version,
+        &context.result_fingerprint,
+        context.depth,
+    );
+    if !constant_time_eq(context.revision_id.as_bytes(), expected_revision.as_bytes()) {
+        return Err("revision identity mismatch".to_string());
+    }
+    validate_plan_evidence(&context.plan)
 }
 
-fn standalone_branch_count(query: &str) -> usize {
-    super::query_plan::discourse_branch_layout(query).map_or(1, |layout| layout.segments.len())
+fn validate_plan_evidence(plan: &CompiledSearchPlan) -> Result<(), String> {
+    for reference in plan
+        .branches
+        .iter()
+        .flat_map(|branch| match &branch.geo_scope {
+            super::compiled_plan::GeoScope::Scoped {
+                seed_cells,
+                expanded_cell_paths,
+                supporting_evidence,
+                ..
+            } => supporting_evidence
+                .iter()
+                .chain(
+                    seed_cells
+                        .iter()
+                        .flat_map(|seed| seed.supporting_evidence.iter()),
+                )
+                .chain(
+                    expanded_cell_paths
+                        .iter()
+                        .flat_map(|path| path.supporting_evidence.iter()),
+                )
+                .collect::<Vec<_>>(),
+            super::compiled_plan::GeoScope::BundleWide => Vec::new(),
+        })
+    {
+        reference
+            .validate_for(&reference.subject_entity_id, &plan.snapshot_identity)
+            .map_err(|error| format!("invalid revision evidence identity: {error}"))?;
+    }
+    Ok(())
 }
 
-pub fn compiled_branch_count(query: &str) -> usize {
-    standalone_branch_count(query)
+fn revision_id_for_plan(
+    parent_revision_id: Option<&str>,
+    operation: SearchRevisionOperation,
+    plan_fingerprint: &str,
+    runtime_version: &SearchRuntimeVersion,
+    result_fingerprint: &str,
+    depth: usize,
+) -> String {
+    let payload = serde_json::to_vec(&serde_json::json!({
+        "parentRevisionId": parent_revision_id,
+        "operation": operation,
+        "planFingerprint": plan_fingerprint,
+        "runtimeVersion": runtime_version,
+        "resultFingerprint": result_fingerprint,
+        "depth": depth,
+    }))
+    .expect("revision identity payload is serializable");
+    let digest = hmac_sha256(revision_signing_key(), &payload);
+    format!("rev-{depth:03}-{}", &encode_hex(&digest)[..32])
+}
+
+pub fn result_membership_fingerprint(ids: &[String]) -> String {
+    let digest =
+        Sha256::digest(serde_json::to_vec(ids).expect("result membership is JSON serializable"));
+    format!("sha256:{}", encode_hex(&digest))
+}
+
+fn encode_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
+    if !value.len().is_multiple_of(2) {
+        return Err("invalid revision context encoding".to_string());
+    }
+    (0..value.len())
+        .step_by(2)
+        .map(|index| {
+            u8::from_str_radix(&value[index..index + 2], 16)
+                .map_err(|_| "invalid revision context encoding".to_string())
+        })
+        .collect()
 }
 
 pub fn revision_id_for_query(
@@ -568,477 +965,124 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
         == 0
 }
 
-fn replace_budget_constraint(
-    parent_plan: &CompiledSearchPlan,
-    utterance: &str,
-    target_branch: Option<usize>,
-) -> Option<String> {
-    let replacement_slots = super::parser::parse_query_slots(utterance);
-    let replacement = replacement_slots.budgets.first()?;
-    let replacement_text = utterance.get(replacement.start..replacement.end)?.trim();
-    if replacement_text.is_empty()
-        || target_branch.is_some_and(|index| index >= parent_plan.branches.len())
-    {
-        return None;
-    }
-
-    let mut branch_queries = Vec::with_capacity(parent_plan.branches.len());
-    for (index, branch) in parent_plan.branches.iter().enumerate() {
-        if target_branch.is_none_or(|target| target == index) {
-            let (query, replaced) = replace_branch_predicates(
-                branch,
-                &[PredicateFamily::Budget],
-                replacement_text,
-                parent_plan.branches.len() == 1,
-            )?;
-            if replaced == 0 {
-                return None;
-            }
-            branch_queries.push(query);
-        } else {
-            branch_queries.push(branch_source_query(branch)?);
-        }
-    }
-    Some(branch_queries.join(" or "))
-}
-
-fn replace_branch_predicates(
-    branch: &GeoBranch,
-    families: &[PredicateFamily],
-    replacement: &str,
-    use_full_source_query: bool,
-) -> Option<(String, usize)> {
-    let spans = branch
-        .predicates
-        .source_spans_for(families, PredicatePolarity::Positive);
-    let (branch_start, branch_end) = if use_full_source_query {
-        (0, branch.source_query.len())
-    } else {
-        branch_source_bounds(branch)?
-    };
-    let mut query = branch
-        .source_query
-        .get(branch_start..branch_end)?
-        .to_string();
-    for span in spans.iter().rev() {
-        if span.start < branch_start || span.end > branch_end || span.start > span.end {
-            return None;
-        }
-        query.replace_range(
-            span.start - branch_start..span.end - branch_start,
-            replacement,
-        );
-    }
-    Some((normalize_query(&query), spans.len()))
-}
-
-fn canonical_plan_query(plan: &CompiledSearchPlan) -> String {
-    if let [branch] = plan.branches.as_slice() {
-        return normalize_query(&branch.source_query);
-    }
-    plan.branches
-        .iter()
-        .filter_map(branch_source_query)
-        .collect::<Vec<_>>()
-        .join(" or ")
-}
-
-fn branch_source_query(branch: &GeoBranch) -> Option<String> {
-    let (start, end) = branch_source_bounds(branch)?;
-    branch.source_query.get(start..end).map(normalize_query)
-}
-
-fn branch_source_bounds(branch: &GeoBranch) -> Option<(usize, usize)> {
-    Some((
-        branch.source_spans.iter().map(|span| span.start).min()?,
-        branch.source_spans.iter().map(|span| span.end).max()?,
-    ))
-}
-
-fn normalize_query(query: &str) -> String {
-    query.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-fn compile_revision_parent_plan(query: &str) -> CompiledSearchPlan {
-    CompiledSearchPlan::compile(super::CompiledQuery::from_text(query), "revision-parent")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::search::ast::{ConstraintExpr, ConstraintTerm};
-    use crate::search::intent::SourceSpan;
 
     const LIMITS: SearchRevisionLimits = SearchRevisionLimits {
         max_active_branches: 8,
     };
 
-    fn area_parent_plan(query: &str, area: &str) -> CompiledSearchPlan {
-        let start = query.find(area).expect("area occurs in parent query");
-        let end = start + area.len();
-        CompiledSearchPlan::compile(
-            super::super::CompiledQuery::with_constraints(
-                query,
+    fn test_plan(compiled_query: super::super::CompiledQuery) -> CompiledSearchPlan {
+        CompiledSearchPlan::compile_for_snapshot(
+            compiled_query,
+            "test-snapshot",
+            &[],
+            &GeoTopologyIndex::default(),
+            None,
+            GeoCellSearchPolicy {
+                max_hops: 2,
+                max_distance_km: 4.0,
+            },
+        )
+    }
+
+    #[test]
+    fn typed_overwrite_replaces_bhk_and_budget_without_dropping_parent_area() {
+        let parent_query = "3BHK in Whitefield under 2.5Cr";
+        let base = super::super::CompiledQuery::from_text(parent_query);
+        let parent = test_plan(super::super::CompiledQuery::with_constraints(
+            parent_query,
+            ConstraintExpr::and(vec![
+                base.constraints,
                 ConstraintExpr::term(ConstraintTerm::Area {
-                    entity_id: Some(format!("area:{}", area.to_ascii_lowercase())),
-                    value: area.to_string(),
-                    span: Some(SourceSpan {
-                        start,
-                        end,
-                        raw_text: area.to_string(),
-                    }),
+                    entity_id: Some("area:whitefield".to_string()),
+                    value: "Whitefield".to_string(),
+                    span: None,
                 }),
-                parse_intent(query),
-            ),
-            "test-snapshot",
-        )
-    }
-
-    fn spatial_parent_plan(query: &str, target: &str) -> CompiledSearchPlan {
-        let start = query.find(target).expect("spatial target occurs in query");
-        let end = start + target.len();
-        CompiledSearchPlan::compile(
-            super::super::CompiledQuery::with_constraints(
-                query,
-                ConstraintExpr::term(ConstraintTerm::Spatial {
-                    relation: "near".to_string(),
-                    entity_id: format!("area:{}", target.to_ascii_lowercase()),
-                    display_name: target.to_string(),
-                    required: false,
-                    span: Some(SourceSpan {
-                        start,
-                        end,
-                        raw_text: target.to_string(),
-                    }),
-                }),
-                parse_intent(query),
-            ),
-            "test-snapshot",
-        )
-    }
-
-    #[test]
-    fn additive_refinement_retains_parent_scope() {
-        let revision = compile_search_revision(
-            "3BHK in East Bengaluru under 2.4 Cr",
-            "Keep the same search, but make it ready to move",
-            1,
-            LIMITS,
-        );
-
-        assert_eq!(revision.operation, SearchRevisionOperation::Refine);
-        assert_eq!(revision.outcome, SearchRevisionOutcome::Candidate);
-        assert_eq!(
-            revision.candidate_query.as_deref(),
-            Some("3BHK in East Bengaluru under 2.4 Cr ready to move")
-        );
-    }
-
-    #[test]
-    fn complete_equivalent_query_is_a_rephrase() {
-        let revision = compile_search_revision(
-            "3BHK in East Bengaluru under 2.4 Cr",
-            "3 bedrooms in East Bangalore costing no more than 2.4 crore",
-            1,
-            LIMITS,
-        );
-
-        assert_eq!(revision.operation, SearchRevisionOperation::Rephrase);
-        assert_eq!(revision.candidate_branch_count, 1);
-    }
-
-    #[test]
-    fn same_constraints_in_a_different_named_area_are_a_switch() {
-        let revision = compile_search_revision(
-            "3BHK in Hoodi under 2.4 Cr",
-            "3BHK in Whitefield under 2.4 Cr",
-            1,
-            LIMITS,
-        );
-
-        assert_eq!(revision.operation, SearchRevisionOperation::Switch);
-    }
-
-    #[test]
-    fn ninth_branch_requires_a_checkpoint() {
-        let revision = compile_search_revision(
-            "2BHK in Whitefield under 1.6 Cr",
-            "Also consider 3BHK in South Bengaluru under 2 Cr",
-            8,
-            LIMITS,
-        );
-
-        assert_eq!(revision.operation, SearchRevisionOperation::Expand);
-        assert_eq!(revision.outcome, SearchRevisionOutcome::RequireCheckpoint);
-        assert!(revision.candidate_query.is_none());
-    }
-
-    #[test]
-    fn vague_branch_requires_clarification_before_search() {
-        let revision = compile_search_revision(
-            "2BHK in Whitefield under 1.6 Cr",
-            "Also consider another independent area",
-            2,
-            LIMITS,
-        );
-
-        assert_eq!(
-            revision.outcome,
-            SearchRevisionOutcome::RequireClarification
-        );
-    }
-
-    #[test]
-    fn partial_budget_correction_replaces_the_previous_limit() {
-        let revision = compile_search_revision(
-            "3BHK in Hoodi under 2.4 Cr",
-            "Increase the budget to 2.8 Cr",
-            1,
-            LIMITS,
-        );
-
-        assert_eq!(revision.operation, SearchRevisionOperation::Refine);
-        assert_eq!(revision.outcome, SearchRevisionOutcome::Candidate);
-        assert_eq!(
-            revision.candidate_query.as_deref(),
-            Some("3BHK in Hoodi under 2.8 Cr")
-        );
-    }
-
-    #[test]
-    fn vague_relative_distance_requires_clarification() {
-        let revision =
-            compile_search_revision("3BHK near Hoodi under 2.5 Cr", "Make it closer", 1, LIMITS);
-        assert_eq!(
-            revision.outcome,
-            SearchRevisionOutcome::RequireClarification
-        );
-    }
-
-    #[test]
-    fn issue_118_revision_scenarios_compile_without_server_history() {
-        let parent = "3BHK in Whitefield under 2.5Cr";
-        let ready = compile_search_revision(parent, "Make it ready to move", 1, LIMITS);
-        assert_eq!(ready.operation, SearchRevisionOperation::Refine);
-        assert!(ready
-            .candidate_query
-            .as_deref()
-            .is_some_and(|query| query.contains("ready to move")));
-
-        let both = compile_search_revision(
-            parent,
-            "Near both Hoodi Metro and Manipal Hospital",
-            1,
-            LIMITS,
-        );
-        assert!(both
-            .candidate_query
-            .as_deref()
-            .is_some_and(|query| query.contains("both Hoodi Metro and Manipal Hospital")));
-
-        let budget = compile_search_revision(parent, "Increase the budget to 3Cr", 1, LIMITS);
-        assert_eq!(
-            budget.candidate_query.as_deref(),
-            Some("3BHK in Whitefield under 3Cr")
-        );
-
-        let alternative = compile_search_revision(
-            parent,
-            "Alternatively consider 3BHK in Kadugodi under 2.7Cr",
-            1,
-            LIMITS,
-        );
-        assert_eq!(alternative.operation, SearchRevisionOperation::Expand);
-        assert_eq!(alternative.candidate_branch_count, 2);
-
-        let branch_local =
-            compile_search_revision(parent, "Also consider 2BHK in Hoodi under 2Cr", 1, LIMITS);
-        assert!(branch_local
-            .candidate_query
-            .as_deref()
-            .is_some_and(|query| {
-                query == "3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2Cr"
-            }));
-
-        let excluded = compile_search_revision(
-            "3BHK around Whitefield under 3Cr",
-            "Exclude Varthur",
-            1,
-            LIMITS,
-        );
-        assert!(excluded
-            .candidate_query
-            .as_deref()
-            .is_some_and(|query| query.ends_with("Exclude Varthur")));
-
-        let replacement = compile_search_revision(
-            "3BHK around Whitefield under 3Cr",
-            "Instead, search for plots in North Bengaluru under 1.5Cr",
-            1,
-            LIMITS,
-        );
-        assert_eq!(replacement.operation, SearchRevisionOperation::Replace);
-        assert_eq!(replacement.candidate_branch_count, 1);
-    }
-
-    #[test]
-    fn branch_cohorts_keep_eight_as_the_active_limit() {
-        let query = |count: usize| {
-            (1..=count)
-                .map(|index| format!("2BHK in Test Area {index} under 2Cr"))
-                .collect::<Vec<_>>()
-                .join(" or ")
-        };
-        assert_eq!(compiled_branch_count(&query(3)), 3);
-        assert_eq!(compiled_branch_count(&query(8)), 8);
-        assert_eq!(compiled_branch_count(&query(16)), 16);
-        assert_eq!(LIMITS.max_active_branches, 8);
-    }
-
-    #[test]
-    fn untargeted_multi_branch_budget_correction_requires_clarification() {
-        let parent = "3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2Cr";
-        let ambiguous = compile_search_revision(parent, "Increase the budget to 3Cr", 2, LIMITS);
-        assert_eq!(
-            ambiguous.outcome,
-            SearchRevisionOutcome::RequireClarification
-        );
-        assert!(ambiguous.candidate_query.is_none());
-
-        let all = compile_search_revision(parent, "Increase the budget for both to 3Cr", 2, LIMITS);
-        assert_eq!(all.outcome, SearchRevisionOutcome::Candidate);
-        assert!(matches!(
-            all.patches.as_slice(),
-            [SearchRevisionPatch::ReplacePredicate { family, .. }]
-                if *family == PredicateFamily::Budget
+            ]),
+            base.intent,
         ));
-
-        let second =
-            compile_search_revision(parent, "Increase the second budget to 2.4Cr", 2, LIMITS);
-        assert_eq!(second.outcome, SearchRevisionOutcome::Candidate);
+        let mut fragment = test_plan(super::super::CompiledQuery::from_text(
+            "Make it 2BHK under 1.6Cr",
+        ));
+        fragment.assign_source_turn("turn-2");
+        let parent_predicate_ids = parent.branches[0]
+            .predicate_bindings
+            .iter()
+            .map(|binding| (binding.family, binding.predicate_id.clone()))
+            .collect::<std::collections::HashMap<_, _>>();
+        let revision = compile_typed_revision(
+            &parent,
+            &fragment,
+            "Make it 2BHK under 1.6Cr",
+            "rev-001-parent",
+            LIMITS,
+        );
+        let candidate = apply_typed_revision(
+            &parent,
+            &fragment,
+            &revision,
+            "rendered output only",
+            &GeoTopologyIndex::default(),
+            None,
+            GeoCellSearchPolicy {
+                max_hops: 2,
+                max_distance_km: 4.0,
+            },
+        )
+        .expect("typed patch applies");
+        let predicates = &candidate.branches[0].predicates;
+        assert!(predicates.contains_family(PredicateFamily::Area));
+        assert_eq!(candidate.branches[0].constraints.requested_bhks(), [2]);
         assert_eq!(
-            second.candidate_query.as_deref(),
-            Some("3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2.4Cr")
+            candidate.branches[0].constraints.budget_max,
+            Some(16_000_000)
+        );
+        assert!(candidate.branches[0]
+            .source_spans
+            .iter()
+            .any(|span| span.source_turn_id == "turn-2"));
+        for family in [
+            PredicateFamily::Bhk,
+            PredicateFamily::Budget,
+            PredicateFamily::Area,
+        ] {
+            let candidate_id = candidate.branches[0]
+                .predicate_bindings
+                .iter()
+                .find(|binding| binding.family == family)
+                .map(|binding| binding.predicate_id.as_str());
+            assert_eq!(
+                candidate_id,
+                parent_predicate_ids.get(&family).map(String::as_str),
+                "{family:?} keeps its stable predicate id"
+            );
+        }
+    }
+
+    #[test]
+    fn typed_correction_targets_the_configured_eighth_branch() {
+        let query = (1..=8)
+            .map(|index| format!("{index}BHK under 2Cr"))
+            .collect::<Vec<_>>()
+            .join(" or ");
+        let parent = test_plan(super::super::CompiledQuery::from_text(&query));
+        let fragment = test_plan(super::super::CompiledQuery::from_text(
+            "Increase the eighth budget to 3Cr",
+        ));
+        let revision = compile_typed_revision(
+            &parent,
+            &fragment,
+            "Increase the eighth budget to 3Cr",
+            "rev-001-parent",
+            LIMITS,
         );
         assert!(matches!(
-            second.patches.as_slice(),
-            [SearchRevisionPatch::ReplacePredicate {
-                family,
-                branch_id: Some(branch_id),
-                ..
-            }] if *family == PredicateFamily::Budget && branch_id == "branch-2"
+            revision.patches.as_slice(),
+            [TypedSearchRevisionPatch::ReplacePredicate { branch_ids, families, .. }]
+                if branch_ids == &["branch-8"] && families == &[PredicateFamily::Budget]
         ));
-    }
-
-    #[test]
-    fn area_only_alternative_copies_one_parent_branches_nonspatial_constraints() {
-        let parent = "3BHK in Whitefield under 2.5Cr";
-        let plan = area_parent_plan(parent, "Whitefield");
-        let entities = vec![ServingEntityRecord {
-            entity_id: "area:kadugodi".to_string(),
-            entity_type: "area".to_string(),
-            name: "Kadugodi".to_string(),
-            root_source: Some("openstreetmap".to_string()),
-            visibility: Default::default(),
-            searchable_text: "Kadugodi".to_string(),
-        }];
-        let area = resolve_area_only_alternative(
-            "Kadugodi",
-            &entities,
-            &ServingEntityAliasIndex::default(),
-        );
-
-        let revision = compile_search_revision_with_plan(
-            parent,
-            "Also consider Kadugodi",
-            1,
-            LIMITS,
-            Some(&plan),
-            area.as_deref(),
-        );
-
-        assert_eq!(revision.outcome, SearchRevisionOutcome::Candidate);
-        assert_eq!(
-            revision.candidate_query.as_deref(),
-            Some("3BHK in Whitefield under 2.5Cr or 3BHK in Kadugodi under 2.5Cr")
-        );
-    }
-
-    #[test]
-    fn area_only_alternative_reuses_generic_spatial_scope_span() {
-        let parent = "3BHK near Hoodi under 2.5Cr";
-        let plan = spatial_parent_plan(parent, "Hoodi");
-
-        let revision = compile_search_revision_with_plan(
-            parent,
-            "Also consider Kadugodi",
-            1,
-            LIMITS,
-            Some(&plan),
-            Some("Kadugodi"),
-        );
-
-        assert_eq!(revision.outcome, SearchRevisionOutcome::Candidate);
-        assert_eq!(
-            revision.candidate_query.as_deref(),
-            Some("3BHK near Hoodi under 2.5Cr or 3BHK near Kadugodi under 2.5Cr")
-        );
-    }
-
-    #[test]
-    fn area_only_alternative_clarifies_for_multiple_scopes_in_one_branch() {
-        let parent = "3BHK near Hoodi and ITPL under 2.5Cr";
-        let hoodi = spatial_parent_plan(parent, "Hoodi");
-        let itpl = spatial_parent_plan(parent, "ITPL");
-        let plan = CompiledSearchPlan::compile(
-            super::super::CompiledQuery::with_constraints(
-                parent,
-                ConstraintExpr::and(vec![
-                    hoodi.branches[0].predicates.clone(),
-                    itpl.branches[0].predicates.clone(),
-                ]),
-                parse_intent(parent),
-            ),
-            "test-snapshot",
-        );
-
-        let revision = compile_search_revision_with_plan(
-            parent,
-            "Also consider Kadugodi",
-            1,
-            LIMITS,
-            Some(&plan),
-            Some("Kadugodi"),
-        );
-
-        assert_eq!(
-            revision.outcome,
-            SearchRevisionOutcome::RequireClarification
-        );
-        assert!(revision.candidate_query.is_none());
-    }
-
-    #[test]
-    fn area_only_alternative_clarifies_when_multiple_parent_branches_could_supply_constraints() {
-        let parent = "3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2Cr";
-        let plan = CompiledSearchPlan::compile(
-            super::super::CompiledQuery::from_text(parent),
-            "test-snapshot",
-        );
-
-        let revision = compile_search_revision_with_plan(
-            parent,
-            "Also consider Kadugodi",
-            2,
-            LIMITS,
-            Some(&plan),
-            Some("Kadugodi"),
-        );
-
-        assert_eq!(
-            revision.outcome,
-            SearchRevisionOutcome::RequireClarification
-        );
-        assert!(revision.candidate_query.is_none());
     }
 }

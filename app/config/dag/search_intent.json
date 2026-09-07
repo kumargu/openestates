@@ -385,6 +385,10 @@
         "increase the",
         "decrease the"
       ],
+      "revision_overwrite_prefixes": ["actually", "only"],
+      "revision_undo_phrases": ["undo", "go back"],
+      "revision_fresh_prefixes": ["fresh search", "new search", "start over", "forget that"],
+      "revision_exclusion_prefixes": ["exclude", "avoid", "not"],
       "revision_ambiguous_spatial_refinements": [
         "closer",
         "nearer",

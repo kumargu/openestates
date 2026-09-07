@@ -43,7 +43,8 @@ pub enum PredicateFamily {
     Spatial,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PredicatePolarity {
     Positive,
     Negated,
@@ -100,6 +101,10 @@ pub enum ConstraintTerm {
         entity_id: String,
         display_name: String,
         required: bool,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        category_fact_keys: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        distance_limit_km: Option<f64>,
         #[serde(skip_serializing_if = "Option::is_none")]
         span: Option<SourceSpan>,
     },
@@ -154,7 +159,7 @@ pub(crate) struct ResolvedEntityConstraint {
 ///
 /// `intent` is a derived API/ranking summary. Hard eligibility always evaluates
 /// `constraints`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompiledQuery {
     pub raw: String,
     pub constraints: ConstraintExpr,
@@ -203,11 +208,20 @@ impl CompiledQuery {
         discourse_segments: Option<&[(usize, usize)]>,
         shared_suffix_start: Option<usize>,
     ) {
-        let required = terms
+        let terms = terms
             .into_iter()
             .filter(|term| matches!(term, ConstraintTerm::Spatial { required: true, .. }))
             .collect::<Vec<_>>();
-        if required.is_empty() {
+        self.add_spatial_plan_constraints(terms, discourse_segments, shared_suffix_start);
+    }
+
+    pub(crate) fn add_spatial_plan_constraints(
+        &mut self,
+        terms: Vec<ConstraintTerm>,
+        discourse_segments: Option<&[(usize, usize)]>,
+        shared_suffix_start: Option<usize>,
+    ) {
+        if terms.is_empty() {
             return;
         }
         let bounds = self
@@ -223,7 +237,7 @@ impl CompiledQuery {
             .cloned()
             .enumerate()
             .map(|(branch_index, branch)| {
-                let clauses = required
+                let clauses = terms
                     .iter()
                     .filter(|term| {
                         spatial_term_belongs_to_branch(
@@ -613,6 +627,40 @@ impl ConstraintExpr {
         });
     }
 
+    pub fn drop_optional_spatial_includes(&mut self) {
+        let expr = std::mem::replace(self, Self::match_all());
+        *self = remove_positive_terms(expr, false, &|term| {
+            matches!(
+                term,
+                ConstraintTerm::Spatial {
+                    required: false,
+                    ..
+                }
+            )
+        });
+    }
+
+    pub fn remove_positive_families(&mut self, families: &[PredicateFamily]) {
+        let expr = std::mem::replace(self, Self::match_all());
+        *self = remove_positive_terms(expr, false, &|term| {
+            families.contains(&term.predicate_family())
+        });
+    }
+
+    pub fn select_families(&self, families: &[PredicateFamily]) -> Self {
+        select_terms(self, families).unwrap_or_else(Self::match_all)
+    }
+
+    pub fn contains_family(&self, family: PredicateFamily) -> bool {
+        match self {
+            Self::And { clauses } | Self::AnyOf { clauses } => {
+                clauses.iter().any(|clause| clause.contains_family(family))
+            }
+            Self::Not { clause } => clause.contains_family(family),
+            Self::Term { term } => term.predicate_family() == family,
+        }
+    }
+
     pub fn has_budget_max(&self) -> bool {
         has_positive_budget_max(self, false)
     }
@@ -664,6 +712,34 @@ impl ConstraintExpr {
 
     fn is_match_none(&self) -> bool {
         matches!(self, Self::AnyOf { clauses } if clauses.is_empty())
+    }
+}
+
+fn select_terms(
+    expression: &ConstraintExpr,
+    families: &[PredicateFamily],
+) -> Option<ConstraintExpr> {
+    match expression {
+        ConstraintExpr::And { clauses } => {
+            let selected = clauses
+                .iter()
+                .filter_map(|clause| select_terms(clause, families))
+                .collect::<Vec<_>>();
+            (!selected.is_empty()).then(|| ConstraintExpr::and(selected))
+        }
+        ConstraintExpr::AnyOf { clauses } => {
+            let selected = clauses
+                .iter()
+                .filter_map(|clause| select_terms(clause, families))
+                .collect::<Vec<_>>();
+            (!selected.is_empty()).then(|| ConstraintExpr::any_of(selected))
+        }
+        ConstraintExpr::Not { clause } => {
+            select_terms(clause, families).map(ConstraintExpr::negated)
+        }
+        ConstraintExpr::Term { term } => families
+            .contains(&term.predicate_family())
+            .then(|| expression.clone()),
     }
 }
 
@@ -781,12 +857,16 @@ fn semantic_term_value(term: &ConstraintTerm) -> Value {
             relation,
             entity_id,
             required,
+            category_fact_keys,
+            distance_limit_km,
             ..
         } => json!({
             "spatial": {
                 "relation": relation.to_ascii_lowercase(),
                 "entity_id": entity_id,
                 "required": required,
+                "category_fact_keys": category_fact_keys,
+                "distance_limit_km": distance_limit_km,
             }
         }),
     }
@@ -1020,6 +1100,7 @@ fn bhk_terms(plan: &QueryPlan, polarity: SlotPolarity) -> Vec<SpannedTerm> {
 
 fn spanned_bhk_term(slot: &BhkConstraint) -> SpannedTerm {
     let span = SourceSpan {
+        source_turn_id: String::new(),
         start: slot.start,
         end: slot.end,
         raw_text: slot.raw_text.clone(),
@@ -1040,6 +1121,7 @@ fn area_terms(plan: &QueryPlan, polarity: MentionPolarity) -> Vec<SpannedTerm> {
         .filter(|area| area.polarity == polarity)
         .map(|area| {
             let span = SourceSpan {
+                source_turn_id: String::new(),
                 start: area.span.start,
                 end: area.span.end,
                 raw_text: area.matched_text.clone(),
@@ -1123,6 +1205,7 @@ fn spanned_budget_term(budget: &ParsedBudgetConstraint) -> SpannedTerm {
         .collect::<Vec<_>>()
         .join("–");
     let span = SourceSpan {
+        source_turn_id: String::new(),
         start: budget.start,
         end: budget.end,
         raw_text,
@@ -1157,6 +1240,7 @@ fn evidence_terms(
         .filter_map(|matched| {
             let raw_text = query.get(matched.start..matched.end)?.to_string();
             let span = SourceSpan {
+                source_turn_id: String::new(),
                 start: matched.start,
                 end: matched.end,
                 raw_text,
@@ -1699,6 +1783,7 @@ mod tests {
         let first = ConstraintExpr::term(ConstraintTerm::Bhk {
             value: 3,
             span: Some(SourceSpan {
+                source_turn_id: String::new(),
                 start: 0,
                 end: 4,
                 raw_text: "3BHK".to_string(),
@@ -1707,6 +1792,7 @@ mod tests {
         let second = ConstraintExpr::term(ConstraintTerm::Bhk {
             value: 3,
             span: Some(SourceSpan {
+                source_turn_id: String::new(),
                 start: 12,
                 end: 22,
                 raw_text: "3 bedrooms".to_string(),
@@ -1988,6 +2074,7 @@ mod tests {
             entity_type: "area".to_string(),
             display_name: "Test Area".to_string(),
             span: SourceSpan {
+                source_turn_id: String::new(),
                 start,
                 end: start + "Test Area".len(),
                 raw_text: "Test Area".to_string(),
@@ -2023,6 +2110,7 @@ mod tests {
                     entity_type: "area".to_string(),
                     display_name: name.to_string(),
                     span: SourceSpan {
+                        source_turn_id: String::new(),
                         start,
                         end: start + name.len(),
                         raw_text: name.to_string(),
@@ -2291,6 +2379,7 @@ mod tests {
                     entity_type: "society".to_string(),
                     display_name: name.to_string(),
                     span: SourceSpan {
+                        source_turn_id: String::new(),
                         start,
                         end: start + name.len(),
                         raw_text: name.to_string(),
@@ -2323,6 +2412,7 @@ mod tests {
             entity_type: "society".to_string(),
             display_name: name.to_string(),
             span: SourceSpan {
+                source_turn_id: String::new(),
                 start,
                 end: start + name.len(),
                 raw_text: name.to_string(),
@@ -2350,6 +2440,7 @@ mod tests {
                     entity_type: "society".to_string(),
                     display_name: name.to_string(),
                     span: SourceSpan {
+                        source_turn_id: String::new(),
                         start,
                         end: start + name.len(),
                         raw_text: name.to_string(),
@@ -2386,6 +2477,7 @@ mod tests {
             entity_type: "builder".to_string(),
             display_name: "Prestige".to_string(),
             span: SourceSpan {
+                source_turn_id: String::new(),
                 start: 0,
                 end: "Prestige".len(),
                 raw_text: "Prestige".to_string(),
@@ -2415,6 +2507,7 @@ mod tests {
                 entity_type: entity_type.to_string(),
                 display_name: name.to_string(),
                 span: SourceSpan {
+                    source_turn_id: String::new(),
                     start,
                     end: start + name.len(),
                     raw_text: name.to_string(),
@@ -2505,6 +2598,7 @@ mod tests {
                         entity_type: entity_type.to_string(),
                         display_name: name.to_string(),
                         span: SourceSpan {
+                            source_turn_id: String::new(),
                             start,
                             end: start + name.len(),
                             raw_text: name.to_string(),
@@ -2555,6 +2649,7 @@ mod tests {
     #[test]
     fn predicate_span_selection_is_generic_and_polarity_aware() {
         let span = |start, end, raw_text: &str| SourceSpan {
+            source_turn_id: String::new(),
             start,
             end,
             raw_text: raw_text.to_string(),
@@ -2584,6 +2679,8 @@ mod tests {
                 entity_id: "area:hoodi".to_string(),
                 display_name: "Hoodi".to_string(),
                 required: false,
+                category_fact_keys: Vec::new(),
+                distance_limit_km: None,
                 span: Some(location_span),
             }),
             ConstraintExpr::term(ConstraintTerm::Evidence {

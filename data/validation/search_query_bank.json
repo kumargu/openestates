@@ -4500,7 +4500,7 @@
       "turns": [
         {
           "utterance": "3BHK in Sarjapur Road under 2 Cr",
-          "operation": "switch",
+          "operation": "replace",
           "candidate_case_id": "REGION-MIX-002",
           "outcome": "activate_candidate",
           "active_case_id": "REGION-MIX-002",
@@ -4516,7 +4516,7 @@
       "turns": [
         {
           "utterance": "Only 4BHK",
-          "operation": "refine",
+          "operation": "correct",
           "candidate_case_id": "BUYER-LANG-014",
           "outcome": "preserve_parent",
           "active_case_id": "BUYER-LANG-001",
@@ -4548,7 +4548,7 @@
       "utterance": "Make it ready to move",
       "expected_operation": "refine",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK in Whitefield under 2.5Cr ready to move"
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr · Make it ready to move"
     },
     {
       "id": "SPATIAL-REVISION-TWO-ANCHORS",
@@ -4558,7 +4558,7 @@
       "utterance": "Near both Hoodi Metro and Manipal Hospital",
       "expected_operation": "refine",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK in Whitefield under 2.5Cr Near both Hoodi Metro and Manipal Hospital"
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr · Near both Hoodi Metro and Manipal Hospital"
     },
     {
       "id": "SPATIAL-REVISION-BUDGET",
@@ -4566,9 +4566,9 @@
       "parent_query": "3BHK in Whitefield under 2.5Cr",
       "parent_branch_count": 1,
       "utterance": "Increase the budget to 3Cr",
-      "expected_operation": "refine",
+      "expected_operation": "correct",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK in Whitefield under 3Cr"
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr · Increase the budget to 3Cr"
     },
     {
       "id": "SPATIAL-REVISION-KADUGODI",
@@ -4596,9 +4596,9 @@
       "parent_query": "3BHK around Whitefield under 3Cr",
       "parent_branch_count": 1,
       "utterance": "Exclude Varthur",
-      "expected_operation": "refine",
+      "expected_operation": "exclude",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK around Whitefield under 3Cr Exclude Varthur"
+      "expected_active_query": "3BHK around Whitefield under 3Cr · Exclude Varthur"
     },
     {
       "id": "SPATIAL-REVISION-REPLACE",
@@ -4637,6 +4637,55 @@
       "utterance": "Also consider Sarjapur",
       "expected_operation": "expand",
       "expected_outcome": "require_checkpoint"
+    },
+    {
+      "id": "SPATIAL-REVISION-OVERWRITE-BHK-BUDGET",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Make it 2BHK under 1.6Cr",
+      "expected_operation": "refine",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr · Make it 2BHK under 1.6Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-THIRD-BRANCH",
+      "group": "spatial_revision",
+      "parent_query": "Whitefield 2BHK under 1.6Cr or Sarjapur Road 3BHK under 2Cr or North Bengaluru 3BHK under 1.8Cr",
+      "parent_branch_count": 3,
+      "utterance": "Increase the third budget to 2.2Cr",
+      "expected_operation": "correct",
+      "expected_outcome": "candidate",
+      "expected_active_query": "Whitefield 2BHK under 1.6Cr or Sarjapur Road 3BHK under 2Cr or North Bengaluru 3BHK under 1.8Cr · Increase the third budget to 2.2Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-EIGHTH-BRANCH",
+      "group": "spatial_revision",
+      "parent_query": "Whitefield 2BHK under 1.6Cr or Sarjapur Road 3BHK under 2Cr or North Bengaluru 3BHK under 1.8Cr or Bellandur 2BHK under 1.7Cr or HSR Layout 3BHK under 2.5Cr or Devanahalli 2BHK under 1.2Cr or Yelahanka 3BHK under 1.9Cr or Electronic City 2BHK under 1.1Cr",
+      "parent_branch_count": 8,
+      "utterance": "Increase the eighth budget to 1.4Cr",
+      "expected_operation": "correct",
+      "expected_outcome": "candidate",
+      "expected_active_query": "Whitefield 2BHK under 1.6Cr or Sarjapur Road 3BHK under 2Cr or North Bengaluru 3BHK under 1.8Cr or Bellandur 2BHK under 1.7Cr or HSR Layout 3BHK under 2.5Cr or Devanahalli 2BHK under 1.2Cr or Yelahanka 3BHK under 1.9Cr or Electronic City 2BHK under 1.1Cr · Increase the eighth budget to 1.4Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-UNDO",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Undo",
+      "expected_operation": "undo",
+      "expected_outcome": "candidate"
+    },
+    {
+      "id": "SPATIAL-REVISION-FRESH",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Start over: 2BHK in Hoodi under 2Cr",
+      "expected_operation": "fresh",
+      "expected_outcome": "candidate",
+      "expected_active_query": "2BHK in Hoodi under 2Cr"
     },
     {
       "id": "GEO-CELL-001",

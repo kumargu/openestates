@@ -11,9 +11,10 @@ use crate::knowledge::edge::Relation;
 use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::{KnowledgeGraph, SearchEvent};
 use crate::search::{
-    guard_search_query, intent, no_results_guidance, revision_id_for_query, schema,
-    KnowledgeContext, SearchEngine, SearchEvidenceGap, SearchResponse, SearchResultCard,
-    SearchResultSet, SearchRuntimeVersion, SourcedClaim,
+    guard_search_query, intent, issue_signed_search_context, no_results_guidance,
+    revision_id_for_query, schema, KnowledgeContext, SearchEngine, SearchEvidenceGap,
+    SearchResponse, SearchResultCard, SearchResultSet, SearchRevisionOperation,
+    SearchRuntimeVersion, SourcedClaim,
 };
 use crate::state::{
     AppState, CachedSearchOutput, SearchCacheKey, SearchCacheLookup, SearchLogMessage,
@@ -42,9 +43,10 @@ pub async fn search_properties(
     if query.trim().is_empty() {
         let ast_fingerprint = crate::search::ast::semantic_search_fingerprint(&[], &[]);
         let revision_id = revision_id_for_query(&query, &runtime_version, 1);
-        return Ok(Json(SearchResponse {
-            query,
+        let mut response = SearchResponse {
+            query: query.clone(),
             revision_id,
+            revision: None,
             ast_fingerprint,
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
@@ -53,7 +55,10 @@ pub async fn search_properties(
             area_context: None,
             state: "no_matches".to_string(),
             search_guidance: None,
-        }));
+        };
+        let plan = SearchEngine::new(&snapshot).compile_initial(&query, "root");
+        attach_initial_revision(&mut response, &plan);
+        return Ok(Json(response));
     }
 
     if let Some(guarded) = guard_search_query(&query) {
@@ -72,9 +77,10 @@ pub async fn search_properties(
             });
             enqueue_search_log(&state, SearchLogMessage::SearchEvent(event));
 
-            return Ok(Json(SearchResponse {
-                query,
+            let mut response = SearchResponse {
+                query: query.clone(),
                 revision_id,
+                revision: None,
                 ast_fingerprint,
                 result_sets: Vec::new(),
                 ordered_result_ids: Vec::new(),
@@ -83,7 +89,10 @@ pub async fn search_properties(
                 area_context: None,
                 state: "no_matches".to_string(),
                 search_guidance: Some(guarded.guidance),
-            }));
+            };
+            let plan = SearchEngine::new(&snapshot).compile_initial(&query, "root");
+            attach_initial_revision(&mut response, &plan);
+            return Ok(Json(response));
         }
     }
 
@@ -92,20 +101,18 @@ pub async fn search_properties(
         match state.search_cache.lookup_or_reserve(&cache_key).await {
             SearchCacheLookup::Hit(cached) => {
                 enqueue_cached_search_logs(&state, &cached, &query);
-                return Ok(Json(rebase_cached_response(
-                    cached.response.as_ref(),
-                    &query,
-                )));
+                let mut response = rebase_cached_response(cached.response.as_ref(), &query);
+                attach_initial_revision(&mut response, cached.compiled_plan.as_ref());
+                return Ok(Json(response));
             }
             SearchCacheLookup::Waiter(mut receiver) => {
                 match receiver.wait_for(Option::is_some).await {
                     Ok(cached) => {
                         let cached = cached.as_ref().expect("watch predicate requires a value");
                         enqueue_cached_search_logs(&state, cached, &query);
-                        return Ok(Json(rebase_cached_response(
-                            cached.response.as_ref(),
-                            &query,
-                        )));
+                        let mut response = rebase_cached_response(cached.response.as_ref(), &query);
+                        attach_initial_revision(&mut response, cached.compiled_plan.as_ref());
+                        return Ok(Json(response));
                     }
                     Err(_) => continue,
                 }
@@ -128,10 +135,28 @@ pub async fn search_properties(
     for message in computed.log_messages.clone() {
         enqueue_search_log(&state, message);
     }
-    let response = computed.response.as_ref().clone();
+    let mut response = computed.response.as_ref().clone();
+    attach_initial_revision(&mut response, computed.compiled_plan.as_ref());
     reservation.complete(computed).await;
 
     Ok(Json(response))
+}
+
+fn attach_initial_revision(
+    response: &mut SearchResponse,
+    plan: &crate::search::CompiledSearchPlan,
+) {
+    let (_, descriptor) = issue_signed_search_context(
+        None,
+        SearchRevisionOperation::Initial,
+        1,
+        response.query.clone(),
+        plan.clone(),
+        response.runtime_version.clone(),
+        response.ordered_result_ids.clone(),
+    );
+    response.revision_id.clone_from(&descriptor.id);
+    response.revision = Some(descriptor);
 }
 
 pub(crate) fn compute_search(
@@ -139,8 +164,32 @@ pub(crate) fn compute_search(
     graph: KnowledgeGraph,
     query: String,
 ) -> CachedSearchOutput {
-    let serving_facts = Some(&snapshot.bundle.fact_index);
     let engine_output = SearchEngine::new(&snapshot).search(&query);
+    build_search_output(snapshot, graph, query, engine_output)
+}
+
+pub(crate) fn compute_search_plan(
+    snapshot: Arc<SearchRuntimeSnapshot>,
+    graph: KnowledgeGraph,
+    plan: crate::search::CompiledSearchPlan,
+    active_query: String,
+) -> Option<CachedSearchOutput> {
+    let engine_output = SearchEngine::new(&snapshot).execute_plan(plan, &active_query)?;
+    Some(build_search_output(
+        snapshot,
+        graph,
+        active_query,
+        engine_output,
+    ))
+}
+
+fn build_search_output(
+    snapshot: Arc<SearchRuntimeSnapshot>,
+    graph: KnowledgeGraph,
+    query: String,
+    engine_output: crate::search::engine::SearchEngineOutput,
+) -> CachedSearchOutput {
+    let serving_facts = Some(&snapshot.bundle.fact_index);
     let compiled_plan = Arc::new(engine_output.compiled_plan.clone());
     let ast_fingerprint = engine_output.compiled_plan.semantic_fingerprint.clone();
     let parsed_intent = engine_output.intent;
@@ -206,6 +255,7 @@ pub(crate) fn compute_search(
     let response = SearchResponse {
         query,
         revision_id,
+        revision: None,
         ast_fingerprint,
         result_sets,
         ordered_result_ids,
@@ -718,6 +768,7 @@ mod tests {
         let response = SearchResponse {
             query: "3bhk whitefield".to_string(),
             revision_id: "rev-001-test".to_string(),
+            revision: None,
             ast_fingerprint: "sha256:test".to_string(),
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
@@ -755,6 +806,7 @@ mod tests {
         let response = SearchResponse {
             query: "find me something good".to_string(),
             revision_id: "rev-001-test".to_string(),
+            revision: None,
             ast_fingerprint: "sha256:test".to_string(),
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
@@ -838,6 +890,7 @@ mod tests {
         let response = SearchResponse {
             query: "3bhk whitefield".to_string(),
             revision_id: "rev-001-test".to_string(),
+            revision: None,
             ast_fingerprint: "sha256:test".to_string(),
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
