@@ -6,16 +6,20 @@ use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::assets::{AssetPathBuilder, MaterializationRecord, MaterializationStatus};
+use crate::assets::{
+    AssetId, AssetMaterializationStore, AssetPathBuilder, MaterializationId, MaterializationRecord,
+    MaterializationStatus,
+};
 use crate::dag_config::load_serving_eligibility;
 use crate::knowledge::FactValue;
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
 use super::{
     read_edges_parquet, read_entities_parquet, read_entity_aliases_parquet, read_facts_parquet,
-    read_search_metadata_parquet, validate_serving_edge_evidence, validate_society_aliases,
-    BundleArtifactKind, ParquetReadError, ServingBundleManifest, ServingFactIndex,
-    ServingFactRecord, ServingQuarantineReport, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    read_search_metadata_parquet, validate_canonical_spatial_identities,
+    validate_serving_edge_evidence, validate_society_aliases, BundleArtifactKind, ParquetReadError,
+    ServingBundleManifest, ServingFactIndex, ServingFactRecord, ServingQuarantineReport,
+    SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 
 const PUBLIC_MEDIA_PREFIX: &str = "/societies/";
@@ -338,6 +342,18 @@ pub async fn validate_search_serving_candidate(
         Some(key) => read_edges_parquet(&lake.get_bytes(&validated_key(key)?).await?)?,
         None => Vec::new(),
     };
+    let prevalidated = match catalog_base_scope(lake, record).await {
+        Ok(scope) => scope,
+        Err(message) => {
+            issue(
+                &mut issues,
+                "invalid_catalog_base_serving_watermark",
+                message,
+                None,
+            );
+            CatalogBaseScope::default()
+        }
+    };
     if manifest.format_version >= 7 {
         validate_quarantine_contract(lake, &manifest, &entities, &mut issues).await;
         validate_clean_bundle_eligibility(
@@ -346,6 +362,7 @@ pub async fn validate_search_serving_candidate(
             &facts,
             &metadata,
             &edges,
+            &prevalidated.entity_ids,
             &mut issues,
         );
     }
@@ -388,6 +405,14 @@ pub async fn validate_search_serving_candidate(
         &manifest.bundle_version,
         &mut issues,
     );
+    if let Err(error) = validate_canonical_spatial_identities(&entities, &edges) {
+        issue(
+            &mut issues,
+            "invalid_canonical_spatial_identity",
+            error,
+            manifest.edge_parquet_key.clone(),
+        );
+    }
     if let Err(error) = validate_society_aliases(&entity_aliases, &entities) {
         issue(
             &mut issues,
@@ -404,9 +429,10 @@ pub async fn validate_search_serving_candidate(
         &fact_index,
         &manifest.bundle_version,
     );
-    validate_property_projection(&properties, &mut issues);
+    validate_property_projection(&properties, &prevalidated.property_ids, &mut issues);
 
-    let media_references = collect_media_references(&facts);
+    let mut media_references = collect_media_references(&facts);
+    media_references.retain(|url, _| !prevalidated.media_urls.contains(url));
     let media_references_checked = media_references.len();
     let mut media_results = stream::iter(media_references.into_values())
         .map(|reference| async move {
@@ -436,6 +462,115 @@ pub async fn validate_search_serving_candidate(
         media_references_checked,
         passed: issues.is_empty(),
         issues,
+    })
+}
+
+#[derive(Default)]
+struct CatalogBaseScope {
+    entity_ids: BTreeSet<String>,
+    property_ids: BTreeSet<String>,
+    media_urls: BTreeSet<String>,
+}
+
+async fn catalog_base_scope(
+    lake: &LakeStore,
+    record: &MaterializationRecord,
+) -> Result<CatalogBaseScope, String> {
+    let watermarks = record
+        .source_watermarks
+        .iter()
+        .filter(|watermark| watermark.source == "catalog_base_serving")
+        .collect::<Vec<_>>();
+    let [watermark] = watermarks.as_slice() else {
+        return if watermarks.is_empty() {
+            Ok(CatalogBaseScope::default())
+        } else {
+            Err("multiple catalog_base_serving watermarks are not allowed".to_string())
+        };
+    };
+    let materialization_id = watermark
+        .high_watermark
+        .parse::<MaterializationId>()
+        .map_err(|error| format!("invalid base materialization id: {error}"))?;
+    let asset_id =
+        AssetId::new(SEARCH_SERVING_BUNDLE_ASSET_ID).expect("static serving asset id is valid");
+    let base_record = AssetMaterializationStore::new(lake.clone())
+        .record_by_id_for_asset(&asset_id, &materialization_id)
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| {
+            format!("base serving materialization {materialization_id} was not found")
+        })?;
+    if base_record.status != MaterializationStatus::Succeeded {
+        return Err(format!(
+            "base serving materialization {materialization_id} did not succeed"
+        ));
+    }
+    let base_manifest_key =
+        manifest_key_for_record(&base_record).map_err(|error| error.to_string())?;
+    let base_manifest: ServingBundleManifest = lake
+        .get_json(&base_manifest_key)
+        .await
+        .map_err(|error| error.to_string())?;
+    let base_entities = read_entities_parquet(
+        &lake
+            .get_bytes(
+                &validated_key(&base_manifest.entity_parquet_key)
+                    .map_err(|error| error.to_string())?,
+            )
+            .await
+            .map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    let base_facts = read_facts_parquet(
+        &lake
+            .get_bytes(
+                &validated_key(&base_manifest.fact_parquet_key)
+                    .map_err(|error| error.to_string())?,
+            )
+            .await
+            .map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    let base_metadata = read_search_metadata_parquet(
+        &lake
+            .get_bytes(
+                &validated_key(&base_manifest.search_metadata_parquet_key)
+                    .map_err(|error| error.to_string())?,
+            )
+            .await
+            .map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    let base_edges = match base_manifest.edge_parquet_key.as_deref() {
+        Some(key) => read_edges_parquet(
+            &lake
+                .get_bytes(&validated_key(key).map_err(|error| error.to_string())?)
+                .await
+                .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?,
+        None => Vec::new(),
+    };
+    let media_urls = collect_media_references(&base_facts).into_keys().collect();
+    let mut base_fact_index = ServingFactIndex::from_records(base_facts, base_metadata);
+    base_fact_index.add_society_aliases(&base_entities);
+    let property_ids = crate::data_loader::properties_from_serving_records_with_edges(
+        &base_entities,
+        &base_edges,
+        &base_fact_index,
+        &base_manifest.bundle_version,
+    )
+    .into_iter()
+    .map(|property| property.id)
+    .collect();
+    Ok(CatalogBaseScope {
+        entity_ids: base_entities
+            .into_iter()
+            .map(|entity| entity.entity_id)
+            .collect(),
+        property_ids,
+        media_urls,
     })
 }
 
@@ -556,6 +691,7 @@ fn validate_clean_bundle_eligibility(
     facts: &[ServingFactRecord],
     metadata: &[super::ServingSearchMetadataRecord],
     edges: &[super::ServingEdgeRecord],
+    prevalidated_entity_ids: &BTreeSet<String>,
     issues: &mut Vec<ServingBundleValidationIssue>,
 ) {
     let policy = match load_serving_eligibility() {
@@ -582,13 +718,14 @@ fn validate_clean_bundle_eligibility(
         );
         return;
     }
-    let classified = match super::eligibility::classify_and_prune(
+    let classified = match super::eligibility::classify_and_prune_preserving(
         entities.to_vec(),
         facts.to_vec(),
         metadata.to_vec(),
         edges.to_vec(),
         &manifest.bundle_version,
         &policy,
+        prevalidated_entity_ids,
     ) {
         Ok(classified) => classified,
         Err(error) => {
@@ -751,6 +888,7 @@ fn validate_record_relations(
 
 fn validate_property_projection(
     properties: &[crate::models::Property],
+    prevalidated_property_ids: &BTreeSet<String>,
     issues: &mut Vec<ServingBundleValidationIssue>,
 ) {
     if properties.is_empty() {
@@ -773,6 +911,9 @@ fn validate_property_projection(
                 Some(property.id.clone()),
             );
         }
+        if prevalidated_property_ids.contains(&property.id) {
+            continue;
+        }
         if property.area.trim().is_empty() {
             issue(
                 issues,
@@ -790,14 +931,6 @@ fn validate_property_projection(
                 issues,
                 "incomplete_property_price",
                 "property card requires a positive price or an explicit unavailable state",
-                Some(property.id.clone()),
-            );
-        }
-        if property.hero_image.trim().is_empty() || property.images.is_empty() {
-            issue(
-                issues,
-                "incomplete_property_media",
-                "property card requires a hero image and gallery",
                 Some(property.id.clone()),
             );
         }
@@ -864,7 +997,9 @@ struct MediaReference {
     expected_sha256: Option<String>,
 }
 
-fn collect_media_references(facts: &[ServingFactRecord]) -> BTreeMap<String, MediaReference> {
+fn collect_media_references<'a>(
+    facts: impl IntoIterator<Item = &'a ServingFactRecord>,
+) -> BTreeMap<String, MediaReference> {
     let mut references = BTreeMap::new();
     for fact in facts {
         match &fact.value {

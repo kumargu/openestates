@@ -478,7 +478,7 @@ mod tests {
                 state: "no_matches".to_string(),
                 search_guidance: None,
             }),
-            compiled_plan: Arc::new(crate::search::CompiledSearchPlan::single(
+            compiled_plan: Arc::new(crate::search::CompiledSearchPlan::compile(
                 crate::search::CompiledQuery::from_text(query),
                 "test-bundle",
             )),

@@ -63,8 +63,8 @@ pub use nearby_place_categories::{
     load_nearby_place_categories, load_nearby_place_categories_from_path,
     nearby_place_categories_config, nearby_place_categories_path,
     nearby_place_category_for_fact_key, nearby_place_fact_key_matches_category,
-    requested_nearby_place_categories, DerivedDistanceRisk, NearbyPlaceCategoriesFile,
-    NearbyPlaceCategory,
+    requested_nearby_place_categories, CanonicalPlaceIdentityPolicy, DerivedDistanceRisk,
+    NearbyPlaceCategoriesFile, NearbyPlaceCategory, SpatialRole,
 };
 pub use rera_decision_labels::{
     load_rera_decision_labels, load_rera_decision_labels_from_path, rera_decision_labels_config,

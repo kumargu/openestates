@@ -10,10 +10,11 @@ use backend::search::{
     SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
 };
 use backend::serving::{
-    derive_proximity_records, EvidenceId, LoadedServingBundle, ReraEvidenceIndex,
-    ServingBundleManifest, ServingEntityAliasIndex, ServingEntityRecord, ServingFactIndex,
-    ServingFactRecord, ServingSearchMetadataRecord, SourceObservation, SpatialServingIndex,
-    TantivyRecallIndex,
+    derive_proximity_records, materialize_canonical_spatial_identities, EvidenceId,
+    LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest, ServingEntityAliasIndex,
+    ServingEntityAliasRecord, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
+    ServingSearchMetadataRecord, SourceObservation, SpatialServingIndex, TantivyRecallIndex,
+    PROVIDER_BINDING_EDGE,
 };
 use backend::state::SearchRuntimeSnapshot;
 use chrono::{TimeZone, Utc};
@@ -467,6 +468,26 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
                     .eq_ignore_ascii_case("Ready to Move")
             })),
             "SPATIAL-REVISION-TWO-ANCHORS" => {
+                let hoodi_metro_id = fixture
+                    .bundle
+                    .edges
+                    .iter()
+                    .find(|edge| {
+                        edge.edge_type == PROVIDER_BINDING_EDGE
+                            && edge.to_entity_id == "place:hoodi-metro"
+                    })
+                    .map(|edge| edge.from_entity_id.as_str())
+                    .expect("fixture retains canonical Hoodi Metro identity");
+                let manipal_hospital_id = fixture
+                    .bundle
+                    .edges
+                    .iter()
+                    .find(|edge| {
+                        edge.edge_type == PROVIDER_BINDING_EDGE
+                            && edge.to_entity_id == "place:manipal-hospital"
+                    })
+                    .map(|edge| edge.from_entity_id.as_str())
+                    .expect("fixture retains canonical Manipal Hospital identity");
                 let ids = output
                     .results
                     .iter()
@@ -479,8 +500,8 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
                         .iter()
                         .filter_map(|proof| proof.entity_id.as_deref())
                         .collect::<HashSet<_>>();
-                    proof_entities.contains("place:hoodi-metro")
-                        && proof_entities.contains("place:manipal-hospital")
+                    proof_entities.contains(hoodi_metro_id)
+                        && proof_entities.contains(manipal_hospital_id)
                 }));
             }
             "SPATIAL-REVISION-BUDGET" => {
@@ -677,7 +698,11 @@ fn branch_quality_cohorts_preserve_disconnected_scope_and_branch_local_proof() {
             "the {cohort}-branch cohort collapsed disconnected scopes"
         );
         assert_eq!(output.intent_branches.len(), cohort);
-        assert_eq!(output.result_sets.len(), cohort);
+        assert_eq!(
+            output.result_sets.len(),
+            cohort,
+            "the {cohort}-branch cohort lost executable result sets: {output:#?}"
+        );
         assert!(output
             .result_sets
             .iter()
@@ -741,6 +766,249 @@ fn sourced_topology_never_erases_logical_spatial_branches() {
         disconnected.ast_branches.len(),
         2,
         "disconnected spatial intent must not collapse"
+    );
+}
+
+#[test]
+fn geography_first_execution_prioritizes_eligible_exact_societies() {
+    let mut builder = FixtureBuilder::default();
+    for spec in [
+        HomeSpec::new(
+            "geo-air",
+            "Godrej Air",
+            "Alpha",
+            2,
+            18_000_000,
+            12.90,
+            77.60,
+        )
+        .quality(Some(0.5), Some(4.0)),
+        HomeSpec::new(
+            "geo-alpha-prime",
+            "Alpha Prime",
+            "Alpha",
+            2,
+            19_000_000,
+            12.91,
+            77.61,
+        )
+        .quality(Some(0.5), Some(4.8)),
+        HomeSpec::new(
+            "geo-waterford",
+            "Prestige Waterford",
+            "Beta",
+            3,
+            24_000_000,
+            12.92,
+            77.62,
+        )
+        .quality(Some(0.5), Some(4.4)),
+        HomeSpec::new(
+            "geo-beta-prime",
+            "Beta Prime",
+            "Beta",
+            3,
+            23_000_000,
+            12.93,
+            77.63,
+        )
+        .quality(Some(0.5), Some(4.9)),
+        HomeSpec::new(
+            "geo-song",
+            "Prestige Song of the South",
+            "Gamma",
+            3,
+            26_000_000,
+            12.94,
+            77.64,
+        )
+        .quality(Some(0.5), Some(5.0)),
+    ] {
+        builder.add_home(spec);
+    }
+    builder.add_edge("area:alpha", "adjacent_area", "area:beta");
+    builder.add_edge("area:beta", "adjacent_area", "area:gamma");
+    builder.add_alias("Air Homes", "Godrej Air");
+    let fixture = builder.build(false);
+
+    let bare = fixture.search_output("Godrej Air");
+    assert_eq!(
+        bare.result_sets[0]
+            .results
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>(),
+        ["geo-air", "geo-alpha-prime"]
+    );
+    assert_eq!(
+        bare.compiled_plan.branches[0].geo_scope.area_ids(),
+        ["area:alpha"]
+    );
+    assert!(matches!(
+        &bare.compiled_plan.branches[0].geo_scope,
+        backend::search::GeoScope::Areas { supporting_in_area_edges, .. }
+            if !supporting_in_area_edges.is_empty()
+    ));
+
+    let alias = fixture.search_output("Air Homes");
+    assert_eq!(
+        alias.result_sets[0]
+            .results
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>(),
+        ["geo-air", "geo-alpha-prime"],
+        "a durable alias must retain the canonical society's priority"
+    );
+
+    let scoped = fixture.search_output(
+        "Godrej Air 2BHK or Prestige Waterford 3BHK or Prestige Song of the South 3BHK",
+    );
+    assert_eq!(scoped.compiled_plan.branches.len(), 3);
+    assert_eq!(
+        scoped.compiled_plan.branches[0].geo_cluster_id,
+        scoped.compiled_plan.branches[1].geo_cluster_id
+    );
+    assert_ne!(
+        scoped.compiled_plan.branches[0].geo_cluster_id,
+        scoped.compiled_plan.branches[2].geo_cluster_id,
+        "direct adjacency must not become transitive clustering"
+    );
+    assert_eq!(
+        scoped
+            .result_sets
+            .iter()
+            .map(|set| set
+                .results
+                .iter()
+                .map(|result| result.card.id.as_str())
+                .collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+        [
+            vec!["geo-air", "geo-alpha-prime"],
+            vec!["geo-waterford", "geo-beta-prime"],
+            vec!["geo-song"],
+        ]
+    );
+    assert_eq!(
+        scoped
+            .results
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "geo-air",
+            "geo-waterford",
+            "geo-song",
+            "geo-alpha-prime",
+            "geo-beta-prime",
+        ],
+        "round-robin should expose each branch's exact society before area alternatives"
+    );
+
+    let bundle_wide = fixture.search_output("2BHK or 3BHK");
+    assert!(bundle_wide
+        .compiled_plan
+        .branches
+        .iter()
+        .all(|branch| branch.geo_scope.is_bundle_wide()));
+    assert_eq!(
+        bundle_wide
+            .result_sets
+            .iter()
+            .map(|set| set
+                .results
+                .iter()
+                .map(|result| result.card.id.as_str())
+                .collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+        [
+            vec!["geo-alpha-prime", "geo-air"],
+            vec!["geo-song", "geo-beta-prime", "geo-waterford"],
+        ]
+    );
+}
+
+#[test]
+fn exact_society_priority_runs_after_hard_eligibility_and_survives_bundle_wide_fallback() {
+    let mut hard_builder = FixtureBuilder::default();
+    hard_builder.add_home(
+        HomeSpec::new(
+            "criteria-anchor",
+            "Criteria Anchor",
+            "Criteria Area",
+            2,
+            21_000_000,
+            12.90,
+            77.60,
+        )
+        .quality(Some(0.5), Some(4.0)),
+    );
+    hard_builder.add_home(
+        HomeSpec::new(
+            "criteria-alternative",
+            "Criteria Alternative",
+            "Criteria Area",
+            2,
+            19_000_000,
+            12.91,
+            77.61,
+        )
+        .quality(Some(0.5), Some(4.8)),
+    );
+    let hard_fixture = hard_builder.build(false);
+    let hard_filtered = hard_fixture.search_output("Criteria Anchor 2BHK under 2Cr");
+    assert_eq!(
+        hard_filtered
+            .results
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>(),
+        ["criteria-alternative"],
+        "an exact society match must not bypass budget eligibility"
+    );
+
+    let mut dangling_builder = FixtureBuilder::default();
+    dangling_builder.add_home(
+        HomeSpec::new(
+            "dangling-anchor",
+            "Dangling Anchor",
+            "Dangling Area",
+            2,
+            19_000_000,
+            12.92,
+            77.62,
+        )
+        .quality(Some(0.5), Some(4.0)),
+    );
+    dangling_builder.add_home(
+        HomeSpec::new(
+            "bundle-star",
+            "Bundle Star",
+            "Other Area",
+            2,
+            18_000_000,
+            12.93,
+            77.63,
+        )
+        .quality(Some(0.5), Some(4.9)),
+    );
+    dangling_builder.edges.retain(|edge| {
+        !(edge.from_entity_id == "society:dangling-anchor" && edge.edge_type == "in_area")
+    });
+    let dangling_fixture = dangling_builder.build(false);
+    let dangling = dangling_fixture.search_output("Dangling Anchor 2BHK under 2Cr");
+    assert!(dangling.compiled_plan.branches[0]
+        .geo_scope
+        .is_bundle_wide());
+    assert_eq!(
+        dangling
+            .results
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>(),
+        ["dangling-anchor", "bundle-star"],
+        "bundle-wide fallback keeps the eligible exact society ahead of Google-ranked alternatives"
     );
 }
 
@@ -833,6 +1101,16 @@ fn named_place_resolution_uses_sourced_area_context_and_fails_closed_without_it(
         77.5955,
     ));
     let fixture = builder.build(false);
+    let canonical_whitefield_hospital_id = fixture
+        .bundle
+        .edges
+        .iter()
+        .find(|edge| {
+            edge.edge_type == PROVIDER_BINDING_EDGE
+                && edge.to_entity_id == "place:manipal-whitefield"
+        })
+        .map(|edge| edge.from_entity_id.as_str())
+        .expect("fixture retains sourced Whitefield hospital topology");
 
     let scoped = fixture.search_output("3BHK near Manipal Hospital in Whitefield under 2Cr");
     assert_eq!(
@@ -844,7 +1122,7 @@ fn named_place_resolution_uses_sourced_area_context_and_fails_closed_without_it(
             .filter(|entity| entity.entity_type == "place")
             .map(|entity| entity.entity_id.as_str())
             .collect::<Vec<_>>(),
-        ["place:manipal-whitefield"]
+        [canonical_whitefield_hospital_id]
     );
     assert_eq!(
         scoped
@@ -2293,8 +2571,11 @@ impl MockSearchFixture {
     }
 
     fn search_output(&self, query: &str) -> backend::search::engine::SearchEngineOutput {
-        let index =
-            SearchIndex::build_with_serving_entities(&self.properties, &self.bundle.entities);
+        let index = SearchIndex::build_with_serving_graph(
+            &self.properties,
+            &self.bundle.entities,
+            &self.bundle.edges,
+        );
         let snapshot = SearchRuntimeSnapshot::new(
             self.bundle.clone(),
             self.properties.clone(),
@@ -2335,6 +2616,7 @@ fn mock_societies(properties: &[Property]) -> Vec<Society> {
 struct FixtureBuilder {
     properties: Vec<Property>,
     entities: Vec<ServingEntityRecord>,
+    aliases: Vec<ServingEntityAliasRecord>,
     facts: Vec<ServingFactRecord>,
     metadata: Vec<ServingSearchMetadataRecord>,
     edges: Vec<backend::serving::ServingEdgeRecord>,
@@ -2359,14 +2641,39 @@ impl FixtureBuilder {
         latitude: f64,
         longitude: f64,
     ) {
+        self.add_place_with_source(entity_id, name, category, latitude, longitude, "Google");
+    }
+
+    fn add_place_with_source(
+        &mut self,
+        entity_id: &str,
+        name: &str,
+        category: &str,
+        latitude: f64,
+        longitude: f64,
+        source_type: &str,
+    ) {
         self.entities.push(entity(&entity_id, "place", name));
-        self.add_fact(&entity_id, "geo.latitude", FactValue::Numeric(latitude));
-        self.add_fact(&entity_id, "geo.longitude", FactValue::Numeric(longitude));
-        self.add_fact(
-            &entity_id,
-            "place.category",
-            FactValue::Text(category.to_string()),
-        );
+        for (fact_key, value) in [
+            ("geo.latitude", FactValue::Numeric(latitude)),
+            ("geo.longitude", FactValue::Numeric(longitude)),
+            ("place.category", FactValue::Text(category.to_string())),
+        ] {
+            let mut fact = serving_fact(entity_id, fact_key, value);
+            fact.source_type = source_type.to_string();
+            fact.observation = Some(
+                SourceObservation::new(
+                    source_type,
+                    format!("entity-record:{entity_id}"),
+                    entity_id,
+                    fact.learned_at,
+                    fact.source_url.clone(),
+                    vec!["asset:controlled-search-fixture/v1".to_string()],
+                )
+                .unwrap(),
+            );
+            self.facts.push(fact);
+        }
     }
 
     fn add_edge(&mut self, from: &str, relation: &str, to: &str) {
@@ -2380,9 +2687,29 @@ impl FixtureBuilder {
         });
     }
 
+    fn add_alias(&mut self, alias: &str, society: &str) {
+        self.aliases.push(ServingEntityAliasRecord {
+            alias: alias.to_string(),
+            normalized_alias: alias.to_ascii_lowercase(),
+            entity_id: format!("society:{}", slug(society)),
+            entity_type: "society".to_string(),
+            entity_name: society.to_string(),
+            source: "controlled_fixture".to_string(),
+        });
+    }
+
     fn add_home(&mut self, spec: HomeSpec) {
         let society_id = slug(&spec.society);
         let entity_id = format!("society:{society_id}");
+        let area_entity_id = format!("area:{}", slug(&spec.area));
+        if !self
+            .entities
+            .iter()
+            .any(|entity| entity.entity_id == area_entity_id)
+        {
+            self.entities
+                .push(entity(&area_entity_id, "area", &spec.area));
+        }
         if !self
             .entities
             .iter()
@@ -2390,6 +2717,13 @@ impl FixtureBuilder {
         {
             self.entities
                 .push(entity(&entity_id, "society", &spec.society));
+        }
+        if !self.edges.iter().any(|edge| {
+            edge.from_entity_id == entity_id
+                && edge.edge_type == "in_area"
+                && edge.to_entity_id == area_entity_id
+        }) {
+            self.add_edge(&entity_id, "in_area", &area_entity_id);
         }
         self.add_fact(
             &entity_id,
@@ -2490,6 +2824,17 @@ impl FixtureBuilder {
 
     fn build(mut self, derive_proximity: bool) -> MockSearchFixture {
         let mut edges = self.edges;
+        let identity_index =
+            ServingFactIndex::from_records(self.facts.clone(), self.metadata.clone());
+        let identity = materialize_canonical_spatial_identities(
+            &self.entities,
+            &identity_index,
+            &edges,
+            "conversational-semantics-mock",
+        )
+        .expect("controlled spatial identities materialize");
+        self.entities.extend(identity.canonical_entities);
+        edges.extend(identity.binding_edges);
         let topology_index =
             ServingFactIndex::from_records(self.facts.clone(), self.metadata.clone());
         let topology = backend::serving::derive_spatial_topology(
@@ -2503,14 +2848,22 @@ impl FixtureBuilder {
         if derive_proximity {
             let base_index =
                 ServingFactIndex::from_records(self.facts.clone(), self.metadata.clone());
-            let derived = derive_proximity_records(&self.entities, &base_index, &[])
-                .expect("controlled proximity facts derive from config");
+            let derived = derive_proximity_records(
+                &self.entities,
+                &base_index,
+                &edges,
+                "conversational-semantics-mock",
+            )
+            .expect("controlled proximity facts derive from config");
             self.facts.extend(derived.facts);
             self.metadata.extend(derived.search_metadata);
             edges.extend(derived.edges);
         }
-        let fact_index = ServingFactIndex::from_records(self.facts.clone(), self.metadata);
-        let entity_alias_index = ServingEntityAliasIndex::default();
+        let mut fact_index = ServingFactIndex::from_records(self.facts.clone(), self.metadata);
+        fact_index.add_canonical_spatial_bindings(&edges);
+        let entity_alias_count = self.aliases.len() as u64;
+        let entity_alias_index = ServingEntityAliasIndex::from_records(self.aliases)
+            .expect("controlled aliases must be valid");
         let temp_dir = tempdir().expect("temporary Tantivy directory");
         let recall_facts = self
             .facts
@@ -2521,7 +2874,8 @@ impl FixtureBuilder {
         let recall_index =
             TantivyRecallIndex::build_in_dir(temp_dir.path(), &self.entities, &recall_facts, &[])
                 .expect("mock recall index");
-        let geo_index = GeoSearchIndex::from_serving_bundle(&self.entities, &fact_index);
+        let geo_index =
+            GeoSearchIndex::from_serving_bundle_with_edges(&self.entities, &fact_index, &edges);
         let spatial_index = SpatialServingIndex::from_serving_bundle_with_edges(
             &self.entities,
             &fact_index,
@@ -2535,7 +2889,7 @@ impl FixtureBuilder {
                 format_version: 1,
                 created_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
                 entity_count: self.entities.len() as u64,
-                entity_alias_count: 0,
+                entity_alias_count,
                 fact_count: self.facts.len() as u64,
                 search_metadata_count: 0,
                 rera_evidence_count: 0,
@@ -2588,7 +2942,30 @@ fn add_regional_inventory(builder: &mut FixtureBuilder) {
     ] {
         builder.add_area(area);
     }
-    builder.add_place("Kadugodi Tree Park Metro", "metro", 12.9958, 77.7574);
+    builder.add_place_with_source(
+        "place:google:kadugodi-tree-park-metro",
+        "Kadugodi Tree Park",
+        "metro",
+        12.9958,
+        77.7574,
+        "Google",
+    );
+    builder.add_place_with_source(
+        "place:osm:kadugodi-tree-park-metro",
+        "Kadugodi Tree Park",
+        "metro_station",
+        12.9959,
+        77.7575,
+        "OpenStreetMap",
+    );
+    builder.add_place_with_source(
+        "place:google:kadugodi-tree-park",
+        "Kadugodi Tree Park",
+        "park",
+        12.9982,
+        77.7558,
+        "Google",
+    );
     builder.add_place("Iblur Metro", "metro", 12.9182, 77.6713);
     builder.add_place("Nagawara Metro", "metro", 13.0448, 77.6215);
 

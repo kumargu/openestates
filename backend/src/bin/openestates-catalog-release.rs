@@ -163,6 +163,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }))?
             );
         }
+        Command::RebuildServing(options) => {
+            let materialization = rebuild_serving(&lake, options).await?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "manifest": materialization.manifest,
+                    "record": materialization.record,
+                }))?
+            );
+        }
     }
     Ok(())
 }
@@ -248,6 +258,12 @@ enum Command {
     },
     RebaseRera(RebaseReraOptions),
     ExtendServing(ExtendServingOptions),
+    RebuildServing(RebuildServingOptions),
+}
+
+struct RebuildServingOptions {
+    serving_materialization_id: MaterializationId,
+    version: String,
 }
 
 struct RebaseReraOptions {
@@ -349,12 +365,41 @@ fn parse_command(command: &str, args: Vec<String>) -> Result<Command, String> {
         "inspect" => parse_inspect(args),
         "rebase-rera" => parse_rebase_rera(args).map(Command::RebaseRera),
         "extend-serving" => parse_extend_serving(args).map(Command::ExtendServing),
+        "rebuild-serving" => parse_rebuild_serving(args).map(Command::RebuildServing),
         "--help" | "-h" => {
             print_help();
             std::process::exit(0);
         }
         other => Err(format!("unknown command: {other}")),
     }
+}
+
+fn parse_rebuild_serving(args: Vec<String>) -> Result<RebuildServingOptions, String> {
+    let mut cursor = 0usize;
+    let mut serving_materialization_id = None;
+    let mut version = None;
+    while cursor < args.len() {
+        match args[cursor].as_str() {
+            "--serving" => {
+                cursor += 1;
+                serving_materialization_id = Some(parse_materialization_id(take_value(
+                    &args,
+                    &mut cursor,
+                    "--serving",
+                )?)?);
+            }
+            "--version" => {
+                cursor += 1;
+                version = Some(take_value(&args, &mut cursor, "--version")?);
+            }
+            other => return Err(format!("unknown rebuild-serving argument: {other}")),
+        }
+    }
+    Ok(RebuildServingOptions {
+        serving_materialization_id: serving_materialization_id
+            .ok_or_else(|| "rebuild-serving requires --serving".to_string())?,
+        version: version.ok_or_else(|| "rebuild-serving requires --version".to_string())?,
+    })
 }
 
 fn parse_extend_serving(args: Vec<String>) -> Result<ExtendServingOptions, String> {
@@ -858,7 +903,7 @@ async fn extend_catalog_serving(
         .into());
     }
 
-    let base_entity_ids = entities
+    let mut base_entity_ids = entities
         .iter()
         .map(|entity| entity.entity_id.clone())
         .collect::<BTreeSet<_>>();
@@ -1035,19 +1080,28 @@ async fn extend_catalog_serving(
         .iter()
         .map(|record| record.society_id.clone())
         .collect::<BTreeSet<_>>();
-    if !requested_societies.is_subset(&candidate_evidence_societies) {
+    if !options.refresh_existing && !requested_societies.is_subset(&candidate_evidence_societies) {
         return Err(
             "candidate serving bundle is missing RERA evidence for an added society".into(),
         );
     }
     if options.refresh_existing {
-        evidence.retain(|record| !requested_societies.contains(&record.society_id));
+        evidence.retain(|record| !candidate_evidence_societies.contains(&record.society_id));
     }
     evidence.extend(
         candidate_evidence
             .into_iter()
             .filter(|record| requested_societies.contains(&record.society_id)),
     );
+
+    consolidate_prevalidated_empty_society_duplicates(
+        &mut entities,
+        &facts,
+        &search_metadata,
+        &mut edges,
+        &evidence,
+        &mut base_entity_ids,
+    )?;
 
     let included_societies = entities
         .iter()
@@ -1064,13 +1118,14 @@ async fn extend_catalog_serving(
     excluded_rera_evidence_society_ids.dedup();
 
     SearchServingBundleMaterializer::new(lake.clone())
-        .materialize_child_from_serving_records_with_rera_for_run(
+        .materialize_child_from_serving_records_with_rera_preserving_entities_for_run(
             entities,
             facts,
             search_metadata,
             edges,
             evidence,
             excluded_rera_evidence_society_ids,
+            base_entity_ids,
             options.version,
             vec![
                 SourceWatermark {
@@ -1094,6 +1149,132 @@ async fn extend_catalog_serving(
         )
         .await
         .map_err(Into::into)
+}
+
+fn consolidate_prevalidated_empty_society_duplicates(
+    entities: &mut Vec<backend::serving::ServingEntityRecord>,
+    facts: &[backend::serving::ServingFactRecord],
+    search_metadata: &[backend::serving::ServingSearchMetadataRecord],
+    edges: &mut Vec<backend::serving::ServingEdgeRecord>,
+    rera_evidence: &[backend::serving::ServingReraEvidenceRecord],
+    prevalidated_entity_ids: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    let mut societies_by_runtime_id = BTreeMap::<String, Vec<String>>::new();
+    for entity in entities
+        .iter()
+        .filter(|entity| entity.entity_type == "society")
+    {
+        societies_by_runtime_id
+            .entry(format!("soc-{}", serving_society_slug(&entity.name)))
+            .or_default()
+            .push(entity.entity_id.clone());
+    }
+
+    let fact_subjects = facts
+        .iter()
+        .map(|fact| fact.entity_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let metadata_subjects = search_metadata
+        .iter()
+        .map(|metadata| metadata.entity_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let property_societies = edges
+        .iter()
+        .filter(|edge| edge.edge_type == "in_society")
+        .map(|edge| edge.to_entity_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let evidence_societies = rera_evidence
+        .iter()
+        .map(|record| record.society_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut redirects = BTreeMap::<String, String>::new();
+
+    for (runtime_id, society_ids) in societies_by_runtime_id
+        .into_iter()
+        .filter(|(_, society_ids)| society_ids.len() > 1)
+    {
+        if society_ids
+            .iter()
+            .any(|entity_id| !prevalidated_entity_ids.contains(entity_id))
+        {
+            continue;
+        }
+        let populated = society_ids
+            .iter()
+            .filter(|entity_id| {
+                let entity_id = entity_id.as_str();
+                fact_subjects.contains(entity_id)
+                    || metadata_subjects.contains(entity_id)
+                    || property_societies.contains(entity_id)
+                    || evidence_societies.contains(entity_id)
+            })
+            .collect::<Vec<_>>();
+        if populated.len() != 1 {
+            return Err(format!(
+                "prevalidated canonical society identity {runtime_id} cannot be consolidated: expected one populated entity, found {}",
+                populated.len()
+            ));
+        }
+        let retained_entity_id = populated[0];
+        for duplicate_id in society_ids
+            .iter()
+            .filter(|entity_id| *entity_id != retained_entity_id)
+        {
+            if edges.iter().any(|edge| {
+                edge.derivation.is_some()
+                    && (edge.from_entity_id == *duplicate_id || edge.to_entity_id == *duplicate_id)
+            }) {
+                return Err(format!(
+                    "prevalidated empty society {duplicate_id} has derived relations and cannot be consolidated safely"
+                ));
+            }
+            redirects.insert(duplicate_id.clone(), retained_entity_id.clone());
+        }
+    }
+
+    if redirects.is_empty() {
+        return Ok(());
+    }
+    entities.retain(|entity| !redirects.contains_key(&entity.entity_id));
+    for duplicate_id in redirects.keys() {
+        prevalidated_entity_ids.remove(duplicate_id);
+    }
+    for edge in edges.iter_mut() {
+        if let Some(entity_id) = redirects.get(&edge.from_entity_id) {
+            edge.from_entity_id.clone_from(entity_id);
+        }
+        if let Some(entity_id) = redirects.get(&edge.to_entity_id) {
+            edge.to_entity_id.clone_from(entity_id);
+        }
+    }
+    let mut edge_keys = BTreeSet::new();
+    edges.retain(|edge| {
+        edge.from_entity_id != edge.to_entity_id
+            && edge_keys.insert((
+                edge.from_entity_id.clone(),
+                edge.edge_type.clone(),
+                edge.to_entity_id.clone(),
+                edge.source_type.clone(),
+            ))
+    });
+    Ok(())
+}
+
+fn serving_society_slug(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
 }
 
 fn refresh_candidate_facts(
@@ -1592,6 +1773,65 @@ async fn serving_record_and_manifest(
     Ok((record, manifest))
 }
 
+async fn rebuild_serving(
+    lake: &LakeStore,
+    options: RebuildServingOptions,
+) -> Result<backend::serving::SearchServingBundleMaterialization, Box<dyn std::error::Error>> {
+    let materializations = AssetMaterializationStore::new(lake.clone());
+    let (record, manifest) =
+        serving_record_and_manifest(lake, &materializations, &options.serving_materialization_id)
+            .await?;
+    let entities = read_entities_parquet(
+        &lake
+            .get_bytes(&LakeKey::new(manifest.entity_parquet_key.clone())?)
+            .await?,
+    )?;
+    let facts = read_facts_parquet(
+        &lake
+            .get_bytes(&LakeKey::new(manifest.fact_parquet_key.clone())?)
+            .await?,
+    )?;
+    let search_metadata = read_search_metadata_parquet(
+        &lake
+            .get_bytes(&LakeKey::new(manifest.search_metadata_parquet_key.clone())?)
+            .await?,
+    )?;
+    let edges = match manifest.edge_parquet_key.as_ref() {
+        Some(key) => read_edges_parquet(&lake.get_bytes(&LakeKey::new(key.clone())?).await?)?,
+        None => Vec::new(),
+    };
+    let rera_evidence = match manifest.rera_evidence_parquet_key.as_ref() {
+        Some(key) => {
+            read_rera_evidence_parquet(&lake.get_bytes(&LakeKey::new(key.clone())?).await?)?
+        }
+        None => Vec::new(),
+    };
+    let prevalidated_entity_ids = entities
+        .iter()
+        .map(|entity| entity.entity_id.clone())
+        .collect::<BTreeSet<_>>();
+    let source_watermarks = vec![SourceWatermark {
+        source: "serving_bundle_rebuild".to_string(),
+        high_watermark: options.serving_materialization_id.to_string(),
+    }];
+    SearchServingBundleMaterializer::new(lake.clone())
+        .materialize_child_from_serving_records_with_rera_preserving_entities_for_run(
+            entities,
+            facts,
+            search_metadata,
+            edges,
+            rera_evidence,
+            manifest.excluded_rera_evidence_society_ids,
+            prevalidated_entity_ids,
+            options.version,
+            source_watermarks,
+            record.parent_materializations,
+            MaterializationId::new(),
+        )
+        .await
+        .map_err(Into::into)
+}
+
 fn default_project_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -1613,6 +1853,7 @@ fn print_help() {
     println!("  cargo run --bin openestates-catalog-release -- rollback --release <uuid> --env <dev|staging|production>");
     println!("  cargo run --bin openestates-catalog-release -- rebase-rera --base-release <uuid> --evidence-serving <uuid> --version <version>");
     println!("  cargo run --bin openestates-catalog-release -- extend-serving --base-release <uuid> --candidate-serving <uuid> --society <canonical-id> --version <version>");
+    println!("  cargo run --bin openestates-catalog-release -- rebuild-serving --serving <uuid> --version <version>");
     println!();
     println!("Options:");
     println!("  --project-root <path>       Project root used for local lake resolution");

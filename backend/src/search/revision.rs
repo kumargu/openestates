@@ -7,7 +7,7 @@ use crate::dag_config::{search_parser_config, search_resolution_config};
 use crate::serving::{ServingEntityAliasIndex, ServingEntityRecord};
 
 use super::ast::{PredicateFamily, PredicatePolarity};
-use super::compiled_plan::{CompiledSearchPlan, IntentBranch};
+use super::compiled_plan::{CompiledSearchPlan, GeoBranch};
 use super::intent::{parse_intent, SearchIntent};
 use super::SearchRuntimeVersion;
 
@@ -301,6 +301,7 @@ fn area_alternative_query(parent_plan: &CompiledSearchPlan, area_name: &str) -> 
             PredicateFamily::Spatial,
         ],
         area_name,
+        true,
     )?;
     if replaced != 1 {
         return None;
@@ -584,43 +585,74 @@ fn replace_budget_constraint(
     let mut branch_queries = Vec::with_capacity(parent_plan.branches.len());
     for (index, branch) in parent_plan.branches.iter().enumerate() {
         if target_branch.is_none_or(|target| target == index) {
-            let (query, replaced) =
-                replace_branch_predicates(branch, &[PredicateFamily::Budget], replacement_text)?;
+            let (query, replaced) = replace_branch_predicates(
+                branch,
+                &[PredicateFamily::Budget],
+                replacement_text,
+                parent_plan.branches.len() == 1,
+            )?;
             if replaced == 0 {
                 return None;
             }
             branch_queries.push(query);
         } else {
-            branch_queries.push(normalize_query(&branch.compiled_query.raw));
+            branch_queries.push(branch_source_query(branch)?);
         }
     }
     Some(branch_queries.join(" or "))
 }
 
 fn replace_branch_predicates(
-    branch: &IntentBranch,
+    branch: &GeoBranch,
     families: &[PredicateFamily],
     replacement: &str,
+    use_full_source_query: bool,
 ) -> Option<(String, usize)> {
     let spans = branch
         .predicates
         .source_spans_for(families, PredicatePolarity::Positive);
-    let mut query = branch.compiled_query.raw.clone();
+    let (branch_start, branch_end) = if use_full_source_query {
+        (0, branch.source_query.len())
+    } else {
+        branch_source_bounds(branch)?
+    };
+    let mut query = branch
+        .source_query
+        .get(branch_start..branch_end)?
+        .to_string();
     for span in spans.iter().rev() {
-        if span.start > span.end || span.end > query.len() {
+        if span.start < branch_start || span.end > branch_end || span.start > span.end {
             return None;
         }
-        query.replace_range(span.start..span.end, replacement);
+        query.replace_range(
+            span.start - branch_start..span.end - branch_start,
+            replacement,
+        );
     }
     Some((normalize_query(&query), spans.len()))
 }
 
 fn canonical_plan_query(plan: &CompiledSearchPlan) -> String {
+    if let [branch] = plan.branches.as_slice() {
+        return normalize_query(&branch.source_query);
+    }
     plan.branches
         .iter()
-        .map(|branch| normalize_query(&branch.compiled_query.raw))
+        .filter_map(branch_source_query)
         .collect::<Vec<_>>()
         .join(" or ")
+}
+
+fn branch_source_query(branch: &GeoBranch) -> Option<String> {
+    let (start, end) = branch_source_bounds(branch)?;
+    branch.source_query.get(start..end).map(normalize_query)
+}
+
+fn branch_source_bounds(branch: &GeoBranch) -> Option<(usize, usize)> {
+    Some((
+        branch.source_spans.iter().map(|span| span.start).min()?,
+        branch.source_spans.iter().map(|span| span.end).max()?,
+    ))
 }
 
 fn normalize_query(query: &str) -> String {
@@ -628,25 +660,7 @@ fn normalize_query(query: &str) -> String {
 }
 
 fn compile_revision_parent_plan(query: &str) -> CompiledSearchPlan {
-    let snapshot = "revision-parent";
-    let Some(layout) = super::query_plan::discourse_branch_layout(query) else {
-        return CompiledSearchPlan::single(super::CompiledQuery::from_text(query), snapshot);
-    };
-    let shared_suffix = layout
-        .shared_suffix
-        .map(|span| query[span.start..span.end].trim());
-    let plans = layout
-        .segments
-        .into_iter()
-        .map(|span| {
-            let branch = query[span.start..span.end].trim();
-            let branch = shared_suffix
-                .map(|suffix| format!("{branch} {suffix}"))
-                .unwrap_or_else(|| branch.to_string());
-            CompiledSearchPlan::single(super::CompiledQuery::from_text(&branch), snapshot)
-        })
-        .collect();
-    CompiledSearchPlan::combine(plans, snapshot)
+    CompiledSearchPlan::compile(super::CompiledQuery::from_text(query), "revision-parent")
 }
 
 #[cfg(test)]
@@ -662,10 +676,10 @@ mod tests {
     fn area_parent_plan(query: &str, area: &str) -> CompiledSearchPlan {
         let start = query.find(area).expect("area occurs in parent query");
         let end = start + area.len();
-        CompiledSearchPlan::single(
-            super::super::CompiledQuery {
-                raw: query.to_string(),
-                constraints: ConstraintExpr::term(ConstraintTerm::Area {
+        CompiledSearchPlan::compile(
+            super::super::CompiledQuery::with_constraints(
+                query,
+                ConstraintExpr::term(ConstraintTerm::Area {
                     entity_id: Some(format!("area:{}", area.to_ascii_lowercase())),
                     value: area.to_string(),
                     span: Some(SourceSpan {
@@ -674,8 +688,8 @@ mod tests {
                         raw_text: area.to_string(),
                     }),
                 }),
-                intent: parse_intent(query),
-            },
+                parse_intent(query),
+            ),
             "test-snapshot",
         )
     }
@@ -683,10 +697,10 @@ mod tests {
     fn spatial_parent_plan(query: &str, target: &str) -> CompiledSearchPlan {
         let start = query.find(target).expect("spatial target occurs in query");
         let end = start + target.len();
-        CompiledSearchPlan::single(
-            super::super::CompiledQuery {
-                raw: query.to_string(),
-                constraints: ConstraintExpr::term(ConstraintTerm::Spatial {
+        CompiledSearchPlan::compile(
+            super::super::CompiledQuery::with_constraints(
+                query,
+                ConstraintExpr::term(ConstraintTerm::Spatial {
                     relation: "near".to_string(),
                     entity_id: format!("area:{}", target.to_ascii_lowercase()),
                     display_name: target.to_string(),
@@ -697,8 +711,8 @@ mod tests {
                         raw_text: target.to_string(),
                     }),
                 }),
-                intent: parse_intent(query),
-            },
+                parse_intent(query),
+            ),
             "test-snapshot",
         )
     }
@@ -975,15 +989,15 @@ mod tests {
         let parent = "3BHK near Hoodi and ITPL under 2.5Cr";
         let hoodi = spatial_parent_plan(parent, "Hoodi");
         let itpl = spatial_parent_plan(parent, "ITPL");
-        let plan = CompiledSearchPlan::single(
-            super::super::CompiledQuery {
-                raw: parent.to_string(),
-                constraints: ConstraintExpr::and(vec![
+        let plan = CompiledSearchPlan::compile(
+            super::super::CompiledQuery::with_constraints(
+                parent,
+                ConstraintExpr::and(vec![
                     hoodi.branches[0].predicates.clone(),
                     itpl.branches[0].predicates.clone(),
                 ]),
-                intent: parse_intent(parent),
-            },
+                parse_intent(parent),
+            ),
             "test-snapshot",
         );
 
@@ -1006,11 +1020,8 @@ mod tests {
     #[test]
     fn area_only_alternative_clarifies_when_multiple_parent_branches_could_supply_constraints() {
         let parent = "3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2Cr";
-        let plan = CompiledSearchPlan::combine(
-            vec![
-                area_parent_plan("3BHK in Whitefield under 2.5Cr", "Whitefield"),
-                area_parent_plan("2BHK in Hoodi under 2Cr", "Hoodi"),
-            ],
+        let plan = CompiledSearchPlan::compile(
+            super::super::CompiledQuery::from_text(parent),
             "test-snapshot",
         );
 

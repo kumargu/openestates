@@ -216,6 +216,14 @@ impl SpatialServingIndex {
         }
         let mut frontier = vec![entity_id.to_string()];
         while let Some(subject_id) = frontier.pop() {
+            for provider_id in self
+                .geometry
+                .related(&subject_id, super::PROVIDER_BINDING_EDGE)
+            {
+                if !frontier.iter().any(|existing| existing == provider_id) {
+                    frontier.push(provider_id.to_string());
+                }
+            }
             for area_id in self.geometry.related(&subject_id, "in_area") {
                 if !self
                     .entity_types
@@ -250,6 +258,28 @@ impl SpatialServingIndex {
         right_id: &str,
         snapshot_identity: &str,
     ) -> Option<SpatialDistance> {
+        if let Some(derivation) =
+            self.relation_derivation(left_id, "near_place", right_id, snapshot_identity)
+        {
+            let distance_km = derivation.value?;
+            if derivation.unit.as_deref() == Some("km") {
+                return Some(SpatialDistance {
+                    distance_km,
+                    metric: match derivation.metric.as_str() {
+                        "footprint_to_footprint_distance" => "footprint_to_footprint_distance",
+                        "footprint_to_destination_distance" => "footprint_to_destination_distance",
+                        "footprint_to_trusted_point_distance" => {
+                            "footprint_to_destination_distance"
+                        }
+                        _ => "trusted_point_distance_fallback",
+                    },
+                    confidence: derivation.confidence,
+                    source_type: Some("Computed".to_string()),
+                    source_url: None,
+                    evidence_refs: vec![EvidenceRef::for_derivation(derivation)],
+                });
+            }
+        }
         if let Some(distance_km) = self.geometry.distance_km(left_id, right_id) {
             let left = self.geometry.feature(left_id)?;
             let right = self.geometry.feature(right_id)?;

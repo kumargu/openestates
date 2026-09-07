@@ -400,12 +400,26 @@ fn google_review_facts_from_rows(
 ) -> Result<SkillFactsInput, GooglePlaceAssetError> {
     let mut facts = Vec::new();
     let mut annotations = Vec::new();
+    let asset_lineage = google_asset_lineage(google_record)?;
     for row in rows {
+        let provider_observation_id = google_record_observation_id("place", &row)?;
+        let first_new_fact = facts.len();
         append_google_review_facts(&row, run_id, &mut facts, &mut annotations)?;
+        set_google_fact_provenance(
+            &mut facts[first_new_fact..],
+            &provider_observation_id,
+            &asset_lineage,
+        );
         if let Some(alias) = aliases.get(&row.entity_id) {
             let mut alias_row = row.clone();
             alias_row.entity_id.clone_from(alias);
+            let first_new_fact = facts.len();
             append_google_review_facts(&alias_row, run_id, &mut facts, &mut annotations)?;
+            set_google_fact_provenance(
+                &mut facts[first_new_fact..],
+                &provider_observation_id,
+                &asset_lineage,
+            );
         }
     }
     Ok(SkillFactsInput {
@@ -424,6 +438,7 @@ fn google_nearby_place_facts_from_rows(
     aliases: &HashMap<String, String>,
 ) -> Result<SkillFactsInput, GooglePlaceAssetError> {
     let config = load_nearby_place_category_config()?;
+    let asset_lineage = google_asset_lineage(nearby_record)?;
     let mut rows_by_fact = BTreeMap::<(String, String), Vec<GoogleNearbyPlaceRecord>>::new();
     let mut facts = Vec::new();
     let mut annotations = Vec::new();
@@ -458,6 +473,7 @@ fn google_nearby_place_facts_from_rows(
             append_google_nearby_place_identity_facts(
                 row,
                 run_id,
+                &asset_lineage,
                 &mut facts,
                 &mut annotations,
                 &mut emitted_place_fact_keys,
@@ -483,7 +499,14 @@ fn google_nearby_place_facts_from_rows(
             let display = nearby_place_display(&row);
             let value = FactValue::Text(display.clone());
             push_nearby_society_fact(
-                &mut facts, &entity_id, &fact_key, value, &row, run_id, &display,
+                &mut facts,
+                &entity_id,
+                &fact_key,
+                value,
+                &row,
+                run_id,
+                &display,
+                &asset_lineage,
             )?;
             for risk in &category_config.derived_distance_risks {
                 if row
@@ -499,6 +522,7 @@ fn google_nearby_place_facts_from_rows(
                         &row,
                         run_id,
                         &display,
+                        &asset_lineage,
                     )?;
                 }
             }
@@ -554,7 +578,9 @@ fn push_nearby_society_fact(
     row: &GoogleNearbyPlaceRecord,
     run_id: &MaterializationId,
     display: &str,
+    asset_lineage: &[String],
 ) -> Result<(), GooglePlaceAssetError> {
+    let provider_observation_id = google_record_observation_id("nearby_place", row)?;
     facts.push(SkillFactRecord {
         entity_id: entity_id.to_string(),
         fact_key: fact_key.to_string(),
@@ -572,9 +598,9 @@ fn push_nearby_society_fact(
             "sha256:{}",
             sha256_hex(format!("{entity_id}:{fact_key}:{}:{display}", row.place_url).as_bytes())
         ),
-        observation_provider: None,
-        provider_observation_id: None,
-        asset_lineage: Vec::new(),
+        observation_provider: Some("Google".to_string()),
+        provider_observation_id: Some(provider_observation_id),
+        asset_lineage: asset_lineage.to_vec(),
     });
     Ok(())
 }
@@ -582,6 +608,7 @@ fn push_nearby_society_fact(
 fn append_google_nearby_place_identity_facts(
     row: &GoogleNearbyPlaceRecord,
     run_id: &MaterializationId,
+    asset_lineage: &[String],
     facts: &mut Vec<SkillFactRecord>,
     annotations: &mut Vec<SkillFactAnnotationRecord>,
     emitted_fact_keys: &mut HashSet<(String, String)>,
@@ -594,6 +621,7 @@ fn append_google_nearby_place_identity_facts(
     };
 
     let entity_id = nearby_place_entity_id(row);
+    let first_new_fact = facts.len();
     push_nearby_place_fact_once(
         row,
         run_id,
@@ -715,6 +743,13 @@ fn append_google_nearby_place_identity_facts(
             emitted_fact_keys,
         )?;
     }
+
+    let provider_observation_id = google_record_observation_id("nearby_place", row)?;
+    set_google_fact_provenance(
+        &mut facts[first_new_fact..],
+        &provider_observation_id,
+        asset_lineage,
+    );
 
     Ok(())
 }
@@ -952,6 +987,54 @@ fn append_google_review_facts(
         )?;
     }
     Ok(())
+}
+
+fn google_record_observation_id(
+    record_kind: &str,
+    row: &impl Serialize,
+) -> Result<String, GooglePlaceAssetError> {
+    let encoded = serde_json::to_vec(row)?;
+    Ok(format!(
+        "google_{record_kind}_record:sha256:{}",
+        sha256_hex(&encoded)
+    ))
+}
+
+fn google_asset_lineage(
+    record: &MaterializationRecord,
+) -> Result<Vec<String>, GooglePlaceAssetError> {
+    if record.artifacts.is_empty() {
+        return Err(GooglePlaceAssetError::InvalidInput(format!(
+            "Google materialization {} has no artifact lineage",
+            record.materialization_id
+        )));
+    }
+    let mut lineage = record
+        .artifacts
+        .iter()
+        .map(|artifact| {
+            format!(
+                "artifact:{}#{}:{}",
+                artifact.key, artifact.hash_algorithm, artifact.content_hash
+            )
+        })
+        .collect::<Vec<_>>();
+    lineage.push(format!("materialization:{}", record.materialization_id));
+    lineage.sort();
+    lineage.dedup();
+    Ok(lineage)
+}
+
+fn set_google_fact_provenance(
+    facts: &mut [SkillFactRecord],
+    provider_observation_id: &str,
+    asset_lineage: &[String],
+) {
+    for fact in facts {
+        fact.observation_provider = Some("Google".to_string());
+        fact.provider_observation_id = Some(provider_observation_id.to_string());
+        fact.asset_lineage = asset_lineage.to_vec();
+    }
 }
 
 fn push_google_review_cards_fact(

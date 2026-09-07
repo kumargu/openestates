@@ -1030,14 +1030,11 @@ mod tests {
                 }),
             ])
         };
-        let query = CompiledQuery {
-            raw: "grouped query".to_string(),
-            constraints: ConstraintExpr::any_of(vec![
-                branch("Whitefield", 3),
-                branch("Bellandur", 2),
-            ]),
-            intent: empty_intent(),
-        };
+        let query = CompiledQuery::with_constraints(
+            "grouped query",
+            ConstraintExpr::any_of(vec![branch("Whitefield", 3), branch("Bellandur", 2)]),
+            empty_intent(),
+        );
 
         assert_eq!(
             index.recall_ids(&query),
@@ -1111,11 +1108,11 @@ mod tests {
                 span: None,
             })),
         ]);
-        let compiled = CompiledQuery {
-            raw: "3BHK under 4Cr, avoid Prestige Waterford".to_string(),
+        let compiled = CompiledQuery::with_constraints(
+            "3BHK under 4Cr, avoid Prestige Waterford",
             constraints,
-            intent: empty_intent(),
-        };
+            empty_intent(),
+        );
 
         assert_eq!(index.recall_ids(&compiled), vec!["splendour-3bhk"]);
     }
@@ -1175,15 +1172,15 @@ mod tests {
             },
         ];
         let index = SearchIndex::build_with_serving_graph(&[prestige, brigade], &entities, &edges);
-        let compiled = CompiledQuery {
-            raw: "Prestige".to_string(),
-            constraints: ConstraintExpr::term(ConstraintTerm::Builder {
+        let compiled = CompiledQuery::with_constraints(
+            "Prestige",
+            ConstraintExpr::term(ConstraintTerm::Builder {
                 entity_id: "builder:prestige".to_string(),
                 display_name: "Prestige".to_string(),
                 span: None,
             }),
-            intent: empty_intent(),
-        };
+            empty_intent(),
+        );
 
         assert_eq!(index.recall_ids(&compiled), vec!["prestige-home"]);
     }
@@ -1279,15 +1276,15 @@ mod tests {
             derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&[property], &entities, &edges);
-        let query = CompiledQuery {
-            raw: "Canonical Project".to_string(),
-            constraints: ConstraintExpr::term(ConstraintTerm::Society {
+        let query = CompiledQuery::with_constraints(
+            "Canonical Project",
+            ConstraintExpr::term(ConstraintTerm::Society {
                 entity_id: canonical_id.to_string(),
                 display_name: "Canonical Project".to_string(),
                 span: None,
             }),
-            intent: empty_intent(),
-        };
+            empty_intent(),
+        );
 
         assert_eq!(index.recall_ids(&query), vec!["edge-linked-home"]);
         assert!(index.entity_has_property(canonical_id, "edge-linked-home"));
@@ -1322,15 +1319,15 @@ mod tests {
             derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&[property], &entities, &edges);
-        let query = CompiledQuery {
-            raw: "homes in Whitefield".to_string(),
-            constraints: ConstraintExpr::term(ConstraintTerm::Area {
+        let query = CompiledQuery::with_constraints(
+            "homes in Whitefield",
+            ConstraintExpr::term(ConstraintTerm::Area {
                 entity_id: Some("area:whitefield".to_string()),
                 value: "Whitefield".to_string(),
                 span: None,
             }),
-            intent: empty_intent(),
-        };
+            empty_intent(),
+        );
 
         assert_eq!(index.recall_ids(&query), vec!["graph-area-home"]);
     }

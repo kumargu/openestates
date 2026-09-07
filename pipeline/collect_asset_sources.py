@@ -36,6 +36,7 @@ from pipeline.skills.fetch_rera import (
 )
 from pipeline.skills.rera_regulatory_intelligence import (
     DocumentScope,
+    RegulatoryIntelligenceError,
     build_regulatory_source_records,
     load_policy as load_rera_regulatory_policy,
     redacted_document,
@@ -2461,12 +2462,19 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
                 "crawl_run_id": snapshot["crawl_run_id"],
             }
         )
-    if force_refresh and scoped_rera_entities(request):
-        regulatory_payloads = capture_scoped_rera_regulatory_payloads(request)
-    else:
-        regulatory_payloads = load_scoped_rera_regulatory_payloads(request)
-        if len(regulatory_payloads) < len(scoped_rera_entities(request)):
+    try:
+        if force_refresh and scoped_rera_entities(request):
             regulatory_payloads = capture_scoped_rera_regulatory_payloads(request)
+        else:
+            regulatory_payloads = load_scoped_rera_regulatory_payloads(request)
+            if len(regulatory_payloads) < len(scoped_rera_entities(request)):
+                regulatory_payloads = capture_scoped_rera_regulatory_payloads(request)
+    except RegulatoryIntelligenceError as error:
+        logger.warning(
+            "K-RERA regulatory lists unavailable; leaving regulatory coverage empty: %s",
+            error,
+        )
+        regulatory_payloads = []
     regulatory_receipt_keys = set()
     for payload in regulatory_payloads:
         for receipt in payload["receipts"]:

@@ -123,11 +123,13 @@ impl ServingBundleLoader {
         validate_serving_edge_evidence(&edges, fact_index.all_facts(), &manifest.bundle_version)
             .map_err(ServingBundleLoadError::Configuration)?;
         fact_index.add_society_aliases(&entities);
+        fact_index.add_canonical_spatial_bindings(&edges);
         let mut rera_evidence_index = load_rera_evidence_index(&self.lake, &manifest).await?;
         rera_evidence_index.add_aliases(&aliases);
         let mut graph_index = GraphIndex::from_serving_edges(&edges);
         graph_index.add_entity_aliases(&aliases);
-        let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
+        let geo_index =
+            GeoSearchIndex::from_serving_bundle_with_edges(&entities, &fact_index, &edges);
         let spatial_index =
             SpatialServingIndex::from_serving_bundle_with_edges(&entities, &fact_index, &edges);
         let search_capabilities =

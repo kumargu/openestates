@@ -3,6 +3,7 @@ use std::fmt;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::dag_config::{
     self, load_resolution_policies, normalize_source_type, resolve_coordinate_pair,
@@ -309,6 +310,8 @@ fn source_entity_coordinate_facts(
         .iter()
         .filter_map(|seed| Some((seed, seed.latitude?, seed.longitude?)))
         .flat_map(|(seed, latitude, longitude)| {
+            let provider_observation_id = source_entity_seed_observation_id(seed);
+            let asset_lineage = vec![format!("asset:source_entity_seed/run:{run_id}")];
             let input_hash = format!(
                 "source-entity-seed:{}:{latitude:.7}:{longitude:.7}",
                 seed.entity_id
@@ -321,6 +324,8 @@ fn source_entity_coordinate_facts(
                     run_id,
                     learned_at,
                     &input_hash,
+                    &provider_observation_id,
+                    &asset_lineage,
                 ),
                 source_entity_coordinate_fact(
                     seed,
@@ -329,6 +334,8 @@ fn source_entity_coordinate_facts(
                     run_id,
                     learned_at,
                     &input_hash,
+                    &provider_observation_id,
+                    &asset_lineage,
                 ),
             ]
         })
@@ -342,6 +349,8 @@ fn source_entity_coordinate_fact(
     run_id: &MaterializationId,
     learned_at: DateTime<Utc>,
     input_hash: &str,
+    provider_observation_id: &str,
+    asset_lineage: &[String],
 ) -> SkillFactRecord {
     SkillFactRecord {
         entity_id: seed.entity_id.clone(),
@@ -358,10 +367,21 @@ fn source_entity_coordinate_fact(
         learned_at,
         run_id: run_id.to_string(),
         input_hash: input_hash.to_string(),
-        observation_provider: None,
-        provider_observation_id: None,
-        asset_lineage: Vec::new(),
+        observation_provider: Some("SourceEntitySeed".to_string()),
+        provider_observation_id: Some(provider_observation_id.to_string()),
+        asset_lineage: asset_lineage.to_vec(),
     }
+}
+
+fn source_entity_seed_observation_id(seed: &SourceEntitySeed) -> String {
+    let encoded = serde_json::to_vec(seed).expect("source entity seeds serialize");
+    let digest = Sha256::digest(encoded);
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write as _;
+        write!(&mut hex, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    format!("source_entity_seed:sha256:{hex}")
 }
 
 fn load_project_claim_facts_policy() -> Result<CompactionPolicy, CurrentProjectFactsError> {

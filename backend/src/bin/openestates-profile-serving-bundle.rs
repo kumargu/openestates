@@ -113,6 +113,10 @@ struct SelectedFactRow {
     confidence: f32,
     source_type: String,
     learned_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    observation_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    observation_provider: Option<String>,
     answers_preferences: Vec<String>,
 }
 
@@ -161,6 +165,14 @@ fn selected_fact_rows(
                 confidence: fact.confidence,
                 source_type: fact.source_type.clone(),
                 learned_at: fact.learned_at,
+                observation_id: fact
+                    .observation
+                    .as_ref()
+                    .map(|observation| observation.observation_id.as_str().to_string()),
+                observation_provider: fact
+                    .observation
+                    .as_ref()
+                    .map(|observation| observation.provider.clone()),
                 answers_preferences,
             });
         }

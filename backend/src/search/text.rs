@@ -647,6 +647,7 @@ impl TextSearch {
                     p,
                     matched_area,
                     area_match_kind,
+                    &verified_matches,
                     &reasons,
                     search_index,
                     serving_facts,
@@ -3245,6 +3246,7 @@ fn constraint_term_evaluation_for_society(
         ConstraintTerm::Spatial {
             relation,
             entity_id,
+            display_name,
             ..
         } => {
             let matches = evaluation
@@ -3254,7 +3256,12 @@ fn constraint_term_evaluation_for_society(
                 .flatten()
                 .filter(|verified| {
                     verified.subject_entity_id == society_entity_id
-                        && verified.target_entity_id.as_deref() == Some(entity_id)
+                        && if entity_id.is_empty() {
+                            verified.target_entity_id.is_none()
+                                && verified.predicate.eq_ignore_ascii_case(display_name)
+                        } else {
+                            verified.target_entity_id.as_deref() == Some(entity_id)
+                        }
                         && verified.relation.eq_ignore_ascii_case(relation)
                         && verified.snapshot_identity == evaluation.snapshot_identity
                 })
@@ -3267,24 +3274,6 @@ fn constraint_term_evaluation_for_society(
             }
         }
     }
-}
-
-pub(crate) fn property_matches_constraint_term_with_index(
-    property: &Property,
-    term: &ConstraintTerm,
-    search_index: Option<&SearchIndex>,
-    serving_facts: Option<&ServingFactIndex>,
-    evaluation: SearchEvaluationContext<'_>,
-) -> bool {
-    let society_entity_id = canonical_society_entity_id(property, search_index);
-    property_matches_constraint_term_for_society(
-        property,
-        term,
-        search_index,
-        serving_facts,
-        society_entity_id.as_ref(),
-        evaluation,
-    )
 }
 
 fn property_matches_constraint_term_for_society(
@@ -3371,6 +3360,7 @@ fn build_match_reason(
     property: &Property,
     matched_area: Option<&str>,
     area_match_kind: Option<AreaMatchKind>,
+    verified_matches: &[VerifiedMatch],
     reasons: &[String],
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
@@ -3380,7 +3370,7 @@ fn build_match_reason(
     let intent = &query.intent;
     let mut parts = Vec::new();
 
-    parts.extend(named_place_match_reasons(reasons));
+    parts.extend(verified_spatial_match_reasons(verified_matches));
 
     if let Some(area) = matched_area {
         match area_match_kind {
@@ -3467,41 +3457,20 @@ fn build_match_reason(
     }
 }
 
-fn named_place_match_reasons(reasons: &[String]) -> Vec<String> {
-    let mut named_places = Vec::<(String, bool)>::new();
-    for reason in reasons {
-        let Some((preference, _)) = reason.split_once(':') else {
-            continue;
+fn verified_spatial_match_reasons(matches: &[VerifiedMatch]) -> Vec<String> {
+    let mut reasons = Vec::new();
+    for verified in matches {
+        let label = match verified.relation.as_str() {
+            "near" => format!("Near {}", verified.predicate),
+            "inside" => format!("Inside {}", verified.predicate),
+            "adjacent" => format!("Adjacent to {}", verified.predicate),
+            _ => continue,
         };
-        let preference = preference.trim();
-        let (place, is_near) = if let Some(place) = preference.strip_prefix("near ") {
-            (place, true)
-        } else if let Some(place) = preference.strip_prefix("distance from ") {
-            (place, false)
-        } else {
-            continue;
-        };
-        let place = place.trim();
-        if place.is_empty()
-            || named_places
-                .iter()
-                .any(|(existing, _)| existing.eq_ignore_ascii_case(place))
-        {
-            continue;
+        if !reasons.iter().any(|existing: &String| existing == &label) {
+            reasons.push(label);
         }
-        named_places.push((place.to_string(), is_near));
     }
-
-    named_places
-        .into_iter()
-        .map(|(place, is_near)| {
-            if is_near {
-                format!("Near {place}")
-            } else {
-                format!("Distance from {place}")
-            }
-        })
-        .collect()
+    reasons
 }
 
 fn named_place_preference(place_name: &str, distance_km: f64) -> String {
@@ -3639,22 +3608,24 @@ mod tests {
             0.2,
         );
         property.bhk = 0;
-        let positive = CompiledQuery {
-            constraints: crate::search::ast::ConstraintExpr::term(ConstraintTerm::Bhk {
+        let positive = CompiledQuery::with_constraints(
+            "2BHK",
+            crate::search::ast::ConstraintExpr::term(ConstraintTerm::Bhk {
                 value: 2,
                 span: None,
             }),
-            ..CompiledQuery::from_text("2BHK")
-        };
-        let negated = CompiledQuery {
-            constraints: crate::search::ast::ConstraintExpr::negated(
-                crate::search::ast::ConstraintExpr::term(ConstraintTerm::Bhk {
+            CompiledQuery::from_text("2BHK").intent,
+        );
+        let negated = CompiledQuery::with_constraints(
+            "not 2BHK",
+            crate::search::ast::ConstraintExpr::negated(crate::search::ast::ConstraintExpr::term(
+                ConstraintTerm::Bhk {
                     value: 2,
                     span: None,
-                }),
-            ),
-            ..CompiledQuery::from_text("not 2BHK")
-        };
+                },
+            )),
+            CompiledQuery::from_text("not 2BHK").intent,
+        );
 
         let positive_evaluation = property_constraint_evaluation(
             &property,
@@ -3764,6 +3735,7 @@ mod tests {
             Some("Whitefield"),
             None,
             &[],
+            &[],
             None,
             None,
             &society_entity_id,
@@ -3784,6 +3756,7 @@ mod tests {
             &property,
             None,
             None,
+            &[],
             &[],
             None,
             None,
@@ -4357,9 +4330,9 @@ mod tests {
             ),
         ];
         let society_names = local_society_names(&properties);
-        let query = CompiledQuery {
-            raw: "homes".to_string(),
-            constraints: crate::search::ast::ConstraintExpr::any_of(vec![
+        let query = CompiledQuery::with_constraints(
+            "homes",
+            crate::search::ast::ConstraintExpr::any_of(vec![
                 crate::search::ast::ConstraintExpr::and(vec![
                     crate::search::ast::ConstraintExpr::term(ConstraintTerm::Area {
                         entity_id: None,
@@ -4376,8 +4349,8 @@ mod tests {
                     span: None,
                 }),
             ]),
-            intent: SearchIntent::default(),
-        };
+            SearchIntent::default(),
+        );
 
         let results = TextSearch::search_compiled_with_candidate_property_indexes(
             &properties,
@@ -4425,15 +4398,15 @@ mod tests {
             derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
-        let compiled_query = CompiledQuery {
-            raw: "homes in Whitefield".to_string(),
-            constraints: crate::search::ast::ConstraintExpr::term(ConstraintTerm::Area {
+        let compiled_query = CompiledQuery::with_constraints(
+            "homes in Whitefield",
+            crate::search::ast::ConstraintExpr::term(ConstraintTerm::Area {
                 entity_id: Some("area:whitefield".to_string()),
                 value: "Whitefield".to_string(),
                 span: None,
             }),
-            intent: SearchIntent::default(),
-        };
+            SearchIntent::default(),
+        );
 
         let results = TextSearch::search(TextSearchRequest {
             properties: &properties,

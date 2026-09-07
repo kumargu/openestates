@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt;
 
 use crate::assets::{
@@ -238,14 +239,46 @@ impl SearchServingBundleMaterializer {
         parent_materializations: Vec<MaterializationId>,
         run_id: MaterializationId,
     ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
+        self.materialize_child_from_serving_records_with_rera_preserving_entities_for_run(
+            entities,
+            facts,
+            search_metadata,
+            edges,
+            rera_evidence,
+            excluded_rera_evidence_society_ids,
+            BTreeSet::new(),
+            bundle_version,
+            source_watermarks,
+            parent_materializations,
+            run_id,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn materialize_child_from_serving_records_with_rera_preserving_entities_for_run(
+        &self,
+        entities: Vec<ServingEntityRecord>,
+        facts: Vec<ServingFactRecord>,
+        search_metadata: Vec<ServingSearchMetadataRecord>,
+        edges: Vec<ServingEdgeRecord>,
+        rera_evidence: Vec<ServingReraEvidenceRecord>,
+        excluded_rera_evidence_society_ids: Vec<String>,
+        prevalidated_entity_ids: BTreeSet<String>,
+        bundle_version: impl Into<String>,
+        source_watermarks: Vec<SourceWatermark>,
+        parent_materializations: Vec<MaterializationId>,
+        run_id: MaterializationId,
+    ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
         let manifest = ServingBundleBuilder::new(self.lake.clone())
-            .build_child_from_serving_records_with_rera(
+            .build_child_from_serving_records_with_rera_preserving_entities(
                 entities,
                 facts,
                 search_metadata,
                 edges,
                 rera_evidence,
                 excluded_rera_evidence_society_ids,
+                prevalidated_entity_ids,
                 bundle_version,
             )
             .await?;

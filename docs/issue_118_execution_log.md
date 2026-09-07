@@ -4,7 +4,7 @@
 
 - Reset recorded: 2026-09-06 Asia/Kolkata
 - Continuation branch: `feat/issue-118-consolidated`
-- Continuation HEAD: Checkpoint 16 working tree (`refactor: remove home-state time inference`)
+- Continuation HEAD: `0d7dcfc2` (`refactor: remove home-state time inference`)
 - Preserved source branch: `feat/issue-118-spatial-intent`
 - Merge base: `d1c06e2b` (`main` at the start of Issue 118 work)
 - Worktree at reset: clean
@@ -41,8 +41,9 @@ checkpoint-local next steps where they differ from the consolidated plan.
     derivations.
 21. `9b9d9820` — persist qualified containment and adjacency derivations on
     serving edges.
-22. Checkpoint 16 (current working tree) — remove date-derived home state and
-    age facts.
+22. `0d7dcfc2` — remove date-derived home state and age facts.
+23. Checkpoint 17 (current working tree) — extend the validated 115-property
+    catalog with 27 Whitefield societies in an isolated lake.
 
 ### Pulled-forward commitment audit
 
@@ -191,44 +192,117 @@ Each checkpoint updates this log, runs its focused contract plus Cargo check and
 the hardcoding audit, and creates one coherent local commit. A correctness
 failure stops further stacking; honest coverage gaps do not.
 
-### Candidate identity at reset
+### Current candidate identity
 
-- Issue 118 candidate lake: not created.
-- Issue 118 candidate bundle: not generated.
+- Isolated candidate lake:
+  `/tmp/openestates-issue118-whitefield-add30-lake`.
+- Main lake remained untouched and no serving or catalog pointer was promoted.
 - Main local lake must remain read-only for candidate work.
-- Current main-lake serving pointer (inspection only):
-  `data/lake/manifests/assets/search_serving_bundle/partition=global/current.json`
-- Current pointed version: `search-proximity-category-v7-2026-09-04`
-- Current materialization: `653cd6fd-c41e-412e-9764-208bfba07240`
-- Current run: `4790e79e-3fe1-4b05-bc16-4279f3cfab30`
-- The current bundle has no verified Issue 118 area-topology coverage and is
-  not an Issue 118 candidate.
+- The dangling main-lake serving pointer was removed after its bundle was
+  deleted. No main-lake search serving bundle is currently promoted.
+- The surviving 115-property baseline selected for this candidate is
+  `catalog-115-rera-ten-seed-2026-08-10-v2`.
+- Baseline materialization: `764b65da-2173-479f-8411-95efee5e4f34`.
+- Baseline run: `8eadc96f-3019-44f3-9cc1-db3425c40e44`.
+- Baseline contents: 706 entities, 14,094 facts, and 3,574 edges in serving
+  format 6. It is a legacy input corpus, not itself an Issue 118 candidate.
+- Candidate objective: retain that 115-property corpus and add 20–30 unique,
+  real Whitefield societies selected from canonical/RERA Parquet. Image and
+  media completeness are non-blocking because this candidate measures search.
+- Identity, geometry, inventory validity, durable evidence, deterministic
+  ordering, and proof correctness remain blocking gates.
+- Source seed:
+  `data/validation/source_entities/whitefield_search_add30_2026_09_06.json`.
+- Successful scoped DAG run: `233ebd12-59bc-4d32-a276-f752ead8661d`.
+- Scoped serving input: `cb466721-a46c-40b3-9f24-047c8dc80318`, containing
+  27 eligible societies, 55 property configurations, 2,786 facts, 27 RERA
+  evidence rows, and 60 durable inventory observations. Mahaveer Willet,
+  Prestige Dolce Vita, and Republic of Whitefield were honestly quarantined
+  for missing size evidence.
+- Merged serving candidate: `9d722f44-ac3f-4199-b890-43e18674ee13`, version
+  `issue-118-whitefield-115-plus-27-2026-09-06-r2`.
+- Merged contents: 170 properties across 78 runtime societies, exactly the 115
+  baseline properties plus 55 new configurations across 27 new societies.
+- Draft catalog release: `7c875ae9-41bf-42e3-93a8-d23740a68c84`.
+  Complete serving-artifact validation passes. Catalog validation remains
+  rejected because five legacy property IDs lost their old unsupported
+  `-3bhk` suffix under the current projection and the isolated lake's copied
+  current dependency pointers do not match this scoped DAG run. Do not hide
+  either issue with tombstones or pointer promotion.
 
 ### Current verified gate summary
 
 The detailed commands and counts remain recorded in the checkpoints below.
-Through the Checkpoint 16 working tree, focused Rust search and serving
-contracts, the frozen query bank, all-target Cargo check, formatting, and
-`git diff --check` pass. The hardcoding audit remains at 330 findings, 28
-fact-key comparisons, and zero blocked aliases, with zero delta from the
-recorded base. The legacy v8 API smoke suite passes 52/53; its `3BHK` check
-correctly returns no result because that promoted bundle predates durable
-inventory observations. These gates must be rerun for every touched slice.
+The merged candidate starts through the real API with 170 properties. Plain
+2BHK and 3BHK Whitefield searches each return 16 matches with same-observation
+BHK/price proofs. Named Prestige Lakeside Habitat search returns exactly one
+matching configuration. A two-branch Whitefield 2BHK-or-3BHK query returns 32
+unique results without coalescing branches. The live guardrail query bank
+passes 30/30 at 27.71 ms endpoint p95. The frozen conversational contract
+passes 10/10 and the revision API contract passes 3/3.
+
+Live revision probes exposed gaps not covered by those controlled fixtures:
+`Make it 2BHK under 1.6Cr` is treated as a switch and drops inherited
+Whitefield context (`intent_gap`), while `Make it under 2Cr` appends a second
+budget branch instead of replacing the bound (`architecture_gap`). Do not call
+live chained search equivalent to direct search until both are fixed and added
+to the shared query bank.
 
 ### Exact next command
 
 ```bash
-sed -n '360,420p' backend/src/community.rs
-sed -n '3360,3405p' backend/src/routes/properties.rs
-sed -n '1700,1740p' backend/src/assets/kg_view.rs
-sed -n '520,565p' backend/src/assets/compaction.rs
-sed -n '420,455p' backend/src/assets/rera.rs
-rg -n "learned_at\s*[<>]|max_by_key\([^\n]*learned_at" backend/src
+python3 scripts/audit_search_hardcoding.py
+cd backend && CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check --all-targets
+cd .. && git diff --check
 ```
 
-Remove the remaining timestamp-based product-record selection. Select by
-durable content/source identity instead. Leave operational elapsed-time metrics,
-retry scheduling, and run-duration diagnostics unchanged.
+After these gates and the pinned-bundle smoke run, commit the candidate slice.
+The following checkpoint must then diagnose typed revision replacement using
+the two recorded live failures before making any parser or ranking change.
+
+## Checkpoint 17 — 115-property catalog plus 27 Whitefield societies
+
+- Parent commit: `0d7dcfc2`
+- Classified work: offline catalog expansion with legacy validation
+  `architecture_gap`s
+
+### Implemented
+
+- Selected 30 real Whitefield RERA projects from canonical source data and ran
+  the scoped asset DAG in an isolated lake. Current eligibility retained 27
+  societies and quarantined three missing-size projects without requiring
+  images.
+- Kept K-RERA detail/registration receipts when the optional regulatory-list
+  table is unavailable; the absent regulatory coverage remains empty and is
+  logged rather than discarding valid receipts.
+- Added backward-compatible decoding for legacy RERA evidence rows.
+- Extended serving construction with an explicit prevalidated-base scope so a
+  stricter current policy does not silently delete properties from a validated
+  parent catalog.
+- Consolidated only deterministic empty duplicate societies from that pinned
+  base. The populated Arvind Bel Air identity was retained, its empty duplicate
+  was removed, and non-derived relations were redirected. Populated ambiguity,
+  candidate/base name collisions, and derived relations still fail closed.
+- Made candidate validation reconstruct grandfathered entities and property IDs
+  from the immutable `catalog_base_serving` watermark. Legacy packaged media is
+  ignored only for those pinned base entities; any new media remains subject to
+  content-addressed lake validation.
+
+### Candidate and gates
+
+- Scoped DAG and merged candidate identities are recorded in the current
+  candidate section above.
+- Exact property arithmetic: 115 base + 55 added = 170.
+- Exact runtime-society arithmetic: 51 base + 27 added = 78.
+- Merged bundle: 753 entities, 18,556 facts, 20,914 search metadata rows, 5,295
+  edges, 35 RERA evidence rows, and zero newly quarantined societies.
+- `cargo check --all-targets`: passed without code warnings.
+- Complete serving candidate validation: passed.
+- Catalog membership projection parity and RERA evidence scope: passed.
+- Catalog release remains rejected only for the five explicit legacy ID
+  migrations and scoped-vs-current DAG convergence described above.
+- Live search and focused integration results are recorded in the current gate
+  summary above.
 
 ## Checkpoint 11 — timestamps removed from search confidence
 
@@ -1514,3 +1588,427 @@ snapshot's observed inventory options and four-state evaluation. Required BHK
 and budget predicates must accept only validated matches projected from the
 same `EvidenceRef`; preserve the frozen ordered results with observed fixture
 receipts rather than empty satisfied evaluations.
+
+## Canonical spatial identity checkpoint — candidate validation pause
+
+- Recorded: 2026-09-07 Asia/Kolkata
+- Starting HEAD: `0d7dcfc2`
+- Classification: original Kadugodi miss fixed; remaining `architecture_gap`
+  in ranking/proof projection
+
+### Implemented
+
+- Materialized provider-independent canonical place entities with durable
+  `has_provider_binding` derivations while retaining Google and OSM source
+  entities and their observation identities.
+- Restricted cross-provider merging by configured category, normalized name,
+  compatible area context, coordinate tolerance, provider difference, and
+  uniqueness. Ambiguous candidates remain separate and diagnostic.
+- Added config-owned structural spatial roles. Destinations use qualified point
+  distance, footprints may use exact geometry, and regions retain topology.
+- Kept `Kadugodi Tree Park Metro` and `Kadugodi Tree Park` as distinct
+  canonical entities. Google review facts are projected through canonical
+  identity without changing their observation IDs.
+- Removed provider rows with canonical bindings from runtime place resolution,
+  changed proximity targets to canonical IDs, and consolidated duplicate
+  nearby-category parsing onto the DAG configuration type.
+- Added canonical binding validation, bumped the serving format to 11, and
+  added the catalog serving rebuild command used for this candidate.
+
+### Candidate identity
+
+- Isolated lake: `/tmp/openestates-issue118-whitefield-add30-lake`
+- Source serving materialization: `edeae319-b74a-450b-999c-ed3b793eb95a`
+- Candidate serving materialization: `880a4181-5ae3-4924-a1b1-db11fc445c47`
+- Candidate version:
+  `issue-118-whitefield-115-plus-27-canonical-spatial-2026-09-07-r1`
+- Format 11; 1,346 entities; 509 canonical spatial entities; 536 provider
+  bindings; 18,914 facts; 25,835 search metadata rows; 5,332 edges.
+- No ambiguous provider merge was reported. The main lake and all promoted
+  pointers remain unchanged.
+
+### Search evidence
+
+- `2BHK within 1 km of Kadugodi Tree Park Metro under 1.6 Cr` now returns one
+  verified result: `discovered-parimala-skyview-2bhk`, at 0.469 km.
+- `homes near Kadugodi Tree Park Metro` returns 32 results against canonical
+  target `place:canonical:kadugodi-tree-park-metro:39a43e56418618c5`.
+- `homes near Kadugodi Tree Park` returns a different order against canonical
+  target `place:canonical:kadugodi-tree-park:7c2801472b0d38a7`.
+- Park Google evidence remains 4.4 / 2,903 reviews; metro evidence remains
+  4.5 / 1,536 reviews, with distinct durable Google observation IDs.
+- `homes near Manipal Hospital Whitefield` resolves to canonical target
+  `place:canonical:manipal-hospital-whitefield:d3d6115585ad7524` and returns
+  32 verified results.
+
+### Remaining gap and stop reason
+
+Search still has two parallel named-place evidence paths. Hard eligibility and
+`VerifiedMatch` use `SpatialServingIndex::distance_between`, but ranking,
+explanation, and `ProofFocus` still call
+`serving_named_place_evidence_for_entity`, parse distance from free-form
+`nearby_*` text, and associate the row to a resolved entity using token overlap.
+For `Manipal Hospital Whitefield`, the identity matcher removes the generic
+token `hospital`, then incorrectly accepts rows such as `Manipal Hospital EPIP
+Whitefield`. It can therefore display and rank with 0.6 km while the exact
+canonical entity's verified distance is 3.330 km. This is the old duplicate
+evaluation architecture, not missing Google/OSM data.
+
+No further code change was stacked after finding this inconsistency. The next
+change must delete the free-text named-place ranking/proof path and project
+ranking reasons, display distance, and proof focus from the same typed spatial
+evaluation that produced `VerifiedMatch`. Free-text nearby facts may remain
+buyer evidence, but cannot resolve a target identity or drive spatial metrics.
+
+### Gates
+
+- Existing controlled conversational query bank: 10 passed before candidate
+  rebuild, including the updated generic Google/OSM/park fixture.
+- Proximity unit suite: 9 passed.
+- Cargo check and library test compilation passed before the isolated rebuild.
+- `cargo fmt --all -- --check`, `git diff --check`, and the hardcoding audit
+  pass. The audit remains at the existing 330 warnings, 28 fact-key
+  comparisons, and zero blocked aliases.
+- Candidate artifact validator checked 45 artifacts and found no canonical
+  identity, geometry, derivation, or dangling-evidence issue. It rejected the
+  inherited 115 catalog on 186 pre-existing completeness/media findings
+  (missing card area/size on older shells and retired packaged image paths).
+  The gate was not weakened.
+
+### Next exact command
+
+```bash
+sed -n '1220,1345p' backend/src/search/text.rs
+sed -n '895,1135p' backend/src/search/geo.rs
+sed -n '520,610p' backend/src/search/engine.rs
+```
+
+Replace `serving_named_place_evidence_for_entity` and the Haversine fallback
+projection with an evaluation projection keyed by predicate, property, and
+canonical target. Rerun the four live queries above first; ordering,
+explanation distance, proof-focus distance, and verified match must agree
+before any additional cleanup.
+
+## Continuation audit — authoritative compiled execution cleanup
+
+- Recorded: 2026-09-06 Asia/Kolkata
+- Starting HEAD: `0d7dcfc2`
+- Classification: `architecture_gap` plus live-bundle `proof_gap`
+- Existing dirty candidate/materializer changes are preserved and are not part
+  of the search cleanup baseline.
+
+### Chain audit
+
+- `88501c65` pins `SearchEngine` to one runtime snapshot.
+- `0df8f26c` unifies inventory eligibility on snapshot-owned observations.
+- `c867fd5a`, `1b19ac4c`, and `9b9d9820` require qualified spatial evaluation
+  and persist topology derivations.
+- Execution still splits and reparses branch strings, reconstructs entity
+  occurrences from matched text, rebuilds result branches with
+  `ConstraintExpr::flat_branches`, and creates `CompiledSearchPlan` only after
+  search has completed.
+- Proximity facts and `near_place` edges still lack typed derivations. The live
+  Waterford bundle therefore cannot verify a bounded named-place predicate.
+
+### Baseline
+
+- Artifact: `data/validation/search_query_bank.json`, controlled product and
+  Issue 118 suites.
+- `cargo test --test search_conversational_semantics_contract`: 10 passed.
+- `python3 scripts/audit_search_hardcoding.py`: 330 findings, 28 fact-key
+  comparisons, zero blocked aliases.
+- Live API `waterford-osm-arrival-2026-08-31-release`:
+  - `3BHK in Whitefield near Manipal Hospital Whitefield under 2.5 Cr` returns
+    two semantically identical branches.
+  - `2BHK within 1 km of Kadugodi Tree Park Metro under 1.6 Cr` returns zero.
+  - The same Kadugodi query without the bound returns Godrej Splendour 2BHK,
+    proving divergent ranking and hard-evaluation paths.
+
+### Current checkpoint
+
+1. Preserve exact resolved occurrence spans and stop reconstructing them from
+   query text.
+2. Compile branch identity before execution and project result sets from those
+   branches without `flat_branches` re-evaluation.
+3. Delete connected-scope coalescing and other replaced compatibility helpers.
+4. Materialize typed proximity derivations only from qualified geometry or
+   coordinate observations; missing inputs remain a coverage gap.
+5. Run the same controlled bank and live queries. On any remaining gap, stop
+   without stacking another code change.
+
+### Candidate identity
+
+No new Issue 118 serving candidate is promoted. Port 4125 serves the unchanged
+`waterford-osm-arrival-2026-08-31-release` baseline and remains read-only.
+
+### Next exact command
+
+```bash
+sed -n '70,115p' backend/src/search/engine.rs
+sed -n '1580,1840p' backend/src/search/engine.rs
+sed -n '1170,1300p' backend/src/search/engine.rs
+```
+
+## Authoritative latest cursor — 2026-09-07
+
+The continuation audit immediately above is historical. The canonical spatial
+identity checkpoint is the current state: candidate
+`880a4181-5ae3-4924-a1b1-db11fc445c47` fixes the Kadugodi bounded-search miss
+and preserves distinct park/metro Google evidence, but is paused on the
+free-text ranking/proof distance mismatch documented above. Nothing is
+promoted.
+
+### Next exact command
+
+```bash
+sed -n '1220,1345p' backend/src/search/text.rs
+sed -n '895,1135p' backend/src/search/geo.rs
+sed -n '520,610p' backend/src/search/engine.rs
+```
+
+Delete the parallel free-text named-place metric path. Ranking, explanation,
+proof focus, and hard eligibility must project the same typed evaluation for
+the same canonical target before further cleanup.
+
+## Branch-only chained-query audit — 2026-09-07
+
+No serving lookup, recall, ranking, or result assertion was run. The audit
+executed 11 focused tests directly against the typed query AST compiler.
+
+- Passed 9: paired area/BHK alternatives; repeated BHK and branch-local budget;
+  shared suffix scope; branch-local and repeated evidence thresholds;
+  cross-dimension evidence alternatives; resolved society pairing; shared
+  society prefix; and society-specific budgets.
+- Failed 2:
+  - `3BHK in East Bengaluru or 4BHK not in East Bengaluru` incorrectly carries
+    the positive East Bengaluru scope into the second branch, making it require
+    both East Bengaluru and not-East Bengaluru.
+  - `Prestige 3BHK or Godrej Air 4BHK` incorrectly carries the Prestige builder
+    into the Godrej Air society branch, making the second branch require both
+    entities.
+
+The common cause is `compile_constraint_plan`: it groups area, society, and
+builder under one `AlternativeFamily::Entity` for branch detection, but carries
+missing terms forward independently inside each concrete entity/polarity group.
+It therefore cannot see that a later different entity type or opposite-polarity
+entity replaces the earlier scope. This is a compiler architecture gap, not a
+data or search-ranking issue. No code change was made after the failure.
+
+The full runtime-resolved compiled plan is also not independently callable:
+entity and spatial preparation are private steps inside `SearchEngine::search`.
+The raw AST compiler can be tested without search, but bundle-backed society and
+place resolution currently cannot. A clean compile-only boundary is required
+before evaluating the full chained-query bank without executing search.
+
+### Next exact command
+
+```bash
+sed -n '930,1185p' backend/src/search/ast.rs
+sed -n '160,430p' backend/src/search/engine.rs
+```
+
+Replace per-group scope carry-forward with explicit branch ownership and shared
+scope in the compiled plan. Then expose preparation as a compile-only operation
+returning `CompiledSearchPlan`; search execution must consume that plan rather
+than recompile or reparse it.
+
+## Branch compiler ownership fix
+
+The compiler regression is fixed without changing search data, recall, ranking,
+or proof behavior.
+
+- BHK parser terms now retain their containing alternative-cluster span as well
+  as their exact source span. This keeps an internal alternative such as
+  `not 4 or 5 BHK` inside one exclusion while preserving exact predicate spans.
+- Branch anchors are selected from the concrete term groups that actually span
+  alternatives. A trailing exclusion is therefore shared across the relevant
+  branches instead of becoming local to only the last branch.
+- Entity scope is inherited only by a branch with no explicit entity scope.
+  An explicit area, excluded area, society, or builder starts a new branch scope
+  and cannot accidentally accumulate a previous entity type.
+- Added one table-driven compiler contract covering bare inheritance, explicit
+  society replacement, builder-to-society replacement, positive-to-negative
+  area replacement, grouped exclusions, and shared trailing exclusions.
+
+Focused gates:
+
+- `cargo test --lib search::ast::tests`: 31 passed.
+- `cargo test --lib search::parser::tests`: 17 passed.
+- `cargo test --lib search::query_plan::tests`: 23 passed.
+- Frozen controlled product/query-bank contract: passed.
+- `cargo check --all-targets`: passed.
+- Hardcoding audit: unchanged at 330 findings, 28 fact-key comparisons, and
+  zero blocked aliases.
+- `cargo fmt` and `git diff --check`: passed.
+
+The complete conversational contract remains 8/10 because the separate dirty
+canonical-spatial-identity work rewrites fixture place IDs while two assertions
+still expect the old provider IDs. The compiler/query-bank test passes; no
+spatial-identity code was changed as part of this fix.
+
+### Next exact command
+
+```bash
+cd backend
+CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo test --test search_conversational_semantics_contract named_place_resolution_uses_sourced_area_context_and_fails_closed_without_it -- --exact --nocapture
+```
+
+## Geography-first compilation checkpoint — 2026-09-07
+
+- Starting HEAD: `0d7dcfc2` with the existing Issue 118 spatial-identity and
+  branch-compiler worktree preserved.
+- Classification: `architecture_gap`. The promoted facts/config already define
+  `society|place -[in_area]-> area` and direct `adjacent_area` topology, while
+  search still splits raw query strings, executes them independently, calls
+  `CompiledSearchPlan::combine`, and recompiles revision text.
+- Relevant chain: `88501c65` pins one runtime snapshot; `0df8f26c` unifies hard
+  inventory evaluation; `c867fd5a`, `1b19ac4c`, and `9b9d9820` qualify and
+  persist spatial evidence; the dirty AST checkpoint preserves exact source
+  spans and branch ownership. Geography-first compilation is the next
+  architectural checkpoint, not a new parser or vocabulary layer.
+- Config read before implementation: `app/config/dag/manifest.json`,
+  `ontology.json`, and `scoring_policy.json`. The existing Google quality
+  policy is 75% normalized rating plus 25% log-scaled review count.
+- Baseline artifact: `data/validation/search_query_bank.json`.
+- Baseline controlled conversational contract: 8 passed, 2 failed. Both known
+  failures assert provider place IDs that the in-progress canonical spatial
+  identity checkpoint now rewrites; no geography-first assertion has failed
+  yet.
+- Baseline hardcoding audit: 330 warnings, 28 fact-key comparisons, zero
+  blocked aliases.
+- Replacement target: compile one snapshot-bound geography-first plan, derive
+  areas only from explicit area entities or direct sourced `in_area` edges,
+  retain exact place predicates, execute its branches directly, and delete raw
+  branch reparsing, connected execution coalescing, and plan combination.
+
+### Verified compiler checkpoint
+
+- `CompiledSearchPlan` now contains `GeoBranch` records with branch-local
+  predicates, source spans, resolved handles, `GeoScope`, and stable geo-cluster
+  IDs. Positive society predicates are consumed as sourced area anchors and do
+  not survive as eligibility or lexical ranking signals.
+- The runtime compiles the top-level typed query once. Execution-time discourse
+  splitting, ordinal branch-string construction, connected output coalescing,
+  and `CompiledSearchPlan::combine` are deleted.
+- Direct areas remain explicit. Society/place anchors derive only across direct
+  serving `in_area` edges; the most-specific directly evidenced area wins.
+  Missing relations fall back to `BundleWide` with internal resolution gaps.
+- Clustering requires direct adjacency, the same area, or one shared immediate
+  parent. Cluster membership is pairwise, so A-B and B-C cannot transitively
+  merge A with C. Recall still uses only explicit member area IDs.
+- Focused compiler gate:
+  `cargo test --lib search::compiled_plan::tests::geography_first_compiler_contract`
+  passed (1 passed). This is the single table-driven compiler contract required
+  by the checkpoint.
+
+### Verified execution and frozen-bank checkpoint
+
+- Branch execution now applies each compiled branch's hard BHK, budget, state,
+  exclusion, spatial, and evidence predicates before intersecting its sourced
+  area scope. Bundle-wide branches retain the full hard-eligible candidate set
+  through evaluation and rank valid Google evidence ahead of missing evidence
+  with the configured 75/25 rating/review-count policy.
+- The budget parser no longer combines money values from separate discourse
+  branches merely because a later clause contains `to`; only adjacent configured
+  range connectors (or an inline range) combine values. A focused regression
+  preserves both conditional branch budgets and genuine `between ... and ...`
+  ranges.
+- The frozen bank records the explicit product change: society mentions are
+  sourced area anchors, not exact-society preferences; missing place `in_area`
+  topology falls back bundle-wide; bundle-wide soft preferences remain proof and
+  secondary ranking but do not override Google quality order.
+- Focused parser regression passed (1 test). The controlled frozen product suite
+  passed after all 60 scenarios executed against the controlled inventory.
+
+### Verified revision and API checkpoint
+
+- Area-only revisions retain the complete single-branch source query while
+  replacing only the compiled geographic predicate, so BHK and budget clauses
+  cannot disappear when an alternative area is added.
+- Repeated `in <area> under <budget>` branches now bound each named-area clause
+  against its own following budget operator rather than the first operator in
+  the full query.
+- Revision API intent projection reads the executed `CompiledSearchPlan`
+  directly. It returns stable branch and geo-cluster IDs, exact source spans,
+  resolved entity handles, and `GeoScope`, including the sourced `in_area`
+  derivation edges. Result cards continue to expose predicate evaluations as
+  `verifiedMatches` and their corresponding proof focuses.
+- Revision tests passed (14/14), revision-route projection tests passed (3/3),
+  and the complete conversational semantics contract passed (11/11), including
+  controlled journeys and disconnected 3/8/16-branch cohorts.
+
+### Final verification checkpoint
+
+- The search efficiency contract was updated only where old assertions treated
+  a society as an exact eligibility filter or depended on pre-ranking truncation
+  for a dangling place. It now verifies sourced-area-anchor/bundle-wide fallback,
+  branch-local BHK and budget enforcement, and full hard-eligible evaluation;
+  all 11 tests passed.
+- `cargo check --all-targets`, `cargo fmt --all -- --check`, JSON validation, and
+  `git diff --check` passed.
+- The final hardcoding audit matches baseline: 330 warning-only findings, 28
+  fact-key comparisons, and zero blocked search-config aliases. No new production
+  search hardcoding was introduced.
+- Removed-path audit found no `CompiledSearchPlan::combine`, raw paired-ordinal
+  branch query generation, connected-scope coalescing, or temporary search-plan
+  trace output under `backend/src/search` or `backend/src/routes`.
+
+## Exact society priority checkpoint — 2026-09-07
+
+- Product decision: reverse the geography-first checkpoint's treatment of a
+  named society as having no ranking preference. A positive named society
+  remains a sourced area anchor and never becomes an eligibility filter, but
+  an eligible home in that exact society leads its branch before eligible area
+  alternatives. Every BHK, budget, state, exclusion, spatial, and evidence
+  predicate still applies before this ordering rule.
+- Multiple society branches retain their own exact-first ordering; the existing
+  cross-branch round-robin then exposes each eligible named society before
+  later area alternatives. No separate buyer-facing row or frontend change is
+  part of this checkpoint.
+- Classification: `ranking_gap`. The compiler already preserves positive
+  society handles in each `GeoBranch`; recall and eligibility are correct, but
+  branch ranking currently discards that exact identity after using it to
+  derive the area.
+- Baseline focused contract:
+  `geography_first_execution_uses_area_scopes_and_bundle_wide_google_order`
+  passed with `geo-alpha-prime` before `geo-air`, confirming the behavior being
+  changed. Baseline hardcoding audit remains 330 warning-only findings, 28
+  fact-key comparisons, and zero blocked aliases.
+- Implementation boundary: add a config-owned exact-society priority policy and
+  stable-partition already eligible branch results by the branch's resolved
+  positive society IDs. Preserve the existing rank order within the exact and
+  alternative cohorts; do not reuse `match_tier` or add project vocabulary.
+
+### Verified exact-priority behavior
+
+- `search_ranking.exact_society_matches_first` owns the product choice. After
+  normal branch ranking, execution stable-partitions already eligible results
+  by canonical society entity ID, preserving the prior order inside both the
+  exact and area-alternative cohorts.
+- Focused contracts pass for bare society ordering, canonical alias resolution,
+  two directly connected society branches plus one disconnected branch,
+  cross-branch round-robin, an exact home rejected by a hard budget, and a
+  dangling `in_area` relation that falls back bundle-wide.
+- No UI field or `match_tier` meaning changed. Exact identity affects branch
+  order only; sourced area recall, predicate evaluation, and proof projection
+  remain intact.
+- The complete conversational contract passed (12/12), including all 60
+  controlled frozen-bank scenarios. Revision tests passed (14/14). The
+  efficiency suite exposed one old global-order expectation for two dangling
+  society anchors; its branch contents and hard budgets were already correct,
+  and the expectation was updated to the chosen exact-first cross-branch
+  round-robin order.
+- After updating that explicit product expectation, the complete search
+  efficiency contract passed (11/11).
+
+### Final exact-priority verification
+
+- Complete conversational semantics contract: 12/12 passed, including the
+  frozen controlled bank and journeys.
+- Search revision library contract: 14/14 passed.
+- Search efficiency contract: 11/11 passed.
+- `cargo check --all-targets`, `cargo fmt --all -- --check`, query-bank JSON
+  validation, and `git diff --check` passed.
+- The hardcoding audit remains identical to baseline: 330 warning-only
+  findings, 28 fact-key comparisons, and zero blocked aliases. No frontend or
+  buyer-copy change was made.

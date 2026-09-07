@@ -30,13 +30,34 @@ struct SocietyGroup {
     reasons: BTreeSet<String>,
 }
 
-pub(crate) fn classify_and_prune(
+#[cfg(test)]
+fn classify_and_prune(
     entities: Vec<ServingEntityRecord>,
     facts: Vec<ServingFactRecord>,
     search_metadata: Vec<ServingSearchMetadataRecord>,
     edges: Vec<ServingEdgeRecord>,
     bundle_version: &str,
     config: &ServingEligibilityFile,
+) -> Result<EligibleServingRecords, serde_json::Error> {
+    classify_and_prune_preserving(
+        entities,
+        facts,
+        search_metadata,
+        edges,
+        bundle_version,
+        config,
+        &BTreeSet::new(),
+    )
+}
+
+pub(crate) fn classify_and_prune_preserving(
+    entities: Vec<ServingEntityRecord>,
+    facts: Vec<ServingFactRecord>,
+    search_metadata: Vec<ServingSearchMetadataRecord>,
+    edges: Vec<ServingEdgeRecord>,
+    bundle_version: &str,
+    config: &ServingEligibilityFile,
+    prevalidated_entity_ids: &BTreeSet<String>,
 ) -> Result<EligibleServingRecords, serde_json::Error> {
     let mut groups = society_groups(&entities);
     let runtime_id_by_entity_id = groups
@@ -98,7 +119,7 @@ pub(crate) fn classify_and_prune(
         }
     }
 
-    let ineligible_property_ids =
+    let mut ineligible_property_ids =
         evaluate_property_requirements(&projected_properties, config, &mut groups)?;
     evaluate_society_requirements(&facts, &edges, config, &mut groups);
     classify_missing_search_metadata(
@@ -110,6 +131,16 @@ pub(crate) fn classify_and_prune(
         &ineligible_property_ids,
         &mut groups,
     );
+
+    for group in groups.values_mut().filter(|group| {
+        group
+            .entity_ids
+            .iter()
+            .any(|entity_id| prevalidated_entity_ids.contains(entity_id))
+    }) {
+        group.reasons.clear();
+    }
+    ineligible_property_ids.retain(|entity_id| !prevalidated_entity_ids.contains(entity_id));
 
     let quarantine = quarantine_report(bundle_version, config.version, groups);
     let removed_society_ids = quarantine
@@ -126,12 +157,13 @@ pub(crate) fn classify_and_prune(
         .union(&ineligible_property_ids)
         .cloned()
         .collect::<BTreeSet<_>>();
-    let removed_entity_ids = entities_to_remove(
+    let mut removed_entity_ids = entities_to_remove(
         &entities,
         &edges,
         &removed_society_ids,
         &removed_property_ids,
     );
+    removed_entity_ids.retain(|entity_id| !prevalidated_entity_ids.contains(entity_id));
 
     Ok(EligibleServingRecords {
         entities: entities

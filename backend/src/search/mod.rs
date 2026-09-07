@@ -19,7 +19,7 @@ pub mod text;
 pub use ast::{CompiledQuery, ConstraintExpr, ConstraintTerm, PredicateFamily, PredicatePolarity};
 pub use capabilities::SearchCapabilityIndex;
 pub use compiled_plan::{
-    BoolExpr, BranchId, CompiledSearchPlan, IntentBranch, ResolvedEntityHandle,
+    BoolExpr, BranchId, CompiledSearchPlan, GeoBranch, GeoScope, ResolvedEntityHandle,
 };
 pub use engine::{
     CandidateScore, SearchDiagnostics, SearchEngine, SearchEvidenceGap, SearchLayerTiming,

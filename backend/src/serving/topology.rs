@@ -64,7 +64,8 @@ pub fn derive_spatial_topology(
 
     for entity in entities.iter().filter(|entity| {
         entity.entity_type.eq_ignore_ascii_case("society")
-            || entity.entity_type.eq_ignore_ascii_case("place")
+            || (entity.entity_type.eq_ignore_ascii_case("place")
+                && !super::is_canonical_spatial_entity(entity))
     }) {
         let feature = spatial.geometry().feature(&entity.entity_id);
         let containing = if feature

@@ -271,6 +271,8 @@ pub struct SearchRankingPolicy {
     pub review_count_weight: f64,
     #[serde(default = "default_review_count_log_divisor")]
     pub review_count_log_divisor: f64,
+    #[serde(default)]
+    pub exact_society_matches_first: bool,
     #[serde(default = "default_search_result_limit")]
     pub result_limit: usize,
     #[serde(default = "default_best_effort_ranking_tiers")]
@@ -326,6 +328,7 @@ impl Default for SearchRankingPolicy {
             review_rating_weight: default_review_rating_weight(),
             review_count_weight: default_review_count_weight(),
             review_count_log_divisor: default_review_count_log_divisor(),
+            exact_society_matches_first: false,
             result_limit: default_search_result_limit(),
             best_effort_ranking_tiers: default_best_effort_ranking_tiers(),
             best_effort_access_fact_keys: Vec::new(),
@@ -1050,6 +1053,7 @@ mod tests {
         assert_eq!(policy.area_tracker.min_listing_count, 2);
         assert_eq!(policy.search_ranking.ranked_focus_min_match_score, 0.35);
         assert_eq!(policy.search_ranking.result_limit, 32);
+        assert!(policy.search_ranking.exact_society_matches_first);
         assert_eq!(
             policy.search_ranking.best_effort_ranking_tiers,
             [

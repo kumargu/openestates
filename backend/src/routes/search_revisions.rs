@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use crate::search::ast::{ConstraintExpr, ConstraintTerm};
 use crate::search::{
     compile_search_revision_with_plan, revision_id_for_query, validated_revision_depth,
-    SearchResponse, SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
-    SearchRuntimeVersion,
+    CompiledSearchPlan, GeoScope, ResolvedEntityHandle, SearchResponse, SearchRevisionLimits,
+    SearchRevisionOperation, SearchRevisionOutcome, SearchRuntimeVersion, SourceSpan,
 };
 use crate::state::{AppState, RuntimeVersionKey};
 
@@ -59,6 +59,10 @@ pub struct IntentProjection {
 #[serde(rename_all = "camelCase")]
 pub struct IntentBranchProjection {
     pub branch_id: String,
+    pub geo_cluster_id: String,
+    pub source_spans: Vec<SourceSpan>,
+    pub geo_scope: GeoScope,
+    pub resolved_entities: Vec<ResolvedEntityHandle>,
     pub summary: String,
     pub constraints: Vec<IntentConstraintProjection>,
     pub spatial_entities: Vec<SpatialEntityHandle>,
@@ -212,8 +216,7 @@ pub async fn revise_search(
             &runtime_version,
             parent_depth.saturating_add(1),
         );
-        let intent_projection =
-            project_intent(&parent_output.ast_branches, &parent_output.intent_branches);
+        let intent_projection = project_intent(&parent_output.compiled_plan);
         return Json(SearchRevisionResponse {
             revision_id,
             operation: revision.operation,
@@ -251,10 +254,7 @@ pub async fn revise_search(
         &runtime_version,
         parent_depth.saturating_add(1),
     );
-    let intent_projection = project_intent(
-        &candidate_output.ast_branches,
-        &candidate_output.intent_branches,
-    );
+    let intent_projection = project_intent(&candidate_output.compiled_plan);
     let mut search = candidate_output.response.as_ref().clone();
     search.revision_id.clone_from(&revision_id);
     let result_delta = result_delta(
@@ -278,44 +278,39 @@ pub async fn revise_search(
     .into_response()
 }
 
-fn project_intent(
-    ast_branches: &[ConstraintExpr],
-    intents: &[crate::search::SearchIntent],
-) -> IntentProjection {
-    let branches = ast_branches
+fn project_intent(compiled_plan: &CompiledSearchPlan) -> IntentProjection {
+    let branches = compiled_plan
+        .branches
         .iter()
-        .enumerate()
-        .map(|(index, branch)| {
+        .map(|branch| {
             let mut constraints = Vec::new();
             let mut spatial_entities = Vec::new();
             let mut explicit_spatial_ids = Vec::new();
-            collect_explicit_spatial_ids(branch, &mut explicit_spatial_ids);
+            collect_explicit_spatial_ids(&branch.predicates, &mut explicit_spatial_ids);
             collect_projection_terms(
-                branch,
+                &branch.predicates,
                 false,
                 &explicit_spatial_ids,
                 &mut constraints,
                 &mut spatial_entities,
             );
-            if let Some(intent) = intents.get(index) {
-                for preference in &intent.positive_preferences {
-                    for key in &preference.expanded_keys {
-                        push_constraint(&mut constraints, "preference", "prefer", key.clone());
-                    }
+            for preference in &branch.constraints.positive_preferences {
+                for key in &preference.expanded_keys {
+                    push_constraint(&mut constraints, "preference", "prefer", key.clone());
                 }
-                for preference in &intent.negative_preferences {
-                    for key in &preference.expanded_keys {
-                        push_constraint(&mut constraints, "preference", "avoid", key.clone());
-                    }
+            }
+            for preference in &branch.constraints.negative_preferences {
+                for key in &preference.expanded_keys {
+                    push_constraint(&mut constraints, "preference", "avoid", key.clone());
                 }
-                for priority in &intent.ranking_priorities {
-                    push_constraint(
-                        &mut constraints,
-                        "rankingPriority",
-                        "ordered",
-                        priority.clone(),
-                    );
-                }
+            }
+            for priority in &branch.constraints.ranking_priorities {
+                push_constraint(
+                    &mut constraints,
+                    "rankingPriority",
+                    "ordered",
+                    priority.clone(),
+                );
             }
             constraints.sort_by(|left, right| {
                 left.dimension
@@ -329,7 +324,11 @@ fn project_intent(
             });
             let summary = branch_summary(&constraints, &spatial_entities);
             IntentBranchProjection {
-                branch_id: format!("branch-{}", index + 1),
+                branch_id: branch.branch_id.clone(),
+                geo_cluster_id: branch.geo_cluster_id.clone(),
+                source_spans: branch.source_spans.clone(),
+                geo_scope: branch.geo_scope.clone(),
+                resolved_entities: branch.resolved_entities.clone(),
                 summary,
                 constraints,
                 spatial_entities,
@@ -725,8 +724,46 @@ mod tests {
             }),
         ]);
 
-        let projection = project_intent(&[ast], &[crate::search::SearchIntent::default()]);
+        let mut plan = CompiledSearchPlan::compile(
+            crate::search::ast::CompiledQuery::with_constraints(
+                "near Fixture Locality",
+                ast,
+                crate::search::SearchIntent::default(),
+            ),
+            "fixture-snapshot",
+        );
+        let source_span = SourceSpan {
+            start: 5,
+            end: 21,
+            raw_text: "Fixture Locality".to_string(),
+        };
+        plan.branches[0].source_spans = vec![source_span.clone()];
+        plan.branches[0].geo_scope = GeoScope::Areas {
+            area_ids: vec![area_id.to_string()],
+            supporting_in_area_edges: vec![crate::serving::ServingEdgeRecord {
+                from_entity_id: "place:fixture".to_string(),
+                edge_type: "in_area".to_string(),
+                to_entity_id: area_id.to_string(),
+                confidence: 0.9,
+                source_type: "OpenStreetMap".to_string(),
+                derivation: None,
+            }],
+        };
+        plan.branches[0].resolved_entities = vec![ResolvedEntityHandle {
+            entity_id: "place:fixture".to_string(),
+            entity_type: "place".to_string(),
+            display_name: "Fixture Locality".to_string(),
+            source_span: Some(source_span.clone()),
+        }];
+        let projection = project_intent(&plan);
         assert_eq!(projection.branches.len(), 1);
+        assert_eq!(projection.branches[0].branch_id, "branch-1");
+        assert_eq!(projection.branches[0].source_spans, [source_span]);
+        assert_eq!(projection.branches[0].geo_scope, plan.branches[0].geo_scope);
+        assert_eq!(
+            projection.branches[0].resolved_entities,
+            plan.branches[0].resolved_entities
+        );
         assert_eq!(projection.branches[0].spatial_entities.len(), 1);
         assert_eq!(projection.branches[0].spatial_entities[0].relation, "near");
         assert!(

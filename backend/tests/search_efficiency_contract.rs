@@ -92,9 +92,9 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
 }
 
 #[test]
-fn named_place_search_uses_spatial_discovery_across_large_corpus() {
+fn dangling_named_place_search_evaluates_the_full_hard_eligible_corpus() {
     const CORPUS_SIZE: usize = 10_000;
-    const MAX_DURATION: Duration = Duration::from_millis(750);
+    const MAX_DURATION: Duration = Duration::from_secs(2);
 
     let mut properties = Vec::with_capacity(CORPUS_SIZE);
     let mut entities = Vec::with_capacity(CORPUS_SIZE + 1);
@@ -162,6 +162,7 @@ fn named_place_search_uses_spatial_discovery_across_large_corpus() {
     let elapsed = started.elapsed();
 
     assert!(!output.results.is_empty());
+    assert!(output.compiled_plan.branches[0].geo_scope.is_bundle_wide());
     assert!(output.results.len() <= 32);
     assert!(output.eligible_result_count >= output.results.len());
     assert!(output
@@ -237,7 +238,7 @@ fn named_area_does_not_expand_to_nearby_areas() {
 }
 
 #[test]
-fn named_project_miss_does_not_relax_the_hard_budget() {
+fn dangling_society_scope_falls_back_bundle_wide_without_relaxing_the_hard_budget() {
     let properties = vec![
         property("godrej-splendour".to_string(), "Whitefield", 3, 17_000_000),
         property(
@@ -269,13 +270,23 @@ fn named_project_miss_does_not_relax_the_hard_budget() {
 
     let output = SearchEngine::new(&snapshot).search("Godrej Splendour 3BHK under ₹1.4Cr");
 
-    assert_eq!(output.eligible_result_count, 0);
-    assert!(output.results.is_empty());
-    assert!(output.result_sets.is_empty());
+    assert_eq!(output.eligible_result_count, 1);
+    assert_eq!(
+        output
+            .results
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>(),
+        ["budget-alternative"]
+    );
+    assert!(output
+        .results
+        .iter()
+        .all(|result| result.card.price <= 14_000_000));
 }
 
 #[test]
-fn grouped_named_projects_keep_bhk_and_budget_branches_paired() {
+fn dangling_grouped_society_anchors_keep_bhk_and_budget_branches_paired() {
     let mut godrej_three = property("godrej-air-3bhk".to_string(), "Whitefield", 3, 18_000_000);
     godrej_three.society_id = "godrej-air".to_string();
     let mut godrej_four = property("godrej-air-4bhk".to_string(), "Whitefield", 4, 24_000_000);
@@ -345,9 +356,14 @@ fn grouped_named_projects_keep_bhk_and_budget_branches_paired() {
             .iter()
             .map(|result| result.card.id.as_str())
             .collect::<Vec<_>>(),
-        vec!["godrej-air-3bhk", "prestige-waterford-4bhk"]
+        vec![
+            "godrej-air-3bhk",
+            "prestige-waterford-4bhk",
+            "prestige-waterford-3bhk",
+            "godrej-air-4bhk"
+        ]
     );
-    assert_eq!(output.eligible_result_count, 2);
+    assert_eq!(output.eligible_result_count, 4);
     assert_eq!(output.result_sets.len(), 2);
     assert_eq!(
         output
@@ -358,17 +374,27 @@ fn grouped_named_projects_keep_bhk_and_budget_branches_paired() {
         ["branch-1", "branch-2"]
     );
     assert_eq!(
-        output
-            .result_sets
+        output.result_sets[0]
+            .results
             .iter()
-            .map(|set| set.results[0].card.id.as_str())
+            .map(|result| result.card.id.as_str())
             .collect::<Vec<_>>(),
-        ["godrej-air-3bhk", "prestige-waterford-4bhk"]
+        ["godrej-air-3bhk", "prestige-waterford-3bhk"]
     );
-    assert!(output.result_sets[0].label.contains("Godrej Air"));
+    assert_eq!(
+        output.result_sets[1]
+            .results
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>(),
+        ["prestige-waterford-4bhk", "godrej-air-4bhk"]
+    );
     assert!(output.result_sets[0].label.contains("3 BHK"));
-    assert!(output.result_sets[1].label.contains("Prestige Waterford"));
     assert!(output.result_sets[1].label.contains("4 BHK"));
+    assert!(output
+        .result_sets
+        .iter()
+        .all(|set| !set.label.contains("Godrej Air") && !set.label.contains("Prestige Waterford")));
     assert!(output
         .result_sets
         .iter()
@@ -377,7 +403,7 @@ fn grouped_named_projects_keep_bhk_and_budget_branches_paired() {
 }
 
 #[test]
-fn unique_partial_society_name_is_a_hard_constraint() {
+fn unique_partial_society_name_is_only_a_geographic_anchor() {
     let mut waterford_four = property(
         "prestige-waterford-4bhk".to_string(),
         "Whitefield",
@@ -432,12 +458,12 @@ fn unique_partial_society_name_is_a_hard_constraint() {
             .iter()
             .map(|result| result.card.id.as_str())
             .collect::<Vec<_>>(),
-        vec!["prestige-waterford-4bhk"],
+        vec!["prestige-waterford-4bhk", "prestige-lakeside-4bhk"],
         "eligible={}, resolved={:?}",
         output.eligible_result_count,
         output.diagnostics.resolved.entities,
     );
-    assert_eq!(output.eligible_result_count, 1);
+    assert_eq!(output.eligible_result_count, 2);
 }
 
 #[test]
@@ -567,7 +593,7 @@ async fn search_cache_key_changes_with_bundle_version() {
             key_v1.clone(),
             CachedSearchOutput {
                 response: Arc::new(empty_response("3bhk whitefield")),
-                compiled_plan: Arc::new(backend::search::CompiledSearchPlan::single(
+                compiled_plan: Arc::new(backend::search::CompiledSearchPlan::compile(
                     backend::search::CompiledQuery::from_text("3bhk whitefield"),
                     "bundle-v1",
                 )),
@@ -597,7 +623,7 @@ async fn search_cache_hit_still_carries_log_metadata() {
             key.clone(),
             CachedSearchOutput {
                 response: Arc::new(empty_response("3bhk whitefield")),
-                compiled_plan: Arc::new(backend::search::CompiledSearchPlan::single(
+                compiled_plan: Arc::new(backend::search::CompiledSearchPlan::compile(
                     backend::search::CompiledQuery::from_text("3bhk whitefield"),
                     "bundle-v1",
                 )),

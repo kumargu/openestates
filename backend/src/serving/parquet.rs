@@ -20,8 +20,8 @@ use crate::parquet_data::{
 };
 
 use super::{
-    ServingEdgeRecord, ServingEntityAliasRecord, ServingEntityRecord, ServingFactRecord,
-    ServingReraEvidenceRecord, ServingSearchMetadataRecord,
+    DerivedEvidence, ServingEdgeRecord, ServingEntityAliasRecord, ServingEntityRecord,
+    ServingFactRecord, ServingReraEvidenceRecord, ServingSearchMetadataRecord,
 };
 
 pub fn write_entities_parquet(
@@ -716,11 +716,25 @@ pub fn write_edges_parquet(edges: &[ServingEdgeRecord]) -> Result<Vec<u8>, Parqu
                 edge.validate_derivation(&derivation.snapshot_identity)
                     .map_err(|message| ParquetWriteError::InvalidEvidence { row, message })?;
             }
-            edge.derivation
+            let encoded = edge
+                .derivation
                 .as_ref()
                 .map(serde_json::to_string)
                 .transpose()
-                .map_err(ParquetWriteError::Json)
+                .map_err(ParquetWriteError::Json)?;
+            if let (Some(original), Some(encoded)) = (&edge.derivation, &encoded) {
+                let decoded: DerivedEvidence =
+                    serde_json::from_str(encoded).map_err(ParquetWriteError::Json)?;
+                decoded.validate().map_err(|error| {
+                    ParquetWriteError::InvalidEvidence {
+                        row,
+                        message: format!(
+                            "derivation is not stable across JSON serialization: {error}; original={original:?}; decoded={decoded:?}"
+                        ),
+                    }
+                })?;
+            }
+            Ok(encoded)
         })
         .collect::<Result<Vec<_>, _>>()?;
     let schema = Arc::new(Schema::new(vec![
@@ -780,7 +794,13 @@ pub fn read_edges_parquet(bytes: &[u8]) -> Result<Vec<ServingEdgeRecord>, Parque
             };
             if let Some(derivation) = &edge.derivation {
                 edge.validate_derivation(&derivation.snapshot_identity)
-                    .map_err(|message| ParquetReadError::InvalidEvidence { row, message })?;
+                    .map_err(|message| ParquetReadError::InvalidEvidence {
+                        row,
+                        message: format!(
+                            "{} -[{}]-> {}: {message}; derivation={derivation:?}",
+                            edge.from_entity_id, edge.edge_type, edge.to_entity_id,
+                        ),
+                    })?;
             }
             records.push(edge);
         }
@@ -861,10 +881,10 @@ mod tests {
             Some("area:one".to_string()),
             "in_area",
             "footprint_containment",
-            Some(1.0),
-            Some("boolean".to_string()),
-            "spatial-topology-v2",
-            0.9,
+            Some(1.939_540_455_560_791_8),
+            Some("km".to_string()),
+            "spatial-distance-v1",
+            0.812_345_7,
             vec![
                 EvidenceRef::for_observation("bundle:v1", &subject),
                 EvidenceRef::for_observation("bundle:v1", &target),
@@ -875,7 +895,7 @@ mod tests {
             from_entity_id: "society:one".to_string(),
             edge_type: "in_area".to_string(),
             to_entity_id: "area:one".to_string(),
-            confidence: 0.9,
+            confidence: 0.812_345_7,
             source_type: "SpatialTopology".to_string(),
             derivation: Some(derivation),
         };

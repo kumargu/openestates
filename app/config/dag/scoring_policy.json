@@ -103,6 +103,7 @@
     "review_rating_weight": 0.75,
     "review_count_weight": 0.25,
     "review_count_log_divisor": 8.0,
+    "exact_society_matches_first": true,
     "result_limit": 32,
     "best_effort_ranking_tiers": [
       "explicit_intent",

@@ -158,20 +158,35 @@ pub(crate) struct ResolvedEntityConstraint {
 pub struct CompiledQuery {
     pub raw: String,
     pub constraints: ConstraintExpr,
+    pub branches: Vec<ConstraintExpr>,
     pub intent: SearchIntent,
 }
 
 impl CompiledQuery {
+    pub(crate) fn with_constraints(
+        raw: impl Into<String>,
+        constraints: ConstraintExpr,
+        intent: SearchIntent,
+    ) -> Self {
+        Self {
+            raw: raw.into(),
+            branches: vec![constraints.clone()],
+            constraints,
+            intent,
+        }
+    }
+
     pub(crate) fn compile(
         query: &str,
         plan: &QueryPlan,
         intent: SearchIntent,
         entities: &[ResolvedEntityConstraint],
     ) -> Self {
-        let constraints = compile_constraint_expr(query, plan, entities);
+        let compiled_constraints = compile_constraints(query, plan, entities);
         Self {
             raw: query.to_string(),
-            constraints,
+            constraints: compiled_constraints.root,
+            branches: compiled_constraints.branches,
             intent,
         }
     }
@@ -182,21 +197,101 @@ impl CompiledQuery {
         Self::compile(query, &plan, intent, &[])
     }
 
-    pub(crate) fn add_spatial_constraints(&mut self, terms: Vec<ConstraintTerm>) {
+    pub(crate) fn add_spatial_constraints(
+        &mut self,
+        terms: Vec<ConstraintTerm>,
+        discourse_segments: Option<&[(usize, usize)]>,
+        shared_suffix_start: Option<usize>,
+    ) {
         let required = terms
             .into_iter()
-            .filter(|term| matches!(term, ConstraintTerm::Spatial { required: true, .. }));
-        let clauses = required
-            .into_iter()
-            .map(ConstraintExpr::term)
+            .filter(|term| matches!(term, ConstraintTerm::Spatial { required: true, .. }))
             .collect::<Vec<_>>();
-        if !clauses.is_empty() {
-            self.constraints = ConstraintExpr::and(
-                [self.constraints.clone(), ConstraintExpr::and(clauses)]
-                    .into_iter()
-                    .collect(),
-            );
+        if required.is_empty() {
+            return;
         }
+        let bounds = self
+            .branches
+            .iter()
+            .map(source_span_bounds)
+            .collect::<Vec<_>>();
+        let overall_start = bounds.iter().flatten().map(|(start, _)| *start).min();
+        let overall_end = bounds.iter().flatten().map(|(_, end)| *end).max();
+        self.branches = self
+            .branches
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(branch_index, branch)| {
+                let clauses = required
+                    .iter()
+                    .filter(|term| {
+                        spatial_term_belongs_to_branch(
+                            term,
+                            branch_index,
+                            &bounds,
+                            overall_start,
+                            overall_end,
+                            discourse_segments,
+                            shared_suffix_start,
+                        )
+                    })
+                    .cloned()
+                    .map(ConstraintExpr::term)
+                    .collect::<Vec<_>>();
+                ConstraintExpr::and(vec![branch, ConstraintExpr::and(clauses)])
+            })
+            .collect();
+        self.constraints = ConstraintExpr::any_of(self.branches.clone());
+    }
+
+    pub(crate) fn align_discourse_branches(
+        &mut self,
+        segments: &[(usize, usize)],
+        shared_suffix_start: Option<usize>,
+    ) {
+        if segments.len() < 2 || self.branches.len() > 1 {
+            return;
+        }
+        let original = self.constraints.clone();
+        let branches = segments
+            .iter()
+            .map(|(start, end)| {
+                expression_for_segment(&original, *start, *end, shared_suffix_start)
+                    .unwrap_or_else(ConstraintExpr::match_all)
+            })
+            .collect::<Vec<_>>();
+        if branches.iter().filter(|branch| branch.has_terms()).count() < 1 {
+            return;
+        }
+        self.branches = branches;
+        self.constraints = ConstraintExpr::any_of(self.branches.clone());
+    }
+
+    pub(crate) fn align_paired_ordinal_branches(
+        &mut self,
+        segments: &[(usize, usize)],
+        bhk_spans: &[(usize, usize)],
+    ) {
+        if segments.len() < 2 || segments.len() != bhk_spans.len() {
+            return;
+        }
+        let original = self.constraints.clone();
+        let branches = segments
+            .iter()
+            .zip(bhk_spans)
+            .filter_map(|((start, end), bhk_span)| {
+                expression_for_owned_spans(&original, &[(*start, *end), *bhk_span])
+            })
+            .collect::<Vec<_>>();
+        if branches.len() == segments.len() {
+            self.branches = branches;
+            self.constraints = ConstraintExpr::any_of(self.branches.clone());
+        }
+    }
+
+    pub(crate) fn for_branch(&self, constraints: ConstraintExpr) -> Self {
+        Self::with_constraints(self.raw.clone(), constraints, self.intent.clone())
     }
 
     #[cfg(test)]
@@ -204,6 +299,169 @@ impl CompiledQuery {
         let plan = super::query_plan::compile_query_plan(query);
         Self::compile(query, &plan, intent, &[])
     }
+}
+
+fn expression_for_owned_spans(
+    expression: &ConstraintExpr,
+    owned: &[(usize, usize)],
+) -> Option<ConstraintExpr> {
+    match expression {
+        ConstraintExpr::And { clauses } => {
+            let clauses = clauses
+                .iter()
+                .filter_map(|clause| expression_for_owned_spans(clause, owned))
+                .collect::<Vec<_>>();
+            (!clauses.is_empty()).then(|| ConstraintExpr::and(clauses))
+        }
+        ConstraintExpr::AnyOf { clauses } => {
+            let clauses = clauses
+                .iter()
+                .filter_map(|clause| expression_for_owned_spans(clause, owned))
+                .collect::<Vec<_>>();
+            (!clauses.is_empty()).then(|| ConstraintExpr::any_of(clauses))
+        }
+        ConstraintExpr::Not { clause } => {
+            expression_for_owned_spans(clause, owned).map(ConstraintExpr::negated)
+        }
+        ConstraintExpr::Term { term } => term.source_span().and_then(|span| {
+            owned
+                .iter()
+                .any(|(start, end)| span.start < *end && *start < span.end)
+                .then(|| expression.clone())
+        }),
+    }
+}
+
+fn expression_for_segment(
+    expression: &ConstraintExpr,
+    start: usize,
+    end: usize,
+    shared_suffix_start: Option<usize>,
+) -> Option<ConstraintExpr> {
+    match expression {
+        ConstraintExpr::And { clauses } => {
+            let clauses = clauses
+                .iter()
+                .filter_map(|clause| {
+                    expression_for_segment(clause, start, end, shared_suffix_start)
+                })
+                .collect::<Vec<_>>();
+            (!clauses.is_empty()).then(|| ConstraintExpr::and(clauses))
+        }
+        ConstraintExpr::AnyOf { clauses } => {
+            let clauses = clauses
+                .iter()
+                .filter_map(|clause| {
+                    expression_for_segment(clause, start, end, shared_suffix_start)
+                })
+                .collect::<Vec<_>>();
+            (!clauses.is_empty()).then(|| ConstraintExpr::any_of(clauses))
+        }
+        ConstraintExpr::Not { clause } => {
+            expression_for_segment(clause, start, end, shared_suffix_start)
+                .map(ConstraintExpr::negated)
+        }
+        ConstraintExpr::Term { term } => {
+            let belongs = term.source_span().is_none_or(|span| {
+                shared_suffix_start.is_some_and(|shared| span.start >= shared)
+                    || (span.start < end && start < span.end)
+            });
+            belongs.then(|| expression.clone())
+        }
+    }
+}
+
+fn spatial_term_belongs_to_branch(
+    term: &ConstraintTerm,
+    branch_index: usize,
+    bounds: &[Option<(usize, usize)>],
+    overall_start: Option<usize>,
+    overall_end: Option<usize>,
+    discourse_segments: Option<&[(usize, usize)]>,
+    shared_suffix_start: Option<usize>,
+) -> bool {
+    let Some(span) = term.source_span() else {
+        return true;
+    };
+    if let Some(segments) = discourse_segments.filter(|segments| segments.len() == bounds.len()) {
+        if shared_suffix_start.is_some_and(|shared| span.start >= shared) {
+            return true;
+        }
+        return segments
+            .get(branch_index)
+            .is_some_and(|(start, end)| span.start < *end && *start < span.end);
+    }
+    if bounds.iter().any(Option::is_none) {
+        let Some(current) = bounds.get(branch_index) else {
+            return false;
+        };
+        if let Some((start, end)) = current {
+            return span.start < *end && *start < span.end;
+        }
+        let previous_end = bounds[..branch_index]
+            .iter()
+            .rev()
+            .flatten()
+            .map(|(_, end)| *end)
+            .next();
+        let next_start = bounds[branch_index + 1..]
+            .iter()
+            .flatten()
+            .map(|(start, _)| *start)
+            .next();
+        return previous_end.is_none_or(|end| span.start >= end)
+            && next_start.is_none_or(|start| span.end <= start);
+    }
+    if overall_start.is_none_or(|start| span.end <= start)
+        || overall_end.is_none_or(|end| span.start >= end)
+    {
+        return true;
+    }
+    if bounds
+        .get(branch_index)
+        .copied()
+        .flatten()
+        .is_some_and(|(start, end)| span.start < end && start < span.end)
+    {
+        return true;
+    }
+    let owner = bounds
+        .iter()
+        .enumerate()
+        .filter_map(|(index, bounds)| bounds.map(|(start, end)| (index, start, end)))
+        .min_by_key(|(_, start, end)| {
+            if span.end <= *start {
+                start - span.end
+            } else if *end <= span.start {
+                span.start - end
+            } else {
+                0
+            }
+        })
+        .map(|(index, _, _)| index);
+    owner == Some(branch_index)
+}
+
+fn source_span_bounds(expression: &ConstraintExpr) -> Option<(usize, usize)> {
+    let mut spans = Vec::new();
+    collect_source_spans(
+        expression,
+        &[
+            PredicateFamily::Bhk,
+            PredicateFamily::Area,
+            PredicateFamily::Society,
+            PredicateFamily::Builder,
+            PredicateFamily::Budget,
+            PredicateFamily::Evidence,
+            PredicateFamily::Spatial,
+        ],
+        false,
+        false,
+        &mut spans,
+    );
+    let start = spans.iter().map(|span| span.start).min()?;
+    let end = spans.iter().map(|span| span.end).max()?;
+    Some((start, end))
 }
 
 impl ConstraintExpr {
@@ -317,31 +575,6 @@ impl ConstraintExpr {
             ),
             Self::Not { clause } => clause.evaluate_states(term_evaluation).negated(),
             Self::Term { term } => term_evaluation(term),
-        }
-    }
-
-    /// Lower the supported Boolean subset into flat top-level alternatives.
-    /// Nested language is not exposed as a query contract; `And` distributes
-    /// only over the configured `AnyOf` groups produced by our compiler.
-    pub fn flat_branches(&self) -> Vec<Self> {
-        match self {
-            Self::AnyOf { clauses } => clauses.iter().flat_map(Self::flat_branches).collect(),
-            Self::And { clauses } => {
-                clauses
-                    .iter()
-                    .fold(vec![Self::and(Vec::new())], |branches, clause| {
-                        let alternatives = clause.flat_branches();
-                        branches
-                            .into_iter()
-                            .flat_map(|branch| {
-                                alternatives.iter().cloned().map(move |alternative| {
-                                    Self::and(vec![branch.clone(), alternative])
-                                })
-                            })
-                            .collect()
-                    })
-            }
-            Self::Not { .. } | Self::Term { .. } => vec![self.clone()],
         }
     }
 
@@ -621,11 +854,16 @@ pub fn format_bhk_include_label(values: &[u32]) -> Option<String> {
     }
 }
 
-fn compile_constraint_expr(
+struct CompiledConstraints {
+    root: ConstraintExpr,
+    branches: Vec<ConstraintExpr>,
+}
+
+fn compile_constraints(
     query: &str,
     plan: &QueryPlan,
     entities: &[ResolvedEntityConstraint],
-) -> ConstraintExpr {
+) -> CompiledConstraints {
     let mut clauses = Vec::new();
 
     let include_bhks = bhk_terms(plan, SlotPolarity::Include);
@@ -679,7 +917,7 @@ fn compile_constraint_expr(
         excluded_builders.as_slice(),
     ];
     if let Some(plan) = compile_constraint_plan(plan, &positive_groups, &negative_groups) {
-        clauses.push(plan.lower());
+        return plan.compile();
     } else {
         for group in positive_groups {
             if group.is_empty() {
@@ -699,7 +937,20 @@ fn compile_constraint_expr(
         }
     }
 
-    ConstraintExpr::and(clauses)
+    let root = ConstraintExpr::and(clauses);
+    CompiledConstraints {
+        branches: vec![root.clone()],
+        root,
+    }
+}
+
+#[cfg(test)]
+fn compile_constraint_expr(
+    query: &str,
+    plan: &QueryPlan,
+    entities: &[ResolvedEntityConstraint],
+) -> ConstraintExpr {
+    compile_constraints(query, plan, entities).root
 }
 
 #[derive(Clone)]
@@ -929,10 +1180,24 @@ struct ConstraintPlan {
 }
 
 impl ConstraintPlan {
-    fn lower(self) -> ConstraintExpr {
-        let mut clauses = self.shared;
-        clauses.push(ConstraintExpr::any_of(self.branches));
-        ConstraintExpr::and(clauses)
+    fn compile(self) -> CompiledConstraints {
+        let branches = self
+            .branches
+            .into_iter()
+            .map(|branch| {
+                ConstraintExpr::and(
+                    self.shared
+                        .iter()
+                        .cloned()
+                        .chain(std::iter::once(branch))
+                        .collect(),
+                )
+            })
+            .collect::<Vec<_>>();
+        CompiledConstraints {
+            root: ConstraintExpr::any_of(branches.clone()),
+            branches,
+        }
     }
 }
 
@@ -966,7 +1231,7 @@ fn compile_constraint_plan(
                 }),
         )
         .collect::<Vec<_>>();
-    if active_groups.len() < 2 {
+    if active_groups.is_empty() {
         return None;
     }
     let mut family_spans = Vec::<(CompilationFamily, bool, Vec<SourceSpan>)>::new();
@@ -1022,7 +1287,31 @@ fn compile_constraint_plan(
         })
         .collect::<std::collections::HashSet<_>>();
     let entity_scopes_are_branch_local = entity_scope_segments.len() > 1;
+    let segment_has_explicit_entity_scope = (0..segments.len())
+        .map(|segment_index| {
+            group_segments
+                .iter()
+                .enumerate()
+                .any(|(group_index, segment_terms)| {
+                    !segment_terms[segment_index].is_empty()
+                        && active_groups[group_index]
+                            .terms
+                            .first()
+                            .is_some_and(|term| is_entity_family(&term.family))
+                })
+        })
+        .collect::<Vec<_>>();
     let last_segment_index = segments.len() - 1;
+    let group_segment_indexes = group_segments
+        .iter()
+        .map(|segment_terms| {
+            segment_terms
+                .iter()
+                .enumerate()
+                .filter_map(|(segment_index, terms)| (!terms.is_empty()).then_some(segment_index))
+                .collect::<std::collections::HashSet<_>>()
+        })
+        .collect::<Vec<_>>();
     let mut family_segments =
         std::collections::HashMap::<AlternativeFamily, std::collections::HashSet<usize>>::new();
     for segment_terms in &group_segments {
@@ -1039,16 +1328,43 @@ fn compile_constraint_plan(
         .into_iter()
         .filter_map(|(family, segments)| (segments.len() > 1).then_some(family))
         .collect::<std::collections::HashSet<_>>();
+    let directly_repeated_families = group_segment_indexes
+        .iter()
+        .enumerate()
+        .filter(|(_, segments)| segments.len() > 1)
+        .filter_map(|(group_index, _)| {
+            active_groups[group_index]
+                .terms
+                .first()
+                .map(|term| alternative_family(&term.family))
+        })
+        .collect::<std::collections::HashSet<_>>();
+    let branch_group_indexes = group_segment_indexes
+        .iter()
+        .enumerate()
+        .filter_map(|(group_index, segments)| {
+            let family = active_groups[group_index]
+                .terms
+                .first()
+                .map(|term| alternative_family(&term.family))?;
+            (segments.len() > 1
+                || (branch_families.contains(&family)
+                    && !directly_repeated_families.contains(&family)))
+            .then_some(group_index)
+        })
+        .collect::<std::collections::HashSet<_>>();
     let first_branch_start = group_segments
         .iter()
-        .flat_map(|segment_terms| segment_terms[0].iter())
-        .filter(|term| branch_families.contains(&alternative_family(&term.family)))
+        .enumerate()
+        .filter(|(group_index, _)| branch_group_indexes.contains(group_index))
+        .flat_map(|(_, segment_terms)| segment_terms[0].iter())
         .filter_map(|term| term.span.as_ref().map(|span| span.start))
         .min();
     let last_branch_end = group_segments
         .iter()
-        .flat_map(|segment_terms| segment_terms[last_segment_index].iter())
-        .filter(|term| branch_families.contains(&alternative_family(&term.family)))
+        .enumerate()
+        .filter(|(group_index, _)| branch_group_indexes.contains(group_index))
+        .flat_map(|(_, segment_terms)| segment_terms[last_segment_index].iter())
         .filter_map(|term| term.span.as_ref().map(|span| span.end))
         .max();
     let shared_group_indexes = group_segments
@@ -1101,7 +1417,22 @@ fn compile_constraint_plan(
             if shared_group_indexes.contains(&group_index) {
                 continue;
             }
-            let branch_terms = &segment_terms[segment_index];
+            let branch_terms = if entity_scopes_are_branch_local
+                && active_groups[group_index]
+                    .terms
+                    .first()
+                    .is_some_and(|term| is_entity_family(&term.family))
+                && segment_terms[segment_index].is_empty()
+                && !segment_has_explicit_entity_scope[segment_index]
+            {
+                segment_terms[..segment_index]
+                    .iter()
+                    .rev()
+                    .find(|terms| !terms.is_empty())
+                    .unwrap_or(&segment_terms[segment_index])
+            } else {
+                &segment_terms[segment_index]
+            };
             if !branch_terms.is_empty() {
                 let expr = ConstraintExpr::any_of(
                     branch_terms.iter().map(|term| term.expr.clone()).collect(),
@@ -2091,6 +2422,115 @@ mod tests {
         assert!(matches_mixed_entity(&ast, "Other", "Godrej Air", 4));
         assert!(!matches_mixed_entity(&ast, "Prestige", "Other", 4));
         assert!(!matches_mixed_entity(&ast, "Other", "Godrej Air", 3));
+    }
+
+    #[test]
+    fn compiler_branch_ownership_contract() {
+        type Entity<'a> = (&'a str, &'a str);
+        type Probe<'a> = (&'a str, &'a str, &'a str, u32, u64, bool);
+        type Case<'a> = (&'a str, &'a [Entity<'a>], usize, &'a [Probe<'a>]);
+
+        let cases: &[Case<'_>] = &[
+            (
+                "Godrej Air 2BHK or 3BHK or Prestige Waterford 4BHK",
+                &[("society", "Godrej Air"), ("society", "Prestige Waterford")],
+                3,
+                &[
+                    ("", "", "Godrej Air", 2, 0, true),
+                    ("", "", "Godrej Air", 3, 0, true),
+                    ("", "", "Prestige Waterford", 4, 0, true),
+                    ("", "", "Prestige Waterford", 3, 0, false),
+                ],
+            ),
+            (
+                "Prestige 3BHK or Godrej Air 4BHK",
+                &[("builder", "Prestige"), ("society", "Godrej Air")],
+                2,
+                &[
+                    ("", "Prestige", "Other", 3, 0, true),
+                    ("", "Other", "Godrej Air", 4, 0, true),
+                ],
+            ),
+            (
+                "3BHK in East Bengaluru or 4BHK not in East Bengaluru",
+                &[],
+                2,
+                &[
+                    ("East Bengaluru", "", "", 3, 0, true),
+                    ("South Bengaluru", "", "", 4, 0, true),
+                    ("East Bengaluru", "", "", 4, 0, false),
+                ],
+            ),
+            (
+                "3BHK under 2Cr, not 4 or 5 BHK in East Bengaluru",
+                &[],
+                1,
+                &[
+                    ("East Bengaluru", "", "", 3, 19_000_000, true),
+                    ("East Bengaluru", "", "", 4, 19_000_000, false),
+                    ("East Bengaluru", "", "", 5, 19_000_000, false),
+                ],
+            ),
+            (
+                "2 or 3 BHK, not 4 BHK",
+                &[],
+                2,
+                &[
+                    ("", "", "", 2, 0, true),
+                    ("", "", "", 3, 0, true),
+                    ("", "", "", 4, 0, false),
+                ],
+            ),
+        ];
+
+        for (query, entity_specs, branch_count, probes) in cases {
+            let plan = crate::search::query_plan::compile_query_plan(query);
+            let entities = entity_specs
+                .iter()
+                .map(|(entity_type, name)| {
+                    let start = query.find(name).expect("entity should be present");
+                    ResolvedEntityConstraint {
+                        entity_id: format!(
+                            "{}:{}",
+                            entity_type,
+                            name.to_ascii_lowercase().replace(' ', "-")
+                        ),
+                        entity_type: entity_type.to_string(),
+                        display_name: name.to_string(),
+                        span: SourceSpan {
+                            start,
+                            end: start + name.len(),
+                            raw_text: name.to_string(),
+                        },
+                        exclusion: false,
+                    }
+                })
+                .collect::<Vec<_>>();
+            let compiled = CompiledQuery::compile(query, &plan, parse_intent(query), &entities);
+
+            assert_eq!(compiled.branches.len(), *branch_count, "query={query}");
+            for &(area, builder, society, bhk, price, expected) in *probes {
+                let matches = compiled.constraints.evaluate(&mut |term| match term {
+                    ConstraintTerm::Area { value, .. } => value.eq_ignore_ascii_case(area),
+                    ConstraintTerm::Builder { display_name, .. } => {
+                        display_name.eq_ignore_ascii_case(builder)
+                    }
+                    ConstraintTerm::Society { display_name, .. } => {
+                        display_name.eq_ignore_ascii_case(society)
+                    }
+                    ConstraintTerm::Bhk { value, .. } => *value == bhk,
+                    ConstraintTerm::Budget { min, max, .. } => {
+                        min.as_ref().is_none_or(|bound| price >= bound.value)
+                            && max.as_ref().is_none_or(|bound| price <= bound.value)
+                    }
+                    ConstraintTerm::Evidence { .. } | ConstraintTerm::Spatial { .. } => true,
+                });
+                assert_eq!(
+                    matches, expected,
+                    "query={query}, area={area}, builder={builder}, society={society}, bhk={bhk}, price={price}"
+                );
+            }
+        }
     }
 
     #[test]

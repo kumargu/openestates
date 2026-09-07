@@ -17,6 +17,7 @@ pub mod proximity;
 pub mod release_validation;
 pub mod rera;
 pub mod spatial_geometry;
+pub mod spatial_identity;
 pub mod spatial_index;
 pub mod tantivy_index;
 pub mod topology;
@@ -56,6 +57,13 @@ pub use rera::{
     ReraServingProjectionError, ServingReraEvidenceRecord, RERA_EVIDENCE_SCHEMA_VERSION,
 };
 pub use spatial_geometry::{SpatialBounds, SpatialFeature, SpatialGeometry, SpatialGeometryIndex};
+pub use spatial_identity::{
+    bound_provider_entity_ids, canonical_spatial_role, is_canonical_spatial_entity,
+    materialize_canonical_spatial_identities, provider_entity_ids,
+    remove_canonical_spatial_identities, validate_canonical_spatial_identities,
+    CanonicalSpatialIdentityReport, CANONICAL_IDENTITY_ALGORITHM, CANONICAL_SPATIAL_ROOT_SOURCE,
+    PROVIDER_BINDING_EDGE,
+};
 pub use spatial_index::{SpatialDistance, SpatialPoint, SpatialServingIndex};
 pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,

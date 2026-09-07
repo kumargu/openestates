@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -258,6 +258,49 @@ impl ServingFactIndex {
             }
             if let Some(rows) = self.by_entity.get(&canonical_id).cloned() {
                 self.by_entity.insert(alias, rows);
+            }
+        }
+    }
+
+    pub fn add_canonical_spatial_bindings(&mut self, edges: &[ServingEdgeRecord]) {
+        let mut providers_by_canonical = BTreeMap::<String, BTreeSet<String>>::new();
+        for edge in edges.iter().filter(|edge| {
+            edge.edge_type
+                .eq_ignore_ascii_case(super::PROVIDER_BINDING_EDGE)
+        }) {
+            providers_by_canonical
+                .entry(edge.from_entity_id.clone())
+                .or_default()
+                .insert(edge.to_entity_id.clone());
+        }
+        for (canonical_id, provider_ids) in providers_by_canonical {
+            let mut facts = Vec::new();
+            let mut metadata = Vec::new();
+            for provider_id in provider_ids {
+                if let Some(rows) = self.by_entity.get(&provider_id) {
+                    facts.extend(rows.facts.clone());
+                    metadata.extend(rows.search_metadata.clone());
+                }
+            }
+            facts.sort_by_key(ServingFactRecord::stable_selection_key);
+            metadata.sort_by(|left, right| {
+                left.fact_key
+                    .cmp(&right.fact_key)
+                    .then_with(|| left.entity_id.cmp(&right.entity_id))
+            });
+            let mut rows = ServingEntityFactRows {
+                facts,
+                search_metadata: metadata,
+                search_metadata_by_fact_key: HashMap::new(),
+            };
+            for (index, metadata) in rows.search_metadata.iter().enumerate() {
+                rows.search_metadata_by_fact_key
+                    .entry(metadata.fact_key.to_ascii_lowercase())
+                    .or_default()
+                    .push(index);
+            }
+            if !rows.facts.is_empty() {
+                self.by_entity.insert(canonical_id, rows);
             }
         }
     }

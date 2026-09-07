@@ -152,5 +152,5 @@ Never “fix” a fake card by adding a prettier card.
 ---
 
 ## Relation to other skills
-- Always still honor `.claude/skills/coding-practices.md` and `AGENTS.md` buyer-UI rules.
+- Always still honor `AGENTS.md` buyer-UI rules.
 - This skill is the **human critic pass** for visual/product seams those docs describe in principle.

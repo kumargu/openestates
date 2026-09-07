@@ -22,14 +22,15 @@ use super::parquet::{
 use super::proximity::{derive_proximity_records, remove_derived_proximity_records};
 use super::tantivy_index::{TantivyIndexError, TantivyRecallIndex};
 use super::{
-    materialize_society_aliases, unique_society_aliases, validate_serving_edge_evidence,
-    BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingBundleSchema,
-    ServingColumnSchema, ServingEdgeRecord, ServingEntityRecord, ServingFactRecord,
-    ServingReraEvidenceRecord, ServingSearchMetadataRecord, ServingTableSchema, SourceObservation,
-    TrustPolicy,
+    materialize_canonical_spatial_identities, materialize_society_aliases,
+    remove_canonical_spatial_identities, unique_society_aliases,
+    validate_canonical_spatial_identities, validate_serving_edge_evidence, BundleArtifact,
+    BundleArtifactKind, ServingBundleManifest, ServingBundleSchema, ServingColumnSchema,
+    ServingEdgeRecord, ServingEntityRecord, ServingFactRecord, ServingReraEvidenceRecord,
+    ServingSearchMetadataRecord, ServingTableSchema, SourceObservation, TrustPolicy,
 };
 
-pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 10;
+pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 11;
 
 #[derive(Clone)]
 pub struct ServingBundleBuilder {
@@ -80,6 +81,7 @@ impl ServingBundleBuilder {
             edges,
             rera_evidence,
             Vec::new(),
+            &BTreeSet::new(),
             bundle_version,
             true,
         )
@@ -109,12 +111,37 @@ impl ServingBundleBuilder {
     #[allow(clippy::too_many_arguments)]
     pub async fn build_child_from_serving_records_with_rera(
         &self,
+        entities: Vec<ServingEntityRecord>,
+        facts: Vec<ServingFactRecord>,
+        search_metadata: Vec<ServingSearchMetadataRecord>,
+        edges: Vec<ServingEdgeRecord>,
+        rera_evidence: Vec<ServingReraEvidenceRecord>,
+        known_excluded_rera_evidence_society_ids: Vec<String>,
+        bundle_version: impl Into<String>,
+    ) -> Result<ServingBundleManifest, ServingBundleError> {
+        self.build_child_from_serving_records_with_rera_preserving_entities(
+            entities,
+            facts,
+            search_metadata,
+            edges,
+            rera_evidence,
+            known_excluded_rera_evidence_society_ids,
+            BTreeSet::new(),
+            bundle_version,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn build_child_from_serving_records_with_rera_preserving_entities(
+        &self,
         mut entities: Vec<ServingEntityRecord>,
         mut facts: Vec<ServingFactRecord>,
         mut search_metadata: Vec<ServingSearchMetadataRecord>,
         mut edges: Vec<ServingEdgeRecord>,
         rera_evidence: Vec<ServingReraEvidenceRecord>,
         known_excluded_rera_evidence_society_ids: Vec<String>,
+        prevalidated_entity_ids: BTreeSet<String>,
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         remove_derived_proximity_records(&mut facts, &mut search_metadata, &mut edges);
@@ -126,6 +153,7 @@ impl ServingBundleBuilder {
             edges,
             rera_evidence,
             known_excluded_rera_evidence_society_ids,
+            &prevalidated_entity_ids,
             bundle_version,
             true,
         )
@@ -135,17 +163,54 @@ impl ServingBundleBuilder {
     #[allow(clippy::too_many_arguments)]
     async fn build_from_serving_records(
         &self,
-        entities: Vec<ServingEntityRecord>,
+        mut entities: Vec<ServingEntityRecord>,
         mut facts: Vec<ServingFactRecord>,
         mut search_metadata: Vec<ServingSearchMetadataRecord>,
         mut edges: Vec<ServingEdgeRecord>,
         rera_evidence: Vec<ServingReraEvidenceRecord>,
         mut excluded_rera_evidence_society_ids: Vec<String>,
+        prevalidated_entity_ids: &BTreeSet<String>,
         bundle_version: impl Into<String>,
         derive_proximity: bool,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         let bundle_version = bundle_version.into();
         let mut artifacts = Vec::new();
+        remove_canonical_spatial_identities(&mut entities, &mut edges);
+        let identity_index =
+            super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
+        let identity = materialize_canonical_spatial_identities(
+            &entities,
+            &identity_index,
+            &edges,
+            &bundle_version,
+        )
+        .map_err(ServingBundleError::InvalidRecords)?;
+        let identity_gap_key = AssetPathBuilder::serving_bundle_key(
+            &bundle_version,
+            "diagnostics/canonical_spatial_identity.json",
+        );
+        let identity_gap_meta = self
+            .lake
+            .put_json(
+                &identity_gap_key,
+                &serde_json::json!({
+                    "format_version": 1,
+                    "classification": "data_gap",
+                    "canonical_entity_count": identity.canonical_entities.len(),
+                    "provider_binding_count": identity.binding_edges.len(),
+                    "ambiguous_provider_entity_ids": identity.ambiguous_provider_entity_ids,
+                    "unclassified_provider_entity_ids": identity.unclassified_provider_entity_ids,
+                }),
+            )
+            .await?;
+        artifacts.push(artifact(
+            BundleArtifactKind::Other,
+            identity_gap_meta,
+            "application/json",
+            Some(identity.binding_edges.len() as u64),
+        ));
+        entities.extend(identity.canonical_entities);
+        edges.extend(identity.binding_edges);
         let topology_index =
             super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
         let topology_policy = load_resolution_policies()?.spatial_topology;
@@ -186,7 +251,8 @@ impl ServingBundleBuilder {
         if derive_proximity {
             let base_index =
                 super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
-            let derived = derive_proximity_records(&entities, &base_index, &edges)?;
+            let derived =
+                derive_proximity_records(&entities, &base_index, &edges, &bundle_version)?;
             facts.extend(derived.facts);
             search_metadata.extend(derived.search_metadata);
             edges.extend(derived.edges);
@@ -198,13 +264,14 @@ impl ServingBundleBuilder {
             search_metadata,
             edges,
             quarantine,
-        } = super::eligibility::classify_and_prune(
+        } = super::eligibility::classify_and_prune_preserving(
             entities,
             facts,
             search_metadata,
             edges,
             &bundle_version,
             &eligibility,
+            prevalidated_entity_ids,
         )?;
         let (rera_evidence, newly_excluded_rera_evidence_society_ids) =
             catalog_scoped_rera_evidence(&entities, rera_evidence);
@@ -456,6 +523,8 @@ fn validate_serving_records(
         }
     }
     validate_serving_edge_evidence(edges, facts, snapshot_identity)
+        .map_err(ServingBundleError::InvalidRecords)?;
+    validate_canonical_spatial_identities(entities, edges)
         .map_err(ServingBundleError::InvalidRecords)?;
     let entity_type_by_id = entities
         .iter()

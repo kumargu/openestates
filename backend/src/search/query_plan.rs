@@ -28,6 +28,12 @@ pub(crate) struct DiscourseBranchLayout {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PairedOrdinalBranchLayout {
+    pub segments: Vec<ByteSpan>,
+    pub bhk_spans: Vec<ByteSpan>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct QueryToken {
     pub text: String,
     pub start: usize,
@@ -133,6 +139,18 @@ impl QueryPlan {
                 !owner_spans
                     .iter()
                     .any(|span| span.start < token.start && span.end > token.end)
+            })
+            .filter(|token| {
+                !self.slots.bhks.iter().any(|slot| {
+                    slot.cluster_start < token.start
+                        && slot.cluster_end > token.end
+                        && (slot.polarity == SlotPolarity::Exclude
+                            || self.tokens.iter().any(|other| {
+                                other.text.eq_ignore_ascii_case("or")
+                                    && (other.start < slot.cluster_start
+                                        || other.end > slot.cluster_end)
+                            }))
+                })
             })
             .filter(|token| {
                 branch_spans.iter().any(|span| span.end <= token.start)
@@ -269,23 +287,14 @@ pub(crate) fn discourse_branch_layout_with_plan(
     })
 }
 
-#[cfg(test)]
-pub(crate) fn paired_ordinal_branch_queries(query: &str) -> Option<Vec<String>> {
-    let plan = compile_query_plan(query);
-    paired_ordinal_branch_queries_with_plan(query, &plan)
-}
-
-pub(crate) fn paired_ordinal_branch_queries_with_plan(
-    query: &str,
-    plan: &QueryPlan,
-) -> Option<Vec<String>> {
-    let tokens = &plan.tokens;
+pub(crate) fn paired_ordinal_branch_layout(plan: &QueryPlan) -> Option<PairedOrdinalBranchLayout> {
     let config = &search_parser_config().discourse;
     if config.branch_ordinals.len() < 2 {
         return None;
     }
-    let shared_suffix = first_configured_phrase(&tokens, &config.shared_suffix_markers, 0)?;
-    let core_tokens = tokens
+    let shared_suffix = first_configured_phrase(&plan.tokens, &config.shared_suffix_markers, 0)?;
+    let core_tokens = plan
+        .tokens
         .iter()
         .filter(|token| token.start < shared_suffix.start)
         .cloned()
@@ -298,10 +307,14 @@ pub(crate) fn paired_ordinal_branch_queries_with_plan(
         .branch_ordinals
         .iter()
         .map(|ordinal| {
-            first_configured_phrase(&tokens, std::slice::from_ref(ordinal), shared_suffix.end)
+            first_configured_phrase(
+                &plan.tokens,
+                std::slice::from_ref(ordinal),
+                shared_suffix.end,
+            )
         })
         .collect::<Option<Vec<_>>>()?;
-    let branch_bhks = ordinal_spans
+    let bhk_spans = ordinal_spans
         .iter()
         .map(|ordinal| {
             plan.slots
@@ -309,31 +322,25 @@ pub(crate) fn paired_ordinal_branch_queries_with_plan(
                 .iter()
                 .filter(|slot| slot.start >= shared_suffix.start && slot.end <= ordinal.start)
                 .max_by_key(|slot| slot.end)
-                .map(|slot| slot.value)
+                .map(|slot| ByteSpan {
+                    start: slot.start,
+                    end: slot.end,
+                })
         })
         .collect::<Option<Vec<_>>>()?;
-    let spans = [
-        ByteSpan {
-            start: 0,
-            end: joiners[0].start,
-        },
-        ByteSpan {
-            start: joiners[0].end,
-            end: shared_suffix.start,
-        },
-    ];
-    Some(
-        spans
-            .into_iter()
-            .zip(branch_bhks)
-            .map(|(span, bhk)| {
-                let branch = query[span.start..span.end].trim_matches(|character: char| {
-                    character.is_whitespace() || ",;".contains(character)
-                });
-                format!("{branch} {bhk}BHK")
-            })
-            .collect(),
-    )
+    Some(PairedOrdinalBranchLayout {
+        segments: vec![
+            ByteSpan {
+                start: 0,
+                end: joiners[0].start,
+            },
+            ByteSpan {
+                start: joiners[0].end,
+                end: shared_suffix.start,
+            },
+        ],
+        bhk_spans,
+    })
 }
 
 fn first_configured_phrase(
@@ -532,39 +539,6 @@ pub(crate) fn unresolved_named_entity_clause(
     resolved_entity_in_span: impl Fn(ByteSpan) -> bool,
 ) -> Option<String> {
     let query_lower = query.to_ascii_lowercase();
-    let budget_start = plan
-        .slots
-        .budget_min
-        .iter()
-        .chain(plan.slots.budget_max.iter())
-        .flat_map(|budget| exact_pattern_match_ranges(&query_lower, &budget.raw_text))
-        .map(|(start, _)| start)
-        .min();
-    let budget_operator_start = plan
-        .slots
-        .budgets
-        .iter()
-        .filter_map(|budget| {
-            search_parser_config()
-                .budget
-                .operators
-                .iter()
-                .chain(search_parser_config().budget.min_operators.iter())
-                .flat_map(|operator| exact_pattern_match_ranges(&query_lower, operator))
-                .filter(|(_, end)| {
-                    *end <= budget.start
-                        && query[*end..budget.start]
-                            .chars()
-                            .all(|character| !character.is_ascii_alphanumeric())
-                })
-                .max_by(|(left_start, left_end), (right_start, right_end)| {
-                    left_end
-                        .cmp(right_end)
-                        .then_with(|| right_start.cmp(left_start))
-                })
-                .map(|(start, _)| start)
-        })
-        .min();
     let first_relation_start = plan
         .clauses
         .iter()
@@ -579,6 +553,33 @@ pub(crate) fn unresolved_named_entity_clause(
             if first_relation_start.is_some_and(|relation_start| prefix_end > relation_start) {
                 continue;
             }
+            let budget_operator_start = plan
+                .slots
+                .budgets
+                .iter()
+                .filter(|budget| budget.start > prefix_end)
+                .min_by_key(|budget| budget.start)
+                .and_then(|budget| {
+                    search_parser_config()
+                        .budget
+                        .operators
+                        .iter()
+                        .chain(search_parser_config().budget.min_operators.iter())
+                        .flat_map(|operator| exact_pattern_match_ranges(&query_lower, operator))
+                        .filter(|(start, end)| {
+                            *start > prefix_end
+                                && *end <= budget.start
+                                && query[*end..budget.start]
+                                    .chars()
+                                    .all(|character| !character.is_ascii_alphanumeric())
+                        })
+                        .max_by(|(left_start, left_end), (right_start, right_end)| {
+                            left_end
+                                .cmp(right_end)
+                                .then_with(|| right_start.cmp(left_start))
+                        })
+                        .map(|(start, _)| start)
+                });
             let structured_clause_end = plan
                 .slots
                 .bhks
@@ -586,7 +587,6 @@ pub(crate) fn unresolved_named_entity_clause(
                 .map(|slot| slot.start)
                 .chain(plan.slots.budgets.iter().map(|slot| slot.start))
                 .chain(plan.evidence.iter().map(|evidence| evidence.start))
-                .chain(budget_start)
                 .chain(budget_operator_start)
                 .chain(first_relation_start)
                 .filter(|end| *end > prefix_end)
@@ -1764,6 +1764,25 @@ mod tests {
     }
 
     #[test]
+    fn branch_local_named_area_scopes_stop_before_their_budget_operator() {
+        let query = "2BHK in Whitefield under 1.6 Cr or 3BHK in Sarjapur Road under 2 Cr";
+        let plan = compile_query_plan(query);
+        let unresolved = unresolved_named_entity_clause(
+            query,
+            &plan,
+            |_| false,
+            |span| {
+                matches!(
+                    query[span.start..span.end].trim(),
+                    "Whitefield" | "Sarjapur Road"
+                )
+            },
+        );
+
+        assert_eq!(unresolved, None);
+    }
+
+    #[test]
     fn compiles_within_distances_as_hard_relation_clauses() {
         let plan =
             compile_query_plan("3BHK within 1 km of Manipal Hospital and within 3 km of ITPB");
@@ -2078,19 +2097,6 @@ mod tests {
                 .map(|clause| clause.target_text.as_str())
                 .collect::<Vec<_>>(),
             vec!["bagmane tech park", "manipal hospital whitefield"]
-        );
-    }
-
-    #[test]
-    fn pairs_ordinal_constraints_with_comparison_branches() {
-        let query = "Compare Godrej Air under ₹2.6 Cr with Godrej Lakeside Orchard under ₹3.1 Cr, but only show 3BHKs in the first and 4BHKs in the second.";
-
-        assert_eq!(
-            paired_ordinal_branch_queries(query),
-            Some(vec![
-                "Compare Godrej Air under ₹2.6 Cr 3BHK".to_string(),
-                "Godrej Lakeside Orchard under ₹3.1 Cr 4BHK".to_string(),
-            ])
         );
     }
 

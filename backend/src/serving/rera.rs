@@ -15,13 +15,21 @@ pub const RERA_EVIDENCE_SCHEMA_VERSION: &str = "rera_evidence_projection.v2";
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ServingReraEvidenceRecord {
     pub society_id: String,
+    #[serde(default)]
     pub registration_ids: Vec<String>,
+    #[serde(default)]
     pub entities: Vec<ReraEvidenceEntity>,
+    #[serde(default)]
     pub claims: Vec<ReraClaimV1>,
+    #[serde(default)]
     pub events: Vec<ReraEvidenceEvent>,
+    #[serde(default)]
     pub series: Vec<ReraEvidenceSeries>,
+    #[serde(default)]
     pub discrepancies: Vec<ReraInventoryReconciliationV1>,
+    #[serde(default)]
     pub regulatory_coverage: Vec<ReraRegulatoryCoverage>,
+    #[serde(default)]
     pub source_index: Vec<ReraEvidenceSource>,
 }
 
@@ -41,19 +49,25 @@ pub struct ReraEvidenceEvent {
     pub registration_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub promoter_id: Option<String>,
+    #[serde(default)]
     pub event_class: String,
     pub event_type: String,
+    #[serde(alias = "date")]
     pub occurred_at: String,
+    #[serde(default)]
     pub issuer: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proceeding_ref: Option<String>,
+    #[serde(default)]
     pub decision_stage: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub disposition: Option<String>,
+    #[serde(default)]
     pub current_effect: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub affected_scope: Option<String>,
     pub claim_ids: Vec<String>,
+    #[serde(default)]
     pub source_ids: Vec<String>,
 }
 

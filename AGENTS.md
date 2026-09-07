@@ -22,8 +22,6 @@ OpenEstates is not trying to win by having the biggest pile of listings. The wed
 
 ## 0. Before Writing Any Code
 
-**Always read `.claude/skills/coding-practices.md` before writing any code.** It contains the full quality bar, design philosophy, Rust/TypeScript/Python patterns, latency budgets, testing requirements, and the pre-ship checklist. Do not skip this.
-
 **Before shipping buyer-facing UI**, also run `.claude/skills/ui-critic.md` — a human product-design pass for sticky-note cards, heading clutter, duplicate facts, agent-jargon copy, and fake page jumps.
 
 ---
@@ -206,6 +204,34 @@ tests, compile/type checks, and the search hardcoding audit.
   Run broader suites at coherent milestones, not after every tiny checkpoint.
 - Once the architecture and contracts stabilize, add broader unit regression
   coverage in a focused pass where its maintenance cost is justified.
+
+### Architecture replacement discipline
+
+- Do not add backward-compatibility shims unless the user explicitly requests
+  them. This product is pre-production; prefer rebuilding local artifacts and
+  deleting the superseded path.
+- A replacement is incomplete until the old parser, evaluator, constructor, or
+  projection is deleted in the same checkpoint.
+- One semantic concept may have only one authoritative runtime representation.
+  A compiled plan must be the object execution consumes, not a summary created
+  after execution.
+- Preserve predicate and branch IDs, exact source spans, operators, typed
+  values and units, resolution state, and evidence bindings through execution.
+  Never reparse rendered or reconstructed query text.
+- Recall returns candidate IDs only. It never proves eligibility or creates a
+  buyer-facing reason.
+- A required predicate may return `Satisfied` only with durable evidence.
+  Ranking, explanations, proof focus, and API proofs must project from that
+  same evaluation.
+- Never recover numeric, spatial, or identity meaning from display strings on
+  the request path.
+- A capability is searchable only when its eligible evidence policy, evaluator,
+  and proof projection are all bound and validated.
+- Controlled fixtures must not provide stronger evidence than the production
+  materializer. Prove production parity with one materializer-to-bundle-to-API
+  contract before treating a mock scenario as covered.
+- When a module gains a second parser, evaluator, branch constructor, or proof
+  generator, stop and consolidate instead of extending both paths.
 
 ### Time metadata is not product logic
 
@@ -530,7 +556,6 @@ Read the matching skill file **before** starting any task that falls under it:
 
 | Skill | File | Purpose |
 |-------|------|---------|
-| Coding Practices | `.claude/skills/coding-practices.md` | Quality bar, patterns, testing, latency budgets |
 | UI Critic | `.claude/skills/ui-critic.md` | Human UI review: sticky-note chrome, clutter, buyer copy, same-page modes |
 
 ---

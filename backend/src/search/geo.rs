@@ -8,9 +8,9 @@ use crate::dag_config::{
 use crate::knowledge::FactValue;
 use crate::models::Property;
 use crate::serving::{
-    resolve_serving_coordinates, DerivedEvidence, EvidenceRef, ServingEntityRecord,
-    ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord, SpatialGeometryIndex,
-    SpatialServingIndex,
+    bound_provider_entity_ids, is_canonical_spatial_entity, resolve_serving_coordinates,
+    DerivedEvidence, EvidenceRef, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex,
+    ServingFactRecord, ServingSearchMetadataRecord, SpatialGeometryIndex, SpatialServingIndex,
 };
 
 use super::analyzer;
@@ -172,14 +172,31 @@ impl GeoSearchIndex {
         entities: &[ServingEntityRecord],
         fact_index: &ServingFactIndex,
     ) -> Self {
+        Self::from_serving_bundle_with_edges(entities, fact_index, &[])
+    }
+
+    pub fn from_serving_bundle_with_edges(
+        entities: &[ServingEntityRecord],
+        fact_index: &ServingFactIndex,
+        edges: &[ServingEdgeRecord],
+    ) -> Self {
+        let mut bound_fact_index = fact_index.clone();
+        bound_fact_index.add_canonical_spatial_bindings(edges);
+        let fact_index = &bound_fact_index;
         let mut places = Vec::new();
         let mut society_coordinates = Vec::new();
         let mut society_coordinate_ids = HashSet::<String>::new();
-        let geometry = SpatialGeometryIndex::from_serving_bundle(entities, fact_index, &[]);
+        let geometry = SpatialGeometryIndex::from_serving_bundle(entities, fact_index, edges);
+        let bound_provider_ids = bound_provider_entity_ids(edges);
         for entity in entities {
             if entity.entity_type.eq_ignore_ascii_case("place")
                 || entity.entity_type.eq_ignore_ascii_case("area")
             {
+                if bound_provider_ids.contains(entity.entity_id.as_str())
+                    && !is_canonical_spatial_entity(entity)
+                {
+                    continue;
+                }
                 let coordinates =
                     coordinates_for_entity(fact_index, &entity.entity_id).or_else(|| {
                         geometry.representative_coordinate(&entity.entity_id).map(
@@ -561,14 +578,6 @@ impl<'a> GeoSearchQuery<'a> {
             );
             combined = Some(match combined {
                 None => candidates,
-                Some(existing) if self.has_hard_clauses() => existing
-                    .into_iter()
-                    .filter_map(|(entity_id, distance)| {
-                        candidates
-                            .get(&entity_id)
-                            .map(|other| (entity_id, distance.max(*other)))
-                    })
-                    .collect(),
                 Some(mut existing) => {
                     for (entity_id, distance) in candidates {
                         existing
@@ -736,20 +745,10 @@ impl<'a> GeoSearchQuery<'a> {
         &self,
         rows: &crate::serving::ServingEntityFactRows,
     ) -> Option<f64> {
-        if self.has_hard_clauses() {
-            self.clauses
-                .iter()
-                .filter(|clause| clause.requirement == RelationRequirement::Hard)
-                .map(|clause| self.society_rows_match_clause_distance(rows, clause))
-                .try_fold(0.0_f64, |farthest, distance| {
-                    distance.map(|distance| farthest.max(distance))
-                })
-        } else {
-            self.clauses
-                .iter()
-                .filter_map(|clause| self.society_rows_match_clause_distance(rows, clause))
-                .min_by(f64::total_cmp)
-        }
+        self.clauses
+            .iter()
+            .filter_map(|clause| self.society_rows_match_clause_distance(rows, clause))
+            .min_by(f64::total_cmp)
     }
 
     fn society_rows_match_clause_distance(
@@ -845,34 +844,6 @@ impl<'a> GeoSearchQuery<'a> {
                     })
             })
             .collect()
-    }
-
-    pub(crate) fn evaluate_required_for_property(
-        &self,
-        property: &Property,
-        search_index: &SearchIndex,
-        spatial_index: &SpatialServingIndex,
-        fact_index: &ServingFactIndex,
-        snapshot_identity: &str,
-    ) -> BooleanEvaluation {
-        let society_entity_id = search_index
-            .society_entity_id_for_property(&property.id)
-            .map(str::to_string)
-            .unwrap_or_else(|| format!("society:{}", property.society_id));
-        BooleanEvaluation::all(
-            self.clauses
-                .iter()
-                .filter(|clause| clause.requirement == RelationRequirement::Hard)
-                .map(|clause| {
-                    self.evaluate_clause(
-                        &society_entity_id,
-                        clause,
-                        spatial_index,
-                        fact_index,
-                        snapshot_identity,
-                    )
-                }),
-        )
     }
 
     pub(crate) fn verified_matches_for_property(
@@ -1120,19 +1091,30 @@ impl<'a> GeoSearchQuery<'a> {
     }
 
     pub(crate) fn ast_terms(&self) -> Vec<ConstraintTerm> {
-        self.clauses
-            .iter()
-            .flat_map(|clause| {
-                self.places_for_clause(clause)
-                    .map(|place| ConstraintTerm::Spatial {
-                        relation: clause.relation.clone(),
-                        entity_id: place.entity_id.clone(),
-                        display_name: place.name.clone(),
-                        required: clause.requirement == RelationRequirement::Hard,
-                        span: Some(clause.target_span.clone()),
-                    })
-            })
-            .collect()
+        let mut terms = Vec::new();
+        for clause in &self.clauses {
+            let mut has_named_target = false;
+            for place in self.places_for_clause(clause) {
+                has_named_target = true;
+                terms.push(ConstraintTerm::Spatial {
+                    relation: clause.relation.clone(),
+                    entity_id: place.entity_id.clone(),
+                    display_name: place.name.clone(),
+                    required: clause.requirement == RelationRequirement::Hard,
+                    span: Some(clause.target_span.clone()),
+                });
+            }
+            if !has_named_target && !clause.category_fact_keys.is_empty() {
+                terms.push(ConstraintTerm::Spatial {
+                    relation: clause.relation.clone(),
+                    entity_id: String::new(),
+                    display_name: clause.target_text.clone(),
+                    required: clause.requirement == RelationRequirement::Hard,
+                    span: Some(clause.target_span.clone()),
+                });
+            }
+        }
+        terms
     }
 
     pub(crate) fn resolved_clauses(&self) -> &[ResolvedGeoClause] {

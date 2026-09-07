@@ -14,12 +14,50 @@ pub struct NearbyPlaceCategoriesFile {
     pub version: u32,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
+    pub canonical_identity: CanonicalPlaceIdentityPolicy,
     pub categories: Vec<NearbyPlaceCategory>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CanonicalPlaceIdentityPolicy {
+    pub merge_distance_m: f64,
+    #[serde(default)]
+    pub identity_source_priority: Vec<String>,
+}
+
+impl Default for CanonicalPlaceIdentityPolicy {
+    fn default() -> Self {
+        Self {
+            merge_distance_m: 100.0,
+            identity_source_priority: vec!["google".to_string(), "openstreetmap".to_string()],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpatialRole {
+    Region,
+    Footprint,
+    Destination,
+    NetworkNode,
+    Route,
+}
+
+impl Default for SpatialRole {
+    fn default() -> Self {
+        Self::Destination
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NearbyPlaceCategory {
     pub fact_key: String,
+    #[serde(default)]
+    pub spatial_role: SpatialRole,
+    #[serde(default)]
+    pub canonical_name_suffix: Option<String>,
     #[serde(default)]
     pub category_aliases: Vec<String>,
     #[serde(default)]
@@ -183,6 +221,56 @@ impl NearbyPlaceCategory {
         push_normalized_term(&mut terms, &self.display_label);
         terms
     }
+
+    pub fn matches_place(
+        &self,
+        name: &str,
+        place_types: &[String],
+        place_category: Option<&str>,
+    ) -> bool {
+        let normalized_name = normalize_category_text(name);
+        if self
+            .name_block_markers
+            .iter()
+            .any(|blocked| contains_category_text(&normalized_name, blocked))
+        {
+            return false;
+        }
+        let name_marker_match = self
+            .name_markers
+            .iter()
+            .any(|marker| contains_category_text(&normalized_name, marker));
+        if let Some(place_category) = place_category.map(normalize_category_value) {
+            let category_matches = self
+                .category_aliases
+                .iter()
+                .any(|alias| normalize_category_value(alias) == place_category);
+            return category_matches && (!self.require_name_marker || name_marker_match);
+        }
+        if self.require_name_marker {
+            return name_marker_match;
+        }
+        let normalized_types = place_types
+            .iter()
+            .map(|value| normalize_category_value(value))
+            .collect::<HashSet<_>>();
+        if self
+            .accepted_place_types
+            .iter()
+            .map(|value| normalize_category_value(value))
+            .any(|accepted| normalized_types.contains(&accepted))
+        {
+            return true;
+        }
+        if name_marker_match {
+            return true;
+        }
+        self.allow_missing_place_types
+            && normalized_types.is_empty()
+            && self.category_aliases.iter().any(|alias| {
+                contains_category_text(&normalized_name, &normalize_category_value(alias))
+            })
+    }
 }
 
 fn validate_nearby_place_categories(
@@ -191,6 +279,19 @@ fn validate_nearby_place_categories(
     if config.categories.is_empty() {
         return Err(DagConfigError::InvalidConfig(
             "nearby_place_categories must define at least one category".to_string(),
+        ));
+    }
+    if !config.canonical_identity.merge_distance_m.is_finite()
+        || config.canonical_identity.merge_distance_m <= 0.0
+        || config
+            .canonical_identity
+            .identity_source_priority
+            .iter()
+            .any(|source| source.trim().is_empty())
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "canonical place identity policy must define a positive merge distance and non-empty source priorities"
+                .to_string(),
         ));
     }
     let mut fact_keys = HashSet::new();
@@ -231,6 +332,17 @@ fn push_normalized_term(terms: &mut Vec<String>, value: &str) {
 
 fn normalize_category_value(value: &str) -> String {
     value.trim().to_ascii_lowercase().replace([' ', '-'], "_")
+}
+
+fn normalize_category_text(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn contains_category_text(haystack: &str, needle: &str) -> bool {
+    if needle.trim().is_empty() {
+        return false;
+    }
+    haystack.contains(&needle.replace('_', " ")) || haystack.replace(' ', "_").contains(needle)
 }
 
 #[cfg(test)]

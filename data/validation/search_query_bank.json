@@ -59,6 +59,7 @@
         "This is the single executable controlled-search bank. Live DAG/materialization banks remain separate.",
         "Each case selects a reusable fixture profile and declares typed semantics plus buyer-visible result/proof expectations.",
         "The regional profile spans Whitefield, Sarjapur Road, and North Bengaluru with varied prices, configurations, lifecycle states, ratings, noise evidence, and named metro anchors.",
+        "Geography-first product decision: a positive society mention derives its sourced area without becoming an eligibility filter; eligible exact-society homes lead that branch before area alternatives, while searches without sourced geography remain bundle-wide and rank primarily by configured Google review quality.",
         "Entity names are controlled benchmark instances, never parser aliases or production hardcoding."
       ]
     },
@@ -2294,12 +2295,12 @@
       "expected_semantics": {
         "branches": [
           {
-            "society": "Godrej Air",
+            "area": "Hoodi",
             "bhk": 3,
             "budget_max": 26000000
           },
           {
-            "society": "Godrej Lakeside Orchard",
+            "area": "Sarjapur Road",
             "bhk": 4,
             "budget_max": 31000000
           }
@@ -2309,7 +2310,10 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
           ],
           [
             "mock-lakeside-orchard-4bhk"
@@ -2428,12 +2432,12 @@
     },
     {
       "id": "CONV-SEM-009",
-      "category": "dual_commute_proof_with_balance_ranking",
+      "category": "bundle_wide_google_first_with_dual_commute_proof",
       "query": "My office is near Bagmane Tech Park and my partner works near Manipal Hospital Whitefield. Find homes with measured distance evidence to both, prioritizing the better-balanced commute.",
       "expected_semantics": {},
       "fixture": "core",
       "fixture_expectation": {
-        "first_id": "mock-balanced-commute-3bhk",
+        "first_id": "mock-quiet-reviewed-3bhk",
         "required_proof_labels": {
           "mock-balanced-commute-3bhk": [
             "Bagmane Tech Park",
@@ -2462,7 +2466,7 @@
     },
     {
       "id": "BUYER-LANG-001",
-      "category": "simple_exact_society",
+      "category": "society_as_sourced_area_anchor",
       "query": "Godrej Air",
       "expected_semantics": {
         "society": "Godrej Air"
@@ -2470,7 +2474,10 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
           ]
         ]
       },
@@ -2533,7 +2540,10 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
           ]
         ]
       },
@@ -2832,7 +2842,7 @@
     },
     {
       "id": "DECISION-RANK-001",
-      "category": "explicit_preference_priority",
+      "category": "bundle_wide_google_first_with_explicit_preferences",
       "query": "Among ready-to-move 3BHKs near Bagmane Tech Park under ₹2.4 Cr, rank quietness first and resident reviews second.",
       "expected_semantics": {
         "bhk": 3,
@@ -2850,10 +2860,10 @@
       },
       "fixture_expectation": {
         "ordered_prefix": [
-          "mock-quiet-priority-3bhk",
-          "mock-quiet-reviewed-3bhk",
           "mock-review-priority-3bhk",
-          "mock-value-priority-3bhk"
+          "mock-quiet-reviewed-3bhk",
+          "mock-value-priority-3bhk",
+          "mock-missing-noise-3bhk"
         ]
       },
       "fixture": "decision_ranking",
@@ -2861,7 +2871,7 @@
     },
     {
       "id": "DECISION-RANK-002",
-      "category": "accepted_tradeoff_with_compensating_strengths",
+      "category": "bundle_wide_google_first_with_accepted_tradeoff",
       "query": "I can tolerate traffic if the society is quiet and strongly reviewed. Show ready-to-move 3BHKs near Bagmane Tech Park under ₹2.4 Cr.",
       "expected_semantics": {
         "bhk": 3,
@@ -2878,7 +2888,7 @@
         "negative_preferences": []
       },
       "fixture_expectation": {
-        "first_id": "mock-quiet-reviewed-3bhk",
+        "first_id": "mock-review-priority-3bhk",
         "includes": [
           "mock-quiet-priority-3bhk",
           "mock-value-priority-3bhk",
@@ -2890,7 +2900,7 @@
     },
     {
       "id": "DECISION-RANK-003",
-      "category": "hard_evidence_gate_then_soft_decision",
+      "category": "hard_evidence_gate_then_bundle_wide_google_order",
       "query": "Only consider ready-to-move 3BHKs near Bagmane Tech Park under ₹2.4 Cr with Google rating at least 4.2. Among those, choose the quieter home even if another has the higher rating.",
       "expected_semantics": {
         "bhk": 3,
@@ -2910,8 +2920,8 @@
       },
       "fixture_expectation": {
         "ordered_prefix": [
-          "mock-quiet-reviewed-3bhk",
           "mock-review-priority-3bhk",
+          "mock-quiet-reviewed-3bhk",
           "mock-value-priority-3bhk"
         ],
         "excludes": [
@@ -2924,7 +2934,7 @@
     },
     {
       "id": "MULTI-OR-001",
-      "category": "shared_society_dual_configuration",
+      "category": "society_anchored_area_dual_configuration",
       "query": "Godrej Air 2BHK or 3BHK",
       "expected_semantics": {
         "society": "Godrej Air",
@@ -2934,11 +2944,11 @@
         ],
         "branches": [
           {
-            "society": "Godrej Air",
+            "area": "Hoodi",
             "bhk": 2
           },
           {
-            "society": "Godrej Air",
+            "area": "Hoodi",
             "bhk": 3
           }
         ]
@@ -2949,7 +2959,10 @@
             "mock-godrej-air-2bhk"
           ],
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
           ]
         ],
         "unique_result_ids": true
@@ -2959,7 +2972,7 @@
     },
     {
       "id": "MULTI-OR-002",
-      "category": "shared_society_three_configuration_alternatives",
+      "category": "society_anchored_area_three_configuration_alternatives",
       "query": "Godrej Air 2BHK or 3BHK or 4BHK",
       "expected_semantics": {
         "society": "Godrej Air",
@@ -2975,7 +2988,10 @@
             "mock-godrej-air-2bhk"
           ],
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
           ]
         ],
         "excludes": [
@@ -2988,7 +3004,7 @@
     },
     {
       "id": "MULTI-OR-003",
-      "category": "shared_society_branch_specific_budgets",
+      "category": "society_anchored_area_branch_specific_budgets",
       "query": "Godrej Air 2BHK under 2 Cr or 3BHK under 2.4 Cr",
       "expected_semantics": {
         "society": "Godrej Air",
@@ -2998,12 +3014,12 @@
         ],
         "branches": [
           {
-            "society": "Godrej Air",
+            "area": "Hoodi",
             "bhk": 2,
             "budget_max": 20000000
           },
           {
-            "society": "Godrej Air",
+            "area": "Hoodi",
             "bhk": 3,
             "budget_max": 24000000
           }
@@ -3015,7 +3031,9 @@
             "mock-godrej-air-2bhk"
           ],
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk"
           ]
         ],
         "unique_result_ids": true
@@ -3097,7 +3115,10 @@
             "mock-godrej-air-2bhk"
           ],
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
           ],
           [
             "mock-prestige-song-3bhk"
@@ -3138,7 +3159,7 @@
     },
     {
       "id": "MULTI-OR-008",
-      "category": "shared_named_place_dual_configuration",
+      "category": "dangling_named_place_bundle_wide_dual_configuration",
       "query": "Near Hoodi Metro, 2BHK or 3BHK",
       "expected_semantics": {
         "bhks": [
@@ -3167,9 +3188,9 @@
             "mock-or-decoy-2-13"
           ],
           [
-            "mock-dual-place-3bhk",
             "mock-quiet-reviewed-3bhk",
             "mock-missing-noise-3bhk",
+            "mock-dual-place-3bhk",
             "mock-godrej-air-3bhk",
             "mock-balanced-commute-3bhk",
             "mock-or-decoy-3-00",
@@ -3192,7 +3213,7 @@
     },
     {
       "id": "MULTI-OR-009",
-      "category": "shared_trailing_named_place_dual_configuration",
+      "category": "dangling_trailing_named_place_bundle_wide_dual_configuration",
       "query": "2BHK near Hoodi Metro or 3BHK",
       "expected_semantics": {
         "bhks": [
@@ -3221,9 +3242,9 @@
             "mock-or-decoy-2-13"
           ],
           [
-            "mock-dual-place-3bhk",
             "mock-quiet-reviewed-3bhk",
             "mock-missing-noise-3bhk",
+            "mock-dual-place-3bhk",
             "mock-godrej-air-3bhk",
             "mock-balanced-commute-3bhk",
             "mock-or-decoy-3-00",
@@ -3425,7 +3446,7 @@
     },
     {
       "id": "REGION-MIX-008",
-      "category": "shared_north_metro_bhk_alternatives",
+      "category": "dangling_metro_bundle_wide_bhk_alternatives",
       "query": "2BHK or 3BHK near Nagawara Metro under 1.8 Cr",
       "fixture": "regional",
       "expected_semantics": {
@@ -3439,12 +3460,12 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-north-value-2bhk",
             "mock-whitefield-value-2bhk",
             "mock-bellandur-value-2bhk",
             "mock-devanahalli-value-2bhk",
             "mock-electronic-city-value-2bhk",
-            "mock-sarjapur-value-2bhk"
+            "mock-sarjapur-value-2bhk",
+            "mock-north-value-2bhk"
           ],
           [
             "mock-north-family-3bhk",
