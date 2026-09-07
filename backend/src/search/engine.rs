@@ -11,7 +11,9 @@ use crate::serving::{
 use crate::state::{SearchRuntimeSnapshot, SEARCH_ENGINE_VERSION};
 
 use super::ast::{CompiledQuery, ConstraintExpr, ConstraintTerm, ResolvedEntityConstraint};
-use super::compiled_plan::{CompiledSearchPlan, GeoScope, ResolvedEntityHandle};
+use super::compiled_plan::{
+    CompiledSearchPlan, GeoCellSearchPolicy, GeoScope, ResolvedEntityHandle,
+};
 use super::geo;
 use super::index::SearchIndex;
 use super::intent::{SearchIntent, SourceSpan};
@@ -19,7 +21,10 @@ use super::query_plan::{self, QueryPlan};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text, slug};
 use super::schema;
 use super::text::{merged_candidate_ids, SearchEvaluationContext};
-use super::{SearchResultCard, SearchResultSet, TextSearch, TextSearchRequest};
+use super::{
+    GeographyMatch, GeographyMatchKind, SearchResultCard, SearchResultSet, TextSearch,
+    TextSearchRequest,
+};
 
 const TANTIVY_RECALL_LIMIT: usize = 128;
 const DIAGNOSTIC_ID_LIMIT: usize = 20;
@@ -343,7 +348,10 @@ impl<'a> SearchEngine<'a> {
             &self.snapshot.bundle.entities,
             &self.snapshot.bundle.edges,
             Some(&self.snapshot.bundle.spatial_index),
-            Some(self.snapshot.market_locality_neighborhood_radius_km),
+            GeoCellSearchPolicy {
+                max_hops: self.snapshot.geo_cell_max_hops,
+                max_distance_km: self.snapshot.geo_cell_max_distance_km,
+            },
         );
         let ast_branches = compiled_plan
             .branches
@@ -483,7 +491,26 @@ impl<'a> SearchEngine<'a> {
             ranking_candidate_ids,
         };
         let serving_facts = Some(&self.snapshot.bundle.fact_index);
-        let branch_candidate_ids = compiled_plan
+        let geography_edges_by_subject = self
+            .snapshot
+            .bundle
+            .edges
+            .iter()
+            .filter(|edge| {
+                edge.edge_type.eq_ignore_ascii_case("in_market_locality")
+                    || edge.edge_type.eq_ignore_ascii_case("occupies_geo_cell")
+            })
+            .fold(
+                HashMap::<&str, Vec<&crate::serving::ServingEdgeRecord>>::new(),
+                |mut by_subject, edge| {
+                    by_subject
+                        .entry(edge.from_entity_id.as_str())
+                        .or_default()
+                        .push(edge);
+                    by_subject
+                },
+            );
+        let branch_candidates = compiled_plan
             .branches
             .iter()
             .map(|branch| {
@@ -491,33 +518,49 @@ impl<'a> SearchEngine<'a> {
                     .snapshot
                     .search_index
                     .recall_constraint_ids(&branch.compiled_query);
-                if let GeoScope::Areas { area_ids, .. } = &branch.geo_scope {
-                    let scoped = area_ids
-                        .iter()
-                        .flat_map(|area_id| {
-                            self.snapshot
-                                .search_index
-                                .property_ids_for_entity_id(area_id)
-                        })
-                        .collect::<HashSet<_>>();
-                    ids.retain(|property_id| scoped.contains(property_id));
-                }
-                if let GeoScope::SocietyNeighborhood { members, .. } = &branch.geo_scope {
-                    let scoped = members
-                        .iter()
-                        .flat_map(|member| {
-                            self.snapshot
-                                .search_index
-                                .property_ids_for_entity_id(&member.society_entity_id)
-                        })
-                        .collect::<HashSet<_>>();
-                    ids.retain(|property_id| scoped.contains(property_id));
-                }
                 if branch_has_required_spatial_predicate(&branch.predicates) {
                     let spatial = geo_candidate_ids.iter().collect::<HashSet<_>>();
                     ids.retain(|property_id| spatial.contains(property_id));
                 }
-                ids
+                let mut geography_matches = HashMap::new();
+                if matches!(branch.geo_scope, GeoScope::Scoped { .. }) {
+                    ids.retain(|property_id| {
+                        let society_id = self
+                            .snapshot
+                            .search_index
+                            .society_entity_id_for_property(property_id)
+                            .map(str::to_string)
+                            .or_else(|| {
+                                self.snapshot
+                                    .property_by_id
+                                    .get(property_id)
+                                    .and_then(|index| self.snapshot.properties.get(*index))
+                                    .map(|property| {
+                                        crate::routes::enrichment::society_node_id(
+                                            &property.society_id,
+                                        )
+                                    })
+                            });
+                        let Some(society_id) = society_id else {
+                            return false;
+                        };
+                        let Some(geography_match) = geography_match_for_property(
+                            &branch.geo_scope,
+                            &society_id,
+                            geography_edges_by_subject
+                                .get(society_id.as_str())
+                                .map(Vec::as_slice)
+                                .unwrap_or_default(),
+                            &self.snapshot.bundle.spatial_index,
+                            snapshot_identity,
+                        ) else {
+                            return false;
+                        };
+                        geography_matches.insert(property_id.clone(), geography_match);
+                        true
+                    });
+                }
+                (ids, geography_matches)
             })
             .collect::<Vec<_>>();
 
@@ -528,8 +571,8 @@ impl<'a> SearchEngine<'a> {
                 compiled_plan
                     .branches
                     .iter()
-                    .zip(&branch_candidate_ids)
-                    .map(|(branch, candidate_ids)| {
+                    .zip(&branch_candidates)
+                    .map(|(branch, (candidate_ids, geography_matches))| {
                         let candidate_indexes = candidate_property_indexes(
                             candidate_ids,
                             Some(&self.snapshot.property_by_id),
@@ -554,10 +597,14 @@ impl<'a> SearchEngine<'a> {
                                     .serving_bundle_version,
                             },
                         });
+                        for result in &mut results {
+                            result.geography_match =
+                                geography_matches.get(&result.card.id).cloned();
+                        }
                         if branch.geo_scope.is_bundle_wide() {
                             sort_by_google_review_quality(&mut results);
                         }
-                        prioritize_exact_society_matches(branch, &mut results);
+                        sort_geography_cohorts(&mut results);
                         results
                     })
                     .collect()
@@ -721,32 +768,170 @@ fn sort_by_google_review_quality(results: &mut [SearchResultCard]) {
     });
 }
 
-fn prioritize_exact_society_matches(
-    branch: &super::compiled_plan::GeoBranch,
-    results: &mut [SearchResultCard],
-) {
-    if !schema::ranking_policy().exact_society_matches_first {
-        return;
-    }
-    let society_ids = branch
-        .resolved_entities
-        .iter()
-        .filter(|entity| {
-            entity.entity_type.eq_ignore_ascii_case("society")
-                && !branch
-                    .constraints
-                    .excluded_societies
-                    .iter()
-                    .any(|excluded| excluded.eq_ignore_ascii_case(&entity.display_name))
-        })
-        .map(|entity| entity.entity_id.as_str())
-        .collect::<HashSet<_>>();
-    if society_ids.is_empty() {
-        return;
-    }
-    results.sort_by_key(|result| {
-        !society_ids.contains(result.card.kg_entity_refs.society_entity_id.as_str())
+fn sort_geography_cohorts(results: &mut [SearchResultCard]) {
+    results.sort_by_key(
+        |result| match result.geography_match.as_ref().map(|value| value.kind) {
+            Some(GeographyMatchKind::ExactSociety) => 0,
+            Some(GeographyMatchKind::SameMarketLocality) => 1,
+            Some(GeographyMatchKind::CellNearby) => 2,
+            None => 3,
+        },
+    );
+}
+
+fn geography_match_for_property(
+    scope: &GeoScope,
+    society_id: &str,
+    edges: &[&crate::serving::ServingEdgeRecord],
+    spatial_index: &crate::serving::SpatialServingIndex,
+    snapshot_identity: &str,
+) -> Option<GeographyMatch> {
+    let GeoScope::Scoped {
+        anchors,
+        market_locality_ids,
+        seed_cells,
+        expanded_cell_paths,
+        max_distance_km,
+        ..
+    } = scope
+    else {
+        return None;
+    };
+    let exact_society = anchors.iter().any(|anchor| {
+        anchor.entity_type.eq_ignore_ascii_case("society") && anchor.entity_id == society_id
     });
+
+    let market_membership = edges.iter().find_map(|edge| {
+        (edge.edge_type.eq_ignore_ascii_case("in_market_locality")
+            && edge.from_entity_id == society_id
+            && market_locality_ids.contains(&edge.to_entity_id))
+        .then(|| validated_runtime_edge_evidence(edge, snapshot_identity))?
+    });
+    let occupied_paths = edges
+        .iter()
+        .filter_map(|edge| {
+            if !edge.edge_type.eq_ignore_ascii_case("occupies_geo_cell")
+                || edge.from_entity_id != society_id
+            {
+                return None;
+            }
+            let occupancy_evidence = validated_runtime_edge_evidence(edge, snapshot_identity)?;
+            let path = expanded_cell_paths.iter().find(|path| {
+                path.cell_ids
+                    .last()
+                    .is_some_and(|cell| cell == &edge.to_entity_id)
+            })?;
+            Some((path, occupancy_evidence))
+        })
+        .collect::<Vec<_>>();
+    let best_path = occupied_paths.iter().min_by(|(left, _), (right, _)| {
+        left.hops
+            .cmp(&right.hops)
+            .then_with(|| left.distance_km.total_cmp(&right.distance_km))
+            .then_with(|| left.cell_ids.cmp(&right.cell_ids))
+    });
+    let distance = geography_candidate_distance(
+        anchors,
+        seed_cells,
+        society_id,
+        spatial_index,
+        snapshot_identity,
+    );
+
+    let (kind, path, hops, mut evidence_refs) = if exact_society {
+        let (path, occupancy) = best_path?;
+        (
+            GeographyMatchKind::ExactSociety,
+            path.cell_ids.clone(),
+            path.hops,
+            occupancy.clone(),
+        )
+    } else if let Some(membership) = market_membership {
+        let (path, hops) = best_path
+            .map(|(path, _)| (path.cell_ids.clone(), path.hops))
+            .unwrap_or_default();
+        (
+            GeographyMatchKind::SameMarketLocality,
+            path,
+            hops,
+            membership,
+        )
+    } else {
+        let (path, occupancy) = best_path?;
+        let distance = distance.as_ref()?;
+        if distance.distance_km > *max_distance_km {
+            return None;
+        }
+        (
+            GeographyMatchKind::CellNearby,
+            path.cell_ids.clone(),
+            path.hops,
+            occupancy.clone(),
+        )
+    };
+    if let Some((path, _)) = best_path {
+        extend_unique_refs(&mut evidence_refs, path.supporting_evidence.clone());
+    }
+    if let Some(distance) = &distance {
+        extend_unique_refs(&mut evidence_refs, distance.evidence_refs.clone());
+    }
+    Some(GeographyMatch {
+        kind,
+        cell_path: path,
+        hops,
+        distance_km: distance.map(|distance| distance.distance_km),
+        evidence_refs,
+    })
+}
+
+fn geography_candidate_distance(
+    anchors: &[super::compiled_plan::GeoAnchor],
+    seed_cells: &[super::compiled_plan::GeoCellSeed],
+    society_id: &str,
+    spatial_index: &crate::serving::SpatialServingIndex,
+    snapshot_identity: &str,
+) -> Option<crate::serving::SpatialDistance> {
+    let non_area_anchors = anchors
+        .iter()
+        .filter(|anchor| !anchor.entity_type.eq_ignore_ascii_case("area"))
+        .map(|anchor| anchor.entity_id.as_str())
+        .collect::<Vec<_>>();
+    if !non_area_anchors.is_empty() {
+        return non_area_anchors
+            .into_iter()
+            .filter_map(|anchor| {
+                spatial_index.distance_between(anchor, society_id, snapshot_identity)
+            })
+            .min_by(|left, right| left.distance_km.total_cmp(&right.distance_km));
+    }
+    seed_cells
+        .iter()
+        .filter_map(|seed| {
+            spatial_index.distance_from_entity_to_area(society_id, &seed.cell_id, snapshot_identity)
+        })
+        .min_by(|left, right| left.distance_km.total_cmp(&right.distance_km))
+}
+
+fn validated_runtime_edge_evidence(
+    edge: &crate::serving::ServingEdgeRecord,
+    snapshot_identity: &str,
+) -> Option<Vec<crate::serving::EvidenceRef>> {
+    let derivation = edge.derivation.as_ref()?;
+    edge.validate_derivation(snapshot_identity).ok()?;
+    Some(vec![crate::serving::EvidenceRef::for_derivation(
+        derivation,
+    )])
+}
+
+fn extend_unique_refs(
+    target: &mut Vec<crate::serving::EvidenceRef>,
+    values: Vec<crate::serving::EvidenceRef>,
+) {
+    for value in values {
+        if !target.contains(&value) {
+            target.push(value);
+        }
+    }
 }
 
 fn google_review_quality(card: &crate::models::PropertyCard) -> Option<f64> {

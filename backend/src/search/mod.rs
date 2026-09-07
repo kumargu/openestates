@@ -19,7 +19,8 @@ pub mod text;
 pub use ast::{CompiledQuery, ConstraintExpr, ConstraintTerm, PredicateFamily, PredicatePolarity};
 pub use capabilities::SearchCapabilityIndex;
 pub use compiled_plan::{
-    BoolExpr, BranchId, CompiledSearchPlan, GeoBranch, GeoScope, ResolvedEntityHandle,
+    BoolExpr, BranchId, CompiledSearchPlan, GeoAnchor, GeoBranch, GeoCellPath, GeoCellSearchPolicy,
+    GeoCellSeed, GeoScope, ResolvedEntityHandle,
 };
 pub use engine::{
     CandidateScore, SearchDiagnostics, SearchEngine, SearchEvidenceGap, SearchLayerTiming,
@@ -115,6 +116,28 @@ pub struct ConfidenceScore {
     pub components: Vec<ConfidenceComponent>,
 }
 
+/// How a branch's evidenced geography admitted and ordered a result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GeographyMatchKind {
+    ExactSociety,
+    SameMarketLocality,
+    CellNearby,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeographyMatch {
+    pub kind: GeographyMatchKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_path: Vec<String>,
+    pub hops: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub distance_km: Option<f64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_refs: Vec<crate::serving::EvidenceRef>,
+}
+
 /// A search result that includes full PropertyCard data plus match info.
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchResultCard {
@@ -127,6 +150,8 @@ pub struct SearchResultCard {
     pub match_tier: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tradeoff_label: Option<String>,
+    #[serde(rename = "geographyMatch", skip_serializing_if = "Option::is_none")]
+    pub geography_match: Option<GeographyMatch>,
     /// Structured match explanation — present when query has preferences.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub match_explanation: Option<MatchExplanation>,

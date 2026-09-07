@@ -606,6 +606,13 @@ impl ConstraintExpr {
         });
     }
 
+    pub fn drop_area_includes(&mut self) {
+        let expr = std::mem::replace(self, Self::match_all());
+        *self = remove_positive_terms(expr, false, &|term| {
+            matches!(term, ConstraintTerm::Area { .. })
+        });
+    }
+
     pub fn has_budget_max(&self) -> bool {
         has_positive_budget_max(self, false)
     }

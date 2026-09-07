@@ -77,6 +77,61 @@
   names were used only to inspect this internal data gate and are not part of
   search/API output.
 
+### Verified geo-cell runtime checkpoint
+
+- Search geography now has one runtime representation: `GeoScope::Scoped`
+  carries resolved anchors, buyer market-locality IDs, evidenced seed cells,
+  bounded expanded cell paths, supporting evidence, and the config-owned
+  distance cap; `GeoScope::BundleWide` remains the only fallback. The former
+  coordinate-only society-neighborhood model and runtime market-locality
+  adjacency path are deleted.
+- Each branch recalls already hard-eligible inventory in three stable cohorts:
+  exact society, same buyer market locality, then qualified geo-cell nearby.
+  Cell traversal consumes only snapshot-validated `occupies_geo_cell`,
+  `covers_geo_cell`, and `adjacent_area` derivations, stops after two hops or
+  4 km, and rejects disconnected, over-distance, or unevidenced candidates.
+  Society/place anchors measure from their sourced footprint or qualified
+  point; market-area anchors measure from seed-cell coverage.
+- Positive society and area terms establish branch geography but are removed
+  only from the execution query's hard eligibility expression. The
+  authoritative branch plan retains the original predicates, IDs, spans, and
+  resolved handles for revision and proof projection. The revision API fixture
+  caught and fixed an intermediate implementation that had discarded those
+  predicates from the plan itself.
+- Hard BHK, budget, status, exclusion, named-place distance, and evidence
+  predicates still evaluate before geography cohort ordering. Existing Google
+  ordering is stable within each cohort, cross-branch results still round-robin,
+  and bundle-wide queries remain unchanged.
+- Search results now carry internal `geographyMatch` metadata with
+  `exact_society`, `same_market_locality`, or `cell_nearby`, plus cell path,
+  hop count, optional distance, and immutable evidence references. No OSM cell
+  name is serialized and no frontend or buyer-copy change was made. Runtime
+  indexes relevant topology edges once per request rather than scanning the
+  complete edge bundle for every candidate.
+- The compiler table proves same-cell, one-hop, bounded two-hop,
+  over-distance, disconnected, and multi-cell behavior. The frozen controlled
+  bank now has 67 scenarios, adding bare society, exact-over-budget, named
+  market-locality, named-place distance, chained Godrej Air/Waterford,
+  disconnected Prestige Song, and bundle-wide BHK alternatives. The complete
+  conversational contract passed 13/13; revision API passed 3/3; efficiency
+  passed 11/11; focused compiler passed 1/1; focused topology backfill passed
+  2/2.
+- The opt-in materializer-to-Parquet-to-runtime-to-API contract passed against
+  isolated r11 materialization `f2edea91-248c-4179-9266-e2184ed408d2`. It
+  verifies branch-owned paths, exact/same-market/cell-nearby ordering, and
+  evidence identities under the immutable bundle version.
+- Live r11 checks preserve the Godrej Air exact pair followed by the existing
+  same-Whitefield prefix; the under-₹2Cr branch rejects the over-budget exact
+  row and starts with Sumadhura Nandanam. Prestige Waterford remains exact
+  first. Chained branches retain ownership and round-robin. SNN Clermont adds
+  only evidenced nearby homes within two hops and 4 km, while bundle-wide
+  `2BHK or 3BHK` emits no geography metadata.
+- Final gates passed: `cargo check --all-targets`, `cargo fmt --all -- --check`,
+  query-bank JSON validation, and `git diff --check`. The hardcoding audit is
+  unchanged at 330 warning-only findings, 28 fact-key comparisons, and zero
+  blocked aliases; no new production search finding was introduced. The r11
+  child remains unpromoted and no main-lake or production pointer changed.
+
 ## Consolidated continuation plan — Issues 118, 123, and 124
 
 - Reset recorded: 2026-09-06 Asia/Kolkata

@@ -738,16 +738,16 @@ mod tests {
             raw_text: "Fixture Locality".to_string(),
         };
         plan.branches[0].source_spans = vec![source_span.clone()];
-        plan.branches[0].geo_scope = GeoScope::Areas {
-            area_ids: vec![area_id.to_string()],
-            supporting_market_locality_edges: vec![crate::serving::ServingEdgeRecord {
-                from_entity_id: "place:fixture".to_string(),
-                edge_type: "in_market_locality".to_string(),
-                to_entity_id: area_id.to_string(),
-                confidence: 0.9,
-                source_type: "OpenStreetMap".to_string(),
-                derivation: None,
+        plan.branches[0].geo_scope = GeoScope::Scoped {
+            anchors: vec![crate::search::GeoAnchor {
+                entity_id: "place:fixture".to_string(),
+                entity_type: "place".to_string(),
             }],
+            market_locality_ids: vec![area_id.to_string()],
+            seed_cells: Vec::new(),
+            expanded_cell_paths: Vec::new(),
+            supporting_evidence: Vec::new(),
+            max_distance_km: 4.0,
         };
         plan.branches[0].resolved_entities = vec![ResolvedEntityHandle {
             entity_id: "place:fixture".to_string(),

@@ -4637,6 +4637,105 @@
       "utterance": "Also consider Sarjapur",
       "expected_operation": "expand",
       "expected_outcome": "require_checkpoint"
+    },
+    {
+      "id": "GEO-CELL-001",
+      "category": "bare_society_geo_cell_recall",
+      "query": "Godrej Air",
+      "expected_semantics": {"society": "Godrej Air"},
+      "fixture_expectation": {
+        "first_id": "geo-air-2",
+        "includes": ["geo-alpha-prime-3", "geo-same-cell-3", "geo-waterford-3", "geo-two-hop-3"],
+        "excludes": ["geo-far-3", "geo-song-3"]
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
+    },
+    {
+      "id": "GEO-CELL-002",
+      "category": "exact_society_rejected_by_budget",
+      "query": "Godrej Air 2BHK under 2Cr",
+      "expected_semantics": {"society": "Godrej Air", "bhk": 2, "budget_max": 20000000},
+      "fixture_expectation": {
+        "first_id": "geo-alpha-value-2",
+        "excludes": ["geo-air-2"]
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
+    },
+    {
+      "id": "GEO-CELL-003",
+      "category": "named_market_locality_geo_cell_recall",
+      "query": "3BHK in Alpha under 2.5Cr",
+      "expected_semantics": {"area": "Alpha", "bhk": 3, "budget_max": 25000000, "allows_cell_nearby": true},
+      "fixture_expectation": {
+        "ordered_prefix": ["geo-air-3", "geo-alpha-prime-3"],
+        "includes": ["geo-same-cell-3", "geo-waterford-3", "geo-two-hop-3"],
+        "excludes": ["geo-far-3", "geo-song-3"]
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
+    },
+    {
+      "id": "GEO-CELL-004",
+      "category": "named_place_distance_before_geo_cohort",
+      "query": "3BHK within 1 km of Anchor School under 2.5Cr",
+      "expected_semantics": {"bhk": 3, "near": "Anchor School", "distance_max_km": 1.0, "budget_max": 25000000},
+      "fixture_expectation": {
+        "includes": ["geo-air-3", "geo-alpha-prime-3", "geo-same-cell-3"],
+        "excludes": ["geo-waterford-3", "geo-two-hop-3", "geo-far-3", "geo-song-3"]
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
+    },
+    {
+      "id": "GEO-CELL-005",
+      "category": "godrej_waterford_chained_geo_branches",
+      "query": "Godrej Air 2BHK or Prestige Waterford 3BHK",
+      "expected_semantics": {
+        "branches": [
+          {"society": "Godrej Air", "bhk": 2, "allows_cell_nearby": true},
+          {"society": "Prestige Waterford", "bhk": 3, "allows_cell_nearby": true}
+        ]
+      },
+      "fixture_expectation": {
+        "result_set_ordered_prefixes": [["geo-air-2"], ["geo-waterford-3"]],
+        "non_empty_result_sets": 2,
+        "unique_result_ids": true
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
+    },
+    {
+      "id": "GEO-CELL-006",
+      "category": "disconnected_prestige_song_branch",
+      "query": "Godrej Air 2BHK or Prestige Song of the South 3BHK",
+      "expected_semantics": {
+        "branches": [
+          {"society": "Godrej Air", "bhk": 2, "allows_cell_nearby": true},
+          {"society": "Prestige Song of the South", "bhk": 3, "allows_cell_nearby": true}
+        ]
+      },
+      "fixture_expectation": {
+        "result_set_ordered_prefixes": [["geo-air-2"], ["geo-song-3"]],
+        "non_empty_result_sets": 2,
+        "unique_result_ids": true
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
+    },
+    {
+      "id": "GEO-CELL-007",
+      "category": "bundle_wide_configuration_branches_unchanged",
+      "query": "2BHK or 3BHK",
+      "expected_semantics": {"bhks": [2, 3]},
+      "fixture_expectation": {
+        "non_empty_result_sets": 2,
+        "unique_result_ids": true,
+        "includes": ["geo-air-2", "geo-air-3", "geo-song-3"]
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
     }
   ]
 }

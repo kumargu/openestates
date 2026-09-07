@@ -699,6 +699,7 @@ impl TextSearch {
                         match_reason,
                         match_tier: "exact".to_string(),
                         tradeoff_label: None,
+                        geography_match: None,
                         match_explanation,
                         proof_focuses,
                         verified_matches,

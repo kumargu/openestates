@@ -10,11 +10,11 @@ use backend::search::{
     SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
 };
 use backend::serving::{
-    derive_proximity_records, materialize_canonical_spatial_identities, EvidenceId,
-    LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest, ServingEntityAliasIndex,
-    ServingEntityAliasRecord, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
-    ServingSearchMetadataRecord, SourceObservation, SpatialServingIndex, TantivyRecallIndex,
-    PROVIDER_BINDING_EDGE,
+    derive_proximity_records, materialize_canonical_spatial_identities, DerivedEvidence,
+    EvidenceId, EvidenceRef, LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest,
+    ServingEntityAliasIndex, ServingEntityAliasRecord, ServingEntityRecord, ServingFactIndex,
+    ServingFactRecord, ServingSearchMetadataRecord, SourceObservation, SpatialServingIndex,
+    TantivyRecallIndex, PROVIDER_BINDING_EDGE,
 };
 use backend::state::SearchRuntimeSnapshot;
 use chrono::{TimeZone, Utc};
@@ -75,6 +75,7 @@ enum FixtureKind {
     MultiOr,
     Proximity,
     Regional,
+    GeoCells,
 }
 
 #[derive(Deserialize)]
@@ -99,6 +100,7 @@ struct ExpectedSemantics {
     accepted_tradeoffs: Option<Vec<String>>,
     missing_optional_evidence: Option<MissingOptionalEvidence>,
     numeric_min: Option<NumericExpectation>,
+    allows_cell_nearby: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -115,6 +117,7 @@ struct ExpectedBranch {
     society: Option<String>,
     bhk: Option<u32>,
     budget_max: Option<u64>,
+    allows_cell_nearby: Option<bool>,
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -270,7 +273,7 @@ fn frozen_product_scenarios_execute_against_controlled_inventory() {
                 .expect("controlled search case follows the typed contract")
         })
         .collect::<Vec<_>>();
-    assert_eq!(cases.len(), 60, "controlled bank size changed");
+    assert_eq!(cases.len(), 67, "controlled bank size changed");
 
     let unique_ids = cases
         .iter()
@@ -291,6 +294,7 @@ fn frozen_product_scenarios_execute_against_controlled_inventory() {
             FixtureKind::MultiOr,
             FixtureKind::Proximity,
             FixtureKind::Regional,
+            FixtureKind::GeoCells,
         ]),
         "every controlled fixture profile must remain represented"
     );
@@ -743,9 +747,9 @@ fn sourced_topology_never_erases_logical_spatial_branches() {
         ));
     }
     builder.add_edge(
-        "area:eastfield",
-        "adjacent_market_locality",
-        "area:nextfield",
+        "area:cell:area-eastfield",
+        "adjacent_area",
+        "area:cell:area-nextfield",
     );
     let fixture = builder.build(false);
 
@@ -836,8 +840,16 @@ fn geography_first_execution_prioritizes_eligible_exact_societies() {
     ] {
         builder.add_home(spec);
     }
-    builder.add_edge("area:alpha", "adjacent_market_locality", "area:beta");
-    builder.add_edge("area:beta", "adjacent_market_locality", "area:gamma");
+    builder.add_edge(
+        "area:cell:area-alpha",
+        "adjacent_area",
+        "area:cell:area-beta",
+    );
+    builder.add_edge(
+        "area:cell:area-beta",
+        "adjacent_area",
+        "area:cell:area-gamma",
+    );
     builder.add_alias("Air Homes", "Godrej Air");
     let fixture = builder.build(false);
 
@@ -851,13 +863,15 @@ fn geography_first_execution_prioritizes_eligible_exact_societies() {
         ["geo-air", "geo-alpha-prime"]
     );
     assert_eq!(
-        bare.compiled_plan.branches[0].geo_scope.area_ids(),
+        bare.compiled_plan.branches[0]
+            .geo_scope
+            .market_locality_ids(),
         ["area:alpha"]
     );
     assert!(matches!(
         &bare.compiled_plan.branches[0].geo_scope,
-        backend::search::GeoScope::Areas { supporting_market_locality_edges, .. }
-            if !supporting_market_locality_edges.is_empty()
+        backend::search::GeoScope::Scoped { seed_cells, supporting_evidence, .. }
+            if !seed_cells.is_empty() && !supporting_evidence.is_empty()
     ));
 
     let alias = fixture.search_output("Air Homes");
@@ -940,6 +954,76 @@ fn geography_first_execution_prioritizes_eligible_exact_societies() {
 }
 
 #[test]
+fn geo_cell_cohorts_keep_paths_branch_owned_and_evidenced() {
+    let fixture = MockSearchFixture::for_kind(FixtureKind::GeoCells);
+    let output = fixture.search_output("Godrej Air 3BHK");
+    let by_id = output
+        .results
+        .iter()
+        .map(|result| (result.card.id.as_str(), result))
+        .collect::<HashMap<_, _>>();
+    let expected = [
+        (
+            "geo-air-3",
+            backend::search::GeographyMatchKind::ExactSociety,
+            0,
+        ),
+        (
+            "geo-alpha-prime-3",
+            backend::search::GeographyMatchKind::SameMarketLocality,
+            0,
+        ),
+        (
+            "geo-same-cell-3",
+            backend::search::GeographyMatchKind::CellNearby,
+            0,
+        ),
+        (
+            "geo-waterford-3",
+            backend::search::GeographyMatchKind::CellNearby,
+            1,
+        ),
+        (
+            "geo-two-hop-3",
+            backend::search::GeographyMatchKind::CellNearby,
+            2,
+        ),
+    ];
+    for (id, kind, hops) in expected {
+        let geography = by_id[id]
+            .geography_match
+            .as_ref()
+            .unwrap_or_else(|| panic!("{id} keeps structured geography metadata"));
+        assert_eq!(geography.kind, kind, "{id}");
+        assert_eq!(geography.hops, hops, "{id}");
+        assert!(!geography.cell_path.is_empty(), "{id}");
+        assert!(!geography.evidence_refs.is_empty(), "{id}");
+        assert!(geography.distance_km.is_some(), "{id}");
+        assert!(geography
+            .cell_path
+            .iter()
+            .all(|cell| !cell.to_ascii_lowercase().contains("ward")));
+    }
+    assert!(!by_id.contains_key("geo-far-3"));
+    assert!(!by_id.contains_key("geo-song-3"));
+
+    let chained = fixture.search_output("Godrej Air 2BHK or Prestige Waterford 3BHK");
+    assert_eq!(chained.result_sets.len(), 2);
+    assert_eq!(chained.result_sets[0].branch_id, "branch-1");
+    assert_eq!(chained.result_sets[0].results[0].card.id, "geo-air-2");
+    assert_eq!(chained.result_sets[1].branch_id, "branch-2");
+    assert_eq!(chained.result_sets[1].results[0].card.id, "geo-waterford-3");
+    let serialized = serde_json::to_value(&chained.results[0]).unwrap();
+    assert_eq!(
+        serialized["geographyMatch"]["kind"],
+        serde_json::json!("exact_society")
+    );
+    assert!(serialized["geographyMatch"]["evidenceRefs"]
+        .as_array()
+        .is_some_and(|refs| !refs.is_empty()));
+}
+
+#[test]
 fn exact_society_priority_runs_after_hard_eligibility_and_survives_neighborhood_fallback() {
     let mut hard_builder = FixtureBuilder::default();
     hard_builder.add_home(
@@ -1009,19 +1093,17 @@ fn exact_society_priority_runs_after_hard_eligibility_and_survives_neighborhood_
     });
     let dangling_fixture = dangling_builder.build(false);
     let dangling = dangling_fixture.search_output("Dangling Anchor 2BHK under 2Cr");
-    assert!(matches!(
-        &dangling.compiled_plan.branches[0].geo_scope,
-        backend::search::GeoScope::SocietyNeighborhood { members, radius_km, .. }
-            if members.len() == 2 && *radius_km == 4.0
-    ));
+    assert!(dangling.compiled_plan.branches[0]
+        .geo_scope
+        .is_bundle_wide());
     assert_eq!(
         dangling
             .results
             .iter()
             .map(|result| result.card.id.as_str())
             .collect::<Vec<_>>(),
-        ["dangling-anchor", "bundle-star"],
-        "qualified neighborhood fallback keeps the eligible exact society ahead of nearby alternatives"
+        ["bundle-star", "dangling-anchor"],
+        "missing geo-cell evidence falls back bundle-wide without coordinate-only scoping"
     );
 }
 
@@ -1782,7 +1864,7 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
             case.id,
             output.areas
         );
-        if semantics.branches.is_none() {
+        if semantics.branches.is_none() && semantics.allows_cell_nearby != Some(true) {
             assert!(
                 output
                     .result_sets
@@ -1959,14 +2041,14 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
             assert!(!results.is_empty(), "{} branch {index} is empty", case.id);
             assert!(
                 results.iter().all(|result| {
-                    branch
-                        .area
-                        .as_ref()
-                        .is_none_or(|area| result.area.eq_ignore_ascii_case(area))
-                        && branch
-                            .society
+                    (branch.allows_cell_nearby == Some(true)
+                        || (branch
+                            .area
                             .as_ref()
-                            .is_none_or(|society| result.society.eq_ignore_ascii_case(society))
+                            .is_none_or(|area| result.area.eq_ignore_ascii_case(area))
+                            && branch.society.as_ref().is_none_or(|society| {
+                                result.society.eq_ignore_ascii_case(society)
+                            })))
                         && branch.bhk.is_none_or(|bhk| result.bhk == bhk)
                         && branch
                             .budget_max
@@ -2114,8 +2196,137 @@ impl MockSearchFixture {
                 regional_inventory: true,
                 ..FixtureProfile::default()
             },
+            FixtureKind::GeoCells => return Self::geo_cells(),
         };
         Self::build(profile)
+    }
+
+    fn geo_cells() -> Self {
+        let mut builder = FixtureBuilder::default();
+        for market in ["Alpha", "Beta", "Gamma", "Delta"] {
+            builder.add_area(market);
+        }
+        builder.add_geo_cell("area:cell:a", 77.00, 77.01);
+        builder.add_geo_cell("area:cell:b", 77.01, 77.02);
+        builder.add_geo_cell("area:cell:c", 77.02, 77.03);
+        builder.add_geo_cell("area:cell:far", 77.10, 77.11);
+        builder.add_geo_cell("area:cell:disconnected", 78.00, 78.01);
+        builder.add_place("Anchor School", "school", 12.905, 77.005);
+        for spec in [
+            HomeSpec::new(
+                "geo-air-2",
+                "Godrej Air",
+                "Alpha",
+                2,
+                21_000_000,
+                12.905,
+                77.005,
+            ),
+            HomeSpec::new(
+                "geo-air-3",
+                "Godrej Air",
+                "Alpha",
+                3,
+                23_000_000,
+                12.905,
+                77.005,
+            ),
+            HomeSpec::new(
+                "geo-alpha-value-2",
+                "Alpha Value",
+                "Alpha",
+                2,
+                19_000_000,
+                12.905,
+                77.006,
+            ),
+            HomeSpec::new(
+                "geo-alpha-prime-3",
+                "Alpha Prime",
+                "Alpha",
+                3,
+                22_000_000,
+                12.905,
+                77.007,
+            ),
+            HomeSpec::new(
+                "geo-same-cell-3",
+                "Same Cell",
+                "Beta",
+                3,
+                20_000_000,
+                12.905,
+                77.008,
+            ),
+            HomeSpec::new(
+                "geo-waterford-3",
+                "Prestige Waterford",
+                "Beta",
+                3,
+                24_000_000,
+                12.905,
+                77.015,
+            ),
+            HomeSpec::new(
+                "geo-two-hop-3",
+                "Two Hop",
+                "Gamma",
+                3,
+                20_000_000,
+                12.905,
+                77.025,
+            ),
+            HomeSpec::new(
+                "geo-far-3",
+                "Far Cell",
+                "Gamma",
+                3,
+                18_000_000,
+                12.905,
+                77.105,
+            ),
+            HomeSpec::new(
+                "geo-song-3",
+                "Prestige Song of the South",
+                "Delta",
+                3,
+                20_000_000,
+                12.905,
+                78.005,
+            ),
+        ] {
+            builder.add_home(spec);
+        }
+        for (subject, cell) in [
+            ("place:anchor-school", "area:cell:a"),
+            ("society:godrej-air", "area:cell:a"),
+            ("society:alpha-value", "area:cell:a"),
+            ("society:alpha-prime", "area:cell:a"),
+            ("society:same-cell", "area:cell:a"),
+            ("society:prestige-waterford", "area:cell:b"),
+            ("society:two-hop", "area:cell:c"),
+            ("society:far-cell", "area:cell:far"),
+            (
+                "society:prestige-song-of-the-south",
+                "area:cell:disconnected",
+            ),
+        ] {
+            builder.add_edge(subject, "occupies_geo_cell", cell);
+        }
+        for (market, cell) in [
+            ("area:alpha", "area:cell:a"),
+            ("area:beta", "area:cell:a"),
+            ("area:beta", "area:cell:b"),
+            ("area:gamma", "area:cell:c"),
+            ("area:gamma", "area:cell:far"),
+            ("area:delta", "area:cell:disconnected"),
+        ] {
+            builder.add_edge(market, "covers_geo_cell", cell);
+        }
+        builder.add_edge("area:cell:a", "adjacent_area", "area:cell:b");
+        builder.add_edge("area:cell:b", "adjacent_area", "area:cell:c");
+        builder.add_edge("area:cell:b", "adjacent_area", "area:cell:far");
+        builder.build(true)
     }
 
     fn build(profile: FixtureProfile) -> Self {
@@ -2655,6 +2866,21 @@ impl FixtureBuilder {
         self.entities.push(entity(&entity_id, "area", name));
     }
 
+    fn add_geo_cell(&mut self, entity_id: &str, min_lon: f64, max_lon: f64) {
+        let mut cell = entity(entity_id, "area", "Internal search cell");
+        cell.root_source = Some("openstreetmap".to_string());
+        self.entities.push(cell);
+        let mut fact = serving_fact(
+            entity_id,
+            "geo.geometry_geojson",
+            FactValue::Text(format!(
+                "{{\"type\":\"Polygon\",\"coordinates\":[[[{min_lon},12.9],[{max_lon},12.9],[{max_lon},12.91],[{min_lon},12.91],[{min_lon},12.9]]]}}"
+            )),
+        );
+        fact.source_type = "OpenStreetMap".to_string();
+        self.facts.push(fact);
+    }
+
     fn add_place(&mut self, name: &str, category: &str, latitude: f64, longitude: f64) {
         let entity_id = format!("place:{}", slug(name));
         self.add_place_with_id(&entity_id, name, category, latitude, longitude);
@@ -2858,6 +3084,8 @@ impl FixtureBuilder {
 
     fn build(mut self, derive_proximity: bool) -> MockSearchFixture {
         let mut edges = self.edges;
+        qualify_fixture_edges(&mut edges, &self.facts);
+        add_fixture_geo_cells(&mut self.entities, &self.facts, &mut edges);
         let identity_index =
             ServingFactIndex::from_records(self.facts.clone(), self.metadata.clone());
         let identity = materialize_canonical_spatial_identities(
@@ -2960,6 +3188,135 @@ impl FixtureBuilder {
             properties: self.properties,
             bundle: Arc::new(bundle),
         }
+    }
+}
+
+fn qualify_fixture_edges(
+    edges: &mut [backend::serving::ServingEdgeRecord],
+    facts: &[ServingFactRecord],
+) {
+    for edge in edges.iter_mut().filter(|edge| {
+        edge.derivation.is_none()
+            && matches!(
+                edge.edge_type.as_str(),
+                "in_market_locality" | "adjacent_area" | "occupies_geo_cell" | "covers_geo_cell"
+            )
+    }) {
+        let Some(observation) = facts
+            .iter()
+            .filter(|fact| {
+                fact.entity_id == edge.from_entity_id || fact.entity_id == edge.to_entity_id
+            })
+            .find_map(|fact| fact.observation.as_ref())
+            .or_else(|| facts.iter().find_map(|fact| fact.observation.as_ref()))
+        else {
+            continue;
+        };
+        edge.derivation = Some(
+            DerivedEvidence::new(
+                "conversational-semantics-mock",
+                &edge.from_entity_id,
+                Some(edge.to_entity_id.clone()),
+                &edge.edge_type,
+                "controlled_relation",
+                Some(1.0),
+                Some("boolean".to_string()),
+                "controlled-search-fixture-v1",
+                edge.confidence,
+                vec![EvidenceRef::for_observation(
+                    "conversational-semantics-mock",
+                    observation,
+                )],
+            )
+            .expect("controlled edge evidence is valid"),
+        );
+    }
+}
+
+fn add_fixture_geo_cells(
+    entities: &mut Vec<ServingEntityRecord>,
+    facts: &[ServingFactRecord],
+    edges: &mut Vec<backend::serving::ServingEdgeRecord>,
+) {
+    let memberships = edges
+        .iter()
+        .filter(|edge| edge.edge_type == "in_market_locality" && edge.derivation.is_some())
+        .cloned()
+        .collect::<Vec<_>>();
+    for membership in memberships {
+        let cell_id = format!("area:cell:{}", slug(&membership.to_entity_id));
+        if !entities.iter().any(|entity| entity.entity_id == cell_id) {
+            let mut cell = entity(&cell_id, "area", "Internal search cell");
+            cell.root_source = Some("openstreetmap".to_string());
+            entities.push(cell);
+        }
+        let Some(subject_observation) = facts
+            .iter()
+            .filter(|fact| fact.entity_id == membership.from_entity_id)
+            .find_map(|fact| fact.observation.as_ref())
+        else {
+            continue;
+        };
+        if !edges.iter().any(|edge| {
+            edge.from_entity_id == membership.from_entity_id
+                && edge.edge_type == "occupies_geo_cell"
+        }) {
+            edges.push(fixture_derived_edge(
+                &membership.from_entity_id,
+                "occupies_geo_cell",
+                &cell_id,
+                "qualified_point_containment",
+                vec![EvidenceRef::for_observation(
+                    "conversational-semantics-mock",
+                    subject_observation,
+                )],
+            ));
+        }
+        if !edges.iter().any(|edge| {
+            edge.from_entity_id == membership.to_entity_id && edge.edge_type == "covers_geo_cell"
+        }) {
+            let membership_derivation = membership
+                .derivation
+                .as_ref()
+                .expect("qualified fixture membership");
+            edges.push(fixture_derived_edge(
+                &membership.to_entity_id,
+                "covers_geo_cell",
+                &cell_id,
+                "member_geo_cell_coverage",
+                vec![EvidenceRef::for_derivation(membership_derivation)],
+            ));
+        }
+    }
+}
+
+fn fixture_derived_edge(
+    from: &str,
+    relation: &str,
+    to: &str,
+    metric: &str,
+    input_evidence: Vec<EvidenceRef>,
+) -> backend::serving::ServingEdgeRecord {
+    let derivation = DerivedEvidence::new(
+        "conversational-semantics-mock",
+        from,
+        Some(to.to_string()),
+        relation,
+        metric,
+        Some(1.0),
+        Some("boolean".to_string()),
+        "controlled-search-fixture-v1",
+        0.9,
+        input_evidence,
+    )
+    .expect("controlled geo-cell evidence is valid");
+    backend::serving::ServingEdgeRecord {
+        from_entity_id: from.to_string(),
+        edge_type: relation.to_string(),
+        to_entity_id: to.to_string(),
+        confidence: 0.9,
+        source_type: "ControlledGeoCell".to_string(),
+        derivation: Some(derivation),
     }
 }
 

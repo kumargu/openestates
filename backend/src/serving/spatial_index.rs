@@ -315,6 +315,53 @@ impl SpatialServingIndex {
         })
     }
 
+    /// Measure an entity against an area footprint while preserving the
+    /// qualified geometry/coordinate observations used by the measurement.
+    /// This is the search-time distance primitive for bounded geo-cell
+    /// traversal; it never treats a centroid as a sourced point.
+    pub fn distance_from_entity_to_area(
+        &self,
+        entity_id: &str,
+        area_id: &str,
+        snapshot_identity: &str,
+    ) -> Option<SpatialDistance> {
+        let area = self.geometry.feature(area_id)?;
+        if matches!(area.geometry, SpatialGeometry::Point(_)) {
+            return self.distance_between(entity_id, area_id, snapshot_identity);
+        }
+        if self
+            .geometry
+            .feature(entity_id)
+            .is_some_and(|feature| !matches!(feature.geometry, SpatialGeometry::Point(_)))
+        {
+            return self.distance_between(entity_id, area_id, snapshot_identity);
+        }
+        let entity = self.point_for_entity(entity_id)?;
+        let distance_km =
+            self.geometry
+                .distance_to_coordinate_km(area_id, entity.latitude, entity.longitude)?;
+        let area_observation = area.observation.as_ref()?;
+        let mut evidence_refs = point_evidence_refs([entity], snapshot_identity)?;
+        evidence_refs.push(EvidenceRef::for_observation(
+            snapshot_identity,
+            area_observation,
+        ));
+        Some(SpatialDistance {
+            distance_km,
+            metric: "trusted_point_to_footprint_distance",
+            confidence: entity.confidence.min(area.confidence),
+            source_type: entity
+                .source_type
+                .clone()
+                .or_else(|| Some(area.source_type.clone())),
+            source_url: entity
+                .source_url
+                .clone()
+                .or_else(|| area.source_url.clone()),
+            evidence_refs,
+        })
+    }
+
     pub fn footprint_evidence_refs(
         &self,
         entity_ids: &[&str],

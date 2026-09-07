@@ -10,16 +10,16 @@ use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
 use backend::api::build_app_router_with_lake;
 use backend::graph::GraphIndex;
-use backend::knowledge::KnowledgeGraph;
+use backend::knowledge::{FactValue, KnowledgeGraph};
 use backend::lake::LakeStore;
 use backend::models::Property;
 use backend::search::geo::GeoSearchIndex;
 use backend::search::{SearchCapabilityIndex, SearchIndex};
 use backend::security::ExecutionLanes;
 use backend::serving::{
-    LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest, ServingEdgeRecord,
-    ServingEntityAliasIndex, ServingEntityRecord, ServingFactIndex, SpatialServingIndex,
-    TantivyRecallIndex,
+    DerivedEvidence, EvidenceRef, LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest,
+    ServingEdgeRecord, ServingEntityAliasIndex, ServingEntityRecord, ServingFactIndex,
+    ServingFactRecord, SourceObservation, SpatialServingIndex, TantivyRecallIndex,
 };
 use backend::state::{AppState, SearchResponseCache, SearchRuntimeSnapshot};
 use chrono::{TimeZone, Utc};
@@ -271,17 +271,58 @@ fn test_bundle(root: &std::path::Path) -> LoadedServingBundle {
     let entities = vec![
         serving_entity("area:hoodi", "area", "Hoodi"),
         serving_entity("area:sarjapur", "area", "Sarjapur"),
+        serving_entity("area:cell:hoodi", "area", "Internal search cell"),
+        serving_entity("area:cell:sarjapur", "area", "Internal search cell"),
         serving_entity("society:fixture-home", "society", "Fixture Home"),
     ];
-    let edges = vec![ServingEdgeRecord {
-        from_entity_id: "society:fixture-home".to_string(),
-        edge_type: "in_area".to_string(),
-        to_entity_id: "area:hoodi".to_string(),
-        confidence: 1.0,
-        source_type: "OpenStreetMap".to_string(),
-        derivation: None,
-    }];
-    let facts = Vec::new();
+    let facts = vec![
+        topology_fact(
+            "area:cell:hoodi",
+            "geo.geometry_geojson",
+            FactValue::Text(square_geometry(77.70, 77.72)),
+        ),
+        topology_fact(
+            "area:cell:sarjapur",
+            "geo.geometry_geojson",
+            FactValue::Text(square_geometry(77.77, 77.79)),
+        ),
+        topology_fact(
+            "society:fixture-home",
+            "geo.latitude",
+            FactValue::Numeric(12.975),
+        ),
+        topology_fact(
+            "society:fixture-home",
+            "geo.longitude",
+            FactValue::Numeric(77.715),
+        ),
+    ];
+    let edges = vec![
+        topology_edge(
+            "society:fixture-home",
+            "in_market_locality",
+            "area:hoodi",
+            &facts[2],
+        ),
+        topology_edge(
+            "society:fixture-home",
+            "occupies_geo_cell",
+            "area:cell:hoodi",
+            &facts[2],
+        ),
+        topology_edge(
+            "area:hoodi",
+            "covers_geo_cell",
+            "area:cell:hoodi",
+            &facts[0],
+        ),
+        topology_edge(
+            "area:sarjapur",
+            "covers_geo_cell",
+            "area:cell:sarjapur",
+            &facts[1],
+        ),
+    ];
     let fact_index = ServingFactIndex::from_records(facts.clone(), Vec::new());
     let recall_dir = root.join("tantivy");
     let recall_index = TantivyRecallIndex::build_in_dir(&recall_dir, &entities, &facts, &[])
@@ -294,7 +335,7 @@ fn test_bundle(root: &std::path::Path) -> LoadedServingBundle {
             created_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
             entity_count: entities.len() as u64,
             entity_alias_count: 0,
-            fact_count: 0,
+            fact_count: facts.len() as u64,
             search_metadata_count: 0,
             rera_evidence_count: 0,
             excluded_rera_evidence_society_ids: Vec::new(),
@@ -340,6 +381,93 @@ fn serving_entity(entity_id: &str, entity_type: &str, name: &str) -> ServingEnti
         root_source: Some("revision_api_contract".to_string()),
         searchable_text: name.to_string(),
     }
+}
+
+fn topology_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFactRecord {
+    let learned_at = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
+    let source_url = Some("https://example.test/openstreetmap".to_string());
+    let source_type = if matches!(fact_key, "geo.latitude" | "geo.longitude") {
+        "Google"
+    } else {
+        "OpenStreetMap"
+    };
+    ServingFactRecord {
+        entity_id: entity_id.to_string(),
+        fact_key: fact_key.to_string(),
+        value_type: match &value {
+            FactValue::Numeric(_) | FactValue::Score { .. } => "numeric",
+            FactValue::Text(_) => "text",
+            FactValue::Bool(_) => "bool",
+            FactValue::Tags(_) => "tags",
+        }
+        .to_string(),
+        value_text: None,
+        value,
+        confidence: 0.9,
+        source_type: source_type.to_string(),
+        source_url: source_url.clone(),
+        model: None,
+        skill_id: Some("search_revision_api_contract".to_string()),
+        learned_at,
+        observation: Some(
+            SourceObservation::new(
+                source_type,
+                if matches!(fact_key, "geo.latitude" | "geo.longitude") {
+                    format!("{entity_id}:coordinates")
+                } else {
+                    format!("{entity_id}:{fact_key}")
+                },
+                entity_id,
+                learned_at,
+                source_url,
+                vec!["asset:search-revision-api-contract/v1".to_string()],
+            )
+            .expect("revision topology observation"),
+        ),
+    }
+}
+
+fn topology_edge(
+    from: &str,
+    relation: &str,
+    to: &str,
+    evidence_fact: &ServingFactRecord,
+) -> ServingEdgeRecord {
+    let evidence = EvidenceRef::for_observation(
+        "issue-118-revision-api-fixture",
+        evidence_fact
+            .observation
+            .as_ref()
+            .expect("revision topology edge evidence"),
+    );
+    ServingEdgeRecord {
+        from_entity_id: from.to_string(),
+        edge_type: relation.to_string(),
+        to_entity_id: to.to_string(),
+        confidence: 0.9,
+        source_type: "OpenStreetMap".to_string(),
+        derivation: Some(
+            DerivedEvidence::new(
+                "issue-118-revision-api-fixture",
+                from,
+                Some(to.to_string()),
+                relation,
+                "controlled_topology",
+                Some(1.0),
+                Some("boolean".to_string()),
+                "search-revision-api-contract-v1",
+                0.9,
+                vec![evidence],
+            )
+            .expect("revision topology derivation"),
+        ),
+    }
+}
+
+fn square_geometry(min_lon: f64, max_lon: f64) -> String {
+    format!(
+        "{{\"type\":\"Polygon\",\"coordinates\":[[[{min_lon},12.96],[{max_lon},12.96],[{max_lon},12.99],[{min_lon},12.99],[{min_lon},12.96]]]}}"
+    )
 }
 
 fn test_property() -> Property {

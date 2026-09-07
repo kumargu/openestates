@@ -12,9 +12,10 @@ use backend::search::{
     TextSearchRequest,
 };
 use backend::serving::{
-    normalize_alias, LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest,
-    ServingEntityAliasIndex, ServingEntityAliasRecord, ServingEntityRecord, ServingFactIndex,
-    ServingFactRecord, SpatialServingIndex, TantivyRecallIndex,
+    normalize_alias, DerivedEvidence, EvidenceRef, LoadedServingBundle, ReraEvidenceIndex,
+    ServingBundleManifest, ServingEdgeRecord, ServingEntityAliasIndex, ServingEntityAliasRecord,
+    ServingEntityRecord, ServingFactIndex, ServingFactRecord, SourceObservation,
+    SpatialServingIndex, TantivyRecallIndex,
 };
 use backend::state::{
     CachedSearchOutput, RuntimeVersionKey, SearchCacheKey, SearchLogMessage, SearchResponseCache,
@@ -182,13 +183,21 @@ fn dangling_named_place_search_evaluates_the_full_hard_eligible_corpus() {
 }
 
 #[test]
-fn named_area_does_not_expand_to_nearby_areas() {
-    let properties = vec![property(
-        "nearby-whitefield-home".to_string(),
-        "Brookefield",
-        3,
-        18_000_000,
-    )];
+fn named_area_recall_uses_evidenced_geo_cells_not_coordinates() {
+    let properties = vec![
+        property(
+            "cell-whitefield-home".to_string(),
+            "Brookefield",
+            3,
+            18_000_000,
+        ),
+        property(
+            "coordinate-only-whitefield-home".to_string(),
+            "Brookefield",
+            3,
+            18_000_000,
+        ),
+    ];
     let entities = vec![
         ServingEntityRecord {
             entity_id: "area:whitefield".to_string(),
@@ -198,43 +207,83 @@ fn named_area_does_not_expand_to_nearby_areas() {
             searchable_text: "Whitefield".to_string(),
         },
         ServingEntityRecord {
-            entity_id: "society:nearby-whitefield-home".to_string(),
+            entity_id: "area:cell:whitefield".to_string(),
+            entity_type: "area".to_string(),
+            name: "Internal search cell".to_string(),
+            root_source: Some("openstreetmap".to_string()),
+            searchable_text: String::new(),
+        },
+        ServingEntityRecord {
+            entity_id: "society:cell-whitefield-home".to_string(),
             entity_type: "society".to_string(),
-            name: "Nearby Whitefield Home".to_string(),
+            name: "Cell Whitefield Home".to_string(),
             root_source: Some("serving_bundle".to_string()),
-            searchable_text: "Nearby Whitefield Home".to_string(),
+            searchable_text: "Cell Whitefield Home".to_string(),
+        },
+        ServingEntityRecord {
+            entity_id: "society:coordinate-only-whitefield-home".to_string(),
+            entity_type: "society".to_string(),
+            name: "Coordinate Only Whitefield Home".to_string(),
+            root_source: Some("serving_bundle".to_string()),
+            searchable_text: "Coordinate Only Whitefield Home".to_string(),
         },
     ];
     let facts = vec![
-        serving_fact(
-            "area:whitefield",
-            "geo.latitude",
-            FactValue::Numeric(12.9698),
+        topology_fact(
+            "area:cell:whitefield",
+            "geo.geometry_geojson",
+            FactValue::Text(square_geometry(77.74, 77.76)),
         ),
-        serving_fact(
-            "area:whitefield",
-            "geo.longitude",
-            FactValue::Numeric(77.7499),
-        ),
-        serving_fact(
-            "society:nearby-whitefield-home",
+        topology_fact(
+            "society:cell-whitefield-home",
             "geo.latitude",
             FactValue::Numeric(12.9750),
         ),
-        serving_fact(
-            "society:nearby-whitefield-home",
+        topology_fact(
+            "society:cell-whitefield-home",
+            "geo.longitude",
+            FactValue::Numeric(77.7550),
+        ),
+        topology_fact(
+            "society:coordinate-only-whitefield-home",
+            "geo.latitude",
+            FactValue::Numeric(12.9750),
+        ),
+        topology_fact(
+            "society:coordinate-only-whitefield-home",
             "geo.longitude",
             FactValue::Numeric(77.7550),
         ),
     ];
-    let bundle = loaded_bundle(entities, facts);
+    let edges = vec![
+        topology_edge(
+            "area:whitefield",
+            "covers_geo_cell",
+            "area:cell:whitefield",
+            &facts[0],
+        ),
+        topology_edge(
+            "society:cell-whitefield-home",
+            "occupies_geo_cell",
+            "area:cell:whitefield",
+            &facts[1],
+        ),
+        topology_edge(
+            "society:cell-whitefield-home",
+            "in_market_locality",
+            "area:whitefield",
+            &facts[1],
+        ),
+    ];
+    let bundle = loaded_bundle_with_edges(entities, facts, edges);
     let search_index = SearchIndex::build_with_serving_entities(&properties, &bundle.entities);
     let snapshot = search_runtime_snapshot(bundle, &properties, search_index);
 
     let output = SearchEngine::new(&snapshot).search("3BHK in Whitefield under 2Cr");
 
-    assert_eq!(output.eligible_result_count, 0);
-    assert!(output.results.is_empty());
+    assert_eq!(output.eligible_result_count, 1);
+    assert_eq!(output.results[0].card.id, "cell-whitefield-home");
+    assert!(output.results[0].geography_match.is_some());
 }
 
 #[test]
@@ -342,8 +391,56 @@ fn dangling_grouped_society_anchors_keep_bhk_and_budget_branches_paired() {
             root_source: Some("serving_bundle".to_string()),
             searchable_text: "Prestige Waterford".to_string(),
         },
+        ServingEntityRecord {
+            entity_id: "area:cell:shared".to_string(),
+            entity_type: "area".to_string(),
+            name: "Internal search cell".to_string(),
+            root_source: Some("openstreetmap".to_string()),
+            searchable_text: String::new(),
+        },
     ];
-    let bundle = loaded_bundle(entities, Vec::new());
+    let facts = vec![
+        topology_fact(
+            "area:cell:shared",
+            "geo.geometry_geojson",
+            FactValue::Text(square_geometry(77.74, 77.76)),
+        ),
+        topology_fact(
+            "society:godrej-air",
+            "geo.latitude",
+            FactValue::Numeric(12.975),
+        ),
+        topology_fact(
+            "society:godrej-air",
+            "geo.longitude",
+            FactValue::Numeric(77.750),
+        ),
+        topology_fact(
+            "society:prestige-waterford",
+            "geo.latitude",
+            FactValue::Numeric(12.976),
+        ),
+        topology_fact(
+            "society:prestige-waterford",
+            "geo.longitude",
+            FactValue::Numeric(77.751),
+        ),
+    ];
+    let edges = vec![
+        topology_edge(
+            "society:godrej-air",
+            "occupies_geo_cell",
+            "area:cell:shared",
+            &facts[1],
+        ),
+        topology_edge(
+            "society:prestige-waterford",
+            "occupies_geo_cell",
+            "area:cell:shared",
+            &facts[3],
+        ),
+    ];
+    let bundle = loaded_bundle_with_edges(entities, facts, edges);
     let search_index = SearchIndex::build_with_serving_entities(&properties, &bundle.entities);
     let snapshot = search_runtime_snapshot(bundle, &properties, search_index);
 
@@ -722,11 +819,89 @@ fn serving_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFac
     }
 }
 
+fn topology_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFactRecord {
+    let mut fact = serving_fact(entity_id, fact_key, value);
+    let source_type = if matches!(fact_key, "geo.latitude" | "geo.longitude") {
+        "Google"
+    } else {
+        "OpenStreetMap"
+    };
+    fact.source_type = source_type.to_string();
+    fact.source_url = Some("https://example.test/openstreetmap".to_string());
+    fact.observation = Some(
+        SourceObservation::new(
+            source_type,
+            if matches!(fact_key, "geo.latitude" | "geo.longitude") {
+                format!("{entity_id}:coordinates")
+            } else {
+                format!("{entity_id}:{fact_key}")
+            },
+            entity_id,
+            fact.learned_at,
+            fact.source_url.clone(),
+            vec!["asset:search-efficiency-contract/v1".to_string()],
+        )
+        .expect("topology fact observation"),
+    );
+    fact
+}
+
+fn topology_edge(
+    from: &str,
+    relation: &str,
+    to: &str,
+    evidence_fact: &ServingFactRecord,
+) -> ServingEdgeRecord {
+    let evidence = EvidenceRef::for_observation(
+        "efficiency-contract",
+        evidence_fact
+            .observation
+            .as_ref()
+            .expect("topology edge evidence observation"),
+    );
+    ServingEdgeRecord {
+        from_entity_id: from.to_string(),
+        edge_type: relation.to_string(),
+        to_entity_id: to.to_string(),
+        confidence: 0.9,
+        source_type: "OpenStreetMap".to_string(),
+        derivation: Some(
+            DerivedEvidence::new(
+                "efficiency-contract",
+                from,
+                Some(to.to_string()),
+                relation,
+                "controlled_topology",
+                Some(1.0),
+                Some("boolean".to_string()),
+                "search-efficiency-contract-v1",
+                0.9,
+                vec![evidence],
+            )
+            .expect("topology edge derivation"),
+        ),
+    }
+}
+
+fn square_geometry(min_lon: f64, max_lon: f64) -> String {
+    format!(
+        "{{\"type\":\"Polygon\",\"coordinates\":[[[{min_lon},12.96],[{max_lon},12.96],[{max_lon},12.99],[{min_lon},12.99],[{min_lon},12.96]]]}}"
+    )
+}
+
 fn loaded_bundle(
     entities: Vec<ServingEntityRecord>,
     facts: Vec<ServingFactRecord>,
 ) -> LoadedServingBundle {
-    loaded_bundle_with_aliases(entities, facts, Vec::new())
+    loaded_bundle_core(entities, facts, Vec::new(), Vec::new())
+}
+
+fn loaded_bundle_with_edges(
+    entities: Vec<ServingEntityRecord>,
+    facts: Vec<ServingFactRecord>,
+    edges: Vec<ServingEdgeRecord>,
+) -> LoadedServingBundle {
+    loaded_bundle_core(entities, facts, Vec::new(), edges)
 }
 
 fn search_runtime_snapshot(
@@ -786,13 +961,23 @@ fn loaded_bundle_with_aliases(
     facts: Vec<ServingFactRecord>,
     aliases: Vec<ServingEntityAliasRecord>,
 ) -> LoadedServingBundle {
+    loaded_bundle_core(entities, facts, aliases, Vec::new())
+}
+
+fn loaded_bundle_core(
+    entities: Vec<ServingEntityRecord>,
+    facts: Vec<ServingFactRecord>,
+    aliases: Vec<ServingEntityAliasRecord>,
+    edges: Vec<ServingEdgeRecord>,
+) -> LoadedServingBundle {
     let fact_index = ServingFactIndex::from_records(facts.clone(), Vec::new());
     let entity_alias_index = ServingEntityAliasIndex::from_records(aliases).unwrap();
     let temp_dir = tempdir().unwrap();
     let recall_index =
         TantivyRecallIndex::build_in_dir(temp_dir.path(), &entities, &facts, &[]).unwrap();
     let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
-    let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
+    let spatial_index =
+        SpatialServingIndex::from_serving_bundle_with_edges(&entities, &fact_index, &edges);
     LoadedServingBundle {
         manifest: ServingBundleManifest {
             bundle_version: "efficiency-contract".to_string(),
@@ -804,7 +989,7 @@ fn loaded_bundle_with_aliases(
             search_metadata_count: 0,
             rera_evidence_count: 0,
             excluded_rera_evidence_society_ids: Vec::new(),
-            edge_count: 0,
+            edge_count: edges.len() as u64,
             eligibility_policy_version: 0,
             quarantined_society_count: 0,
             quarantine_reason_counts: Default::default(),
@@ -822,8 +1007,8 @@ fn loaded_bundle_with_aliases(
         },
         entities,
         entity_alias_index,
-        edges: Vec::new(),
-        graph_index: GraphIndex::default(),
+        graph_index: GraphIndex::from_serving_edges(&edges),
+        edges,
         recall_index,
         fact_index,
         rera_evidence_index: ReraEvidenceIndex::default(),

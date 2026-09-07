@@ -35,7 +35,8 @@ pub struct SearchRuntimeSnapshot {
     pub societies: Arc<[Society]>,
     pub society_names: HashMap<String, String>,
     pub areas: Arc<[AreaProfile]>,
-    pub market_locality_neighborhood_radius_km: f64,
+    pub geo_cell_max_hops: u8,
+    pub geo_cell_max_distance_km: f64,
     pub version_key: RuntimeVersionKey,
 }
 
@@ -62,11 +63,9 @@ impl SearchRuntimeSnapshot {
             search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
             semantic_contract_digest: semantic_contract_digest().to_string(),
         };
-        let market_locality_neighborhood_radius_km = crate::dag_config::load_resolution_policies()
-            .map(|policies| policies.market_locality.neighborhood_radius_km)
-            .unwrap_or_else(|_| {
-                crate::dag_config::MarketLocalityPolicy::default().neighborhood_radius_km
-            });
+        let geo_cell_policy = crate::dag_config::load_resolution_policies()
+            .map(|policies| policies.spatial_topology)
+            .unwrap_or_default();
         let inventory_options = properties
             .iter()
             .filter_map(|property| {
@@ -99,7 +98,8 @@ impl SearchRuntimeSnapshot {
             societies: Arc::from(societies),
             society_names,
             areas: Arc::from(areas),
-            market_locality_neighborhood_radius_km,
+            geo_cell_max_hops: geo_cell_policy.geo_cell_max_hops,
+            geo_cell_max_distance_km: geo_cell_policy.geo_cell_max_distance_km,
             version_key,
         }
     }
