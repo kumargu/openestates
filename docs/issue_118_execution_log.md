@@ -61,6 +61,46 @@
 - `architecture_gap`: revisions produce typed changes but execute by rendering
   and reparsing query text instead of patching the authenticated compiled plan.
 
+## Normal-DAG geo-cell integration checkpoint — 2026-09-08
+
+- Classification: `architecture_gap` removed. Geo-cell materialization no
+  longer depends on an isolated child-bundle rewrite. `current_project_facts`
+  emits one observed `market.locality_name` fact per unique source-entity
+  area, and `kg_society_view` admits those geometry-less buyer market
+  localities without treating their names as physical containment.
+- Normal serving derivation now runs canonical identity, geometry-backed
+  containment/adjacency, evidenced market membership, cell occupancy, market
+  cell coverage, and proximity in that order. Footprints still override
+  points, every footprint overlap above the configured 1% threshold survives,
+  and a point receives one cell only when containment is unambiguous.
+- Serving format 12 adds explicit `searchable`/`internal` entity visibility.
+  Configured OSM admin-level-10 cells remain available to topology but are
+  absent from aliases, entity resolution, geo search, Tantivy documents, and
+  public intent projections. Buyer market localities remain searchable.
+- The normal builder writes
+  `diagnostics/market_geo_topology.json` with cell counts, point assignments,
+  footprint overlaps, market coverage, bounding-box sizes, adjacency degrees,
+  and evidence failures. The one-off topology-backfill module, catalog CLI,
+  legacy migration, and `adjacent_market_locality` residue are deleted.
+- Exact external-listing project keys now join to canonical RERA society IDs
+  during materialization. The hermetic vertical exposed and removed a fixture
+  listing that incorrectly carried stronger RERA evidence than the production
+  materializer; runtime inventory now consumes the external listing's durable
+  observation on the canonical society.
+- The live geo-cell contract is explicitly ignored when its isolated r11 lake
+  is unavailable rather than silently returning. No r12 live candidate or
+  production pointer was built or promoted in this checkpoint; the immutable
+  r11 artifact recorded above remains the live parity reference.
+- Protecting gates passed: asset DAG executor 12/12, serving bundle 4/4, KG
+  view 2/2, conversational semantics 13/13, efficiency 11/11, revision API
+  3/3, recommendations 2/2, and live geo-cell 1 explicitly ignored. The new
+  hermetic serving contract covers internal visibility, market/cell paths,
+  evidence identities, and Tantivy exclusion.
+- `cargo check --all-targets`, Rust formatting, all `app/config` JSON parsing,
+  and `git diff --check` pass. The hardcoding audit remains at 330 warning-only
+  findings, 28 fact-key comparisons, and zero blocked aliases; this checkpoint
+  introduces no production search-vocabulary finding.
+
 ## OSM geo-cell search checkpoint — 2026-09-07
 
 - Starting HEAD: `feba1670` on `feat/issue-118-consolidated`; worktree clean.

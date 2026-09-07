@@ -1692,6 +1692,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: entity_id.to_string(),
             root_source: None,
+            visibility: Default::default(),
             searchable_text: String::new(),
         }
     }

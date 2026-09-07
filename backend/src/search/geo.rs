@@ -188,7 +188,10 @@ impl GeoSearchIndex {
         let mut society_coordinate_ids = HashSet::<String>::new();
         let geometry = SpatialGeometryIndex::from_serving_bundle(entities, fact_index, edges);
         let bound_provider_ids = bound_provider_entity_ids(edges);
-        for entity in entities {
+        for entity in entities
+            .iter()
+            .filter(|entity| entity.visibility.is_searchable())
+        {
             if entity.entity_type.eq_ignore_ascii_case("place")
                 || entity.entity_type.eq_ignore_ascii_case("area")
             {
@@ -1856,6 +1859,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Near Society".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: "Near Society".to_string(),
         }];
         let edges = vec![crate::serving::ServingEdgeRecord {
@@ -2382,6 +2386,7 @@ mod tests {
                 entity_type: "area".to_string(),
                 name: "Whitefield".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -2389,6 +2394,7 @@ mod tests {
                 entity_type: "area".to_string(),
                 name: "Marathahalli".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Marathahalli".to_string(),
             },
         ];
@@ -2441,6 +2447,7 @@ mod tests {
             entity_type: "area".to_string(),
             name: "Fixture Locality".to_string(),
             root_source: Some("openstreetmap".to_string()),
+            visibility: Default::default(),
             searchable_text: "Fixture Locality".to_string(),
         }];
         let facts = ServingFactIndex::from_records(
@@ -2473,6 +2480,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Whitefield".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -2480,6 +2488,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "International Tech Park Bengaluru ITPB".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "International Tech Park Bengaluru ITPB".to_string(),
             },
             ServingEntityRecord {
@@ -2487,6 +2496,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Hebbal".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Hebbal".to_string(),
             },
             ServingEntityRecord {
@@ -2494,6 +2504,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital EPIP Whitefield".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital EPIP Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -2501,6 +2512,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Clinics Begur".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Clinics Begur".to_string(),
             },
             ServingEntityRecord {
@@ -2508,6 +2520,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Varthur Road".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Varthur Road".to_string(),
             },
             ServingEntityRecord {
@@ -2515,6 +2528,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Yeshwanthpur".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Yeshwanthpur".to_string(),
             },
         ];
@@ -2606,6 +2620,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Whitefield".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -2613,6 +2628,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "International Tech Park Bengaluru ITPB".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "International Tech Park Bengaluru ITPB".to_string(),
             },
             ServingEntityRecord {
@@ -2620,6 +2636,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Hebbal".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Hebbal".to_string(),
             },
             ServingEntityRecord {
@@ -2627,6 +2644,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital EPIP Whitefield".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital EPIP Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -2634,6 +2652,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Clinics Begur".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Clinics Begur".to_string(),
             },
             ServingEntityRecord {
@@ -2641,6 +2660,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Varthur Road".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Varthur Road".to_string(),
             },
             ServingEntityRecord {
@@ -2648,6 +2668,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Yeshwanthpur".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Yeshwanthpur".to_string(),
             },
         ];

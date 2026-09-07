@@ -191,14 +191,30 @@ pub async fn external_listing_facts_input_with_aliases(
 ) -> Result<SkillFactsInput, ProjectEnrichmentAssetError> {
     let rows = read_external_listing_rows(lake, listing_record).await?;
     let canonical = read_canonical_society_rows(lake, canonical_record).await?;
-    let aliases = canonical
+    let canonical_by_project_key = canonical
         .mappings
-        .into_iter()
-        .filter_map(|mapping| {
-            mapping
-                .alias_entity_id
-                .filter(|alias| alias != &mapping.canonical_entity_id)
-                .map(|alias| (mapping.canonical_entity_id, alias))
+        .iter()
+        .map(|mapping| {
+            (
+                mapping.project_key.as_str(),
+                mapping.canonical_entity_id.as_str(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    let canonical_by_entity_id = canonical
+        .mappings
+        .iter()
+        .flat_map(|mapping| {
+            std::iter::once((
+                mapping.canonical_entity_id.as_str(),
+                mapping.canonical_entity_id.as_str(),
+            ))
+            .chain(
+                mapping
+                    .alias_entity_id
+                    .as_deref()
+                    .map(|alias| (alias, mapping.canonical_entity_id.as_str())),
+            )
         })
         .collect::<HashMap<_, _>>();
     let mut facts = Vec::new();
@@ -206,26 +222,21 @@ pub async fn external_listing_facts_input_with_aliases(
     let asset_lineage = external_listing_asset_lineage(listing_record)?;
     for row in rows {
         let provider_observation_id = external_listing_observation_id(&row)?;
+        let entity_id = row
+            .project_key
+            .as_deref()
+            .and_then(|project_key| canonical_by_project_key.get(project_key).copied())
+            .or_else(|| canonical_by_entity_id.get(row.entity_id.as_str()).copied())
+            .unwrap_or(row.entity_id.as_str());
         append_listing_facts_with_provenance(
             &row,
-            &row.entity_id,
+            entity_id,
             run_id,
             &provider_observation_id,
             &asset_lineage,
             &mut facts,
             &mut annotations,
         )?;
-        if let Some(alias) = aliases.get(&row.entity_id) {
-            append_listing_facts_with_provenance(
-                &row,
-                alias,
-                run_id,
-                &provider_observation_id,
-                &asset_lineage,
-                &mut facts,
-                &mut annotations,
-            )?;
-        }
     }
     Ok(SkillFactsInput {
         source: "external_listing".to_string(),

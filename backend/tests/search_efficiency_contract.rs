@@ -105,6 +105,7 @@ fn dangling_named_place_search_evaluates_the_full_hard_eligible_corpus() {
         entity_type: "place".to_string(),
         name: "Benchmark Tech Park".to_string(),
         root_source: Some("google".to_string()),
+        visibility: Default::default(),
         searchable_text: "Benchmark Tech Park".to_string(),
     });
     facts.extend([
@@ -140,6 +141,7 @@ fn dangling_named_place_search_evaluates_the_full_hard_eligible_corpus() {
             entity_type: "society".to_string(),
             name: id,
             root_source: Some("serving_bundle".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         });
         let offset = 0.01 + index as f64 * 0.0000001;
@@ -204,6 +206,7 @@ fn named_area_recall_uses_evidenced_geo_cells_not_coordinates() {
             entity_type: "area".to_string(),
             name: "Whitefield".to_string(),
             root_source: Some("serving_bundle".to_string()),
+            visibility: Default::default(),
             searchable_text: "Whitefield".to_string(),
         },
         ServingEntityRecord {
@@ -211,6 +214,7 @@ fn named_area_recall_uses_evidenced_geo_cells_not_coordinates() {
             entity_type: "area".to_string(),
             name: "Internal search cell".to_string(),
             root_source: Some("openstreetmap".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         },
         ServingEntityRecord {
@@ -218,6 +222,7 @@ fn named_area_recall_uses_evidenced_geo_cells_not_coordinates() {
             entity_type: "society".to_string(),
             name: "Cell Whitefield Home".to_string(),
             root_source: Some("serving_bundle".to_string()),
+            visibility: Default::default(),
             searchable_text: "Cell Whitefield Home".to_string(),
         },
         ServingEntityRecord {
@@ -225,6 +230,7 @@ fn named_area_recall_uses_evidenced_geo_cells_not_coordinates() {
             entity_type: "society".to_string(),
             name: "Coordinate Only Whitefield Home".to_string(),
             root_source: Some("serving_bundle".to_string()),
+            visibility: Default::default(),
             searchable_text: "Coordinate Only Whitefield Home".to_string(),
         },
     ];
@@ -303,6 +309,7 @@ fn dangling_society_scope_falls_back_bundle_wide_without_relaxing_the_hard_budge
             entity_type: "society".to_string(),
             name: "Godrej Splendour".to_string(),
             root_source: Some("serving_bundle".to_string()),
+            visibility: Default::default(),
             searchable_text: "Godrej Splendour".to_string(),
         },
         ServingEntityRecord {
@@ -310,6 +317,7 @@ fn dangling_society_scope_falls_back_bundle_wide_without_relaxing_the_hard_budge
             entity_type: "society".to_string(),
             name: "Budget Alternative".to_string(),
             root_source: Some("serving_bundle".to_string()),
+            visibility: Default::default(),
             searchable_text: "Budget Alternative".to_string(),
         },
     ];
@@ -382,6 +390,7 @@ fn dangling_grouped_society_anchors_keep_bhk_and_budget_branches_paired() {
             entity_type: "society".to_string(),
             name: "Godrej Air".to_string(),
             root_source: Some("serving_bundle".to_string()),
+            visibility: Default::default(),
             searchable_text: "Godrej Air".to_string(),
         },
         ServingEntityRecord {
@@ -389,6 +398,7 @@ fn dangling_grouped_society_anchors_keep_bhk_and_budget_branches_paired() {
             entity_type: "society".to_string(),
             name: "Prestige Waterford".to_string(),
             root_source: Some("serving_bundle".to_string()),
+            visibility: Default::default(),
             searchable_text: "Prestige Waterford".to_string(),
         },
         ServingEntityRecord {
@@ -396,6 +406,7 @@ fn dangling_grouped_society_anchors_keep_bhk_and_budget_branches_paired() {
             entity_type: "area".to_string(),
             name: "Internal search cell".to_string(),
             root_source: Some("openstreetmap".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         },
     ];
@@ -522,6 +533,7 @@ fn unique_partial_society_name_is_only_a_geographic_anchor() {
             entity_type: "society".to_string(),
             name: "Prestige Waterford".to_string(),
             root_source: Some("serving_bundle".to_string()),
+            visibility: Default::default(),
             searchable_text: "Prestige Waterford".to_string(),
         },
         ServingEntityRecord {
@@ -529,6 +541,7 @@ fn unique_partial_society_name_is_only_a_geographic_anchor() {
             entity_type: "society".to_string(),
             name: "Prestige Lakeside Habitat".to_string(),
             root_source: Some("serving_bundle".to_string()),
+            visibility: Default::default(),
             searchable_text: "Prestige Lakeside Habitat".to_string(),
         },
     ];

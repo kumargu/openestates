@@ -30,7 +30,7 @@ use super::{
     ServingSearchMetadataRecord, ServingTableSchema, SourceObservation, TrustPolicy,
 };
 
-pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 11;
+pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 12;
 
 #[derive(Clone)]
 pub struct ServingBundleBuilder {
@@ -146,6 +146,7 @@ impl ServingBundleBuilder {
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         remove_derived_proximity_records(&mut facts, &mut search_metadata, &mut edges);
         super::topology::remove_derived_spatial_topology_edges(&mut edges);
+        super::remove_derived_market_geo_topology_edges(&mut edges);
         rebuild_serving_entity_searchable_text(&mut entities, &facts);
         self.build_from_serving_records(
             entities,
@@ -214,12 +215,13 @@ impl ServingBundleBuilder {
         edges.extend(identity.binding_edges);
         let topology_index =
             super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
-        let topology_policy = load_resolution_policies()?.spatial_topology;
+        let resolution_policies = load_resolution_policies()?;
+        let topology_policy = &resolution_policies.spatial_topology;
         let topology = super::derive_spatial_topology(
             &entities,
             &topology_index,
             &edges,
-            &topology_policy,
+            topology_policy,
             &bundle_version,
         );
         let area_entity_count = entities
@@ -267,6 +269,62 @@ impl ServingBundleBuilder {
             Some(topology_gap_count as u64),
         ));
         merge_spatial_topology_edges(&mut edges, topology.edges);
+        let (market_geo_edges, market_geo_report) = super::derive_market_geo_topology(
+            &entities,
+            &facts,
+            &resolution_policies.market_locality,
+            topology_policy,
+            &bundle_version,
+        )
+        .map_err(|error| ServingBundleError::InvalidRecords(error.to_string()))?;
+        let market_geo_evidence_error =
+            validate_serving_edge_evidence(&market_geo_edges, &facts, &bundle_version)
+                .err()
+                .map(|error| error.to_string());
+        let adjacency_degree =
+            adjacency_degree_stats(&edges, &market_geo_report.internal_geo_cell_entity_ids);
+        let cell_size = geo_cell_size_stats(
+            &entities,
+            &topology_index,
+            &market_geo_report.internal_geo_cell_entity_ids,
+        );
+        let market_geo_key = AssetPathBuilder::serving_bundle_key(
+            &bundle_version,
+            "diagnostics/market_geo_topology.json",
+        );
+        let market_geo_meta = self
+            .lake
+            .put_json(
+                &market_geo_key,
+                &serde_json::json!({
+                    "format_version": 1,
+                    "classification": "data_gap",
+                    "geo_cell_count": market_geo_report.geo_cell_area_count,
+                    "point_assignment_count": market_geo_report.point_geo_cell_edge_count,
+                    "footprint_overlap_count": market_geo_report.footprint_geo_cell_edge_count,
+                    "market_coverage_count": market_geo_report.market_geo_cell_edge_count,
+                    "direct_market_membership_count": market_geo_report.direct_market_locality_edge_count,
+                    "proximity_market_membership_count": market_geo_report.proximity_market_locality_edge_count,
+                    "zero_cell_point_entity_ids": market_geo_report.zero_cell_point_entity_ids,
+                    "ambiguous_point_cell_entity_ids": market_geo_report.ambiguous_point_cell_entity_ids,
+                    "multi_cell_footprint_entity_ids": market_geo_report.multi_cell_footprint_entity_ids,
+                    "cell_bbox_area_km2": cell_size,
+                    "adjacency_degree": adjacency_degree,
+                    "evidence_validation_error": market_geo_evidence_error,
+                }),
+            )
+            .await?;
+        artifacts.push(artifact(
+            BundleArtifactKind::Other,
+            market_geo_meta,
+            "application/json",
+            Some(market_geo_edges.len() as u64),
+        ));
+        mark_internal_geo_cells(
+            &mut entities,
+            &market_geo_report.internal_geo_cell_entity_ids,
+        );
+        merge_spatial_topology_edges(&mut edges, market_geo_edges);
         if derive_proximity {
             let base_index =
                 super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
@@ -642,6 +700,10 @@ fn rebuild_serving_entity_searchable_text(
         }
     }
     for entity in entities {
+        if !entity.visibility.is_searchable() {
+            entity.searchable_text.clear();
+            continue;
+        }
         entity.searchable_text = format!(
             "{} {} {} {}",
             entity.entity_id,
@@ -653,6 +715,70 @@ fn rebuild_serving_entity_searchable_text(
                 .unwrap_or("")
         );
     }
+}
+
+fn mark_internal_geo_cells(entities: &mut [ServingEntityRecord], cell_ids: &[String]) {
+    let cell_ids = cell_ids.iter().map(String::as_str).collect::<BTreeSet<_>>();
+    for entity in entities {
+        if cell_ids.contains(entity.entity_id.as_str()) {
+            entity.visibility = super::ServingEntityVisibility::Internal;
+            entity.searchable_text.clear();
+        }
+    }
+}
+
+fn adjacency_degree_stats(edges: &[ServingEdgeRecord], cell_ids: &[String]) -> serde_json::Value {
+    let cells = cell_ids.iter().map(String::as_str).collect::<BTreeSet<_>>();
+    let mut degree = BTreeMap::<&str, usize>::new();
+    for edge in edges.iter().filter(|edge| {
+        edge.edge_type.eq_ignore_ascii_case("adjacent_area")
+            && cells.contains(edge.from_entity_id.as_str())
+            && cells.contains(edge.to_entity_id.as_str())
+    }) {
+        *degree.entry(edge.from_entity_id.as_str()).or_default() += 1;
+    }
+    numeric_distribution(degree.into_values().map(|value| value as f64).collect())
+}
+
+fn geo_cell_size_stats(
+    entities: &[ServingEntityRecord],
+    facts: &super::ServingFactIndex,
+    cell_ids: &[String],
+) -> serde_json::Value {
+    let spatial = super::SpatialGeometryIndex::from_serving_bundle(entities, facts, &[]);
+    let mut areas = cell_ids
+        .iter()
+        .filter_map(|cell_id| spatial.feature(cell_id))
+        .map(|feature| {
+            let mid_latitude = (feature.bounds.min_latitude + feature.bounds.max_latitude) / 2.0;
+            let height = (feature.bounds.max_latitude - feature.bounds.min_latitude).abs() * 111.32;
+            let width = (feature.bounds.max_longitude - feature.bounds.min_longitude).abs()
+                * 111.32
+                * mid_latitude.to_radians().cos().abs();
+            height * width
+        })
+        .filter(|area| area.is_finite())
+        .collect::<Vec<_>>();
+    areas.sort_by(f64::total_cmp);
+    numeric_distribution(areas)
+}
+
+fn numeric_distribution(mut values: Vec<f64>) -> serde_json::Value {
+    if values.is_empty() {
+        return serde_json::json!({"count": 0});
+    }
+    values.sort_by(f64::total_cmp);
+    let percentile = |ratio: f64| {
+        let index = ((values.len() - 1) as f64 * ratio).round() as usize;
+        values[index]
+    };
+    serde_json::json!({
+        "count": values.len(),
+        "min": values[0],
+        "median": percentile(0.5),
+        "p95": percentile(0.95),
+        "max": values[values.len() - 1],
+    })
 }
 
 fn catalog_scoped_rera_evidence(
@@ -696,6 +822,7 @@ pub fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSch
                     required_column("entity_type", "utf8"),
                     required_column("name", "utf8"),
                     optional_column("root_source", "utf8"),
+                    required_column("visibility", "utf8"),
                     required_column("searchable_text", "utf8"),
                 ],
             },
@@ -835,6 +962,7 @@ fn serving_entity_records(
             entity_type: node.entity_type.clone(),
             name: node.name.clone(),
             root_source: node.root_source.clone(),
+            visibility: Default::default(),
             searchable_text: format!(
                 "{} {} {} {}",
                 node.entity_id,
@@ -1376,6 +1504,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Arvind Bel Air".to_string(),
                 root_source: Some("rera".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
             ServingEntityRecord {
@@ -1383,6 +1512,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Arvind Bel Air".to_string(),
                 root_source: Some("rera".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
         ];
@@ -1401,6 +1531,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Society One".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let facts = vec![ServingFactRecord {
@@ -1433,6 +1564,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Society One".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let facts = vec![ServingFactRecord {
@@ -1476,6 +1608,7 @@ mod tests {
             entity_type: "property".to_string(),
             name: "Orphan 2 BHK".to_string(),
             root_source: Some("listing".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
 
@@ -1493,6 +1626,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Catalog Society".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let (included, excluded) = catalog_scoped_rera_evidence(

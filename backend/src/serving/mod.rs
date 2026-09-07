@@ -10,6 +10,7 @@ pub mod coordinates;
 mod eligibility;
 pub mod evidence;
 pub mod loader;
+pub mod market_topology;
 pub mod materializer;
 pub mod parquet;
 pub mod projection;
@@ -21,7 +22,6 @@ pub mod spatial_identity;
 pub mod spatial_index;
 pub mod tantivy_index;
 pub mod topology;
-pub mod topology_backfill;
 pub mod types;
 
 pub use aliases::{
@@ -36,6 +36,9 @@ pub use evidence::{
     SourceObservation,
 };
 pub use loader::{LoadedServingBundle, ServingBundleLoadError, ServingBundleLoader};
+pub use market_topology::{
+    derive_market_geo_topology, remove_derived_market_geo_topology_edges, MarketGeoTopologyReport,
+};
 pub use materializer::{
     SearchServingBundleMaterialization, SearchServingBundleMaterializeError,
     SearchServingBundleMaterializer,
@@ -70,14 +73,10 @@ pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,
 };
 pub use topology::{derive_spatial_topology, SpatialTopologyReport};
-pub use topology_backfill::{
-    backfill_area_topology, AreaTopologyBackfillInput, AreaTopologyBackfillRecords,
-    AreaTopologyBackfillReport,
-};
 pub use types::{
     unique_society_aliases, validate_serving_edge_evidence, BundleArtifact, BundleArtifactKind,
     QuarantinedSociety, ServingBundleManifest, ServingBundleSchema, ServingColumnSchema,
-    ServingEdgeRecord, ServingEntityFactRows, ServingEntityRecord, ServingFactIndex,
-    ServingFactRecord, ServingQuarantineReport, ServingSearchMetadataRecord, ServingTableSchema,
-    TrustPolicy, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    ServingEdgeRecord, ServingEntityFactRows, ServingEntityRecord, ServingEntityVisibility,
+    ServingFactIndex, ServingFactRecord, ServingQuarantineReport, ServingSearchMetadataRecord,
+    ServingTableSchema, TrustPolicy, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };

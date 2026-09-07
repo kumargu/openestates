@@ -544,6 +544,7 @@ mod tests {
             entity_type: entity_type.to_string(),
             name: id.to_string(),
             root_source: Some("OpenStreetMap".to_string()),
+            visibility: Default::default(),
             searchable_text: id.to_string(),
         }
     }

@@ -3685,6 +3685,7 @@ fn entity(entity_id: &str, entity_type: &str, name: &str) -> ServingEntityRecord
         entity_type: entity_type.to_string(),
         name: name.to_string(),
         root_source: Some("mock_contract".to_string()),
+        visibility: Default::default(),
         searchable_text: name.to_string(),
     }
 }

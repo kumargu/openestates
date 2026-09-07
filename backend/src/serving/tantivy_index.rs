@@ -56,7 +56,10 @@ impl TantivyRecallIndex {
             .map_err(TantivyIndexError::Tantivy)?;
         let facts_by_entity = facts_for_entities(facts, search_metadata);
 
-        for entity in entities {
+        for entity in entities
+            .iter()
+            .filter(|entity| entity.visibility.is_searchable())
+        {
             let fact_text = facts_by_entity
                 .get(&entity.entity_id)
                 .cloned()

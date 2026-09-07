@@ -4,6 +4,7 @@ use std::sync::Arc;
 use arrow::array::{ArrayRef, Float32Array, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
+use backend::assets::{MaterializationId, SourceWatermark};
 use backend::knowledge::fact::{
     FactSource, FactValue, ScoringDirection, ScoringHint, SourceType, SourcedFact,
 };
@@ -11,8 +12,11 @@ use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::{LakeKey, LakeStore};
 use backend::serving::{
-    hydrate_tantivy_index, read_facts_parquet, read_search_metadata_parquet, BundleArtifactKind,
-    ServingBundleBuilder, ServingBundleManifest, TantivyRecallIndex,
+    hydrate_tantivy_index, read_edges_parquet, read_entities_parquet, read_facts_parquet,
+    read_search_metadata_parquet, BundleArtifactKind, SearchServingBundleMaterializer,
+    ServingBundleBuilder, ServingBundleLoader, ServingBundleManifest, ServingEntityRecord,
+    ServingEntityVisibility, ServingFactRecord, ServingSearchMetadataRecord, SourceObservation,
+    TantivyRecallIndex,
 };
 use chrono::Utc;
 use parquet::arrow::ArrowWriter;
@@ -35,7 +39,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert_eq!(manifest.search_metadata_count, 18);
     assert_eq!(manifest.rera_evidence_count, 0);
     assert_eq!(manifest.edge_count, 0);
-    assert_eq!(manifest.eligibility_policy_version, 4);
+    assert_eq!(manifest.eligibility_policy_version, 5);
     assert_eq!(manifest.quarantined_society_count, 0);
     assert_eq!(
         manifest.entity_parquet_key,
@@ -137,7 +141,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/manifest.json").unwrap();
     let manifest_body = lake.get_text(&manifest_key).await.unwrap();
     let manifest_json: serde_json::Value = serde_json::from_str(&manifest_body).unwrap();
-    assert_eq!(manifest_json["format_version"], 10);
+    assert_eq!(manifest_json["format_version"], 12);
     assert!(manifest_json["entity_alias_parquet_key"]
         .as_str()
         .is_some_and(|key| key.ends_with("entity_aliases/part-00000.parquet")));
@@ -166,6 +170,281 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert_eq!(hits[0].name, "Green Acre Whitefield");
     assert!(hits[0].matched_fields.iter().any(|field| field == "name"));
     assert!(hits[0].matched_fields.iter().any(|field| field == "body"));
+}
+
+#[tokio::test]
+async fn normal_serving_build_materializes_internal_geo_cells_and_excludes_their_names() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let version = "geo-cell-normal-dag-fixture";
+    let entities = vec![
+        serving_entity(
+            "area:market:whitefield",
+            "area",
+            "Whitefield",
+            "market_locality",
+        ),
+        serving_entity(
+            "area:osm:cell-a",
+            "area",
+            "Secret Ward Alpha",
+            "openstreetmap",
+        ),
+        serving_entity(
+            "area:osm:cell-b",
+            "area",
+            "Secret Ward Beta",
+            "openstreetmap",
+        ),
+        serving_entity("place:school", "place", "Fixture School", "google"),
+    ];
+    let learned_at = Utc::now();
+    let facts = vec![
+        observed_serving_fact(
+            "area:market:whitefield",
+            "market.locality_name",
+            FactValue::Text("Whitefield".to_string()),
+            "SourceEntitySeed",
+            "market-name",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "area:osm:cell-a",
+            "place.name",
+            FactValue::Text("Secret Ward Alpha".to_string()),
+            "OpenStreetMap",
+            "cell-a-name",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "area:osm:cell-a",
+            "area.admin_level",
+            FactValue::Text("10".to_string()),
+            "OpenStreetMap",
+            "cell-a-level",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "area:osm:cell-a",
+            "geo.geometry_geojson",
+            FactValue::Text(
+                r#"{"type":"Polygon","coordinates":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}"#
+                    .to_string(),
+            ),
+            "OpenStreetMap",
+            "cell-a-geometry",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "area:osm:cell-b",
+            "place.name",
+            FactValue::Text("Secret Ward Beta".to_string()),
+            "OpenStreetMap",
+            "cell-b-name",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "area:osm:cell-b",
+            "area.admin_level",
+            FactValue::Text("10".to_string()),
+            "OpenStreetMap",
+            "cell-b-level",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "area:osm:cell-b",
+            "geo.geometry_geojson",
+            FactValue::Text(
+                r#"{"type":"Polygon","coordinates":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}"#
+                    .to_string(),
+            ),
+            "OpenStreetMap",
+            "cell-b-geometry",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "place:school",
+            "google_place_address",
+            FactValue::Text("Main Road, Whitefield, Bengaluru".to_string()),
+            "Google",
+            "school-address",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "place:school",
+            "geo.latitude",
+            FactValue::Numeric(2.0),
+            "Google",
+            "school-coordinate",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "place:school",
+            "geo.longitude",
+            FactValue::Numeric(2.0),
+            "Google",
+            "school-coordinate",
+            learned_at,
+        ),
+    ];
+    let metadata = facts.iter().map(serving_metadata).collect();
+
+    let materialization = SearchServingBundleMaterializer::new(lake.clone())
+        .materialize_child_from_serving_records_for_run(
+            entities,
+            facts,
+            metadata,
+            Vec::new(),
+            version,
+            vec![SourceWatermark {
+                source: "hermetic_fixture".to_string(),
+                high_watermark: "v1".to_string(),
+            }],
+            Vec::new(),
+            MaterializationId::new(),
+        )
+        .await
+        .unwrap();
+    let manifest = materialization.manifest.clone();
+    let cache = tempdir().unwrap();
+    let bundle = ServingBundleLoader::new(lake.clone(), cache.path())
+        .load_search_bundle_by_materialization(&materialization.record.materialization_id)
+        .await
+        .unwrap()
+        .unwrap();
+
+    for cell_id in ["area:osm:cell-a", "area:osm:cell-b"] {
+        let cell = bundle
+            .entities
+            .iter()
+            .find(|entity| entity.entity_id == cell_id)
+            .unwrap();
+        assert_eq!(cell.visibility, ServingEntityVisibility::Internal);
+        assert!(cell.searchable_text.is_empty());
+    }
+    assert!(bundle.edges.iter().any(|edge| {
+        edge.from_entity_id == "place:school"
+            && edge.edge_type == "in_market_locality"
+            && edge.to_entity_id == "area:market:whitefield"
+            && edge.derivation.is_some()
+    }));
+    assert!(bundle.edges.iter().any(|edge| {
+        edge.from_entity_id == "place:school"
+            && edge.edge_type == "occupies_geo_cell"
+            && edge.to_entity_id == "area:osm:cell-a"
+            && edge.derivation.is_some()
+    }));
+    assert!(bundle.edges.iter().any(|edge| {
+        edge.from_entity_id == "area:market:whitefield"
+            && edge.edge_type == "covers_geo_cell"
+            && edge.to_entity_id == "area:osm:cell-a"
+            && edge.derivation.is_some()
+    }));
+    let hydrated = tempdir().unwrap();
+    hydrate_tantivy_index(&lake, &manifest, hydrated.path())
+        .await
+        .unwrap();
+    assert!(TantivyRecallIndex::open(hydrated.path())
+        .unwrap()
+        .search("Secret Ward Alpha", 10)
+        .unwrap()
+        .is_empty());
+
+    let entity_bytes = lake
+        .get_bytes(&LakeKey::new(manifest.entity_parquet_key).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(
+        read_entities_parquet(&entity_bytes).unwrap(),
+        bundle.entities
+    );
+    let edge_bytes = lake
+        .get_bytes(&LakeKey::new(manifest.edge_parquet_key.unwrap()).unwrap())
+        .await
+        .unwrap();
+    let edges = read_edges_parquet(&edge_bytes).unwrap();
+    assert!(edges
+        .iter()
+        .filter_map(|edge| edge.derivation.as_ref())
+        .all(|derivation| derivation
+            .input_evidence
+            .iter()
+            .all(|evidence| evidence.snapshot_identity == version)));
+}
+
+fn serving_entity(
+    entity_id: &str,
+    entity_type: &str,
+    name: &str,
+    root_source: &str,
+) -> ServingEntityRecord {
+    ServingEntityRecord {
+        entity_id: entity_id.to_string(),
+        entity_type: entity_type.to_string(),
+        name: name.to_string(),
+        root_source: Some(root_source.to_string()),
+        visibility: ServingEntityVisibility::Searchable,
+        searchable_text: name.to_string(),
+    }
+}
+
+fn observed_serving_fact(
+    entity_id: &str,
+    fact_key: &str,
+    value: FactValue,
+    source_type: &str,
+    provider_id: &str,
+    learned_at: chrono::DateTime<Utc>,
+) -> ServingFactRecord {
+    let value_type = match value {
+        FactValue::Numeric(_) => "numeric",
+        FactValue::Bool(_) => "bool",
+        FactValue::Tags(_) => "tags",
+        FactValue::Score { .. } => "score",
+        FactValue::Text(_) => "text",
+    };
+    let value_text = match &value {
+        FactValue::Text(value) => Some(value.clone()),
+        FactValue::Numeric(value) => Some(value.to_string()),
+        FactValue::Bool(value) => Some(value.to_string()),
+        _ => None,
+    };
+    ServingFactRecord {
+        entity_id: entity_id.to_string(),
+        fact_key: fact_key.to_string(),
+        value_type: value_type.to_string(),
+        value_text,
+        value,
+        confidence: 0.95,
+        source_type: source_type.to_string(),
+        source_url: Some("https://example.test/source".to_string()),
+        model: None,
+        skill_id: Some("normal-dag-fixture".to_string()),
+        learned_at,
+        observation: Some(
+            SourceObservation::new(
+                source_type,
+                provider_id,
+                entity_id,
+                learned_at,
+                Some("https://example.test/source".to_string()),
+                vec!["asset:normal-dag-fixture/run:1".to_string()],
+            )
+            .unwrap(),
+        ),
+    }
+}
+
+fn serving_metadata(fact: &ServingFactRecord) -> ServingSearchMetadataRecord {
+    ServingSearchMetadataRecord {
+        entity_id: fact.entity_id.clone(),
+        fact_key: fact.fact_key.clone(),
+        display_template: None,
+        answers_preferences: Vec::new(),
+        scoring_direction: None,
+        scoring_weight: None,
+        scoring_thresholds: Vec::new(),
+    }
 }
 
 #[test]

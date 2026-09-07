@@ -540,6 +540,7 @@ fn support_spatial_entities(
                     name: None,
                     has_coordinates: coordinate_entities.contains(&fact.entity_id),
                     has_geometry: false,
+                    is_market_locality: false,
                     root_source: Some(fact.source_type.to_ascii_lowercase()),
                     created_at: fact.learned_at,
                     updated_at: fact.learned_at,
@@ -552,6 +553,11 @@ fn support_spatial_entities(
         match (fact.fact_key.as_str(), value) {
             ("place.name", FactValue::Text(name)) if !name.trim().is_empty() => {
                 entry.name = Some(name.trim().to_string());
+            }
+            ("market.locality_name", FactValue::Text(name)) if !name.trim().is_empty() => {
+                entry.name = Some(name.trim().to_string());
+                entry.is_market_locality = true;
+                entry.root_source = Some("market_locality".to_string());
             }
             ("geo.geometry_geojson", FactValue::Text(geometry)) if !geometry.trim().is_empty() => {
                 entry.has_geometry = true;
@@ -572,6 +578,7 @@ struct SupportSpatialEntity {
     name: Option<String>,
     has_coordinates: bool,
     has_geometry: bool,
+    is_market_locality: bool,
     root_source: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -581,7 +588,7 @@ impl SupportSpatialEntity {
     fn into_record(self) -> Option<KgViewEntityRecord> {
         let name = self.name?;
         let has_required_geometry = match self.entity_type.as_str() {
-            "area" => self.has_geometry,
+            "area" => self.has_geometry || self.is_market_locality,
             "place" => self.has_coordinates,
             _ => false,
         };
@@ -2152,6 +2159,33 @@ mod tests {
         assert!(hospital_values
             .iter()
             .any(|value| value.contains("Manipal Hospital")));
+    }
+
+    #[test]
+    fn market_locality_fact_admits_geometryless_area_entity() {
+        let learned_at = Utc.with_ymd_and_hms(2026, 9, 8, 7, 0, 0).unwrap();
+        let fact = skill_fact(
+            "area:market:whitefield",
+            "market.locality_name",
+            FactValue::Text("Whitefield".to_string()),
+            learned_at,
+        );
+
+        let records = KgViewRecords::from_graph_with_skill_facts(
+            &KnowledgeGraph::new(),
+            std::slice::from_ref(&fact),
+            &[],
+        )
+        .unwrap();
+
+        let entity = records
+            .entities
+            .iter()
+            .find(|entity| entity.entity_id == fact.entity_id)
+            .unwrap();
+        assert_eq!(entity.entity_type, "area");
+        assert_eq!(entity.name, "Whitefield");
+        assert_eq!(entity.root_source.as_deref(), Some("market_locality"));
     }
 
     fn skill_fact(

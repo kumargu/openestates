@@ -9,14 +9,13 @@ use backend::serving::ServingBundleLoader;
 const EXPECTED_VERSION: &str = "issue-118-whitefield-115-plus-27-geo-cells-2026-09-07-r11";
 
 #[tokio::test]
+#[ignore = "requires the isolated Issue 118 r11 lake and materialization"]
 async fn isolated_geo_cell_materialization_survives_parquet_runtime_and_api_projection() {
-    let Some(lake_root) = std::env::var_os("OPENESTATES_ISSUE118_LAKE_ROOT") else {
-        return;
-    };
-    let Some(materialization_id) = std::env::var_os("OPENESTATES_ISSUE118_MATERIALIZATION_ID")
-    else {
-        return;
-    };
+    let lake_root = std::env::var_os("OPENESTATES_ISSUE118_LAKE_ROOT")
+        .expect("OPENESTATES_ISSUE118_LAKE_ROOT is required for the ignored live contract");
+    let materialization_id = std::env::var_os("OPENESTATES_ISSUE118_MATERIALIZATION_ID").expect(
+        "OPENESTATES_ISSUE118_MATERIALIZATION_ID is required for the ignored live contract",
+    );
     let materialization_id = materialization_id
         .into_string()
         .expect("materialization id is UTF-8")

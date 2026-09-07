@@ -1796,6 +1796,7 @@ mod tests {
                 entity_type: "property".to_string(),
                 name: "3 BHK in Prestige Lavender Fields".to_string(),
                 root_source: Some("discovered".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
             ServingEntityRecord {
@@ -1803,6 +1804,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Prestige Lavender Fields".to_string(),
                 root_source: Some("rera".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
         ];
@@ -1899,6 +1901,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Brigade Lakefront Crimson".to_string(),
             root_source: Some("discovered".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -1983,6 +1986,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Godrej Splendour".to_string(),
                 root_source: Some("rera".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
             ServingEntityRecord {
@@ -1990,6 +1994,7 @@ mod tests {
                 entity_type: "area".to_string(),
                 name: "Whitefield".to_string(),
                 root_source: Some("rera".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
         ];
@@ -2034,6 +2039,7 @@ mod tests {
             entity_type: "property".to_string(),
             name: "3 BHK in Svamitva Soul Spring".to_string(),
             root_source: Some("discovered".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2074,6 +2080,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Godrej Splendour".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2107,6 +2114,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Prestige Elm Park".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2153,6 +2161,7 @@ mod tests {
                 entity_type: "property".to_string(),
                 name: "3 BHK in Prestige Waterford".to_string(),
                 root_source: Some("external_listing".to_string()),
+                visibility: Default::default(),
                 searchable_text: "3 BHK in Prestige Waterford".to_string(),
             },
             ServingEntityRecord {
@@ -2160,6 +2169,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Prestige Elm Park".to_string(),
                 root_source: Some("builder_official".to_string()),
+                visibility: Default::default(),
                 searchable_text: "Prestige Elm Park".to_string(),
             },
         ];
@@ -2200,6 +2210,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Prestige Elm Park".to_string(),
                 root_source: Some("rera".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
             ServingEntityRecord {
@@ -2207,6 +2218,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Prestige Elm Park".to_string(),
                 root_source: Some("rera".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
         ];
@@ -2245,6 +2257,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "RERA Only Project".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2271,6 +2284,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Pursuit of a Radical Rhapsody Phase 2".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2323,6 +2337,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Priced Project".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2750,6 +2765,7 @@ mod tests {
             entity_type: "property".to_string(),
             name: "3 BHK in Prestige Lakeside Habitat".to_string(),
             root_source: Some("discovered".to_string()),
+            visibility: Default::default(),
             searchable_text: "3 BHK in Prestige Lakeside Habitat".to_string(),
         }];
         let property_id = "property:discovered-prestige-lakeside-habitat-3bhk";
@@ -2784,6 +2800,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Promising Unknown Config".to_string(),
             root_source: Some("discovered".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(

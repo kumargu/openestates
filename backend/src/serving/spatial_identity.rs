@@ -145,6 +145,7 @@ pub fn materialize_canonical_spatial_identities(
                 entity_type: "place".to_string(),
                 name: canonical_name,
                 root_source: Some(CANONICAL_SPATIAL_ROOT_SOURCE.to_string()),
+                visibility: Default::default(),
                 searchable_text,
             });
             for index in component {
@@ -181,6 +182,7 @@ pub fn materialize_canonical_spatial_identities(
                 entity_type: "place".to_string(),
                 name: canonical_name,
                 root_source: Some(CANONICAL_SPATIAL_ROOT_SOURCE.to_string()),
+                visibility: Default::default(),
                 searchable_text: candidate.searchable_terms.join(" "),
             });
             let derivation = DerivedEvidence::new(

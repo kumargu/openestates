@@ -939,6 +939,7 @@ mod tests {
             entity_type: "area".to_string(),
             name: "Kadugodi".to_string(),
             root_source: Some("openstreetmap".to_string()),
+            visibility: Default::default(),
             searchable_text: "Kadugodi".to_string(),
         }];
         let area = resolve_area_only_alternative(

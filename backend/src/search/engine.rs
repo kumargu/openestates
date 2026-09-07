@@ -1482,7 +1482,8 @@ fn resolve_serving_query_entities_from_records_with_alias_index(
     let mut entities = Vec::new();
 
     for entity in entities_source {
-        if !is_serving_resolvable_entity_type(&entity.entity_type)
+        if !entity.visibility.is_searchable()
+            || !is_serving_resolvable_entity_type(&entity.entity_type)
             || !is_resolvable_entity_name(&entity.name, resolution_config)
         {
             continue;
@@ -1587,7 +1588,8 @@ fn fuzzy_society_name_matches(
         std::collections::BTreeMap::<(usize, usize), Vec<(usize, &ServingEntityRecord)>>::new();
 
     for entity in entities_source.iter().filter(|entity| {
-        entity.entity_type.eq_ignore_ascii_case("society")
+        entity.visibility.is_searchable()
+            && entity.entity_type.eq_ignore_ascii_case("society")
             && is_resolvable_entity_name(&entity.name, resolution_config)
     }) {
         let name_tokens = entity_name_tokens(&entity.name);
@@ -2226,6 +2228,7 @@ mod tests {
             entity_type: entity_type.to_string(),
             name: name.to_string(),
             root_source: None,
+            visibility: Default::default(),
             searchable_text: name.to_string(),
         }
     }
@@ -2381,6 +2384,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: property.society_id.clone(),
                 root_source: Some("engine_test".to_string()),
+                visibility: Default::default(),
                 searchable_text: property.society_id.clone(),
             })
             .collect::<Vec<_>>();

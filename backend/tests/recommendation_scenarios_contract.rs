@@ -468,6 +468,7 @@ fn build_bundle(case: &ScenarioCase, specs: &[PropertySpec]) -> LoadedServingBun
             entity_type: "society".to_string(),
             name: spec.society.clone(),
             root_source: Some("mock_contract".to_string()),
+            visibility: Default::default(),
             searchable_text: spec.society.clone(),
         })
         .collect::<Vec<_>>();
@@ -523,6 +524,7 @@ fn build_bundle(case: &ScenarioCase, specs: &[PropertySpec]) -> LoadedServingBun
             entity_type: "place".to_string(),
             name: target.trim_start_matches("place:").replace('-', " "),
             root_source: Some("mock_contract".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         });
     }

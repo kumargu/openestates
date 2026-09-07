@@ -60,7 +60,10 @@ impl SearchIndex {
         edges: &[ServingEdgeRecord],
     ) -> Self {
         let mut index = Self::build(properties);
-        for entity in entities {
+        for entity in entities
+            .iter()
+            .filter(|entity| entity.visibility.is_searchable())
+        {
             index
                 .entity_name_by_id
                 .insert(entity.entity_id.clone(), entity.name.clone());
@@ -482,7 +485,9 @@ impl SearchIndex {
     ) {
         let area_names = entities
             .iter()
-            .filter(|entity| entity.entity_type.eq_ignore_ascii_case("area"))
+            .filter(|entity| {
+                entity.visibility.is_searchable() && entity.entity_type.eq_ignore_ascii_case("area")
+            })
             .map(|entity| (entity.entity_id.as_str(), entity.name.as_str()))
             .collect::<HashMap<_, _>>();
         let mut area_name_additions = HashMap::<String, Vec<String>>::new();
@@ -1129,6 +1134,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Prestige Society".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Prestige Society".to_string(),
             },
             ServingEntityRecord {
@@ -1136,6 +1142,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Brigade Society".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Brigade Society".to_string(),
             },
             ServingEntityRecord {
@@ -1143,6 +1150,7 @@ mod tests {
                 entity_type: "builder".to_string(),
                 name: "Prestige".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Prestige".to_string(),
             },
             ServingEntityRecord {
@@ -1150,6 +1158,7 @@ mod tests {
                 entity_type: "builder".to_string(),
                 name: "Brigade".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Brigade".to_string(),
             },
         ];
@@ -1242,6 +1251,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Century Central".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: "Century Central".to_string(),
         }];
         let index = SearchIndex::build_with_serving_entities(&properties, &entities);
@@ -1265,6 +1275,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Canonical Project".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: "Canonical Project".to_string(),
         }];
         let edges = vec![ServingEdgeRecord {
@@ -1300,6 +1311,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Century Central".to_string(),
                 root_source: Some("rera".to_string()),
+                visibility: Default::default(),
                 searchable_text: "Century Central".to_string(),
             },
             ServingEntityRecord {
@@ -1307,6 +1319,7 @@ mod tests {
                 entity_type: "area".to_string(),
                 name: "Whitefield".to_string(),
                 root_source: Some("serving".to_string()),
+                visibility: Default::default(),
                 searchable_text: "Whitefield".to_string(),
             },
         ];

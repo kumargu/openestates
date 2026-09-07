@@ -616,6 +616,7 @@ mod tests {
             entity_type: entity_type.to_string(),
             name: name.to_string(),
             root_source: Some("test".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }
     }

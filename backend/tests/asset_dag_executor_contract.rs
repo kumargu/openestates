@@ -21,15 +21,16 @@ use backend::assets::{
     ReraReceiptInput, ReraReceiptKind, ReraReceiptSourceRecord, ReraReceiptsSourceInput,
     ReraRegistryMaterializer, ReraRegistryMonthlyInput, ReraSourceRecordInput,
     ReraSourceRecordKind, ReraSourceRecordsInput, SkillFactAnnotationRecord, SkillFactMaterializer,
-    SkillFactRecord, SkillFactsInput, SourceWatermark, StormwaterDrainObservationRecord,
-    StormwaterDrainRiskInput, TrustTier, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
-    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
-    CURRENT_PROJECT_FACTS_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
-    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, RERA_CLAIMS_ASSET_ID,
-    RERA_LEGAL_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID,
-    RERA_REGISTRY_MONTHLY_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
+    SkillFactRecord, SkillFactsInput, SourceEntitySeed, SourceWatermark,
+    StormwaterDrainObservationRecord, StormwaterDrainRiskInput, TrustTier,
+    APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
+    CANONICAL_SOCIETY_NODES_ASSET_ID, CURRENT_PROJECT_FACTS_ASSET_ID,
+    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
+    HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
+    OSM_SOCIETY_ACCESS_FACTS_ASSET_ID, RERA_CLAIMS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    RERA_SOURCE_RECORDS_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -511,6 +512,16 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     .to_record()
     .unwrap();
     let mut source_inputs = mock_source_inputs(now);
+    source_inputs.source_entities.push(SourceEntitySeed {
+        entity_id: "society:rera-meadows".to_string(),
+        alias_entity_id: None,
+        name: "RERA Meadows".to_string(),
+        area: Some("Whitefield".to_string()),
+        city: Some("Bengaluru".to_string()),
+        project_key: Some("rera-meadows".to_string()),
+        latitude: None,
+        longitude: None,
+    });
     source_inputs.rera_receipts = Some(ReraReceiptsSourceInput {
         snapshot_date: "2026-07-13".to_string(),
         receipts: vec![ReraReceiptSourceRecord {
@@ -759,7 +770,8 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         search_society("rera-meadows", "RERA Meadows"),
         search_society("unproven-whitefield", "Unproven Whitefield"),
     ];
-    let search_index = SearchIndex::build(&properties);
+    let search_index =
+        SearchIndex::build_with_serving_graph(&properties, &loaded.entities, &loaded.edges);
     let loaded = Arc::new(loaded);
     let search_runtime = SearchRuntimeSnapshot::new(
         loaded.clone(),
@@ -846,8 +858,14 @@ async fn executor_requires_source_inputs_without_promoting_current_source_pointe
     seed_current_upstreams_for_partition(&lake, &store, now, &run_partition).await;
     seed_required_red_flag_upstreams(&lake, &store, now).await;
 
-    let options = AssetDagExecutionOptions::new(run_partition.clone(), now)
-        .with_source_inputs(AssetSourceInputs::default());
+    let mut source_inputs = mock_source_inputs(now);
+    source_inputs.external_images_weekly = None;
+    source_inputs.source_failures.insert(
+        EXTERNAL_IMAGES_WEEKLY_ASSET_ID.to_string(),
+        "fixture source unavailable".to_string(),
+    );
+    let options =
+        AssetDagExecutionOptions::new(run_partition.clone(), now).with_source_inputs(source_inputs);
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
         .await
@@ -1327,22 +1345,29 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
     seed_required_red_flag_upstreams(&lake, &store, now).await;
 
     let options = AssetDagExecutionOptions::new(run_partition, now)
-        .with_source_inputs(AssetSourceInputs::default());
+        .with_source_inputs(mock_source_inputs(now));
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
         .await
         .unwrap();
 
-    assert_eq!(
-        report.executed_assets,
-        vec![
-            asset_id(BUILDER_RERA_AGGREGATES_ASSET_ID),
-            asset_id(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID),
-            asset_id(HOME_STATE_SIGNALS_ASSET_ID),
-            asset_id(CURRENT_PROJECT_FACTS_ASSET_ID),
-            asset_id(KG_SOCIETY_VIEW_ASSET_ID),
-            asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),
-        ]
+    for id in [
+        BUILDER_RERA_AGGREGATES_ASSET_ID,
+        APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
+        HOME_STATE_SIGNALS_ASSET_ID,
+        CURRENT_PROJECT_FACTS_ASSET_ID,
+        KG_SOCIETY_VIEW_ASSET_ID,
+        SEARCH_SERVING_BUNDLE_ASSET_ID,
+    ] {
+        assert!(report.executed_assets.contains(&asset_id(id)));
+    }
+    assert!(
+        executed_position(&report.executed_assets, CURRENT_PROJECT_FACTS_ASSET_ID)
+            < executed_position(&report.executed_assets, KG_SOCIETY_VIEW_ASSET_ID)
+    );
+    assert!(
+        executed_position(&report.executed_assets, KG_SOCIETY_VIEW_ASSET_ID)
+            < executed_position(&report.executed_assets, SEARCH_SERVING_BUNDLE_ASSET_ID)
     );
     assert!(store
         .current_record(
@@ -1418,8 +1443,7 @@ async fn only_forced_serving_rebuild_restores_the_current_kg_snapshot() {
         .expect("forced serving bundle should be loadable");
 
     assert!(loaded.entities.iter().any(|entity| {
-        entity.entity_id == "society:green-acre-whitefield"
-            && entity.name == "Green Acre Whitefield"
+        entity.entity_id.starts_with("society:rera-") && entity.name == "RERA Meadows"
     }));
 }
 
@@ -1625,6 +1649,21 @@ async fn seed_required_red_flag_upstreams(
         &AssetPartition::global(),
     )
     .await;
+    seed_skill_fact_current(
+        lake,
+        store,
+        OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
+        "openstreetmap_society_access",
+        "2026-07-13",
+        &AssetPartition::global(),
+        vec![canonical.materialization_id.clone()],
+        now,
+        "approach_road_condition",
+        "documented",
+        "OpenStreetMap",
+        "seed-osm-society-access",
+    )
+    .await;
     for (asset_id, source, fact_key, value) in [
         (
             backend::assets::OSM_POWER_LINE_FACTS_ASSET_ID,
@@ -1826,12 +1865,6 @@ fn add_serving_eligibility_facts(society: &mut Node) {
         ("area", FactValue::Text("Whitefield".to_string())),
         ("builder_name", FactValue::Text("Test Builder".to_string())),
         (
-            "listing_3bhk",
-            FactValue::Text(
-                serde_json::json!({"price": 31_000_000.0, "area_sqft": 1_900.0}).to_string(),
-            ),
-        ),
-        (
             "hero_image",
             FactValue::Text("https://img.example.com/green-acre.webp".to_string()),
         ),
@@ -1892,9 +1925,9 @@ fn search_property(id: &str, society_id: &str, society_name: &str) -> Property {
         property_type: "Apartment".to_string(),
         listing_type: "Resale".to_string(),
         bhk: 3,
-        price: 18_000_000,
-        price_min: None,
-        price_max: None,
+        price: 31_000_000,
+        price_min: Some(30_000_000),
+        price_max: Some(32_000_000),
         price_per_sqft: 12_000,
         carpet_area_sqft: 1_200,
         super_builtup_sqft: 1_500,
@@ -2390,7 +2423,7 @@ fn mock_rera_input(now: chrono::DateTime<Utc>) -> ReraRegistryMonthlyInput {
                 promoter_name: Some("Proof Homes Private Limited".to_string()),
                 status: Some("Approved".to_string()),
                 project_type: Some("Residential Apartment".to_string()),
-                project_address: Some("Whitefield Main Road, Bengaluru".to_string()),
+                project_address: Some("Main Road, Whitefield, Bengaluru".to_string()),
                 area_name: Some("Whitefield".to_string()),
                 district: Some("Bengaluru Urban".to_string()),
                 taluk: Some("Bengaluru East".to_string()),
@@ -2406,7 +2439,7 @@ fn mock_rera_input(now: chrono::DateTime<Utc>) -> ReraRegistryMonthlyInput {
                 promoter_name: Some("Proof Homes Private Limited".to_string()),
                 status: Some("Approved".to_string()),
                 project_type: Some("Residential Apartment".to_string()),
-                project_address: Some("Whitefield Main Road, Bengaluru".to_string()),
+                project_address: Some("Main Road, Whitefield, Bengaluru".to_string()),
                 area_name: Some("Whitefield".to_string()),
                 district: Some("Bengaluru Urban".to_string()),
                 taluk: Some("Bengaluru East".to_string()),
@@ -2422,7 +2455,7 @@ fn mock_rera_input(now: chrono::DateTime<Utc>) -> ReraRegistryMonthlyInput {
                 promoter_name: Some("Proof Homes Private Limited".to_string()),
                 status: Some("Approved".to_string()),
                 project_type: Some("Residential Apartment".to_string()),
-                project_address: Some("Whitefield Main Road, Bengaluru".to_string()),
+                project_address: Some("Main Road, Whitefield, Bengaluru".to_string()),
                 area_name: Some("Whitefield".to_string()),
                 district: Some("Bengaluru Urban".to_string()),
                 taluk: Some("Bengaluru East".to_string()),

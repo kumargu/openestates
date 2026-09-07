@@ -9,6 +9,35 @@ use super::evidence::{DerivedEvidence, EvidenceId, EvidenceIdentityError, Source
 
 pub const SEARCH_SERVING_BUNDLE_ASSET_ID: &str = "search_serving_bundle";
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ServingEntityVisibility {
+    #[default]
+    Searchable,
+    Internal,
+}
+
+impl ServingEntityVisibility {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Searchable => "searchable",
+            Self::Internal => "internal",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "searchable" => Some(Self::Searchable),
+            "internal" => Some(Self::Internal),
+            _ => None,
+        }
+    }
+
+    pub fn is_searchable(self) -> bool {
+        self == Self::Searchable
+    }
+}
+
 /// One entity row in the request-path bundle.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ServingEntityRecord {
@@ -16,6 +45,8 @@ pub struct ServingEntityRecord {
     pub entity_type: String,
     pub name: String,
     pub root_source: Option<String>,
+    #[serde(default)]
+    pub visibility: ServingEntityVisibility,
     pub searchable_text: String,
 }
 
@@ -481,6 +512,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Prestige Falcon City".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }]);
 

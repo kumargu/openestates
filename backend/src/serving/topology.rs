@@ -358,6 +358,7 @@ mod tests {
             entity_type: kind.to_string(),
             name: id.to_string(),
             root_source: Some("test".to_string()),
+            visibility: Default::default(),
             searchable_text: id.to_string(),
         }
     }

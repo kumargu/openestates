@@ -21,7 +21,8 @@ use crate::parquet_data::{
 
 use super::{
     DerivedEvidence, ServingEdgeRecord, ServingEntityAliasRecord, ServingEntityRecord,
-    ServingFactRecord, ServingReraEvidenceRecord, ServingSearchMetadataRecord,
+    ServingEntityVisibility, ServingFactRecord, ServingReraEvidenceRecord,
+    ServingSearchMetadataRecord,
 };
 
 pub fn write_entities_parquet(
@@ -32,6 +33,7 @@ pub fn write_entities_parquet(
         Field::new("entity_type", DataType::Utf8, false),
         Field::new("name", DataType::Utf8, false),
         Field::new("root_source", DataType::Utf8, true),
+        Field::new("visibility", DataType::Utf8, false),
         Field::new("searchable_text", DataType::Utf8, false),
     ]));
 
@@ -47,6 +49,11 @@ pub fn write_entities_parquet(
             string_array(entities.iter().map(|entity| entity.entity_type.clone())),
             string_array(entities.iter().map(|entity| entity.name.clone())),
             optional_string_array(root_sources),
+            string_array(
+                entities
+                    .iter()
+                    .map(|entity| entity.visibility.as_str().to_string()),
+            ),
             string_array(entities.iter().map(|entity| entity.searchable_text.clone())),
         ],
     )
@@ -63,14 +70,24 @@ pub fn read_entities_parquet(bytes: &[u8]) -> Result<Vec<ServingEntityRecord>, P
         let entity_type = string_column(&batch, "entity_type")?;
         let name = string_column(&batch, "name")?;
         let root_source = string_column(&batch, "root_source")?;
+        let visibility = string_column(&batch, "visibility")?;
         let searchable_text = string_column(&batch, "searchable_text")?;
 
         for row in 0..batch.num_rows() {
+            let visibility_value = required_string(visibility, row, "visibility")?;
+            let visibility =
+                ServingEntityVisibility::parse(&visibility_value).ok_or_else(|| {
+                    ParquetReadError::InvalidTypedValue {
+                        row,
+                        message: format!("unknown serving entity visibility {visibility_value:?}"),
+                    }
+                })?;
             records.push(ServingEntityRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 entity_type: required_string(entity_type, row, "entity_type")?,
                 name: required_string(name, row, "name")?,
                 root_source: optional_string(root_source, row),
+                visibility,
                 searchable_text: required_string(searchable_text, row, "searchable_text")?,
             });
         }

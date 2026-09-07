@@ -1271,6 +1271,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Test Society".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let facts = vec![fact(FactValue::Text("School".to_string()))];

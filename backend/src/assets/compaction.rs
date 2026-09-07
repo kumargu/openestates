@@ -108,6 +108,11 @@ impl CurrentProjectFactsMaterializer {
             &dag_run_id,
             learned_at,
         ));
+        input_facts.extend(source_entity_market_locality_facts(
+            source_entities,
+            &dag_run_id,
+            learned_at,
+        ));
         let input_fact_count = input_facts.len() as u64;
         let scoped_fact_keys = input_facts
             .iter()
@@ -340,6 +345,91 @@ fn source_entity_coordinate_facts(
             ]
         })
         .collect()
+}
+
+fn source_entity_market_locality_facts(
+    source_entities: &[SourceEntitySeed],
+    run_id: &MaterializationId,
+    learned_at: DateTime<Utc>,
+) -> Vec<SkillFactRecord> {
+    let mut areas = BTreeMap::<String, Vec<&SourceEntitySeed>>::new();
+    for seed in source_entities {
+        let Some(area) = seed
+            .area
+            .as_deref()
+            .map(str::trim)
+            .filter(|area| !area.is_empty())
+        else {
+            continue;
+        };
+        areas
+            .entry(normalize_market_locality_name(area))
+            .or_default()
+            .push(seed);
+    }
+
+    areas
+        .into_iter()
+        .map(|(normalized_name, mut seeds)| {
+            seeds.sort_by(|left, right| left.entity_id.cmp(&right.entity_id));
+            let display_name = seeds
+                .iter()
+                .filter_map(|seed| seed.area.as_deref().map(str::trim))
+                .min()
+                .unwrap_or(normalized_name.as_str())
+                .to_string();
+            let name_digest = hex_digest(&Sha256::digest(normalized_name.as_bytes()));
+            let entity_id = format!("area:market:{}", &name_digest[..16]);
+            let encoded = serde_json::to_vec(&(
+                entity_id.as_str(),
+                display_name.as_str(),
+                seeds
+                    .iter()
+                    .map(|seed| seed.entity_id.as_str())
+                    .collect::<Vec<_>>(),
+            ))
+            .expect("market-locality source rows serialize");
+            let observation_digest = hex_digest(&Sha256::digest(encoded));
+            SkillFactRecord {
+                entity_id,
+                fact_key: "market.locality_name".to_string(),
+                value_type: "text".to_string(),
+                value_json: serde_json::to_string(&FactValue::Text(display_name))
+                    .expect("market-locality name serializes"),
+                confidence: 0.95,
+                source_type: "SourceEntitySeed".to_string(),
+                source_url: None,
+                model: None,
+                skill_id: Some("source_entity_seed".to_string()),
+                triggered_by: None,
+                learned_at,
+                run_id: run_id.to_string(),
+                input_hash: observation_digest.clone(),
+                observation_provider: Some("SourceEntitySeed".to_string()),
+                provider_observation_id: Some(format!(
+                    "market_locality_seed:sha256:{observation_digest}"
+                )),
+                asset_lineage: vec![format!("asset:source_entity_seed/run:{run_id}")],
+            }
+        })
+        .collect()
+}
+
+fn normalize_market_locality_name(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        write!(&mut output, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    output
 }
 
 fn source_entity_coordinate_fact(
@@ -849,6 +939,43 @@ mod tests {
         };
 
         assert_eq!(compaction_part_file_name(&policy, 7), "chunk-00007.parquet");
+    }
+
+    #[test]
+    fn source_entity_areas_emit_one_observed_market_locality_fact() {
+        let run_id = MaterializationId::new();
+        let learned_at = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
+        let seeds = [
+            SourceEntitySeed {
+                entity_id: "society:one".to_string(),
+                alias_entity_id: None,
+                name: "One".to_string(),
+                area: Some(" Whitefield ".to_string()),
+                city: Some("Bengaluru".to_string()),
+                project_key: None,
+                latitude: None,
+                longitude: None,
+            },
+            SourceEntitySeed {
+                entity_id: "society:two".to_string(),
+                alias_entity_id: None,
+                name: "Two".to_string(),
+                area: Some("whitefield".to_string()),
+                city: Some("Bengaluru".to_string()),
+                project_key: None,
+                latitude: None,
+                longitude: None,
+            },
+        ];
+
+        let facts = source_entity_market_locality_facts(&seeds, &run_id, learned_at);
+
+        assert_eq!(facts.len(), 1);
+        assert_eq!(facts[0].fact_key, "market.locality_name");
+        assert!(facts[0].entity_id.starts_with("area:market:"));
+        assert_eq!(facts[0].source_type, "SourceEntitySeed");
+        assert!(facts[0].provider_observation_id.is_some());
+        assert!(!facts[0].asset_lineage.is_empty());
     }
 
     #[test]
