@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 use crate::assets::{SkillFactRecord, SourceEntitySeed};
 use crate::dag_config::{
     load_fact_registry_index, load_resolution_policies, normalize_source_type,
-    scoring_direction_from_hint, MarketLocalityPolicy,
+    scoring_direction_from_hint, MarketLocalityPolicy, SpatialTopologyPolicy,
 };
 use crate::knowledge::FactValue;
 
@@ -22,8 +22,11 @@ use super::{
 const LEGACY_SOCIETY_BOUNDARY_FACT_KEY: &str = "society.boundary_geojson";
 const GEOMETRY_FACT_KEY: &str = "geo.geometry_geojson";
 const AREA_NAME_FACT_KEY: &str = "place.name";
-const EXPLICIT_AREA_NAME_FACT_KEY: &str = "geo.explicit_area_name";
 const IN_MARKET_LOCALITY: &str = "in_market_locality";
+const OCCUPIES_GEO_CELL: &str = "occupies_geo_cell";
+const COVERS_GEO_CELL: &str = "covers_geo_cell";
+const ADJACENT_MARKET_LOCALITY: &str = "adjacent_market_locality";
+const ADMIN_LEVEL_FACT_KEY: &str = "area.admin_level";
 const MARKET_LOCALITY_ROOT_SOURCE: &str = "market_locality";
 
 #[derive(Debug, Clone)]
@@ -46,12 +49,17 @@ pub struct AreaTopologyBackfillReport {
     pub added_area_fact_count: usize,
     pub rejected_area_entity_ids: Vec<String>,
     pub migrated_society_footprint_entity_ids: Vec<String>,
-    pub imported_explicit_area_reference_entity_ids: Vec<String>,
-    pub unmatched_explicit_area_references: BTreeMap<String, String>,
     pub ambiguous_area_names: Vec<String>,
     pub added_market_locality_entity_ids: Vec<String>,
     pub direct_market_locality_edge_count: usize,
     pub proximity_market_locality_edge_count: usize,
+    pub geo_cell_area_count: usize,
+    pub footprint_geo_cell_edge_count: usize,
+    pub point_geo_cell_edge_count: usize,
+    pub zero_cell_point_entity_ids: Vec<String>,
+    pub ambiguous_point_cell_entity_ids: Vec<String>,
+    pub multi_cell_footprint_entity_ids: Vec<String>,
+    pub market_geo_cell_edge_count: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -84,8 +92,9 @@ impl std::error::Error for AreaTopologyBackfillError {}
 /// Augment an immutable serving snapshot with qualified area inputs.
 ///
 /// Administrative topology and buyer market locality remain separate. OSM
-/// polygons produce `in_area`; qualified address and coordinate evidence
-/// produce `in_market_locality`.
+/// polygons produce geometry-backed `in_area`; qualified address evidence
+/// produces `in_market_locality`; and configured administrative polygons form
+/// an internal cell graph for bounded search expansion.
 pub fn backfill_area_topology(
     input: AreaTopologyBackfillInput,
 ) -> Result<AreaTopologyBackfillRecords, AreaTopologyBackfillError> {
@@ -121,15 +130,7 @@ pub fn backfill_area_topology(
                 .to_string(),
         ));
     }
-    let unique_area_ids = area_names
-        .values()
-        .filter(|area_ids| area_ids.len() == 1)
-        .flatten()
-        .cloned()
-        .collect::<HashSet<_>>();
-    qualified_area_facts.retain(|fact| unique_area_ids.contains(&fact.entity_id));
-
-    let mut added_entities = area_entities(&qualified_area_facts, &area_names)?;
+    let mut added_entities = area_entities(&qualified_area_facts)?;
     report.added_area_entity_ids = added_entities
         .iter()
         .map(|entity| entity.entity_id.clone())
@@ -156,19 +157,12 @@ pub fn backfill_area_topology(
     }
     report.migrated_society_footprint_entity_ids.sort();
     report.migrated_society_footprint_entity_ids.dedup();
-    let footprint_society_ids = report
-        .migrated_society_footprint_entity_ids
-        .iter()
-        .cloned()
-        .collect::<HashSet<_>>();
-
-    let policy = load_resolution_policies()
-        .map_err(backfill_error)?
-        .market_locality;
+    let policies = load_resolution_policies().map_err(backfill_error)?;
+    let market_policy = &policies.market_locality;
     let seed_areas = unique_seed_area_assertions(input.source_entity_seeds)?;
     let (mut market_entities, market_name_facts) = market_locality_seeds(
         &seed_areas,
-        &policy.market_name_fact_key,
+        &market_policy.market_name_fact_key,
         &input.source_entity_seed_lineage,
         input.imported_at,
     )?;
@@ -178,45 +172,10 @@ pub fn backfill_area_topology(
         .collect();
     added_entities.append(&mut market_entities);
 
-    let mut explicit_area_facts = Vec::new();
-    for (entity_id, area_name) in &seed_areas {
-        if !base_society_ids.contains(entity_id)
-            || footprint_society_ids.contains(entity_id)
-            || existing_fact_keys
-                .contains(&(entity_id.clone(), EXPLICIT_AREA_NAME_FACT_KEY.to_string()))
-        {
-            continue;
-        }
-        let normalized = normalize_exact_area_name(&area_name);
-        match area_names.get(&normalized) {
-            Some(area_ids) if area_ids.len() == 1 => {
-                explicit_area_facts.push(explicit_area_fact(
-                    entity_id,
-                    area_name,
-                    &input.source_entity_seed_lineage,
-                    input.imported_at,
-                )?);
-                report
-                    .imported_explicit_area_reference_entity_ids
-                    .push(entity_id.clone());
-            }
-            Some(_) => {
-                report.ambiguous_area_names.push(area_name.clone());
-            }
-            None => {
-                report
-                    .unmatched_explicit_area_references
-                    .insert(entity_id.clone(), area_name.clone());
-            }
-        }
-    }
-    report.imported_explicit_area_reference_entity_ids.sort();
-    report.imported_explicit_area_reference_entity_ids.dedup();
     report.ambiguous_area_names.sort();
     report.ambiguous_area_names.dedup();
 
     qualified_area_facts.extend(migrated_footprints);
-    qualified_area_facts.extend(explicit_area_facts);
     qualified_area_facts.extend(market_name_facts);
     let (mut added_facts, mut added_metadata) = serving_records(qualified_area_facts)?;
 
@@ -229,7 +188,11 @@ pub fn backfill_area_topology(
     entities.extend(added_entities);
     entities.sort_by(|left, right| left.entity_id.cmp(&right.entity_id));
 
-    let mut facts = input.facts;
+    let mut facts = input
+        .facts
+        .into_iter()
+        .filter(|fact| !fact.fact_key.eq_ignore_ascii_case("geo.explicit_area_name"))
+        .collect::<Vec<_>>();
     facts.append(&mut added_facts);
     facts.sort_by(|left, right| {
         left.entity_id
@@ -240,16 +203,26 @@ pub fn backfill_area_topology(
                     .cmp(&right.stable_selection_key())
             })
     });
-    let mut search_metadata = input.search_metadata;
+    facts.dedup_by(|left, right| {
+        left.entity_id == right.entity_id
+            && left.fact_key == right.fact_key
+            && left.stable_selection_key() == right.stable_selection_key()
+    });
+    let mut search_metadata = input
+        .search_metadata
+        .into_iter()
+        .filter(|row| !row.fact_key.eq_ignore_ascii_case("geo.explicit_area_name"))
+        .collect::<Vec<_>>();
     search_metadata.append(&mut added_metadata);
     search_metadata.sort_by(|left, right| {
         left.entity_id
             .cmp(&right.entity_id)
             .then_with(|| left.fact_key.cmp(&right.fact_key))
     });
+    search_metadata.dedup();
 
     let market_edges =
-        derive_market_locality_edges(&entities, &facts, &policy, &input.snapshot_identity)?;
+        derive_market_locality_edges(&entities, &facts, market_policy, &input.snapshot_identity)?;
     report.direct_market_locality_edge_count = market_edges
         .iter()
         .filter(|edge| {
@@ -261,13 +234,20 @@ pub fn backfill_area_topology(
     report.proximity_market_locality_edge_count =
         market_edges.len() - report.direct_market_locality_edge_count;
 
-    if report.migrated_society_footprint_entity_ids.is_empty()
-        && report
-            .imported_explicit_area_reference_entity_ids
-            .is_empty()
+    let geo_cell_edges = derive_geo_cell_edges(
+        &entities,
+        &facts,
+        &market_edges,
+        &policies.spatial_topology,
+        &input.snapshot_identity,
+        &mut report,
+    )?;
+    if geo_cell_edges
+        .iter()
+        .all(|edge| edge.edge_type != OCCUPIES_GEO_CELL)
     {
         return Err(AreaTopologyBackfillError(
-            "area-topology backfill produced no qualified society-to-area inputs".to_string(),
+            "area-topology backfill produced no qualified geo-cell occupancy".to_string(),
         ));
     }
 
@@ -276,8 +256,20 @@ pub fn backfill_area_topology(
         facts,
         search_metadata,
         edges: {
-            let mut edges = input.edges;
+            let mut edges = input
+                .edges
+                .into_iter()
+                .filter(|edge| {
+                    !edge.edge_type.eq_ignore_ascii_case(IN_MARKET_LOCALITY)
+                        && !edge.edge_type.eq_ignore_ascii_case(OCCUPIES_GEO_CELL)
+                        && !edge.edge_type.eq_ignore_ascii_case(COVERS_GEO_CELL)
+                        && !edge
+                            .edge_type
+                            .eq_ignore_ascii_case(ADJACENT_MARKET_LOCALITY)
+                })
+                .collect::<Vec<_>>();
             edges.extend(market_edges);
+            edges.extend(geo_cell_edges);
             edges.sort_by(|left, right| {
                 left.from_entity_id
                     .cmp(&right.from_entity_id)
@@ -362,7 +354,6 @@ fn unique_area_names(
 
 fn area_entities(
     facts: &[SkillFactRecord],
-    area_names: &HashMap<String, Vec<String>>,
 ) -> Result<Vec<ServingEntityRecord>, AreaTopologyBackfillError> {
     let mut names_by_id = HashMap::<String, String>::new();
     let mut sources_by_id = HashMap::<String, String>::new();
@@ -373,16 +364,11 @@ fn area_entities(
         let FactValue::Text(name) = fact_value(fact)? else {
             continue;
         };
-        if area_names
-            .get(&normalize_exact_area_name(&name))
-            .is_some_and(|ids| ids.len() == 1)
-        {
-            names_by_id.insert(fact.entity_id.clone(), name.trim().to_string());
-            sources_by_id.insert(
-                fact.entity_id.clone(),
-                fact.source_type.to_ascii_lowercase(),
-            );
-        }
+        names_by_id.insert(fact.entity_id.clone(), name.trim().to_string());
+        sources_by_id.insert(
+            fact.entity_id.clone(),
+            fact.source_type.to_ascii_lowercase(),
+        );
     }
     let mut entities = names_by_id
         .into_iter()
@@ -430,40 +416,6 @@ fn qualify_legacy_source_fact(fact: &mut SkillFactRecord) -> Result<(), AreaTopo
         )));
     }
     Ok(())
-}
-
-fn explicit_area_fact(
-    entity_id: &str,
-    area_name: &str,
-    lineage: &str,
-    imported_at: DateTime<Utc>,
-) -> Result<SkillFactRecord, AreaTopologyBackfillError> {
-    if lineage.trim().is_empty() {
-        return Err(AreaTopologyBackfillError(
-            "source-entity seed lineage is required".to_string(),
-        ));
-    }
-    let encoded = serde_json::to_vec(&(entity_id, area_name)).map_err(backfill_error)?;
-    let digest = hex_digest(&Sha256::digest(&encoded));
-    Ok(SkillFactRecord {
-        entity_id: entity_id.to_string(),
-        fact_key: EXPLICIT_AREA_NAME_FACT_KEY.to_string(),
-        value_type: "text".to_string(),
-        value_json: serde_json::to_string(&FactValue::Text(area_name.trim().to_string()))
-            .map_err(backfill_error)?,
-        confidence: 0.95,
-        source_type: "SourceEntitySeed".to_string(),
-        source_url: None,
-        model: None,
-        skill_id: Some("area_topology_backfill".to_string()),
-        triggered_by: Some("explicit_source_entity_area".to_string()),
-        learned_at: imported_at,
-        run_id: format!("source-entity-seed-{digest}"),
-        input_hash: digest.clone(),
-        observation_provider: Some("SourceEntitySeed".to_string()),
-        provider_observation_id: Some(format!("source_entity_seed:sha256:{digest}")),
-        asset_lineage: vec![lineage.to_string()],
-    })
 }
 
 fn market_locality_seeds(
@@ -676,6 +628,264 @@ fn derive_market_locality_edges(
             && left.to_entity_id == right.to_entity_id
     });
     Ok(edges)
+}
+
+fn derive_geo_cell_edges(
+    entities: &[ServingEntityRecord],
+    facts: &[ServingFactRecord],
+    market_edges: &[ServingEdgeRecord],
+    policy: &SpatialTopologyPolicy,
+    snapshot_identity: &str,
+    report: &mut AreaTopologyBackfillReport,
+) -> Result<Vec<ServingEdgeRecord>, AreaTopologyBackfillError> {
+    let fact_index = ServingFactIndex::from_records(facts.to_vec(), Vec::new());
+    let spatial = SpatialServingIndex::from_serving_bundle(entities, &fact_index);
+    let allowed_sources = policy
+        .geo_cell_area_sources
+        .iter()
+        .map(|source| normalize_source_type(source))
+        .collect::<HashSet<_>>();
+    let cell_ids = entities
+        .iter()
+        .filter(|entity| entity.entity_type.eq_ignore_ascii_case("area"))
+        .filter(|entity| {
+            entity
+                .root_source
+                .as_deref()
+                .is_some_and(|source| allowed_sources.contains(&normalize_source_type(source)))
+        })
+        .filter(|entity| {
+            serving_admin_level(&fact_index, &entity.entity_id) == Some(policy.geo_cell_admin_level)
+        })
+        .filter(|entity| spatial.geometry().has_footprint(&entity.entity_id))
+        .map(|entity| entity.entity_id.clone())
+        .collect::<HashSet<_>>();
+    report.geo_cell_area_count = cell_ids.len();
+    if cell_ids.is_empty() {
+        return Err(AreaTopologyBackfillError(format!(
+            "area-topology backfill found no configured admin-level-{} geo cells",
+            policy.geo_cell_admin_level
+        )));
+    }
+
+    let mut occupies = Vec::new();
+    for entity in entities.iter().filter(|entity| {
+        entity.entity_type.eq_ignore_ascii_case("society")
+            || entity.entity_type.eq_ignore_ascii_case("place")
+    }) {
+        if spatial.geometry().has_footprint(&entity.entity_id) {
+            let mut matches = spatial
+                .geometry()
+                .features_intersecting(&entity.entity_id)
+                .into_iter()
+                .filter(|cell| cell_ids.contains(&cell.entity_id))
+                .filter_map(|cell| {
+                    spatial
+                        .geometry()
+                        .overlap_ratio(&entity.entity_id, &cell.entity_id)
+                        .filter(|ratio| *ratio >= policy.minimum_geo_cell_overlap_ratio)
+                        .map(|ratio| (cell, ratio))
+                })
+                .collect::<Vec<_>>();
+            matches.sort_by(|(left, _), (right, _)| left.entity_id.cmp(&right.entity_id));
+            if matches.len() > 1 {
+                report
+                    .multi_cell_footprint_entity_ids
+                    .push(entity.entity_id.clone());
+            }
+            for (cell, overlap_ratio) in matches {
+                let Some(input_evidence) = spatial.footprint_evidence_refs(
+                    &[&entity.entity_id, &cell.entity_id],
+                    snapshot_identity,
+                ) else {
+                    continue;
+                };
+                let confidence = spatial
+                    .geometry()
+                    .feature(&entity.entity_id)
+                    .map_or(0.0, |feature| feature.confidence)
+                    .min(cell.confidence);
+                occupies.push(geo_cell_edge(
+                    &entity.entity_id,
+                    &cell.entity_id,
+                    OCCUPIES_GEO_CELL,
+                    "footprint_overlap_ratio",
+                    Some(overlap_ratio),
+                    Some("ratio"),
+                    confidence,
+                    input_evidence,
+                    snapshot_identity,
+                )?);
+                report.footprint_geo_cell_edge_count += 1;
+            }
+            continue;
+        }
+
+        let Some(point) = spatial
+            .point_for_entity(&entity.entity_id)
+            .filter(|point| point.confidence >= policy.minimum_point_confidence)
+            .filter(|point| !point.observations.is_empty())
+        else {
+            continue;
+        };
+        let mut containing = spatial
+            .geometry()
+            .features_containing_coordinate(point.latitude, point.longitude)
+            .into_iter()
+            .filter(|cell| cell_ids.contains(&cell.entity_id))
+            .collect::<Vec<_>>();
+        containing.sort_by(|left, right| left.entity_id.cmp(&right.entity_id));
+        containing.dedup_by(|left, right| left.entity_id == right.entity_id);
+        match containing.as_slice() {
+            [] => report
+                .zero_cell_point_entity_ids
+                .push(entity.entity_id.clone()),
+            [cell] => {
+                let Some(cell_observation) = cell.observation.as_ref() else {
+                    continue;
+                };
+                let mut input_evidence = point
+                    .observations
+                    .iter()
+                    .map(|observation| EvidenceRef::for_observation(snapshot_identity, observation))
+                    .collect::<Vec<_>>();
+                input_evidence.push(EvidenceRef::for_observation(
+                    snapshot_identity,
+                    cell_observation,
+                ));
+                occupies.push(geo_cell_edge(
+                    &entity.entity_id,
+                    &cell.entity_id,
+                    OCCUPIES_GEO_CELL,
+                    "qualified_point_containment",
+                    Some(1.0),
+                    Some("boolean"),
+                    point.confidence.min(cell.confidence),
+                    input_evidence,
+                    snapshot_identity,
+                )?);
+                report.point_geo_cell_edge_count += 1;
+            }
+            _ => report
+                .ambiguous_point_cell_entity_ids
+                .push(entity.entity_id.clone()),
+        }
+    }
+    report.multi_cell_footprint_entity_ids.sort();
+    report.multi_cell_footprint_entity_ids.dedup();
+    report.zero_cell_point_entity_ids.sort();
+    report.zero_cell_point_entity_ids.dedup();
+    report.ambiguous_point_cell_entity_ids.sort();
+    report.ambiguous_point_cell_entity_ids.dedup();
+
+    let mut occupancy_by_entity = HashMap::<&str, Vec<&ServingEdgeRecord>>::new();
+    for edge in &occupies {
+        occupancy_by_entity
+            .entry(edge.from_entity_id.as_str())
+            .or_default()
+            .push(edge);
+    }
+    let mut coverage_inputs = BTreeMap::<(String, String), (f32, Vec<EvidenceRef>)>::new();
+    for membership in market_edges {
+        let Some(membership_derivation) = membership.derivation.as_ref() else {
+            continue;
+        };
+        for occupancy in occupancy_by_entity
+            .get(membership.from_entity_id.as_str())
+            .into_iter()
+            .flatten()
+        {
+            let Some(occupancy_derivation) = occupancy.derivation.as_ref() else {
+                continue;
+            };
+            let entry = coverage_inputs
+                .entry((
+                    membership.to_entity_id.clone(),
+                    occupancy.to_entity_id.clone(),
+                ))
+                .or_insert((1.0, Vec::new()));
+            entry.0 = entry.0.min(membership.confidence).min(occupancy.confidence);
+            entry
+                .1
+                .push(EvidenceRef::for_derivation(membership_derivation));
+            entry
+                .1
+                .push(EvidenceRef::for_derivation(occupancy_derivation));
+        }
+    }
+    let mut coverage = coverage_inputs
+        .into_iter()
+        .map(|((market_id, cell_id), (confidence, input_evidence))| {
+            geo_cell_edge(
+                &market_id,
+                &cell_id,
+                COVERS_GEO_CELL,
+                "member_geo_cell_coverage",
+                Some(1.0),
+                Some("boolean"),
+                confidence,
+                input_evidence,
+                snapshot_identity,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    report.market_geo_cell_edge_count = coverage.len();
+    occupies.append(&mut coverage);
+    occupies.sort_by(|left, right| {
+        left.from_entity_id
+            .cmp(&right.from_entity_id)
+            .then_with(|| left.edge_type.cmp(&right.edge_type))
+            .then_with(|| left.to_entity_id.cmp(&right.to_entity_id))
+    });
+    Ok(occupies)
+}
+
+fn serving_admin_level(facts: &ServingFactIndex, entity_id: &str) -> Option<u8> {
+    facts
+        .entity(entity_id)?
+        .facts
+        .iter()
+        .filter(|fact| fact.fact_key.eq_ignore_ascii_case(ADMIN_LEVEL_FACT_KEY))
+        .find_map(|fact| match &fact.value {
+            FactValue::Text(value) => value.trim().parse().ok(),
+            FactValue::Numeric(value) if value.fract() == 0.0 => Some(*value as u8),
+            _ => None,
+        })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn geo_cell_edge(
+    subject_id: &str,
+    cell_id: &str,
+    relation: &str,
+    metric: &str,
+    value: Option<f64>,
+    unit: Option<&str>,
+    confidence: f32,
+    input_evidence: Vec<EvidenceRef>,
+    snapshot_identity: &str,
+) -> Result<ServingEdgeRecord, AreaTopologyBackfillError> {
+    let derivation = DerivedEvidence::new(
+        snapshot_identity,
+        subject_id,
+        Some(cell_id.to_string()),
+        relation,
+        metric,
+        value,
+        unit.map(str::to_string),
+        "geo-cell-materialization-v1",
+        confidence,
+        input_evidence,
+    )
+    .map_err(backfill_error)?;
+    Ok(ServingEdgeRecord {
+        from_entity_id: subject_id.to_string(),
+        edge_type: relation.to_string(),
+        to_entity_id: cell_id.to_string(),
+        confidence,
+        source_type: "GeoCellMaterialization".to_string(),
+        derivation: Some(derivation),
+    })
 }
 
 fn address_has_component(address: &str, normalized_locality: &str) -> bool {
@@ -964,7 +1174,7 @@ mod tests {
     }
 
     #[test]
-    fn backfill_uses_polygon_or_explicit_seed_area_and_ignores_unmatched_names() {
+    fn backfill_materializes_evidenced_geo_cells_without_name_containment() {
         let area_facts = vec![
             skill_fact(
                 "area:osm:whitefield",
@@ -984,6 +1194,24 @@ mod tests {
                 "area.admin_level",
                 FactValue::Text("10".to_string()),
             ),
+            skill_fact(
+                "area:osm:hoodi",
+                AREA_NAME_FACT_KEY,
+                FactValue::Text("Hoodi".to_string()),
+            ),
+            skill_fact(
+                "area:osm:hoodi",
+                GEOMETRY_FACT_KEY,
+                FactValue::Text(
+                    r#"{"type":"Polygon","coordinates":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}"#
+                        .to_string(),
+                ),
+            ),
+            skill_fact(
+                "area:osm:hoodi",
+                "area.admin_level",
+                FactValue::Text("10".to_string()),
+            ),
         ];
         let mut legacy_footprint = skill_fact(
             "society:polygon",
@@ -995,13 +1223,25 @@ mod tests {
         legacy_footprint.observation_provider = None;
         legacy_footprint.provider_observation_id = None;
         legacy_footprint.asset_lineage.clear();
+        let mut multi_cell_footprint = skill_fact(
+            "society:multi-cell",
+            LEGACY_SOCIETY_BOUNDARY_FACT_KEY,
+            FactValue::Text(
+                r#"{"type":"Polygon","coordinates":[[[9.9,1],[10.1,1],[10.1,2],[9.9,2],[9.9,1]]]}"#
+                    .to_string(),
+            ),
+        );
+        multi_cell_footprint.observation_provider = None;
+        multi_cell_footprint.provider_observation_id = None;
+        multi_cell_footprint.asset_lineage.clear();
         let records = backfill_area_topology(AreaTopologyBackfillInput {
             entities: vec![
                 entity("society:polygon", "society"),
+                entity("society:multi-cell", "society"),
                 entity("society:explicit", "society"),
                 entity("society:nearby", "society"),
+                entity("society:ambiguous", "society"),
                 entity("society:far", "society"),
-                entity("society:unmatched", "society"),
                 entity("place:hospital", "place"),
             ],
             facts: vec![
@@ -1022,44 +1262,72 @@ mod tests {
                 observed_fact(
                     "society:explicit",
                     "geo.latitude",
-                    FactValue::Numeric(12.98),
+                    FactValue::Numeric(2.0),
                     "Google",
                     "google-coordinates-explicit",
                 ),
                 observed_fact(
                     "society:explicit",
                     "geo.longitude",
-                    FactValue::Numeric(77.71),
+                    FactValue::Numeric(7.0),
                     "Google",
                     "google-coordinates-explicit",
                 ),
                 observed_fact(
                     "society:nearby",
                     "geo.latitude",
-                    FactValue::Numeric(12.981),
+                    FactValue::Numeric(2.001),
                     "Google",
                     "google-coordinates-nearby",
                 ),
                 observed_fact(
                     "society:nearby",
                     "geo.longitude",
-                    FactValue::Numeric(77.711),
+                    FactValue::Numeric(7.001),
                     "Google",
                     "google-coordinates-nearby",
                 ),
                 observed_fact(
                     "society:far",
                     "geo.latitude",
-                    FactValue::Numeric(13.20),
+                    FactValue::Numeric(20.0),
                     "Google",
                     "google-coordinates-far",
                 ),
                 observed_fact(
                     "society:far",
                     "geo.longitude",
-                    FactValue::Numeric(77.90),
+                    FactValue::Numeric(90.0),
                     "Google",
                     "google-coordinates-far",
+                ),
+                observed_fact(
+                    "society:ambiguous",
+                    "geo.latitude",
+                    FactValue::Numeric(2.0),
+                    "Google",
+                    "google-coordinates-ambiguous",
+                ),
+                observed_fact(
+                    "society:ambiguous",
+                    "geo.longitude",
+                    FactValue::Numeric(10.0),
+                    "Google",
+                    "google-coordinates-ambiguous",
+                ),
+                observed_fact(
+                    "society:polygon",
+                    "geo.latitude",
+                    FactValue::Numeric(2.0),
+                    "Google",
+                    "google-coordinates-polygon",
+                ),
+                observed_fact(
+                    "society:polygon",
+                    "geo.longitude",
+                    FactValue::Numeric(15.0),
+                    "Google",
+                    "google-coordinates-polygon",
                 ),
             ],
             search_metadata: Vec::new(),
@@ -1067,11 +1335,10 @@ mod tests {
             rera_evidence: Vec::new(),
             excluded_rera_evidence_society_ids: Vec::new(),
             area_facts,
-            society_geometry_facts: vec![legacy_footprint],
+            society_geometry_facts: vec![legacy_footprint, multi_cell_footprint],
             source_entity_seeds: vec![
                 seed("society:polygon", "Whitefield"),
                 seed("society:explicit", " Whitefield "),
-                seed("society:unmatched", "Not In Boundary Data"),
             ],
             source_entity_seed_lineage: "source_entity_seed:file:sha256:fixture".to_string(),
             snapshot_identity: "backfill-fixture".to_string(),
@@ -1081,23 +1348,12 @@ mod tests {
 
         assert_eq!(
             records.report.migrated_society_footprint_entity_ids,
-            ["society:polygon"]
+            ["society:multi-cell", "society:polygon"]
         );
-        assert_eq!(
-            records.report.imported_explicit_area_reference_entity_ids,
-            ["society:explicit"]
-        );
-        assert_eq!(
-            records
-                .report
-                .unmatched_explicit_area_references
-                .get("society:unmatched")
-                .map(String::as_str),
-            Some("Not In Boundary Data")
-        );
-        assert!(!records.facts.iter().any(|fact| {
-            fact.entity_id == "society:polygon" && fact.fact_key == EXPLICIT_AREA_NAME_FACT_KEY
-        }));
+        assert!(!records
+            .facts
+            .iter()
+            .any(|fact| fact.fact_key == "geo.explicit_area_name"));
         assert_eq!(records.report.direct_market_locality_edge_count, 2);
         assert_eq!(records.report.proximity_market_locality_edge_count, 1);
         let whitefield_market_id = records
@@ -1139,44 +1395,58 @@ mod tests {
         assert!(!records.edges.iter().any(|edge| {
             edge.from_entity_id == "society:far" && edge.edge_type == IN_MARKET_LOCALITY
         }));
+        assert_eq!(records.report.geo_cell_area_count, 2);
+        assert_eq!(records.report.footprint_geo_cell_edge_count, 3);
+        assert_eq!(records.report.point_geo_cell_edge_count, 2);
+        assert_eq!(
+            records.report.multi_cell_footprint_entity_ids,
+            ["society:multi-cell"]
+        );
+        assert_eq!(
+            records.report.ambiguous_point_cell_entity_ids,
+            ["society:ambiguous"]
+        );
+        assert_eq!(records.report.zero_cell_point_entity_ids, ["society:far"]);
+        assert_eq!(records.report.market_geo_cell_edge_count, 1);
+        let polygon_cells = records
+            .edges
+            .iter()
+            .filter(|edge| {
+                edge.from_entity_id == "society:polygon" && edge.edge_type == OCCUPIES_GEO_CELL
+            })
+            .map(|edge| edge.to_entity_id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(polygon_cells, ["area:osm:whitefield"]);
+        let multi_cells = records
+            .edges
+            .iter()
+            .filter(|edge| {
+                edge.from_entity_id == "society:multi-cell" && edge.edge_type == OCCUPIES_GEO_CELL
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(multi_cells.len(), 2);
+        assert!(multi_cells.iter().all(|edge| edge
+            .derivation
+            .as_ref()
+            .is_some_and(|derivation| derivation.metric == "footprint_overlap_ratio"
+                && derivation.value.is_some_and(|ratio| ratio >= 0.49))));
+        assert!(records.edges.iter().any(|edge| {
+            edge.from_entity_id == whitefield_market_id
+                && edge.edge_type == COVERS_GEO_CELL
+                && edge.to_entity_id == "area:osm:whitefield"
+                && edge
+                    .derivation
+                    .as_ref()
+                    .is_some_and(|derivation| derivation.input_evidence.len() >= 2)
+        }));
 
-        let mut topology_facts = records.facts.clone();
-        let explicit_observed_at = Utc.timestamp_opt(1_700_000_200, 0).unwrap();
-        topology_facts.push(ServingFactRecord {
-            entity_id: "society:polygon".to_string(),
-            fact_key: EXPLICIT_AREA_NAME_FACT_KEY.to_string(),
-            value_type: "text".to_string(),
-            value_text: Some("Whitefield".to_string()),
-            value: FactValue::Text("Whitefield".to_string()),
-            confidence: 0.95,
-            source_type: "SourceEntitySeed".to_string(),
-            source_url: None,
-            model: None,
-            skill_id: Some("topology_fixture".to_string()),
-            learned_at: explicit_observed_at,
-            observation: Some(
-                SourceObservation::new(
-                    "SourceEntitySeed",
-                    "polygon-explicit-area",
-                    "society:polygon",
-                    explicit_observed_at,
-                    None,
-                    vec!["asset:topology-fixture/run:fixture-run".to_string()],
-                )
-                .unwrap(),
-            ),
-        });
-        let index = ServingFactIndex::from_records(topology_facts, records.search_metadata.clone());
-        let policy = SpatialTopologyPolicy {
-            explicit_area_name_fact_keys: vec![EXPLICIT_AREA_NAME_FACT_KEY.to_string()],
-            explicit_area_name_allowed_sources: vec!["source_entity_seed".to_string()],
-            ..SpatialTopologyPolicy::default()
-        };
+        let index =
+            ServingFactIndex::from_records(records.facts.clone(), records.search_metadata.clone());
         let topology = derive_spatial_topology(
             &records.entities,
             &index,
             &records.edges,
-            &policy,
+            &SpatialTopologyPolicy::default(),
             "backfill-fixture",
         );
         assert!(topology.edges.iter().any(|edge| {
@@ -1187,20 +1457,17 @@ mod tests {
                     .as_ref()
                     .is_some_and(|derivation| derivation.metric == "footprint_containment")
         }));
-        assert!(topology.edges.iter().any(|edge| {
-            edge.from_entity_id == "society:explicit"
-                && edge.to_entity_id == "area:osm:whitefield"
-                && edge
-                    .derivation
-                    .as_ref()
-                    .is_some_and(|derivation| derivation.metric == "explicit_area_name_match")
-        }));
         assert!(!topology
             .edges
             .iter()
-            .any(|edge| edge.from_entity_id == "society:unmatched"));
+            .any(|edge| edge.from_entity_id == "society:explicit"));
         assert!(validate_serving_edge_evidence(
-            &topology.edges,
+            &records
+                .edges
+                .iter()
+                .chain(topology.edges.iter())
+                .cloned()
+                .collect::<Vec<_>>(),
             index.all_facts(),
             "backfill-fixture"
         )

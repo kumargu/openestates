@@ -46,10 +46,11 @@
     "minimum_point_confidence": 0.5,
     "ambiguity_epsilon": 1e-9,
     "require_matching_admin_level_for_adjacency": true,
-    "explicit_area_name_fact_keys": ["geo.explicit_area_name"],
-    "explicit_area_name_allowed_sources": ["source_entity_seed"],
-    "minimum_explicit_area_confidence": 0.8,
-    "area_name_fact_key": "place.name"
+    "geo_cell_admin_level": 10,
+    "geo_cell_area_sources": ["openstreetmap"],
+    "minimum_geo_cell_overlap_ratio": 0.01,
+    "geo_cell_max_hops": 2,
+    "geo_cell_max_distance_km": 4.0
   },
   "market_locality": {
     "direct_address_fact_keys": ["google_place_address", "rera_project_address"],

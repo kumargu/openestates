@@ -1,5 +1,82 @@
 # Issue 118 execution log
 
+## OSM geo-cell search checkpoint — 2026-09-07
+
+- Starting HEAD: `feba1670` on `feat/issue-118-consolidated`; worktree clean.
+- Classification: `architecture_gap`. The r6 child proves distinct buyer
+  market-locality membership, but its fallback geography is split between a
+  coordinate-only `GeoScope::SocietyNeighborhood` and a separately
+  materialized `adjacent_market_locality` graph. Meanwhile, physical
+  `in_area` containment still admits name-derived
+  `geo.explicit_area_name`/`explicit_area_name_match` evidence.
+- Chain audit: `ce50c216`, `1b19ac4c`, and `9b9d9820` established qualified
+  polygon topology and durable spatial evidence; `9268af84` made geography
+  branch-owned; `2ee4d456` backfilled missing area topology; `feba1670`
+  correctly separated buyer market localities from OSM administrative areas,
+  but added the duplicate neighborhood and market-adjacency representations
+  this checkpoint will consolidate.
+- Config read before implementation: `app/config/dag/manifest.json`,
+  `resolution_policies.json`, and `ontology.json`. OSM administrative-level-10
+  polygons will be reused as unnamed internal cells; no locality, society, or
+  place vocabulary will be added to runtime code or parser config.
+- Baseline artifact: unpromoted r6 child
+  `/tmp/openestates-issue118-topology-backfill-lake/serving/search_bundle/version=issue-118-whitefield-115-plus-27-market-locality-2026-09-07-r6`.
+  Its recorded Parquet counts are 2,103 entities, 22,764 facts, 9,026 edges,
+  and 32 `in_market_locality` edges. The prior API baseline preserves exact
+  society first and same-Whitefield Google order for Godrej Air and Prestige
+  Waterford branches.
+- Implementation boundary: first materialize `occupies_geo_cell` and
+  `covers_geo_cell` with durable geometry/coordinate/topology evidence in an
+  isolated child. Only after point ambiguity, footprint overlap, cell size,
+  and adjacency gates pass will search compile a single scoped geography and
+  traverse evidenced `adjacent_area` paths within config-owned hop and distance
+  limits.
+
+### Verified geo-cell materialization checkpoint
+
+- Removed `geo.explicit_area_name` from the fact registry and child bundles,
+  deleted `explicit_area_name_match` topology derivation, and kept `in_area`
+  for footprint containment and area hierarchy only. Rebuilding from r6 also
+  discards and recomputes snapshot-qualified market/cell edges instead of
+  reusing stale derivations.
+- Added ontology-backed `occupies_geo_cell` (society/place to OSM area) and
+  `covers_geo_cell` (market locality to OSM area). Config selects
+  OpenStreetMap admin-level-10 polygons, 1% minimum footprint overlap, two
+  traversal hops, and a 4 km cap. Footprints materialize every qualifying
+  overlap and take precedence over points; a qualified point materializes only
+  when exactly one cell contains it. Coverage edges retain both market
+  membership and occupancy derivation references.
+- OSM polygon-name uniqueness is no longer an admission rule. Repeated names
+  remain harmless internal metadata on distinct source identities and cannot
+  create artificial cell gaps or containment.
+- The isolated unpromoted child is materialization
+  `f2edea91-248c-4179-9266-e2184ed408d2`, version
+  `issue-118-whitefield-115-plus-27-geo-cells-2026-09-07-r11`, under
+  `/tmp/openestates-issue118-topology-backfill-lake`. The failed r7 attempt
+  exposed stale r6 evidence reuse; r8 exposed duplicate imported area rows.
+  r9 then exposed the remaining name-uniqueness admission rule. All three were
+  corrected before selecting r11. No main-lake or production pointer changed.
+- Direct Parquet inspection found 2,259 entities, 23,509 facts, 10,756 edges,
+  and 23,226 search-metadata rows. There are 370 configured cells, zero
+  `geo.explicit_area_name` facts, zero `explicit_area_name_match` derivations,
+  zero `adjacent_market_locality` edges, and one geometry-backed `in_area`
+  society edge.
+- Point containment produced 552 one-cell assignments and zero overlapping
+  assignments; 42 qualified points fell outside the selected cells, including
+  three societies, and remain honest coverage gaps. The one live society
+  footprint overlaps a single cell at 0.99999999; the focused materializer
+  contract proves multi-cell footprints retain every overlap above 1% and
+  that a footprint overrides a conflicting point.
+- Cell area distribution is 0.20 km² minimum, 1.09 km² median, 6.42 km² p95,
+  and 18.04 km² maximum (718.79 km² total). The 4,748 directed evidenced
+  adjacency edges have degree 1 minimum, 5 median, 9 p95, and 15 maximum.
+  The bounded runtime distance cap remains necessary for unusually large or
+  irregular cells.
+- Requested live mappings pass: Godrej Air → Bharath Aikya Ward, Habitat Eden
+  Heights → Kaveri Nagara, and Prestige Waterford → S.M Krishna Ward. OSM
+  names were used only to inspect this internal data gate and are not part of
+  search/API output.
+
 ## Consolidated continuation plan — Issues 118, 123, and 124
 
 - Reset recorded: 2026-09-06 Asia/Kolkata

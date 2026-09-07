@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 
-use crate::dag_config::{normalize_source_type, SpatialTopologyPolicy};
+use crate::dag_config::SpatialTopologyPolicy;
 use crate::knowledge::FactValue;
 
 use super::{
-    DerivedEvidence, EvidenceRef, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex,
-    ServingFactRecord, SpatialGeometry, SpatialServingIndex,
+    DerivedEvidence, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex, SpatialGeometry,
+    SpatialServingIndex,
 };
 
 const IN_AREA: &str = "in_area";
@@ -23,9 +23,6 @@ pub(crate) fn remove_derived_spatial_topology_edges(edges: &mut Vec<ServingEdgeR
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SpatialTopologyReport {
     pub edges: Vec<ServingEdgeRecord>,
-    pub explicit_area_bound_entity_ids: Vec<String>,
-    pub unresolved_explicit_area_entity_ids: Vec<String>,
-    pub ambiguous_explicit_area_entity_ids: Vec<String>,
     pub ambiguous_entity_ids: Vec<String>,
     pub missing_geometry_entity_ids: Vec<String>,
     pub missing_admin_level_entity_ids: Vec<String>,
@@ -72,24 +69,11 @@ pub fn derive_spatial_topology(
             )
         })
         .collect::<HashSet<_>>();
-    let explicitly_bound = derive_explicit_area_references(
-        entities,
-        facts,
-        &spatial,
-        policy,
-        snapshot_identity,
-        &mut report,
-        &mut seen,
-    );
-
     for entity in entities.iter().filter(|entity| {
         entity.entity_type.eq_ignore_ascii_case("society")
             || (entity.entity_type.eq_ignore_ascii_case("place")
                 && !super::is_canonical_spatial_entity(entity))
     }) {
-        if explicitly_bound.contains(&entity.entity_id) {
-            continue;
-        }
         let feature = spatial.geometry().feature(&entity.entity_id);
         let containing = if feature
             .is_some_and(|feature| !matches!(feature.geometry, SpatialGeometry::Point(_)))
@@ -230,198 +214,11 @@ pub fn derive_spatial_topology(
     }
     report.ambiguous_entity_ids.sort();
     report.ambiguous_entity_ids.dedup();
-    report.explicit_area_bound_entity_ids.sort();
-    report.explicit_area_bound_entity_ids.dedup();
-    report.unresolved_explicit_area_entity_ids.sort();
-    report.unresolved_explicit_area_entity_ids.dedup();
-    report.ambiguous_explicit_area_entity_ids.sort();
-    report.ambiguous_explicit_area_entity_ids.dedup();
     report.missing_geometry_entity_ids.sort();
     report.missing_geometry_entity_ids.dedup();
     report.missing_admin_level_entity_ids.sort();
     report.missing_admin_level_entity_ids.dedup();
     report
-}
-
-fn derive_explicit_area_references(
-    entities: &[ServingEntityRecord],
-    facts: &ServingFactIndex,
-    spatial: &SpatialServingIndex,
-    policy: &SpatialTopologyPolicy,
-    snapshot_identity: &str,
-    report: &mut SpatialTopologyReport,
-    seen: &mut HashSet<(String, String, String)>,
-) -> HashSet<String> {
-    if policy.explicit_area_name_fact_keys.is_empty()
-        || policy.explicit_area_name_allowed_sources.is_empty()
-    {
-        return HashSet::new();
-    }
-    let configured_keys = policy
-        .explicit_area_name_fact_keys
-        .iter()
-        .map(|key| key.to_ascii_lowercase())
-        .collect::<HashSet<_>>();
-    let allowed_sources = policy
-        .explicit_area_name_allowed_sources
-        .iter()
-        .map(|source| normalize_source_type(source))
-        .collect::<HashSet<_>>();
-    let mut areas_by_name =
-        std::collections::HashMap::<String, Vec<(&ServingEntityRecord, &ServingFactRecord)>>::new();
-    for area in entities
-        .iter()
-        .filter(|entity| entity.entity_type.eq_ignore_ascii_case("area"))
-    {
-        let Some(rows) = facts.entity(&area.entity_id) else {
-            continue;
-        };
-        for name_fact in rows.facts.iter().filter(|fact| {
-            fact.fact_key
-                .eq_ignore_ascii_case(&policy.area_name_fact_key)
-                && fact.observation.is_some()
-        }) {
-            let FactValue::Text(name) = &name_fact.value else {
-                continue;
-            };
-            let normalized = normalize_exact_area_name(name);
-            if !normalized.is_empty() {
-                areas_by_name
-                    .entry(normalized)
-                    .or_default()
-                    .push((area, name_fact));
-            }
-        }
-    }
-    for candidates in areas_by_name.values_mut() {
-        candidates.sort_by(|(left_area, left_fact), (right_area, right_fact)| {
-            left_area
-                .entity_id
-                .cmp(&right_area.entity_id)
-                .then_with(|| {
-                    left_fact
-                        .stable_selection_key()
-                        .cmp(&right_fact.stable_selection_key())
-                })
-        });
-        candidates.dedup_by(|left, right| left.0.entity_id == right.0.entity_id);
-    }
-
-    let mut bound = HashSet::new();
-    for entity in entities.iter().filter(|entity| {
-        entity.entity_type.eq_ignore_ascii_case("society")
-            || entity.entity_type.eq_ignore_ascii_case("place")
-    }) {
-        if spatial
-            .geometry()
-            .feature(&entity.entity_id)
-            .is_some_and(|feature| !matches!(feature.geometry, SpatialGeometry::Point(_)))
-        {
-            continue;
-        }
-        let Some(rows) = facts.entity(&entity.entity_id) else {
-            continue;
-        };
-        let mut references = rows
-            .facts
-            .iter()
-            .filter(|fact| configured_keys.contains(&fact.fact_key.to_ascii_lowercase()))
-            .filter(|fact| fact.confidence >= policy.minimum_explicit_area_confidence)
-            .filter(|fact| allowed_sources.contains(&normalize_source_type(&fact.source_type)))
-            .filter(|fact| fact.observation.is_some())
-            .filter_map(|fact| match &fact.value {
-                FactValue::Text(name) if !normalize_exact_area_name(name).is_empty() => {
-                    Some((normalize_exact_area_name(name), fact))
-                }
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        if references.is_empty() {
-            continue;
-        }
-        references.sort_by(|(_, left), (_, right)| {
-            right.confidence.total_cmp(&left.confidence).then_with(|| {
-                left.stable_selection_key()
-                    .cmp(&right.stable_selection_key())
-            })
-        });
-
-        let mut resolved =
-            Vec::<(&ServingEntityRecord, &ServingFactRecord, &ServingFactRecord)>::new();
-        let mut unresolved = false;
-        let mut ambiguous = false;
-        for (name, reference_fact) in references {
-            match areas_by_name.get(&name).map(Vec::as_slice) {
-                None | Some([]) => unresolved = true,
-                Some([candidate]) => resolved.push((candidate.0, candidate.1, reference_fact)),
-                Some(_) => ambiguous = true,
-            }
-        }
-        resolved.sort_by(|left, right| left.0.entity_id.cmp(&right.0.entity_id));
-        resolved.dedup_by(|left, right| left.0.entity_id == right.0.entity_id);
-        if ambiguous || resolved.len() > 1 {
-            report
-                .ambiguous_explicit_area_entity_ids
-                .push(entity.entity_id.clone());
-            continue;
-        }
-        if unresolved {
-            report
-                .unresolved_explicit_area_entity_ids
-                .push(entity.entity_id.clone());
-            continue;
-        }
-        let Some((area, area_name_fact, reference_fact)) = resolved.first().copied() else {
-            continue;
-        };
-        let confidence = reference_fact.confidence.min(area_name_fact.confidence);
-        let inputs = [reference_fact, area_name_fact]
-            .into_iter()
-            .filter_map(|fact| fact.observation.as_ref())
-            .map(|observation| EvidenceRef::for_observation(snapshot_identity, observation))
-            .collect::<Vec<_>>();
-        let derivation = DerivedEvidence::new(
-            snapshot_identity,
-            &entity.entity_id,
-            Some(area.entity_id.clone()),
-            IN_AREA,
-            "explicit_area_name_match",
-            Some(1.0),
-            Some("boolean".to_string()),
-            "spatial-topology-explicit-area-v1",
-            confidence,
-            inputs,
-        )
-        .ok();
-        if derivation.is_none() {
-            report
-                .unresolved_explicit_area_entity_ids
-                .push(entity.entity_id.clone());
-            continue;
-        }
-        push_edge(
-            &mut report.edges,
-            seen,
-            &entity.entity_id,
-            IN_AREA,
-            &area.entity_id,
-            confidence,
-            derivation,
-        );
-        report
-            .explicit_area_bound_entity_ids
-            .push(entity.entity_id.clone());
-        bound.insert(entity.entity_id.clone());
-    }
-    bound
-}
-
-fn normalize_exact_area_name(value: &str) -> String {
-    value
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase()
 }
 
 enum Containment {
