@@ -595,7 +595,13 @@ fn issue_118_fixture() -> MockSearchFixture {
     }
     builder.add_place("Hoodi Metro", "metro", 12.9900, 77.7150);
     builder.add_place("Manipal Hospital", "hospital", 12.9700, 77.7350);
+    builder.add_edge("place:hoodi-metro", "in_market_locality", "area:hoodi");
     builder.add_edge("place:hoodi-metro", "in_area", "area:hoodi");
+    builder.add_edge(
+        "place:manipal-hospital",
+        "in_market_locality",
+        "area:whitefield",
+    );
     builder.add_edge("place:manipal-hospital", "in_area", "area:whitefield");
     for spec in [
         HomeSpec::new(
@@ -736,7 +742,11 @@ fn sourced_topology_never_erases_logical_spatial_branches() {
             77.7,
         ));
     }
-    builder.add_edge("area:eastfield", "adjacent_area", "area:nextfield");
+    builder.add_edge(
+        "area:eastfield",
+        "adjacent_market_locality",
+        "area:nextfield",
+    );
     let fixture = builder.build(false);
 
     let connected =
@@ -826,8 +836,8 @@ fn geography_first_execution_prioritizes_eligible_exact_societies() {
     ] {
         builder.add_home(spec);
     }
-    builder.add_edge("area:alpha", "adjacent_area", "area:beta");
-    builder.add_edge("area:beta", "adjacent_area", "area:gamma");
+    builder.add_edge("area:alpha", "adjacent_market_locality", "area:beta");
+    builder.add_edge("area:beta", "adjacent_market_locality", "area:gamma");
     builder.add_alias("Air Homes", "Godrej Air");
     let fixture = builder.build(false);
 
@@ -846,8 +856,8 @@ fn geography_first_execution_prioritizes_eligible_exact_societies() {
     );
     assert!(matches!(
         &bare.compiled_plan.branches[0].geo_scope,
-        backend::search::GeoScope::Areas { supporting_in_area_edges, .. }
-            if !supporting_in_area_edges.is_empty()
+        backend::search::GeoScope::Areas { supporting_market_locality_edges, .. }
+            if !supporting_market_locality_edges.is_empty()
     ));
 
     let alias = fixture.search_output("Air Homes");
@@ -930,7 +940,7 @@ fn geography_first_execution_prioritizes_eligible_exact_societies() {
 }
 
 #[test]
-fn exact_society_priority_runs_after_hard_eligibility_and_survives_bundle_wide_fallback() {
+fn exact_society_priority_runs_after_hard_eligibility_and_survives_neighborhood_fallback() {
     let mut hard_builder = FixtureBuilder::default();
     hard_builder.add_home(
         HomeSpec::new(
@@ -994,13 +1004,16 @@ fn exact_society_priority_runs_after_hard_eligibility_and_survives_bundle_wide_f
         .quality(Some(0.5), Some(4.9)),
     );
     dangling_builder.edges.retain(|edge| {
-        !(edge.from_entity_id == "society:dangling-anchor" && edge.edge_type == "in_area")
+        !(edge.from_entity_id == "society:dangling-anchor"
+            && edge.edge_type == "in_market_locality")
     });
     let dangling_fixture = dangling_builder.build(false);
     let dangling = dangling_fixture.search_output("Dangling Anchor 2BHK under 2Cr");
-    assert!(dangling.compiled_plan.branches[0]
-        .geo_scope
-        .is_bundle_wide());
+    assert!(matches!(
+        &dangling.compiled_plan.branches[0].geo_scope,
+        backend::search::GeoScope::SocietyNeighborhood { members, radius_km, .. }
+            if members.len() == 2 && *radius_km == 4.0
+    ));
     assert_eq!(
         dangling
             .results
@@ -1008,7 +1021,7 @@ fn exact_society_priority_runs_after_hard_eligibility_and_survives_bundle_wide_f
             .map(|result| result.card.id.as_str())
             .collect::<Vec<_>>(),
         ["dangling-anchor", "bundle-star"],
-        "bundle-wide fallback keeps the eligible exact society ahead of Google-ranked alternatives"
+        "qualified neighborhood fallback keeps the eligible exact society ahead of nearby alternatives"
     );
 }
 
@@ -1018,8 +1031,16 @@ fn connected_hard_spatial_alternatives_preserve_any_of_semantics() {
     builder.add_area("Sharedfield");
     builder.add_place("East Anchor", "landmark", 12.9000, 77.7000);
     builder.add_place("West Anchor", "landmark", 12.9000, 77.7300);
-    builder.add_edge("place:east-anchor", "in_area", "area:sharedfield");
-    builder.add_edge("place:west-anchor", "in_area", "area:sharedfield");
+    builder.add_edge(
+        "place:east-anchor",
+        "in_market_locality",
+        "area:sharedfield",
+    );
+    builder.add_edge(
+        "place:west-anchor",
+        "in_market_locality",
+        "area:sharedfield",
+    );
     builder.add_home(HomeSpec::new(
         "east-home",
         "East Homes",
@@ -1080,6 +1101,12 @@ fn named_place_resolution_uses_sourced_area_context_and_fails_closed_without_it(
         13.0500,
         77.5950,
     );
+    builder.add_edge(
+        "place:manipal-whitefield",
+        "in_market_locality",
+        "area:whitefield",
+    );
+    builder.add_edge("place:manipal-hebbal", "in_market_locality", "area:hebbal");
     builder.add_edge("place:manipal-whitefield", "in_area", "area:whitefield");
     builder.add_edge("place:manipal-hebbal", "in_area", "area:hebbal");
     builder.add_home(HomeSpec::new(
@@ -2724,6 +2751,13 @@ impl FixtureBuilder {
                 && edge.to_entity_id == area_entity_id
         }) {
             self.add_edge(&entity_id, "in_area", &area_entity_id);
+        }
+        if !self.edges.iter().any(|edge| {
+            edge.from_entity_id == entity_id
+                && edge.edge_type == "in_market_locality"
+                && edge.to_entity_id == area_entity_id
+        }) {
+            self.add_edge(&entity_id, "in_market_locality", &area_entity_id);
         }
         self.add_fact(
             &entity_id,

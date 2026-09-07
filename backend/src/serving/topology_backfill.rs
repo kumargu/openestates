@@ -7,18 +7,24 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::assets::{SkillFactRecord, SourceEntitySeed};
-use crate::dag_config::{load_fact_registry_index, scoring_direction_from_hint};
+use crate::dag_config::{
+    load_fact_registry_index, load_resolution_policies, normalize_source_type,
+    scoring_direction_from_hint, MarketLocalityPolicy,
+};
 use crate::knowledge::FactValue;
 
 use super::{
-    ServingEdgeRecord, ServingEntityRecord, ServingFactRecord, ServingReraEvidenceRecord,
-    ServingSearchMetadataRecord, SourceObservation,
+    DerivedEvidence, EvidenceRef, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex,
+    ServingFactRecord, ServingReraEvidenceRecord, ServingSearchMetadataRecord, SourceObservation,
+    SpatialServingIndex,
 };
 
 const LEGACY_SOCIETY_BOUNDARY_FACT_KEY: &str = "society.boundary_geojson";
 const GEOMETRY_FACT_KEY: &str = "geo.geometry_geojson";
 const AREA_NAME_FACT_KEY: &str = "place.name";
 const EXPLICIT_AREA_NAME_FACT_KEY: &str = "geo.explicit_area_name";
+const IN_MARKET_LOCALITY: &str = "in_market_locality";
+const MARKET_LOCALITY_ROOT_SOURCE: &str = "market_locality";
 
 #[derive(Debug, Clone)]
 pub struct AreaTopologyBackfillRecords {
@@ -43,6 +49,9 @@ pub struct AreaTopologyBackfillReport {
     pub imported_explicit_area_reference_entity_ids: Vec<String>,
     pub unmatched_explicit_area_references: BTreeMap<String, String>,
     pub ambiguous_area_names: Vec<String>,
+    pub added_market_locality_entity_ids: Vec<String>,
+    pub direct_market_locality_edge_count: usize,
+    pub proximity_market_locality_edge_count: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +66,7 @@ pub struct AreaTopologyBackfillInput {
     pub society_geometry_facts: Vec<SkillFactRecord>,
     pub source_entity_seeds: Vec<SourceEntitySeed>,
     pub source_entity_seed_lineage: String,
+    pub snapshot_identity: String,
     pub imported_at: DateTime<Utc>,
 }
 
@@ -73,8 +83,9 @@ impl std::error::Error for AreaTopologyBackfillError {}
 
 /// Augment an immutable serving snapshot with qualified area inputs.
 ///
-/// This deliberately performs no locality inference. The only non-geometric
-/// binding input is the explicit `area` field from a source-entity seed.
+/// Administrative topology and buyer market locality remain separate. OSM
+/// polygons produce `in_area`; qualified address and coordinate evidence
+/// produce `in_market_locality`.
 pub fn backfill_area_topology(
     input: AreaTopologyBackfillInput,
 ) -> Result<AreaTopologyBackfillRecords, AreaTopologyBackfillError> {
@@ -151,11 +162,26 @@ pub fn backfill_area_topology(
         .cloned()
         .collect::<HashSet<_>>();
 
-    let mut explicit_area_facts = Vec::new();
+    let policy = load_resolution_policies()
+        .map_err(backfill_error)?
+        .market_locality;
     let seed_areas = unique_seed_area_assertions(input.source_entity_seeds)?;
-    for (entity_id, area_name) in seed_areas {
-        if !base_society_ids.contains(&entity_id)
-            || footprint_society_ids.contains(&entity_id)
+    let (mut market_entities, market_name_facts) = market_locality_seeds(
+        &seed_areas,
+        &policy.market_name_fact_key,
+        &input.source_entity_seed_lineage,
+        input.imported_at,
+    )?;
+    report.added_market_locality_entity_ids = market_entities
+        .iter()
+        .map(|entity| entity.entity_id.clone())
+        .collect();
+    added_entities.append(&mut market_entities);
+
+    let mut explicit_area_facts = Vec::new();
+    for (entity_id, area_name) in &seed_areas {
+        if !base_society_ids.contains(entity_id)
+            || footprint_society_ids.contains(entity_id)
             || existing_fact_keys
                 .contains(&(entity_id.clone(), EXPLICIT_AREA_NAME_FACT_KEY.to_string()))
         {
@@ -165,22 +191,22 @@ pub fn backfill_area_topology(
         match area_names.get(&normalized) {
             Some(area_ids) if area_ids.len() == 1 => {
                 explicit_area_facts.push(explicit_area_fact(
-                    &entity_id,
-                    &area_name,
+                    entity_id,
+                    area_name,
                     &input.source_entity_seed_lineage,
                     input.imported_at,
                 )?);
                 report
                     .imported_explicit_area_reference_entity_ids
-                    .push(entity_id);
+                    .push(entity_id.clone());
             }
             Some(_) => {
-                report.ambiguous_area_names.push(area_name);
+                report.ambiguous_area_names.push(area_name.clone());
             }
             None => {
                 report
                     .unmatched_explicit_area_references
-                    .insert(entity_id, area_name);
+                    .insert(entity_id.clone(), area_name.clone());
             }
         }
     }
@@ -191,6 +217,7 @@ pub fn backfill_area_topology(
 
     qualified_area_facts.extend(migrated_footprints);
     qualified_area_facts.extend(explicit_area_facts);
+    qualified_area_facts.extend(market_name_facts);
     let (mut added_facts, mut added_metadata) = serving_records(qualified_area_facts)?;
 
     let mut entities = input.entities;
@@ -221,6 +248,19 @@ pub fn backfill_area_topology(
             .then_with(|| left.fact_key.cmp(&right.fact_key))
     });
 
+    let market_edges =
+        derive_market_locality_edges(&entities, &facts, &policy, &input.snapshot_identity)?;
+    report.direct_market_locality_edge_count = market_edges
+        .iter()
+        .filter(|edge| {
+            edge.derivation
+                .as_ref()
+                .is_some_and(|derivation| derivation.metric == "address_component_match")
+        })
+        .count();
+    report.proximity_market_locality_edge_count =
+        market_edges.len() - report.direct_market_locality_edge_count;
+
     if report.migrated_society_footprint_entity_ids.is_empty()
         && report
             .imported_explicit_area_reference_entity_ids
@@ -235,7 +275,17 @@ pub fn backfill_area_topology(
         entities,
         facts,
         search_metadata,
-        edges: input.edges,
+        edges: {
+            let mut edges = input.edges;
+            edges.extend(market_edges);
+            edges.sort_by(|left, right| {
+                left.from_entity_id
+                    .cmp(&right.from_entity_id)
+                    .then_with(|| left.edge_type.cmp(&right.edge_type))
+                    .then_with(|| left.to_entity_id.cmp(&right.to_entity_id))
+            });
+            edges
+        },
         rera_evidence: input.rera_evidence,
         excluded_rera_evidence_society_ids: input.excluded_rera_evidence_society_ids,
         prevalidated_entity_ids,
@@ -413,6 +463,269 @@ fn explicit_area_fact(
         observation_provider: Some("SourceEntitySeed".to_string()),
         provider_observation_id: Some(format!("source_entity_seed:sha256:{digest}")),
         asset_lineage: vec![lineage.to_string()],
+    })
+}
+
+fn market_locality_seeds(
+    seed_areas: &BTreeMap<String, String>,
+    market_name_fact_key: &str,
+    lineage: &str,
+    imported_at: DateTime<Utc>,
+) -> Result<(Vec<ServingEntityRecord>, Vec<SkillFactRecord>), AreaTopologyBackfillError> {
+    let mut names = BTreeMap::<String, String>::new();
+    for area_name in seed_areas.values() {
+        names
+            .entry(normalize_exact_area_name(area_name))
+            .or_insert_with(|| area_name.trim().to_string());
+    }
+    let mut entities = Vec::new();
+    let mut facts = Vec::new();
+    for (normalized_name, display_name) in names {
+        let digest = hex_digest(&Sha256::digest(normalized_name.as_bytes()));
+        let entity_id = format!("area:market:{}", &digest[..16]);
+        entities.push(ServingEntityRecord {
+            entity_id: entity_id.clone(),
+            entity_type: "area".to_string(),
+            name: display_name.clone(),
+            root_source: Some(MARKET_LOCALITY_ROOT_SOURCE.to_string()),
+            searchable_text: format!("{entity_id} area {display_name}"),
+        });
+        facts.push(market_locality_name_fact(
+            &entity_id,
+            &display_name,
+            market_name_fact_key,
+            lineage,
+            imported_at,
+        )?);
+    }
+    Ok((entities, facts))
+}
+
+fn market_locality_name_fact(
+    entity_id: &str,
+    name: &str,
+    fact_key: &str,
+    lineage: &str,
+    imported_at: DateTime<Utc>,
+) -> Result<SkillFactRecord, AreaTopologyBackfillError> {
+    let encoded = serde_json::to_vec(&(entity_id, name)).map_err(backfill_error)?;
+    let digest = hex_digest(&Sha256::digest(&encoded));
+    Ok(SkillFactRecord {
+        entity_id: entity_id.to_string(),
+        fact_key: fact_key.to_string(),
+        value_type: "text".to_string(),
+        value_json: serde_json::to_string(&FactValue::Text(name.to_string()))
+            .map_err(backfill_error)?,
+        confidence: 0.95,
+        source_type: "SourceEntitySeed".to_string(),
+        source_url: None,
+        model: None,
+        skill_id: Some("market_locality_backfill".to_string()),
+        triggered_by: Some("market_locality_vocabulary".to_string()),
+        learned_at: imported_at,
+        run_id: format!("market-locality-seed-{digest}"),
+        input_hash: digest.clone(),
+        observation_provider: Some("SourceEntitySeed".to_string()),
+        provider_observation_id: Some(format!("market_locality_seed:sha256:{digest}")),
+        asset_lineage: vec![lineage.to_string()],
+    })
+}
+
+fn derive_market_locality_edges(
+    entities: &[ServingEntityRecord],
+    facts: &[ServingFactRecord],
+    policy: &MarketLocalityPolicy,
+    snapshot_identity: &str,
+) -> Result<Vec<ServingEdgeRecord>, AreaTopologyBackfillError> {
+    if snapshot_identity.trim().is_empty() {
+        return Err(AreaTopologyBackfillError(
+            "market-locality derivation requires a snapshot identity".to_string(),
+        ));
+    }
+    let fact_index = ServingFactIndex::from_records(facts.to_vec(), Vec::new());
+    let spatial = SpatialServingIndex::from_serving_bundle(entities, &fact_index);
+    let address_entity_ids = entities
+        .iter()
+        .filter(|entity| {
+            entity.entity_type.eq_ignore_ascii_case("society")
+                || entity.entity_type.eq_ignore_ascii_case("place")
+        })
+        .map(|entity| entity.entity_id.as_str())
+        .collect::<HashSet<_>>();
+    let address_keys = policy
+        .direct_address_fact_keys
+        .iter()
+        .map(|key| key.to_ascii_lowercase())
+        .collect::<HashSet<_>>();
+    let address_sources = policy
+        .direct_address_allowed_sources
+        .iter()
+        .map(|source| normalize_source_type(source))
+        .collect::<HashSet<_>>();
+    let mut edges = Vec::new();
+
+    for locality in entities.iter().filter(|entity| {
+        entity.entity_type.eq_ignore_ascii_case("area")
+            && entity
+                .root_source
+                .as_deref()
+                .is_some_and(|source| source.eq_ignore_ascii_case(MARKET_LOCALITY_ROOT_SOURCE))
+    }) {
+        let Some(locality_name_fact) = fact_index
+            .entity(&locality.entity_id)
+            .into_iter()
+            .flat_map(|rows| &rows.facts)
+            .find(|fact| {
+                fact.fact_key
+                    .eq_ignore_ascii_case(&policy.market_name_fact_key)
+                    && fact.observation.is_some()
+            })
+        else {
+            continue;
+        };
+        let normalized_locality = normalize_exact_area_name(&locality.name);
+        let mut direct = BTreeMap::<String, &ServingFactRecord>::new();
+        for fact in facts.iter().filter(|fact| {
+            address_entity_ids.contains(fact.entity_id.as_str())
+                && address_keys.contains(&fact.fact_key.to_ascii_lowercase())
+                && address_sources.contains(&normalize_source_type(&fact.source_type))
+                && fact.confidence >= policy.minimum_direct_address_confidence
+                && fact.observation.is_some()
+        }) {
+            let FactValue::Text(address) = &fact.value else {
+                continue;
+            };
+            if address_has_component(address, &normalized_locality) {
+                let replace = direct.get(&fact.entity_id).is_none_or(|current| {
+                    fact.confidence > current.confidence
+                        || (fact.confidence == current.confidence
+                            && fact.stable_selection_key() < current.stable_selection_key())
+                });
+                if replace {
+                    direct.insert(fact.entity_id.clone(), fact);
+                }
+            }
+        }
+
+        for (society_id, address_fact) in &direct {
+            let input_evidence = vec![
+                evidence_for_fact(locality_name_fact, snapshot_identity)?,
+                evidence_for_fact(address_fact, snapshot_identity)?,
+            ];
+            let confidence = locality_name_fact.confidence.min(address_fact.confidence);
+            edges.push(market_locality_edge(
+                society_id,
+                &locality.entity_id,
+                "address_component_match",
+                confidence,
+                input_evidence,
+                snapshot_identity,
+            )?);
+        }
+
+        for candidate in spatial
+            .points()
+            .iter()
+            .filter(|point| point.entity_type.eq_ignore_ascii_case("society"))
+            .filter(|point| !direct.contains_key(&point.entity_id))
+        {
+            let nearest = direct
+                .iter()
+                .filter_map(|(core_id, address_fact)| {
+                    spatial
+                        .distance_between(&candidate.entity_id, core_id, snapshot_identity)
+                        .filter(|distance| distance.distance_km <= policy.neighborhood_radius_km)
+                        .map(|distance| (core_id, *address_fact, distance))
+                })
+                .min_by(|left, right| {
+                    left.2
+                        .distance_km
+                        .total_cmp(&right.2.distance_km)
+                        .then_with(|| left.0.cmp(right.0))
+                });
+            let Some((_core_id, address_fact, distance)) = nearest else {
+                continue;
+            };
+            let mut input_evidence = vec![
+                evidence_for_fact(locality_name_fact, snapshot_identity)?,
+                evidence_for_fact(address_fact, snapshot_identity)?,
+            ];
+            input_evidence.extend(distance.evidence_refs);
+            let confidence = locality_name_fact
+                .confidence
+                .min(address_fact.confidence)
+                .min(distance.confidence);
+            edges.push(market_locality_edge(
+                &candidate.entity_id,
+                &locality.entity_id,
+                "qualified_society_proximity",
+                confidence,
+                input_evidence,
+                snapshot_identity,
+            )?);
+        }
+    }
+    edges.sort_by(|left, right| {
+        left.from_entity_id
+            .cmp(&right.from_entity_id)
+            .then_with(|| left.to_entity_id.cmp(&right.to_entity_id))
+    });
+    edges.dedup_by(|left, right| {
+        left.from_entity_id == right.from_entity_id
+            && left.edge_type == right.edge_type
+            && left.to_entity_id == right.to_entity_id
+    });
+    Ok(edges)
+}
+
+fn address_has_component(address: &str, normalized_locality: &str) -> bool {
+    address
+        .split(',')
+        .map(normalize_exact_area_name)
+        .any(|component| component == normalized_locality)
+}
+
+fn evidence_for_fact(
+    fact: &ServingFactRecord,
+    snapshot_identity: &str,
+) -> Result<EvidenceRef, AreaTopologyBackfillError> {
+    let observation = fact.observation.as_ref().ok_or_else(|| {
+        AreaTopologyBackfillError(format!(
+            "market-locality input {}/{} lacks an observation",
+            fact.entity_id, fact.fact_key
+        ))
+    })?;
+    Ok(EvidenceRef::for_observation(snapshot_identity, observation))
+}
+
+fn market_locality_edge(
+    society_id: &str,
+    locality_id: &str,
+    metric: &str,
+    confidence: f32,
+    input_evidence: Vec<EvidenceRef>,
+    snapshot_identity: &str,
+) -> Result<ServingEdgeRecord, AreaTopologyBackfillError> {
+    let derivation = DerivedEvidence::new(
+        snapshot_identity,
+        society_id,
+        Some(locality_id.to_string()),
+        IN_MARKET_LOCALITY,
+        metric,
+        Some(1.0),
+        Some("boolean".to_string()),
+        "market-locality-v1",
+        confidence,
+        input_evidence,
+    )
+    .map_err(backfill_error)?;
+    Ok(ServingEdgeRecord {
+        from_entity_id: society_id.to_string(),
+        edge_type: IN_MARKET_LOCALITY.to_string(),
+        to_entity_id: locality_id.to_string(),
+        confidence,
+        source_type: "MarketLocality".to_string(),
+        derivation: Some(derivation),
     })
 }
 
@@ -608,6 +921,48 @@ mod tests {
         }
     }
 
+    fn observed_fact(
+        id: &str,
+        key: &str,
+        value: FactValue,
+        source_type: &str,
+        provider_observation_id: &str,
+    ) -> ServingFactRecord {
+        let learned_at = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
+        ServingFactRecord {
+            entity_id: id.to_string(),
+            fact_key: key.to_string(),
+            value_type: match &value {
+                FactValue::Numeric(_) => "numeric",
+                _ => "text",
+            }
+            .to_string(),
+            value_text: match &value {
+                FactValue::Numeric(value) => Some(value.to_string()),
+                FactValue::Text(value) => Some(value.clone()),
+                _ => None,
+            },
+            value,
+            confidence: 0.9,
+            source_type: source_type.to_string(),
+            source_url: Some("https://example.test/market-evidence".to_string()),
+            model: None,
+            skill_id: Some("market-locality-fixture".to_string()),
+            learned_at,
+            observation: Some(
+                SourceObservation::new(
+                    source_type,
+                    provider_observation_id,
+                    id,
+                    learned_at,
+                    Some("https://example.test/market-evidence".to_string()),
+                    vec!["asset:market-locality-fixture/run:1".to_string()],
+                )
+                .unwrap(),
+            ),
+        }
+    }
+
     #[test]
     fn backfill_uses_polygon_or_explicit_seed_area_and_ignores_unmatched_names() {
         let area_facts = vec![
@@ -644,9 +999,69 @@ mod tests {
             entities: vec![
                 entity("society:polygon", "society"),
                 entity("society:explicit", "society"),
+                entity("society:nearby", "society"),
+                entity("society:far", "society"),
                 entity("society:unmatched", "society"),
+                entity("place:hospital", "place"),
             ],
-            facts: Vec::new(),
+            facts: vec![
+                observed_fact(
+                    "society:explicit",
+                    "google_place_address",
+                    FactValue::Text("Road, Whitefield, Bengaluru".to_string()),
+                    "Google",
+                    "google-address-explicit",
+                ),
+                observed_fact(
+                    "place:hospital",
+                    "google_place_address",
+                    FactValue::Text("Main Road, Whitefield, Bengaluru".to_string()),
+                    "Google",
+                    "google-address-hospital",
+                ),
+                observed_fact(
+                    "society:explicit",
+                    "geo.latitude",
+                    FactValue::Numeric(12.98),
+                    "Google",
+                    "google-coordinates-explicit",
+                ),
+                observed_fact(
+                    "society:explicit",
+                    "geo.longitude",
+                    FactValue::Numeric(77.71),
+                    "Google",
+                    "google-coordinates-explicit",
+                ),
+                observed_fact(
+                    "society:nearby",
+                    "geo.latitude",
+                    FactValue::Numeric(12.981),
+                    "Google",
+                    "google-coordinates-nearby",
+                ),
+                observed_fact(
+                    "society:nearby",
+                    "geo.longitude",
+                    FactValue::Numeric(77.711),
+                    "Google",
+                    "google-coordinates-nearby",
+                ),
+                observed_fact(
+                    "society:far",
+                    "geo.latitude",
+                    FactValue::Numeric(13.20),
+                    "Google",
+                    "google-coordinates-far",
+                ),
+                observed_fact(
+                    "society:far",
+                    "geo.longitude",
+                    FactValue::Numeric(77.90),
+                    "Google",
+                    "google-coordinates-far",
+                ),
+            ],
             search_metadata: Vec::new(),
             edges: Vec::new(),
             rera_evidence: Vec::new(),
@@ -659,6 +1074,7 @@ mod tests {
                 seed("society:unmatched", "Not In Boundary Data"),
             ],
             source_entity_seed_lineage: "source_entity_seed:file:sha256:fixture".to_string(),
+            snapshot_identity: "backfill-fixture".to_string(),
             imported_at: Utc.timestamp_opt(1_700_000_100, 0).unwrap(),
         })
         .unwrap();
@@ -681,6 +1097,47 @@ mod tests {
         );
         assert!(!records.facts.iter().any(|fact| {
             fact.entity_id == "society:polygon" && fact.fact_key == EXPLICIT_AREA_NAME_FACT_KEY
+        }));
+        assert_eq!(records.report.direct_market_locality_edge_count, 2);
+        assert_eq!(records.report.proximity_market_locality_edge_count, 1);
+        let whitefield_market_id = records
+            .entities
+            .iter()
+            .find(|entity| {
+                entity.root_source.as_deref() == Some(MARKET_LOCALITY_ROOT_SOURCE)
+                    && entity.name == "Whitefield"
+            })
+            .map(|entity| entity.entity_id.as_str())
+            .unwrap();
+        assert!(records.edges.iter().any(|edge| {
+            edge.from_entity_id == "society:explicit"
+                && edge.edge_type == IN_MARKET_LOCALITY
+                && edge.to_entity_id == whitefield_market_id
+                && edge
+                    .derivation
+                    .as_ref()
+                    .is_some_and(|derivation| derivation.metric == "address_component_match")
+        }));
+        assert!(records.edges.iter().any(|edge| {
+            edge.from_entity_id == "place:hospital"
+                && edge.edge_type == IN_MARKET_LOCALITY
+                && edge.to_entity_id == whitefield_market_id
+                && edge
+                    .derivation
+                    .as_ref()
+                    .is_some_and(|derivation| derivation.metric == "address_component_match")
+        }));
+        assert!(records.edges.iter().any(|edge| {
+            edge.from_entity_id == "society:nearby"
+                && edge.edge_type == IN_MARKET_LOCALITY
+                && edge.to_entity_id == whitefield_market_id
+                && edge
+                    .derivation
+                    .as_ref()
+                    .is_some_and(|derivation| derivation.metric == "qualified_society_proximity")
+        }));
+        assert!(!records.edges.iter().any(|edge| {
+            edge.from_entity_id == "society:far" && edge.edge_type == IN_MARKET_LOCALITY
         }));
 
         let mut topology_facts = records.facts.clone();

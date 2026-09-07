@@ -51,6 +51,13 @@
     "minimum_explicit_area_confidence": 0.8,
     "area_name_fact_key": "place.name"
   },
+  "market_locality": {
+    "direct_address_fact_keys": ["google_place_address", "rera_project_address"],
+    "direct_address_allowed_sources": ["google", "rera"],
+    "minimum_direct_address_confidence": 0.8,
+    "neighborhood_radius_km": 4.0,
+    "market_name_fact_key": "market.locality_name"
+  },
   "overrides": {
     "legal.rera_registered": {
       "source_priority": ["rera", "computed"]

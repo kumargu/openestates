@@ -2098,3 +2098,84 @@ CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo test --test search_conversational_
   parsing, and `git diff --check`. The hardcoding audit remains at its baseline
   of 330 warning-only findings, 28 fact-key comparisons, and zero blocked
   aliases.
+
+## Market-locality search separation — 2026-09-07
+
+- Starting HEAD: `2ee4d456` on `feat/issue-118-consolidated`; worktree clean.
+- Classification: `architecture_gap`. The unpromoted topology child correctly
+  materializes OSM administrative containment as `in_area`, but the search
+  compiler and recall index currently treat every such edge as an authoritative
+  buyer market. That would turn a useful polygon join into a false hard search
+  boundary.
+- Chain audit: `2ee4d456` added the isolated topology backfill on top of
+  `9268af84`, whose compiler derives `GeoScope::Areas` from generic `in_area`;
+  `SearchIndex::add_serving_area_memberships` likewise indexes every generic
+  `in_area` edge as searchable inventory membership. Exact eligible society
+  priority already exists and runs after hard eligibility.
+- Config read before implementation: `app/config/dag/manifest.json`,
+  `ontology.json`, and `search_intent.json`. No project or locality alias will
+  be added.
+- Baseline artifacts: `data/validation/search_query_bank.json` and the isolated
+  serving child at
+  `/tmp/openestates-issue118-topology-backfill-lake/serving/search_bundle/version=issue-118-whitefield-115-plus-27-area-topology-2026-09-07-r4`.
+- Intended change: introduce an explicit `market_locality` relation owned by
+  qualified market evidence, keep `in_area` for administrative/polygon joins,
+  and let named societies fall back to a coordinate-backed neighborhood only
+  when no sourced market locality exists.
+
+### Verified market-locality materialization checkpoint
+
+- Added config-owned `in_market_locality` and
+  `adjacent_market_locality` ontology relations plus a market-locality
+  resolution policy. Address fact keys, allowed sources, minimum confidence,
+  and the 4 km one-hop society-neighborhood radius are config values.
+- The offline topology child builder now creates distinct market-area entities;
+  their `market.locality_name` fact does not participate in OSM polygon name
+  matching. Seed area values define vocabulary only and never prove society
+  membership.
+- Direct membership requires an exact comma-delimited address component from a
+  configured source, minimum confidence, and a durable observation. One-hop
+  expansion requires qualified society coordinates or footprints and carries
+  all input evidence in a deterministic derived edge. It is not transitive.
+- The focused backfill contract verifies direct address membership, nearby
+  society expansion, rejection of a distant society, separation from OSM
+  `in_area`, and valid edge evidence. `cargo test --lib
+  serving::topology_backfill::tests` passed 2/2 and `cargo check --all-targets`
+  passed at this checkpoint.
+
+### Final isolated market-locality and API checkpoint
+
+- The final unpromoted child is materialization
+  `c3bfa0a1-edf3-4824-8101-7d60fcc61db3`, version
+  `issue-118-whitefield-115-plus-27-market-locality-2026-09-07-r6`, under
+  `/tmp/openestates-issue118-topology-backfill-lake`. No current pointer or
+  main-lake artifact changed.
+- The config-owned neighborhood radius is resolved when the immutable search
+  runtime snapshot is built; request-time compilation performs no config-file
+  I/O.
+- Direct Parquet inspection found 2,103 entities, 22,764 facts, 9,026 edges,
+  and 32 `in_market_locality` edges: 20 exact address-component derivations
+  and 12 one-hop qualified-proximity derivations. The ontology admits both
+  society and place membership, while proximity expansion remains
+  society-only and non-transitive.
+- Prestige Waterford maps directly to the Whitefield market entity with two
+  evidence references. Godrej Air maps to the same entity through qualified
+  proximity with four evidence references. OSM `in_area` remains independent
+  and does not enter inventory recall.
+- A real API started against that pinned child and returned:
+  - `Godrej Air`: exact Godrej Air 2BHK and 3BHK rows first, then 30 eligible
+    Whitefield alternatives.
+  - `Godrej Air 2BHK under ₹2Cr`: 19 eligible Whitefield alternatives and no
+    Godrej Air row because its sourced minimum is ₹2.10Cr.
+  - `Prestige Waterford 3BHK`: the exact eligible Waterford row first, followed
+    by 22 Whitefield alternatives.
+  - `Godrej Air 2BHK or Prestige Waterford 3BHK`: two preserved branches with
+    the eligible exact society first in each branch.
+  - `SNN Clermont`: without a market-locality edge, the exact 3BHK and 4BHK
+    rows lead a ten-row coordinate-qualified neighborhood instead of falling
+    back to the whole Bengaluru bundle.
+- Final gates passed: the 12-test conversational search contract; focused
+  topology, compiler, and market-locality index contracts; `cargo check
+  --all-targets`; `cargo fmt --all -- --check`; config and query-bank JSON
+  parsing; and `git diff --check`. The hardcoding audit is unchanged at 330
+  warning-only findings, 28 fact-key comparisons, and zero blocked aliases.

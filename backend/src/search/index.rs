@@ -90,7 +90,7 @@ impl SearchIndex {
             }
         }
         index.add_serving_builder_memberships(entities, edges);
-        index.add_serving_area_memberships(entities, edges);
+        index.add_serving_market_locality_memberships(entities, edges);
         index
     }
 
@@ -475,7 +475,7 @@ impl SearchIndex {
         }
     }
 
-    fn add_serving_area_memberships(
+    fn add_serving_market_locality_memberships(
         &mut self,
         entities: &[ServingEntityRecord],
         edges: &[ServingEdgeRecord],
@@ -490,7 +490,7 @@ impl SearchIndex {
 
         for edge in edges
             .iter()
-            .filter(|edge| edge.edge_type.eq_ignore_ascii_case("in_area"))
+            .filter(|edge| edge.edge_type.eq_ignore_ascii_case("in_market_locality"))
         {
             let (society_entity_id, area_entity_id, area_name) =
                 if let Some(area_name) = area_names.get(edge.to_entity_id.as_str()) {
@@ -1291,7 +1291,7 @@ mod tests {
     }
 
     #[test]
-    fn serving_graph_area_membership_participates_in_structured_recall() {
+    fn serving_graph_market_locality_membership_participates_in_structured_recall() {
         let mut property = test_property("graph-area-home", "century-central");
         property.area = "Unknown".to_string();
         let entities = vec![
@@ -1312,7 +1312,7 @@ mod tests {
         ];
         let edges = vec![ServingEdgeRecord {
             from_entity_id: "society:rera-af36618d49c94b92".to_string(),
-            edge_type: "in_area".to_string(),
+            edge_type: "in_market_locality".to_string(),
             to_entity_id: "area:whitefield".to_string(),
             confidence: 0.9,
             source_type: "test".to_string(),

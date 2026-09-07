@@ -2001,6 +2001,7 @@ async fn backfill_area_topology_serving(
         society_geometry_facts: society_geometry_rows.facts,
         source_entity_seeds,
         source_entity_seed_lineage: format!("source_entity_seed:file:sha256:{seed_digest}"),
+        snapshot_identity: options.version.clone(),
         imported_at: Utc::now(),
     })?;
     let report = records.report.clone();

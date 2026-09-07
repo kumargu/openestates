@@ -20,7 +20,35 @@ pub struct ResolutionPoliciesFile {
     #[serde(default)]
     pub spatial_topology: SpatialTopologyPolicy,
     #[serde(default)]
+    pub market_locality: MarketLocalityPolicy,
+    #[serde(default)]
     pub overrides: HashMap<String, ResolutionOverride>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MarketLocalityPolicy {
+    #[serde(default)]
+    pub direct_address_fact_keys: Vec<String>,
+    #[serde(default)]
+    pub direct_address_allowed_sources: Vec<String>,
+    #[serde(default = "default_minimum_market_address_confidence")]
+    pub minimum_direct_address_confidence: f32,
+    #[serde(default = "default_market_neighborhood_radius_km")]
+    pub neighborhood_radius_km: f64,
+    #[serde(default = "default_market_name_fact_key")]
+    pub market_name_fact_key: String,
+}
+
+impl Default for MarketLocalityPolicy {
+    fn default() -> Self {
+        Self {
+            direct_address_fact_keys: Vec::new(),
+            direct_address_allowed_sources: Vec::new(),
+            minimum_direct_address_confidence: default_minimum_market_address_confidence(),
+            neighborhood_radius_km: default_market_neighborhood_radius_km(),
+            market_name_fact_key: default_market_name_fact_key(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -61,8 +89,20 @@ fn default_minimum_explicit_area_confidence() -> f32 {
     0.8
 }
 
+fn default_minimum_market_address_confidence() -> f32 {
+    0.8
+}
+
+fn default_market_neighborhood_radius_km() -> f64 {
+    4.0
+}
+
 fn default_area_name_fact_key() -> String {
     "place.name".to_string()
+}
+
+fn default_market_name_fact_key() -> String {
+    "market.locality_name".to_string()
 }
 
 fn default_true() -> bool {
@@ -125,6 +165,7 @@ pub fn resolution_policies_path() -> std::path::PathBuf {
 pub fn load_resolution_policies() -> Result<ResolutionPoliciesFile, DagConfigError> {
     let policies: ResolutionPoliciesFile = load_json(&resolution_policies_path())?;
     let topology = &policies.spatial_topology;
+    let market = &policies.market_locality;
     if !(0.0..=1.0).contains(&topology.minimum_society_overlap_ratio)
         || !(0.0..=1.0).contains(&topology.minimum_area_containment_ratio)
         || !(0.0..=1.0).contains(&topology.minimum_point_confidence)
@@ -140,9 +181,21 @@ pub fn load_resolution_policies() -> Result<ResolutionPoliciesFile, DagConfigErr
             .explicit_area_name_allowed_sources
             .iter()
             .any(|source| source.trim().is_empty())
+        || !(0.0..=1.0).contains(&market.minimum_direct_address_confidence)
+        || !market.neighborhood_radius_km.is_finite()
+        || market.neighborhood_radius_km <= 0.0
+        || market.market_name_fact_key.trim().is_empty()
+        || market
+            .direct_address_fact_keys
+            .iter()
+            .any(|key| key.trim().is_empty())
+        || market
+            .direct_address_allowed_sources
+            .iter()
+            .any(|source| source.trim().is_empty())
     {
         return Err(DagConfigError::InvalidConfig(
-            "spatial topology thresholds must be finite ratios".to_string(),
+            "spatial and market-locality policies contain invalid values".to_string(),
         ));
     }
     Ok(policies)

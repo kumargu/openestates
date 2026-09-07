@@ -342,6 +342,8 @@ impl<'a> SearchEngine<'a> {
             &resolved_entities,
             &self.snapshot.bundle.entities,
             &self.snapshot.bundle.edges,
+            Some(&self.snapshot.bundle.spatial_index),
+            Some(self.snapshot.market_locality_neighborhood_radius_km),
         );
         let ast_branches = compiled_plan
             .branches
@@ -496,6 +498,17 @@ impl<'a> SearchEngine<'a> {
                             self.snapshot
                                 .search_index
                                 .property_ids_for_entity_id(area_id)
+                        })
+                        .collect::<HashSet<_>>();
+                    ids.retain(|property_id| scoped.contains(property_id));
+                }
+                if let GeoScope::SocietyNeighborhood { members, .. } = &branch.geo_scope {
+                    let scoped = members
+                        .iter()
+                        .flat_map(|member| {
+                            self.snapshot
+                                .search_index
+                                .property_ids_for_entity_id(&member.society_entity_id)
                         })
                         .collect::<HashSet<_>>();
                     ids.retain(|property_id| scoped.contains(property_id));
@@ -932,6 +945,7 @@ fn resolve_serving_query_entities(
             &bundle.entity_alias_index,
         ),
     );
+    prefer_market_locality_area_matches(&bundle.edges, &mut entities);
     let bound_provider_ids = crate::serving::bound_provider_entity_ids(&bundle.edges);
     entities.retain(|entity| {
         !entity.entity_type.eq_ignore_ascii_case("place")
@@ -939,6 +953,44 @@ fn resolve_serving_query_entities(
     });
     remove_entities_only_mentioned_inside_longer_match(query, &mut entities);
     entities
+}
+
+fn prefer_market_locality_area_matches(
+    edges: &[crate::serving::ServingEdgeRecord],
+    entities: &mut Vec<ResolvedSearchEntity>,
+) {
+    let market_area_ids = edges
+        .iter()
+        .filter(|edge| edge.edge_type.eq_ignore_ascii_case("in_market_locality"))
+        .map(|edge| edge.to_entity_id.as_str())
+        .collect::<HashSet<_>>();
+    let preferred = entities
+        .iter()
+        .filter(|entity| {
+            entity.entity_type.eq_ignore_ascii_case("area")
+                && market_area_ids.contains(entity.entity_id.as_str())
+        })
+        .filter_map(|entity| {
+            Some((
+                entity.name.to_ascii_lowercase(),
+                entity.polarity.clone(),
+                entity.source_span.as_ref()?.start,
+                entity.source_span.as_ref()?.end,
+            ))
+        })
+        .collect::<HashSet<_>>();
+    entities.retain(|entity| {
+        !entity.entity_type.eq_ignore_ascii_case("area")
+            || market_area_ids.contains(entity.entity_id.as_str())
+            || entity.source_span.as_ref().is_none_or(|span| {
+                !preferred.contains(&(
+                    entity.name.to_ascii_lowercase(),
+                    entity.polarity.clone(),
+                    span.start,
+                    span.end,
+                ))
+            })
+    });
 }
 
 fn remove_entities_only_mentioned_inside_longer_match(

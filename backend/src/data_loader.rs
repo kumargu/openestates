@@ -992,6 +992,7 @@ fn resolution_policies() -> &'static ResolutionPoliciesFile {
             source_caps: HashMap::new(),
             coordinate_sources: HashMap::new(),
             spatial_topology: Default::default(),
+            market_locality: Default::default(),
             overrides: HashMap::new(),
         })
     })

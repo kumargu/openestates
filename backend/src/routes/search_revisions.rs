@@ -740,9 +740,9 @@ mod tests {
         plan.branches[0].source_spans = vec![source_span.clone()];
         plan.branches[0].geo_scope = GeoScope::Areas {
             area_ids: vec![area_id.to_string()],
-            supporting_in_area_edges: vec![crate::serving::ServingEdgeRecord {
+            supporting_market_locality_edges: vec![crate::serving::ServingEdgeRecord {
                 from_entity_id: "place:fixture".to_string(),
-                edge_type: "in_area".to_string(),
+                edge_type: "in_market_locality".to_string(),
                 to_entity_id: area_id.to_string(),
                 confidence: 0.9,
                 source_type: "OpenStreetMap".to_string(),

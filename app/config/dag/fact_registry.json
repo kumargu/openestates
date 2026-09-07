@@ -4127,6 +4127,27 @@
       }
     },
     {
+      "fact_key": "market.locality_name",
+      "bucket": "geo",
+      "label": "market locality name",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "area"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "SourceEntitySeed"
+      ],
+      "display_template": "Market locality: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
       "fact_key": "area.admin_level",
       "bucket": "geo",
       "label": "administrative level",
@@ -8138,7 +8159,7 @@
       }
     }
   ],
-  "fact_count": 141,
+  "fact_count": 142,
   "excluded_search_fact_keys": [
     "google_review_cards",
     "google_review_snippets"
