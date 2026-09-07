@@ -1,5 +1,66 @@
 # Issue 118 execution log
 
+## Completion audit — 2026-09-08
+
+- Starting HEAD: `33630754` on `feat/issue-118-consolidated`; worktree clean.
+- Merge base: `d1c06e2b`. The branch contains 27 local commits. The table below
+  records the disposition of every commit before the remaining architecture is
+  replaced; a retained behavior is a contract, not an instruction to retain
+  the original implementation.
+- Baseline artifact: `data/validation/search_query_bank.json`.
+- Isolated live artifact: materialization
+  `f2edea91-248c-4179-9266-e2184ed408d2`, version
+  `issue-118-whitefield-115-plus-27-geo-cells-2026-09-07-r11`, under
+  `/tmp/openestates-issue118-topology-backfill-lake`. It remains unpromoted.
+- Passing baseline: conversational semantics 13/13, search efficiency 11/11,
+  and revision API 3/3. The hardcoding audit reports the unchanged 330
+  warning-only findings and zero blocked search-config aliases.
+- The unrelated `frontend/media-manifest.json` bundle-version change from
+  `9268af84` is restored to the merge-base value in this checkpoint. The
+  consolidated `AGENTS.md` policy and controlled Whitefield/OSM fixtures are
+  retained.
+
+### Per-commit disposition
+
+| Commit | Retained behavior | Superseded implementation | Protecting tests |
+|---|---|---|---|
+| `87fe103d` | Stateless revision semantics and deterministic operation selection | Reconstructed-query revision execution | Revision API and revision unit contracts |
+| `42bfff34` | Original Issue 118 benchmark and spatial experiment record | Experimental runtime paths | Frozen query bank and conversational contract |
+| `2f0aefba` | Four-state, fail-closed evidence semantics | Early predicate-specific evaluators | Evaluation unit and conversational contracts |
+| `ce50c216` | Polygon-first containment and sourced adjacency | First topology projection | Topology and OSM access contracts |
+| `529a7d24` | Logical branch preservation | Duplicate AST/query-plan projections | AST, query-plan, and conversational contracts |
+| `42e11f88` | Sourced named-place area context | Request-path area recovery helpers | Named-place conversational scenarios |
+| `0461a73c` | Unknown hard inventory predicates fail closed | Parser-owned inventory fallbacks | Search quality and conversational contracts |
+| `e81cc950` | Generic predicate-family revision selection | String-fragment patch representation | Revision API and revision unit contracts |
+| `d1203aea` | Shared replacement semantics | Query-render-and-reparse replacement | Revision unit contracts |
+| `dcd7abbc` | Consolidated execution memory | Stale checkpoint-local next steps | This execution log |
+| `88501c65` | Snapshot-pinned search construction | Snapshot-adjacent duplicate runtime projections | Serving runtime and efficiency contracts |
+| `c574e092` | Durable, snapshot-qualified evidence identities | None | Evidence and serving bundle contracts |
+| `820c6b95` | Serving fact observations survive Parquet | None | Serving bundle contract |
+| `cb7db89d` | External listing lineage survives the DAG | None | Project enrichment vertical contract |
+| `59246b97` | Inventory eligibility requires qualified receipts | Early duplicated inventory selection | Conversational and search quality contracts |
+| `72fe4bb6` | Focused high-value Issue 118 gates | None | Frozen query bank |
+| `2ea0f2ec` | No time-derived search confidence | None | Search text and conversational contracts |
+| `0df8f26c` | One four-state inventory evaluator and proof projection | Removed duplicate evaluator | Efficiency and search quality contracts |
+| `c867fd5a` | Spatial predicates cannot succeed without exact evaluation | None | Search quality and efficiency contracts |
+| `1b19ac4c` | Spatial matches carry qualified observations and derivations | Runtime distance projections where offline facts now exist | Conversational and OSM access contracts |
+| `9b9d9820` | Spatial edge derivations persist through serving | Request-time full-edge discovery | Serving bundle and efficiency contracts |
+| `0d7dcfc2` | No date-derived home state or age | None | Home-state asset contracts |
+| `9268af84` | Geography-first branches, exact-society ordering prerequisites, bounded generic mechanics | Duplicate branch projections, unused Tantivy candidates, and media-manifest edit | Conversational, efficiency, and hardcoding gates |
+| `2ee4d456` | Qualified area-topology rules and isolated r11 evidence | One-off topology-backfill module, CLI, and legacy migration | Topology and live geo-cell contracts |
+| `feba1670` | Buyer market locality is distinct from physical containment | `adjacent_market_locality` and backfill-only materialization | Market-locality and conversational contracts |
+| `5504152b` | Footprints override points; all 1% overlaps survive; unambiguous points get one cell | Backfill-owned geo-cell materialization | Topology and live geo-cell contracts |
+| `33630754` | Exact/same-market/cell-nearby ordering, bounded traversal, branch ownership, Google order, and round-robin merge | Request-built topology projection and unconsumed global Tantivy recall | Conversational, efficiency, revision API, and live geo-cell contracts |
+
+### Remaining classified gaps
+
+- `architecture_gap`: geo cells and market locality currently require the
+  child-bundle `topology_backfill` path instead of the normal asset DAG.
+- `architecture_gap`: execution retains duplicate plan/intent projections and
+  computes a global Tantivy candidate set that branch execution does not use.
+- `architecture_gap`: revisions produce typed changes but execute by rendering
+  and reparsing query text instead of patching the authenticated compiled plan.
+
 ## OSM geo-cell search checkpoint — 2026-09-07
 
 - Starting HEAD: `feba1670` on `feat/issue-118-consolidated`; worktree clean.
