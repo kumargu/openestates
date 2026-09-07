@@ -7,6 +7,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use crate::dag_config::search_guardrail_config;
 use crate::search::ast::{ConstraintExpr, ConstraintTerm};
 use crate::search::{
     compile_search_revision_with_plan, revision_id_for_query, validated_revision_depth,
@@ -16,9 +17,6 @@ use crate::search::{
 use crate::state::{AppState, RuntimeVersionKey};
 
 use super::search::compute_search;
-
-const MAX_ACTIVE_BRANCHES: usize = 8;
-const MAX_REVISION_DEPTH: usize = 12;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -191,12 +189,12 @@ pub async fn revise_search(
         &request.utterance,
         derived_parent_count,
         SearchRevisionLimits {
-            max_active_branches: MAX_ACTIVE_BRANCHES,
+            max_active_branches: search_guardrail_config().revisions.max_active_branches,
         },
         Some(&parent_output.compiled_plan),
         area_only_alternative.as_deref(),
     );
-    let depth_checkpoint = parent_depth >= MAX_REVISION_DEPTH;
+    let depth_checkpoint = parent_depth >= search_guardrail_config().revisions.max_revision_depth;
     let outcome = if depth_checkpoint {
         SearchRevisionOutcome::RequireCheckpoint
     } else {

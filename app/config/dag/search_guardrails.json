@@ -4,6 +4,10 @@
   "too_short": {
     "min_tokens": 2
   },
+  "revisions": {
+    "max_active_branches": 8,
+    "max_revision_depth": 12
+  },
   "home_intent_detection": {
     "minimum_positive_score": 2,
     "minimum_short_query_score": 6,

@@ -11,6 +11,8 @@ pub struct SearchGuardrailFile {
     #[serde(default)]
     pub too_short: TooShortGuardrailConfig,
     #[serde(default)]
+    pub revisions: SearchRevisionGuardrailConfig,
+    #[serde(default)]
     pub home_intent_detection: HomeIntentDetectionConfig,
     #[serde(default)]
     pub assistant_directed_question: AssistantDirectedQuestionConfig,
@@ -20,6 +22,31 @@ pub struct SearchGuardrailFile {
     pub vague_home_query: PhraseGuardrailConfig,
     #[serde(default)]
     pub guidance: SearchGuardrailGuidanceConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SearchRevisionGuardrailConfig {
+    #[serde(default = "default_max_active_branches")]
+    pub max_active_branches: usize,
+    #[serde(default = "default_max_revision_depth")]
+    pub max_revision_depth: usize,
+}
+
+impl Default for SearchRevisionGuardrailConfig {
+    fn default() -> Self {
+        Self {
+            max_active_branches: default_max_active_branches(),
+            max_revision_depth: default_max_revision_depth(),
+        }
+    }
+}
+
+fn default_max_active_branches() -> usize {
+    8
+}
+
+fn default_max_revision_depth() -> usize {
+    12
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -197,7 +224,30 @@ pub fn search_guardrails_path() -> std::path::PathBuf {
 pub fn load_search_guardrails_from_path(
     path: &Path,
 ) -> Result<SearchGuardrailFile, DagConfigError> {
-    load_json(path)
+    let config = load_json(path)?;
+    validate_search_guardrails(&config)?;
+    Ok(config)
+}
+
+fn validate_search_guardrails(config: &SearchGuardrailFile) -> Result<(), DagConfigError> {
+    if config.version == 0 {
+        return Err(DagConfigError::InvalidConfig(
+            "search_guardrails.json version must be greater than zero".to_string(),
+        ));
+    }
+    if config.revisions.max_active_branches == 0 {
+        return Err(DagConfigError::InvalidConfig(
+            "search_guardrails.json revisions.max_active_branches must be greater than zero"
+                .to_string(),
+        ));
+    }
+    if config.revisions.max_revision_depth == 0 {
+        return Err(DagConfigError::InvalidConfig(
+            "search_guardrails.json revisions.max_revision_depth must be greater than zero"
+                .to_string(),
+        ));
+    }
+    Ok(())
 }
 
 pub fn load_search_guardrails() -> Result<SearchGuardrailFile, DagConfigError> {
@@ -223,6 +273,15 @@ mod tests {
         }
         let config = load_search_guardrails().expect("search_guardrails.json should load");
         assert_eq!(config.version, 1);
+        assert_eq!(config.revisions.max_active_branches, 8);
+        assert_eq!(config.revisions.max_revision_depth, 12);
+        assert!(
+            crate::dag_config::search_parser_config()
+                .discourse
+                .branch_ordinals
+                .len()
+                >= config.revisions.max_active_branches
+        );
         assert!(!config.home_intent_detection.term_groups.is_empty());
         assert!(!config
             .assistant_directed_question

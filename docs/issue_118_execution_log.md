@@ -129,6 +129,19 @@
   and `git diff --check` pass. The hardcoding audit remains unchanged at 330
   warning-only findings, 28 fact-key comparisons, and zero blocked aliases.
 
+## Config-owned revision bounds checkpoint — 2026-09-08
+
+- Moved the eight-active-branch and twelve-revision bounds into
+  `search_guardrails.json`; the revision route now reads the validated startup
+  config instead of production constants.
+- Extended the configured discourse ordinals through `eighth`. The config
+  contract verifies that the ordinal vocabulary covers every admitted active
+  branch and rejects zero-valued revision limits.
+- Protecting gates passed: search-guardrail config 1/1 and revision API 3/3.
+  Rust formatting, config JSON parsing, and `git diff --check` pass. Cargo used
+  the required git registry protocol after the environment blocked the sparse
+  index host.
+
 ## OSM geo-cell search checkpoint — 2026-09-07
 
 - Starting HEAD: `feba1670` on `feat/issue-118-consolidated`; worktree clean.

@@ -352,7 +352,7 @@
       "conditional_branch_starters": ["if"],
       "conjunctive_relation_markers": ["both"],
       "paired_branch_joiners": ["with"],
-      "branch_ordinals": ["first", "second"],
+      "branch_ordinals": ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"],
       "ranking_instruction_prefixes": ["rank only by", "rank", "choose"],
       "ranking_scope_end_markers": ["even if"],
       "scoped_exclusion_markers": ["unless"],
