@@ -24,8 +24,9 @@ export function visibleFeaturesForScene(document: AtlasDocument, scene: AtlasSce
   if (scene.visibility.mode === "home") return [home];
   if (scene.visibility.mode === "category") return [home, ...categoryFeatures(document, scene.visibility.categoryId)];
 
-  const selected = document.features.find((feature) => feature.id === scene.visibility.featureId);
-  if (!selected) throw new Error(`Atlas feature '${scene.visibility.featureId}' is missing`);
+  const featureId = scene.visibility.featureId;
+  const selected = document.features.find((feature) => feature.id === featureId);
+  if (!selected) throw new Error(`Atlas feature '${featureId}' is missing`);
   return scene.visibility.mode === "pair" ? [home, selected] : [selected];
 }
 

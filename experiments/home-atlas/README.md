@@ -1,65 +1,81 @@
-# Home Atlas foundation
+# Home Atlas experiment
 
-This experiment preserves the renderer-independent foundation proven in the
-[Waterford Home Atlas](https://openestates-home-atlas.guluuu3.chatgpt.site).
-It is intentionally not imported by the current OpenEstates frontend.
+This package preserves the renderer-independent foundations and the complete visual prototypes proven in the [Waterford and Brigade Home Atlas](https://openestates-home-atlas.guluuu3.chatgpt.site/). It is intentionally isolated from the current OpenEstates frontend until the property-page integration is designed and reviewed.
 
-The goal is to let a later integration reuse the hard parts without copying the
-prototype UI:
+Everything lives under one package so a later Codex session can reuse the accepted behavior without reconstructing geometry, selection, camera, tour, or scale-policy decisions.
 
-- source-aware feature contracts;
-- neighborhood-scale geometry and nearest-segment calculations;
-- responsive camera framing;
-- stable category numbering and group/pair selection;
-- declarative tour scenes that state both camera and visible context.
+## One production contract
 
-## Boundaries
+`SurfaceSceneResponse` remains the production scene boundary:
 
-- OSM owns durable geometry. Google may render the scene and provide panorama
-  availability, but renderer state is never stored as map truth.
-- Distances declare their method and target. A straight-line distance is not a
-  route or travel time.
-- Road highlighting describes alignment, not measured width.
-- Camera elevation is presentation metadata only.
-- `fixtures/waterford.sample.json` is a compact test fixture, not production
-  config or serving data.
-- There is no API key or Google Maps loader in this folder.
+```text
+OSM and Google collectors
+  -> DAG facts and config
+  -> serving bundle
+  -> Rust SurfaceSceneResponse
+  -> presentation, selection, and journey planners
+  -> Google 3D renderer and existing React playback controls
+```
 
-## Modules
+`AtlasDocument` in `src/types.ts` is an experiment-only normalized interaction model used by the compact Waterford fixture. It must not become another API, storage schema, or source of truth. Production integration should consume `SurfaceSceneResponse` and adapt only the minimum view state needed by the portable helpers.
 
-| Module | Responsibility |
+The archived `prototype/web/atlas-document.js` has the same constraint: it preserves the working Site, but is not a production import surface.
+
+## Package map
+
+| Path | Responsibility |
 | --- | --- |
-| `src/types.ts` | Portable feature, evidence, camera, and scene contracts |
-| `src/geometry.ts` | Distance, footprint, feature points, nearest road segment |
-| `src/camera.ts` | Responsive place, pair, group, feature, and road cameras |
-| `src/selection.ts` | Stable distance ordering, numbering, and scene visibility |
-| `src/scenes.ts` | Generic category-tour construction with injected buyer copy |
+| `src/types.ts` | Portable feature, evidence, camera, visibility, and scene contracts |
+| `src/geometry.ts` | Distance, footprint, feature-point, and nearest-segment calculations |
+| `src/camera.ts` | Responsive place, pair, group, feature, and road camera framing |
+| `src/selection.ts` | Stable ordering, numbering, and group/pair visibility |
+| `src/scenes.ts` | Generic category tours with injected buyer-facing copy |
+| `src/presentation.ts` | Society, estate, and township policy derived from `SurfaceSceneResponse` |
+| `src/journey.ts` | Exact route projection, timed journey scenes, and camera interpolation |
+| `fixtures/` | Compact Waterford interaction fixture |
+| `prototype/` | Runnable Waterford and Brigade visual reference plus canonical Brigade OSM inventory |
+| `screenshots/` | Review evidence captured from the running Site |
+| `tests/` | Contract coverage for Waterford interactions and Brigade scale/journey behavior |
 
-## Later OpenEstates integration
+## Rules that survive integration
 
-1. Adapt DAG/serving facts into `AtlasDocument`; do not load the fixture.
-2. Reuse `buildNumberedPlaces`, `clusterClosePlaces`, and
-   `metroStationsAroundHome` from `frontend/src/lib/nearbyPlateProjection.ts`.
-3. Translate `AtlasScene.camera` into the existing Google 3D map adapter.
-4. Translate `AtlasScene.visibility` into `PropertyMapContext` layers.
-5. Run scenes through `useArrivalPlaybackController`; do not add a second
-   playback owner.
+- OSM owns durable boundaries, roads, buildings, and mapped extents. Google may own place locations, imagery, panorama availability, and rendering.
+- Every distance declares its method and target. Straight-line distance is never presented as travel time.
+- Road highlighting describes mapped alignment, not measured width.
+- Scale behavior comes from scene geometry and configurable thresholds, never society-name branches.
+- Route direction is resolved upstream from mapped direction/access and entrance facts. The camera planner preserves the supplied order.
+- Buyer copy is injected into scene construction instead of embedded in geometry code.
+- Camera altitude and elevation are presentation metadata, not geographic facts.
+- The existing `useArrivalPlaybackController` remains the playback owner; journey builders produce scenes and do not start a second animation loop.
+- API keys, deployment identity, generated build output, and speculative tower/amenity labels do not belong in this package.
 
-The first integration slice should be Metro around Waterford: group view,
-numbered list, one selected station, then return home. Roads and schools should
-reuse the same interaction grammar.
+## Recommended wiring sequence
 
-## Checks
+1. Emit the required OSM/Google evidence through the DAG and serving bundle into `SurfaceSceneResponse`.
+2. Run `resolveAtlasPresentation` to select society, estate, or township layout from geometry and named config thresholds.
+3. Adapt scene features into the existing nearby projections and portable selection/camera helpers.
+4. Start with Waterford Metro: group view, numbered list, one selected station, and return home.
+5. Add road descent/walk using the ordered route and `buildAerialJourney`.
+6. Enable the township split-context treatment for Brigade only after the same contracts pass with production scene data.
+7. Fit the controls into the current property-page theme; do not copy the prototype shell pixel-for-pixel.
 
-From this folder, with Node 22 or newer:
+## Validation
+
+From the repository root:
 
 ```bash
-node --experimental-strip-types --test tests/homeAtlas.test.ts
+frontend/node_modules/.bin/tsc -p experiments/home-atlas/tsconfig.json
+node --experimental-strip-types --test experiments/home-atlas/tests/*.test.ts
 ```
 
-For strict type checking when TypeScript is available:
+From `experiments/home-atlas/prototype/`:
 
 ```bash
-tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext src/*.ts
+npm run check
 ```
 
+The combined suite covers ten contracts: Waterford source ownership, ordering, visibility, responsive cameras and category tours; Brigade route fidelity, monotonic timing, heading interpolation, and geometry-driven presentation policy.
+
+## Deliberately deferred
+
+This PR does not import the package into buyer-facing UI, alter backend/DAG/config behavior, add another playback controller, or claim that experimental inventory is production evidence. Those changes should arrive as small, reviewable integration slices after this foundation is merged.
