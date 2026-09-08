@@ -63,6 +63,23 @@ pub fn write_entities_parquet(
 }
 
 pub fn read_entities_parquet(bytes: &[u8]) -> Result<Vec<ServingEntityRecord>, ParquetReadError> {
+    read_entities_parquet_impl(bytes, false)
+}
+
+/// Read a pre-visibility entity table for the offline `rebuild-serving`
+/// command. Runtime loading remains strict: only the catalog rebuild path may
+/// assign the old implicit searchable visibility before rematerializing the
+/// bundle in the current format.
+pub fn read_entities_parquet_for_offline_rebuild(
+    bytes: &[u8],
+) -> Result<Vec<ServingEntityRecord>, ParquetReadError> {
+    read_entities_parquet_impl(bytes, true)
+}
+
+fn read_entities_parquet_impl(
+    bytes: &[u8],
+    allow_missing_visibility: bool,
+) -> Result<Vec<ServingEntityRecord>, ParquetReadError> {
     let mut records = Vec::new();
     for batch in ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes))?.build()? {
         let batch = batch?;
@@ -70,18 +87,28 @@ pub fn read_entities_parquet(bytes: &[u8]) -> Result<Vec<ServingEntityRecord>, P
         let entity_type = string_column(&batch, "entity_type")?;
         let name = string_column(&batch, "name")?;
         let root_source = string_column(&batch, "root_source")?;
-        let visibility = string_column(&batch, "visibility")?;
+        let visibility = match string_column(&batch, "visibility") {
+            Ok(visibility) => Some(visibility),
+            Err(_) if allow_missing_visibility => None,
+            Err(error) => return Err(error),
+        };
         let searchable_text = string_column(&batch, "searchable_text")?;
 
         for row in 0..batch.num_rows() {
-            let visibility_value = required_string(visibility, row, "visibility")?;
-            let visibility =
-                ServingEntityVisibility::parse(&visibility_value).ok_or_else(|| {
-                    ParquetReadError::InvalidTypedValue {
-                        row,
-                        message: format!("unknown serving entity visibility {visibility_value:?}"),
-                    }
-                })?;
+            let visibility = match visibility {
+                Some(visibility) => {
+                    let visibility_value = required_string(visibility, row, "visibility")?;
+                    ServingEntityVisibility::parse(&visibility_value).ok_or_else(|| {
+                        ParquetReadError::InvalidTypedValue {
+                            row,
+                            message: format!(
+                                "unknown serving entity visibility {visibility_value:?}"
+                            ),
+                        }
+                    })?
+                }
+                None => ServingEntityVisibility::Searchable,
+            };
             records.push(ServingEntityRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 entity_type: required_string(entity_type, row, "entity_type")?,
@@ -859,6 +886,37 @@ mod tests {
             vec!["asset:osm/version:v1".to_string()],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn only_offline_rebuild_accepts_legacy_entities_without_visibility() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("entity_id", DataType::Utf8, false),
+            Field::new("entity_type", DataType::Utf8, false),
+            Field::new("name", DataType::Utf8, false),
+            Field::new("root_source", DataType::Utf8, true),
+            Field::new("searchable_text", DataType::Utf8, false),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![
+                string_array(["society:legacy".to_string()].into_iter()),
+                string_array(["society".to_string()].into_iter()),
+                string_array(["Legacy Society".to_string()].into_iter()),
+                optional_string_array(vec![Some("legacy-source".to_string())]),
+                string_array(["Legacy Society".to_string()].into_iter()),
+            ],
+        )
+        .unwrap();
+        let bytes = write_batch(batch).unwrap();
+
+        let strict_error = read_entities_parquet(&bytes)
+            .expect_err("runtime loading must reject entities without visibility");
+        assert!(strict_error.to_string().contains("visibility"));
+
+        let rebuilt = read_entities_parquet_for_offline_rebuild(&bytes).unwrap();
+        assert_eq!(rebuilt.len(), 1);
+        assert_eq!(rebuilt[0].visibility, ServingEntityVisibility::Searchable);
     }
 
     #[test]

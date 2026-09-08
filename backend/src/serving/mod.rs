@@ -44,9 +44,10 @@ pub use materializer::{
     SearchServingBundleMaterializer,
 };
 pub use parquet::{
-    read_edges_parquet, read_entities_parquet, read_entity_aliases_parquet, read_facts_parquet,
-    read_rera_evidence_parquet, read_search_metadata_parquet, write_entity_aliases_parquet,
-    write_rera_evidence_parquet, ParquetReadError,
+    read_edges_parquet, read_entities_parquet, read_entities_parquet_for_offline_rebuild,
+    read_entity_aliases_parquet, read_facts_parquet, read_rera_evidence_parquet,
+    read_search_metadata_parquet, write_entity_aliases_parquet, write_rera_evidence_parquet,
+    ParquetReadError,
 };
 pub use projection::{GoogleReviewEvidence, ProjectedFact, SocietyFactProjection};
 pub use proximity::{derive_proximity_records, DerivedProximityRecords};

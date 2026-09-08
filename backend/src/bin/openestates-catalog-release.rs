@@ -10,12 +10,15 @@ use backend::assets::{
     KG_SOCIETY_VIEW_ASSET_ID, RERA_CLAIMS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
     RERA_RECEIPTS_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
 };
+use backend::dag_config::load_fact_registry;
 use backend::data_loader::properties_from_serving_bundle;
 use backend::lake::{LakeKey, LakeStore, LakeStoreLocation, LAKE_URL_ENV};
 use backend::serving::{
-    read_edges_parquet, read_entities_parquet, read_facts_parquet, read_rera_evidence_parquet,
-    read_search_metadata_parquet, validate_search_serving_candidate, write_frontend_media_manifest,
-    SearchServingBundleMaterializer, ServingBundleLoader, ServingBundleManifest,
+    read_edges_parquet, read_entities_parquet, read_entities_parquet_for_offline_rebuild,
+    read_facts_parquet, read_rera_evidence_parquet, read_search_metadata_parquet,
+    validate_search_serving_candidate, write_frontend_media_manifest,
+    SearchServingBundleMaterializer, ServingBundleLoader, ServingBundleManifest, ServingEdgeRecord,
+    ServingEntityRecord, ServingFactRecord, ServingSearchMetadataRecord,
     SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 
@@ -263,6 +266,7 @@ enum Command {
 
 struct RebuildServingOptions {
     serving_materialization_id: MaterializationId,
+    revalidate_eligibility: bool,
     version: String,
 }
 
@@ -279,6 +283,7 @@ struct ExtendServingOptions {
     candidate_serving_materialization_id: MaterializationId,
     kg_materialization_id: Option<MaterializationId>,
     society_ids: Vec<String>,
+    all_candidate_societies: bool,
     excluded_fact_keys: Vec<String>,
     refresh_existing: bool,
     version: String,
@@ -377,6 +382,7 @@ fn parse_command(command: &str, args: Vec<String>) -> Result<Command, String> {
 fn parse_rebuild_serving(args: Vec<String>) -> Result<RebuildServingOptions, String> {
     let mut cursor = 0usize;
     let mut serving_materialization_id = None;
+    let mut revalidate_eligibility = false;
     let mut version = None;
     while cursor < args.len() {
         match args[cursor].as_str() {
@@ -392,12 +398,17 @@ fn parse_rebuild_serving(args: Vec<String>) -> Result<RebuildServingOptions, Str
                 cursor += 1;
                 version = Some(take_value(&args, &mut cursor, "--version")?);
             }
+            "--revalidate-eligibility" => {
+                revalidate_eligibility = true;
+                cursor += 1;
+            }
             other => return Err(format!("unknown rebuild-serving argument: {other}")),
         }
     }
     Ok(RebuildServingOptions {
         serving_materialization_id: serving_materialization_id
             .ok_or_else(|| "rebuild-serving requires --serving".to_string())?,
+        revalidate_eligibility,
         version: version.ok_or_else(|| "rebuild-serving requires --version".to_string())?,
     })
 }
@@ -408,6 +419,7 @@ fn parse_extend_serving(args: Vec<String>) -> Result<ExtendServingOptions, Strin
     let mut candidate_serving_materialization_id = None;
     let mut kg_materialization_id = None;
     let mut society_ids = Vec::new();
+    let mut all_candidate_societies = false;
     let mut excluded_fact_keys = Vec::new();
     let mut refresh_existing = false;
     let mut version = None;
@@ -441,6 +453,10 @@ fn parse_extend_serving(args: Vec<String>) -> Result<ExtendServingOptions, Strin
                 cursor += 1;
                 society_ids.push(take_value(&args, &mut cursor, "--society")?);
             }
+            "--all-candidate-societies" => {
+                all_candidate_societies = true;
+                cursor += 1;
+            }
             "--exclude-fact" => {
                 cursor += 1;
                 excluded_fact_keys.push(take_value(&args, &mut cursor, "--exclude-fact")?);
@@ -456,8 +472,14 @@ fn parse_extend_serving(args: Vec<String>) -> Result<ExtendServingOptions, Strin
             other => return Err(format!("unknown extend-serving argument: {other}")),
         }
     }
-    if society_ids.is_empty() {
-        return Err("extend-serving requires at least one --society".to_string());
+    if society_ids.is_empty() && !all_candidate_societies {
+        return Err("extend-serving requires --society or --all-candidate-societies".to_string());
+    }
+    if !society_ids.is_empty() && all_candidate_societies {
+        return Err(
+            "extend-serving accepts either --society or --all-candidate-societies, not both"
+                .to_string(),
+        );
     }
     society_ids.sort();
     society_ids.dedup();
@@ -470,6 +492,7 @@ fn parse_extend_serving(args: Vec<String>) -> Result<ExtendServingOptions, Strin
             .ok_or_else(|| "extend-serving requires --candidate-serving".to_string())?,
         kg_materialization_id,
         society_ids,
+        all_candidate_societies,
         excluded_fact_keys,
         refresh_existing,
         version: version.ok_or_else(|| "extend-serving requires --version".to_string())?,
@@ -888,12 +911,16 @@ async fn extend_catalog_serving(
             )?)
             .await?,
     )?;
-    let requested_societies = options.society_ids.into_iter().collect::<BTreeSet<_>>();
     let candidate_societies = candidate_entities
         .iter()
         .filter(|entity| entity.entity_type == "society")
         .map(|entity| entity.entity_id.clone())
         .collect::<BTreeSet<_>>();
+    let requested_societies = if options.all_candidate_societies {
+        candidate_societies.clone()
+    } else {
+        options.society_ids.into_iter().collect::<BTreeSet<_>>()
+    };
     if candidate_societies != requested_societies {
         return Err(format!(
             "candidate serving societies do not match requested additions; candidate={}, requested={}",
@@ -920,11 +947,6 @@ async fn extend_catalog_serving(
                 format!("society {existing} already exists in the base serving bundle").into(),
             );
         }
-    } else if let Some(missing) = requested_societies
-        .iter()
-        .find(|society_id| !base_entity_ids.contains(*society_id))
-    {
-        return Err(format!("society {missing} does not exist in the base serving bundle").into());
     }
     let added_entity_ids = candidate_entities
         .iter()
@@ -1781,22 +1803,28 @@ async fn rebuild_serving(
     let (record, manifest) =
         serving_record_and_manifest(lake, &materializations, &options.serving_materialization_id)
             .await?;
-    let entities = read_entities_parquet(
+    let mut entities = read_entities_parquet_for_offline_rebuild(
         &lake
             .get_bytes(&LakeKey::new(manifest.entity_parquet_key.clone())?)
             .await?,
     )?;
-    let facts = read_facts_parquet(
+    let mut facts = read_facts_parquet(
         &lake
             .get_bytes(&LakeKey::new(manifest.fact_parquet_key.clone())?)
             .await?,
     )?;
-    let search_metadata = read_search_metadata_parquet(
+    let mut search_metadata = read_search_metadata_parquet(
         &lake
             .get_bytes(&LakeKey::new(manifest.search_metadata_parquet_key.clone())?)
             .await?,
     )?;
-    let edges = match manifest.edge_parquet_key.as_ref() {
+    let stripped_media_facts = strip_retired_frontend_media_facts(&mut facts, &mut search_metadata);
+    if stripped_media_facts > 0 {
+        eprintln!(
+            "offline rebuild removed {stripped_media_facts} legacy frontend-media fact pair(s)"
+        );
+    }
+    let mut edges = match manifest.edge_parquet_key.as_ref() {
         Some(key) => read_edges_parquet(&lake.get_bytes(&LakeKey::new(key.clone())?).await?)?,
         None => Vec::new(),
     };
@@ -1806,10 +1834,27 @@ async fn rebuild_serving(
         }
         None => Vec::new(),
     };
-    let prevalidated_entity_ids = entities
-        .iter()
-        .map(|entity| entity.entity_id.clone())
-        .collect::<BTreeSet<_>>();
+    let repaired_duplicates = repair_legacy_duplicate_rera_societies(
+        &mut entities,
+        &mut facts,
+        &mut search_metadata,
+        &mut edges,
+        &load_fact_registry()?.runtime.society_identity_fact_keys,
+    );
+    if !repaired_duplicates.is_empty() {
+        eprintln!(
+            "offline rebuild coalesced duplicate RERA society entities: {}",
+            repaired_duplicates.join(", ")
+        );
+    }
+    let prevalidated_entity_ids = if options.revalidate_eligibility {
+        BTreeSet::new()
+    } else {
+        entities
+            .iter()
+            .map(|entity| entity.entity_id.clone())
+            .collect::<BTreeSet<_>>()
+    };
     let source_watermarks = vec![SourceWatermark {
         source: "serving_bundle_rebuild".to_string(),
         high_watermark: options.serving_materialization_id.to_string(),
@@ -1830,6 +1875,134 @@ async fn rebuild_serving(
         )
         .await
         .map_err(Into::into)
+}
+
+/// Old serving bundles could carry the same RERA registration under duplicate
+/// society entity IDs. Coalesce only exact-name, exact-registration duplicates
+/// during an offline rebuild; all less certain collisions still fail current
+/// serving validation.
+fn repair_legacy_duplicate_rera_societies(
+    entities: &mut Vec<ServingEntityRecord>,
+    facts: &mut Vec<ServingFactRecord>,
+    search_metadata: &mut Vec<ServingSearchMetadataRecord>,
+    edges: &mut Vec<ServingEdgeRecord>,
+    society_identity_fact_keys: &[String],
+) -> Vec<String> {
+    let mut society_ids_by_name = BTreeMap::<String, Vec<String>>::new();
+    for entity in entities
+        .iter()
+        .filter(|entity| entity.entity_type == "society")
+    {
+        society_ids_by_name
+            .entry(entity.name.trim().to_lowercase())
+            .or_default()
+            .push(entity.entity_id.clone());
+    }
+
+    let fact_count_by_entity =
+        facts
+            .iter()
+            .fold(BTreeMap::<&str, usize>::new(), |mut counts, fact| {
+                *counts.entry(fact.entity_id.as_str()).or_default() += 1;
+                counts
+            });
+    let mut replacement_by_duplicate = BTreeMap::<String, String>::new();
+    for society_ids in society_ids_by_name
+        .values()
+        .filter(|society_ids| society_ids.len() > 1)
+    {
+        let identities_by_entity = society_ids
+            .iter()
+            .map(|entity_id| {
+                facts
+                    .iter()
+                    .filter(|fact| {
+                        fact.entity_id == *entity_id
+                            && society_identity_fact_keys.contains(&fact.fact_key)
+                    })
+                    .filter_map(|fact| {
+                        fact.value_text
+                            .as_deref()
+                            .map(|value| (fact.fact_key.as_str(), value))
+                    })
+                    .collect::<BTreeSet<_>>()
+            })
+            .collect::<Vec<_>>();
+        let identities = identities_by_entity
+            .iter()
+            .flatten()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        if identities.len() != 1
+            || identities_by_entity
+                .iter()
+                .any(|identity| identity.len() != 1)
+        {
+            continue;
+        }
+
+        let primary = society_ids
+            .iter()
+            .max_by_key(|entity_id| {
+                (
+                    fact_count_by_entity
+                        .get(entity_id.as_str())
+                        .copied()
+                        .unwrap_or_default(),
+                    std::cmp::Reverse(entity_id.as_str()),
+                )
+            })
+            .expect("duplicate group is non-empty")
+            .clone();
+        for duplicate in society_ids
+            .iter()
+            .filter(|entity_id| **entity_id != primary)
+        {
+            replacement_by_duplicate.insert(duplicate.clone(), primary.clone());
+        }
+    }
+
+    if replacement_by_duplicate.is_empty() {
+        return Vec::new();
+    }
+    entities.retain(|entity| !replacement_by_duplicate.contains_key(&entity.entity_id));
+    facts.retain(|fact| !replacement_by_duplicate.contains_key(&fact.entity_id));
+    search_metadata.retain(|metadata| !replacement_by_duplicate.contains_key(&metadata.entity_id));
+    edges.retain_mut(|edge| {
+        if let Some(primary) = replacement_by_duplicate.get(&edge.to_entity_id) {
+            if edge.edge_type == "in_society" && edge.derivation.is_none() {
+                edge.to_entity_id = primary.clone();
+                return true;
+            }
+            return false;
+        }
+        !replacement_by_duplicate.contains_key(&edge.from_entity_id)
+    });
+
+    replacement_by_duplicate
+        .into_iter()
+        .map(|(duplicate, primary)| format!("{duplicate}->{primary}"))
+        .collect()
+}
+
+fn strip_retired_frontend_media_facts(
+    facts: &mut Vec<ServingFactRecord>,
+    search_metadata: &mut Vec<ServingSearchMetadataRecord>,
+) -> usize {
+    let retired_pairs = facts
+        .iter()
+        .filter(|fact| {
+            fact.value_text
+                .as_deref()
+                .is_some_and(|value| value.contains("/societies/"))
+        })
+        .map(|fact| (fact.entity_id.clone(), fact.fact_key.clone()))
+        .collect::<BTreeSet<_>>();
+    facts.retain(|fact| !retired_pairs.contains(&(fact.entity_id.clone(), fact.fact_key.clone())));
+    search_metadata.retain(|metadata| {
+        !retired_pairs.contains(&(metadata.entity_id.clone(), metadata.fact_key.clone()))
+    });
+    retired_pairs.len()
 }
 
 fn default_project_root() -> PathBuf {
@@ -1869,8 +2042,12 @@ fn print_help() {
     println!("  --candidate-serving <uuid>  Scoped serving candidate used to extend a catalog");
     println!("  --kg <uuid>                 Optional rebuilt KG lineage for a scoped refresh");
     println!("  --society <canonical-id>    Society expected in the scoped candidate; repeatable");
+    println!("  --all-candidate-societies   Use every society in the immutable candidate bundle");
     println!(
-        "  --refresh-existing          Refresh matching fact keys for an existing catalog society"
+        "  --refresh-existing          Upsert candidate societies and refresh matching fact keys"
+    );
+    println!(
+        "  --revalidate-eligibility    Quarantine legacy societies that fail current serving eligibility"
     );
     println!(
         "  --exclude-fact <fact-key>   Remove a superseded fact and search metadata; repeatable"

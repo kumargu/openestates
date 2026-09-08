@@ -2577,3 +2577,52 @@ CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo test --test search_conversational_
   --all-targets`; `cargo fmt --all -- --check`; config and query-bank JSON
   parsing; and `git diff --check`. The hardcoding audit is unchanged at 330
   warning-only findings, 28 fact-key comparisons, and zero blocked aliases.
+
+## Rich format-12 dev promotion — 2026-09-08
+
+- Chain audit started at `07d9957d`. The Issue 118 architecture commits remain
+  the selected foundation; this checkpoint changes only offline catalog rebuild
+  mechanics, the immutable serving candidate, and the `dev` pointer. Production
+  and remote branches were not touched.
+- A scoped normal-DAG run (`5c31039d-bded-45ab-936d-f80a5164a135`)
+  completed but added no societies and had no geo cells because the main-lake
+  OSM boundary input was absent. It was retained as a diagnostic run, not
+  selected for promotion.
+- Offline rebuilds now keep runtime Parquet loading strict while allowing the
+  catalog tool to ingest legacy entities, re-run current eligibility, remove
+  retired `/societies/` media facts, and coalesce only exact-name identities
+  whose configured identity facts agree. `extend-serving` can atomically
+  refresh overlapping societies and add every eligible candidate society.
+- The first rich merge (`c888caa7-ea80-4ad1-b3de-e8158f810673`) passed serving
+  gates but was rejected because its historical KG closure contained two full
+  `canonical_society_nodes` snapshots. The selected rebuild pins the already
+  validated format-12 base lineage and records both source serving snapshots as
+  watermarks; no lineage gate was bypassed.
+- Selected materialization `3c2454c0-1d24-4b79-a1fe-d3d305eca3f5`, version
+  `issue-118-dev-rich-format12-2026-09-08-r3`, contains 71 societies, 159
+  property configurations, 2,237 entities, 23,574 facts, 10,715 edges, and 48
+  RERA evidence records. It has no quarantine. Eight collected RERA identities
+  outside the catalog remain omitted as an explicit coverage warning.
+- Geo diagnostics preserve the r11 parity counts: 370 internal cells, 552
+  unambiguous point assignments, zero ambiguous assignments, and the same 42
+  qualified points outside selected cells. Godrej Air, Habitat Eden Heights,
+  and Prestige Waterford retain their evidenced known cell mappings. Internal
+  OSM entities have empty searchable text, no alias rows, and their three known
+  names return zero API matches.
+- Pinned API benchmarks returned exact-society prefixes for Godrej Air,
+  Prestige Waterford, and newly added Godrej United. Whitefield queries returned
+  20 qualified 2BHK results under ₹2Cr and 17 qualified 3BHK results under
+  ₹2.5Cr. `Make it 2BHK under 1.6Cr` retained Whitefield and replaced both typed
+  constraints; retry identity, `409` conflict handling, and zero-result parent
+  preservation passed.
+- Catalog release `4de65b1b-41a5-48d8-b6b6-75e548374777` passed pinned
+  lineage, serving completeness, membership identity, property projection,
+  and RERA evidence gates. It was promoted to `dev` by compare-and-swap from
+  `4ca2540a-2375-4ecb-822d-9bece975ccfb`. A normal API start without a serving
+  override loaded the selected 71-society bundle.
+- Verification passed: catalog unit tests 8/8; conversational 13/13; efficiency
+  12/12; revision API 3/3; serving bundle 4/4; serving runtime 5/5;
+  recommendations 2/2; asset DAG executor 12/12; live geo-cell 1 explicitly
+  ignored; `cargo check --all-targets`; Rust formatting; config/query-bank JSON;
+  and `git diff --check`. The hardcoding audit remains at 330 warning-only
+  findings, 28 fact-key comparisons, and zero blocked aliases.

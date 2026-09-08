@@ -13,6 +13,9 @@
     "never_default": true
   },
   "runtime": {
+    "society_identity_fact_keys": [
+      "rera_number"
+    ],
     "multi_value_fact_keys": [
       "nearby_schools",
       "nearby_metro_stations",
