@@ -2626,3 +2626,30 @@ CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo test --test search_conversational_
   ignored; `cargo check --all-targets`; Rust formatting; config/query-bank JSON;
   and `git diff --check`. The hardcoding audit remains at 330 warning-only
   findings, 28 fact-key comparisons, and zero blocked aliases.
+
+## Findings 1–7 repair baseline — 2026-09-08
+
+- Starting HEAD: `cf049657` on `feat/issue-118-consolidated`; the worktree was
+  clean. The selected dev release was
+  `4de65b1b-41a5-48d8-b6b6-75e548374777`, backed by format-12
+  materialization `3c2454c0-1d24-4b79-a1fe-d3d305eca3f5` with 71 societies
+  and 159 configurations.
+- Chain audit: `c309aff7` introduced snapshot-owned topology and branch recall;
+  `a831cabd` introduced typed signed revisions; `07d9957d` closed serving
+  evidence after eligibility; and `cf049657` produced the rich dev release.
+  The retained contracts are four-state hard eligibility, typed plan patches,
+  exact/same-market/cell-nearby cohorts, branch round-robin, snapshot-qualified
+  evidence, format-12 visibility, and the 71/159 membership floor.
+- Classified findings before implementation: `architecture_gap` for raw
+  `activeQuery` execution, duplicate prepared/compiled query projections,
+  global Tantivy and spatial candidate injection, unresolved geography falling
+  back to bundle-wide recall, property-string area exclusion, and static
+  revision caches; `ranking_gap` for the final Google-only reorder and forced
+  exact tier; `data_gap` for the rich catalog being assembled by the legacy
+  serving rebuild path rather than reproducible current source seeds.
+- Baseline gates: conversational semantics 13/13, search efficiency 12/12,
+  revision API 3/3. The hardcoding audit reported the unchanged 330
+  warning-only findings, 28 fact-key comparisons, and zero blocked aliases.
+  Baseline artifact remains `data/validation/search_query_bank.json`.
+- Restored `frontend/media-manifest.json` to its pre-`cf049657` value because
+  its generated bundle pointer is unrelated to backend dev catalog promotion.
