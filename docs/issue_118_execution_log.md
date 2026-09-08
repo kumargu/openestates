@@ -206,6 +206,66 @@
   claim that broad suite as passing; the Issue 118 frozen and vertical gates
   above are the verified completion boundary.
 
+## Isolated format-12 normal-DAG rebuild — 2026-09-08
+
+- Rebuild root:
+  `/tmp/openestates-issue118-format12.w74Dcv`. No dev, staging,
+  production, or repository lake pointer was promoted. Attempts r1 and r2
+  proved the source-seed locality gap; r3 reached topology construction but
+  rejected dangling coverage evidence after society eligibility pruning. The
+  successful r4 candidate is materialization
+  `62caf848-2654-47a5-a67f-e24ba923ce1f`, run
+  `35cfbf25-3567-491d-8339-3e3539f98cf4`, version
+  `issue-118-whitefield-format12-2026-09-08-r4`.
+- The r3 failure exposed an eligibility-order bug. Eligibility now closes the
+  retained edge set over surviving observations and derivations, so an edge is
+  kept only when its complete evidence chain survived entity/fact pruning.
+  The focused evidence-closure regression passes.
+- The r4 serving manifest records format 12, 2,099 entities, 14,504 facts,
+  14,504 search-metadata rows, 7,805 edges, 27 societies, and 54 properties.
+  Topology diagnostics record 370 internal cells, 18 direct plus 10 proximity
+  market memberships, eight covered cells, 538 point assignments, 41
+  unassigned points, zero ambiguous assignments, and no evidence validation
+  error. There are no footprint-overlap rows in this input snapshot, so
+  multi-cell footprint behavior remains protected by the hermetic serving
+  vertical rather than claimed as live-data coverage.
+- The ignored live contract no longer hardcodes the retired r11 bundle label.
+  It requires an explicit format-12 materialization and checks the actual
+  candidate: all 370 cells remain internal, no cell identity enters aliases or
+  Tantivy recall, the Godrej United, Sumadhura Nandanam, and Prestige Green
+  Gables cell mappings survive Parquet/runtime loading, cell-nearby ordering is
+  appended after exact results, branches retain ownership, and evidence
+  references validate against the candidate snapshot.
+- Live search prefixes are:
+  `Godrej United` -> its 2/3/4/5BHK inventory then Sumadhura Nandanam;
+  `Prestige Green Gables 3BHK under 4Cr` -> exact Green Gables then the
+  qualified Brigade Tech Gardens cell neighbor; and
+  `Sumadhura Nandanam 2BHK under 2Cr` -> exact Nandanam then same-market
+  homes. The two-society query creates two owned branches and round-robins the
+  two exact 3BHKs first.
+- Live revision checks pass for BHK/budget replacement, spatial correction,
+  exclusion, zero-result parent preservation, undo, fresh search, exact
+  idempotent replay, and conflicting key reuse with `409`. The guardrail
+  benchmark passes 30/30 checks with 99.33 ms endpoint p95 in the single-run
+  mode supported by the configured 16-request search burst. A deliberately
+  overdriven 30-request warm/repeat run hit `429`; that result measures the
+  launch rate limit, not search semantics.
+- Remaining classification: `architecture_gap` / `data_gap`. The
+  reproducible normal-DAG KG contains only the current 30-society Whitefield
+  extension, while r11's 92-society corpus was assembled by historical serving
+  bundle merges rather than a reproducible KG snapshot. The r4 eligible output
+  consequently has 27 societies and omits Godrej Air. Reintroducing a
+  format-11 migration reader or runtime aliases would violate the no-shim and
+  DAG-ownership rules; the correct follow-up is to reconstruct the richer
+  source/KG lineage and rerun the normal DAG.
+- Protecting gates pass: evidence closure 1/1, conversational semantics 13/13,
+  revision API 3/3, efficiency 12/12, recommendations 2/2, serving bundle 4/4,
+  asset DAG executor 12/12, ignored live geo-cell 1/1, and guardrails 30/30.
+  `cargo check --all-targets`, formatting, config/query-bank JSON parsing,
+  `git diff --check`, and the hardcoding audit pass. The audit remains at 330
+  warning-only findings, 28 fact-key comparisons, and zero blocked aliases.
+  The generated `frontend/media-manifest.json` change was restored.
+
 ## OSM geo-cell search checkpoint — 2026-09-07
 
 - Starting HEAD: `feba1670` on `feat/issue-118-consolidated`; worktree clean.
