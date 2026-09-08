@@ -2653,3 +2653,41 @@ CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo test --test search_conversational_
   Baseline artifact remains `data/validation/search_query_bank.json`.
 - Restored `frontend/media-manifest.json` to its pre-`cf049657` value because
   its generated bundle pointer is unrelated to backend dev catalog promotion.
+
+## Findings 1–3 and 5–7 compiled execution checkpoint — 2026-09-08
+
+- Initial and revised searches now execute only a snapshot-pinned
+  `CompiledSearchPlan`. `activeQuery` is presentation/log data; a signed-context
+  contract proves changing it cannot change fingerprints, membership, order,
+  or proofs. Branches own canonical recall/scoring terms, structured recall,
+  Tantivy recall, spatial recall, preference keys, and diagnostics.
+- Missing topology is a typed unresolved scope. Explicit unknown geography
+  fails closed, while a directly resolved society may retain only its exact
+  anchor. Exclusions use serving-backed entity membership, not `Property.area`;
+  a controlled test deliberately swaps display areas and still excludes the
+  evidenced Whitefield member. Unsupported Sarjapur and Yelahanka scopes return
+  no candidates in a bundle that does not resolve them.
+- Branch-affix ownership now distinguishes shared spatial prefixes/suffixes
+  from branch-local relations. Named-place categories are projected from the
+  configured nearby-place registry, preventing school, hospital, and metro
+  preferences or proofs from leaking into sibling branches. Branch recall
+  diagnostics prove both spatial branches contributed candidates.
+- The final Google-only reorder and forced exact-tier overwrite are deleted.
+  Frozen scenarios now reflect explicit preference priority, combined
+  preference quality, balanced multi-anchor commute, and named-place distance
+  within stable geography cohorts. Exact-society, same-market, cell-nearby, and
+  round-robin branch ordering remain intact.
+- Revision idempotency and semantic caches are owned by `AppState`. Atomic
+  reservations distinguish `InFlight` and `Complete`; identical concurrent
+  retries wait for and clone the leader response, differing fingerprints return
+  `409`, abandoned leaders wake waiters and release the key, and bounded
+  eviction applies only to completed entries. Capacities are validated in
+  `search_guardrails.json`.
+- Deleted the unused `search/focus.rs`, global recall set, raw-query execution,
+  query-derived revision authentication, duplicate compiled projection,
+  unused `RemovePredicate`, and obsolete final sort helpers. The search runtime
+  version is now `openestates-search-runtime-v3`.
+- Focused gates pass: conversational semantics 15/15, efficiency 12/12, and
+  revision API 5/5. `cargo check --all-targets`, Rust formatting, and
+  `git diff --check` pass. The hardcoding audit remains unchanged at 330
+  warning-only findings, 28 fact-key comparisons, and zero blocked aliases.

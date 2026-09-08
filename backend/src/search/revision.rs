@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 use crate::dag_config::search_parser_config;
 use crate::serving::SpatialServingIndex;
 
-use super::ast::{semantic_search_fingerprint, ConstraintExpr, PredicateFamily};
+use super::ast::{ConstraintExpr, PredicateFamily};
 use super::compiled_plan::{
     CompiledSearchPlan, GeoCellSearchPolicy, GeoTopologyIndex, ResolvedEntityHandle,
 };
@@ -51,10 +51,6 @@ pub enum TypedSearchRevisionPatch {
         branch_ids: Vec<String>,
         families: Vec<PredicateFamily>,
         expression: super::ast::ConstraintExpr,
-    },
-    RemovePredicate {
-        branch_ids: Vec<String>,
-        families: Vec<PredicateFamily>,
     },
     AddAlternative {
         branch_id: String,
@@ -299,7 +295,6 @@ pub fn apply_typed_revision(
     parent: &CompiledSearchPlan,
     fragment: &CompiledSearchPlan,
     revision: &TypedSearchRevision,
-    active_query: &str,
     topology: &GeoTopologyIndex,
     spatial_index: Option<&SpatialServingIndex>,
     geo_cell_policy: GeoCellSearchPolicy,
@@ -344,16 +339,6 @@ pub fn apply_typed_revision(
                     if branch_ids.contains(branch_id) {
                         predicates.remove_positive_families(families);
                         *predicates = conjoin(predicates.clone(), expression.clone());
-                    }
-                }
-            }
-            TypedSearchRevisionPatch::RemovePredicate {
-                branch_ids,
-                families,
-            } => {
-                for (branch_id, predicates) in &mut branches {
-                    if branch_ids.contains(branch_id) {
-                        predicates.remove_positive_families(families);
                     }
                 }
             }
@@ -419,17 +404,6 @@ pub fn apply_typed_revision(
                     aggregate_intent.budget_max = fragment.aggregate_intent.budget_max;
                 }
             }
-            TypedSearchRevisionPatch::RemovePredicate { families, .. } => {
-                if families.contains(&PredicateFamily::Bhk) {
-                    aggregate_intent.bhk = None;
-                    aggregate_intent.bhks.clear();
-                    aggregate_intent.bhk_spans.clear();
-                }
-                if families.contains(&PredicateFamily::Budget) {
-                    aggregate_intent.budget_min = None;
-                    aggregate_intent.budget_max = None;
-                }
-            }
             TypedSearchRevisionPatch::AddAlternative { .. } => {
                 for area in &fragment.aggregate_intent.areas {
                     if !aggregate_intent
@@ -457,7 +431,6 @@ pub fn apply_typed_revision(
         branches,
         aggregate_intent,
         resolved_entities,
-        active_query,
         topology,
         spatial_index,
         geo_cell_policy,
@@ -760,19 +733,9 @@ fn encode_signed_context(context: &SignedSearchContext) -> String {
 }
 
 fn validate_signed_search_context(context: &SignedSearchContext) -> Result<(), String> {
-    let predicates = context
-        .plan
-        .branches
-        .iter()
-        .map(|branch| branch.predicates.clone())
-        .collect::<Vec<_>>();
-    let constraints = context
-        .plan
-        .branches
-        .iter()
-        .map(|branch| branch.constraints.clone())
-        .collect::<Vec<_>>();
-    let fingerprint = semantic_search_fingerprint(&predicates, &constraints);
+    let mut validated_plan = context.plan.clone();
+    validated_plan.refresh_semantic_fingerprint();
+    let fingerprint = validated_plan.semantic_fingerprint;
     if fingerprint != context.plan.semantic_fingerprint || fingerprint != context.plan_fingerprint {
         return Err("revision plan fingerprint mismatch".to_string());
     }
@@ -816,6 +779,7 @@ fn validate_plan_evidence(plan: &CompiledSearchPlan) -> Result<(), String> {
                         .flat_map(|path| path.supporting_evidence.iter()),
                 )
                 .collect::<Vec<_>>(),
+            super::compiled_plan::GeoScope::Unresolved { .. } => Vec::new(),
             super::compiled_plan::GeoScope::BundleWide => Vec::new(),
         })
     {
@@ -868,47 +832,6 @@ fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
                 .map_err(|_| "invalid revision context encoding".to_string())
         })
         .collect()
-}
-
-pub fn revision_id_for_query(
-    query: &str,
-    runtime_version: &SearchRuntimeVersion,
-    depth: usize,
-) -> String {
-    let mut payload = Vec::new();
-    payload.extend_from_slice(
-        query
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .as_bytes(),
-    );
-    payload.push(0);
-    payload.extend_from_slice(
-        &serde_json::to_vec(runtime_version).expect("runtime version is serializable"),
-    );
-    payload.extend_from_slice(&depth.to_be_bytes());
-    let digest = hmac_sha256(revision_signing_key(), &payload);
-    let encoded = digest
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    format!("rev-{depth:03}-{}", &encoded[..32])
-}
-
-pub fn validated_revision_depth(
-    revision_id: &str,
-    query: &str,
-    runtime_version: &SearchRuntimeVersion,
-) -> Option<usize> {
-    let depth = revision_id
-        .strip_prefix("rev-")?
-        .split('-')
-        .next()?
-        .parse::<usize>()
-        .ok()?;
-    let expected = revision_id_for_query(query, runtime_version, depth);
-    (depth > 0 && constant_time_eq(revision_id.as_bytes(), expected.as_bytes())).then_some(depth)
 }
 
 const REVISION_SIGNING_KEY_ENV: &str = "OPENESTATES_REVISION_SIGNING_KEY";
@@ -1024,7 +947,6 @@ mod tests {
             &parent,
             &fragment,
             &revision,
-            "rendered output only",
             &GeoTopologyIndex::default(),
             None,
             GeoCellSearchPolicy {

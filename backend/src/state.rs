@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -24,7 +24,7 @@ use crate::security::security_tuning;
 use crate::security::ExecutionLanes;
 use crate::serving::LoadedServingBundle;
 
-pub const SEARCH_ENGINE_VERSION: &str = "openestates-search-runtime-v2";
+pub const SEARCH_ENGINE_VERSION: &str = "openestates-search-runtime-v3";
 
 pub struct SearchRuntimeSnapshot {
     pub bundle: Arc<LoadedServingBundle>,
@@ -167,6 +167,214 @@ pub struct CachedSearchOutput {
     pub response: Arc<SearchResponse>,
     pub compiled_plan: Arc<crate::search::CompiledSearchPlan>,
     pub log_messages: Vec<SearchLogMessage>,
+}
+
+pub struct SearchRevisionCaches {
+    idempotency: Arc<std::sync::Mutex<RevisionIdempotencyState>>,
+    semantic: std::sync::Mutex<LruCache<String, CachedSearchOutput>>,
+}
+
+struct RevisionIdempotencyState {
+    entries: HashMap<String, RevisionIdempotencyEntry>,
+    completed_order: VecDeque<String>,
+    completed_capacity: usize,
+    next_reservation_id: u64,
+}
+
+enum RevisionIdempotencyEntry {
+    InFlight {
+        request_fingerprint: String,
+        reservation_id: u64,
+        sender: tokio::sync::watch::Sender<RevisionReservationUpdate>,
+    },
+    Complete {
+        request_fingerprint: String,
+        response: crate::routes::search_revisions::SearchRevisionResponse,
+    },
+}
+
+#[derive(Clone)]
+pub enum RevisionReservationUpdate {
+    Pending,
+    Complete(crate::routes::search_revisions::SearchRevisionResponse),
+    Abandoned,
+}
+
+pub enum RevisionIdempotencyLookup {
+    Hit(crate::routes::search_revisions::SearchRevisionResponse),
+    Leader(RevisionIdempotencyReservation),
+    Waiter(tokio::sync::watch::Receiver<RevisionReservationUpdate>),
+    Conflict,
+}
+
+pub struct RevisionIdempotencyReservation {
+    inner: Arc<std::sync::Mutex<RevisionIdempotencyState>>,
+    key: String,
+    reservation_id: u64,
+    completed: bool,
+}
+
+impl SearchRevisionCaches {
+    pub fn from_config() -> Self {
+        let revisions = &crate::dag_config::search_guardrail_config().revisions;
+        Self::new(
+            revisions.idempotency_cache_capacity,
+            revisions.semantic_cache_capacity,
+        )
+    }
+
+    pub fn new(idempotency_capacity: usize, semantic_capacity: usize) -> Self {
+        let semantic_capacity =
+            NonZeroUsize::new(semantic_capacity.max(1)).expect("capacity is non-zero");
+        Self {
+            idempotency: Arc::new(std::sync::Mutex::new(RevisionIdempotencyState {
+                entries: HashMap::new(),
+                completed_order: VecDeque::new(),
+                completed_capacity: idempotency_capacity.max(1),
+                next_reservation_id: 0,
+            })),
+            semantic: std::sync::Mutex::new(LruCache::new(semantic_capacity)),
+        }
+    }
+
+    pub fn lookup_or_reserve(
+        &self,
+        parent_revision_id: &str,
+        client_key: &str,
+        request_fingerprint: &str,
+    ) -> RevisionIdempotencyLookup {
+        let key = format!("{parent_revision_id}\0{client_key}");
+        let mut state = self
+            .idempotency
+            .lock()
+            .expect("revision idempotency cache lock poisoned");
+        if let Some(entry) = state.entries.get(&key) {
+            return match entry {
+                RevisionIdempotencyEntry::Complete {
+                    request_fingerprint: existing,
+                    response,
+                } if existing == request_fingerprint => {
+                    RevisionIdempotencyLookup::Hit(response.clone())
+                }
+                RevisionIdempotencyEntry::InFlight {
+                    request_fingerprint: existing,
+                    sender,
+                    ..
+                } if existing == request_fingerprint => {
+                    RevisionIdempotencyLookup::Waiter(sender.subscribe())
+                }
+                _ => RevisionIdempotencyLookup::Conflict,
+            };
+        }
+
+        let (sender, _receiver) = tokio::sync::watch::channel(RevisionReservationUpdate::Pending);
+        state.next_reservation_id = state.next_reservation_id.wrapping_add(1);
+        let reservation_id = state.next_reservation_id;
+        state.entries.insert(
+            key.clone(),
+            RevisionIdempotencyEntry::InFlight {
+                request_fingerprint: request_fingerprint.to_string(),
+                reservation_id,
+                sender,
+            },
+        );
+        RevisionIdempotencyLookup::Leader(RevisionIdempotencyReservation {
+            inner: self.idempotency.clone(),
+            key,
+            reservation_id,
+            completed: false,
+        })
+    }
+
+    pub fn semantic_get(&self, key: &str) -> Option<CachedSearchOutput> {
+        self.semantic
+            .lock()
+            .expect("semantic revision cache lock poisoned")
+            .get(key)
+            .cloned()
+    }
+
+    pub fn semantic_insert(&self, key: String, output: CachedSearchOutput) {
+        self.semantic
+            .lock()
+            .expect("semantic revision cache lock poisoned")
+            .put(key, output);
+    }
+}
+
+impl RevisionIdempotencyReservation {
+    pub fn complete(mut self, response: crate::routes::search_revisions::SearchRevisionResponse) {
+        let mut state = self
+            .inner
+            .lock()
+            .expect("revision idempotency cache lock poisoned");
+        let Some(RevisionIdempotencyEntry::InFlight {
+            request_fingerprint,
+            reservation_id,
+            sender,
+        }) = state.entries.remove(&self.key)
+        else {
+            self.completed = true;
+            return;
+        };
+        if reservation_id != self.reservation_id {
+            state.entries.insert(
+                self.key.clone(),
+                RevisionIdempotencyEntry::InFlight {
+                    request_fingerprint,
+                    reservation_id,
+                    sender,
+                },
+            );
+            self.completed = true;
+            return;
+        }
+
+        state.entries.insert(
+            self.key.clone(),
+            RevisionIdempotencyEntry::Complete {
+                request_fingerprint,
+                response: response.clone(),
+            },
+        );
+        state.completed_order.push_back(self.key.clone());
+        let _ = sender.send(RevisionReservationUpdate::Complete(response));
+        while state.completed_order.len() > state.completed_capacity {
+            if let Some(oldest) = state.completed_order.pop_front() {
+                if matches!(
+                    state.entries.get(&oldest),
+                    Some(RevisionIdempotencyEntry::Complete { .. })
+                ) {
+                    state.entries.remove(&oldest);
+                }
+            }
+        }
+        self.completed = true;
+    }
+}
+
+impl Drop for RevisionIdempotencyReservation {
+    fn drop(&mut self) {
+        if self.completed {
+            return;
+        }
+        let Ok(mut state) = self.inner.lock() else {
+            return;
+        };
+        let is_current = matches!(
+            state.entries.get(&self.key),
+            Some(RevisionIdempotencyEntry::InFlight { reservation_id, .. })
+                if *reservation_id == self.reservation_id
+        );
+        if !is_current {
+            return;
+        }
+        if let Some(RevisionIdempotencyEntry::InFlight { sender, .. }) =
+            state.entries.remove(&self.key)
+        {
+            let _ = sender.send(RevisionReservationUpdate::Abandoned);
+        }
+    }
 }
 
 pub struct SearchResponseCache {
@@ -410,6 +618,8 @@ pub struct AppState {
     pub search_runtime: ArcSwap<SearchRuntimeSnapshot>,
     /// Bounded optimization cache for non-debug search responses.
     pub search_cache: SearchResponseCache,
+    /// Atomic revision idempotency reservations and compiled-plan result reuse.
+    pub search_revision_caches: SearchRevisionCaches,
     /// One serialized full-catalog response per active runtime version. This
     /// prevents repeated anonymous reads from rebuilding and serializing ~1 MiB.
     pub property_catalog_cache: tokio::sync::Mutex<Option<(String, bytes::Bytes)>>,
@@ -504,6 +714,36 @@ mod tests {
             )),
             log_messages: Vec::new(),
         }
+    }
+
+    #[tokio::test]
+    async fn abandoned_revision_reservation_wakes_waiters_and_can_be_reacquired() {
+        let caches = SearchRevisionCaches::new(2, 2);
+        let RevisionIdempotencyLookup::Leader(leader) =
+            caches.lookup_or_reserve("parent", "client", "fingerprint")
+        else {
+            panic!("first caller leads");
+        };
+        let RevisionIdempotencyLookup::Waiter(mut waiter) =
+            caches.lookup_or_reserve("parent", "client", "fingerprint")
+        else {
+            panic!("identical concurrent caller waits");
+        };
+        assert!(matches!(
+            caches.lookup_or_reserve("parent", "client", "different"),
+            RevisionIdempotencyLookup::Conflict
+        ));
+
+        drop(leader);
+        waiter.changed().await.expect("cancellation update arrives");
+        assert!(matches!(
+            waiter.borrow().clone(),
+            RevisionReservationUpdate::Abandoned
+        ));
+        assert!(matches!(
+            caches.lookup_or_reserve("parent", "client", "fingerprint"),
+            RevisionIdempotencyLookup::Leader(_)
+        ));
     }
 
     #[tokio::test]

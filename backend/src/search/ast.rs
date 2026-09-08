@@ -202,19 +202,6 @@ impl CompiledQuery {
         Self::compile(query, &plan, intent, &[])
     }
 
-    pub(crate) fn add_spatial_constraints(
-        &mut self,
-        terms: Vec<ConstraintTerm>,
-        discourse_segments: Option<&[(usize, usize)]>,
-        shared_suffix_start: Option<usize>,
-    ) {
-        let terms = terms
-            .into_iter()
-            .filter(|term| matches!(term, ConstraintTerm::Spatial { required: true, .. }))
-            .collect::<Vec<_>>();
-        self.add_spatial_plan_constraints(terms, discourse_segments, shared_suffix_start);
-    }
-
     pub(crate) fn add_spatial_plan_constraints(
         &mut self,
         terms: Vec<ConstraintTerm>,
@@ -229,6 +216,7 @@ impl CompiledQuery {
             .iter()
             .map(source_span_bounds)
             .collect::<Vec<_>>();
+        let branch_choice_extent = branch_choice_extent(&self.branches);
         let overall_start = bounds.iter().flatten().map(|(start, _)| *start).min();
         let overall_end = bounds.iter().flatten().map(|(_, end)| *end).max();
         self.branches = self
@@ -246,6 +234,7 @@ impl CompiledQuery {
                             &bounds,
                             overall_start,
                             overall_end,
+                            branch_choice_extent,
                             discourse_segments,
                             shared_suffix_start,
                         )
@@ -391,12 +380,18 @@ fn spatial_term_belongs_to_branch(
     bounds: &[Option<(usize, usize)>],
     overall_start: Option<usize>,
     overall_end: Option<usize>,
+    branch_choice_extent: Option<(usize, usize)>,
     discourse_segments: Option<&[(usize, usize)]>,
     shared_suffix_start: Option<usize>,
 ) -> bool {
     let Some(span) = term.source_span() else {
         return true;
     };
+    if let Some((choice_start, choice_end)) = branch_choice_extent {
+        if span.end <= choice_start || span.start >= choice_end {
+            return true;
+        }
+    }
     if let Some(segments) = discourse_segments.filter(|segments| segments.len() == bounds.len()) {
         if shared_suffix_start.is_some_and(|shared| span.start >= shared) {
             return true;
@@ -454,6 +449,65 @@ fn spatial_term_belongs_to_branch(
         })
         .map(|(index, _, _)| index);
     owner == Some(branch_index)
+}
+
+fn branch_choice_extent(branches: &[ConstraintExpr]) -> Option<(usize, usize)> {
+    let spans_by_branch = branches
+        .iter()
+        .map(expression_source_spans)
+        .collect::<Vec<_>>();
+    let unique_by_branch = spans_by_branch
+        .iter()
+        .map(|spans| {
+            spans
+                .iter()
+                .filter(|span| {
+                    !spans_by_branch
+                        .iter()
+                        .all(|branch_spans| branch_spans.contains(span))
+                })
+                .copied()
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    if unique_by_branch.iter().any(Vec::is_empty) {
+        return None;
+    }
+
+    let start = unique_by_branch
+        .iter()
+        .flatten()
+        .map(|(start, _)| *start)
+        .min()?;
+    let end = unique_by_branch
+        .iter()
+        .flatten()
+        .map(|(_, end)| *end)
+        .max()?;
+    Some((start, end))
+}
+
+fn expression_source_spans(expression: &ConstraintExpr) -> Vec<(usize, usize)> {
+    let mut spans = Vec::new();
+    collect_source_spans(
+        expression,
+        &[
+            PredicateFamily::Bhk,
+            PredicateFamily::Area,
+            PredicateFamily::Society,
+            PredicateFamily::Builder,
+            PredicateFamily::Budget,
+            PredicateFamily::Evidence,
+            PredicateFamily::Spatial,
+        ],
+        false,
+        false,
+        &mut spans,
+    );
+    spans
+        .into_iter()
+        .map(|span| (span.start, span.end))
+        .collect()
 }
 
 fn source_span_bounds(expression: &ConstraintExpr) -> Option<(usize, usize)> {

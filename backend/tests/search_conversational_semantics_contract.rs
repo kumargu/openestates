@@ -6,7 +6,7 @@ use backend::knowledge::FactValue;
 use backend::models::{Property, Society};
 use backend::search::geo::GeoSearchIndex;
 use backend::search::{
-    apply_typed_revision, compile_typed_revision, render_revision_active_query,
+    apply_typed_revision, compile_typed_revision, render_revision_active_query, GeoScope,
     SearchCapabilityIndex, SearchEngine, SearchIndex, SearchRevisionLimits,
     SearchRevisionOperation, SearchRevisionOutcome,
 };
@@ -493,13 +493,10 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
             continue;
         }
         executed += 1;
-        let active_query =
-            render_revision_active_query(&case.parent_query, &case.utterance, revision.operation);
         let candidate = apply_typed_revision(
             &parent,
             &fragment,
             &revision,
-            &active_query,
             &snapshot.geo_topology,
             Some(&snapshot.bundle.spatial_index),
             backend::search::GeoCellSearchPolicy {
@@ -509,7 +506,7 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
         )
         .expect("candidate patch applies");
         let output = engine
-            .execute_plan(candidate, &active_query)
+            .execute_plan(candidate)
             .expect("candidate executes against its pinned snapshot");
         match case.id.as_str() {
             "SPATIAL-REVISION-READY" => assert!(output.results.iter().all(|result| {
@@ -855,6 +852,114 @@ fn sourced_topology_never_erases_logical_spatial_branches() {
 }
 
 #[test]
+fn branch_local_spatial_recall_never_leaks_school_and_hospital_proof() {
+    let mut builder = FixtureBuilder::default();
+    builder.add_place("North Star School", "school", 12.9000, 77.7000);
+    builder.add_place("South Star Hospital", "hospital", 12.9500, 77.7500);
+    builder.add_home(HomeSpec::new(
+        "school-branch-home",
+        "School Branch Homes",
+        "Northfield",
+        3,
+        20_000_000,
+        12.9005,
+        77.7005,
+    ));
+    builder.add_home(HomeSpec::new(
+        "hospital-branch-home",
+        "Hospital Branch Homes",
+        "Southfield",
+        3,
+        20_000_000,
+        12.9505,
+        77.7505,
+    ));
+    let fixture = builder.build(false);
+    let output = fixture.search_output(
+        "Either give me a 3BHK within 1 km of North Star School, or one within 1 km of South Star Hospital; keep both under 3Cr.",
+    );
+
+    assert_eq!(output.result_sets.len(), 2);
+    assert_eq!(output.diagnostics.recall.branches.len(), 2);
+    assert!(output
+        .diagnostics
+        .recall
+        .branches
+        .iter()
+        .all(|branch| branch.spatial_count > 0));
+    assert_eq!(
+        output.result_sets[0].results[0].card.id,
+        "school-branch-home"
+    );
+    assert_eq!(
+        output.result_sets[1].results[0].card.id,
+        "hospital-branch-home"
+    );
+    assert!(output.result_sets[0].results.iter().all(|result| result
+        .proof_focuses
+        .iter()
+        .all(|focus| focus.matched_label.as_deref() != Some("South Star Hospital"))));
+    assert!(output.result_sets[1].results.iter().all(|result| result
+        .proof_focuses
+        .iter()
+        .all(|focus| focus.matched_label.as_deref() != Some("North Star School"))));
+}
+
+#[test]
+fn explicit_geography_exclusions_use_serving_membership_and_unknown_scopes_fail_closed() {
+    let mut builder = FixtureBuilder::default();
+    builder.add_home(HomeSpec::new(
+        "whitefield-member",
+        "Whitefield Member",
+        "Whitefield",
+        3,
+        20_000_000,
+        12.97,
+        77.72,
+    ));
+    builder.add_home(HomeSpec::new(
+        "hoodi-member",
+        "Hoodi Member",
+        "Hoodi",
+        3,
+        20_000_000,
+        12.99,
+        77.71,
+    ));
+    let mut fixture = builder.build(false);
+    fixture
+        .properties
+        .iter_mut()
+        .find(|property| property.id == "whitefield-member")
+        .unwrap()
+        .area = "Hoodi".to_string();
+    fixture
+        .properties
+        .iter_mut()
+        .find(|property| property.id == "hoodi-member")
+        .unwrap()
+        .area = "Whitefield".to_string();
+
+    let excluded = fixture.search_output("3BHK excluding Whitefield under 3Cr");
+    assert_eq!(
+        excluded
+            .results
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>(),
+        ["hoodi-member"]
+    );
+    for unsupported in ["Sarjapur", "Yelahanka"] {
+        let output = fixture.search_output(&format!("3BHK in {unsupported} under 3Cr"));
+        assert!(output.results.is_empty(), "{unsupported} became citywide");
+        assert!(matches!(
+            output.compiled_plan.branches[0].geo_scope,
+            GeoScope::Unresolved { .. }
+        ));
+    }
+}
+
+#[test]
 fn geography_first_execution_prioritizes_eligible_exact_societies() {
     let mut builder = FixtureBuilder::default();
     for spec in [
@@ -1164,17 +1269,18 @@ fn exact_society_priority_runs_after_hard_eligibility_and_survives_neighborhood_
     });
     let dangling_fixture = dangling_builder.build(false);
     let dangling = dangling_fixture.search_output("Dangling Anchor 2BHK under 2Cr");
-    assert!(dangling.compiled_plan.branches[0]
-        .geo_scope
-        .is_bundle_wide());
+    assert!(matches!(
+        dangling.compiled_plan.branches[0].geo_scope,
+        GeoScope::Unresolved { .. }
+    ));
     assert_eq!(
         dangling
             .results
             .iter()
             .map(|result| result.card.id.as_str())
             .collect::<Vec<_>>(),
-        ["bundle-star", "dangling-anchor"],
-        "missing geo-cell evidence falls back bundle-wide without coordinate-only scoping"
+        ["dangling-anchor"],
+        "missing topology keeps only the directly resolved society anchor"
     );
 }
 
@@ -1517,7 +1623,6 @@ fn run_controlled_journey(
             &active_plan,
             &fragment,
             &revision,
-            &candidate_query,
             &snapshot.geo_topology,
             Some(&snapshot.bundle.spatial_index),
             backend::search::GeoCellSearchPolicy {
@@ -1531,7 +1636,6 @@ fn run_controlled_journey(
                     candidate_plan
                         .clone()
                         .expect("candidate turn must compile a typed plan"),
-                    &candidate_query,
                 )
                 .expect("typed candidate runs against the pinned snapshot");
             evaluate_candidate(
@@ -1817,8 +1921,9 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
         assert_eq!(
             actual_ids.first().copied(),
             Some(first_id.as_str()),
-            "{} returned unexpected first result; all={actual_ids:?}; warnings={:?}",
+            "{} returned unexpected first result; all={actual_ids:?}; result_sets={:?}; warnings={:?}",
             case.id,
+            output.result_sets,
             output.warnings
         );
     }

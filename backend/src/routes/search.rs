@@ -11,10 +11,9 @@ use crate::knowledge::edge::Relation;
 use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::{KnowledgeGraph, SearchEvent};
 use crate::search::{
-    guard_search_query, intent, issue_signed_search_context, no_results_guidance,
-    revision_id_for_query, schema, KnowledgeContext, SearchEngine, SearchEvidenceGap,
-    SearchResponse, SearchResultCard, SearchResultSet, SearchRevisionOperation,
-    SearchRuntimeVersion, SourcedClaim,
+    guard_search_query, intent, issue_signed_search_context, no_results_guidance, schema,
+    KnowledgeContext, SearchEngine, SearchEvidenceGap, SearchResponse, SearchResultCard,
+    SearchResultSet, SearchRevisionOperation, SearchRuntimeVersion, SourcedClaim,
 };
 use crate::state::{
     AppState, CachedSearchOutput, SearchCacheKey, SearchCacheLookup, SearchLogMessage,
@@ -42,10 +41,9 @@ pub async fn search_properties(
 
     if query.trim().is_empty() {
         let ast_fingerprint = crate::search::ast::semantic_search_fingerprint(&[], &[]);
-        let revision_id = revision_id_for_query(&query, &runtime_version, 1);
         let mut response = SearchResponse {
             query: query.clone(),
-            revision_id,
+            revision_id: String::new(),
             revision: None,
             ast_fingerprint,
             result_sets: Vec::new(),
@@ -68,7 +66,6 @@ pub async fn search_properties(
             // candidate, let ranking handle the query instead of rejecting it.
         } else {
             let ast_fingerprint = crate::search::ast::semantic_search_fingerprint(&[], &[]);
-            let revision_id = revision_id_for_query(&query, &runtime_version, 1);
             let mut event = SearchEvent::new(query.clone(), guarded.intent.clone(), 0);
             event.enrichment_gaps.push(EnrichmentGap {
                 entity_id: "search:guardrail".to_string(),
@@ -79,7 +76,7 @@ pub async fn search_properties(
 
             let mut response = SearchResponse {
                 query: query.clone(),
-                revision_id,
+                revision_id: String::new(),
                 revision: None,
                 ast_fingerprint,
                 result_sets: Vec::new(),
@@ -174,7 +171,7 @@ pub(crate) fn compute_search_plan(
     plan: crate::search::CompiledSearchPlan,
     active_query: String,
 ) -> Option<CachedSearchOutput> {
-    let engine_output = SearchEngine::new(&snapshot).execute_plan(plan, &active_query)?;
+    let engine_output = SearchEngine::new(&snapshot).execute_plan(plan)?;
     Some(build_search_output(
         snapshot,
         graph,
@@ -201,7 +198,6 @@ fn build_search_output(
         .map(|result| result.card.id.clone())
         .collect();
     let runtime_version = search_runtime_version(&snapshot);
-    let revision_id = revision_id_for_query(&query, &runtime_version, 1);
 
     // Look up area context if the intent identified an area.
     let area_context = parsed_intent.area.as_ref().and_then(|area_name| {
@@ -254,7 +250,7 @@ fn build_search_output(
     let total_matches = unique_result_count(&result_sets);
     let response = SearchResponse {
         query,
-        revision_id,
+        revision_id: String::new(),
         revision: None,
         ast_fingerprint,
         result_sets,
@@ -348,7 +344,6 @@ fn try_enqueue_search_log(
 fn rebase_cached_response(response: &SearchResponse, query: &str) -> SearchResponse {
     let mut response = response.clone();
     response.query = query.to_string();
-    response.revision_id = revision_id_for_query(query, &response.runtime_version, 1);
     response
 }
 

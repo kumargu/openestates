@@ -1,5 +1,5 @@
-use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -16,7 +16,9 @@ use crate::search::{
     SearchRevisionDescriptor, SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
     SearchRuntimeVersion, SignedSearchContext, SourceSpan,
 };
-use crate::state::{AppState, CachedSearchOutput, RuntimeVersionKey};
+use crate::state::{
+    AppState, RevisionIdempotencyLookup, RevisionReservationUpdate, RuntimeVersionKey,
+};
 
 use super::search::compute_search_plan;
 
@@ -159,22 +161,36 @@ pub async fn revise_search(
         );
     }
     let request_fingerprint = revision_request_fingerprint(&request);
-    match idempotency_lookup(
-        &parent.revision_id,
-        &request.client_idempotency_key,
-        &request_fingerprint,
-    ) {
-        IdempotencyLookup::Hit(response) => return Json(response).into_response(),
-        IdempotencyLookup::Conflict => {
-            return revision_error(
-                StatusCode::CONFLICT,
-                "idempotency_key_conflict",
-                "This idempotency key was already used for a different revision.",
-                runtime_version,
-            )
+    let reservation = loop {
+        match state.search_revision_caches.lookup_or_reserve(
+            &parent.revision_id,
+            &request.client_idempotency_key,
+            &request_fingerprint,
+        ) {
+            RevisionIdempotencyLookup::Hit(response) => return Json(response).into_response(),
+            RevisionIdempotencyLookup::Conflict => {
+                return revision_error(
+                    StatusCode::CONFLICT,
+                    "idempotency_key_conflict",
+                    "This idempotency key was already used for a different revision.",
+                    runtime_version,
+                )
+            }
+            RevisionIdempotencyLookup::Leader(reservation) => break reservation,
+            RevisionIdempotencyLookup::Waiter(mut receiver) => loop {
+                match receiver.borrow().clone() {
+                    RevisionReservationUpdate::Complete(response) => {
+                        return Json(response).into_response()
+                    }
+                    RevisionReservationUpdate::Abandoned => break,
+                    RevisionReservationUpdate::Pending => {}
+                }
+                if receiver.changed().await.is_err() {
+                    break;
+                }
+            },
         }
-        IdempotencyLookup::Miss => {}
-    }
+    };
     if parent.depth >= search_guardrail_config().revisions.max_revision_depth {
         let response = inactive_revision_response(
             &parent,
@@ -183,12 +199,7 @@ pub async fn revise_search(
             SearchRevisionOutcome::RequireCheckpoint,
             runtime_version,
         );
-        idempotency_insert(
-            &parent.revision_id,
-            &request.client_idempotency_key,
-            request_fingerprint,
-            response.clone(),
-        );
+        reservation.complete(response.clone());
         return Json(response).into_response();
     }
 
@@ -215,12 +226,7 @@ pub async fn revise_search(
             revision.outcome,
             runtime_version,
         );
-        idempotency_insert(
-            &parent.revision_id,
-            &request.client_idempotency_key,
-            request_fingerprint,
-            response.clone(),
-        );
+        reservation.complete(response.clone());
         return Json(response).into_response();
     }
 
@@ -268,7 +274,6 @@ pub async fn revise_search(
             &parent.plan,
             &fragment,
             &revision,
-            &active_query,
             &snapshot.geo_topology,
             Some(&snapshot.bundle.spatial_index),
             GeoCellSearchPolicy {
@@ -290,7 +295,10 @@ pub async fn revise_search(
         candidate_plan.semantic_fingerprint,
         serde_json::to_string(&runtime_version).expect("runtime version serializes")
     );
-    let candidate_output = if let Some(cached) = semantic_cache_get(&semantic_cache_key) {
+    let candidate_output = if let Some(cached) = state
+        .search_revision_caches
+        .semantic_get(&semantic_cache_key)
+    {
         cached
     } else {
         let graph = state.knowledge.read().await.clone();
@@ -311,7 +319,9 @@ pub async fn revise_search(
                 runtime_version,
             );
         };
-        semantic_cache_insert(semantic_cache_key, output.clone());
+        state
+            .search_revision_caches
+            .semantic_insert(semantic_cache_key, output.clone());
         output
     };
     let candidate_ids = candidate_output.response.ordered_result_ids.clone();
@@ -379,48 +389,8 @@ pub async fn revise_search(
             suggested_action: "Remove one constraint or try a broader alternative.".to_string(),
         }),
     };
-    idempotency_insert(
-        &parent.revision_id,
-        &request.client_idempotency_key,
-        request_fingerprint,
-        response.clone(),
-    );
+    reservation.complete(response.clone());
     Json(response).into_response()
-}
-
-const REVISION_CACHE_CAPACITY: usize = 128;
-
-struct IdempotencyEntry {
-    request_fingerprint: String,
-    response: SearchRevisionResponse,
-}
-
-#[derive(Default)]
-struct IdempotencyCache {
-    entries: HashMap<String, IdempotencyEntry>,
-    order: VecDeque<String>,
-}
-
-enum IdempotencyLookup {
-    Hit(SearchRevisionResponse),
-    Conflict,
-    Miss,
-}
-
-#[derive(Default)]
-struct SemanticRevisionCache {
-    entries: HashMap<String, CachedSearchOutput>,
-    order: VecDeque<String>,
-}
-
-fn idempotency_cache() -> &'static Mutex<IdempotencyCache> {
-    static CACHE: OnceLock<Mutex<IdempotencyCache>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(IdempotencyCache::default()))
-}
-
-fn semantic_revision_cache() -> &'static Mutex<SemanticRevisionCache> {
-    static CACHE: OnceLock<Mutex<SemanticRevisionCache>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(SemanticRevisionCache::default()))
 }
 
 fn revision_request_fingerprint(request: &SearchRevisionRequest) -> String {
@@ -430,75 +400,6 @@ fn revision_request_fingerprint(request: &SearchRevisionRequest) -> String {
         "selectedPropertyId": request.selected_property_id,
     }))
     .expect("revision request fingerprint serializes")
-}
-
-fn idempotency_lookup(
-    parent_revision_id: &str,
-    client_key: &str,
-    request_fingerprint: &str,
-) -> IdempotencyLookup {
-    let key = format!("{parent_revision_id}\0{client_key}");
-    let cache = idempotency_cache()
-        .lock()
-        .expect("revision idempotency cache lock poisoned");
-    match cache.entries.get(&key) {
-        Some(entry) if entry.request_fingerprint == request_fingerprint => {
-            IdempotencyLookup::Hit(entry.response.clone())
-        }
-        Some(_) => IdempotencyLookup::Conflict,
-        None => IdempotencyLookup::Miss,
-    }
-}
-
-fn idempotency_insert(
-    parent_revision_id: &str,
-    client_key: &str,
-    request_fingerprint: String,
-    response: SearchRevisionResponse,
-) {
-    let key = format!("{parent_revision_id}\0{client_key}");
-    let mut cache = idempotency_cache()
-        .lock()
-        .expect("revision idempotency cache lock poisoned");
-    if !cache.entries.contains_key(&key) {
-        cache.order.push_back(key.clone());
-    }
-    cache.entries.insert(
-        key,
-        IdempotencyEntry {
-            request_fingerprint,
-            response,
-        },
-    );
-    while cache.entries.len() > REVISION_CACHE_CAPACITY {
-        if let Some(oldest) = cache.order.pop_front() {
-            cache.entries.remove(&oldest);
-        }
-    }
-}
-
-fn semantic_cache_get(key: &str) -> Option<CachedSearchOutput> {
-    semantic_revision_cache()
-        .lock()
-        .expect("semantic revision cache lock poisoned")
-        .entries
-        .get(key)
-        .cloned()
-}
-
-fn semantic_cache_insert(key: String, output: CachedSearchOutput) {
-    let mut cache = semantic_revision_cache()
-        .lock()
-        .expect("semantic revision cache lock poisoned");
-    if !cache.entries.contains_key(&key) {
-        cache.order.push_back(key.clone());
-    }
-    cache.entries.insert(key, output);
-    while cache.entries.len() > REVISION_CACHE_CAPACITY {
-        if let Some(oldest) = cache.order.pop_front() {
-            cache.entries.remove(&oldest);
-        }
-    }
 }
 
 fn descriptor_from_context(
@@ -928,7 +829,6 @@ fn revision_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::search::{revision_id_for_query, validated_revision_depth};
 
     #[test]
     fn result_delta_is_stable_and_marks_order_changes() {
@@ -939,49 +839,6 @@ mod tests {
         assert_eq!(delta.removed, ["a"]);
         assert_eq!(delta.retained, ["b", "c"]);
         assert_eq!(delta.reordered, ["b", "c"]);
-    }
-
-    #[test]
-    fn revision_ids_are_bound_to_the_parent_query_and_runtime() {
-        let runtime = SearchRuntimeVersion {
-            serving_bundle_version: "bundle-v1".to_string(),
-            scoring_policy_version: 1,
-            search_engine_version: "engine-v1".to_string(),
-            semantic_contract_digest: "sha256:test".to_string(),
-        };
-        let revision_id = revision_id_for_query("3BHK in Whitefield", &runtime, 12);
-        assert_eq!(
-            validated_revision_depth(&revision_id, "3BHK in Whitefield", &runtime),
-            Some(12)
-        );
-        assert_eq!(
-            validated_revision_depth(&revision_id, "3BHK in Hoodi", &runtime),
-            None
-        );
-        assert_eq!(
-            validated_revision_depth("rev-000-deadbeef", "3BHK in Whitefield", &runtime),
-            None
-        );
-
-        let mut public_hash = sha2::Sha256::new();
-        use sha2::Digest;
-        public_hash.update(b"3BHK in Whitefield");
-        public_hash.update([0]);
-        public_hash.update(serde_json::to_vec(&runtime).unwrap());
-        let forged = format!(
-            "rev-012-{}",
-            public_hash
-                .finalize()
-                .iter()
-                .take(8)
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>()
-        );
-        assert_eq!(
-            validated_revision_depth(&forged, "3BHK in Whitefield", &runtime),
-            None,
-            "a caller-computable hash must not authenticate revision depth"
-        );
     }
 
     #[test]

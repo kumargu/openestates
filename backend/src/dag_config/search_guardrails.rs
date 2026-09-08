@@ -30,6 +30,10 @@ pub struct SearchRevisionGuardrailConfig {
     pub max_active_branches: usize,
     #[serde(default = "default_max_revision_depth")]
     pub max_revision_depth: usize,
+    #[serde(default = "default_revision_cache_capacity")]
+    pub idempotency_cache_capacity: usize,
+    #[serde(default = "default_revision_cache_capacity")]
+    pub semantic_cache_capacity: usize,
 }
 
 impl Default for SearchRevisionGuardrailConfig {
@@ -37,6 +41,8 @@ impl Default for SearchRevisionGuardrailConfig {
         Self {
             max_active_branches: default_max_active_branches(),
             max_revision_depth: default_max_revision_depth(),
+            idempotency_cache_capacity: default_revision_cache_capacity(),
+            semantic_cache_capacity: default_revision_cache_capacity(),
         }
     }
 }
@@ -47,6 +53,10 @@ fn default_max_active_branches() -> usize {
 
 fn default_max_revision_depth() -> usize {
     12
+}
+
+fn default_revision_cache_capacity() -> usize {
+    128
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -244,6 +254,14 @@ fn validate_search_guardrails(config: &SearchGuardrailFile) -> Result<(), DagCon
     if config.revisions.max_revision_depth == 0 {
         return Err(DagConfigError::InvalidConfig(
             "search_guardrails.json revisions.max_revision_depth must be greater than zero"
+                .to_string(),
+        ));
+    }
+    if config.revisions.idempotency_cache_capacity == 0
+        || config.revisions.semantic_cache_capacity == 0
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "search_guardrails.json revision cache capacities must be greater than zero"
                 .to_string(),
         ));
     }

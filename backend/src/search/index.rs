@@ -88,8 +88,7 @@ impl SearchIndex {
             for property_id in property_ids {
                 index
                     .society_entity_by_property
-                    .entry(property_id)
-                    .or_insert_with(|| canonical_id.clone());
+                    .insert(property_id, canonical_id.clone());
             }
         }
         index.add_serving_builder_memberships(entities, edges);
@@ -124,8 +123,7 @@ impl SearchIndex {
                 &property_id,
             );
             self.society_entity_by_property
-                .entry(property_id)
-                .or_insert_with(|| edge.to_entity_id.clone());
+                .insert(property_id, edge.to_entity_id.clone());
         }
     }
 
@@ -200,6 +198,9 @@ impl SearchIndex {
                 .or_default(),
             &property.id,
         );
+        self.society_entity_by_property
+            .entry(property.id.clone())
+            .or_insert_with(|| society_node_id(&property.society_id));
         for phrase in named_entity_phrases(property) {
             push_unique(
                 self.by_named_entity_phrase.entry(phrase).or_default(),

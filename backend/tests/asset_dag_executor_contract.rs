@@ -785,6 +785,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         execution: backend::security::ExecutionLanes::current(),
         search_runtime: ArcSwap::from_pointee(search_runtime),
         search_cache: SearchResponseCache::new(8),
+        search_revision_caches: backend::state::SearchRevisionCaches::new(8, 8),
         property_catalog_cache: tokio::sync::Mutex::new(None),
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),

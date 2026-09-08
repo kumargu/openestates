@@ -325,6 +325,7 @@ impl TextSearch {
                     .iter()
                     .map(|evidence| evidence.distance_km)
                     .min_by(f64::total_cmp);
+                primary_intent_score += named_place_intent_score(&named_place_evidence);
                 let named_place_proof_rank = named_place_evidence
                     .iter()
                     .map(|evidence| {
@@ -341,7 +342,6 @@ impl TextSearch {
                     graph_count += 1;
                     score += evidence.score_delta;
                     positive_evidence_score += evidence.score_delta.max(0.0);
-                    primary_intent_score += named_place_intent_score(&evidence);
                     let preference =
                         named_place_preference(&evidence.place_name, evidence.distance_km);
                     let focus_reason = format!("matched {}", preference);
@@ -1391,8 +1391,37 @@ fn evidence_intent_score(evidence: &EvidenceMatch) -> f64 {
     evidence.normalized_score.clamp(0.0, 1.0) * f64::from(evidence.confidence.clamp(0.0, 1.0))
 }
 
-fn named_place_intent_score(evidence: &NamedPlaceEvidence) -> f64 {
-    evidence.normalized_score.clamp(0.0, 1.0) * f64::from(evidence.confidence.clamp(0.0, 1.0))
+fn named_place_intent_score(evidence: &[NamedPlaceEvidence]) -> f64 {
+    let mut scores_by_place = HashMap::<&str, (f64, f64, f64)>::new();
+    for item in evidence {
+        let score =
+            item.normalized_score.clamp(0.0, 1.0) * f64::from(item.confidence.clamp(0.0, 1.0));
+        scores_by_place
+            .entry(item.place_entity_id.as_str())
+            .and_modify(|current| {
+                current.0 = current.0.max(score);
+                current.1 = current.1.min(item.distance_km);
+                current.2 = current.2.max(f64::from(item.confidence.clamp(0.0, 1.0)));
+            })
+            .or_insert((
+                score,
+                item.distance_km,
+                f64::from(item.confidence.clamp(0.0, 1.0)),
+            ));
+    }
+    if scores_by_place.len() <= 1 {
+        return scores_by_place.values().map(|value| value.0).sum();
+    }
+
+    let furthest_distance = scores_by_place
+        .values()
+        .map(|value| value.1)
+        .fold(0.0, f64::max);
+    let weakest_confidence = scores_by_place
+        .values()
+        .map(|value| value.2)
+        .fold(1.0, f64::min);
+    scores_by_place.len() as f64 * weakest_confidence / (1.0 + furthest_distance)
 }
 
 fn named_place_query_answers_preference(
@@ -3146,7 +3175,7 @@ fn constraint_term_evaluation_for_society(
             if property.area.trim().is_empty() {
                 BooleanEvaluation::unknown()
             } else {
-                known_match(property_matches_area(property, value))
+                known_match(property.area.eq_ignore_ascii_case(value))
             }
         }
         ConstraintTerm::Society {
@@ -3234,10 +3263,6 @@ fn property_matches_constraint_term_for_society(
         evaluation,
     )
     .is_satisfied()
-}
-
-fn property_matches_area(property: &crate::models::Property, area: &str) -> bool {
-    property.area.eq_ignore_ascii_case(area)
 }
 
 fn match_label_from_score_and_coverage(

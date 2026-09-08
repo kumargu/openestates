@@ -2432,12 +2432,12 @@
     },
     {
       "id": "CONV-SEM-009",
-      "category": "bundle_wide_google_first_with_dual_commute_proof",
+      "category": "bundle_wide_balanced_commute_with_dual_proof",
       "query": "My office is near Bagmane Tech Park and my partner works near Manipal Hospital Whitefield. Find homes with measured distance evidence to both, prioritizing the better-balanced commute.",
       "expected_semantics": {},
       "fixture": "core",
       "fixture_expectation": {
-        "first_id": "mock-quiet-reviewed-3bhk",
+        "first_id": "mock-balanced-commute-3bhk",
         "required_proof_labels": {
           "mock-balanced-commute-3bhk": [
             "Bagmane Tech Park",
@@ -2842,7 +2842,7 @@
     },
     {
       "id": "DECISION-RANK-001",
-      "category": "bundle_wide_google_first_with_explicit_preferences",
+      "category": "explicit_preference_priority_order",
       "query": "Among ready-to-move 3BHKs near Bagmane Tech Park under ₹2.4 Cr, rank quietness first and resident reviews second.",
       "expected_semantics": {
         "bhk": 3,
@@ -2860,10 +2860,10 @@
       },
       "fixture_expectation": {
         "ordered_prefix": [
-          "mock-review-priority-3bhk",
+          "mock-quiet-priority-3bhk",
           "mock-quiet-reviewed-3bhk",
-          "mock-value-priority-3bhk",
-          "mock-missing-noise-3bhk"
+          "mock-review-priority-3bhk",
+          "mock-value-priority-3bhk"
         ]
       },
       "fixture": "decision_ranking",
@@ -2871,7 +2871,7 @@
     },
     {
       "id": "DECISION-RANK-002",
-      "category": "bundle_wide_google_first_with_accepted_tradeoff",
+      "category": "combined_preferences_with_accepted_tradeoff",
       "query": "I can tolerate traffic if the society is quiet and strongly reviewed. Show ready-to-move 3BHKs near Bagmane Tech Park under ₹2.4 Cr.",
       "expected_semantics": {
         "bhk": 3,
@@ -2888,7 +2888,7 @@
         "negative_preferences": []
       },
       "fixture_expectation": {
-        "first_id": "mock-review-priority-3bhk",
+        "first_id": "mock-quiet-reviewed-3bhk",
         "includes": [
           "mock-quiet-priority-3bhk",
           "mock-value-priority-3bhk",
@@ -2900,7 +2900,7 @@
     },
     {
       "id": "DECISION-RANK-003",
-      "category": "hard_evidence_gate_then_bundle_wide_google_order",
+      "category": "hard_evidence_gate_then_explicit_priority_order",
       "query": "Only consider ready-to-move 3BHKs near Bagmane Tech Park under ₹2.4 Cr with Google rating at least 4.2. Among those, choose the quieter home even if another has the higher rating.",
       "expected_semantics": {
         "bhk": 3,
@@ -2920,8 +2920,8 @@
       },
       "fixture_expectation": {
         "ordered_prefix": [
-          "mock-review-priority-3bhk",
           "mock-quiet-reviewed-3bhk",
+          "mock-review-priority-3bhk",
           "mock-value-priority-3bhk"
         ],
         "excludes": [
@@ -3159,7 +3159,7 @@
     },
     {
       "id": "MULTI-OR-008",
-      "category": "dangling_named_place_bundle_wide_dual_configuration",
+      "category": "named_place_intent_ranked_dual_configuration",
       "query": "Near Hoodi Metro, 2BHK or 3BHK",
       "expected_semantics": {
         "bhks": [
@@ -3170,8 +3170,8 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-metro-home-2bhk",
             "mock-godrej-air-2bhk",
+            "mock-metro-home-2bhk",
             "mock-or-decoy-2-00",
             "mock-or-decoy-2-01",
             "mock-or-decoy-2-02",
@@ -3188,22 +3188,22 @@
             "mock-or-decoy-2-13"
           ],
           [
-            "mock-quiet-reviewed-3bhk",
-            "mock-missing-noise-3bhk",
-            "mock-dual-place-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk",
             "mock-godrej-air-3bhk",
             "mock-balanced-commute-3bhk",
+            "mock-dual-place-3bhk",
+            "mock-manipal-only-3bhk",
+            "mock-quiet-reviewed-3bhk",
+            "mock-missing-noise-3bhk",
             "mock-or-decoy-3-00",
             "mock-or-decoy-3-01",
             "mock-or-decoy-3-02",
             "mock-or-decoy-3-03",
             "mock-or-decoy-3-04",
             "mock-or-decoy-3-05",
-            "mock-or-decoy-3-06",
-            "mock-or-decoy-3-07",
-            "mock-or-decoy-3-08",
-            "mock-or-decoy-3-09",
-            "mock-or-decoy-3-10"
+            "mock-or-decoy-3-06"
           ]
         ],
         "unique_result_ids": true
@@ -3213,7 +3213,7 @@
     },
     {
       "id": "MULTI-OR-009",
-      "category": "dangling_trailing_named_place_bundle_wide_dual_configuration",
+      "category": "branch_scoped_named_place_dual_configuration",
       "query": "2BHK near Hoodi Metro or 3BHK",
       "expected_semantics": {
         "bhks": [
@@ -3224,8 +3224,8 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-metro-home-2bhk",
             "mock-godrej-air-2bhk",
+            "mock-metro-home-2bhk",
             "mock-or-decoy-2-00",
             "mock-or-decoy-2-01",
             "mock-or-decoy-2-02",
@@ -3244,8 +3244,8 @@
           [
             "mock-quiet-reviewed-3bhk",
             "mock-missing-noise-3bhk",
-            "mock-dual-place-3bhk",
             "mock-godrej-air-3bhk",
+            "mock-dual-place-3bhk",
             "mock-balanced-commute-3bhk",
             "mock-or-decoy-3-00",
             "mock-or-decoy-3-01",
@@ -3446,7 +3446,7 @@
     },
     {
       "id": "REGION-MIX-008",
-      "category": "dangling_metro_bundle_wide_bhk_alternatives",
+      "category": "shared_named_place_bhk_alternatives",
       "query": "2BHK or 3BHK near Nagawara Metro under 1.8 Cr",
       "fixture": "regional",
       "expected_semantics": {
@@ -3460,12 +3460,12 @@
       "fixture_expectation": {
         "result_sets": [
           [
+            "mock-north-value-2bhk",
+            "mock-sarjapur-value-2bhk",
             "mock-whitefield-value-2bhk",
             "mock-bellandur-value-2bhk",
             "mock-devanahalli-value-2bhk",
-            "mock-electronic-city-value-2bhk",
-            "mock-sarjapur-value-2bhk",
-            "mock-north-value-2bhk"
+            "mock-electronic-city-value-2bhk"
           ],
           [
             "mock-north-family-3bhk",

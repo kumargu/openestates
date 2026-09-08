@@ -657,7 +657,10 @@ impl<'a> GeoSearchQuery<'a> {
             return Vec::new();
         }
         let mut ids = Vec::new();
-        let has_hard_clauses = self.has_hard_clauses();
+        let has_hard_clauses = self
+            .clauses
+            .iter()
+            .any(|clause| clause.requirement == RelationRequirement::Hard);
         for property in properties {
             if !property.is_listable() {
                 continue;
@@ -1229,12 +1232,33 @@ impl<'a> GeoSearchQuery<'a> {
             let mut has_named_target = false;
             for place in self.places_for_clause(clause) {
                 has_named_target = true;
+                let category_fact_keys = if clause.category_fact_keys.is_empty() {
+                    place
+                        .category
+                        .as_deref()
+                        .map(|place_category| {
+                            nearby_place_categories_config()
+                                .categories
+                                .iter()
+                                .filter(|category| {
+                                    nearby_place_fact_key_matches_category(
+                                        &category.fact_key,
+                                        place_category,
+                                    )
+                                })
+                                .map(|category| category.fact_key.clone())
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                } else {
+                    clause.category_fact_keys.clone()
+                };
                 terms.push(ConstraintTerm::Spatial {
                     relation: clause.relation.clone(),
                     entity_id: place.entity_id.clone(),
                     display_name: place.name.clone(),
                     required: clause.requirement == RelationRequirement::Hard,
-                    category_fact_keys: clause.category_fact_keys.clone(),
+                    category_fact_keys,
                     distance_limit_km: clause.distance_limit_km,
                     span: Some(clause.target_span.clone()),
                 });
@@ -1313,12 +1337,6 @@ impl<'a> GeoSearchQuery<'a> {
             }
         }
         terms
-    }
-
-    pub(crate) fn has_hard_clauses(&self) -> bool {
-        self.clauses
-            .iter()
-            .any(|clause| clause.requirement == RelationRequirement::Hard)
     }
 
     #[cfg(test)]

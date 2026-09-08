@@ -14,7 +14,9 @@ use backend::knowledge::{FactValue, KnowledgeGraph};
 use backend::lake::LakeStore;
 use backend::models::Property;
 use backend::search::geo::GeoSearchIndex;
-use backend::search::{decode_signed_search_context, SearchCapabilityIndex, SearchIndex};
+use backend::search::{
+    decode_signed_search_context, issue_signed_search_context, SearchCapabilityIndex, SearchIndex,
+};
 use backend::security::ExecutionLanes;
 use backend::serving::{
     DerivedEvidence, EvidenceRef, LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest,
@@ -249,6 +251,103 @@ async fn equivalent_direct_and_revised_searches_share_ast_results_and_proofs() {
 }
 
 #[tokio::test]
+async fn concurrent_revision_retries_share_one_atomic_idempotency_reservation() {
+    let app = test_app().await;
+    let parent = get_search(&app, "3BHK in Hoodi under 2.4 Cr", 51).await;
+    let parent_context = parent.1["revision"]["context"].as_str().unwrap();
+
+    let identical = revision_request(
+        parent_context,
+        "Make it under 2.5Cr",
+        "concurrent-identical",
+    );
+    let (first, second) = tokio::join!(
+        post_revision(&app, identical.clone(), 52),
+        post_revision(&app, identical, 53),
+    );
+    assert_eq!(first.0, StatusCode::OK);
+    assert_eq!(second.0, StatusCode::OK);
+    assert_eq!(first.1, second.1, "waiters clone the leader response");
+
+    let (leader, conflict) = tokio::join!(
+        post_revision(
+            &app,
+            revision_request(parent_context, "Make it under 2.5Cr", "concurrent-conflict",),
+            54,
+        ),
+        post_revision(
+            &app,
+            revision_request(parent_context, "Only 4BHK", "concurrent-conflict"),
+            55,
+        ),
+    );
+    let responses = [leader, conflict];
+    assert_eq!(
+        responses
+            .iter()
+            .filter(|response| response.0 == StatusCode::OK)
+            .count(),
+        1
+    );
+    let conflict = responses
+        .iter()
+        .find(|response| response.0 == StatusCode::CONFLICT)
+        .expect("a differing in-flight fingerprint conflicts");
+    assert_eq!(conflict.1["code"], "idempotency_key_conflict");
+}
+
+#[tokio::test]
+async fn signed_active_query_is_presentation_only_for_revision_execution() {
+    let app = test_app().await;
+    let parent = get_search(&app, "3BHK in Hoodi under 2.4 Cr", 61).await;
+    let parent_context = parent.1["revision"]["context"].as_str().unwrap();
+    let decoded = decode_signed_search_context(parent_context).unwrap();
+    let (_, presentation_only_parent) = issue_signed_search_context(
+        decoded.parent_revision_id.clone(),
+        decoded.operation,
+        decoded.depth,
+        "This display text must not affect execution".to_string(),
+        decoded.plan.clone(),
+        decoded.runtime_version.clone(),
+        decoded.ordered_result_ids.clone(),
+    );
+
+    let original = post_revision(
+        &app,
+        revision_request(parent_context, "Make it under 2.5Cr", "active-original"),
+        62,
+    );
+    let presentation_changed = post_revision(
+        &app,
+        revision_request(
+            &presentation_only_parent.context,
+            "Make it under 2.5Cr",
+            "active-presentation-changed",
+        ),
+        63,
+    );
+    let (original, presentation_changed) = tokio::join!(original, presentation_changed);
+    assert_eq!(original.0, StatusCode::OK);
+    assert_eq!(presentation_changed.0, StatusCode::OK);
+    assert_ne!(
+        original.1["activeQuery"],
+        presentation_changed.1["activeQuery"]
+    );
+    assert_eq!(
+        original.1["search"]["astFingerprint"],
+        presentation_changed.1["search"]["astFingerprint"]
+    );
+    assert_eq!(
+        original.1["search"]["orderedResultIds"],
+        presentation_changed.1["search"]["orderedResultIds"]
+    );
+    assert_eq!(
+        original.1["search"]["resultSets"],
+        presentation_changed.1["search"]["resultSets"]
+    );
+}
+
+#[tokio::test]
 async fn ninth_branch_requires_checkpoint_without_executing_a_candidate() {
     let app = test_app().await;
     let parent_query = "2BHK under 1Cr or 2BHK under 1.1Cr or 2BHK under 1.2Cr or 2BHK under 1.3Cr or 2BHK under 1.4Cr or 2BHK under 1.5Cr or 2BHK under 1.6Cr or 2BHK under 1.7Cr";
@@ -289,6 +388,7 @@ async fn test_app() -> Router {
         execution: ExecutionLanes::current(),
         search_runtime: ArcSwap::from_pointee(runtime),
         search_cache: SearchResponseCache::new(8),
+        search_revision_caches: backend::state::SearchRevisionCaches::new(8, 8),
         property_catalog_cache: tokio::sync::Mutex::new(None),
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),

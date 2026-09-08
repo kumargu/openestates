@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::serving::{EvidenceRef, ServingEdgeRecord, ServingEntityRecord, SpatialServingIndex};
 
@@ -240,7 +241,21 @@ pub enum GeoScope {
         supporting_evidence: Vec<EvidenceRef>,
         max_distance_km: f64,
     },
+    Unresolved {
+        anchors: Vec<GeoAnchor>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        requested: Vec<String>,
+        reason: GeoScopeResolution,
+    },
     BundleWide,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GeoScopeResolution {
+    MissingTopology,
+    MissingSpatialIndex,
+    UnresolvedExplicitGeography,
 }
 
 impl GeoScope {
@@ -250,6 +265,7 @@ impl GeoScope {
                 market_locality_ids,
                 ..
             } => market_locality_ids,
+            Self::Unresolved { .. } => &[],
             Self::BundleWide => &[],
         }
     }
@@ -262,6 +278,7 @@ impl GeoScope {
             } => expanded_cell_paths
                 .iter()
                 .find(|path| path.cell_ids.last().is_some_and(|id| id == cell_id)),
+            Self::Unresolved { .. } => None,
             Self::BundleWide => None,
         }
     }
@@ -283,7 +300,10 @@ pub struct GeoBranch {
     pub resolved_entities: Vec<ResolvedEntityHandle>,
     pub constraints: SearchIntent,
     pub buyer_summary: String,
-    pub source_query: String,
+    pub recall_query: String,
+    pub scoring_query: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_text: Option<String>,
     pub compiled_query: CompiledQuery,
 }
 
@@ -369,6 +389,16 @@ impl CompiledSearchPlan {
     ) -> Self {
         let snapshot_identity = snapshot_identity.into();
         let mut resolution_gaps = Vec::new();
+        let spatial_keys_by_branch = compiled_query
+            .branches
+            .iter()
+            .map(spatial_preference_keys)
+            .collect::<Vec<_>>();
+        let all_spatial_keys = spatial_keys_by_branch
+            .iter()
+            .flatten()
+            .cloned()
+            .collect::<BTreeSet<_>>();
         let mut branches = compiled_query
             .branches
             .iter()
@@ -400,16 +430,41 @@ impl CompiledSearchPlan {
                 // owns recall and the society itself is not an eligibility
                 // predicate. Ranking may still prioritize an eligible exact
                 // society match through the config-owned search policy.
-                let geography_spans = positive_geography_spans(&predicates);
                 let mut eligibility_predicates = predicates.clone();
                 eligibility_predicates.drop_society_includes();
                 eligibility_predicates.drop_area_includes();
                 eligibility_predicates.drop_optional_spatial_includes();
+                let owned_spatial_keys = &spatial_keys_by_branch[index];
+                let external_spatial_keys = all_spatial_keys
+                    .difference(owned_spatial_keys)
+                    .cloned()
+                    .collect::<BTreeSet<_>>();
+                let constraints = project_branch_intent(
+                    &compiled_query.intent,
+                    &eligibility_predicates,
+                    owned_spatial_keys,
+                    &external_spatial_keys,
+                );
+                let scoring_query = canonical_scoring_query(
+                    &eligibility_predicates,
+                    &constraints,
+                    &branch_entities,
+                );
+                let recall_query = canonical_recall_query(
+                    &predicates,
+                    &constraints,
+                    &branch_entities,
+                    &scoring_query,
+                );
+                let fallback_text = (recall_query.is_empty()
+                    && !compiled_query.raw.trim().is_empty())
+                .then(|| normalize_fallback_text(&compiled_query.raw));
                 let mut branch_query = compiled_query.for_branch(eligibility_predicates.clone());
-                branch_query.raw =
-                    scoring_query(&branch_query.raw, &source_spans, &geography_spans);
-                let constraints =
-                    project_branch_intent(&compiled_query.intent, &eligibility_predicates);
+                branch_query.raw = if scoring_query.is_empty() {
+                    fallback_text.clone().unwrap_or_default()
+                } else {
+                    scoring_query.clone()
+                };
                 branch_query.intent = constraints.clone();
 
                 GeoBranch {
@@ -418,11 +473,17 @@ impl CompiledSearchPlan {
                     source_spans,
                     geo_scope,
                     buyer_summary: eligibility_predicates.buyer_label(),
-                    source_query: compiled_query.raw.clone(),
                     predicates,
                     predicate_bindings: Vec::new(),
                     resolved_entities: branch_entities,
                     constraints,
+                    recall_query: if recall_query.is_empty() {
+                        fallback_text.clone().unwrap_or_default()
+                    } else {
+                        recall_query
+                    },
+                    scoring_query,
+                    fallback_text,
                     compiled_query: branch_query,
                 }
             })
@@ -438,12 +499,13 @@ impl CompiledSearchPlan {
             .iter()
             .map(|branch| branch.constraints.clone())
             .collect::<Vec<_>>();
+        let semantic_fingerprint = semantic_plan_fingerprint(&predicates, &constraints, &branches);
         Self {
             root,
             branches,
             resolution_gaps,
             aggregate_intent: compiled_query.intent,
-            semantic_fingerprint: semantic_search_fingerprint(&predicates, &constraints),
+            semantic_fingerprint,
             snapshot_identity,
         }
     }
@@ -453,13 +515,12 @@ impl CompiledSearchPlan {
         branch_predicates: Vec<(BranchId, ConstraintExpr)>,
         aggregate_intent: SearchIntent,
         resolved_entities: Vec<ResolvedEntityHandle>,
-        active_query: &str,
         topology: &GeoTopologyIndex,
         spatial_index: Option<&SpatialServingIndex>,
         geo_cell_policy: GeoCellSearchPolicy,
     ) -> Self {
         let compiled_query = CompiledQuery {
-            raw: active_query.to_string(),
+            raw: String::new(),
             constraints: ConstraintExpr::any_of(
                 branch_predicates
                     .iter()
@@ -485,7 +546,41 @@ impl CompiledSearchPlan {
         }
         recompiled.root = root_for(&recompiled.branches);
         refresh_predicate_bindings(&mut recompiled.branches, Some(&self.branches));
+        for branch in &mut recompiled.branches {
+            if let Some(previous) = self
+                .branches
+                .iter()
+                .find(|previous| previous.branch_id == branch.branch_id)
+            {
+                branch.fallback_text.clone_from(&previous.fallback_text);
+                if branch.recall_query.is_empty() {
+                    branch.recall_query.clone_from(&previous.recall_query);
+                }
+                if branch.compiled_query.raw.is_empty() {
+                    branch
+                        .compiled_query
+                        .raw
+                        .clone_from(&previous.compiled_query.raw);
+                }
+            }
+        }
+        recompiled.refresh_semantic_fingerprint();
         recompiled
+    }
+
+    pub fn refresh_semantic_fingerprint(&mut self) {
+        let predicates = self
+            .branches
+            .iter()
+            .map(|branch| branch.predicates.clone())
+            .collect::<Vec<_>>();
+        let constraints = self
+            .branches
+            .iter()
+            .map(|branch| branch.constraints.clone())
+            .collect::<Vec<_>>();
+        self.semantic_fingerprint =
+            semantic_plan_fingerprint(&predicates, &constraints, &self.branches);
     }
 }
 
@@ -656,13 +751,7 @@ fn compile_geo_scope<'a>(
 ) -> GeoScope {
     let mut explicit_area_ids = BTreeSet::new();
     let mut anchors = BTreeSet::new();
-    collect_geo_anchors(
-        predicates,
-        false,
-        topology,
-        &mut explicit_area_ids,
-        &mut anchors,
-    );
+    collect_geo_anchors(predicates, false, &mut explicit_area_ids, &mut anchors);
     explicit_area_ids.retain(|area_id| topology.is_market_area(area_id));
 
     let mut market_locality_ids = explicit_area_ids
@@ -722,7 +811,15 @@ fn compile_geo_scope<'a>(
     }
 
     if scope_anchors.is_empty() {
-        return GeoScope::BundleWide;
+        return if has_positive_explicit_geography(predicates, false) {
+            GeoScope::Unresolved {
+                anchors: Vec::new(),
+                requested: Vec::new(),
+                reason: GeoScopeResolution::UnresolvedExplicitGeography,
+            }
+        } else {
+            GeoScope::BundleWide
+        };
     }
     if seed_cells_by_id.is_empty() {
         for anchor in &scope_anchors {
@@ -731,11 +828,25 @@ fn compile_geo_scope<'a>(
                 resolution_gaps.push(gap);
             }
         }
-        return GeoScope::BundleWide;
+        return GeoScope::Unresolved {
+            requested: scope_anchors
+                .iter()
+                .map(|anchor| anchor.entity_id.clone())
+                .collect(),
+            anchors: scope_anchors,
+            reason: GeoScopeResolution::MissingTopology,
+        };
     }
     let Some(spatial_index) = spatial_index else {
         resolution_gaps.push("missing spatial index for geo-cell traversal".to_string());
-        return GeoScope::BundleWide;
+        return GeoScope::Unresolved {
+            requested: scope_anchors
+                .iter()
+                .map(|anchor| anchor.entity_id.clone())
+                .collect(),
+            anchors: scope_anchors,
+            reason: GeoScopeResolution::MissingSpatialIndex,
+        };
     };
 
     let seed_cells = seed_cells_by_id
@@ -764,6 +875,23 @@ fn compile_geo_scope<'a>(
         expanded_cell_paths,
         supporting_evidence,
         max_distance_km: policy.max_distance_km,
+    }
+}
+
+fn has_positive_explicit_geography(expression: &ConstraintExpr, negated: bool) -> bool {
+    match expression {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => clauses
+            .iter()
+            .any(|clause| has_positive_explicit_geography(clause, negated)),
+        ConstraintExpr::Not { clause } => has_positive_explicit_geography(clause, !negated),
+        ConstraintExpr::Term {
+            term:
+                ConstraintTerm::Area {
+                    entity_id: Some(_), ..
+                }
+                | ConstraintTerm::Society { .. },
+        } => !negated,
+        ConstraintExpr::Term { .. } => false,
     }
 }
 
@@ -879,18 +1007,17 @@ fn validated_edge_evidence(
 fn collect_geo_anchors<'a>(
     expression: &'a ConstraintExpr,
     negated: bool,
-    topology: &GeoTopologyIndex,
     explicit_area_ids: &mut BTreeSet<&'a str>,
     anchors: &mut BTreeSet<&'a str>,
 ) {
     match expression {
         ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
             for clause in clauses {
-                collect_geo_anchors(clause, negated, topology, explicit_area_ids, anchors);
+                collect_geo_anchors(clause, negated, explicit_area_ids, anchors);
             }
         }
         ConstraintExpr::Not { clause } => {
-            collect_geo_anchors(clause, !negated, topology, explicit_area_ids, anchors)
+            collect_geo_anchors(clause, !negated, explicit_area_ids, anchors)
         }
         ConstraintExpr::Term { term } if !negated => match term {
             ConstraintTerm::Area {
@@ -901,19 +1028,6 @@ fn collect_geo_anchors<'a>(
             }
             ConstraintTerm::Society { entity_id, .. } => {
                 anchors.insert(entity_id);
-            }
-            ConstraintTerm::Spatial { entity_id, .. } => {
-                if entity_id.is_empty() {
-                    return;
-                }
-                if topology
-                    .entity_type(entity_id)
-                    .is_some_and(|kind| kind.eq_ignore_ascii_case("area"))
-                {
-                    explicit_area_ids.insert(entity_id);
-                } else {
-                    anchors.insert(entity_id);
-                }
             }
             _ => {}
         },
@@ -1041,21 +1155,117 @@ fn collect_positive_geography_spans(
     }
 }
 
-fn scoring_query(
-    _query: &str,
-    branch_spans: &[SourceSpan],
-    geography_spans: &[SourceSpan],
+fn canonical_scoring_query(
+    predicates: &ConstraintExpr,
+    intent: &SearchIntent,
+    resolved_entities: &[ResolvedEntityHandle],
 ) -> String {
-    branch_spans
-        .iter()
+    let geography_spans = positive_geography_spans(predicates);
+    let mut terms = all_source_spans(predicates)
+        .into_iter()
         .filter(|span| {
             !geography_spans
                 .iter()
                 .any(|geography| spans_overlap(span, geography))
         })
-        .map(|span| span.raw_text.as_str())
+        .map(|span| span.raw_text)
+        .collect::<Vec<_>>();
+    for preference in intent
+        .positive_preferences
+        .iter()
+        .chain(intent.negative_preferences.iter())
+    {
+        push_unique_text(&mut terms, &preference.raw_text);
+    }
+    for priority in &intent.ranking_priorities {
+        push_unique_text(&mut terms, priority);
+    }
+    for entity in resolved_entities
+        .iter()
+        .filter(|entity| entity.entity_type.eq_ignore_ascii_case("builder"))
+    {
+        push_unique_text(&mut terms, &entity.display_name);
+    }
+    normalize_terms(terms)
+}
+
+fn canonical_recall_query(
+    predicates: &ConstraintExpr,
+    intent: &SearchIntent,
+    resolved_entities: &[ResolvedEntityHandle],
+    scoring_query: &str,
+) -> String {
+    let mut terms = Vec::new();
+    if !scoring_query.is_empty() {
+        terms.push(scoring_query.to_string());
+    }
+    for entity in resolved_entities {
+        push_unique_text(&mut terms, &entity.display_name);
+    }
+    for span in all_source_spans(predicates) {
+        push_unique_text(&mut terms, &span.raw_text);
+    }
+    for preference in intent
+        .positive_preferences
+        .iter()
+        .chain(intent.negative_preferences.iter())
+    {
+        push_unique_text(&mut terms, &preference.raw_text);
+    }
+    normalize_terms(terms)
+}
+
+fn normalize_terms(terms: Vec<String>) -> String {
+    terms
+        .into_iter()
+        .flat_map(|term| {
+            term.split_whitespace()
+                .map(str::to_ascii_lowercase)
+                .collect::<Vec<_>>()
+        })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn normalize_fallback_text(value: &str) -> String {
+    value
+        .split_whitespace()
+        .map(str::to_ascii_lowercase)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn push_unique_text(values: &mut Vec<String>, value: &str) {
+    if !value.trim().is_empty()
+        && !values
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(value))
+    {
+        values.push(value.to_string());
+    }
+}
+
+fn semantic_plan_fingerprint(
+    predicates: &[ConstraintExpr],
+    intents: &[SearchIntent],
+    branches: &[GeoBranch],
+) -> String {
+    let base = semantic_search_fingerprint(predicates, intents);
+    let fallback = branches
+        .iter()
+        .map(|branch| branch.fallback_text.as_deref().unwrap_or_default())
+        .collect::<Vec<_>>();
+    let digest = Sha256::digest(
+        serde_json::to_vec(&(base, fallback))
+            .expect("compiled search semantics are JSON serializable"),
+    );
+    format!(
+        "sha256:{}",
+        digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    )
 }
 
 fn spans_overlap(left: &SourceSpan, right: &SourceSpan) -> bool {
@@ -1068,7 +1278,12 @@ fn spans_overlap(left: &SourceSpan, right: &SourceSpan) -> bool {
     left.start < right.end && right.start < left.end
 }
 
-fn project_branch_intent(aggregate: &SearchIntent, predicates: &ConstraintExpr) -> SearchIntent {
+fn project_branch_intent(
+    aggregate: &SearchIntent,
+    predicates: &ConstraintExpr,
+    owned_spatial_keys: &BTreeSet<String>,
+    external_spatial_keys: &BTreeSet<String>,
+) -> SearchIntent {
     let mut intent = aggregate.clone();
     intent.area = None;
     intent.areas.clear();
@@ -1081,10 +1296,74 @@ fn project_branch_intent(aggregate: &SearchIntent, predicates: &ConstraintExpr) 
     intent.excluded_societies.clear();
     intent.excluded_builders.clear();
     intent.exclude_bhks.clear();
+    intent.positive_preferences.retain(|preference| {
+        preference_is_owned_by_branch(preference, owned_spatial_keys, external_spatial_keys)
+    });
+    intent.negative_preferences.retain(|preference| {
+        preference_is_owned_by_branch(preference, owned_spatial_keys, external_spatial_keys)
+    });
+    intent.ranking_priorities.retain(|priority| {
+        intent
+            .positive_preferences
+            .iter()
+            .chain(intent.negative_preferences.iter())
+            .any(|preference| preference.raw_text.eq_ignore_ascii_case(priority))
+    });
+    intent.preferences.retain(|preference| {
+        intent
+            .positive_preferences
+            .iter()
+            .chain(intent.negative_preferences.iter())
+            .any(|signal| signal.raw_text.eq_ignore_ascii_case(preference))
+            || intent
+                .accepted_tradeoffs
+                .iter()
+                .any(|tradeoff| tradeoff.eq_ignore_ascii_case(preference))
+    });
     collect_branch_intent(predicates, false, &mut intent);
     intent.area = (intent.areas.len() == 1).then(|| intent.areas[0].clone());
     intent.bhk = (intent.bhks.len() == 1).then(|| intent.bhks[0]);
     intent
+}
+
+fn preference_is_owned_by_branch(
+    preference: &super::intent::PreferenceSignal,
+    owned_spatial_keys: &BTreeSet<String>,
+    external_spatial_keys: &BTreeSet<String>,
+) -> bool {
+    let overlaps_owned = preference
+        .expanded_keys
+        .iter()
+        .any(|key| owned_spatial_keys.contains(key));
+    let overlaps_external = preference
+        .expanded_keys
+        .iter()
+        .any(|key| external_spatial_keys.contains(key));
+    overlaps_owned || !overlaps_external
+}
+
+fn spatial_preference_keys(expression: &ConstraintExpr) -> BTreeSet<String> {
+    fn collect(expression: &ConstraintExpr, negated: bool, keys: &mut BTreeSet<String>) {
+        match expression {
+            ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
+                for clause in clauses {
+                    collect(clause, negated, keys);
+                }
+            }
+            ConstraintExpr::Not { clause } => collect(clause, !negated, keys),
+            ConstraintExpr::Term {
+                term:
+                    ConstraintTerm::Spatial {
+                        category_fact_keys, ..
+                    },
+            } if !negated => keys.extend(category_fact_keys.iter().cloned()),
+            ConstraintExpr::Term { .. } => {}
+        }
+    }
+
+    let mut keys = BTreeSet::new();
+    collect(expression, false, &mut keys);
+    keys
 }
 
 fn collect_branch_intent(expression: &ConstraintExpr, negated: bool, intent: &mut SearchIntent) {

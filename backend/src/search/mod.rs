@@ -4,7 +4,6 @@ pub mod capabilities;
 pub mod compiled_plan;
 pub mod engine;
 pub mod evaluation;
-pub mod focus;
 pub mod geo;
 pub mod guard;
 pub mod index;
@@ -20,7 +19,8 @@ pub use ast::{CompiledQuery, ConstraintExpr, ConstraintTerm, PredicateFamily, Pr
 pub use capabilities::SearchCapabilityIndex;
 pub use compiled_plan::{
     BoolExpr, BranchId, CompiledSearchPlan, GeoAnchor, GeoBranch, GeoCellPath, GeoCellSearchPolicy,
-    GeoCellSeed, GeoScope, GeoTopologyIndex, GeoTopologyLink, ResolvedEntityHandle,
+    GeoCellSeed, GeoScope, GeoScopeResolution, GeoTopologyIndex, GeoTopologyLink,
+    ResolvedEntityHandle,
 };
 pub use engine::{
     CandidateScore, SearchDiagnostics, SearchEngine, SearchEvidenceGap, SearchLayerTiming,
@@ -30,7 +30,6 @@ pub use evaluation::{
     BooleanEvaluation, EvaluationEvidence, EvaluationState, EvidenceGap, InventoryOption,
     PredicateEvaluation, VerifiedMatch,
 };
-pub use focus::{build_search_result_focus, FocusBuildInputs, SearchResultFocus};
 pub use guard::{
     guard_search_query, named_society_alternatives_guidance, no_results_guidance, SearchGuidance,
 };
@@ -38,10 +37,9 @@ pub use index::SearchIndex;
 pub use intent::{SearchIntent, SourceSpan};
 pub use revision::{
     apply_typed_revision, compile_typed_revision, decode_signed_search_context,
-    issue_signed_search_context, render_revision_active_query, revision_id_for_query,
-    validated_revision_depth, BuyerIntentBranchProjection, SearchRevisionDescriptor,
-    SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome, SignedSearchContext,
-    TypedSearchRevision, TypedSearchRevisionPatch,
+    issue_signed_search_context, render_revision_active_query, BuyerIntentBranchProjection,
+    SearchRevisionDescriptor, SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
+    SignedSearchContext, TypedSearchRevision, TypedSearchRevisionPatch,
 };
 pub use text::{SearchEvaluationContext, TextSearch, TextSearchRequest};
 

@@ -104,6 +104,7 @@ pub async fn load_app_state_with_execution(
         execution,
         search_runtime: ArcSwap::from_pointee(search_runtime),
         search_cache: SearchResponseCache::from_env(),
+        search_revision_caches: crate::state::SearchRevisionCaches::from_config(),
         property_catalog_cache: tokio::sync::Mutex::new(None),
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),

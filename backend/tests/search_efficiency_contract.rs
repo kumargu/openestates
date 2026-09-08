@@ -307,7 +307,7 @@ fn named_area_recall_uses_evidenced_geo_cells_not_coordinates() {
 }
 
 #[test]
-fn dangling_society_scope_falls_back_bundle_wide_without_relaxing_the_hard_budget() {
+fn dangling_society_scope_fails_closed_without_relaxing_the_hard_budget() {
     let properties = vec![
         property("godrej-splendour".to_string(), "Whitefield", 3, 17_000_000),
         property(
@@ -341,15 +341,8 @@ fn dangling_society_scope_falls_back_bundle_wide_without_relaxing_the_hard_budge
 
     let output = SearchEngine::new(&snapshot).search("Godrej Splendour 3BHK under ₹1.4Cr");
 
-    assert_eq!(output.eligible_result_count, 1);
-    assert_eq!(
-        output
-            .results
-            .iter()
-            .map(|result| result.card.id.as_str())
-            .collect::<Vec<_>>(),
-        ["budget-alternative"]
-    );
+    assert_eq!(output.eligible_result_count, 0);
+    assert!(output.results.is_empty());
     assert!(output
         .results
         .iter()
@@ -582,12 +575,12 @@ fn unique_partial_society_name_is_only_a_geographic_anchor() {
             .iter()
             .map(|result| result.card.id.as_str())
             .collect::<Vec<_>>(),
-        vec!["prestige-waterford-4bhk", "prestige-lakeside-4bhk"],
+        vec!["prestige-waterford-4bhk"],
         "eligible={}, resolved={:?}",
         output.eligible_result_count,
         output.diagnostics.resolved.entities,
     );
-    assert_eq!(output.eligible_result_count, 2);
+    assert_eq!(output.eligible_result_count, 1);
 }
 
 #[test]
@@ -609,7 +602,12 @@ fn tantivy_candidates_reach_branch_ranking_without_satisfying_hard_inventory() {
 
     let output = SearchEngine::new(&snapshot).search("quiet 3BHK");
 
-    assert!(output.diagnostics.recall.tantivy_count > 0);
+    assert!(
+        output.diagnostics.recall.tantivy_count > 0,
+        "branch={:?}, recall={:?}",
+        output.compiled_plan.branches[0].recall_query,
+        output.diagnostics.recall
+    );
     assert_eq!(output.diagnostics.recall.tantivy_branch_additions, 1);
     assert!(
         output.results.is_empty(),
