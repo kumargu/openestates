@@ -15,12 +15,11 @@ pub mod revision;
 pub mod schema;
 pub mod text;
 
-pub use ast::{CompiledQuery, ConstraintExpr, ConstraintTerm, PredicateFamily, PredicatePolarity};
+pub use ast::{ConstraintExpr, ConstraintTerm, IntentAst, PredicateFamily, PredicatePolarity};
 pub use capabilities::SearchCapabilityIndex;
 pub use compiled_plan::{
     BoolExpr, BranchId, CompiledSearchPlan, GeoAnchor, GeoBranch, GeoCellPath, GeoCellSearchPolicy,
-    GeoCellSeed, GeoScope, GeoScopeResolution, GeoTopologyIndex, GeoTopologyLink,
-    ResolvedEntityHandle,
+    GeoCellSeed, GeoScope, GeoScopeResolution, ResolvedEntityHandle,
 };
 pub use engine::{
     CandidateScore, SearchDiagnostics, SearchEngine, SearchEvidenceGap, SearchLayerTiming,
@@ -36,12 +35,13 @@ pub use guard::{
 pub use index::SearchIndex;
 pub use intent::{SearchIntent, SourceSpan};
 pub use revision::{
-    apply_typed_revision, compile_typed_revision, decode_signed_search_context,
-    issue_signed_search_context, render_revision_active_query, BuyerIntentBranchProjection,
+    apply_typed_revision, compile_typed_revision, decode_signed_search_context, intent_breakdown,
+    issue_signed_search_context, render_revision_active_query, result_membership_fingerprint,
+    BuyerIntentBranchProjection, PortableIntentAst, PortableIntentAstBranch,
     SearchRevisionDescriptor, SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
     SignedSearchContext, TypedSearchRevision, TypedSearchRevisionPatch,
 };
-pub use text::{SearchEvaluationContext, TextSearch, TextSearchRequest};
+pub use text::{CandidateEvaluationRequest, CandidateEvaluator, SearchEvaluationContext};
 
 use serde::{Deserialize, Serialize};
 

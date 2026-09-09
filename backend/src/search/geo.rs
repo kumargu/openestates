@@ -14,7 +14,7 @@ use crate::serving::{
 };
 
 use super::analyzer;
-use super::ast::{ConstraintExpr, ConstraintTerm};
+use super::ast::ConstraintTerm;
 use super::evaluation::{
     BooleanEvaluation, EvaluationEvidence, EvidenceGap, PredicateEvaluation, VerifiedMatch,
 };
@@ -100,14 +100,14 @@ pub(crate) fn normalized_distance_score(
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct GeoSearchIndex {
+pub struct SpatialEntityIndex {
     places: Vec<GeoPlace>,
     society_coordinates: Vec<EntityCoordinates>,
 }
 
 #[derive(Debug, Clone)]
 pub struct GeoSearchQuery<'a> {
-    index: &'a GeoSearchIndex,
+    index: &'a SpatialEntityIndex,
     places: Vec<ResolvedGeoPlace>,
     clauses: Vec<ResolvedGeoClause>,
     unresolved_targets: Vec<String>,
@@ -167,7 +167,7 @@ struct EntityCoordinates {
     confidence: f32,
 }
 
-impl GeoSearchIndex {
+impl SpatialEntityIndex {
     pub fn from_serving_bundle(
         entities: &[ServingEntityRecord],
         fact_index: &ServingFactIndex,
@@ -357,12 +357,10 @@ impl GeoSearchIndex {
     /// predicates. This deliberately performs no buyer-text parsing or fuzzy
     /// resolution; every entity id was already resolved when its source turn
     /// was compiled.
-    pub(crate) fn query_from_constraints(
+    pub(crate) fn bind_compiled_spatial_predicates(
         &self,
-        constraints: &ConstraintExpr,
+        terms: &[ConstraintTerm],
     ) -> Option<GeoSearchQuery<'_>> {
-        let mut terms = Vec::new();
-        collect_compiled_spatial_terms(constraints, &mut terms);
         if terms.is_empty() {
             return None;
         }
@@ -556,24 +554,6 @@ impl GeoSearchIndex {
                     .ok()
                     .and_then(|index| self.society_coordinates.get(index))
             })
-    }
-}
-
-fn collect_compiled_spatial_terms<'a>(
-    expression: &'a ConstraintExpr,
-    terms: &mut Vec<&'a ConstraintTerm>,
-) {
-    match expression {
-        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
-            for clause in clauses {
-                collect_compiled_spatial_terms(clause, terms);
-            }
-        }
-        ConstraintExpr::Not { clause } => collect_compiled_spatial_terms(clause, terms),
-        ConstraintExpr::Term {
-            term: term @ ConstraintTerm::Spatial { .. },
-        } => terms.push(term),
-        ConstraintExpr::Term { .. } => {}
     }
 }
 
@@ -881,6 +861,19 @@ impl<'a> GeoSearchQuery<'a> {
         &self,
         rows: &crate::serving::ServingEntityFactRows,
     ) -> Option<f64> {
+        let hard = self
+            .clauses
+            .iter()
+            .filter(|clause| clause.requirement == RelationRequirement::Hard)
+            .collect::<Vec<_>>();
+        if !hard.is_empty() {
+            return hard
+                .into_iter()
+                .map(|clause| self.society_rows_match_clause_distance(rows, clause))
+                .collect::<Option<Vec<_>>>()?
+                .into_iter()
+                .min_by(f64::total_cmp);
+        }
         self.clauses
             .iter()
             .filter_map(|clause| self.society_rows_match_clause_distance(rows, clause))
@@ -1973,7 +1966,7 @@ mod tests {
 
     #[test]
     fn ranked_geo_candidates_gate_evidence_on_generic_structured_matches() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![GeoPlace {
                 entity_id: "place:bagmane".to_string(),
                 name: "Bagmane Tech Park".to_string(),
@@ -2085,7 +2078,7 @@ mod tests {
 
     #[test]
     fn society_coordinate_lookup_normalizes_runtime_soc_prefix() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: Vec::new(),
             society_coordinates: vec![EntityCoordinates {
                 entity_id: "society:sumadhura-capitol-residences".to_string(),
@@ -2230,7 +2223,7 @@ mod tests {
 
     #[test]
     fn exact_place_mentions_do_not_expand_to_generic_place_family_matches() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![
                 GeoPlace {
                     entity_id: "place:hm".to_string(),
@@ -2262,7 +2255,7 @@ mod tests {
 
     #[test]
     fn explicit_metro_family_rejects_competing_park_entities() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![
                 GeoPlace {
                     entity_id: "place:kadugodi-park".to_string(),
@@ -2305,7 +2298,7 @@ mod tests {
 
     #[test]
     fn named_place_without_radius_recalls_and_proves_inventory_beyond_scoring_boundary() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![GeoPlace {
                 entity_id: "place:bagmane".to_string(),
                 name: "Bagmane Tech Park".to_string(),
@@ -2345,7 +2338,7 @@ mod tests {
 
     #[test]
     fn distinctive_partial_place_token_resolves_named_place() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![
                 GeoPlace {
                     entity_id: "place:hospital".to_string(),
@@ -2382,7 +2375,7 @@ mod tests {
 
     #[test]
     fn distinctive_two_token_name_resolves_place_with_long_tagline() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![GeoPlace {
                 entity_id: "place:school".to_string(),
                 name: "Northstar High - Learn. Lead. Succeed".to_string(),
@@ -2408,7 +2401,7 @@ mod tests {
 
     #[test]
     fn generic_place_family_tokens_do_not_resolve_as_named_places() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![
                 GeoPlace {
                     entity_id: "place:hm".to_string(),
@@ -2444,7 +2437,7 @@ mod tests {
 
     #[test]
     fn generic_place_family_clauses_do_not_fuzzily_resolve_named_places() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![GeoPlace {
                 entity_id: "place:montessori".to_string(),
                 name: "Mont Ivy Montessori Preschools Near Me".to_string(),
@@ -2476,7 +2469,7 @@ mod tests {
             significant_place_tokens("Tech Park").is_empty(),
             "generic place tokens should come from scoring policy config"
         );
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![GeoPlace {
                 entity_id: "place:generic-tech-park".to_string(),
                 name: "Tech Park".to_string(),
@@ -2497,7 +2490,7 @@ mod tests {
 
     #[test]
     fn place_mentions_without_relation_do_not_trigger_geo_query() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![GeoPlace {
                 entity_id: "place:deens".to_string(),
                 name: "Deens Academy".to_string(),
@@ -2518,7 +2511,7 @@ mod tests {
 
     #[test]
     fn unsupported_or_named_targets_do_not_fall_back_to_partial_category_words() {
-        let index = GeoSearchIndex::default();
+        let index = SpatialEntityIndex::default();
 
         let unsupported = index
             .query("3bhk near a police station")
@@ -2559,7 +2552,7 @@ mod tests {
             ],
             Vec::new(),
         );
-        let index = GeoSearchIndex::from_serving_bundle(&entities, &facts);
+        let index = SpatialEntityIndex::from_serving_bundle(&entities, &facts);
 
         let query = index
             .query(
@@ -2612,7 +2605,7 @@ mod tests {
             Vec::new(),
         );
 
-        let index = GeoSearchIndex::from_serving_bundle(&entities, &facts);
+        let index = SpatialEntityIndex::from_serving_bundle(&entities, &facts);
         let query = index
             .query("3BHK inside Fixture Locality")
             .expect("polygon-backed areas should resolve by serving identity");
@@ -2743,7 +2736,7 @@ mod tests {
             local_property("outside-office-limit", "outside-office-limit"),
             local_property("wrong-hospital", "wrong-hospital"),
         ];
-        let index = GeoSearchIndex::from_serving_bundle(&entities, &facts);
+        let index = SpatialEntityIndex::from_serving_bundle(&entities, &facts);
         let query = index
             .query("3bhk within 1 km of Manipal Hospital Whitefield and within 3 km of ITPB")
             .expect("both hard anchors should resolve");
@@ -2909,7 +2902,7 @@ mod tests {
             ],
             Vec::new(),
         );
-        let index = GeoSearchIndex::from_serving_bundle(&entities, &facts);
+        let index = SpatialEntityIndex::from_serving_bundle(&entities, &facts);
         let query = index
             .query("3bhk within 1 km of Manipal Hospital and within 3 km of ITPB")
             .expect("both hard anchors should resolve");
@@ -2925,7 +2918,7 @@ mod tests {
 
     #[test]
     fn longest_exact_place_name_suppresses_contained_entity() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![
                 GeoPlace {
                     entity_id: "place:area:banashankari".to_string(),

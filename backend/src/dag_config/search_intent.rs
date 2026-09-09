@@ -107,9 +107,9 @@ pub struct DiscourseParserConfig {
     #[serde(default)]
     pub revision_overwrite_prefixes: Vec<String>,
     #[serde(default)]
-    pub revision_undo_phrases: Vec<String>,
+    pub revision_relative_increase_prefixes: Vec<String>,
     #[serde(default)]
-    pub revision_fresh_prefixes: Vec<String>,
+    pub revision_relative_decrease_prefixes: Vec<String>,
     #[serde(default)]
     pub revision_exclusion_prefixes: Vec<String>,
     #[serde(default)]
@@ -413,18 +413,18 @@ fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
             .map(String::as_str),
     )?;
     validate_aliases(
-        "parser.discourse.revision_undo_phrases",
+        "parser.discourse.revision_relative_increase_prefixes",
         config
             .discourse
-            .revision_undo_phrases
+            .revision_relative_increase_prefixes
             .iter()
             .map(String::as_str),
     )?;
     validate_aliases(
-        "parser.discourse.revision_fresh_prefixes",
+        "parser.discourse.revision_relative_decrease_prefixes",
         config
             .discourse
-            .revision_fresh_prefixes
+            .revision_relative_decrease_prefixes
             .iter()
             .map(String::as_str),
     )?;

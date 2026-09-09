@@ -383,11 +383,16 @@
         "i meant",
         "change the",
         "increase the",
-        "decrease the"
+        "decrease the",
+        "stretch budget by",
+        "increase budget by",
+        "raise budget by",
+        "reduce budget by",
+        "decrease budget by"
       ],
       "revision_overwrite_prefixes": ["actually", "only"],
-      "revision_undo_phrases": ["undo", "go back"],
-      "revision_fresh_prefixes": ["fresh search", "new search", "start over", "forget that"],
+      "revision_relative_increase_prefixes": ["stretch budget by", "increase budget by", "raise budget by"],
+      "revision_relative_decrease_prefixes": ["reduce budget by", "decrease budget by"],
       "revision_exclusion_prefixes": ["exclude", "avoid", "not"],
       "revision_ambiguous_spatial_refinements": [
         "closer",

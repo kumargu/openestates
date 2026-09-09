@@ -1,12 +1,13 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::serving::{EvidenceRef, ServingEdgeRecord, ServingEntityRecord, SpatialServingIndex};
+use crate::graph::GraphIndex;
+use crate::serving::{EvidenceRef, SpatialServingIndex};
 
 use super::ast::{
-    semantic_search_fingerprint, CompiledQuery, ConstraintExpr, ConstraintTerm, NumericBound,
+    semantic_search_fingerprint, ConstraintExpr, ConstraintTerm, IntentAst, NumericBound,
 };
 use super::intent::{SearchIntent, SourceSpan};
 
@@ -51,164 +52,6 @@ pub struct GeoCellPath {
 pub struct GeoCellSearchPolicy {
     pub max_hops: u8,
     pub max_distance_km: f64,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct GeoTopologyLink {
-    pub target_entity_id: String,
-    pub evidence_refs: Vec<EvidenceRef>,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct GeoTopologyIndex {
-    entity_types: HashMap<String, String>,
-    market_area_ids: HashSet<String>,
-    market_memberships: HashMap<String, Vec<GeoTopologyLink>>,
-    cell_occupancies: HashMap<String, Vec<GeoTopologyLink>>,
-    market_cell_coverage: HashMap<String, Vec<GeoTopologyLink>>,
-    cell_adjacency: HashMap<String, Vec<GeoTopologyLink>>,
-    internal_cell_ids: HashSet<String>,
-}
-
-impl GeoTopologyIndex {
-    pub fn build(
-        entities: &[ServingEntityRecord],
-        edges: &[ServingEdgeRecord],
-        snapshot_identity: &str,
-    ) -> Self {
-        let entity_types = entities
-            .iter()
-            .map(|entity| (entity.entity_id.clone(), entity.entity_type.clone()))
-            .collect();
-        let internal_cell_ids = entities
-            .iter()
-            .filter(|entity| !entity.visibility.is_searchable())
-            .map(|entity| entity.entity_id.clone())
-            .collect();
-        let mut index = Self {
-            entity_types,
-            internal_cell_ids,
-            ..Self::default()
-        };
-        for edge in edges {
-            let Some(evidence_refs) = validated_edge_evidence(edge, snapshot_identity) else {
-                continue;
-            };
-            let link = GeoTopologyLink {
-                target_entity_id: edge.to_entity_id.clone(),
-                evidence_refs: evidence_refs.clone(),
-            };
-            match edge.edge_type.as_str() {
-                "in_market_locality" => {
-                    index.market_area_ids.insert(edge.to_entity_id.clone());
-                    push_topology_link(
-                        index
-                            .market_memberships
-                            .entry(edge.from_entity_id.clone())
-                            .or_default(),
-                        link,
-                    );
-                }
-                "occupies_geo_cell" => {
-                    push_topology_link(
-                        index
-                            .cell_occupancies
-                            .entry(edge.from_entity_id.clone())
-                            .or_default(),
-                        link,
-                    );
-                }
-                "covers_geo_cell" => {
-                    index.market_area_ids.insert(edge.from_entity_id.clone());
-                    push_topology_link(
-                        index
-                            .market_cell_coverage
-                            .entry(edge.from_entity_id.clone())
-                            .or_default(),
-                        link,
-                    );
-                }
-                "adjacent_area" => {
-                    push_topology_link(
-                        index
-                            .cell_adjacency
-                            .entry(edge.from_entity_id.clone())
-                            .or_default(),
-                        link,
-                    );
-                    push_topology_link(
-                        index
-                            .cell_adjacency
-                            .entry(edge.to_entity_id.clone())
-                            .or_default(),
-                        GeoTopologyLink {
-                            target_entity_id: edge.from_entity_id.clone(),
-                            evidence_refs,
-                        },
-                    );
-                }
-                _ => {}
-            }
-        }
-        index
-    }
-
-    pub fn entity_type(&self, entity_id: &str) -> Option<&str> {
-        self.entity_types.get(entity_id).map(String::as_str)
-    }
-
-    pub fn is_market_area(&self, entity_id: &str) -> bool {
-        self.market_area_ids.contains(entity_id)
-    }
-
-    pub fn market_memberships(&self, entity_id: &str) -> &[GeoTopologyLink] {
-        self.market_memberships
-            .get(entity_id)
-            .map(Vec::as_slice)
-            .unwrap_or_default()
-    }
-
-    pub fn occupied_cells(&self, entity_id: &str) -> &[GeoTopologyLink] {
-        self.cell_occupancies
-            .get(entity_id)
-            .map(Vec::as_slice)
-            .unwrap_or_default()
-    }
-
-    pub fn covered_cells(&self, market_id: &str) -> &[GeoTopologyLink] {
-        self.market_cell_coverage
-            .get(market_id)
-            .map(Vec::as_slice)
-            .unwrap_or_default()
-    }
-
-    pub fn adjacent_cells(&self, cell_id: &str) -> &[GeoTopologyLink] {
-        self.cell_adjacency
-            .get(cell_id)
-            .map(Vec::as_slice)
-            .unwrap_or_default()
-    }
-
-    pub fn are_adjacent(&self, left: &str, right: &str) -> bool {
-        self.adjacent_cells(left)
-            .iter()
-            .any(|link| link.target_entity_id == right)
-    }
-
-    pub fn is_internal_cell(&self, entity_id: &str) -> bool {
-        self.internal_cell_ids.contains(entity_id)
-    }
-}
-
-fn push_topology_link(links: &mut Vec<GeoTopologyLink>, link: GeoTopologyLink) {
-    if links
-        .iter()
-        .any(|existing| existing.target_entity_id == link.target_entity_id)
-    {
-        return;
-    }
-    links.push(link);
-    links.sort_by(|left, right| left.target_entity_id.cmp(&right.target_entity_id));
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -295,16 +138,17 @@ pub struct GeoBranch {
     pub source_spans: Vec<SourceSpan>,
     pub geo_scope: GeoScope,
     pub predicates: ConstraintExpr,
+    pub eligibility_predicates: ConstraintExpr,
+    pub spatial_predicates: Vec<ConstraintTerm>,
     #[serde(default)]
     pub predicate_bindings: Vec<CompiledPredicateBinding>,
     pub resolved_entities: Vec<ResolvedEntityHandle>,
-    pub constraints: SearchIntent,
+    pub ranking_intent: SearchIntent,
     pub buyer_summary: String,
     pub recall_query: String,
     pub scoring_query: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback_text: Option<String>,
-    pub compiled_query: CompiledQuery,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -334,14 +178,10 @@ impl CompiledSearchPlan {
                 .filter_map(|entity| entity.source_span.as_mut())
                 .for_each(|span| assign_span_turn(span, source_turn_id));
             assign_expression_turn(&mut branch.predicates, source_turn_id);
-            assign_expression_turn(&mut branch.compiled_query.constraints, source_turn_id);
+            assign_expression_turn(&mut branch.eligibility_predicates, source_turn_id);
+            branch.spatial_predicates = compiled_spatial_predicates(&branch.predicates);
             branch
-                .compiled_query
-                .branches
-                .iter_mut()
-                .for_each(|expression| assign_expression_turn(expression, source_turn_id));
-            branch
-                .constraints
+                .ranking_intent
                 .bhk_spans
                 .iter_mut()
                 .for_each(|span| assign_span_turn(span, source_turn_id));
@@ -365,14 +205,10 @@ impl CompiledSearchPlan {
                 .filter_map(|entity| entity.source_span.as_mut())
                 .for_each(|span| shift_span(span, offset));
             shift_expression_spans(&mut branch.predicates, offset);
-            shift_expression_spans(&mut branch.compiled_query.constraints, offset);
+            shift_expression_spans(&mut branch.eligibility_predicates, offset);
+            branch.spatial_predicates = compiled_spatial_predicates(&branch.predicates);
             branch
-                .compiled_query
-                .branches
-                .iter_mut()
-                .for_each(|expression| shift_expression_spans(expression, offset));
-            branch
-                .constraints
+                .ranking_intent
                 .bhk_spans
                 .iter_mut()
                 .for_each(|span| shift_span(span, offset));
@@ -380,10 +216,10 @@ impl CompiledSearchPlan {
         refresh_predicate_bindings(&mut self.branches, None);
     }
     pub fn compile_for_snapshot(
-        compiled_query: CompiledQuery,
+        compiled_query: IntentAst,
         snapshot_identity: impl Into<String>,
         resolved_entities: &[ResolvedEntityHandle],
-        topology: &GeoTopologyIndex,
+        topology: &GraphIndex,
         spatial_index: Option<&SpatialServingIndex>,
         geo_cell_policy: GeoCellSearchPolicy,
     ) -> Self {
@@ -459,14 +295,7 @@ impl CompiledSearchPlan {
                 let fallback_text = (recall_query.is_empty()
                     && !compiled_query.raw.trim().is_empty())
                 .then(|| normalize_fallback_text(&compiled_query.raw));
-                let mut branch_query = compiled_query.for_branch(eligibility_predicates.clone());
-                branch_query.raw = if scoring_query.is_empty() {
-                    fallback_text.clone().unwrap_or_default()
-                } else {
-                    scoring_query.clone()
-                };
-                branch_query.intent = constraints.clone();
-
+                let spatial_predicates = compiled_spatial_predicates(&predicates);
                 GeoBranch {
                     branch_id: format!("branch-{}", index + 1),
                     geo_cluster_id: String::new(),
@@ -474,9 +303,11 @@ impl CompiledSearchPlan {
                     geo_scope,
                     buyer_summary: eligibility_predicates.buyer_label(),
                     predicates,
+                    eligibility_predicates,
+                    spatial_predicates,
                     predicate_bindings: Vec::new(),
                     resolved_entities: branch_entities,
-                    constraints,
+                    ranking_intent: constraints,
                     recall_query: if recall_query.is_empty() {
                         fallback_text.clone().unwrap_or_default()
                     } else {
@@ -484,7 +315,6 @@ impl CompiledSearchPlan {
                     },
                     scoring_query,
                     fallback_text,
-                    compiled_query: branch_query,
                 }
             })
             .collect::<Vec<_>>();
@@ -497,7 +327,7 @@ impl CompiledSearchPlan {
             .collect::<Vec<_>>();
         let constraints = branches
             .iter()
-            .map(|branch| branch.constraints.clone())
+            .map(|branch| branch.ranking_intent.clone())
             .collect::<Vec<_>>();
         let semantic_fingerprint = semantic_plan_fingerprint(&predicates, &constraints, &branches);
         Self {
@@ -515,11 +345,11 @@ impl CompiledSearchPlan {
         branch_predicates: Vec<(BranchId, ConstraintExpr)>,
         aggregate_intent: SearchIntent,
         resolved_entities: Vec<ResolvedEntityHandle>,
-        topology: &GeoTopologyIndex,
+        topology: &GraphIndex,
         spatial_index: Option<&SpatialServingIndex>,
         geo_cell_policy: GeoCellSearchPolicy,
     ) -> Self {
-        let compiled_query = CompiledQuery {
+        let compiled_query = IntentAst {
             raw: String::new(),
             constraints: ConstraintExpr::any_of(
                 branch_predicates
@@ -556,12 +386,6 @@ impl CompiledSearchPlan {
                 if branch.recall_query.is_empty() {
                     branch.recall_query.clone_from(&previous.recall_query);
                 }
-                if branch.compiled_query.raw.is_empty() {
-                    branch
-                        .compiled_query
-                        .raw
-                        .clone_from(&previous.compiled_query.raw);
-                }
             }
         }
         recompiled.refresh_semantic_fingerprint();
@@ -577,10 +401,31 @@ impl CompiledSearchPlan {
         let constraints = self
             .branches
             .iter()
-            .map(|branch| branch.constraints.clone())
+            .map(|branch| branch.ranking_intent.clone())
             .collect::<Vec<_>>();
         self.semantic_fingerprint =
             semantic_plan_fingerprint(&predicates, &constraints, &self.branches);
+    }
+}
+
+fn compiled_spatial_predicates(expression: &ConstraintExpr) -> Vec<ConstraintTerm> {
+    let mut predicates = Vec::new();
+    collect_spatial_predicates(expression, &mut predicates);
+    predicates
+}
+
+fn collect_spatial_predicates(expression: &ConstraintExpr, predicates: &mut Vec<ConstraintTerm>) {
+    match expression {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
+            for clause in clauses {
+                collect_spatial_predicates(clause, predicates);
+            }
+        }
+        ConstraintExpr::Not { clause } => collect_spatial_predicates(clause, predicates),
+        ConstraintExpr::Term {
+            term: term @ ConstraintTerm::Spatial { .. },
+        } => predicates.push(term.clone()),
+        ConstraintExpr::Term { .. } => {}
     }
 }
 
@@ -743,7 +588,7 @@ fn root_for(branches: &[GeoBranch]) -> BoolExpr<BranchId> {
 
 fn compile_geo_scope<'a>(
     predicates: &'a ConstraintExpr,
-    topology: &GeoTopologyIndex,
+    topology: &GraphIndex,
     spatial_index: Option<&SpatialServingIndex>,
     policy: GeoCellSearchPolicy,
     snapshot_identity: &str,
@@ -822,6 +667,9 @@ fn compile_geo_scope<'a>(
         };
     }
     if seed_cells_by_id.is_empty() {
+        if !has_positive_area_or_society_geography(predicates, false) {
+            return GeoScope::BundleWide;
+        }
         for anchor in &scope_anchors {
             let gap = format!("missing sourced geo-cell seed for {}", anchor.entity_id);
             if !resolution_gaps.contains(&gap) {
@@ -891,6 +739,31 @@ fn has_positive_explicit_geography(expression: &ConstraintExpr, negated: bool) -
                 }
                 | ConstraintTerm::Society { .. },
         } => !negated,
+        ConstraintExpr::Term {
+            term:
+                ConstraintTerm::Spatial {
+                    entity_id,
+                    required: true,
+                    ..
+                },
+        } => !negated && !entity_id.is_empty(),
+        ConstraintExpr::Term { .. } => false,
+    }
+}
+
+fn has_positive_area_or_society_geography(expression: &ConstraintExpr, negated: bool) -> bool {
+    match expression {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => clauses
+            .iter()
+            .any(|clause| has_positive_area_or_society_geography(clause, negated)),
+        ConstraintExpr::Not { clause } => has_positive_area_or_society_geography(clause, !negated),
+        ConstraintExpr::Term {
+            term:
+                ConstraintTerm::Area {
+                    entity_id: Some(_), ..
+                }
+                | ConstraintTerm::Society { .. },
+        } => !negated,
         ConstraintExpr::Term { .. } => false,
     }
 }
@@ -898,7 +771,7 @@ fn has_positive_explicit_geography(expression: &ConstraintExpr, negated: bool) -
 fn expand_geo_cells(
     anchors: &[GeoAnchor],
     seed_cells: &[GeoCellSeed],
-    topology: &GeoTopologyIndex,
+    topology: &GraphIndex,
     spatial_index: &SpatialServingIndex,
     policy: GeoCellSearchPolicy,
     snapshot_identity: &str,
@@ -995,15 +868,6 @@ fn geo_cell_distance(
         .min_by(|left, right| left.distance_km.total_cmp(&right.distance_km))
 }
 
-fn validated_edge_evidence(
-    edge: &ServingEdgeRecord,
-    snapshot_identity: &str,
-) -> Option<Vec<EvidenceRef>> {
-    let derivation = edge.derivation.as_ref()?;
-    edge.validate_derivation(snapshot_identity).ok()?;
-    Some(vec![EvidenceRef::for_derivation(derivation)])
-}
-
 fn collect_geo_anchors<'a>(
     expression: &'a ConstraintExpr,
     negated: bool,
@@ -1029,13 +893,20 @@ fn collect_geo_anchors<'a>(
             ConstraintTerm::Society { entity_id, .. } => {
                 anchors.insert(entity_id);
             }
+            ConstraintTerm::Spatial {
+                entity_id,
+                required: true,
+                ..
+            } if !entity_id.is_empty() => {
+                anchors.insert(entity_id);
+            }
             _ => {}
         },
         ConstraintExpr::Term { .. } => {}
     }
 }
 
-fn assign_geo_clusters(branches: &mut [GeoBranch], topology: &GeoTopologyIndex) {
+fn assign_geo_clusters(branches: &mut [GeoBranch], topology: &GraphIndex) {
     let mut clusters: Vec<Vec<usize>> = Vec::new();
     for branch_index in 0..branches.len() {
         let cluster = clusters.iter_mut().find(|members| {
@@ -1060,11 +931,7 @@ fn assign_geo_clusters(branches: &mut [GeoBranch], topology: &GeoTopologyIndex) 
     }
 }
 
-fn directly_connected_scopes(
-    left: &GeoScope,
-    right: &GeoScope,
-    topology: &GeoTopologyIndex,
-) -> bool {
+fn directly_connected_scopes(left: &GeoScope, right: &GeoScope, topology: &GraphIndex) -> bool {
     if left.is_bundle_wide() || right.is_bundle_wide() {
         return left.is_bundle_wide() && right.is_bundle_wide();
     }
@@ -1432,7 +1299,8 @@ mod tests {
     use super::*;
     use crate::knowledge::FactValue;
     use crate::serving::{
-        DerivedEvidence, EvidenceRef, ServingFactIndex, ServingFactRecord, SourceObservation,
+        DerivedEvidence, EvidenceRef, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex,
+        ServingFactRecord, SourceObservation,
     };
     use chrono::{TimeZone, Utc};
 
@@ -1559,16 +1427,16 @@ mod tests {
                 false,
             ),
             (
-                "dangling society falls back bundle wide",
+                "dangling society fails closed around the direct anchor",
                 society_term("society:missing", "Missing", 0),
                 Vec::new(),
-                true,
+                false,
             ),
             (
-                "administrative containment does not scope search",
+                "administrative containment cannot substitute for market topology",
                 society_term("society:ward-only", "Ward Only", 0),
                 Vec::new(),
-                true,
+                false,
             ),
             (
                 "no geography falls back bundle wide",
@@ -1662,9 +1530,9 @@ mod tests {
             plan.branches[0].geo_cluster_id,
             plan.branches[2].geo_cluster_id
         );
-        assert_eq!(plan.branches[0].constraints.bhks, [2]);
-        assert_eq!(plan.branches[1].constraints.bhks, [3]);
-        assert_eq!(plan.branches[2].constraints.bhks, [4]);
+        assert_eq!(plan.branches[0].ranking_intent.bhks, [2]);
+        assert_eq!(plan.branches[1].ranking_intent.bhks, [3]);
+        assert_eq!(plan.branches[2].ranking_intent.bhks, [4]);
         assert!(matches!(
             &plan.branches[0].predicates,
             ConstraintExpr::And { clauses }
@@ -1681,7 +1549,7 @@ mod tests {
                 ))
         ));
         assert!(matches!(
-            &plan.branches[0].compiled_query.constraints,
+            &plan.branches[0].eligibility_predicates,
             ConstraintExpr::Term {
                 term: ConstraintTerm::Bhk { value: 2, .. }
             }
@@ -1713,9 +1581,9 @@ mod tests {
         edges: &[ServingEdgeRecord],
     ) -> CompiledSearchPlan {
         let constraints = ConstraintExpr::any_of(branches.clone());
-        let topology = GeoTopologyIndex::build(entities, edges, "test-snapshot");
+        let topology = GraphIndex::from_serving_bundle(entities, edges, "test-snapshot");
         CompiledSearchPlan::compile_for_snapshot(
-            CompiledQuery {
+            IntentAst {
                 raw: "Air 2BHK Waterford 3BHK Song 4BHK".to_string(),
                 constraints,
                 branches,

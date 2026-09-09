@@ -160,14 +160,15 @@ pub(crate) struct ResolvedEntityConstraint {
 /// `intent` is a derived API/ranking summary. Hard eligibility always evaluates
 /// `constraints`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CompiledQuery {
+pub struct IntentAst {
     pub raw: String,
     pub constraints: ConstraintExpr,
     pub branches: Vec<ConstraintExpr>,
     pub intent: SearchIntent,
 }
 
-impl CompiledQuery {
+impl IntentAst {
+    #[cfg(test)]
     pub(crate) fn with_constraints(
         raw: impl Into<String>,
         constraints: ConstraintExpr,
@@ -291,10 +292,6 @@ impl CompiledQuery {
             self.branches = branches;
             self.constraints = ConstraintExpr::any_of(self.branches.clone());
         }
-    }
-
-    pub(crate) fn for_branch(&self, constraints: ConstraintExpr) -> Self {
-        Self::with_constraints(self.raw.clone(), constraints, self.intent.clone())
     }
 
     #[cfg(test)]
@@ -677,7 +674,13 @@ impl ConstraintExpr {
     pub fn drop_area_includes(&mut self) {
         let expr = std::mem::replace(self, Self::match_all());
         *self = remove_positive_terms(expr, false, &|term| {
-            matches!(term, ConstraintTerm::Area { .. })
+            matches!(
+                term,
+                ConstraintTerm::Area {
+                    entity_id: Some(_),
+                    ..
+                }
+            )
         });
     }
 
@@ -1827,7 +1830,7 @@ fn push_unique_u32(values: &mut Vec<u32>, value: u32) {
 mod tests {
     use super::{
         compile_constraint_expr, semantic_ast_fingerprint, semantic_search_fingerprint,
-        CompiledQuery, ConstraintExpr, ConstraintTerm, NumericBound, PredicateFamily,
+        ConstraintExpr, ConstraintTerm, IntentAst, NumericBound, PredicateFamily,
         PredicatePolarity, ResolvedEntityConstraint, SourceSpan,
     };
     use crate::search::intent::{parse_intent, HardConstraint};
@@ -1879,7 +1882,7 @@ mod tests {
         let intent = parse_intent("2 or 3 BHK, not 4 BHK");
         assert_eq!(intent.bhks, vec![2, 3]);
         assert_eq!(intent.exclude_bhks, vec![4]);
-        let query = CompiledQuery::from_text_with_intent("2 or 3 BHK, not 4 BHK", intent);
+        let query = IntentAst::from_text_with_intent("2 or 3 BHK, not 4 BHK", intent);
         assert!(matches_bhk(&query.constraints, 2));
         assert!(matches_bhk(&query.constraints, 3));
         assert!(!matches_bhk(&query.constraints, 4));
@@ -1894,7 +1897,7 @@ mod tests {
         let intent = parse_intent("3BHK budget not over 2Cr");
         assert_eq!(intent.budget_min, None);
         assert_eq!(intent.budget_max, Some(20_000_000));
-        let query = CompiledQuery::from_text_with_intent("3BHK budget not over 2Cr", intent);
+        let query = IntentAst::from_text_with_intent("3BHK budget not over 2Cr", intent);
         assert!(matches_price(&query.constraints, 20_000_000));
         assert!(!matches_price(&query.constraints, 20_000_001));
     }
@@ -1908,7 +1911,7 @@ mod tests {
 
     #[test]
     fn dropping_bhk_includes_keeps_exclusions() {
-        let mut query = CompiledQuery::from_text("2 or 3 BHK, not 4 BHK");
+        let mut query = IntentAst::from_text("2 or 3 BHK, not 4 BHK");
         query.constraints.drop_bhk_includes();
         assert!(matches_bhk(&query.constraints, 1));
         assert!(!matches_bhk(&query.constraints, 4));
@@ -1939,7 +1942,7 @@ mod tests {
 
     #[test]
     fn buyer_query_compiles_cross_field_alternatives_as_branches() {
-        let query = CompiledQuery::from_text("3BHK in East Bengaluru or 2BHK in South Bengaluru");
+        let query = IntentAst::from_text("3BHK in East Bengaluru or 2BHK in South Bengaluru");
 
         assert!(matches_home(&query.constraints, "East Bengaluru", 3));
         assert!(matches_home(&query.constraints, "South Bengaluru", 2));
@@ -1950,7 +1953,7 @@ mod tests {
     #[test]
     fn repeated_bhk_occurrences_remain_in_each_grouped_branch() {
         let raw = "East Bengaluru 3BHK under 2Cr or South Bengaluru 3BHK under 3Cr";
-        let query = CompiledQuery::from_text(raw);
+        let query = IntentAst::from_text(raw);
 
         assert!(matches_home_budget(
             &query.constraints,
@@ -1975,7 +1978,7 @@ mod tests {
     #[test]
     fn exclusion_internal_or_does_not_split_positive_constraints() {
         let raw = "3BHK under 2Cr, not 4 or 5 BHK in East Bengaluru";
-        let query = CompiledQuery::from_text(raw);
+        let query = IntentAst::from_text(raw);
 
         assert!(matches_home_budget(
             &query.constraints,
@@ -2000,7 +2003,7 @@ mod tests {
     #[test]
     fn exclusion_scoped_to_one_alternative_stays_in_that_branch() {
         let raw = "3BHK in East Bengaluru or 4BHK not in East Bengaluru";
-        let query = CompiledQuery::from_text(raw);
+        let query = IntentAst::from_text(raw);
 
         assert!(matches_home(&query.constraints, "East Bengaluru", 3));
         assert!(matches_home(&query.constraints, "South Bengaluru", 4));
@@ -2011,7 +2014,7 @@ mod tests {
     #[test]
     fn dangling_or_is_ignored_without_flattening_valid_branches() {
         let raw = "East Bengaluru 3BHK under 2Cr or South Bengaluru 4BHK under 3Cr or";
-        let query = CompiledQuery::from_text(raw);
+        let query = IntentAst::from_text(raw);
 
         assert!(matches_home_budget(
             &query.constraints,
@@ -2036,7 +2039,7 @@ mod tests {
     #[test]
     fn adjacent_or_is_normalized_without_flattening_valid_branches() {
         let raw = "East Bengaluru 3BHK under 2Cr or or South Bengaluru 4BHK under 3Cr";
-        let query = CompiledQuery::from_text(raw);
+        let query = IntentAst::from_text(raw);
 
         assert!(matches_home_budget(
             &query.constraints,
@@ -2073,7 +2076,7 @@ mod tests {
     #[test]
     fn soft_preference_or_does_not_split_hard_constraint_branches() {
         let raw = "3BHK ready or recently completed in East Bengaluru under 2Cr or 4BHK in South Bengaluru under 3Cr";
-        let query = CompiledQuery::from_text(raw);
+        let query = IntentAst::from_text(raw);
 
         assert!(matches_home_budget(
             &query.constraints,
@@ -2110,7 +2113,7 @@ mod tests {
     #[test]
     fn branch_specific_soft_words_do_not_hide_a_complete_hard_branch_boundary() {
         let raw = "East Bengaluru 3BHK ready or under construction South Bengaluru 4BHK";
-        let query = CompiledQuery::from_text(raw);
+        let query = IntentAst::from_text(raw);
 
         assert!(matches_home(&query.constraints, "East Bengaluru", 3));
         assert!(matches_home(&query.constraints, "South Bengaluru", 4));
@@ -2198,7 +2201,7 @@ mod tests {
     #[test]
     fn shared_suffix_area_stays_conjoined_with_grouped_bhk_budget_branches() {
         let raw = "3BHK under 2Cr or 4BHK under 4Cr in East Bengaluru";
-        let query = CompiledQuery::from_text(raw);
+        let query = IntentAst::from_text(raw);
 
         assert!(matches_home_budget(
             &query.constraints,
@@ -2229,7 +2232,7 @@ mod tests {
     #[test]
     fn evidence_constraint_stays_inside_its_grouped_branch() {
         let raw = "3BHK above 10 acres under 2Cr or 4BHK under 4Cr";
-        let query = CompiledQuery::from_text(raw);
+        let query = IntentAst::from_text(raw);
 
         assert!(matches_evidence_branch(
             &query.constraints,
@@ -2260,7 +2263,7 @@ mod tests {
     #[test]
     fn repeated_evidence_dimension_keeps_each_branch_threshold() {
         let raw = "3BHK above 10 acres under 2Cr or 4BHK above 5 acres under 4Cr";
-        let query = CompiledQuery::from_text(raw);
+        let query = IntentAst::from_text(raw);
 
         assert!(matches_evidence_threshold(
             &query.constraints,
@@ -2291,7 +2294,7 @@ mod tests {
     #[test]
     fn evidence_family_preserves_soft_word_bordered_alternatives() {
         let raw = "above 10 acres ready or under construction above 5 acres";
-        let query = CompiledQuery::from_text(raw);
+        let query = IntentAst::from_text(raw);
 
         assert!(matches_evidence_threshold(
             &query.constraints,
@@ -2315,7 +2318,7 @@ mod tests {
 
     #[test]
     fn cross_dimension_evidence_alternatives_keep_shared_bhk() {
-        let query = CompiledQuery::from_text("3BHK with 10+ acres or at least 80% open space");
+        let query = IntentAst::from_text("3BHK with 10+ acres or at least 80% open space");
         let evidence = query
             .constraints
             .matched_evidence_constraints(&mut |_| true);
@@ -2348,7 +2351,7 @@ mod tests {
             85.0
         ));
 
-        let suffix = CompiledQuery::from_text("10+ acres or at least 80% open space for 3BHK");
+        let suffix = IntentAst::from_text("10+ acres or at least 80% open space for 3BHK");
         assert!(matches_cross_evidence_alternative(
             &suffix.constraints,
             3,
@@ -2371,7 +2374,7 @@ mod tests {
             85.0
         ));
 
-        let multi_prefix = CompiledQuery::from_text(
+        let multi_prefix = IntentAst::from_text(
             "3BHK with 10+ acres and Google rating >= 4.2 or at least 80% open space",
         );
         assert!(matches_cross_evidence_alternative(
@@ -2382,7 +2385,7 @@ mod tests {
             85.0
         ));
 
-        let multi_suffix = CompiledQuery::from_text(
+        let multi_suffix = IntentAst::from_text(
             "10+ acres or at least 80% open space and Google rating >= 4.2 for 3BHK",
         );
         assert!(matches_cross_evidence_alternative(
@@ -2396,7 +2399,7 @@ mod tests {
 
     #[test]
     fn symbolic_evidence_operators_reach_the_ast() {
-        let query = CompiledQuery::from_text(
+        let query = IntentAst::from_text(
             "3BHK with 10+ acres, at least 80% open space, and Google rating >= 4.2",
         );
         let constraints = query
@@ -2661,7 +2664,7 @@ mod tests {
                     }
                 })
                 .collect::<Vec<_>>();
-            let compiled = CompiledQuery::compile(query, &plan, parse_intent(query), &entities);
+            let compiled = IntentAst::compile(query, &plan, parse_intent(query), &entities);
 
             assert_eq!(compiled.branches.len(), *branch_count, "query={query}");
             for &(area, builder, society, bhk, price, expected) in *probes {
@@ -2691,7 +2694,7 @@ mod tests {
     #[test]
     fn compiled_terms_keep_real_query_byte_spans() {
         let query = "2/3 BHK under 2Cr";
-        let compiled = CompiledQuery::from_text(query);
+        let compiled = IntentAst::from_text(query);
         let mut spans = Vec::new();
         collect_spans(&compiled.constraints, &mut spans);
 

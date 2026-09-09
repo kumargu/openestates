@@ -10,7 +10,7 @@ use crate::serving::{
 };
 use crate::state::{SearchRuntimeSnapshot, SEARCH_ENGINE_VERSION};
 
-use super::ast::{CompiledQuery, ConstraintExpr, ConstraintTerm, ResolvedEntityConstraint};
+use super::ast::{ConstraintExpr, ConstraintTerm, IntentAst, ResolvedEntityConstraint};
 use super::compiled_plan::{
     CompiledSearchPlan, GeoCellSearchPolicy, GeoScope, ResolvedEntityHandle,
 };
@@ -19,11 +19,12 @@ use super::index::SearchIndex;
 use super::intent::{SearchIntent, SourceSpan};
 use super::query_plan::{self, QueryPlan};
 use super::resolver::{is_resolvable_entity_name, slug};
+use super::revision::PortableIntentAst;
 use super::schema;
 use super::text::SearchEvaluationContext;
 use super::{
-    GeographyMatch, GeographyMatchKind, SearchResultCard, SearchResultSet, TextSearch,
-    TextSearchRequest,
+    CandidateEvaluationRequest, CandidateEvaluator, GeographyMatch, GeographyMatchKind,
+    SearchResultCard, SearchResultSet,
 };
 
 const TANTIVY_RECALL_LIMIT: usize = 128;
@@ -167,7 +168,7 @@ struct TantivyRecallResult {
 }
 
 struct PreparedSearchBranch {
-    plan_compiled_query: CompiledQuery,
+    plan_compiled_query: IntentAst,
     serving_resolved_entities: Vec<ResolvedSearchEntity>,
     unresolved_entity_clause: Option<String>,
 }
@@ -188,6 +189,82 @@ impl<'a> SearchEngine<'a> {
         let aggregate_intent = query_plan::project_search_intent(query, &top_level_plan);
         let prepared = self.prepare_branch_from_plan(query, top_level_plan, aggregate_intent, &[]);
         self.compile_prepared_plan(&prepared, source_turn_id)
+    }
+
+    /// Bind a portable intent tree to the active serving snapshot. This path
+    /// deliberately never reparses the buyer-facing presentation string.
+    pub fn compile_intent_ast(
+        &self,
+        ast: &PortableIntentAst,
+    ) -> Result<CompiledSearchPlan, String> {
+        if ast.version != 1 || ast.branches.is_empty() {
+            return Err("unsupported or empty intent AST".to_string());
+        }
+        let branch_predicates = ast
+            .branches
+            .iter()
+            .map(|branch| branch.predicates.clone())
+            .collect::<Vec<_>>();
+        let compiled_query = IntentAst {
+            raw: String::new(),
+            constraints: ConstraintExpr::any_of(branch_predicates.clone()),
+            branches: branch_predicates,
+            intent: ast.aggregate_intent.clone(),
+        };
+        let resolved_entities = ast
+            .branches
+            .iter()
+            .flat_map(|branch| branch.resolved_entities.iter().cloned())
+            .fold(
+                Vec::<ResolvedEntityHandle>::new(),
+                |mut entities, entity| {
+                    if !entities.iter().any(|existing| {
+                        existing.entity_id == entity.entity_id
+                            && existing.source_span == entity.source_span
+                    }) {
+                        entities.push(entity);
+                    }
+                    entities
+                },
+            );
+        let mut plan = CompiledSearchPlan::compile_for_snapshot(
+            compiled_query,
+            self.snapshot.version_key.serving_bundle_version.as_str(),
+            &resolved_entities,
+            &self.snapshot.bundle.graph_index,
+            Some(&self.snapshot.bundle.spatial_index),
+            GeoCellSearchPolicy {
+                max_hops: self.snapshot.geo_cell_max_hops,
+                max_distance_km: self.snapshot.geo_cell_max_distance_km,
+            },
+        );
+        if plan.branches.len() != ast.branches.len() {
+            return Err("intent AST branch count changed while binding".to_string());
+        }
+        for (branch, portable) in plan.branches.iter_mut().zip(&ast.branches) {
+            branch.branch_id.clone_from(&portable.branch_id);
+            branch
+                .resolved_entities
+                .clone_from(&portable.resolved_entities);
+            for binding in &mut branch.predicate_bindings {
+                if let Some(stable) = portable.predicate_bindings.iter().find(|stable| {
+                    stable.family == binding.family
+                        && stable.polarity == binding.polarity
+                        && (stable.semantic_key == binding.semantic_key
+                            || stable.path == binding.path)
+                }) {
+                    binding.predicate_id.clone_from(&stable.predicate_id);
+                }
+            }
+        }
+        plan.root = super::compiled_plan::BoolExpr::Any(
+            plan.branches
+                .iter()
+                .map(|branch| super::compiled_plan::BoolExpr::Leaf(branch.branch_id.clone()))
+                .collect(),
+        );
+        plan.refresh_semantic_fingerprint();
+        Ok(plan)
     }
 
     pub fn compile_fragment(
@@ -299,7 +376,7 @@ impl<'a> SearchEngine<'a> {
             prepared.plan_compiled_query.clone(),
             self.snapshot.version_key.serving_bundle_version.as_str(),
             &resolved_entities,
-            &self.snapshot.geo_topology,
+            &self.snapshot.bundle.graph_index,
             Some(&self.snapshot.bundle.spatial_index),
             GeoCellSearchPolicy {
                 max_hops: self.snapshot.geo_cell_max_hops,
@@ -347,7 +424,7 @@ impl<'a> SearchEngine<'a> {
         let geo_query = self
             .snapshot
             .bundle
-            .geo_index
+            .entity_index
             .query_with_plan_and_area_context(
                 &query_plan,
                 Some(&self.snapshot.bundle.spatial_index),
@@ -400,7 +477,7 @@ impl<'a> SearchEngine<'a> {
         let entity_constraints = resolved_entity_constraints(&serving_resolved_entities);
         let intent = apply_resolved_constraints(parsed_intent, &serving_resolved_entities);
         let mut compiled_query =
-            CompiledQuery::compile(query, &query_plan, intent, &entity_constraints);
+            IntentAst::compile(query, &query_plan, intent, &entity_constraints);
         if let Some(layout) = query_plan::paired_ordinal_branch_layout(&query_plan) {
             let segments = layout
                 .segments
@@ -468,11 +545,12 @@ impl<'a> SearchEngine<'a> {
                 )
             })
             .filter(|clause| {
-                !serving_resolved_entities.iter().any(|entity| {
-                    entity.polarity != "exclusion"
-                        && (entity.name.eq_ignore_ascii_case(clause)
-                            || entity.matched_text.eq_ignore_ascii_case(clause))
-                })
+                !constraint_has_unbound_area(&plan_compiled_query.constraints, clause)
+                    && !serving_resolved_entities.iter().any(|entity| {
+                        entity.polarity != "exclusion"
+                            && (entity.name.eq_ignore_ascii_case(clause)
+                                || entity.matched_text.eq_ignore_ascii_case(clause))
+                    })
             });
         PreparedSearchBranch {
             plan_compiled_query,
@@ -499,12 +577,12 @@ impl<'a> SearchEngine<'a> {
             let structured = timer.measure("structured_recall", || {
                 self.snapshot
                     .search_index
-                    .recall_ids(&branch.compiled_query)
+                    .recall_plan_ids(&branch.scoring_query, &branch.eligibility_predicates)
             });
-            let eligible_property_ids = has_filter_intent(&branch.compiled_query).then(|| {
+            let eligible_property_ids = branch.eligibility_predicates.has_terms().then(|| {
                 self.snapshot
                     .search_index
-                    .recall_constraint_ids(&branch.compiled_query)
+                    .recall_constraint_expr_ids(&branch.eligibility_predicates)
                     .into_iter()
                     .collect::<HashSet<_>>()
             });
@@ -518,8 +596,8 @@ impl<'a> SearchEngine<'a> {
             let mut geo_query = self
                 .snapshot
                 .bundle
-                .geo_index
-                .query_from_constraints(&branch.predicates);
+                .entity_index
+                .bind_compiled_spatial_predicates(&branch.spatial_predicates);
             let spatial = timer.measure("geo_recall", || {
                 let coordinate_candidates = geo_query
                     .as_ref()
@@ -619,7 +697,7 @@ impl<'a> SearchEngine<'a> {
                     let Some(geography_match) = geography_match_for_property(
                         &branch.geo_scope,
                         society_id,
-                        &self.snapshot.geo_topology,
+                        &self.snapshot.bundle.graph_index,
                         &self.snapshot.bundle.spatial_index,
                         snapshot_identity,
                     ) else {
@@ -631,10 +709,10 @@ impl<'a> SearchEngine<'a> {
             }
 
             let unavailable_capability = branch
-                .constraints
+                .ranking_intent
                 .positive_preferences
                 .iter()
-                .chain(branch.constraints.negative_preferences.iter())
+                .chain(branch.ranking_intent.negative_preferences.iter())
                 .filter(|preference| preference.required)
                 .find(|preference| {
                     !self
@@ -653,7 +731,7 @@ impl<'a> SearchEngine<'a> {
                 let candidate_indexes =
                     candidate_property_indexes(&candidates, Some(&self.snapshot.property_by_id));
                 timer.measure("ranking", || {
-                    TextSearch::search(TextSearchRequest {
+                    CandidateEvaluator::search(CandidateEvaluationRequest {
                         properties: &self.snapshot.properties,
                         search_index: Some(&self.snapshot.search_index),
                         extra_candidate_ids: None,
@@ -661,9 +739,9 @@ impl<'a> SearchEngine<'a> {
                         geo_query: geo_query.as_ref(),
                         serving_facts,
                         society_names: &self.snapshot.society_names,
-                        societies: &self.snapshot.societies,
-                        compiled_query: &branch.compiled_query,
-                        graph: None,
+                        query: &branch.scoring_query,
+                        intent: &branch.ranking_intent,
+                        constraints: &branch.eligibility_predicates,
                         evaluation: SearchEvaluationContext {
                             options: &self.snapshot.inventory_options,
                             spatial_matches: &verified_spatial_matches,
@@ -807,6 +885,24 @@ fn normalized_place_family_target(value: &str) -> String {
         .join(" ")
 }
 
+fn constraint_has_unbound_area(expression: &ConstraintExpr, label: &str) -> bool {
+    match expression {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => clauses
+            .iter()
+            .any(|clause| constraint_has_unbound_area(clause, label)),
+        ConstraintExpr::Not { .. } => false,
+        ConstraintExpr::Term {
+            term:
+                ConstraintTerm::Area {
+                    entity_id: None,
+                    value,
+                    ..
+                },
+        } => value.eq_ignore_ascii_case(label),
+        ConstraintExpr::Term { .. } => false,
+    }
+}
+
 fn first_relation_start(plan: &QueryPlan) -> Option<usize> {
     let relations = &crate::dag_config::search_parser_config().relations.aliases;
     plan.tokens.iter().enumerate().find_map(|(index, token)| {
@@ -917,7 +1013,7 @@ fn sort_geography_cohorts(results: &mut [SearchResultCard]) {
 fn geography_match_for_property(
     scope: &GeoScope,
     society_id: &str,
-    topology: &super::compiled_plan::GeoTopologyIndex,
+    topology: &crate::graph::GraphIndex,
     spatial_index: &crate::serving::SpatialServingIndex,
     snapshot_identity: &str,
 ) -> Option<GeographyMatch> {
@@ -1906,10 +2002,6 @@ impl SearchTimer {
     }
 }
 
-fn has_filter_intent(query: &CompiledQuery) -> bool {
-    query.constraints.has_terms()
-}
-
 fn tantivy_candidate_ids(
     serving_bundle: Option<&LoadedServingBundle>,
     query: &str,
@@ -2064,7 +2156,7 @@ mod tests {
     use crate::knowledge::FactValue;
     use crate::models::Society;
     use crate::search::evaluation::{EvaluationState, InventoryOption};
-    use crate::search::geo::GeoSearchIndex;
+    use crate::search::geo::SpatialEntityIndex;
     use crate::search::intent::SearchIntent;
     use crate::search::SearchCapabilityIndex;
     use crate::serving::{
@@ -2299,7 +2391,7 @@ mod tests {
         let cache_dir = tempdir().expect("temporary engine test bundle").keep();
         let recall_index = TantivyRecallIndex::build_in_dir(&cache_dir, &entities, &facts, &[])
             .expect("engine test recall index");
-        let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
+        let entity_index = SpatialEntityIndex::from_serving_bundle(&entities, &fact_index);
         let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
         let search_index = SearchIndex::build_with_serving_entities(properties, &entities);
         let bundle = LoadedServingBundle {
@@ -2318,14 +2410,13 @@ mod tests {
                 quarantined_society_count: 0,
                 quarantine_reason_counts: Default::default(),
                 entity_parquet_key: "entities.parquet".to_string(),
-                entity_alias_parquet_key: None,
+                entity_alias_parquet_key: "aliases.parquet".to_string(),
                 fact_parquet_key: "facts.parquet".to_string(),
                 search_metadata_parquet_key: "search.parquet".to_string(),
-                rera_evidence_parquet_key: None,
-                edge_parquet_key: None,
-                quarantine_report_key: None,
+                rera_evidence_parquet_key: "rera.parquet".to_string(),
+                edge_parquet_key: "edges.parquet".to_string(),
+                quarantine_report_key: "quarantine.json".to_string(),
                 schema_key: "schema.json".to_string(),
-                trust_policy_key: "trust.json".to_string(),
                 tantivy_index_prefix: "tantivy".to_string(),
                 artifacts: Vec::new(),
             },
@@ -2336,12 +2427,12 @@ mod tests {
             recall_index,
             fact_index,
             rera_evidence_index: ReraEvidenceIndex::default(),
-            geo_index,
+            entity_index,
             spatial_index,
             search_capabilities: SearchCapabilityIndex::default(),
             cache_dir,
         };
-        SearchRuntimeSnapshot::new(
+        let mut snapshot = SearchRuntimeSnapshot::new(
             Arc::new(bundle),
             properties.to_vec(),
             properties
@@ -2368,7 +2459,44 @@ mod tests {
                 .collect(),
             Vec::new(),
             search_index,
-        )
+        );
+        snapshot.inventory_options = properties
+            .iter()
+            .map(|property| {
+                let society_id = snapshot
+                    .search_index
+                    .society_entity_id_for_property(&property.id)
+                    .expect("fixture society identity")
+                    .to_string();
+                let observation = SourceObservation::new(
+                    "SearchEngineFixture",
+                    property.id.clone(),
+                    society_id.clone(),
+                    Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+                    Some(format!("https://example.test/{}", property.id)),
+                    vec!["asset:search-engine-fixture/v1".to_string()],
+                )
+                .unwrap();
+                let exact_price = (property.price > 0).then_some(property.price);
+                (
+                    property.id.clone(),
+                    InventoryOption {
+                        property_id: property.id.clone(),
+                        society_id,
+                        bhk: (property.bhk > 0).then_some(property.bhk),
+                        price_min: property.price_min.or(exact_price),
+                        price_max: property.price_max.or(exact_price),
+                        size_sqft: (property.super_builtup_sqft > 0)
+                            .then_some(property.super_builtup_sqft),
+                        evidence_reference: Some(EvidenceRef::for_observation(
+                            &snapshot.version_key.serving_bundle_version,
+                            &observation,
+                        )),
+                    },
+                )
+            })
+            .collect();
+        snapshot
     }
 
     #[test]
@@ -2377,8 +2505,7 @@ mod tests {
             .map(|index| test_property(&format!("eligible-{index:02}"), "Whitefield"))
             .collect::<Vec<_>>();
 
-        let output = run_search_for_test("3bhk in Whitefield under 2cr", &properties);
-
+        let output = run_search_for_test("3bhk homes under 2cr", &properties);
         assert_eq!(output.eligible_result_count, 48);
         assert_eq!(output.results.len(), 32);
         assert!(output
@@ -2986,7 +3113,7 @@ mod tests {
         let intent = query_plan::project_search_intent(query, &plan);
         let resolved = resolve_serving_query_entities_from_records(query, &intent, &entities);
         let entities = resolved_entity_constraints(&resolved);
-        let compiled = CompiledQuery::compile(query, &plan, intent, &entities);
+        let compiled = IntentAst::compile(query, &plan, intent, &entities);
         let matches = |builder: &str, price: u64| {
             compiled.constraints.evaluate(&mut |term| match term {
                 crate::search::ast::ConstraintTerm::Builder { display_name, .. } => {
@@ -3195,10 +3322,10 @@ mod tests {
             ],
             Vec::new(),
         );
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &facts);
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &facts);
         let query =
             "3bhk near Whitefield close to kids school and near my wife office in Marathahalli";
-        let geo_query = geo_index
+        let geo_query = entity_index
             .query(query)
             .expect("Whitefield and school clauses should remain usable");
         let resolved = ["Whitefield", "Marathahalli"]

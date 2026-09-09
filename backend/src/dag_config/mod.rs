@@ -13,7 +13,7 @@
 //! | `ui_surfaces.json` | UI surface → leaves | Frontend/API mappers |
 //! | `evidence_sections.json` | Property evidence section metadata | Property detail API |
 //! | `search_intent.json` | Buyer archetypes | Search intent (migration pending) |
-//! | `serving_eligibility.json` | Clean-bundle admission policy | Serving bundle builder + release validator |
+//! | `serving_eligibility.json` | Clean-bundle admission policy | Serving bundle builder + structural validator |
 //! | `crawl_policies/*.json` | Crawl skip/cadence | Python collectors |
 //!
 //! **Instances** (society:*, road:*, fact values) live in `data/lake/` Parquet only.

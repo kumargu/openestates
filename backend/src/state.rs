@@ -710,7 +710,7 @@ mod tests {
                 search_guidance: None,
             }),
             compiled_plan: Arc::new(crate::search::CompiledSearchPlan::compile_for_snapshot(
-                crate::search::CompiledQuery::from_text(query),
+                crate::search::IntentAst::from_text(query),
                 "test-bundle",
                 &[],
                 &crate::graph::GraphIndex::default(),

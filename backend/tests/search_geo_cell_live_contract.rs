@@ -1,32 +1,26 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use backend::assets::MaterializationId;
 use backend::data_loader::runtime_snapshot_from_serving_bundle;
 use backend::lake::LakeStore;
 use backend::search::{GeographyMatchKind, SearchEngine};
 use backend::serving::{ServingBundleLoader, ServingEntityVisibility};
 
 #[tokio::test]
-#[ignore = "requires an isolated Issue 118 format-12 lake and materialization"]
-async fn isolated_geo_cell_materialization_survives_parquet_runtime_and_api_projection() {
+#[ignore = "requires an isolated Issue 118 format-12 lake and bundle"]
+async fn isolated_geo_cell_bundle_survives_parquet_runtime_and_api_projection() {
     let lake_root = std::env::var_os("OPENESTATES_ISSUE118_LAKE_ROOT")
         .expect("OPENESTATES_ISSUE118_LAKE_ROOT is required for the ignored live contract");
-    let materialization_id = std::env::var_os("OPENESTATES_ISSUE118_MATERIALIZATION_ID").expect(
-        "OPENESTATES_ISSUE118_MATERIALIZATION_ID is required for the ignored live contract",
-    );
-    let materialization_id = materialization_id
+    let bundle_version = std::env::var_os("OPENESTATES_ISSUE118_BUNDLE_VERSION")
+        .expect("OPENESTATES_ISSUE118_BUNDLE_VERSION is required for the ignored live contract")
         .into_string()
-        .expect("materialization id is UTF-8")
-        .parse::<MaterializationId>()
-        .expect("materialization id is a UUID");
+        .expect("bundle version is UTF-8");
     let lake = LakeStore::local(PathBuf::from(lake_root)).unwrap();
     let cache = tempfile::tempdir().unwrap();
     let bundle = ServingBundleLoader::new(lake, cache.path())
-        .load_search_bundle_by_materialization(&materialization_id)
+        .load_search_bundle(&bundle_version)
         .await
-        .unwrap()
-        .expect("isolated Issue 118 materialization exists");
+        .expect("isolated Issue 118 bundle exists");
     assert_eq!(bundle.manifest.format_version, 12);
     let snapshot_identity = bundle.manifest.bundle_version.clone();
 

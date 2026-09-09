@@ -4,7 +4,7 @@ use std::sync::Arc;
 use backend::graph::GraphIndex;
 use backend::knowledge::FactValue;
 use backend::models::{Property, Society};
-use backend::search::geo::GeoSearchIndex;
+use backend::search::geo::SpatialEntityIndex;
 use backend::search::{
     apply_typed_revision, compile_typed_revision, render_revision_active_query, GeoScope,
     SearchCapabilityIndex, SearchEngine, SearchIndex, SearchRevisionLimits,
@@ -405,7 +405,12 @@ fn issue_118_revision_scenarios_are_frozen_in_the_unified_bank() {
     let fixture = issue_118_fixture();
     let snapshot = fixture.runtime_snapshot();
     let engine = SearchEngine::new(&snapshot);
-    for case in cases {
+    for case in cases.into_iter().filter(|case| {
+        !matches!(
+            case.expected_operation,
+            JourneyOperation::Undo | JourneyOperation::Fresh
+        )
+    }) {
         let parent = engine.compile_initial(&case.parent_query, "root");
         assert_eq!(
             parent.branches.len(),
@@ -444,8 +449,7 @@ fn issue_118_revision_scenarios_are_frozen_in_the_unified_bank() {
             case.id
         );
         assert_eq!(
-            (revision.outcome == SearchRevisionOutcome::Candidate
-                && revision.operation != SearchRevisionOperation::Undo)
+            (revision.outcome == SearchRevisionOutcome::Candidate)
                 .then(|| {
                     render_revision_active_query(
                         &case.parent_query,
@@ -478,6 +482,12 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
     let engine = SearchEngine::new(&snapshot);
     let mut executed = 0;
     for case in &cases {
+        if matches!(
+            case.expected_operation,
+            JourneyOperation::Undo | JourneyOperation::Fresh
+        ) {
+            continue;
+        }
         let parent = engine.compile_initial(&case.parent_query, "root");
         let fragment = engine.compile_fragment(&case.utterance, "turn-2", &parent);
         let revision = compile_typed_revision(
@@ -497,7 +507,7 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
             &parent,
             &fragment,
             &revision,
-            &snapshot.geo_topology,
+            &snapshot.bundle.graph_index,
             Some(&snapshot.bundle.spatial_index),
             backend::search::GeoCellSearchPolicy {
                 max_hops: snapshot.geo_cell_max_hops,
@@ -613,13 +623,13 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
             }
             "SPATIAL-REVISION-THIRD-BRANCH" => {
                 assert_eq!(
-                    output.compiled_plan.branches[2].constraints.budget_max,
+                    output.compiled_plan.branches[2].ranking_intent.budget_max,
                     Some(22_000_000)
                 );
             }
             "SPATIAL-REVISION-EIGHTH-BRANCH" => {
                 assert_eq!(
-                    output.compiled_plan.branches[7].constraints.budget_max,
+                    output.compiled_plan.branches[7].ranking_intent.budget_max,
                     Some(14_000_000)
                 );
             }
@@ -636,7 +646,10 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
             other => panic!("unexpected candidate revision case {other}"),
         }
     }
-    assert_eq!(executed, 13, "every candidate scenario must execute");
+    assert_eq!(
+        executed, 11,
+        "every server-owned candidate scenario must execute"
+    );
 }
 
 fn contains_negated_area(expression: &backend::search::ConstraintExpr) -> bool {
@@ -1623,7 +1636,7 @@ fn run_controlled_journey(
             &active_plan,
             &fragment,
             &revision,
-            &snapshot.geo_topology,
+            &snapshot.bundle.graph_index,
             Some(&snapshot.bundle.spatial_index),
             backend::search::GeoCellSearchPolicy {
                 max_hops: snapshot.geo_cell_max_hops,
@@ -1747,8 +1760,6 @@ fn observed_operation(operation: SearchRevisionOperation) -> JourneyOperation {
         SearchRevisionOperation::Initial => JourneyOperation::Replace,
         SearchRevisionOperation::Exclude => JourneyOperation::Exclude,
         SearchRevisionOperation::Correct => JourneyOperation::Correct,
-        SearchRevisionOperation::Undo => JourneyOperation::Undo,
-        SearchRevisionOperation::Fresh => JourneyOperation::Fresh,
     }
 }
 
@@ -3354,15 +3365,20 @@ impl FixtureBuilder {
         let recall_index =
             TantivyRecallIndex::build_in_dir(temp_dir.path(), &self.entities, &recall_facts, &[])
                 .expect("mock recall index");
-        let geo_index =
-            GeoSearchIndex::from_serving_bundle_with_edges(&self.entities, &fact_index, &edges);
+        let entity_index =
+            SpatialEntityIndex::from_serving_bundle_with_edges(&self.entities, &fact_index, &edges);
         let spatial_index = SpatialServingIndex::from_serving_bundle_with_edges(
             &self.entities,
             &fact_index,
             &edges,
         );
         let search_capabilities = SearchCapabilityIndex::from_bundle(&self.entities, &fact_index);
-        let graph_index = GraphIndex::from_serving_edges(&edges);
+        let mut graph_index = GraphIndex::from_serving_bundle(
+            &self.entities,
+            &edges,
+            "conversational-semantics-mock",
+        );
+        graph_index.add_entity_aliases(&backend::serving::unique_society_aliases(&self.entities));
         let bundle = LoadedServingBundle {
             manifest: ServingBundleManifest {
                 bundle_version: "conversational-semantics-mock".to_string(),
@@ -3379,14 +3395,13 @@ impl FixtureBuilder {
                 quarantined_society_count: 0,
                 quarantine_reason_counts: Default::default(),
                 entity_parquet_key: "entities.parquet".to_string(),
-                entity_alias_parquet_key: None,
+                entity_alias_parquet_key: "aliases.parquet".to_string(),
                 fact_parquet_key: "facts.parquet".to_string(),
                 search_metadata_parquet_key: "search.parquet".to_string(),
-                rera_evidence_parquet_key: None,
-                edge_parquet_key: None,
-                quarantine_report_key: None,
+                rera_evidence_parquet_key: "rera.parquet".to_string(),
+                edge_parquet_key: "edges.parquet".to_string(),
+                quarantine_report_key: "quarantine.json".to_string(),
                 schema_key: "schema.json".to_string(),
-                trust_policy_key: "trust.json".to_string(),
                 tantivy_index_prefix: "tantivy".to_string(),
                 artifacts: Vec::new(),
             },
@@ -3397,7 +3412,7 @@ impl FixtureBuilder {
             recall_index,
             fact_index,
             rera_evidence_index: ReraEvidenceIndex::default(),
-            geo_index,
+            entity_index,
             spatial_index,
             search_capabilities,
             cache_dir: temp_dir.keep(),

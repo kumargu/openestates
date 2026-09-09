@@ -5,11 +5,11 @@ use std::time::{Duration, Instant};
 use backend::graph::GraphIndex;
 use backend::knowledge::FactValue;
 use backend::models::{Property, Society};
-use backend::search::geo::GeoSearchIndex;
+use backend::search::geo::SpatialEntityIndex;
 use backend::search::intent::parse_intent;
 use backend::search::{
-    CompiledQuery, SearchEngine, SearchIndex, SearchResponse, SearchRuntimeVersion, TextSearch,
-    TextSearchRequest,
+    CandidateEvaluationRequest, CandidateEvaluator, IntentAst, SearchEngine, SearchIndex,
+    SearchResponse, SearchRuntimeVersion,
 };
 use backend::serving::{
     normalize_alias, DerivedEvidence, EvidenceRef, LoadedServingBundle, ReraEvidenceIndex,
@@ -34,10 +34,10 @@ const MAX_INDEXED_SEARCH_DURATION: Duration = Duration::from_millis(750);
 
 fn inert_test_plan(query: &str, snapshot: &str) -> backend::search::CompiledSearchPlan {
     backend::search::CompiledSearchPlan::compile_for_snapshot(
-        backend::search::CompiledQuery::from_text(query),
+        backend::search::IntentAst::from_text(query),
         snapshot,
         &[],
-        &backend::search::GeoTopologyIndex::default(),
+        &backend::graph::GraphIndex::default(),
         None,
         backend::search::GeoCellSearchPolicy {
             max_hops: 2,
@@ -58,7 +58,7 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
     assert_eq!(intent.bhk, Some(3));
     assert_eq!(intent.budget_max, Some(20_000_000));
 
-    let recall_ids = index.recall_ids(&CompiledQuery::from_text(query));
+    let recall_ids = index.recall_ids(&IntentAst::from_text(query));
     let recall_ratio = recall_ids.len() as f64 / properties.len() as f64;
 
     assert_eq!(
@@ -73,8 +73,8 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
 
     let inventory_options = inventory_options(&properties);
     let started = Instant::now();
-    let compiled_query = CompiledQuery::from_text(query);
-    let results = TextSearch::search(TextSearchRequest {
+    let compiled_query = IntentAst::from_text(query);
+    let results = CandidateEvaluator::search(CandidateEvaluationRequest {
         properties: &properties,
         search_index: Some(&index),
         extra_candidate_ids: None,
@@ -82,9 +82,9 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
         geo_query: None,
         serving_facts: None,
         society_names: &society_names,
-        societies: &[],
-        compiled_query: &compiled_query,
-        graph: None,
+        query: &compiled_query.raw,
+        intent: &compiled_query.intent,
+        constraints: &compiled_query.constraints,
         evaluation: inventory_context(&inventory_options),
     });
     let elapsed = started.elapsed();
@@ -631,8 +631,8 @@ fn unsupported_inventory_query_short_circuits_large_mock_corpus() {
 
     let inventory_options = HashMap::new();
     let started = Instant::now();
-    let compiled_query = CompiledQuery::from_text(query);
-    let results = TextSearch::search(TextSearchRequest {
+    let compiled_query = IntentAst::from_text(query);
+    let results = CandidateEvaluator::search(CandidateEvaluationRequest {
         properties: &properties,
         search_index: Some(&index),
         extra_candidate_ids: None,
@@ -640,9 +640,9 @@ fn unsupported_inventory_query_short_circuits_large_mock_corpus() {
         geo_query: None,
         serving_facts: None,
         society_names: &society_names,
-        societies: &[],
-        compiled_query: &compiled_query,
-        graph: None,
+        query: &compiled_query.raw,
+        intent: &compiled_query.intent,
+        constraints: &compiled_query.constraints,
         evaluation: inventory_context(&inventory_options),
     });
     let elapsed = started.elapsed();
@@ -683,10 +683,10 @@ fn candidate_ranking_preserves_order_and_corpus_tiebreaks() {
         ),
     ];
     let society_names = society_names(&properties);
-    let compiled_query = CompiledQuery::from_text("3bhk whitefield under 2cr");
+    let compiled_query = IntentAst::from_text("3bhk whitefield under 2cr");
     let inventory_options = inventory_options(&properties);
 
-    let unrestricted = TextSearch::search(TextSearchRequest {
+    let unrestricted = CandidateEvaluator::search(CandidateEvaluationRequest {
         properties: &properties,
         search_index: None,
         extra_candidate_ids: None,
@@ -694,12 +694,12 @@ fn candidate_ranking_preserves_order_and_corpus_tiebreaks() {
         geo_query: None,
         serving_facts: None,
         society_names: &society_names,
-        societies: &[],
-        compiled_query: &compiled_query,
-        graph: None,
+        query: &compiled_query.raw,
+        intent: &compiled_query.intent,
+        constraints: &compiled_query.constraints,
         evaluation: inventory_context(&inventory_options),
     });
-    let restricted = TextSearch::search(TextSearchRequest {
+    let restricted = CandidateEvaluator::search(CandidateEvaluationRequest {
         properties: &properties,
         search_index: None,
         extra_candidate_ids: None,
@@ -707,9 +707,9 @@ fn candidate_ranking_preserves_order_and_corpus_tiebreaks() {
         geo_query: None,
         serving_facts: None,
         society_names: &society_names,
-        societies: &[],
-        compiled_query: &compiled_query,
-        graph: None,
+        query: &compiled_query.raw,
+        intent: &compiled_query.intent,
+        constraints: &compiled_query.constraints,
         evaluation: inventory_context(&inventory_options),
     });
 
@@ -1018,9 +1018,11 @@ fn loaded_bundle_core(
     let temp_dir = tempdir().unwrap();
     let recall_index =
         TantivyRecallIndex::build_in_dir(temp_dir.path(), &entities, &facts, &[]).unwrap();
-    let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
+    let entity_index = SpatialEntityIndex::from_serving_bundle(&entities, &fact_index);
     let spatial_index =
         SpatialServingIndex::from_serving_bundle_with_edges(&entities, &fact_index, &edges);
+    let mut graph_index = GraphIndex::from_serving_bundle(&entities, &edges, "efficiency-contract");
+    graph_index.add_entity_aliases(&backend::serving::unique_society_aliases(&entities));
     LoadedServingBundle {
         manifest: ServingBundleManifest {
             bundle_version: "efficiency-contract".to_string(),
@@ -1037,25 +1039,24 @@ fn loaded_bundle_core(
             quarantined_society_count: 0,
             quarantine_reason_counts: Default::default(),
             entity_parquet_key: "entities.parquet".to_string(),
-            entity_alias_parquet_key: None,
+            entity_alias_parquet_key: "aliases.parquet".to_string(),
             fact_parquet_key: "facts.parquet".to_string(),
             search_metadata_parquet_key: "search.parquet".to_string(),
-            rera_evidence_parquet_key: None,
-            edge_parquet_key: None,
-            quarantine_report_key: None,
+            rera_evidence_parquet_key: "rera.parquet".to_string(),
+            edge_parquet_key: "edges.parquet".to_string(),
+            quarantine_report_key: "quarantine.json".to_string(),
             schema_key: "schema.json".to_string(),
-            trust_policy_key: "trust.json".to_string(),
             tantivy_index_prefix: "tantivy".to_string(),
             artifacts: Vec::new(),
         },
         entities,
         entity_alias_index,
-        graph_index: GraphIndex::from_serving_edges(&edges),
+        graph_index,
         edges,
         recall_index,
         fact_index,
         rera_evidence_index: ReraEvidenceIndex::default(),
-        geo_index,
+        entity_index,
         spatial_index,
         search_capabilities: backend::search::SearchCapabilityIndex::default(),
         cache_dir: temp_dir.keep(),

@@ -7,7 +7,7 @@ use crate::serving::{
 };
 
 use super::analyzer;
-use super::ast::{CompiledQuery, ConstraintExpr, ConstraintTerm};
+use super::ast::{ConstraintExpr, ConstraintTerm, IntentAst};
 use crate::dag_config::area_alias_entries;
 
 /// In-memory recall index for local search.
@@ -229,23 +229,24 @@ impl SearchIndex {
         }
     }
 
-    pub fn recall_ids(&self, query: &CompiledQuery) -> Vec<String> {
+    pub fn recall_ids(&self, query: &IntentAst) -> Vec<String> {
+        self.recall_plan_ids(&query.raw, &query.constraints)
+    }
+
+    pub fn recall_plan_ids(&self, raw: &str, constraints: &ConstraintExpr) -> Vec<String> {
         let mut candidate: Option<HashSet<String>> = None;
 
-        let named_entity_ids = self.named_entity_candidates(&query.raw, &query.constraints);
+        let named_entity_ids = self.named_entity_candidates(raw, constraints);
         if !named_entity_ids.is_empty() {
             intersect_candidate(&mut candidate, named_entity_ids);
         }
 
-        if query.constraints.has_terms() {
-            intersect_candidate_exact(
-                &mut candidate,
-                self.constraint_candidates(&query.constraints),
-            );
+        if constraints.has_terms() {
+            intersect_candidate_exact(&mut candidate, self.constraint_candidates(constraints));
         }
 
         if candidate.is_none() {
-            let token_ids = self.token_candidates_ranked(&query.raw);
+            let token_ids = self.token_candidates_ranked(raw);
             if !token_ids.is_empty() {
                 return token_ids;
             }
@@ -261,7 +262,7 @@ impl SearchIndex {
         ordered
     }
 
-    pub fn recall_named_entity_ids(&self, query: &CompiledQuery) -> Vec<String> {
+    pub fn recall_named_entity_ids(&self, query: &IntentAst) -> Vec<String> {
         let candidate = self.fuzzy_named_entity_candidates(&query.raw, &query.constraints);
         self.all_ids
             .iter()
@@ -270,11 +271,15 @@ impl SearchIndex {
             .collect()
     }
 
-    pub fn recall_constraint_ids(&self, query: &CompiledQuery) -> Vec<String> {
-        if !query.constraints.has_terms() {
+    pub fn recall_constraint_ids(&self, query: &IntentAst) -> Vec<String> {
+        self.recall_constraint_expr_ids(&query.constraints)
+    }
+
+    pub fn recall_constraint_expr_ids(&self, constraints: &ConstraintExpr) -> Vec<String> {
+        if !constraints.has_terms() {
             return self.all_ids.clone();
         }
-        let candidates = self.constraint_candidates(&query.constraints);
+        let candidates = self.constraint_candidates(constraints);
         self.all_ids
             .iter()
             .filter(|id| candidates.contains(*id))
@@ -480,10 +485,10 @@ impl SearchIndex {
         let mut area_name_additions = HashMap::<String, Vec<String>>::new();
         let mut area_entity_additions = HashMap::<String, Vec<String>>::new();
 
-        for edge in edges
-            .iter()
-            .filter(|edge| edge.edge_type.eq_ignore_ascii_case("in_market_locality"))
-        {
+        for edge in edges.iter().filter(|edge| {
+            edge.edge_type.eq_ignore_ascii_case("in_market_locality")
+                || edge.edge_type.eq_ignore_ascii_case("in_area")
+        }) {
             let (society_entity_id, area_entity_id, area_name) =
                 if let Some(area_name) = area_names.get(edge.to_entity_id.as_str()) {
                     (
@@ -917,11 +922,11 @@ mod tests {
         let index = SearchIndex::build(&[property]);
 
         assert_eq!(
-            index.recall_ids(&CompiledQuery::from_text("Godrej Splendour")),
+            index.recall_ids(&IntentAst::from_text("Godrej Splendour")),
             vec!["prop-1"]
         );
         assert_eq!(
-            index.recall_ids(&CompiledQuery::from_text("gorej")),
+            index.recall_ids(&IntentAst::from_text("gorej")),
             vec!["prop-1"]
         );
     }
@@ -932,18 +937,18 @@ mod tests {
         let index = SearchIndex::build(&[property]);
 
         assert_eq!(
-            index.recall_named_entity_ids(&CompiledQuery::from_text("Prestige Waterfor")),
+            index.recall_named_entity_ids(&IntentAst::from_text("Prestige Waterfor")),
             vec!["prop-1"]
         );
         assert_eq!(
-            index.recall_named_entity_ids(&CompiledQuery::from_text("Prestge")),
+            index.recall_named_entity_ids(&IntentAst::from_text("Prestge")),
             vec!["prop-1"]
         );
         assert!(index
-            .recall_named_entity_ids(&CompiledQuery::from_text("near office"))
+            .recall_named_entity_ids(&IntentAst::from_text("near office"))
             .is_empty());
         assert!(index
-            .recall_named_entity_ids(&CompiledQuery::from_text("hi"))
+            .recall_named_entity_ids(&IntentAst::from_text("hi"))
             .is_empty());
     }
 
@@ -952,7 +957,7 @@ mod tests {
         let property = test_property("prop-1", "brigade-7-gardens");
         let index = SearchIndex::build(&[property]);
         assert_eq!(
-            index.recall_ids(&CompiledQuery::from_text("brgade")),
+            index.recall_ids(&IntentAst::from_text("brgade")),
             vec!["prop-1"]
         );
     }
@@ -972,24 +977,24 @@ mod tests {
         sarjapur_two.area = "Sarjapur".to_string();
         let index = SearchIndex::build(&[two, three, four, sarjapur_two]);
 
-        let mut ids = index.recall_ids(&CompiledQuery::from_text("2 or 3 BHK"));
+        let mut ids = index.recall_ids(&IntentAst::from_text("2 or 3 BHK"));
         ids.sort();
         assert_eq!(ids, vec!["sarjapur-two", "three", "two"]);
 
-        let mut ids = index.recall_ids(&CompiledQuery::from_text(
+        let mut ids = index.recall_ids(&IntentAst::from_text(
             "2 or 3 BHK in Whitefield or Sarjapur",
         ));
         ids.sort();
         assert_eq!(ids, vec!["sarjapur-two", "three", "two"]);
 
-        let mut ids = index.recall_ids(&CompiledQuery::from_text(
+        let mut ids = index.recall_ids(&IntentAst::from_text(
             "2 or 3 BHK in Whitefield or Sarjapur, not 2 BHK",
         ));
         ids.sort();
         assert_eq!(ids, vec!["three"]);
 
         let raw = "2 or 3 BHK in East Bengaluru";
-        let mut ids = index.recall_ids(&CompiledQuery::from_text(raw));
+        let mut ids = index.recall_ids(&IntentAst::from_text(raw));
         ids.sort();
         assert_eq!(ids, vec!["three", "two"]);
     }
@@ -1022,7 +1027,7 @@ mod tests {
                 }),
             ])
         };
-        let query = CompiledQuery::with_constraints(
+        let query = IntentAst::with_constraints(
             "grouped query",
             ConstraintExpr::any_of(vec![branch("Whitefield", 3), branch("Bellandur", 2)]),
             empty_intent(),
@@ -1050,7 +1055,7 @@ mod tests {
         ];
         let index = SearchIndex::build(&properties);
         let query = "3BHK in East Bengaluru or 2BHK in South Bengaluru";
-        let compiled = CompiledQuery::from_text(query);
+        let compiled = IntentAst::from_text(query);
 
         assert_eq!(index.recall_ids(&compiled), vec!["east-3", "south-2"]);
     }
@@ -1066,7 +1071,7 @@ mod tests {
         let index = SearchIndex::build(&[target, area_peer]);
         let mut intent = empty_intent();
         intent.area = Some("South Bengaluru".to_string());
-        let compiled = CompiledQuery::from_text_with_intent("Prestige Falcon City", intent);
+        let compiled = IntentAst::from_text_with_intent("Prestige Falcon City", intent);
 
         assert_eq!(index.recall_ids(&compiled), vec!["falcon-3bhk"]);
     }
@@ -1100,7 +1105,7 @@ mod tests {
                 span: None,
             })),
         ]);
-        let compiled = CompiledQuery::with_constraints(
+        let compiled = IntentAst::with_constraints(
             "3BHK under 4Cr, avoid Prestige Waterford",
             constraints,
             empty_intent(),
@@ -1168,7 +1173,7 @@ mod tests {
             },
         ];
         let index = SearchIndex::build_with_serving_graph(&[prestige, brigade], &entities, &edges);
-        let compiled = CompiledQuery::with_constraints(
+        let compiled = IntentAst::with_constraints(
             "Prestige",
             ConstraintExpr::term(ConstraintTerm::Builder {
                 entity_id: "builder:prestige".to_string(),
@@ -1193,7 +1198,7 @@ mod tests {
         let intent = crate::search::intent::parse_intent(
             "homes with Google rating at least 4.2 and at least 100 reviews",
         );
-        let compiled = CompiledQuery::from_text_with_intent("rating and reviews", intent);
+        let compiled = IntentAst::from_text_with_intent("rating and reviews", intent);
 
         assert_eq!(index.recall_ids(&compiled), ["alpha", "beta"]);
     }
@@ -1274,7 +1279,7 @@ mod tests {
             derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&[property], &entities, &edges);
-        let query = CompiledQuery::with_constraints(
+        let query = IntentAst::with_constraints(
             "Canonical Project",
             ConstraintExpr::term(ConstraintTerm::Society {
                 entity_id: canonical_id.to_string(),
@@ -1319,7 +1324,7 @@ mod tests {
             derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&[property], &entities, &edges);
-        let query = CompiledQuery::with_constraints(
+        let query = IntentAst::with_constraints(
             "homes in Whitefield",
             ConstraintExpr::term(ConstraintTerm::Area {
                 entity_id: Some("area:whitefield".to_string()),

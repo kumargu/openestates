@@ -8,11 +8,11 @@ use crate::dag_config::{
 };
 use crate::knowledge::node::RootSource;
 use crate::knowledge::{FactValue, KnowledgeGraph};
-use crate::models::{KgEntityRefs, Property, Society};
+#[cfg(test)]
+use crate::models::Society;
+use crate::models::{KgEntityRefs, Property};
 use crate::proof_focus::ProofFocus;
-use crate::routes::enrichment::{
-    area_node_id, enrich_property_card, property_node_id, society_node_id,
-};
+use crate::routes::enrichment::{area_node_id, property_node_id, society_node_id};
 use crate::scoring::BestEffortRankingTier;
 use crate::serving::{
     GoogleReviewEvidence, ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
@@ -20,7 +20,9 @@ use crate::serving::{
 };
 
 use super::analyzer;
-use super::ast::{CompiledQuery, ConstraintTerm};
+use super::ast::ConstraintTerm;
+#[cfg(test)]
+use super::ast::IntentAst;
 use super::evaluation::{InventoryOption, VerifiedMatch};
 use super::geo;
 use super::index::{
@@ -41,7 +43,7 @@ use super::{
 ///
 /// Designed to be swappable with a vector search backend later — the interface
 /// (query in, scored results out) stays the same.
-pub struct TextSearch;
+pub struct CandidateEvaluator;
 
 #[derive(Clone, Copy)]
 pub struct SearchEvaluationContext<'a> {
@@ -50,7 +52,7 @@ pub struct SearchEvaluationContext<'a> {
     pub snapshot_identity: &'a str,
 }
 
-pub struct TextSearchRequest<'a, 'geo> {
+pub struct CandidateEvaluationRequest<'a, 'geo> {
     pub properties: &'a [Property],
     pub search_index: Option<&'a SearchIndex>,
     pub extra_candidate_ids: Option<&'a [String]>,
@@ -58,17 +60,17 @@ pub struct TextSearchRequest<'a, 'geo> {
     pub geo_query: Option<&'a geo::GeoSearchQuery<'geo>>,
     pub serving_facts: Option<&'a ServingFactIndex>,
     pub society_names: &'a std::collections::HashMap<String, String>,
-    pub societies: &'a [Society],
-    pub compiled_query: &'a CompiledQuery,
-    pub graph: Option<&'a KnowledgeGraph>,
+    pub query: &'a str,
+    pub intent: &'a SearchIntent,
+    pub constraints: &'a super::ast::ConstraintExpr,
     pub evaluation: SearchEvaluationContext<'a>,
 }
 
 const COORDINATE_NAMED_PLACE_PROOF_RANK: u8 = 1;
 const SERVING_NAMED_PLACE_PROOF_RANK: u8 = 2;
 
-impl TextSearch {
-    pub fn search(request: TextSearchRequest<'_, '_>) -> Vec<SearchResultCard> {
+impl CandidateEvaluator {
+    pub fn search(request: CandidateEvaluationRequest<'_, '_>) -> Vec<SearchResultCard> {
         Self::search_compiled_with_candidate_property_indexes(
             request.properties,
             request.search_index,
@@ -77,9 +79,9 @@ impl TextSearch {
             request.geo_query,
             request.serving_facts,
             request.society_names,
-            request.societies,
-            request.compiled_query,
-            request.graph,
+            request.query,
+            request.intent,
+            request.constraints,
             request.evaluation,
         )
     }
@@ -93,13 +95,11 @@ impl TextSearch {
         geo_query: Option<&geo::GeoSearchQuery<'_>>,
         serving_facts: Option<&ServingFactIndex>,
         society_names: &std::collections::HashMap<String, String>,
-        societies: &[Society],
-        compiled_query: &CompiledQuery,
-        graph: Option<&KnowledgeGraph>,
+        query: &str,
+        intent: &SearchIntent,
+        constraints: &super::ast::ConstraintExpr,
         evaluation: SearchEvaluationContext<'_>,
     ) -> Vec<SearchResultCard> {
-        let query = compiled_query.raw.as_str();
-        let intent = &compiled_query.intent;
         if !intent.unsupported_inventory_types.is_empty() {
             return Vec::new();
         }
@@ -133,7 +133,7 @@ impl TextSearch {
             None
         } else {
             merged_candidate_ids(
-                search_index.map(|index| index.recall_ids(compiled_query)),
+                search_index.map(|index| index.recall_plan_ids(query, constraints)),
                 extra_candidate_ids,
             )
         };
@@ -153,7 +153,7 @@ impl TextSearch {
 
                 let constraint_evaluation = property_constraint_evaluation(
                     p,
-                    compiled_query,
+                    constraints,
                     search_index,
                     serving_facts,
                     society_entity_id.as_ref(),
@@ -231,19 +231,16 @@ impl TextSearch {
                     (0.0, None, None)
                 };
 
-                let matched_constraints =
-                    compiled_query
-                        .constraints
-                        .matched_evidence_constraints(&mut |term| {
-                            property_matches_constraint_term_for_society(
-                                p,
-                                term,
-                                search_index,
-                                serving_facts,
-                                society_entity_id.as_ref(),
-                                evaluation,
-                            )
-                        });
+                let matched_constraints = constraints.matched_evidence_constraints(&mut |term| {
+                    property_matches_constraint_term_for_society(
+                        p,
+                        term,
+                        search_index,
+                        serving_facts,
+                        society_entity_id.as_ref(),
+                        evaluation,
+                    )
+                });
                 let hard_constraint_matches = match_hard_constraints(
                     &matched_constraints,
                     p,
@@ -320,6 +317,15 @@ impl TextSearch {
                 let named_place_fact_keys = named_place_evidence
                     .iter()
                     .map(|evidence| evidence.fact_key.clone())
+                    .collect::<Vec<_>>();
+                let named_place_reason_labels = named_place_evidence
+                    .iter()
+                    .map(|evidence| {
+                        sentence_case(&named_place_preference(
+                            &evidence.place_name,
+                            evidence.distance_km,
+                        ))
+                    })
                     .collect::<Vec<_>>();
                 let nearest_named_place_distance_km = named_place_evidence
                     .iter()
@@ -535,7 +541,7 @@ impl TextSearch {
 
                 // Structured preference queries should still return local candidates
                 // with no-data coverage instead of disappearing behind a penalty.
-                let has_constraints = compiled_query.constraints.has_terms();
+                let has_constraints = constraints.has_terms();
                 let has_preferences =
                     !positive_preferences.is_empty() || !negative_preferences.is_empty();
                 if score <= 0.0 && (has_constraints || has_preferences) {
@@ -556,62 +562,55 @@ impl TextSearch {
                     return None;
                 }
 
-                // Use shared enrichment — same PropertyCard as /api/properties.
-                // graph is always Some in practice (search always has KG access).
-                let mut card = if let Some(g) = graph {
-                    enrich_property_card(p, societies, g)
-                } else {
-                    // Fallback without graph — build minimal card
-                    crate::models::PropertyCard {
-                        id: p.id.clone(),
-                        kg_entity_refs: KgEntityRefs {
-                            property_entity_id: property_node_id(&p.id),
-                            society_entity_id: society_node_id(&p.society_id),
-                            area_entity_id: area_node_id(&p.area),
-                            builder_entity_id: None,
-                            source_entity_ids: Vec::new(),
-                        },
-                        title: p.title.clone(),
-                        area: p.area.clone(),
-                        price: p.price,
-                        price_min: p.price_min,
-                        price_max: p.price_max,
-                        price_per_sqft: p.price_per_sqft,
-                        bhk: p.bhk,
-                        sqft: p.carpet_area_sqft,
-                        carpet_area_sqft: p.carpet_area_sqft,
-                        super_builtup_sqft: p.super_builtup_sqft,
-                        society_name: society_name.to_string(),
-                        builder_name: p.builder_name.clone(),
-                        images: p.images.clone(),
-                        hero_image: p.hero_image.clone(),
-                        transparency_tags: crate::routes::enrichment::compact_transparency_tags(
-                            &p.transparency_tags,
-                        ),
-                        description_summary: p.description_summary.clone(),
-                        possession_status: p.possession_status.clone(),
-                        metro_distance_mins: p.metro_distance_mins,
-                        floor: p.floor,
-                        total_floors: p.total_floors,
-                        facing: p.facing.clone(),
-                        google_rating: None,
-                        google_review_count: None,
-                        google_reviews_url: None,
-                        society_land_acres: None,
-                        open_space_pct: None,
-                        root_source: None,
-                        project_status: None,
-                        project_status_display: None,
-                        home_state_display: None,
-                        builder_delivery_display: None,
-                        data_freshness: None,
-                        floor_plan_preview_url: None,
-                        plan_carpet_area_sqft: None,
-                        plan_sale_area_sqft: None,
-                        plan_configuration_type: None,
-                        decision_labels: Vec::new(),
-                        decision_check_summary: None,
-                    }
+                let mut card = crate::models::PropertyCard {
+                    id: p.id.clone(),
+                    kg_entity_refs: KgEntityRefs {
+                        property_entity_id: property_node_id(&p.id),
+                        society_entity_id: society_node_id(&p.society_id),
+                        area_entity_id: area_node_id(&p.area),
+                        builder_entity_id: None,
+                        source_entity_ids: Vec::new(),
+                    },
+                    title: p.title.clone(),
+                    area: p.area.clone(),
+                    price: p.price,
+                    price_min: p.price_min,
+                    price_max: p.price_max,
+                    price_per_sqft: p.price_per_sqft,
+                    bhk: p.bhk,
+                    sqft: p.carpet_area_sqft,
+                    carpet_area_sqft: p.carpet_area_sqft,
+                    super_builtup_sqft: p.super_builtup_sqft,
+                    society_name: society_name.to_string(),
+                    builder_name: p.builder_name.clone(),
+                    images: p.images.clone(),
+                    hero_image: p.hero_image.clone(),
+                    transparency_tags: crate::routes::enrichment::compact_transparency_tags(
+                        &p.transparency_tags,
+                    ),
+                    description_summary: p.description_summary.clone(),
+                    possession_status: p.possession_status.clone(),
+                    metro_distance_mins: p.metro_distance_mins,
+                    floor: p.floor,
+                    total_floors: p.total_floors,
+                    facing: p.facing.clone(),
+                    google_rating: None,
+                    google_review_count: None,
+                    google_reviews_url: None,
+                    society_land_acres: None,
+                    open_space_pct: None,
+                    root_source: None,
+                    project_status: None,
+                    project_status_display: None,
+                    home_state_display: None,
+                    builder_delivery_display: None,
+                    data_freshness: None,
+                    floor_plan_preview_url: None,
+                    plan_carpet_area_sqft: None,
+                    plan_sale_area_sqft: None,
+                    plan_configuration_type: None,
+                    decision_labels: Vec::new(),
+                    decision_check_summary: None,
                 };
                 if let Some(serving_facts) = serving_facts {
                     enrich_card_from_serving_facts(
@@ -643,11 +642,13 @@ impl TextSearch {
                     has_preferences,
                 );
                 let match_reason = build_match_reason(
-                    compiled_query,
+                    intent,
+                    constraints,
                     p,
                     matched_area,
                     area_match_kind,
                     &verified_matches,
+                    &named_place_reason_labels,
                     &reasons,
                     search_index,
                     serving_facts,
@@ -660,15 +661,9 @@ impl TextSearch {
                     .as_ref()
                     .map(|e| e.graph_driven_pct)
                     .unwrap_or(0.0);
-                let confidence_score = serving_facts
-                    .and_then(|facts| {
-                        compute_confidence_from_serving_facts(
-                            facts,
-                            society_entity_id.as_ref(),
-                            gdp,
-                        )
-                    })
-                    .or_else(|| compute_confidence(graph, &p.society_id, gdp));
+                let confidence_score = serving_facts.and_then(|facts| {
+                    compute_confidence_from_serving_facts(facts, society_entity_id.as_ref(), gdp)
+                });
                 let review_quality_score = review_quality_score(&card);
                 let major_access_score =
                     best_effort_access_score(serving_facts, society_entity_id.as_ref(), intent);
@@ -1421,7 +1416,8 @@ fn named_place_intent_score(evidence: &[NamedPlaceEvidence]) -> f64 {
         .values()
         .map(|value| value.2)
         .fold(1.0, f64::min);
-    scores_by_place.len() as f64 * weakest_confidence / (1.0 + furthest_distance)
+    (scores_by_place.len() - 1) as f64
+        + scores_by_place.len() as f64 * weakest_confidence / (1.0 + furthest_distance)
 }
 
 fn named_place_query_answers_preference(
@@ -3104,13 +3100,13 @@ fn canonical_society_entity_id<'a>(
 
 fn property_constraint_evaluation(
     property: &Property,
-    query: &CompiledQuery,
+    constraints: &super::ast::ConstraintExpr,
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
     evaluation: SearchEvaluationContext<'_>,
 ) -> super::evaluation::BooleanEvaluation {
-    query.constraints.evaluate_states(&mut |term| {
+    constraints.evaluate_states(&mut |term| {
         constraint_term_evaluation_for_society(
             property,
             term,
@@ -3321,27 +3317,33 @@ fn budget_display_label(value: u64) -> String {
 
 #[allow(clippy::too_many_arguments)]
 fn build_match_reason(
-    query: &CompiledQuery,
+    intent: &SearchIntent,
+    constraints: &super::ast::ConstraintExpr,
     property: &Property,
     matched_area: Option<&str>,
     area_match_kind: Option<AreaMatchKind>,
     verified_matches: &[VerifiedMatch],
+    named_place_reasons: &[String],
     reasons: &[String],
     search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
     evaluation: SearchEvaluationContext<'_>,
 ) -> String {
-    let intent = &query.intent;
     let mut parts = Vec::new();
 
     parts.extend(verified_spatial_match_reasons(verified_matches));
+    for reason in named_place_reasons {
+        if !parts.contains(reason) {
+            parts.push(reason.clone());
+        }
+    }
 
     if let Some(area) = matched_area {
         let _ = area_match_kind;
         parts.push(format!("Matches {}", area));
     }
-    if let Some(label) = query.constraints.matched_bhk_include_label(&mut |term| {
+    if let Some(label) = constraints.matched_bhk_include_label(&mut |term| {
         property_matches_constraint_term_for_society(
             property,
             term,
@@ -3353,7 +3355,7 @@ fn build_match_reason(
     }) {
         parts.push(label);
     }
-    let matched_budget = query.constraints.matched_budget_bounds(&mut |term| {
+    let matched_budget = constraints.matched_budget_bounds(&mut |term| {
         property_matches_constraint_term_for_society(
             property,
             term,
@@ -3379,7 +3381,7 @@ fn build_match_reason(
         }
     }
 
-    for constraint in query.constraints.matched_evidence_constraints(&mut |term| {
+    for constraint in constraints.matched_evidence_constraints(&mut |term| {
         property_matches_constraint_term_for_society(
             property,
             term,
@@ -3438,6 +3440,14 @@ fn named_place_preference(place_name: &str, distance_km: f64) -> String {
     } else {
         format!("distance from {place_name}")
     }
+}
+
+fn sentence_case(value: &str) -> String {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    first.to_uppercase().chain(chars).collect()
 }
 
 fn preference_was_matched(reasons: &[String], preference: &str) -> bool {
@@ -3567,15 +3577,15 @@ mod tests {
             0.2,
         );
         property.bhk = 0;
-        let positive = CompiledQuery::with_constraints(
+        let positive = IntentAst::with_constraints(
             "2BHK",
             crate::search::ast::ConstraintExpr::term(ConstraintTerm::Bhk {
                 value: 2,
                 span: None,
             }),
-            CompiledQuery::from_text("2BHK").intent,
+            IntentAst::from_text("2BHK").intent,
         );
-        let negated = CompiledQuery::with_constraints(
+        let negated = IntentAst::with_constraints(
             "not 2BHK",
             crate::search::ast::ConstraintExpr::negated(crate::search::ast::ConstraintExpr::term(
                 ConstraintTerm::Bhk {
@@ -3583,12 +3593,12 @@ mod tests {
                     span: None,
                 },
             )),
-            CompiledQuery::from_text("not 2BHK").intent,
+            IntentAst::from_text("not 2BHK").intent,
         );
 
         let positive_evaluation = property_constraint_evaluation(
             &property,
-            &positive,
+            &positive.constraints,
             None,
             None,
             "society:unknown-bhk",
@@ -3596,7 +3606,7 @@ mod tests {
         );
         let negated_evaluation = property_constraint_evaluation(
             &property,
-            &negated,
+            &negated.constraints,
             None,
             None,
             "society:unknown-bhk",
@@ -3647,12 +3657,12 @@ mod tests {
         geo_query: Option<&geo::GeoSearchQuery<'_>>,
         serving_facts: Option<&ServingFactIndex>,
         society_names: &std::collections::HashMap<String, String>,
-        societies: &[Society],
+        _societies: &[Society],
         query: &str,
         intent: &SearchIntent,
-        graph: Option<&KnowledgeGraph>,
+        _graph: Option<&KnowledgeGraph>,
     ) -> Vec<SearchResultCard> {
-        let compiled_query = CompiledQuery::from_text_with_intent(query, intent.clone());
+        let compiled_query = IntentAst::from_text_with_intent(query, intent.clone());
         let merged_ids = merged_candidate_ids(
             search_index.map(|index| index.recall_ids(&compiled_query)),
             extra_candidate_ids,
@@ -3667,7 +3677,7 @@ mod tests {
                 .filter(|indexes| !indexes.is_empty())
         });
         let inventory_options = fixture_inventory_options(properties, search_index);
-        TextSearch::search(TextSearchRequest {
+        CandidateEvaluator::search(CandidateEvaluationRequest {
             properties,
             search_index,
             extra_candidate_ids: merged_ids.as_deref(),
@@ -3675,24 +3685,26 @@ mod tests {
             geo_query,
             serving_facts,
             society_names,
-            societies,
-            compiled_query: &compiled_query,
-            graph,
+            query: &compiled_query.raw,
+            intent: &compiled_query.intent,
+            constraints: &compiled_query.constraints,
             evaluation: fixture_inventory_context(&inventory_options),
         })
     }
 
     #[test]
     fn match_reason_names_the_configuration_that_matched() {
-        let query = CompiledQuery::from_text("2 or 3 BHK in Whitefield");
+        let query = IntentAst::from_text("2 or 3 BHK in Whitefield");
         let property = local_property("three", "Whitefield", "soc-three", 3, 10_000_000, 10, 0.2);
         let inventory_options = fixture_inventory_options(std::slice::from_ref(&property), None);
         let society_entity_id = society_node_id(&property.society_id);
         let reason = build_match_reason(
-            &query,
+            &query.intent,
+            &query.constraints,
             &property,
             Some("Whitefield"),
             None,
+            &[],
             &[],
             &[],
             None,
@@ -3706,15 +3718,17 @@ mod tests {
 
     #[test]
     fn match_reason_names_the_budget_branch_that_matched() {
-        let query = CompiledQuery::from_text("3BHK under 2Cr or 4BHK under 4Cr");
+        let query = IntentAst::from_text("3BHK under 2Cr or 4BHK under 4Cr");
         let property = local_property("four", "Whitefield", "soc-four", 4, 35_000_000, 10, 0.2);
         let inventory_options = fixture_inventory_options(std::slice::from_ref(&property), None);
         let society_entity_id = society_node_id(&property.society_id);
         let reason = build_match_reason(
-            &query,
+            &query.intent,
+            &query.constraints,
             &property,
             None,
             None,
+            &[],
             &[],
             &[],
             None,
@@ -4019,7 +4033,7 @@ mod tests {
             .map(|property| {
                 let society_id = canonical_society_entity_id(property, search_index).into_owned();
                 let observation = SourceObservation::new(
-                    "TextSearchFixture",
+                    "CandidateEvaluatorFixture",
                     property.id.clone(),
                     society_id.clone(),
                     Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
@@ -4251,8 +4265,7 @@ mod tests {
         let index = crate::search::SearchIndex::build(&properties);
         let intent = crate::search::intent::parse_intent("3BHK in East Bengaluru under 2Cr");
 
-        let compiled =
-            CompiledQuery::from_text_with_intent("3BHK in East Bengaluru under 2Cr", intent);
+        let compiled = IntentAst::from_text_with_intent("3BHK in East Bengaluru under 2Cr", intent);
         let ids = index.recall_ids(&compiled);
 
         assert_eq!(ids, vec!["whitefield-fit"]);
@@ -4290,7 +4303,7 @@ mod tests {
             ),
         ];
         let society_names = local_society_names(&properties);
-        let query = CompiledQuery::with_constraints(
+        let query = IntentAst::with_constraints(
             "homes",
             crate::search::ast::ConstraintExpr::any_of(vec![
                 crate::search::ast::ConstraintExpr::and(vec![
@@ -4312,7 +4325,7 @@ mod tests {
             SearchIntent::default(),
         );
 
-        let results = TextSearch::search_compiled_with_candidate_property_indexes(
+        let results = CandidateEvaluator::search_compiled_with_candidate_property_indexes(
             &properties,
             None,
             None,
@@ -4320,9 +4333,9 @@ mod tests {
             None,
             None,
             &society_names,
-            &[],
-            &query,
-            None,
+            &query.raw,
+            &query.intent,
+            &query.constraints,
             fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         );
         let ids = results
@@ -4358,7 +4371,7 @@ mod tests {
             derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
-        let compiled_query = CompiledQuery::with_constraints(
+        let compiled_query = IntentAst::with_constraints(
             "homes in Whitefield",
             crate::search::ast::ConstraintExpr::term(ConstraintTerm::Area {
                 entity_id: Some("area:whitefield".to_string()),
@@ -4368,7 +4381,7 @@ mod tests {
             SearchIntent::default(),
         );
 
-        let results = TextSearch::search(TextSearchRequest {
+        let results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: Some(&index),
             extra_candidate_ids: None,
@@ -4376,9 +4389,9 @@ mod tests {
             geo_query: None,
             serving_facts: None,
             society_names: &society_names,
-            societies: &[],
-            compiled_query: &compiled_query,
-            graph: None,
+            query: &compiled_query.raw,
+            intent: &compiled_query.intent,
+            constraints: &compiled_query.constraints,
             evaluation: fixture_inventory_context(&fixture_inventory_options(
                 &properties,
                 Some(&index),
@@ -4442,10 +4455,9 @@ mod tests {
                 vec![4.2, 4.0],
             )],
         );
-        let compiled_query = CompiledQuery::from_text("3BHK above 10 acres with good reviews");
-        let graph = KnowledgeGraph::new();
+        let compiled_query = IntentAst::from_text("3BHK above 10 acres with good reviews");
 
-        let results = TextSearch::search(TextSearchRequest {
+        let results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: Some(&index),
             extra_candidate_ids: None,
@@ -4453,9 +4465,9 @@ mod tests {
             geo_query: None,
             serving_facts: Some(&serving_facts),
             society_names: &society_names,
-            societies: &[],
-            compiled_query: &compiled_query,
-            graph: Some(&graph),
+            query: &compiled_query.raw,
+            intent: &compiled_query.intent,
+            constraints: &compiled_query.constraints,
             evaluation: fixture_inventory_context(&fixture_inventory_options(
                 &properties,
                 Some(&index),
@@ -4582,9 +4594,9 @@ mod tests {
                 ),
             ],
         );
-        let compiled_query = CompiledQuery::from_text("3BHK under 2Cr with good reviews");
+        let compiled_query = IntentAst::from_text("3BHK under 2Cr with good reviews");
 
-        let results = TextSearch::search(TextSearchRequest {
+        let results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: Some(&index),
             extra_candidate_ids: None,
@@ -4592,9 +4604,9 @@ mod tests {
             geo_query: None,
             serving_facts: Some(&serving_facts),
             society_names: &society_names,
-            societies: &[],
-            compiled_query: &compiled_query,
-            graph: None,
+            query: &compiled_query.raw,
+            intent: &compiled_query.intent,
+            constraints: &compiled_query.constraints,
             evaluation: fixture_inventory_context(&fixture_inventory_options(
                 &properties,
                 Some(&index),
@@ -4646,8 +4658,8 @@ mod tests {
                 vec![],
             )],
         );
-        let registration = CompiledQuery::from_text("RERA registered");
-        let registration_results = TextSearch::search(TextSearchRequest {
+        let registration = IntentAst::from_text("RERA registered");
+        let registration_results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: None,
             extra_candidate_ids: None,
@@ -4655,9 +4667,9 @@ mod tests {
             geo_query: None,
             serving_facts: Some(&serving_facts),
             society_names: &society_names,
-            societies: &[],
-            compiled_query: &registration,
-            graph: None,
+            query: &registration.raw,
+            intent: &registration.intent,
+            constraints: &registration.constraints,
             evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
 
@@ -4686,9 +4698,8 @@ mod tests {
             .find(|preference| preference.raw_text == "legal safety")
             .expect("legal safety intent");
         legal.required = true;
-        let legal_query =
-            CompiledQuery::from_text_with_intent("must have legal safety", legal_intent);
-        let legal_results = TextSearch::search(TextSearchRequest {
+        let legal_query = IntentAst::from_text_with_intent("must have legal safety", legal_intent);
+        let legal_results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: None,
             extra_candidate_ids: None,
@@ -4696,9 +4707,9 @@ mod tests {
             geo_query: None,
             serving_facts: Some(&serving_facts),
             society_names: &society_names,
-            societies: &[],
-            compiled_query: &legal_query,
-            graph: None,
+            query: &legal_query.raw,
+            intent: &legal_query.intent,
+            constraints: &legal_query.constraints,
             evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert!(legal_results.is_empty());
@@ -4753,8 +4764,8 @@ mod tests {
             ],
         );
 
-        let ordinary = CompiledQuery::from_text("legal safety");
-        let ordinary_results = TextSearch::search(TextSearchRequest {
+        let ordinary = IntentAst::from_text("legal safety");
+        let ordinary_results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: None,
             extra_candidate_ids: None,
@@ -4762,9 +4773,9 @@ mod tests {
             geo_query: None,
             serving_facts: Some(&serving_facts),
             society_names: &society_names,
-            societies: &[],
-            compiled_query: &ordinary,
-            graph: None,
+            query: &ordinary.raw,
+            intent: &ordinary.intent,
+            constraints: &ordinary.constraints,
             evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert_eq!(ordinary_results.len(), 1, "soft discovery remains lenient");
@@ -4780,9 +4791,8 @@ mod tests {
             .find(|preference| preference.raw_text == "legal safety")
             .expect("legal safety preference")
             .required = true;
-        let required =
-            CompiledQuery::from_text_with_intent("must have legal safety", required_intent);
-        let required_results = TextSearch::search(TextSearchRequest {
+        let required = IntentAst::from_text_with_intent("must have legal safety", required_intent);
+        let required_results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: None,
             extra_candidate_ids: None,
@@ -4790,9 +4800,9 @@ mod tests {
             geo_query: None,
             serving_facts: Some(&serving_facts),
             society_names: &society_names,
-            societies: &[],
-            compiled_query: &required,
-            graph: None,
+            query: &required.raw,
+            intent: &required.intent,
+            constraints: &required.constraints,
             evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert!(required_results.is_empty());
@@ -4828,8 +4838,8 @@ mod tests {
             )],
         );
 
-        let ordinary = CompiledQuery::from_text("RERA registered");
-        let ordinary_results = TextSearch::search(TextSearchRequest {
+        let ordinary = IntentAst::from_text("RERA registered");
+        let ordinary_results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: None,
             extra_candidate_ids: None,
@@ -4837,9 +4847,9 @@ mod tests {
             geo_query: None,
             serving_facts: Some(&serving_facts),
             society_names: &society_names,
-            societies: &[],
-            compiled_query: &ordinary,
-            graph: None,
+            query: &ordinary.raw,
+            intent: &ordinary.intent,
+            constraints: &ordinary.constraints,
             evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert_eq!(ordinary_results.len(), 1, "soft discovery remains lenient");
@@ -4860,9 +4870,8 @@ mod tests {
             .find(|preference| preference.raw_text == "RERA registration")
             .expect("RERA registration preference")
             .required = true;
-        let required =
-            CompiledQuery::from_text_with_intent("must be RERA registered", required_intent);
-        let required_results = TextSearch::search(TextSearchRequest {
+        let required = IntentAst::from_text_with_intent("must be RERA registered", required_intent);
+        let required_results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: None,
             extra_candidate_ids: None,
@@ -4870,9 +4879,9 @@ mod tests {
             geo_query: None,
             serving_facts: Some(&serving_facts),
             society_names: &society_names,
-            societies: &[],
-            compiled_query: &required,
-            graph: None,
+            query: &required.raw,
+            intent: &required.intent,
+            constraints: &required.constraints,
             evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert!(required_results.is_empty());
@@ -4921,8 +4930,8 @@ mod tests {
                 ),
             ],
         );
-        let query = CompiledQuery::from_text("3BHK Whitefield with good reviews");
-        let results = TextSearch::search(TextSearchRequest {
+        let query = IntentAst::from_text("3BHK Whitefield with good reviews");
+        let results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: None,
             extra_candidate_ids: None,
@@ -4930,9 +4939,9 @@ mod tests {
             geo_query: None,
             serving_facts: Some(&serving_facts),
             society_names: &society_names,
-            societies: &[],
-            compiled_query: &query,
-            graph: None,
+            query: &query.raw,
+            intent: &query.intent,
+            constraints: &query.constraints,
             evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert_eq!(
@@ -4957,8 +4966,8 @@ mod tests {
         )];
         let society_names = local_society_names(&properties);
 
-        let ordinary = CompiledQuery::from_text("Whitefield homes");
-        let ordinary_results = TextSearch::search(TextSearchRequest {
+        let ordinary = IntentAst::from_text("Whitefield homes");
+        let ordinary_results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: None,
             extra_candidate_ids: None,
@@ -4966,15 +4975,15 @@ mod tests {
             geo_query: None,
             serving_facts: None,
             society_names: &society_names,
-            societies: &[],
-            compiled_query: &ordinary,
-            graph: None,
+            query: &ordinary.raw,
+            intent: &ordinary.intent,
+            constraints: &ordinary.constraints,
             evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert_eq!(ordinary_results.len(), 1);
 
-        let constrained = CompiledQuery::from_text("3BHK in Whitefield");
-        let constrained_results = TextSearch::search(TextSearchRequest {
+        let constrained = IntentAst::from_text("3BHK in Whitefield");
+        let constrained_results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: None,
             extra_candidate_ids: None,
@@ -4982,9 +4991,9 @@ mod tests {
             geo_query: None,
             serving_facts: None,
             society_names: &society_names,
-            societies: &[],
-            compiled_query: &constrained,
-            graph: None,
+            query: &constrained.raw,
+            intent: &constrained.intent,
+            constraints: &constrained.constraints,
             evaluation: fixture_inventory_context(&fixture_inventory_options(&properties, None)),
         });
         assert!(constrained_results.is_empty());
@@ -5632,8 +5641,8 @@ mod tests {
             ],
             Vec::new(),
         );
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = geo_index
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = entity_index
             .query("3bhk near Kadugodi Tree Park")
             .expect("query should resolve the named place");
         let geo_candidate_ids = geo_query.candidate_property_ids(&properties);
@@ -5759,12 +5768,12 @@ mod tests {
             ],
             Vec::new(),
         );
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
         for query in [
             "3bhk near Kadugodi Tree Park",
             "3bhk near Kadugodi, Tree-Park",
         ] {
-            let geo_query = geo_index
+            let geo_query = entity_index
                 .query(query)
                 .expect("query should resolve the named place");
             let geo_candidate_ids = geo_query.candidate_property_ids(&properties);
@@ -5887,8 +5896,8 @@ mod tests {
                 Vec::new(),
             )],
         );
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = geo_index
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = entity_index
             .query("whitefield home near deens academy")
             .expect("query should resolve Deens Academy");
         let geo_candidate_ids = geo_query.candidate_property_ids(&properties);
@@ -5964,14 +5973,14 @@ mod tests {
                 Vec::new(),
             )],
         );
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
-        let tight_query = geo_index
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
+        let tight_query = entity_index
             .query("homes within 500m of deens academy")
             .expect("query should resolve Deens Academy");
-        let loose_query = geo_index
+        let loose_query = entity_index
             .query("homes within 1 km of deens academy")
             .expect("query should resolve Deens Academy");
-        let postposed_tight_query = geo_index
+        let postposed_tight_query = entity_index
             .query("homes near deens academy within 500m")
             .expect("postposed distance should stay attached to Deens Academy");
 
@@ -6034,8 +6043,8 @@ mod tests {
             ],
             Vec::new(),
         );
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = geo_index
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = entity_index
             .query("homes near Begur Lake")
             .expect("named lake should resolve");
 
@@ -6085,8 +6094,8 @@ mod tests {
             ],
             Vec::new(),
         );
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = geo_index
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = entity_index
             .query("Prestige Southern Star near stormwater drain")
             .expect("named stormwater drain should resolve");
 
@@ -6150,8 +6159,8 @@ mod tests {
             ],
             Vec::new(),
         );
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = geo_index
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = entity_index
             .query("homes near Bommanahalli Metro Station")
             .expect("named metro should resolve");
 
@@ -6254,8 +6263,8 @@ mod tests {
                 Vec::new(),
             )],
         );
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = geo_index
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = entity_index
             .query("apartment near gopalan national school hoodi")
             .expect("query should resolve school and Hoodi");
         let geo_candidate_ids = geo_query.candidate_property_ids(&properties);
@@ -6400,10 +6409,12 @@ mod tests {
             1.0,
         ));
         let serving_facts = ServingFactIndex::from_records(facts, Vec::new());
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
         let query =
             "3BHK near Manipal Hospital Whitefield and near International Tech Park Bengaluru ITPB";
-        let geo_query = geo_index.query(query).expect("both anchors should resolve");
+        let geo_query = entity_index
+            .query(query)
+            .expect("both anchors should resolve");
         let intent = crate::search::intent::parse_intent(query);
         let results = search_for_test_with_recall(
             &properties,
@@ -6536,8 +6547,8 @@ mod tests {
                 Vec::new(),
             )],
         );
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = geo_index
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = entity_index
             .query("3bhk near example office park whitefield")
             .expect("query should resolve the named office park");
         let intent =
@@ -6695,8 +6706,8 @@ mod tests {
             ],
         );
         let query = "3bhk near example named hospital";
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = geo_index
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = entity_index
             .query(query)
             .expect("query should resolve the named hospital");
         assert!(
@@ -6827,8 +6838,8 @@ mod tests {
             ],
         );
         let query = "3bhk near Bagmane Tech Park";
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = geo_index
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = entity_index
             .query(query)
             .expect("Bagmane Tech Park should resolve");
         let intent = crate::search::intent::parse_intent(query);
@@ -6965,8 +6976,8 @@ mod tests {
                 ),
             ],
         );
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = geo_index
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = entity_index
             .query("3bhk near example office park whitefield")
             .expect("query should resolve the named office park");
         let intent =
@@ -8472,7 +8483,7 @@ mod tests {
         let query = "near tech parks but quiet not electronic city 3bhk";
         let mut intent = crate::search::intent::parse_intent(query);
         intent.excluded_areas = vec!["Electronic City".to_string()];
-        let mut compiled = CompiledQuery::from_text_with_intent(query, intent);
+        let mut compiled = IntentAst::from_text_with_intent(query, intent);
         compiled.constraints = crate::search::ast::ConstraintExpr::and(vec![
             compiled.constraints,
             crate::search::ast::ConstraintExpr::negated(crate::search::ast::ConstraintExpr::term(
@@ -8489,7 +8500,7 @@ mod tests {
             vec!["Electronic City".to_string()]
         );
 
-        let results = TextSearch::search_compiled_with_candidate_property_indexes(
+        let results = CandidateEvaluator::search_compiled_with_candidate_property_indexes(
             &properties,
             Some(&index),
             None,
@@ -8497,9 +8508,9 @@ mod tests {
             None,
             None,
             &society_names,
-            &[],
-            &compiled,
-            None,
+            &compiled.raw,
+            &compiled.intent,
+            &compiled.constraints,
             fixture_inventory_context(&fixture_inventory_options(&properties, Some(&index))),
         );
 
@@ -8542,7 +8553,7 @@ mod tests {
         let query = "3BHK under 4Cr, avoid Prestige Waterford";
         let mut intent = crate::search::intent::parse_intent(query);
         intent.excluded_societies = vec!["Prestige Waterford".to_string()];
-        let mut compiled = CompiledQuery::from_text_with_intent(query, intent);
+        let mut compiled = IntentAst::from_text_with_intent(query, intent);
         compiled.constraints = crate::search::ast::ConstraintExpr::and(vec![
             compiled.constraints,
             crate::search::ast::ConstraintExpr::negated(crate::search::ast::ConstraintExpr::term(
@@ -8554,7 +8565,7 @@ mod tests {
             )),
         ]);
 
-        let results = TextSearch::search_compiled_with_candidate_property_indexes(
+        let results = CandidateEvaluator::search_compiled_with_candidate_property_indexes(
             &properties,
             Some(&index),
             None,
@@ -8562,9 +8573,9 @@ mod tests {
             None,
             None,
             &society_names,
-            &[],
-            &compiled,
-            None,
+            &compiled.raw,
+            &compiled.intent,
+            &compiled.constraints,
             fixture_inventory_context(&fixture_inventory_options(&properties, Some(&index))),
         );
 
@@ -8709,8 +8720,8 @@ mod tests {
                 ),
             ],
         );
-        let compiled_query = CompiledQuery::from_text("3BHK Whitefield under 2Cr reliable builder");
-        let results = TextSearch::search(TextSearchRequest {
+        let compiled_query = IntentAst::from_text("3BHK Whitefield under 2Cr reliable builder");
+        let results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: Some(&index),
             extra_candidate_ids: None,
@@ -8718,9 +8729,9 @@ mod tests {
             geo_query: None,
             serving_facts: Some(&serving_facts),
             society_names: &society_names,
-            societies: &[],
-            compiled_query: &compiled_query,
-            graph: None,
+            query: &compiled_query.raw,
+            intent: &compiled_query.intent,
+            constraints: &compiled_query.constraints,
             evaluation: fixture_inventory_context(&fixture_inventory_options(
                 &properties,
                 Some(&index),
