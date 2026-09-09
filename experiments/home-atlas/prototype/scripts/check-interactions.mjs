@@ -20,6 +20,7 @@ class Element {
 const elements=new Map(),frames=new Map();let clock=0,frameId=0;
 const element=selector=>{if(selector.startsWith('#'))assert(ids.has(selector.slice(1)),selector);if(!elements.has(selector))elements.set(selector,new Element());return elements.get(selector)};
 const context=vm.createContext({nearby,...core,...scenes,resolveAtlasPolicy,WATERFORD_ATLAS_CONFIG,
+  installArrivalWalk:()=>({pause(){}}),installAtlasShell:()=>{},
   calculateRoadCamera:core.roadCamera,selectPlacesInCategory:core.placesInCategory,
   calculatePlaceCamera:core.placeCamera,calculatePairCamera:core.pairCamera,
   calculateGroupCamera:core.groupCamera,calculateFeatureCamera:core.featureCamera,
