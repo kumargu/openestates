@@ -29,6 +29,125 @@ export type AtlasCameraPose = {
   tilt: number;
 };
 
+
+export type AtlasRoadDirection = "as-mapped" | "reverse";
+
+export type AtlasRoadFlightTuning = Readonly<{
+  baseSpeedMps: number;
+  minimumRate: number;
+  maximumRate: number;
+  lookBehindM: number;
+  lookAheadM: number;
+  altitudeOffsetM: number;
+  tilt: number;
+  desktopRangeM: number;
+  mobileRangeM: number;
+  mobileBreakpointPx: number;
+}>;
+
+export type AtlasStreetHandoff = {
+  routePoint: AtlasPoint;
+  distanceAlongM: number;
+  distanceFromRouteM: number;
+  heading: number;
+};
+
+export const DEFAULT_ROAD_FLIGHT_TUNING: AtlasRoadFlightTuning = Object.freeze({
+  baseSpeedMps: 12,
+  minimumRate: 0.5,
+  maximumRate: 2,
+  lookBehindM: 25,
+  lookAheadM: 65,
+  altitudeOffsetM: 8,
+  tilt: 67,
+  desktopRangeM: 270,
+  mobileRangeM: 350,
+  mobileBreakpointPx: 700,
+});
+
+export function selectPrimaryAtlasRoute(
+  geometries: readonly SceneGeometry[],
+  { direction = "as-mapped" }: { direction?: AtlasRoadDirection } = {},
+): AtlasRoute {
+  if (direction !== "as-mapped" && direction !== "reverse") {
+    throw new Error("Atlas route direction must be as-mapped or reverse");
+  }
+
+  let selected: AtlasRoute | undefined;
+  for (const geometry of geometries) {
+    if (geometry.type !== "LineString" || geometry.coordinates.length < 2) continue;
+    const candidate = buildAtlasRoute(geometry);
+    if (!selected || candidate.lengthM > selected.lengthM) selected = candidate;
+  }
+  if (!selected) throw new Error("No continuous LineString is available for the Atlas route");
+  if (direction === "as-mapped") return selected;
+
+  return buildAtlasRoute({
+    type: "LineString",
+    coordinates: [...selected.coordinates].reverse(),
+  });
+}
+
+export function clampRoadPlaybackRate(
+  playbackRate: number,
+  tuning: AtlasRoadFlightTuning = DEFAULT_ROAD_FLIGHT_TUNING,
+): number {
+  return clamp(playbackRate, tuning.minimumRate, tuning.maximumRate);
+}
+
+export function advanceRoadDistance(
+  route: AtlasRoute,
+  currentDistanceM: number,
+  elapsedMs: number,
+  playbackRate: number,
+  tuning: AtlasRoadFlightTuning = DEFAULT_ROAD_FLIGHT_TUNING,
+): number {
+  const elapsedSeconds = Math.max(0, elapsedMs) / 1_000;
+  const metres = currentDistanceM
+    + elapsedSeconds * tuning.baseSpeedMps * clampRoadPlaybackRate(playbackRate, tuning);
+  return clamp(metres, 0, route.lengthM);
+}
+
+export function roadFlightCamera(
+  route: AtlasRoute,
+  distanceAlongM: number,
+  groundElevationM: number,
+  viewportWidthPx: number,
+  tuning: AtlasRoadFlightTuning = DEFAULT_ROAD_FLIGHT_TUNING,
+): AtlasCameraPose {
+  const point = pointAlongRoute(route, distanceAlongM);
+  return {
+    center: {
+      ...point,
+      altitude: groundElevationM + tuning.altitudeOffsetM,
+    },
+    heading: headingAlongRoute(
+      route,
+      distanceAlongM,
+      tuning.lookBehindM,
+      tuning.lookAheadM,
+    ),
+    range: viewportWidthPx < tuning.mobileBreakpointPx
+      ? tuning.mobileRangeM
+      : tuning.desktopRangeM,
+    tilt: tuning.tilt,
+  };
+}
+
+export function projectStreetHandoff(
+  route: AtlasRoute,
+  streetPoint: AtlasPoint,
+  heading: number,
+): AtlasStreetHandoff {
+  const projection = projectPointOntoRoute(route, streetPoint);
+  return {
+    routePoint: pointAlongRoute(route, projection.distanceAlongM),
+    distanceAlongM: projection.distanceAlongM,
+    distanceFromRouteM: projection.distanceFromRouteM,
+    heading: normalizeHeading(heading),
+  };
+}
+
 export function buildAtlasRoute(geometry: SceneGeometry): AtlasRoute {
   if (geometry.type !== "LineString" || geometry.coordinates.length < 2) {
     throw new Error("An Atlas route requires one continuous LineString");
@@ -64,9 +183,14 @@ export function pointAlongRoute(route: AtlasRoute, distanceAlongM: number): Atla
   };
 }
 
-export function headingAlongRoute(route: AtlasRoute, distanceAlongM: number): number {
-  const before = pointAlongRoute(route, distanceAlongM - 25);
-  const after = pointAlongRoute(route, distanceAlongM + 55);
+export function headingAlongRoute(
+  route: AtlasRoute,
+  distanceAlongM: number,
+  lookBehindM = 25,
+  lookAheadM = 55,
+): number {
+  const before = pointAlongRoute(route, distanceAlongM - lookBehindM);
+  const after = pointAlongRoute(route, distanceAlongM + lookAheadM);
   const longitude = (after.longitude - before.longitude)
     * Math.cos(before.latitude * Math.PI / 180);
   return normalizeHeading(Math.atan2(longitude, after.latitude - before.latitude) * 180 / Math.PI);
