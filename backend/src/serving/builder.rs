@@ -5,13 +5,14 @@ use std::path::{Path, PathBuf};
 use chrono::Utc;
 
 use crate::assets::{
-    AssetPathBuilder, KgViewEdgeRecord, KgViewFactAnnotationRecord, KgViewFactRecord, KgViewRecords,
+    AssetPathBuilder, SocietyGoldEdgeRecord, SocietyGoldFactAnnotationRecord,
+    SocietyGoldFactRecord, SocietyGoldRecords,
 };
 use crate::dag_config::{
     load_fact_registry_index, load_resolution_policies, load_serving_eligibility,
     scoring_direction_from_hint, DagConfigError,
 };
-use crate::knowledge::{FactValue, KnowledgeGraph};
+use crate::knowledge::FactValue;
 use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
 use crate::search::schema;
 
@@ -27,7 +28,7 @@ use super::{
     validate_canonical_spatial_identities, validate_serving_edge_evidence, BundleArtifact,
     BundleArtifactKind, ServingBundleManifest, ServingBundleSchema, ServingColumnSchema,
     ServingEdgeRecord, ServingEntityRecord, ServingFactRecord, ServingReraEvidenceRecord,
-    ServingSearchMetadataRecord, ServingTableSchema, SourceObservation, TrustPolicy,
+    ServingSearchMetadataRecord, ServingTableSchema, SourceObservation,
 };
 
 pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 12;
@@ -42,106 +43,18 @@ impl ServingBundleBuilder {
         Self { lake }
     }
 
-    pub async fn build_from_graph(
-        &self,
-        graph: &KnowledgeGraph,
-        bundle_version: impl Into<String>,
-    ) -> Result<ServingBundleManifest, ServingBundleError> {
-        let records = KgViewRecords::from_graph(graph)?;
-        self.build_from_kg_view_records(&records, bundle_version)
-            .await
-    }
-
-    pub async fn build_from_kg_view_records(
-        &self,
-        records: &KgViewRecords,
-        bundle_version: impl Into<String>,
-    ) -> Result<ServingBundleManifest, ServingBundleError> {
-        self.build_from_kg_view_records_with_rera(records, Vec::new(), bundle_version)
-            .await
-    }
-
-    pub async fn build_from_kg_view_records_with_rera(
-        &self,
-        records: &KgViewRecords,
-        rera_evidence: Vec<ServingReraEvidenceRecord>,
-        bundle_version: impl Into<String>,
-    ) -> Result<ServingBundleManifest, ServingBundleError> {
-        let current_facts = current_serving_facts(&records.facts);
-        let entities = serving_entity_records(records, &current_facts);
-        let facts = serving_fact_records(&current_facts)?;
-        let current_annotations = current_serving_annotations(&records.fact_annotations);
-        let search_metadata =
-            serving_search_metadata_records(&current_facts, &current_annotations)?;
-        let edges = serving_edge_records(&records.edges);
-        self.build_from_serving_records(
-            entities,
-            facts,
-            search_metadata,
-            edges,
-            rera_evidence,
-            Vec::new(),
-            &BTreeSet::new(),
-            bundle_version,
-            true,
-        )
-        .await
-    }
-
-    pub async fn build_child_from_serving_records(
-        &self,
-        entities: Vec<ServingEntityRecord>,
-        facts: Vec<ServingFactRecord>,
-        search_metadata: Vec<ServingSearchMetadataRecord>,
-        edges: Vec<ServingEdgeRecord>,
-        bundle_version: impl Into<String>,
-    ) -> Result<ServingBundleManifest, ServingBundleError> {
-        self.build_child_from_serving_records_with_rera(
-            entities,
-            facts,
-            search_metadata,
-            edges,
-            Vec::new(),
-            Vec::new(),
-            bundle_version,
-        )
-        .await
-    }
-
+    /// Build the one request-path bundle from immutable society gold rows.
+    ///
+    /// Input snapshots may include reusable topology rows. Derived rows are
+    /// rebuilt exactly once for the new catalog generation.
     #[allow(clippy::too_many_arguments)]
-    pub async fn build_child_from_serving_records_with_rera(
-        &self,
-        entities: Vec<ServingEntityRecord>,
-        facts: Vec<ServingFactRecord>,
-        search_metadata: Vec<ServingSearchMetadataRecord>,
-        edges: Vec<ServingEdgeRecord>,
-        rera_evidence: Vec<ServingReraEvidenceRecord>,
-        known_excluded_rera_evidence_society_ids: Vec<String>,
-        bundle_version: impl Into<String>,
-    ) -> Result<ServingBundleManifest, ServingBundleError> {
-        self.build_child_from_serving_records_with_rera_preserving_entities(
-            entities,
-            facts,
-            search_metadata,
-            edges,
-            rera_evidence,
-            known_excluded_rera_evidence_society_ids,
-            BTreeSet::new(),
-            bundle_version,
-        )
-        .await
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub async fn build_child_from_serving_records_with_rera_preserving_entities(
+    pub async fn build_from_catalog_records(
         &self,
         mut entities: Vec<ServingEntityRecord>,
         mut facts: Vec<ServingFactRecord>,
         mut search_metadata: Vec<ServingSearchMetadataRecord>,
         mut edges: Vec<ServingEdgeRecord>,
         rera_evidence: Vec<ServingReraEvidenceRecord>,
-        known_excluded_rera_evidence_society_ids: Vec<String>,
-        prevalidated_entity_ids: BTreeSet<String>,
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         remove_derived_proximity_records(&mut facts, &mut search_metadata, &mut edges);
@@ -154,10 +67,7 @@ impl ServingBundleBuilder {
             search_metadata,
             edges,
             rera_evidence,
-            known_excluded_rera_evidence_society_ids,
-            &prevalidated_entity_ids,
             bundle_version,
-            true,
         )
         .await
     }
@@ -170,10 +80,7 @@ impl ServingBundleBuilder {
         mut search_metadata: Vec<ServingSearchMetadataRecord>,
         mut edges: Vec<ServingEdgeRecord>,
         rera_evidence: Vec<ServingReraEvidenceRecord>,
-        mut excluded_rera_evidence_society_ids: Vec<String>,
-        prevalidated_entity_ids: &BTreeSet<String>,
         bundle_version: impl Into<String>,
-        derive_proximity: bool,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         let bundle_version = bundle_version.into();
         let mut artifacts = Vec::new();
@@ -325,15 +232,12 @@ impl ServingBundleBuilder {
             &market_geo_report.internal_geo_cell_entity_ids,
         );
         merge_spatial_topology_edges(&mut edges, market_geo_edges);
-        if derive_proximity {
-            let base_index =
-                super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
-            let derived =
-                derive_proximity_records(&entities, &base_index, &edges, &bundle_version)?;
-            facts.extend(derived.facts);
-            search_metadata.extend(derived.search_metadata);
-            edges.extend(derived.edges);
-        }
+        let base_index =
+            super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
+        let derived = derive_proximity_records(&entities, &base_index, &edges, &bundle_version)?;
+        facts.extend(derived.facts);
+        search_metadata.extend(derived.search_metadata);
+        edges.extend(derived.edges);
         let eligibility = load_serving_eligibility()?;
         let super::eligibility::EligibleServingRecords {
             entities,
@@ -341,27 +245,21 @@ impl ServingBundleBuilder {
             search_metadata,
             edges,
             quarantine,
-        } = super::eligibility::classify_and_prune_preserving(
+        } = super::eligibility::classify_and_prune(
             entities,
             facts,
             search_metadata,
             edges,
             &bundle_version,
             &eligibility,
-            prevalidated_entity_ids,
         )?;
-        let (rera_evidence, newly_excluded_rera_evidence_society_ids) =
+        let (rera_evidence, mut excluded_rera_evidence_society_ids) =
             catalog_scoped_rera_evidence(&entities, rera_evidence);
-        excluded_rera_evidence_society_ids.extend(newly_excluded_rera_evidence_society_ids);
         excluded_rera_evidence_society_ids.sort();
         excluded_rera_evidence_society_ids.dedup();
         validate_serving_records(&entities, &facts, &search_metadata, &edges, &bundle_version)?;
         let entity_aliases = materialize_society_aliases(&entities, &edges)
             .map_err(|err| ServingBundleError::InvalidRecords(err.to_string()))?;
-        if let Err(err) = write_preference_coverage_report(&entities, &facts, &search_metadata) {
-            eprintln!("preference coverage report skipped: {err}");
-        }
-
         let entity_key =
             AssetPathBuilder::serving_bundle_key(&bundle_version, "entities/part-00000.parquet");
         let entity_bytes = write_entities_parquet(&entities)?;
@@ -454,22 +352,11 @@ impl ServingBundleBuilder {
         ));
 
         let schema_key = AssetPathBuilder::serving_bundle_key(&bundle_version, "schema.json");
-        let schema_descriptor = serving_bundle_schema_descriptor(SERVING_BUNDLE_FORMAT_VERSION);
+        let schema_descriptor = serving_bundle_schema_descriptor();
         let schema_meta = self.lake.put_json(&schema_key, &schema_descriptor).await?;
         artifacts.push(artifact(
             BundleArtifactKind::SchemaJson,
             schema_meta,
-            "application/json",
-            None,
-        ));
-
-        let trust_policy = TrustPolicy::default();
-        let trust_policy_key =
-            AssetPathBuilder::serving_bundle_key(&bundle_version, "trust_policy.json");
-        let trust_policy_meta = self.lake.put_json(&trust_policy_key, &trust_policy).await?;
-        artifacts.push(artifact(
-            BundleArtifactKind::TrustPolicyJson,
-            trust_policy_meta,
             "application/json",
             None,
         ));
@@ -499,14 +386,13 @@ impl ServingBundleBuilder {
             quarantined_society_count: quarantine.excluded_society_count,
             quarantine_reason_counts: quarantine.reason_counts.clone(),
             entity_parquet_key: entity_key.to_string(),
-            entity_alias_parquet_key: Some(entity_alias_key.to_string()),
+            entity_alias_parquet_key: entity_alias_key.to_string(),
             fact_parquet_key: fact_key.to_string(),
             search_metadata_parquet_key: search_metadata_key.to_string(),
-            rera_evidence_parquet_key: Some(rera_evidence_key.to_string()),
-            edge_parquet_key: Some(edge_key.to_string()),
-            quarantine_report_key: Some(quarantine_key.to_string()),
+            rera_evidence_parquet_key: rera_evidence_key.to_string(),
+            edge_parquet_key: edge_key.to_string(),
+            quarantine_report_key: quarantine_key.to_string(),
             schema_key: schema_key.to_string(),
-            trust_policy_key: trust_policy_key.to_string(),
             tantivy_index_prefix: tantivy_prefix,
             artifacts,
         };
@@ -808,9 +694,9 @@ fn catalog_scoped_rera_evidence(
     (included, excluded_ids)
 }
 
-pub fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSchema {
+pub fn serving_bundle_schema_descriptor() -> ServingBundleSchema {
     ServingBundleSchema {
-        format_version,
+        format_version: SERVING_BUNDLE_FORMAT_VERSION,
         storage_format: "parquet+tantivy".to_string(),
         fact_schema_registry_version: schema::registry().version,
         tables: vec![
@@ -841,49 +727,36 @@ pub fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSch
             ServingTableSchema {
                 name: "facts".to_string(),
                 path: "facts/part-00000.parquet".to_string(),
-                columns: {
-                    let mut columns = vec![
-                        required_column("entity_id", "utf8"),
-                        required_column("fact_key", "utf8"),
-                        required_column("value_type", "utf8"),
-                        optional_column("value_text", "utf8"),
-                        optional_column("value_number", "float64"),
-                        optional_column("value_bool", "bool"),
-                        optional_column("value_tags", "list<utf8>"),
-                        optional_column("value_score", "float64"),
-                        optional_column("value_score_explanation", "utf8"),
-                        required_column("confidence", "float32"),
-                        required_column("source_type", "utf8"),
-                        optional_column("source_url", "utf8"),
-                        optional_column("model", "utf8"),
-                        optional_column("skill_id", "utf8"),
-                        required_column("learned_at", "timestamp_rfc3339"),
-                    ];
-                    if format_version >= 9 {
-                        columns.push(optional_column(
-                            "observation_json",
-                            "json<source_observation>",
-                        ));
-                    }
-                    columns
-                },
+                columns: vec![
+                    required_column("entity_id", "utf8"),
+                    required_column("fact_key", "utf8"),
+                    required_column("value_type", "utf8"),
+                    optional_column("value_text", "utf8"),
+                    optional_column("value_number", "float64"),
+                    optional_column("value_bool", "bool"),
+                    optional_column("value_tags", "list<utf8>"),
+                    optional_column("value_score", "float64"),
+                    optional_column("value_score_explanation", "utf8"),
+                    required_column("confidence", "float32"),
+                    required_column("source_type", "utf8"),
+                    optional_column("source_url", "utf8"),
+                    optional_column("model", "utf8"),
+                    optional_column("skill_id", "utf8"),
+                    required_column("learned_at", "timestamp_rfc3339"),
+                    optional_column("observation_json", "json<source_observation>"),
+                ],
             },
             ServingTableSchema {
                 name: "edges".to_string(),
                 path: "edges/part-00000.parquet".to_string(),
-                columns: {
-                    let mut columns = vec![
-                        required_column("from_entity_id", "utf8"),
-                        required_column("edge_type", "utf8"),
-                        required_column("to_entity_id", "utf8"),
-                        required_column("confidence", "float32"),
-                        required_column("source_type", "utf8"),
-                    ];
-                    if format_version >= 10 {
-                        columns.push(optional_column("derivation_json", "json<derived_evidence>"));
-                    }
-                    columns
-                },
+                columns: vec![
+                    required_column("from_entity_id", "utf8"),
+                    required_column("edge_type", "utf8"),
+                    required_column("to_entity_id", "utf8"),
+                    required_column("confidence", "float32"),
+                    required_column("source_type", "utf8"),
+                    optional_column("derivation_json", "json<derived_evidence>"),
+                ],
             },
             ServingTableSchema {
                 name: "search_metadata".to_string(),
@@ -926,7 +799,7 @@ fn optional_column(name: &str, logical_type: &str) -> ServingColumnSchema {
     }
 }
 
-fn serving_edge_records(edges: &[KgViewEdgeRecord]) -> Vec<ServingEdgeRecord> {
+pub(crate) fn serving_edge_records(edges: &[SocietyGoldEdgeRecord]) -> Vec<ServingEdgeRecord> {
     edges
         .iter()
         .map(|edge| ServingEdgeRecord {
@@ -949,9 +822,9 @@ fn serving_edge_type(relation: &str) -> String {
     }
 }
 
-fn serving_entity_records(
-    records: &KgViewRecords,
-    current_facts: &[KgViewFactRecord],
+pub(crate) fn serving_entity_records(
+    records: &SocietyGoldRecords,
+    current_facts: &[SocietyGoldFactRecord],
 ) -> Vec<ServingEntityRecord> {
     let fact_text_by_entity = serving_fact_text_by_entity(current_facts);
     records
@@ -977,8 +850,8 @@ fn serving_entity_records(
         .collect()
 }
 
-fn current_serving_facts(facts: &[KgViewFactRecord]) -> Vec<KgViewFactRecord> {
-    let mut current = BTreeMap::<ServingFactKey, &KgViewFactRecord>::new();
+pub(crate) fn current_serving_facts(facts: &[SocietyGoldFactRecord]) -> Vec<SocietyGoldFactRecord> {
+    let mut current = BTreeMap::<ServingFactKey, &SocietyGoldFactRecord>::new();
     for fact in facts {
         let key = ServingFactKey {
             entity_id: fact.entity_id.as_str(),
@@ -1006,7 +879,10 @@ fn current_serving_facts(facts: &[KgViewFactRecord]) -> Vec<KgViewFactRecord> {
     current.into_values().cloned().collect()
 }
 
-fn stable_fact_tiebreak(left: &KgViewFactRecord, right: &KgViewFactRecord) -> std::cmp::Ordering {
+fn stable_fact_tiebreak(
+    left: &SocietyGoldFactRecord,
+    right: &SocietyGoldFactRecord,
+) -> std::cmp::Ordering {
     left.value_json
         .cmp(&right.value_json)
         .then_with(|| left.observation_provider.cmp(&right.observation_provider))
@@ -1028,10 +904,10 @@ struct ServingFactKey<'a> {
     skill_id: Option<&'a str>,
 }
 
-fn current_serving_annotations(
-    annotations: &[KgViewFactAnnotationRecord],
-) -> Vec<KgViewFactAnnotationRecord> {
-    let mut current = BTreeMap::<(&str, &str), &KgViewFactAnnotationRecord>::new();
+pub(crate) fn current_serving_annotations(
+    annotations: &[SocietyGoldFactAnnotationRecord],
+) -> Vec<SocietyGoldFactAnnotationRecord> {
+    let mut current = BTreeMap::<(&str, &str), &SocietyGoldFactAnnotationRecord>::new();
     for annotation in annotations {
         current.insert(
             (annotation.entity_id.as_str(), annotation.fact_key.as_str()),
@@ -1041,7 +917,7 @@ fn current_serving_annotations(
     current.into_values().cloned().collect()
 }
 
-fn serving_fact_text_by_entity(facts: &[KgViewFactRecord]) -> HashMap<String, String> {
+fn serving_fact_text_by_entity(facts: &[SocietyGoldFactRecord]) -> HashMap<String, String> {
     let mut by_entity = HashMap::<String, String>::new();
     for fact in facts {
         let entry = by_entity.entry(fact.entity_id.clone()).or_default();
@@ -1055,8 +931,8 @@ fn serving_fact_text_by_entity(facts: &[KgViewFactRecord]) -> HashMap<String, St
     by_entity
 }
 
-fn serving_fact_records(
-    facts: &[KgViewFactRecord],
+pub(crate) fn serving_fact_records(
+    facts: &[SocietyGoldFactRecord],
 ) -> Result<Vec<ServingFactRecord>, ServingBundleError> {
     facts
         .iter()
@@ -1082,7 +958,7 @@ fn serving_fact_records(
 }
 
 fn source_observation_for_fact(
-    fact: &KgViewFactRecord,
+    fact: &SocietyGoldFactRecord,
 ) -> Result<Option<SourceObservation>, ServingBundleError> {
     match (
         fact.observation_provider.as_deref(),
@@ -1112,9 +988,9 @@ fn source_observation_for_fact(
     }
 }
 
-fn serving_search_metadata_records(
-    facts: &[KgViewFactRecord],
-    annotations: &[KgViewFactAnnotationRecord],
+pub(crate) fn serving_search_metadata_records(
+    facts: &[SocietyGoldFactRecord],
+    annotations: &[SocietyGoldFactAnnotationRecord],
 ) -> Result<Vec<ServingSearchMetadataRecord>, ServingBundleError> {
     let registry = load_fact_registry_index().map_err(ServingBundleError::DagConfig)?;
     let annotation_by_key = annotations
@@ -1125,7 +1001,7 @@ fn serving_search_metadata_records(
                 annotation,
             )
         })
-        .collect::<HashMap<(&str, &str), &KgViewFactAnnotationRecord>>();
+        .collect::<HashMap<(&str, &str), &SocietyGoldFactAnnotationRecord>>();
 
     let mut seen = BTreeMap::<(&str, &str), ()>::new();
     let mut records = Vec::with_capacity(facts.len());
@@ -1170,109 +1046,6 @@ fn serving_search_metadata_records(
             .then_with(|| left.fact_key.cmp(&right.fact_key))
     });
     Ok(records)
-}
-
-#[derive(Debug, serde::Serialize)]
-struct PreferenceCoverageReport {
-    generated_at: String,
-    society_count: usize,
-    preference_labels: Vec<PreferenceLabelCoverage>,
-    registry_gaps: Vec<RegistryGap>,
-}
-
-#[derive(Debug, serde::Serialize)]
-struct PreferenceLabelCoverage {
-    label: String,
-    societies_with_match: u32,
-    society_coverage_pct: f64,
-}
-
-#[derive(Debug, serde::Serialize)]
-struct RegistryGap {
-    fact_key: String,
-    entity_count: u32,
-}
-
-fn write_preference_coverage_report(
-    entities: &[ServingEntityRecord],
-    facts: &[ServingFactRecord],
-    search_metadata: &[ServingSearchMetadataRecord],
-) -> Result<(), std::io::Error> {
-    let society_count = entities
-        .iter()
-        .filter(|entity| entity.entity_type == "Society")
-        .count();
-    if society_count == 0 {
-        return Ok(());
-    }
-
-    let metadata_by_entity_fact = search_metadata
-        .iter()
-        .map(|row| ((row.entity_id.as_str(), row.fact_key.as_str()), row))
-        .collect::<HashMap<(&str, &str), &ServingSearchMetadataRecord>>();
-
-    let mut label_hits = BTreeMap::<String, std::collections::HashSet<String>>::new();
-    for fact in facts {
-        if let Some(metadata) =
-            metadata_by_entity_fact.get(&(fact.entity_id.as_str(), fact.fact_key.as_str()))
-        {
-            for label in &metadata.answers_preferences {
-                label_hits
-                    .entry(label.to_lowercase())
-                    .or_default()
-                    .insert(fact.entity_id.clone());
-            }
-        }
-    }
-
-    let preference_labels = label_hits
-        .into_iter()
-        .map(|(label, societies)| {
-            let societies_with_match = societies.len() as u32;
-            PreferenceLabelCoverage {
-                label,
-                societies_with_match,
-                society_coverage_pct: (societies_with_match as f64 / society_count as f64) * 100.0,
-            }
-        })
-        .collect::<Vec<_>>();
-
-    let mut registry_gaps = BTreeMap::<String, u32>::new();
-    for fact in facts {
-        if !metadata_by_entity_fact.contains_key(&(fact.entity_id.as_str(), fact.fact_key.as_str()))
-        {
-            *registry_gaps.entry(fact.fact_key.clone()).or_default() += 1;
-        }
-    }
-    let registry_gaps = registry_gaps
-        .into_iter()
-        .map(|(fact_key, entity_count)| RegistryGap {
-            fact_key,
-            entity_count,
-        })
-        .collect::<Vec<_>>();
-
-    let report = PreferenceCoverageReport {
-        generated_at: Utc::now().to_rfc3339(),
-        society_count,
-        preference_labels,
-        registry_gaps,
-    };
-
-    let output_path = preference_coverage_output_path();
-    if let Some(parent) = output_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let payload = serde_json::to_string_pretty(&report)?;
-    std::fs::write(output_path, payload)?;
-    Ok(())
-}
-
-fn preference_coverage_output_path() -> PathBuf {
-    if let Ok(path) = std::env::var("OPENESTATES_PREFERENCE_COVERAGE_PATH") {
-        return PathBuf::from(path);
-    }
-    PathBuf::from("data/validation/preference_coverage.json")
 }
 
 async fn upload_tantivy_dir(
@@ -1451,7 +1224,7 @@ mod tests {
 
     #[test]
     fn kg_fact_provenance_becomes_a_validated_source_observation() {
-        let fact = KgViewFactRecord {
+        let fact = SocietyGoldFactRecord {
             entity_id: "society:one".to_string(),
             fact_key: "listing_3bhk".to_string(),
             fact_version: 1,

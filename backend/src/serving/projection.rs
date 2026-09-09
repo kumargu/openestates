@@ -326,7 +326,7 @@ mod tests {
     use crate::serving::ServingSearchMetadataRecord;
 
     #[test]
-    fn newer_valid_facts_override_legacy_fallback() {
+    fn valid_serving_facts_override_runtime_fallback() {
         let index = index(vec![
             fact(
                 "society:prestige-park-grove",
@@ -370,7 +370,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_latest_values_do_not_hide_older_valid_serving_facts() {
+    fn invalid_values_do_not_hide_valid_serving_facts() {
         let index = index(vec![
             fact(
                 "society:sample",

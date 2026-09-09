@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
@@ -15,6 +15,7 @@ use tokio::sync::RwLock;
 use crate::discovery::DiscoveryConfig;
 use crate::knowledge::KnowledgeGraph;
 use crate::knowledge::SearchEvent;
+use crate::lake::{LakeKey, LakeStore};
 use crate::models::{AreaProfile, Property, Society};
 use crate::recommendations::RecommendationResponse;
 use crate::routes::enrichment::society_node_id;
@@ -32,7 +33,6 @@ pub struct SearchRuntimeSnapshot {
     pub property_by_id: HashMap<String, usize>,
     pub inventory_options: HashMap<String, InventoryOption>,
     pub search_index: SearchIndex,
-    pub geo_topology: crate::search::GeoTopologyIndex,
     pub societies: Arc<[Society]>,
     pub society_names: HashMap<String, String>,
     pub areas: Arc<[AreaProfile]>,
@@ -89,19 +89,12 @@ impl SearchRuntimeSnapshot {
                 .map(|option| (property.id.clone(), option))
             })
             .collect();
-        let geo_topology = crate::search::GeoTopologyIndex::build(
-            &bundle.entities,
-            &bundle.edges,
-            &version_key.serving_bundle_version,
-        );
-
         Self {
             bundle,
             properties: Arc::from(properties),
             property_by_id,
             inventory_options,
             search_index,
-            geo_topology,
             societies: Arc::from(societies),
             society_names,
             areas: Arc::from(areas),
@@ -594,15 +587,34 @@ pub fn search_log_queue_capacity_from_env() -> usize {
 
 pub fn spawn_search_log_worker(
     execution: &ExecutionLanes,
-    knowledge: Arc<RwLock<KnowledgeGraph>>,
+    lake: LakeStore,
     mut rx: mpsc::Receiver<SearchLogMessage>,
 ) {
     execution.spawn_internal(async move {
         while let Some(message) = rx.recv().await {
             match message {
                 SearchLogMessage::SearchEvent(event) => {
-                    let mut graph = knowledge.write().await;
-                    graph.log_search(event, security_tuning().search_cache.event_history);
+                    let timestamp = event.timestamp;
+                    let payload =
+                        serde_json::to_vec(&event).expect("search events are serializable");
+                    let digest = Sha256::digest(&payload)
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>();
+                    let key = format!(
+                        "raw/source=search_events/dt={}/run_id=runtime/{}-{}.json",
+                        timestamp.format("%Y-%m-%d"),
+                        timestamp.format("%Y%m%dT%H%M%S%.9fZ"),
+                        &digest[..16],
+                    );
+                    let Ok(key) = LakeKey::new(key) else {
+                        continue;
+                    };
+                    let _ = lake
+                        .put_json_if(&key, &event, |existing: Option<&SearchEvent>| {
+                            existing.is_none()
+                        })
+                        .await;
                 }
             }
         }
@@ -632,8 +644,6 @@ pub struct AppState {
     pub properties: RwLock<Vec<Property>>,
     /// Local recall index rebuilt from app-owned property data.
     pub search_index: RwLock<SearchIndex>,
-    /// Optional compiled KG serving bundle loaded from the local/S3-shaped lake.
-    pub serving_bundle: RwLock<Option<Arc<LoadedServingBundle>>>,
     /// In-process cache keyed by property + bundle + scoring policy + engine version.
     pub recommendation_cache: RwLock<std::collections::HashMap<String, RecommendationResponse>>,
     pub areas: RwLock<Vec<AreaProfile>>,
@@ -652,8 +662,6 @@ pub struct AppState {
     pub interest_counter: AtomicU64,
     /// Serializes bounded interest-file accounting and appends.
     pub interest_write_lock: tokio::sync::Mutex<()>,
-    /// Prevents authenticated admin requests from spawning overlapping asset runs.
-    pub asset_run_active: AtomicBool,
 }
 
 impl AppState {
@@ -705,7 +713,7 @@ mod tests {
                 crate::search::CompiledQuery::from_text(query),
                 "test-bundle",
                 &[],
-                &crate::search::GeoTopologyIndex::default(),
+                &crate::graph::GraphIndex::default(),
                 None,
                 crate::search::GeoCellSearchPolicy {
                     max_hops: 2,
@@ -744,6 +752,46 @@ mod tests {
             caches.lookup_or_reserve("parent", "client", "fingerprint"),
             RevisionIdempotencyLookup::Leader(_)
         ));
+    }
+
+    #[tokio::test]
+    async fn search_event_worker_writes_immutable_lake_event_without_graph_history() {
+        let temp = tempfile::tempdir().expect("temporary event lake");
+        let lake = LakeStore::local(temp.path()).expect("local event lake");
+        let lanes = ExecutionLanes::current();
+        let (tx, rx) = mpsc::channel(2);
+        spawn_search_log_worker(&lanes, lake.clone(), rx);
+
+        let event = SearchEvent::new(
+            "3bhk near metro".to_string(),
+            crate::search::intent::parse_intent("3bhk near metro"),
+            2,
+        );
+        tx.send(SearchLogMessage::SearchEvent(event.clone()))
+            .await
+            .expect("event queue accepts message");
+        drop(tx);
+
+        let prefix = crate::lake::LakePrefix::new("raw/source=search_events")
+            .expect("static event prefix is valid");
+        let keys = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                let keys = lake.list_keys(&prefix).await.expect("event keys list");
+                if !keys.is_empty() {
+                    break keys;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("worker writes the event promptly");
+
+        assert_eq!(keys.len(), 1);
+        assert!(keys[0].as_str().contains("/run_id=runtime/"));
+        let written: SearchEvent = lake.get_json(&keys[0]).await.expect("event round trips");
+        assert_eq!(written.query, event.query);
+        assert_eq!(written.results_returned, event.results_returned);
+        assert_eq!(KnowledgeGraph::new().stats().search_events, 0);
     }
 
     #[tokio::test]

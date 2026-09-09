@@ -7,8 +7,6 @@ use crate::knowledge::FactValue;
 
 use super::evidence::{DerivedEvidence, EvidenceId, EvidenceIdentityError, SourceObservation};
 
-pub const SEARCH_SERVING_BUNDLE_ASSET_ID: &str = "search_serving_bundle";
-
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ServingEntityVisibility {
@@ -219,6 +217,7 @@ pub struct ServingSearchMetadataRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServingBundleSchema {
     pub format_version: u32,
     pub storage_format: String,
@@ -227,6 +226,7 @@ pub struct ServingBundleSchema {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServingTableSchema {
     pub name: String,
     pub path: String,
@@ -234,6 +234,7 @@ pub struct ServingTableSchema {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServingColumnSchema {
     pub name: String,
     pub logical_type: String,
@@ -419,14 +420,13 @@ pub enum BundleArtifactKind {
     SearchMetadataParquet,
     ReraEvidenceParquet,
     SchemaJson,
-    TrustPolicyJson,
     QuarantineJson,
     TantivyIndexFile,
-    #[serde(other)]
     Other,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BundleArtifact {
     pub kind: BundleArtifactKind,
     pub key: String,
@@ -438,6 +438,7 @@ pub struct BundleArtifact {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServingQuarantineReport {
     pub format_version: u32,
     pub eligibility_policy_version: u32,
@@ -448,6 +449,7 @@ pub struct ServingQuarantineReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct QuarantinedSociety {
     pub runtime_society_id: String,
     pub society_entity_ids: Vec<String>,
@@ -455,31 +457,6 @@ pub struct QuarantinedSociety {
     pub property_entity_ids: Vec<String>,
     pub projected_property_ids: Vec<String>,
     pub reason_codes: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TrustPolicy {
-    pub version: u32,
-    pub proof_sources: Vec<String>,
-    pub support_sources: Vec<String>,
-    pub ai_source_max_confidence: f32,
-}
-
-impl Default for TrustPolicy {
-    fn default() -> Self {
-        Self {
-            version: 1,
-            proof_sources: vec!["Rera".to_string(), "Bbmp".to_string(), "Manual".to_string()],
-            support_sources: vec![
-                "Reddit".to_string(),
-                "Google".to_string(),
-                "News".to_string(),
-                "Computed".to_string(),
-                "BuilderOfficial".to_string(),
-            ],
-            ai_source_max_confidence: 0.5,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -525,42 +502,31 @@ mod tests {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServingBundleManifest {
     pub bundle_version: String,
     pub format_version: u32,
     pub created_at: DateTime<Utc>,
     pub entity_count: u64,
-    #[serde(default)]
     pub entity_alias_count: u64,
     pub fact_count: u64,
     pub search_metadata_count: u64,
-    #[serde(default)]
     pub rera_evidence_count: u64,
     /// RERA evidence collected for societies outside this bundle's catalog.
     /// These rows remain in durable RERA assets but are never exposed at runtime.
-    #[serde(default)]
     pub excluded_rera_evidence_society_ids: Vec<String>,
-    #[serde(default)]
     pub edge_count: u64,
-    #[serde(default)]
     pub eligibility_policy_version: u32,
-    #[serde(default)]
     pub quarantined_society_count: u64,
-    #[serde(default)]
     pub quarantine_reason_counts: BTreeMap<String, u64>,
     pub entity_parquet_key: String,
-    #[serde(default)]
-    pub entity_alias_parquet_key: Option<String>,
+    pub entity_alias_parquet_key: String,
     pub fact_parquet_key: String,
     pub search_metadata_parquet_key: String,
-    #[serde(default)]
-    pub rera_evidence_parquet_key: Option<String>,
-    #[serde(default)]
-    pub edge_parquet_key: Option<String>,
-    #[serde(default)]
-    pub quarantine_report_key: Option<String>,
+    pub rera_evidence_parquet_key: String,
+    pub edge_parquet_key: String,
+    pub quarantine_report_key: String,
     pub schema_key: String,
-    pub trust_policy_key: String,
     pub tantivy_index_prefix: String,
     pub artifacts: Vec<BundleArtifact>,
 }

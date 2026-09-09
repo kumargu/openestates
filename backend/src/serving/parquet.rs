@@ -63,23 +63,6 @@ pub fn write_entities_parquet(
 }
 
 pub fn read_entities_parquet(bytes: &[u8]) -> Result<Vec<ServingEntityRecord>, ParquetReadError> {
-    read_entities_parquet_impl(bytes, false)
-}
-
-/// Read a pre-visibility entity table for the offline `rebuild-serving`
-/// command. Runtime loading remains strict: only the catalog rebuild path may
-/// assign the old implicit searchable visibility before rematerializing the
-/// bundle in the current format.
-pub fn read_entities_parquet_for_offline_rebuild(
-    bytes: &[u8],
-) -> Result<Vec<ServingEntityRecord>, ParquetReadError> {
-    read_entities_parquet_impl(bytes, true)
-}
-
-fn read_entities_parquet_impl(
-    bytes: &[u8],
-    allow_missing_visibility: bool,
-) -> Result<Vec<ServingEntityRecord>, ParquetReadError> {
     let mut records = Vec::new();
     for batch in ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes))?.build()? {
         let batch = batch?;
@@ -87,28 +70,18 @@ fn read_entities_parquet_impl(
         let entity_type = string_column(&batch, "entity_type")?;
         let name = string_column(&batch, "name")?;
         let root_source = string_column(&batch, "root_source")?;
-        let visibility = match string_column(&batch, "visibility") {
-            Ok(visibility) => Some(visibility),
-            Err(_) if allow_missing_visibility => None,
-            Err(error) => return Err(error),
-        };
+        let visibility = string_column(&batch, "visibility")?;
         let searchable_text = string_column(&batch, "searchable_text")?;
 
         for row in 0..batch.num_rows() {
-            let visibility = match visibility {
-                Some(visibility) => {
-                    let visibility_value = required_string(visibility, row, "visibility")?;
-                    ServingEntityVisibility::parse(&visibility_value).ok_or_else(|| {
-                        ParquetReadError::InvalidTypedValue {
-                            row,
-                            message: format!(
-                                "unknown serving entity visibility {visibility_value:?}"
-                            ),
-                        }
-                    })?
-                }
-                None => ServingEntityVisibility::Searchable,
-            };
+            let visibility_value = required_string(visibility, row, "visibility")?;
+            let visibility =
+                ServingEntityVisibility::parse(&visibility_value).ok_or_else(|| {
+                    ParquetReadError::InvalidTypedValue {
+                        row,
+                        message: format!("unknown serving entity visibility {visibility_value:?}"),
+                    }
+                })?;
             records.push(ServingEntityRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 entity_type: required_string(entity_type, row, "entity_type")?,
@@ -300,7 +273,6 @@ pub fn read_facts_parquet(bytes: &[u8]) -> Result<Vec<ServingFactRecord>, Parque
         let fact_key = string_column(&batch, "fact_key")?;
         let value_type = string_column(&batch, "value_type")?;
         let value_text = optional_string_column(&batch, "value_text")?;
-        let legacy_value_json = optional_string_column(&batch, "value_json")?;
         let confidence = float32_column(&batch, "confidence")?;
         let source_type = string_column(&batch, "source_type")?;
         let source_url = string_column(&batch, "source_url")?;
@@ -312,8 +284,7 @@ pub fn read_facts_parquet(bytes: &[u8]) -> Result<Vec<ServingFactRecord>, Parque
         for row in 0..batch.num_rows() {
             let value_type = required_string(value_type, row, "value_type")?;
             let typed_value = typed_value_from_batch(&batch, row);
-            let value =
-                fact_value_from_batch(typed_value.as_ref(), legacy_value_json, row, &value_type)?;
+            let value = fact_value_from_batch(typed_value.as_ref(), row, &value_type)?;
             let typed_value_text = typed_value.and_then(|value| value.value_text);
             let observation = observation_json
                 .and_then(|column| optional_string(column, row))
@@ -361,8 +332,6 @@ pub fn read_search_metadata_parquet(
         let entity_id = string_column(&batch, "entity_id")?;
         let fact_key = string_column(&batch, "fact_key")?;
         let display_template = string_column(&batch, "display_template")?;
-        let legacy_answers_preferences_json =
-            optional_string_column(&batch, "answers_preferences_json")?;
         let scoring_direction = string_column(&batch, "scoring_direction")?;
         let scoring_weight = float32_column(&batch, "scoring_weight")?;
 
@@ -378,11 +347,7 @@ pub fn read_search_metadata_parquet(
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 fact_key: required_string(fact_key, row, "fact_key")?,
                 display_template: optional_string(display_template, row),
-                answers_preferences: answers_preferences_from_batch(
-                    &batch,
-                    legacy_answers_preferences_json,
-                    row,
-                )?,
+                answers_preferences: answers_preferences_from_batch(&batch, row)?,
                 scoring_direction: optional_string(scoring_direction, row),
                 scoring_weight: optional_f32(scoring_weight, row),
                 scoring_thresholds,
@@ -463,16 +428,9 @@ fn optional_string_array(values: Vec<Option<String>>) -> ArrayRef {
 
 fn fact_value_from_batch(
     typed_value: Option<&TypedFactValue>,
-    legacy_json: Option<&StringArray>,
     row: usize,
     value_type: &str,
 ) -> Result<FactValue, ParquetReadError> {
-    if let Some(legacy_json) = legacy_json {
-        let value = serde_json::from_str(&required_string(legacy_json, row, "value_json")?)?;
-        validate_read_fact_value_type(value_type, &value, row)?;
-        return Ok(value);
-    }
-
     let typed_value = typed_value.ok_or_else(|| ParquetReadError::InvalidTypedValue {
         row,
         message: "missing typed fact value columns".to_string(),
@@ -496,35 +454,10 @@ fn validate_fact_value_type(value_type: &str, value: &FactValue) -> Result<(), P
     })
 }
 
-fn validate_read_fact_value_type(
-    value_type: &str,
-    value: &FactValue,
-    row: usize,
-) -> Result<(), ParquetReadError> {
-    if TypedFactValue::value_type_matches(value_type, value) {
-        return Ok(());
-    }
-    Err(ParquetReadError::InvalidTypedValue {
-        row,
-        message: format!(
-            "value_type {value_type} does not match fact value type {}",
-            TypedFactValue::value_type_for(value)
-        ),
-    })
-}
-
 fn answers_preferences_from_batch(
     batch: &RecordBatch,
-    legacy_json: Option<&StringArray>,
     row: usize,
 ) -> Result<Vec<String>, ParquetReadError> {
-    if let Some(legacy_json) = legacy_json {
-        return Ok(serde_json::from_str(&required_string(
-            legacy_json,
-            row,
-            "answers_preferences_json",
-        )?)?);
-    }
     Ok(
         match optional_string_list_column_value(batch, ANSWERS_PREFERENCES_COLUMN, row) {
             Ok(OptionalListColumn::Values(values)) => values,
@@ -886,37 +819,6 @@ mod tests {
             vec!["asset:osm/version:v1".to_string()],
         )
         .unwrap()
-    }
-
-    #[test]
-    fn only_offline_rebuild_accepts_legacy_entities_without_visibility() {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("entity_id", DataType::Utf8, false),
-            Field::new("entity_type", DataType::Utf8, false),
-            Field::new("name", DataType::Utf8, false),
-            Field::new("root_source", DataType::Utf8, true),
-            Field::new("searchable_text", DataType::Utf8, false),
-        ]));
-        let batch = RecordBatch::try_new(
-            schema,
-            vec![
-                string_array(["society:legacy".to_string()].into_iter()),
-                string_array(["society".to_string()].into_iter()),
-                string_array(["Legacy Society".to_string()].into_iter()),
-                optional_string_array(vec![Some("legacy-source".to_string())]),
-                string_array(["Legacy Society".to_string()].into_iter()),
-            ],
-        )
-        .unwrap();
-        let bytes = write_batch(batch).unwrap();
-
-        let strict_error = read_entities_parquet(&bytes)
-            .expect_err("runtime loading must reject entities without visibility");
-        assert!(strict_error.to_string().contains("visibility"));
-
-        let rebuilt = read_entities_parquet_for_offline_rebuild(&bytes).unwrap();
-        assert_eq!(rebuilt.len(), 1);
-        assert_eq!(rebuilt[0].visibility, ServingEntityVisibility::Searchable);
     }
 
     #[test]

@@ -135,28 +135,22 @@ async fn build_property_surfaces_response(
     surface_ids: &[String],
     proof_focus: Option<&ProofFocus>,
 ) -> Result<PropertySurfacesResponse, SurfaceRouteError> {
-    let properties = state.properties.read().await;
-    let property = properties
+    let runtime = state.search_runtime.load_full();
+    let property = runtime
+        .properties
         .iter()
         .find(|property| property.id == *property_id)
         .cloned()
         .ok_or_else(|| SurfaceRouteError::not_found("property_not_found"))?;
-    drop(properties);
 
     let config = ui_surfaces_config()
         .map_err(|err| SurfaceRouteError::internal(format!("surface_config_invalid: {err}")))?;
 
-    let serving_bundle = state.serving_bundle.read().await.clone().ok_or_else(|| {
-        SurfaceRouteError::status(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "serving_bundle_unavailable",
-        )
-    })?;
     let graph = state.knowledge.read().await;
     let entity_refs = kg_entity_refs_for_property(&property, &graph);
     drop(graph);
-    let societies = state.societies.read().await;
-    let society_name = societies
+    let society_name = runtime
+        .societies
         .iter()
         .find(|society| society.id == property.society_id)
         .map(|society| society.name.as_str());
@@ -186,7 +180,7 @@ async fn build_property_surfaces_response(
             &property,
             society_name,
             entity_refs.clone(),
-            &serving_bundle,
+            &runtime.bundle,
             surface,
             surface_focus,
         ) {

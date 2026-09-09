@@ -773,11 +773,10 @@ fn layer_records<'a>(
         }
     }
     records.sort_by(|left, right| {
-        right
-            .learned_at
-            .cmp(&left.learned_at)
-            .then_with(|| left.source_url.cmp(&right.source_url))
-            .then_with(|| left.entity_id.cmp(&right.entity_id))
+        right.confidence.total_cmp(&left.confidence).then_with(|| {
+            left.stable_selection_key()
+                .cmp(&right.stable_selection_key())
+        })
     });
     records.dedup_by(|left, right| {
         left.entity_id == right.entity_id

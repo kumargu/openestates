@@ -1,10 +1,3 @@
-use std::fs::File;
-use std::sync::Arc;
-
-use arrow::array::{ArrayRef, Float32Array, StringArray};
-use arrow::datatypes::{DataType, Field, Schema};
-use arrow::record_batch::RecordBatch;
-use backend::assets::{MaterializationId, SourceWatermark};
 use backend::knowledge::fact::{
     FactSource, FactValue, ScoringDirection, ScoringHint, SourceType, SourcedFact,
 };
@@ -13,14 +6,13 @@ use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::{LakeKey, LakeStore};
 use backend::serving::{
     hydrate_tantivy_index, read_edges_parquet, read_entities_parquet, read_facts_parquet,
-    read_search_metadata_parquet, BundleArtifactKind, SearchServingBundleMaterializer,
-    ServingBundleBuilder, ServingBundleLoader, ServingBundleManifest, ServingEntityRecord,
-    ServingEntityVisibility, ServingFactRecord, ServingSearchMetadataRecord, SourceObservation,
-    TantivyRecallIndex,
+    read_search_metadata_parquet, BundleArtifactKind, ServingBundleBuilder, ServingBundleLoader,
+    ServingBundleManifest, ServingEntityRecord, ServingEntityVisibility, ServingFactRecord,
+    ServingSearchMetadataRecord, SourceObservation, TantivyRecallIndex,
 };
 use chrono::Utc;
-use parquet::arrow::ArrowWriter;
 use parquet::file::reader::{FileReader, SerializedFileReader};
+use std::fs::File;
 use tempfile::tempdir;
 
 #[tokio::test]
@@ -28,9 +20,17 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let graph = mock_graph();
+    let (entities, facts, metadata) = catalog_records_from_graph(&graph);
 
     let manifest = ServingBundleBuilder::new(lake.clone())
-        .build_from_graph(&graph, "2026-07-12T18:30Z")
+        .build_from_catalog_records(
+            entities,
+            facts,
+            metadata,
+            Vec::new(),
+            Vec::new(),
+            "2026-07-12T18:30Z",
+        )
         .await
         .unwrap();
 
@@ -65,6 +65,12 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         .artifacts
         .iter()
         .any(|artifact| artifact.kind == BundleArtifactKind::QuarantineJson));
+    let mut legacy_manifest = serde_json::to_value(&manifest).unwrap();
+    legacy_manifest
+        .as_object_mut()
+        .unwrap()
+        .insert("trust_policy_key".to_string(), serde_json::json!("retired"));
+    assert!(serde_json::from_value::<ServingBundleManifest>(legacy_manifest).is_err());
     let topology_gaps = manifest
         .artifacts
         .iter()
@@ -94,7 +100,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         .await
         .unwrap();
     let edge_bytes = lake
-        .get_bytes(&LakeKey::new(manifest.edge_parquet_key.clone().unwrap()).unwrap())
+        .get_bytes(&LakeKey::new(manifest.edge_parquet_key.clone()).unwrap())
         .await
         .unwrap();
     assert_is_parquet(&entity_bytes);
@@ -289,28 +295,14 @@ async fn normal_serving_build_materializes_internal_geo_cells_and_excludes_their
     ];
     let metadata = facts.iter().map(serving_metadata).collect();
 
-    let materialization = SearchServingBundleMaterializer::new(lake.clone())
-        .materialize_child_from_serving_records_for_run(
-            entities,
-            facts,
-            metadata,
-            Vec::new(),
-            version,
-            vec![SourceWatermark {
-                source: "hermetic_fixture".to_string(),
-                high_watermark: "v1".to_string(),
-            }],
-            Vec::new(),
-            MaterializationId::new(),
-        )
+    let manifest = ServingBundleBuilder::new(lake.clone())
+        .build_from_catalog_records(entities, facts, metadata, Vec::new(), Vec::new(), version)
         .await
         .unwrap();
-    let manifest = materialization.manifest.clone();
     let cache = tempdir().unwrap();
     let bundle = ServingBundleLoader::new(lake.clone(), cache.path())
-        .load_search_bundle_by_materialization(&materialization.record.materialization_id)
+        .load_search_bundle(version)
         .await
-        .unwrap()
         .unwrap();
 
     for cell_id in ["area:osm:cell-a", "area:osm:cell-b"] {
@@ -359,7 +351,7 @@ async fn normal_serving_build_materializes_internal_geo_cells_and_excludes_their
         bundle.entities
     );
     let edge_bytes = lake
-        .get_bytes(&LakeKey::new(manifest.edge_parquet_key.unwrap()).unwrap())
+        .get_bytes(&LakeKey::new(manifest.edge_parquet_key).unwrap())
         .await
         .unwrap();
     let edges = read_edges_parquet(&edge_bytes).unwrap();
@@ -448,79 +440,82 @@ fn serving_metadata(fact: &ServingFactRecord) -> ServingSearchMetadataRecord {
 }
 
 #[test]
-fn serving_manifest_allows_optional_sidecar_artifact_kinds() {
-    let manifest_body = r#"{
-      "bundle_version": "bundle-with-sidecar",
-      "format_version": 5,
-      "created_at": "2026-08-03T18:25:24.188555Z",
-      "entity_count": 1,
-      "fact_count": 1,
-      "search_metadata_count": 1,
-      "edge_count": 0,
-      "entity_parquet_key": "serving/search_bundle/version=bundle/entities/part-00000.parquet",
-      "fact_parquet_key": "serving/search_bundle/version=bundle/facts/part-00000.parquet",
-      "search_metadata_parquet_key": "serving/search_bundle/version=bundle/search_metadata/part-00000.parquet",
-      "edge_parquet_key": null,
-      "semantic_embedding_parquet_key": null,
-      "ontology_embedding_parquet_key": "serving/search_bundle/version=bundle/ontology_embeddings/part-00000.parquet",
-      "schema_key": "serving/search_bundle/version=bundle/schema.json",
-      "trust_policy_key": "serving/search_bundle/version=bundle/trust_policy.json",
-      "tantivy_index_prefix": "serving/search_bundle/version=bundle/tantivy_index",
-      "artifacts": [
-        {
-          "kind": "ontology_embeddings_parquet",
-          "key": "serving/search_bundle/version=bundle/ontology_embeddings/part-00000.parquet",
-          "format": "application/vnd.apache.parquet",
-          "content_hash": "hash",
-          "hash_algorithm": "sha256",
-          "size_bytes": 10,
-          "row_count": 1
-        },
-        {
-          "kind": "tantivy_index_file",
-          "key": "serving/search_bundle/version=bundle/tantivy_index/meta.json",
-          "format": "application/octet-stream",
-          "content_hash": "hash",
-          "hash_algorithm": "sha256",
-          "size_bytes": 10,
-          "row_count": null
-        }
-      ]
-    }"#;
-
-    let manifest: ServingBundleManifest = serde_json::from_str(manifest_body).unwrap();
-
-    assert!(manifest
-        .artifacts
-        .iter()
-        .any(|artifact| artifact.kind == BundleArtifactKind::Other));
-    assert_eq!(
-        manifest.artifacts[1].kind,
-        BundleArtifactKind::TantivyIndexFile
-    );
+fn serving_manifest_requires_the_complete_format_12_contract() {
+    let old_manifest = r#"{"bundle_version":"old","format_version":5}"#;
+    assert!(serde_json::from_str::<ServingBundleManifest>(old_manifest).is_err());
 }
 
-#[test]
-fn legacy_json_serving_parquet_reads_into_typed_runtime_records() {
-    let facts = read_facts_parquet(&legacy_facts_parquet()).unwrap();
-    assert_eq!(facts.len(), 1);
-    assert_eq!(facts[0].entity_id, "society:legacy-green");
-    assert_eq!(
-        facts[0].value,
-        FactValue::Text("Legacy residents mention trees".to_string())
-    );
-    assert_eq!(
-        facts[0].value_text.as_deref(),
-        Some("Legacy residents mention trees")
-    );
-
-    let metadata = read_search_metadata_parquet(&legacy_search_metadata_parquet()).unwrap();
-    assert_eq!(metadata.len(), 1);
-    assert_eq!(
-        metadata[0].answers_preferences,
-        vec!["greenery".to_string(), "trees".to_string()]
-    );
-    assert_eq!(metadata[0].scoring_direction.as_deref(), Some("TextMatch"));
+fn catalog_records_from_graph(
+    graph: &KnowledgeGraph,
+) -> (
+    Vec<ServingEntityRecord>,
+    Vec<ServingFactRecord>,
+    Vec<ServingSearchMetadataRecord>,
+) {
+    let mut entities = Vec::new();
+    let mut facts = Vec::new();
+    let mut metadata = Vec::new();
+    for node in graph.nodes.values() {
+        entities.push(ServingEntityRecord {
+            entity_id: node.id.clone(),
+            entity_type: "society".to_string(),
+            name: node.name.clone(),
+            root_source: node.root_source.map(|_| "rera".to_string()),
+            visibility: ServingEntityVisibility::Searchable,
+            searchable_text: String::new(),
+        });
+        let mut current = std::collections::BTreeMap::new();
+        for sourced in &node.facts {
+            current
+                .entry(sourced.key.as_str())
+                .and_modify(|existing: &mut &SourcedFact| {
+                    if sourced.version > existing.version {
+                        *existing = sourced;
+                    }
+                })
+                .or_insert(sourced);
+        }
+        for sourced in current.into_values() {
+            let value_type = match &sourced.value {
+                FactValue::Numeric(_) => "numeric",
+                FactValue::Text(_) => "text",
+                FactValue::Bool(_) => "bool",
+                FactValue::Tags(_) => "tags",
+                FactValue::Score { .. } => "score",
+            };
+            facts.push(ServingFactRecord {
+                entity_id: node.id.clone(),
+                fact_key: sourced.key.clone(),
+                value_type: value_type.to_string(),
+                value_text: None,
+                value: sourced.value.clone(),
+                confidence: sourced.confidence,
+                source_type: format!("{:?}", sourced.source.source_type),
+                source_url: sourced.source.url.clone(),
+                model: sourced.source.model.clone(),
+                skill_id: sourced.source.skill_id.clone(),
+                learned_at: sourced.learned_at,
+                observation: None,
+            });
+            metadata.push(ServingSearchMetadataRecord {
+                entity_id: node.id.clone(),
+                fact_key: sourced.key.clone(),
+                display_template: sourced.display_template.clone(),
+                answers_preferences: sourced.answers_preferences.clone(),
+                scoring_direction: sourced
+                    .scoring_hint
+                    .as_ref()
+                    .map(|_| "text_match".to_string()),
+                scoring_weight: sourced.scoring_hint.as_ref().map(|hint| hint.weight),
+                scoring_thresholds: sourced
+                    .scoring_hint
+                    .as_ref()
+                    .map(|hint| hint.thresholds.clone())
+                    .unwrap_or_default(),
+            });
+        }
+    }
+    (entities, facts, metadata)
 }
 
 fn mock_graph() -> KnowledgeGraph {
@@ -665,75 +660,4 @@ fn parquet_columns(bytes: &[u8]) -> Vec<String> {
         .iter()
         .map(|field| field.name().to_string())
         .collect()
-}
-
-fn legacy_facts_parquet() -> Vec<u8> {
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("entity_id", DataType::Utf8, false),
-        Field::new("fact_key", DataType::Utf8, false),
-        Field::new("value_type", DataType::Utf8, false),
-        Field::new("value_text", DataType::Utf8, true),
-        Field::new("value_json", DataType::Utf8, false),
-        Field::new("confidence", DataType::Float32, false),
-        Field::new("source_type", DataType::Utf8, false),
-        Field::new("source_url", DataType::Utf8, true),
-        Field::new("model", DataType::Utf8, true),
-        Field::new("skill_id", DataType::Utf8, true),
-        Field::new("learned_at", DataType::Utf8, false),
-    ]));
-    write_legacy_parquet(
-        schema,
-        vec![
-            string_array(["society:legacy-green"]),
-            string_array(["resident_greenery_signal"]),
-            string_array(["text"]),
-            optional_string_array([Some("Legacy residents mention trees")]),
-            string_array([r#"{"type":"Text","data":"Legacy residents mention trees"}"#]),
-            Arc::new(Float32Array::from(vec![0.71])) as ArrayRef,
-            string_array(["Reddit"]),
-            optional_string_array([Some("https://reddit.com/r/BangaloreRealEstates/legacy")]),
-            optional_string_array([None]),
-            optional_string_array([Some("legacy_skill")]),
-            string_array(["2026-07-13T00:00:00Z"]),
-        ],
-    )
-}
-
-fn legacy_search_metadata_parquet() -> Vec<u8> {
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("entity_id", DataType::Utf8, false),
-        Field::new("fact_key", DataType::Utf8, false),
-        Field::new("display_template", DataType::Utf8, true),
-        Field::new("answers_preferences_json", DataType::Utf8, false),
-        Field::new("scoring_direction", DataType::Utf8, true),
-        Field::new("scoring_weight", DataType::Float32, true),
-    ]));
-    write_legacy_parquet(
-        schema,
-        vec![
-            string_array(["society:legacy-green"]),
-            string_array(["resident_greenery_signal"]),
-            optional_string_array([Some("Resident signal: {value}")]),
-            string_array([r#"["greenery","trees"]"#]),
-            optional_string_array([Some("TextMatch")]),
-            Arc::new(Float32Array::from(vec![Some(1.4)])) as ArrayRef,
-        ],
-    )
-}
-
-fn write_legacy_parquet(schema: Arc<Schema>, columns: Vec<ArrayRef>) -> Vec<u8> {
-    let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
-    let mut bytes = Vec::new();
-    let mut writer = ArrowWriter::try_new(&mut bytes, schema, None).unwrap();
-    writer.write(&batch).unwrap();
-    writer.close().unwrap();
-    bytes
-}
-
-fn string_array<const N: usize>(values: [&str; N]) -> ArrayRef {
-    Arc::new(StringArray::from(Vec::from(values)))
-}
-
-fn optional_string_array<const N: usize>(values: [Option<&str>; N]) -> ArrayRef {
-    Arc::new(StringArray::from(Vec::from(values)))
 }
