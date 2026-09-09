@@ -120,7 +120,7 @@ Example:
       "id": "registered_transaction_facts",
       "stage": "silver",
       "description": "Registered sale/lease transaction observations.",
-      "dependencies": ["kg_society_view"],
+      "dependencies": ["society_gold_snapshot"],
       "optional_dependencies": ["rera_legal_facts"],
       "refresh": { "cadence": "monthly", "ttl_days": 45 },
       "cost_tier": "expensive",
@@ -425,7 +425,7 @@ Delete `legacy_preference_score` only after:
    d. Python collector / Rust materializer runs on that list only
    e. Write materialization record + watermarks
 4. Resolver merges facts across sources per resolution_policies.json
-5. Promote search_serving_bundle
+5. Write one format-12 bundle and CAS `manifests/catalog/dev.json`
 6. Emit coverage + data-health artifacts
 ```
 

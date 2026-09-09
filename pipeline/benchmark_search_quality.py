@@ -186,9 +186,8 @@ def main() -> None:
     bundle_requirement_error = serving_bundle_requirement_error(
         required_bundle_version, runtime_bundle_version
     )
-    runtime_materialization = materialization_for_bundle_version(Path.cwd(), runtime_bundle_version)
-    local_current_materialization = current_search_bundle_materialization(Path.cwd())
-    serving_materialization = runtime_materialization or local_current_materialization
+    runtime_bundle = bundle_summary(Path.cwd(), runtime_bundle_version)
+    local_current_bundle = current_catalog_bundle(Path.cwd())
     output = {
         "benchmark": spec.get("benchmark"),
         "version": spec.get("version"),
@@ -199,16 +198,12 @@ def main() -> None:
         "search_runtime": search_runtime,
         "required_serving_bundle_version": required_bundle_version,
         "serving_bundle_requirement_satisfied": bundle_requirement_error is None,
-        "serving_bundle_materialization": serving_materialization,
-        "runtime_serving_bundle_materialization": runtime_materialization,
-        "local_current_serving_bundle_materialization": local_current_materialization,
-        "runtime_serving_bundle_manifest": search_bundle_manifest_summary(
-            Path.cwd(), runtime_bundle_version
-        ),
+        "runtime_serving_bundle": runtime_bundle,
+        "local_current_serving_bundle": local_current_bundle,
         "provenance_warnings": provenance_warnings(
             runtime_bundle_version,
-            runtime_materialization,
-            local_current_materialization,
+            runtime_bundle,
+            local_current_bundle,
         ),
         "summary": summarize(results, scoreable_modes),
         "results": results,
@@ -1513,27 +1508,19 @@ def markdown_report(output: Dict[str, Any]) -> str:
                 f"- Serving bundle: `{runtime.get('servingBundleVersion') or runtime.get('serving_bundle_version')}`",
             ]
         )
-    materialization = output.get("serving_bundle_materialization") or {}
-    if materialization:
+    runtime_bundle = output.get("runtime_serving_bundle") or {}
+    if runtime_bundle:
         lines.extend(
             [
-                f"- Runtime materialization id: `{materialization.get('materialization_id')}`",
-                f"- Runtime materialization version: `{materialization.get('version')}`",
+                f"- Runtime entities/facts/search rows: {runtime_bundle.get('entity_count')} / "
+                f"{runtime_bundle.get('fact_count')} / {runtime_bundle.get('search_metadata_count')}",
             ]
         )
-    manifest = output.get("runtime_serving_bundle_manifest") or {}
-    if manifest:
-        lines.extend(
-            [
-                f"- Runtime entities/facts/search rows: {manifest.get('entity_count')} / "
-                f"{manifest.get('fact_count')} / {manifest.get('search_metadata_count')}",
-            ]
-        )
-    local_current = output.get("local_current_serving_bundle_materialization") or {}
-    if local_current and local_current.get("version") != materialization.get("version"):
+    local_current = output.get("local_current_serving_bundle") or {}
+    if local_current and local_current.get("version") != runtime_bundle.get("version"):
         lines.append(
-            f"- Local current pointer: `{local_current.get('version')}` "
-            f"(`{local_current.get('materialization_id')}`)"
+            f"- Catalog dev bundle: `{local_current.get('version')}` "
+            f"(revision `{local_current.get('revision')}`)"
         )
     for warning in output.get("provenance_warnings") or []:
         lines.append(f"- Provenance warning: {warning}")
@@ -1783,81 +1770,45 @@ def inferred_scoreable_modes(cases: List[Dict[str, Any]]) -> List[str]:
     return scoreable or ["data_backed"]
 
 
-def materialization_summary(data: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "asset_id": data.get("asset_id"),
-        "materialization_id": data.get("materialization_id"),
-        "materialization_key": data.get("materialization_key"),
-        "version": data.get("version"),
-        "run_id": data.get("run_id"),
-        "updated_at": data.get("updated_at"),
-        "created_at": data.get("created_at"),
-        "status": data.get("status"),
-        "row_count": data.get("row_count"),
-        "parent_materializations": data.get("parent_materializations") or [],
-    }
-
-
-def current_search_bundle_materialization(root: Path) -> Dict[str, Any]:
-    current = (
-        root
-        / "data"
-        / "lake"
-        / "manifests"
-        / "assets"
-        / "search_serving_bundle"
-        / "partition=global"
-        / "current.json"
-    )
+def current_catalog_bundle(root: Path) -> Dict[str, Any]:
+    current = root / "data" / "lake" / "manifests" / "catalog" / "dev.json"
     if not current.exists():
         return {}
     try:
         data = load_json(current)
     except (OSError, json.JSONDecodeError):
         return {}
-    return materialization_summary(data)
+    generation = data.get("current") or {}
+    return {
+        "version": generation.get("bundle_version"),
+        "roster_id": generation.get("roster_id"),
+        "roster_key": generation.get("roster_key"),
+        "revision": data.get("revision"),
+        "updated_at": data.get("updated_at"),
+    }
 
 
-def materialization_for_bundle_version(root: Path, bundle_version: Optional[str]) -> Dict[str, Any]:
+def bundle_summary(root: Path, bundle_version: Optional[str]) -> Dict[str, Any]:
     if not bundle_version:
         return {}
-    materialization_dir = (
+    manifest_path = (
         root
         / "data"
         / "lake"
-        / "manifests"
-        / "assets"
-        / "search_serving_bundle"
-        / "partition=global"
-        / "materializations"
+        / "serving"
+        / "search_bundle"
+        / f"version={bundle_version}"
+        / "manifest.json"
     )
-    if not materialization_dir.exists():
-        return {}
-    for path in sorted(materialization_dir.glob("*.json")):
-        try:
-            data = load_json(path)
-        except (OSError, json.JSONDecodeError):
-            continue
-        if data.get("version") == bundle_version:
-            summary = materialization_summary(data)
-            summary["materialization_key"] = str(path.relative_to(root / "data" / "lake"))
-            return summary
-    return {}
-
-
-def search_bundle_manifest_summary(root: Path, bundle_version: Optional[str]) -> Dict[str, Any]:
-    if not bundle_version:
-        return {}
-    manifest = root / "data" / "lake" / "serving" / "search_bundle" / f"version={bundle_version}" / "manifest.json"
-    if not manifest.exists():
+    if not manifest_path.exists():
         return {}
     try:
-        data = load_json(manifest)
+        data = load_json(manifest_path)
     except (OSError, json.JSONDecodeError):
         return {}
     return {
-        "bundle_version": data.get("bundle_version"),
-        "path": str(manifest.parent),
+        "version": data.get("bundle_version"),
+        "format_version": data.get("format_version"),
         "entity_count": data.get("entity_count"),
         "fact_count": data.get("fact_count"),
         "search_metadata_count": data.get("search_metadata_count"),
@@ -1867,19 +1818,19 @@ def search_bundle_manifest_summary(root: Path, bundle_version: Optional[str]) ->
 
 def provenance_warnings(
     runtime_bundle_version: Optional[str],
-    runtime_materialization: Dict[str, Any],
-    local_current_materialization: Dict[str, Any],
+    runtime_bundle: Dict[str, Any],
+    local_current_bundle: Dict[str, Any],
 ) -> List[str]:
     warnings: List[str] = []
-    if runtime_bundle_version and not runtime_materialization:
+    if runtime_bundle_version and not runtime_bundle:
         warnings.append(
-            f"live runtime bundle {runtime_bundle_version!r} has no matching local materialization record"
+            f"live runtime bundle {runtime_bundle_version!r} has no matching local bundle"
         )
-    current_version = local_current_materialization.get("version")
+    current_version = local_current_bundle.get("version")
     if runtime_bundle_version and current_version and runtime_bundle_version != current_version:
         warnings.append(
-            "live runtime bundle differs from data/lake current pointer; "
-            "compare benchmark runs by runtime bundle, not by the repo pointer"
+            "live runtime bundle differs from data/lake catalog dev pointer; "
+            "compare benchmark runs by runtime bundle, not by the lake pointer"
         )
     return warnings
 
