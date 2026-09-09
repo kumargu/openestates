@@ -48,14 +48,6 @@ impl AssetMaterializationStore {
     }
 
     pub async fn promote_current(&self, record: &MaterializationRecord) -> Result<bool, LakeError> {
-        self.promote_current_for_run(record, record.created_at)
-            .await
-    }
-
-    pub async fn force_promote_current(
-        &self,
-        record: &MaterializationRecord,
-    ) -> Result<(), LakeError> {
         let pointer = current_pointer_for_record(record, Utc::now());
         self.lake
             .put_json(
@@ -63,38 +55,21 @@ impl AssetMaterializationStore {
                 &pointer,
             )
             .await?;
-        Ok(())
+        Ok(true)
     }
 
-    pub async fn promote_current_for_run(
+    pub async fn compare_and_swap_current(
         &self,
         record: &MaterializationRecord,
-        run_created_at: chrono::DateTime<Utc>,
-    ) -> Result<bool, LakeError> {
-        self.promote_current_for_run_if_current(record, run_created_at, None)
-            .await
-    }
-
-    pub async fn promote_current_for_run_if_current(
-        &self,
-        record: &MaterializationRecord,
-        run_created_at: chrono::DateTime<Utc>,
         expected_current: Option<&super::MaterializationId>,
     ) -> Result<bool, LakeError> {
-        let mut pointer = current_pointer_for_record(record, Utc::now());
-        pointer.run_created_at = Some(run_created_at);
+        let pointer = current_pointer_for_record(record, Utc::now());
         let key = AssetPathBuilder::current_pointer_key(&record.asset_id, &record.partition);
         self.lake
             .put_json_if(&key, &pointer, |current: Option<&CurrentAssetPointer>| {
-                let Some(current) = current else {
-                    return true;
-                };
-                let current_time = current.run_created_at.unwrap_or(current.updated_at);
-                expected_current == Some(&current.materialization_id)
-                    || run_created_at > current_time
-                    || (run_created_at == current_time
-                        && pointer.materialization_id.to_string()
-                            > current.materialization_id.to_string())
+                current.map(|value| &value.materialization_id) == expected_current
+                    || current
+                        .is_some_and(|value| value.materialization_id == record.materialization_id)
             })
             .await
     }

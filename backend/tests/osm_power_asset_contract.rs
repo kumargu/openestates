@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use backend::assets::{
-    osm_power_line_facts_input, KgViewRecords, OsmPowerInfrastructureInput,
-    OsmPowerLineObservationRecord,
+    osm_power_line_facts_input, OsmPowerInfrastructureInput, OsmPowerLineObservationRecord,
+    SocietyGoldRecords,
 };
 use backend::knowledge::KnowledgeGraph;
 use chrono::{TimeZone, Utc};
@@ -93,7 +93,7 @@ fn osm_power_line_facts_emit_transmission_red_flag_and_geometry() {
                 .contains("avoid transmission line")
     }));
 
-    let kg_records = KgViewRecords::from_graph_with_skill_facts(
+    let kg_records = SocietyGoldRecords::from_graph_with_skill_facts(
         &KnowledgeGraph::new(),
         &facts.facts,
         &facts.fact_annotations,

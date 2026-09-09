@@ -26,7 +26,7 @@ def iter_parquet_files(root: Path) -> Iterable[Path]:
     if not root.exists():
         return
     for path in sorted(root.rglob("*.parquet")):
-        if "reddit_resident_facts" in str(path) or "search_serving_bundle" in str(path):
+        if "reddit_resident_facts" in str(path):
             yield path
 
 
@@ -91,21 +91,13 @@ def run_audit(lake_root: Path) -> Tuple[int, List[str]]:
     try:
         import pyarrow.parquet  # noqa: F401
     except ImportError:
-        print("WARN — pyarrow not installed; skipping lake Parquet scan (POC JSON only)")
+        print("WARN — pyarrow not installed; skipping lake Parquet scan")
 
     violations: List[str] = []
     scanned = 0
     for path in iter_parquet_files(lake_root):
         scanned += 1
         violations.extend(scan_parquet(path))
-
-    poc_path = Path("data/validation/reddit_poc_society_signals.json")
-    if poc_path.exists():
-        payload = json.loads(poc_path.read_text(encoding="utf-8"))
-        for entry in payload.get("facts", []):
-            value = str(entry.get("value") or "")
-            if len(value) > MAX_DERIVED_VALUE_LEN:
-                violations.append("POC JSON {}: value too long".format(entry.get("fact_key")))
 
     return scanned, violations
 

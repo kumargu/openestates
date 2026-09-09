@@ -227,8 +227,11 @@ async fn requested_assets_follow_the_dag_plan_and_skip_fresh_rera() {
         .unwrap();
 
     let executor = AssetDagExecutor::new(default_openestates_registry(), lake);
-    let partition =
-        AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
+    let partition = AssetPartition::new([
+        ("dt", "2026-07-14"),
+        ("society", "source-provider-fixture"),
+        ("subreddit", "BangaloreRealEstates"),
+    ]);
     let plan = executor.plan(&partition, now).await.unwrap();
     let requested = AssetSourceInputs::requested_asset_ids(&plan);
 

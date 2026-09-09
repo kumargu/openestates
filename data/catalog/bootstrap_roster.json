@@ -1,0 +1,676 @@
+{
+  "format_version": 1,
+  "description": "Immutable bootstrap seed roster used only when the development catalog has no active pointer.",
+  "source_entities": [
+    {
+      "entity_id": "society:rera-526d82c4b10990fe",
+      "alias_entity_id": "society:amrutha-platinum-towers",
+      "name": "Amrutha Platinum Towers",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/180420/001525",
+      "latitude": 12.9634618,
+      "longitude": 77.7347701
+    },
+    {
+      "entity_id": "society:rera-04ca128e3eff8243",
+      "alias_entity_id": "society:arvind-bel-air",
+      "name": "Arvind Bel Air",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/472/PR/200515/003406",
+      "latitude": 13.0938536,
+      "longitude": 77.56007129999999
+    },
+    {
+      "entity_id": "society:rera-7b9bb252368eec94",
+      "alias_entity_id": "society:birla-tisya",
+      "name": "BIRLA TISYA",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/309/PR/211022/004371",
+      "latitude": 12.9802168,
+      "longitude": 77.53831389999999
+    },
+    {
+      "entity_id": "society:rera-e68d15500e147ecd",
+      "alias_entity_id": "society:brigade-7-gardens",
+      "name": "Brigade 7 Gardens",
+      "area": "Banashankari",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171021/000508",
+      "latitude": 12.896276,
+      "longitude": 77.5308391
+    },
+    {
+      "entity_id": "society:rera-bec42c8141cb0b15",
+      "alias_entity_id": "society:brigade-komarla-heights",
+      "name": "BRIGADE KOMARLA HEIGHTS",
+      "area": "Padmanabhanagar",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/140322/004754"
+    },
+    {
+      "entity_id": "society:rera-e120e2f085c2819f",
+      "alias_entity_id": "society:brigade-laguna",
+      "name": "Brigade Laguna",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/309/PR/170322/004775",
+      "latitude": 13.0653527,
+      "longitude": 77.6089618
+    },
+    {
+      "entity_id": "society:rera-ccfa353d22484c7b",
+      "alias_entity_id": "society:brigade-lakefront-crimson",
+      "name": "Brigade Lakefront - Crimson",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171016/000503"
+    },
+    {
+      "entity_id": "society:rera-3f60497f6b602bb1",
+      "alias_entity_id": "society:brigade-woods",
+      "name": "Brigade Woods",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/180611/001895",
+      "latitude": 12.9841,
+      "longitude": 77.7420982
+    },
+    {
+      "entity_id": "society:rera-af36618d49c94b92",
+      "alias_entity_id": "society:century-central",
+      "name": "Century Central",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171015/000351",
+      "latitude": 12.8920299,
+      "longitude": 77.5648227
+    },
+    {
+      "entity_id": "society:rera-46bf4705cef5e279",
+      "alias_entity_id": "society:century-ethos",
+      "name": "Century Ethos ",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/309/PR/171014/000283",
+      "latitude": 13.0619424,
+      "longitude": 77.5949995
+    },
+    {
+      "entity_id": "society:rera-a46f28147c448b81",
+      "alias_entity_id": "society:desai-grandeur",
+      "name": "Desai Grandeur",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/180611/001887",
+      "latitude": 12.9772849,
+      "longitude": 77.7584731
+    },
+    {
+      "entity_id": "society:rera-b64904e17950889a",
+      "alias_entity_id": "society:desai-radiant",
+      "name": "DESAI RADIANT",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171214/001190",
+      "latitude": 12.9781798,
+      "longitude": 77.756672
+    },
+    {
+      "entity_id": "society:rera-d3a4c30f2b11eb1c",
+      "alias_entity_id": "society:disha-courtyard",
+      "name": "DISHA COURTYARD",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/190123/002296",
+      "latitude": 12.9741069,
+      "longitude": 77.7571442
+    },
+    {
+      "entity_id": "society:rera-c1af3dd6c1581e3e",
+      "alias_entity_id": "society:godrej-air",
+      "name": "Godrej Air",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/170819/000006"
+    },
+    {
+      "entity_id": "society:rera-8dae7e2ebcb812f1",
+      "alias_entity_id": "society:godrej-eternity",
+      "name": "Godrej Eternity",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171013/000233"
+    },
+    {
+      "entity_id": "society:rera-688242e8e3711955",
+      "alias_entity_id": "society:godrej-lakeside-orchard",
+      "name": "GODREJ LAKESIDE ORCHARD",
+      "area": "Sarjapur Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/300924/007105"
+    },
+    {
+      "entity_id": "society:rera-e33c7fdcc0d15688",
+      "alias_entity_id": "society:godrej-splendour",
+      "name": "Godrej Splendour",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/160622/005000"
+    },
+    {
+      "entity_id": "society:rera-a84cefe381eb87e8",
+      "alias_entity_id": "society:godrej-united",
+      "name": "Godrej United",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171010/000003",
+      "latitude": 12.9946926,
+      "longitude": 77.7045681
+    },
+    {
+      "entity_id": "society:rera-625bf95abd07dda7",
+      "alias_entity_id": "society:gopalan-aqua",
+      "name": "Gopalan Aqua",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/190327/002496",
+      "latitude": 12.9787804,
+      "longitude": 77.7581713
+    },
+    {
+      "entity_id": "society:rera-50a0074af8c0d8be",
+      "alias_entity_id": "society:habitat-eden-heights",
+      "name": "Habitat Eden Heights",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171014/000258",
+      "latitude": 12.9897083,
+      "longitude": 77.7154552
+    },
+    {
+      "entity_id": "society:rera-746a1e9128d28ad3",
+      "alias_entity_id": "society:mahaveer-promenade",
+      "name": "MAHAVEER PROMENADE",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171015/000455",
+      "latitude": 13.007339,
+      "longitude": 77.7397371
+    },
+    {
+      "entity_id": "society:rera-9464b33ae7909dd6",
+      "alias_entity_id": "society:mahaveer-ranches",
+      "name": "MAHAVEER RANCHES PHASE I",
+      "area": "Hosa Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171015/000421"
+    },
+    {
+      "entity_id": "society:rera-d855bc3290c4af3e",
+      "alias_entity_id": "society:mahaveer-tranquil",
+      "name": "MAHAVEER TRANQUIL",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171028/000807",
+      "latitude": 12.9687785,
+      "longitude": 77.7334898
+    },
+    {
+      "entity_id": "society:rera-697fbbfce88898f2",
+      "alias_entity_id": "society:mantri-tranquil",
+      "name": "Mantri Tranquil",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/190711/002659",
+      "latitude": 12.8880493,
+      "longitude": 77.5451437
+    },
+    {
+      "entity_id": "society:rera-c2394a00f5ad2909",
+      "alias_entity_id": "society:mirabelle",
+      "name": "Mirabelle",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/309/PR/131023/006321",
+      "latitude": 13.0268034,
+      "longitude": 77.60865919999999
+    },
+    {
+      "entity_id": "society:rera-ed26990c2d277fa6",
+      "alias_entity_id": "society:narya-5-elements",
+      "name": "NARYA 5 ELEMENTS",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171214/001859",
+      "latitude": 13.0034758,
+      "longitude": 77.7610997
+    },
+    {
+      "entity_id": "society:rera-886337bc84b09645",
+      "alias_entity_id": "society:parimala-skyview",
+      "name": "Parimala Skyview",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171214/001051",
+      "latitude": 12.9838398,
+      "longitude": 77.7507197
+    },
+    {
+      "entity_id": "society:rera-c8115c5bd2ddb21e",
+      "alias_entity_id": "society:pavani-divine",
+      "name": "Pavani Divine",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171031/001412",
+      "latitude": 12.9834935,
+      "longitude": 77.7170411
+    },
+    {
+      "entity_id": "society:rera-d3090a201815d30f",
+      "alias_entity_id": "society:prestige-botanique",
+      "name": "Prestige Botanique",
+      "area": "Basavanagudi",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180627/001936",
+      "latitude": 12.9543324,
+      "longitude": 77.5802291
+    },
+    {
+      "entity_id": "society:rera-cd6d20ba75389465",
+      "alias_entity_id": "society:prestige-boulevard",
+      "name": "PRESTIGE BOULEVARD",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/170824/000057",
+      "latitude": 12.9741145,
+      "longitude": 77.7429834
+    },
+    {
+      "entity_id": "society:rera-78131c93a2d222cd",
+      "alias_entity_id": "society:prestige-elysian",
+      "name": "Prestige Elysian",
+      "area": "Bannerghatta Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/190722/002709",
+      "latitude": 12.873221100000002,
+      "longitude": 77.5940272
+    },
+    {
+      "entity_id": "society:rera-3befa7927348d2f3",
+      "alias_entity_id": "society:prestige-fairfield",
+      "name": "PRESTIGE FAIRFIELD",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/309/PR/200211/003273",
+      "latitude": 13.045623,
+      "longitude": 77.5720589
+    },
+    {
+      "entity_id": "society:rera-de36720f386e8a3f",
+      "alias_entity_id": "society:prestige-falcon-city",
+      "name": "PRESTIGE FALCON CITY",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170913/000114",
+      "latitude": 12.886722,
+      "longitude": 77.56387219999999
+    },
+    {
+      "entity_id": "society:rera-6a92ec2a5a1d4a4a",
+      "alias_entity_id": "society:prestige-fontaine-bleau",
+      "name": "PRESTIGE FONTAINE BLEAU",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171223/002017",
+      "latitude": 12.9751452,
+      "longitude": 77.7427047
+    },
+    {
+      "entity_id": "society:rera-cfa189726c230587",
+      "alias_entity_id": "society:prestige-green-gables",
+      "name": "Prestige Green Gables",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/140222/004706",
+      "latitude": 12.9402299,
+      "longitude": 77.6988951
+    },
+    {
+      "entity_id": "society:rera-7886bc98e6a977a5",
+      "alias_entity_id": "society:prestige-lakeside-habitat",
+      "name": "Prestige Lakeside Habitat",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/170915/000176",
+      "latitude": 12.9314858,
+      "longitude": 77.7359716
+    },
+    {
+      "entity_id": "society:rera-a19f2cf2456fc549",
+      "alias_entity_id": "society:prestige-lavender-fields",
+      "name": "Prestige Lavender Fields",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/290423/005906",
+      "latitude": 12.93466,
+      "longitude": 77.7399204
+    },
+    {
+      "entity_id": "society:rera-3cf3565aa4739401",
+      "alias_entity_id": "society:prestige-park-square",
+      "name": "Prestige Park Square",
+      "area": "Bannerghatta Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180313/002634",
+      "latitude": 12.8455968,
+      "longitude": 77.5873147
+    },
+    {
+      "entity_id": "society:rera-9e36c8a04a40e472",
+      "alias_entity_id": "society:prestige-song-of-the-south",
+      "name": "PRESTIGE SONG OF THE SOUTH PHASE I",
+      "area": "Begur Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170915/000243",
+      "latitude": 12.8629791,
+      "longitude": 77.61037859999999
+    },
+    {
+      "entity_id": "society:rera-ca22a221f0b66506",
+      "alias_entity_id": "society:prestige-southern-star",
+      "name": "Prestige Southern Star",
+      "area": "Begur Village Begur Hobli Bengaluru South",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/210325/007603",
+      "latitude": 12.873175,
+      "longitude": 77.622547
+    },
+    {
+      "entity_id": "society:rera-53c0b81882e6acc6",
+      "alias_entity_id": "society:prestige-waterford",
+      "name": "PRESTIGE WATERFORD",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/200811/003528",
+      "latitude": 12.9819914,
+      "longitude": 77.7421819
+    },
+    {
+      "entity_id": "society:rera-55b9f3b5370894cd",
+      "alias_entity_id": "society:purva-westend",
+      "name": "Purva Westend",
+      "area": "Kudlu Gate",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170915/000236",
+      "latitude": 12.8897346,
+      "longitude": 77.63764429999999
+    },
+    {
+      "entity_id": "society:rera-1c5ed25d455f2628",
+      "alias_entity_id": "society:renaissance-bellevue",
+      "name": "Renaissance Bellevue",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/309/PR/200304/003327",
+      "latitude": 13.0069898,
+      "longitude": 77.56804699999999
+    },
+    {
+      "entity_id": "society:rera-817a906317d2c7bd",
+      "alias_entity_id": "society:renaissance-reserva",
+      "name": "Renaissance Reserva",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/309/PR/190614/002602",
+      "latitude": 13.0415411,
+      "longitude": 77.5479639
+    },
+    {
+      "entity_id": "society:rera-69bb8c1b442a965d",
+      "alias_entity_id": "society:ruchira-lilium",
+      "name": "Ruchira Lilium",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171222/000996",
+      "latitude": 12.997285,
+      "longitude": 77.7630166
+    },
+    {
+      "entity_id": "society:rera-f62a2a3e69fbe1de",
+      "alias_entity_id": "society:salarpuria-sattva-misty-charm",
+      "name": "SALARPURIA SATTVA MISTY CHARM",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180507/001635",
+      "latitude": 12.8638785,
+      "longitude": 77.5440265
+    },
+    {
+      "entity_id": "society:rera-e5c0c55f44d23f3d",
+      "alias_entity_id": "society:shriram-hebbal-one",
+      "name": "SHRIRAM HEBBAL ONE",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/309/PR/171013/001159"
+    },
+    {
+      "entity_id": "society:rera-f5582864641239f3",
+      "alias_entity_id": "society:shriram-southern-crest",
+      "name": "SHRIRAM SOUTHERN CREST",
+      "area": "JP Nagar",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171014/000364",
+      "latitude": 12.9057137,
+      "longitude": 77.5724724
+    },
+    {
+      "entity_id": "society:rera-1bb852b438567a14",
+      "alias_entity_id": "society:snn-clermont",
+      "name": "SNN CLERMONT",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/309/PR/170918/000666",
+      "latitude": 13.0424099,
+      "longitude": 77.6096669
+    },
+    {
+      "entity_id": "society:rera-1b14372176e70906",
+      "alias_entity_id": "society:snn-raj-etternia",
+      "name": "SNN Raj Etternia",
+      "area": "Haralur Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170920/000655"
+    },
+    {
+      "entity_id": "society:rera-dcee93ea77d09eb0",
+      "alias_entity_id": "society:snn-raj-grandeur",
+      "name": "SNN Raj Grandeur",
+      "area": "Bommanahalli",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170918/000681",
+      "latitude": 12.9017708,
+      "longitude": 77.6245005
+    },
+    {
+      "entity_id": "society:rera-b719e74c670a7d43",
+      "alias_entity_id": "society:snn-raj-greenbay",
+      "name": "SNN Raj Greenbay",
+      "area": "Electronic City",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170920/000621",
+      "latitude": 12.8531378,
+      "longitude": 77.67884180000001
+    },
+    {
+      "entity_id": "society:rera-53117ea502ea0cd0",
+      "alias_entity_id": "society:snn-raj-serenity",
+      "name": "SNN RAJ SERENITY",
+      "area": "Begur Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/150622/004987",
+      "latitude": 12.8594753,
+      "longitude": 77.6140353
+    },
+    {
+      "entity_id": "society:rera-699d44c234988565",
+      "alias_entity_id": "society:snn-raj-spiritua",
+      "name": "SNN Raj Spiritua",
+      "area": "JP Nagar",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171014/000342",
+      "latitude": 12.9111043,
+      "longitude": 77.5726269
+    },
+    {
+      "entity_id": "society:rera-22f4c48f354aeb23",
+      "alias_entity_id": "society:sobha-25-richmond",
+      "name": "Sobha 25 Richmond ",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/170916/000257"
+    },
+    {
+      "entity_id": "society:rera-7aebcaf51f604095",
+      "alias_entity_id": "society:sobha-clovelly",
+      "name": "Sobha Clovelly",
+      "area": "Banashankari",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171014/000201",
+      "latitude": 12.9112544,
+      "longitude": 77.5568665
+    },
+    {
+      "entity_id": "society:rera-2a8457298f16cc42",
+      "alias_entity_id": "society:sobha-forest-edge",
+      "name": "Sobha Forest Edge",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180227/002592",
+      "latitude": 12.876866,
+      "longitude": 77.5286991
+    },
+    {
+      "entity_id": "society:rera-a3a28abd38e71003",
+      "alias_entity_id": "society:sobha-indraprastha",
+      "name": "Sobha Indraprastha",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/309/PR/170915/000234",
+      "latitude": 12.9797353,
+      "longitude": 77.5638829
+    },
+    {
+      "entity_id": "society:rera-6df3e8af3f384bee",
+      "alias_entity_id": "society:spectra-raaya",
+      "name": "Spectra Raaya",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/190809/002788",
+      "latitude": 12.9612098,
+      "longitude": 77.7304492
+    },
+    {
+      "entity_id": "society:rera-20f63624d25038cb",
+      "alias_entity_id": "society:sumadhura-capitol-residences",
+      "name": "SUMADHURA CAPITOL RESIDENCES",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/051024/007125"
+    },
+    {
+      "entity_id": "society:rera-25c0f766df515a4a",
+      "alias_entity_id": "society:sumadhura-eden-garden",
+      "name": "SUMADHURA EDEN GARDEN",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/180328/002632",
+      "latitude": 13.0276734,
+      "longitude": 77.7514457
+    },
+    {
+      "entity_id": "society:rera-0df6367ce304a963",
+      "alias_entity_id": "society:sumadhura-nandanam",
+      "name": "SUMADHURA NANDANAM",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/180507/001667",
+      "latitude": 12.991133,
+      "longitude": 77.7126988
+    },
+    {
+      "entity_id": "society:sumadhura-soham",
+      "alias_entity_id": "society:sumadhura-soham",
+      "name": "SUMADHURA SOHAM PHASE-I",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171123/000704",
+      "latitude": 12.9792988,
+      "longitude": 77.7431039
+    },
+    {
+      "entity_id": "society:rera-6110b15935ab8320",
+      "alias_entity_id": "society:the-marquis",
+      "name": "The Marquis",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/181122/002134",
+      "latitude": 12.9785951,
+      "longitude": 77.7519553
+    },
+    {
+      "entity_id": "society:rera-9eea80e64c4f261b",
+      "alias_entity_id": "society:the-presidential-tower",
+      "name": "The Presidential Tower ",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/309/PR/171014/000565",
+      "latitude": 13.0278729,
+      "longitude": 77.5460889
+    },
+    {
+      "entity_id": "society:rera-1cd8ca37d5ed6d54",
+      "alias_entity_id": "society:the-residences-at-brigade-tech-gardens",
+      "name": "The Residences at Brigade Tech Gardens",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/030223/005690",
+      "latitude": 12.9633057,
+      "longitude": 77.7183111
+    },
+    {
+      "entity_id": "society:rera-b26d1b258b181639",
+      "alias_entity_id": "society:tower-7-one-bangalore-west",
+      "name": "Tower 7  One Bangalore West",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/309/PR/190412/002524",
+      "latitude": 13.0087941,
+      "longitude": 77.5535661
+    },
+    {
+      "entity_id": "society:rera-a4ceb5a33ccd42b6",
+      "alias_entity_id": "society:umiya-woods",
+      "name": "Umiya Woods",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171015/000830",
+      "latitude": 12.975036,
+      "longitude": 77.7449496
+    },
+    {
+      "entity_id": "society:rera-67ba4bfb38da8a8c",
+      "alias_entity_id": "society:vaswani-exquisite",
+      "name": "Vaswani Exquisite",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171015/000784"
+    },
+    {
+      "entity_id": "society:rera-612b8984826874f8",
+      "alias_entity_id": "society:vaswani-starlight",
+      "name": "Vaswani Starlight",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/180424/006808"
+    },
+    {
+      "entity_id": "society:rera-086c12af2e3ea980",
+      "alias_entity_id": "society:venus-gardenia",
+      "name": "Venus Gardenia",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/180319/000564",
+      "latitude": 12.9633688,
+      "longitude": 77.746167
+    }
+  ]
+}

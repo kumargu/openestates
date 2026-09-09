@@ -52,18 +52,8 @@ burst = 20
 [media]
 stream_concurrency = 64
 
-[admin]
-max_source_entities = 64
-max_source_entity_bytes = 256
-max_partition_parts = 16
-max_field_bytes = 256
-default_source_timeout_seconds = 1800
-max_source_timeout_seconds = 7200
-max_asset_run_log_bytes = 16777216
-
 [retention]
 serving_cache_versions = 8
-asset_log_files = 20
 
 [interest_storage]
 max_name_chars = 120

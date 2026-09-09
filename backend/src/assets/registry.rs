@@ -779,9 +779,9 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Support,
         ),
         asset(
-            "current_project_facts",
+            "society_fact_snapshot",
             AssetStage::Gold,
-            "Compacted current project fact rows for fast KG view and serving-bundle materialization. Graph-shaped assets stay as direct KG dependencies.",
+            "Compacted society-scoped fact rows for immutable gold snapshots. Graph-shaped assets stay as direct dependencies.",
             &[
                 "rera_legal_facts",
                 "rera_project_plan_frames",
@@ -802,6 +802,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
             CostTier::Free,
             TrustTier::Derived,
         )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys(&["society"]))
         .with_dependency_fan_in_policy(
             "google_review_facts",
             DependencyFanInPolicy::AllCurrentPartitions,
@@ -820,17 +821,21 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_optional_dependency("google_nearby_place_facts")
         .with_optional_dependency("external_listing_facts")
         .with_optional_dependency("image_media_facts")
+        .with_optional_dependency("builder_rera_aggregates")
         .with_optional_dependency("home_state_signals")
+        .with_optional_dependency("society_groundwater_potential_facts")
         .with_optional_dependency("bengaluru_metro_station_facts")
         .with_optional_dependency("osm_locality_boundary_facts")
-        .with_optional_dependency("osm_society_access_facts"),
+        .with_optional_dependency("osm_society_access_facts")
+        .with_optional_dependency("osm_power_line_facts")
+        .with_optional_dependency("stormwater_drain_facts"),
         asset(
-            "kg_society_view",
+            "society_gold_snapshot",
             AssetStage::Gold,
-            "Versioned society KG view merged by source precedence and fact policy.",
+            "Immutable society gold snapshot merged by source precedence and fact policy.",
             &[
                 "canonical_society_nodes",
-                "current_project_facts",
+                "society_fact_snapshot",
                 // Approach-road data includes road-segment entities and graph edges, so it bypasses
                 // fact-row compaction and remains a direct KG input.
                 "approach_road_graph_facts",
@@ -839,25 +844,9 @@ pub fn default_openestates_registry() -> AssetRegistry {
             CostTier::Free,
             TrustTier::Derived,
         )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys(&["society"]))
         .with_optional_dependency("approach_road_graph_facts")
-        .with_optional_dependency("current_project_facts"),
-        asset(
-            "search_serving_bundle",
-            AssetStage::Serving,
-            "Local request-path bundle for KG facts, schema config, aliases, and indexes.",
-            &[
-                "kg_society_view",
-                "rera_receipts",
-                "rera_source_records",
-                "rera_claims",
-            ],
-            RefreshCadence::OnChange,
-            CostTier::Free,
-            TrustTier::Serving,
-        )
-        .with_optional_dependency("rera_receipts")
-        .with_optional_dependency("rera_source_records")
-        .with_optional_dependency("rera_claims"),
+        .with_optional_dependency("society_fact_snapshot"),
     ])
     .expect("default asset registry is valid")
 }
@@ -890,15 +879,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_registry_orders_roots_before_serving_bundle() {
+    fn default_registry_orders_roots_before_society_gold() {
         let registry = default_openestates_registry();
         let ordered = registry.topological_order().unwrap();
         let rera_pos = position(&ordered, "rera_registry_monthly");
-        let kg_pos = position(&ordered, "kg_society_view");
-        let serving_pos = position(&ordered, "search_serving_bundle");
+        let kg_pos = position(&ordered, "society_gold_snapshot");
 
         assert!(rera_pos < kg_pos);
-        assert!(kg_pos < serving_pos);
     }
 
     #[test]
@@ -924,34 +911,25 @@ mod tests {
                 .unwrap(),
             AssetPartition::new([("source", "google")])
         );
-        assert_eq!(
-            registry
-                .partition_for(
-                    &AssetId::new("search_serving_bundle").unwrap(),
-                    &run_partition
-                )
-                .unwrap(),
-            AssetPartition::global()
-        );
     }
 
     #[test]
-    fn default_registry_fans_support_facts_into_global_kg() {
+    fn default_registry_fans_support_facts_into_society_gold() {
         let registry = default_openestates_registry();
-        let current_project_facts = registry
-            .get(&AssetId::new("current_project_facts").unwrap())
+        let society_fact_snapshot = registry
+            .get(&AssetId::new("society_fact_snapshot").unwrap())
             .unwrap();
         let kg = registry
-            .get(&AssetId::new("kg_society_view").unwrap())
+            .get(&AssetId::new("society_gold_snapshot").unwrap())
             .unwrap();
 
         assert_eq!(
-            current_project_facts
+            society_fact_snapshot
                 .dependency_fan_in_policy(&AssetId::new("google_review_facts").unwrap()),
             DependencyFanInPolicy::AllCurrentPartitions
         );
         assert_eq!(
-            kg.dependency_fan_in_policy(&AssetId::new("current_project_facts").unwrap()),
+            kg.dependency_fan_in_policy(&AssetId::new("society_fact_snapshot").unwrap()),
             DependencyFanInPolicy::ResolvedPartition
         );
         assert_eq!(
@@ -1017,10 +995,10 @@ mod tests {
     #[test]
     fn registry_rejects_missing_dependency() {
         let result = AssetRegistry::new(vec![asset(
-            "search_serving_bundle",
+            "invalid_test_asset",
             AssetStage::Serving,
             "bad test asset",
-            &["missing_kg_view"],
+            &["missing_society_gold"],
             RefreshCadence::OnChange,
             CostTier::Free,
             TrustTier::Serving,

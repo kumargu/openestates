@@ -1561,7 +1561,7 @@ mod tests {
             .await
             .unwrap();
         AssetMaterializationStore::new(lake.clone())
-            .force_promote_current(&first)
+            .promote_current(&first)
             .await
             .unwrap();
 

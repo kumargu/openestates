@@ -9,15 +9,14 @@ use backend::assets::{
     PlanReason, RefreshCadence, SourceWatermark,
 };
 use backend::lake::{LakeKey, LakeStore};
-use chrono::{TimeZone, Utc};
+use chrono::Utc;
 use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
-use serde_json::json;
 use tempfile::tempdir;
 
 #[tokio::test]
-async fn mock_rera_to_serving_bundle_materializes_with_stable_local_keys() {
+async fn mock_rera_to_gold_materializes_with_stable_local_keys() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let materializations = AssetMaterializationStore::new(lake.clone());
@@ -108,59 +107,6 @@ async fn mock_rera_to_serving_bundle_materializes_with_stable_local_keys() {
         .await
         .unwrap();
 
-    let serving_asset = AssetId::new("search_serving_bundle").unwrap();
-    let serving_partition = AssetPartition::global();
-    let serving_key = AssetPathBuilder::serving_bundle_key("2026-07-12T10:00Z", "manifest.json");
-    let serving_meta = lake
-        .put_json(
-            &serving_key,
-            &json!({
-                "bundleVersion": "2026-07-12T10:00Z",
-                "kgVersion": "2026-07",
-                "sourceWatermarks": {
-                    "rera": "2026-07"
-                }
-            }),
-        )
-        .await
-        .unwrap();
-    let serving_record = MaterializationRecord::succeeded(
-        serving_asset.clone(),
-        AssetStage::Serving,
-        serving_partition.clone(),
-        "2026-07-12T10:00Z",
-        vec![ArtifactRef::json(serving_meta)],
-    )
-    .with_parent_materializations(vec![fact_record.materialization_id.clone()])
-    .with_source_watermarks(vec![SourceWatermark {
-        source: "rera".to_string(),
-        high_watermark: "2026-07".to_string(),
-    }])
-    .with_row_count(1);
-
-    materializations
-        .write_materialization(&serving_record)
-        .await
-        .unwrap();
-    materializations
-        .promote_current(&serving_record)
-        .await
-        .unwrap();
-
-    let current_serving = materializations
-        .current_record(&serving_asset, &serving_partition)
-        .await
-        .unwrap();
-    assert_eq!(current_serving.version, "2026-07-12T10:00Z");
-    assert_eq!(
-        current_serving.parent_materializations,
-        vec![fact_record.materialization_id.clone()]
-    );
-    assert_eq!(
-        current_serving.artifacts[0].key,
-        "serving/search_bundle/version=2026-07-12t10-00z/manifest.json"
-    );
-
     let current_facts = materializations
         .current_record(&facts_asset, &fact_partition)
         .await
@@ -172,12 +118,6 @@ async fn mock_rera_to_serving_bundle_materializes_with_stable_local_keys() {
 
     let raw_body = lake.get_bytes(&rera_key).await.unwrap();
     assert_is_parquet(&raw_body);
-
-    let current_pointer_key =
-        LakeKey::new("manifests/assets/search_serving_bundle/partition=global/current.json")
-            .unwrap();
-    let pointer_body = lake.get_text(&current_pointer_key).await.unwrap();
-    assert!(pointer_body.contains("2026-07-12T10:00Z"));
 }
 
 #[tokio::test]
@@ -193,8 +133,11 @@ async fn planner_returns_missing_automatic_assets_in_dependency_order() {
         .count();
     let planner = AssetPlanner::new(registry, materializations);
 
-    let partition =
-        AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")]);
+    let partition = AssetPartition::new([
+        ("dt", "2026-07-13"),
+        ("society", "planner-fixture"),
+        ("subreddit", "BangaloreRealEstates"),
+    ]);
     let plan = planner
         .plan_partition(&partition, Utc::now())
         .await
@@ -219,7 +162,7 @@ async fn planner_returns_missing_automatic_assets_in_dependency_order() {
     assert!(plan.iter().all(|asset| asset.reason == PlanReason::Missing));
     assert_eq!(
         plan.last().unwrap().asset_id,
-        AssetId::new("search_serving_bundle").unwrap()
+        AssetId::new("society_gold_snapshot").unwrap()
     );
 }
 
@@ -339,14 +282,12 @@ async fn materialization_store_lists_current_records_for_all_asset_partitions() 
 }
 
 #[tokio::test]
-async fn older_run_cannot_roll_back_current_asset_pointer() {
+async fn stale_cas_cannot_roll_back_current_asset_pointer() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let store = AssetMaterializationStore::new(lake);
-    let asset_id = AssetId::new("kg_society_view").unwrap();
+    let asset_id = AssetId::new("society_gold_snapshot").unwrap();
     let partition = AssetPartition::global();
-    let older_time = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
-    let newer_time = older_time + chrono::Duration::hours(1);
     let older = MaterializationRecord::succeeded(
         asset_id.clone(),
         AssetStage::Gold,
@@ -364,12 +305,10 @@ async fn older_run_cannot_roll_back_current_asset_pointer() {
     store.write_materialization(&older).await.unwrap();
     store.write_materialization(&newer).await.unwrap();
 
-    assert!(store
-        .promote_current_for_run(&newer, newer_time)
-        .await
-        .unwrap());
+    store.promote_current(&older).await.unwrap();
+    store.promote_current(&newer).await.unwrap();
     assert!(!store
-        .promote_current_for_run(&older, older_time)
+        .compare_and_swap_current(&older, Some(&older.materialization_id))
         .await
         .unwrap());
     assert_eq!(

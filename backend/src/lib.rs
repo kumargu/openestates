@@ -1,5 +1,6 @@
 pub mod api;
 pub mod assets;
+pub mod catalog;
 pub mod community;
 pub mod dag_config;
 pub mod data_loader;

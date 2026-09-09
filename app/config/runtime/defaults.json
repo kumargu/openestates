@@ -20,7 +20,7 @@
     "frontend_vite": 5173
   },
   "request_path_reads": [
-    "serving bundle (via lake current pointer)",
+    "serving bundle selected by manifests/catalog/dev.json",
     "in-memory indexes built at startup from serving bundle"
   ],
   "request_path_never_reads": [

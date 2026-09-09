@@ -24,7 +24,7 @@ data/lake/             Parquet — what the system *knows*
 | Where is "waterlogging" defined? | `app/config/dag/concern_taxonomy.json` + `fact_registry.json` |
 | Where is "ECC Road floods in monsoon" stored? | `data/lake/.../facts/part-00000.parquet` on `road:*` entity |
 | Where is Prestige Waterford → ECC Road edge? | `data/lake/gold/.../edges/part-00000.parquet` |
-| What does search read at request time? | `data/lake/serving/search_bundle/version=*/` (via `current.json` pointer) |
+| What does search read at request time? | One `data/lake/serving/search_bundle/version=*/` selected by `manifests/catalog/dev.json` |
 
 **Never** put society names, road names, or fact values in `app/config/`.
 
@@ -88,14 +88,21 @@ silver/{asset_id}/source={source}/dt={dt}/run_id={run_id}/manifest.json
 silver/facts/entity_type={type}/fact_key={key}/source={source}/...
 ```
 
-### Gold — KG view (merged graph)
+### Gold — society snapshots and reusable topology
 
 ```text
-gold/kg_society_view/version={version}/
+gold/society_catalog/society={society}/snapshot={snapshot}/
   entities/part-00000.parquet      # nodes
-  edges/part-00000.parquet       # typed edges
-  facts/part-00000.parquet       # leaf instances
-  fact_annotations/part-00000.parquet
+  edges/part-00000.parquet         # typed edges
+  facts/part-00000.parquet         # leaf instances
+  search_metadata/part-00000.parquet
+  rera_evidence/part-00000.parquet
+
+gold/catalog_topology/snapshot={snapshot}/
+  entities/part-00000.parquet
+  edges/part-00000.parquet
+  facts/part-00000.parquet
+  search_metadata/part-00000.parquet
 ```
 
 ### Serving — runtime bundle (only API input)
@@ -110,11 +117,16 @@ serving/search_bundle/version={version}/
   tantivy_index/
 ```
 
-### Manifests — promotion pointers (JSON only)
+### Manifests — catalog pointer and immutable generations
 
 ```text
-manifests/assets/search_serving_bundle/partition=global/current.json
-  → { "version": "...", "materialization_id": "..." }
+manifests/catalog/dev.json
+  → current roster + serving bundle
+  → previous roster + serving bundle
+
+manifests/catalog/rosters/{roster_id}.json
+manifests/catalog/societies/society={society}/snapshots/{snapshot_id}.json
+manifests/catalog/topology/snapshots/{snapshot_id}.json
 ```
 
 ---

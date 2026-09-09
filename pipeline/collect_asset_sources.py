@@ -1570,14 +1570,11 @@ def skip_reddit_collection() -> bool:
 
 
 def empty_reddit_assets(request: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    from pipeline.skills.reddit_poc_import import collect_reddit_poc_fact_rows
-
     planned_at = normalized_planned_at(request)
     partition = partition_values(request)
     snapshot_date = partition.get("dt") or planned_at[:10]
     subreddit = partition.get("subreddit") or "BangaloreRealEstates"
     watermark = {"source": "reddit_skipped", "high_watermark": planned_at}
-    poc_facts, poc_annotations = collect_reddit_poc_fact_rows(snapshot_date)
     return (
         {
             "snapshot_date": snapshot_date,
@@ -1588,8 +1585,8 @@ def empty_reddit_assets(request: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[s
         {
             "source": "reddit",
             "snapshot_date": snapshot_date,
-            "facts": poc_facts,
-            "fact_annotations": poc_annotations,
+            "facts": [],
+            "fact_annotations": [],
             "source_watermarks": [watermark],
         },
     )

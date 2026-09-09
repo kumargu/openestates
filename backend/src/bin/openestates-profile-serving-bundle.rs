@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-use backend::assets::MaterializationId;
+use backend::catalog::CatalogStore;
 use backend::data_loader::properties_from_serving_bundle;
 use backend::knowledge::FactValue;
 use backend::lake::LakeStoreLocation;
@@ -18,17 +18,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(default_project_root);
     let lake = LakeStoreLocation::from_env(&project_root)?.open()?;
     let cache_root = project_root.join("data").join("cache").join("serving");
-    let loader = ServingBundleLoader::new(lake, cache_root);
-    let bundle = match &options.serving_materialization_id {
-        Some(materialization_id) => loader
-            .load_search_bundle_by_materialization(materialization_id)
-            .await?
-            .ok_or_else(|| format!("serving materialization {materialization_id} was not found"))?,
-        None => loader
-            .load_current_search_bundle()
-            .await?
-            .ok_or("no promoted search serving bundle found")?,
-    };
+    let loader = ServingBundleLoader::new(lake.clone(), cache_root);
+    let pointer = CatalogStore::new(lake)
+        .pointer()
+        .await?
+        .ok_or("no promoted catalog found")?;
+    let bundle = loader
+        .load_search_bundle(&pointer.current.bundle_version)
+        .await?;
 
     let mut fact_stats = BTreeMap::<String, FactKeyStats>::new();
     let mut metadata_stats = BTreeMap::<String, MetadataStats>::new();
@@ -306,7 +303,6 @@ impl MetadataStats {
 #[derive(Default)]
 struct CliOptions {
     project_root: Option<PathBuf>,
-    serving_materialization_id: Option<MaterializationId>,
     limit: Option<usize>,
     markdown: bool,
     fact_keys: BTreeSet<String>,
@@ -334,14 +330,6 @@ impl CliOptions {
                             .parse()
                             .map_err(|_| "--limit requires a positive integer".to_string())?,
                     );
-                }
-                "--serving" => {
-                    let value = args
-                        .next()
-                        .ok_or_else(|| "--serving requires a materialization UUID".to_string())?;
-                    options.serving_materialization_id = Some(value.parse().map_err(|err| {
-                        format!("--serving requires a materialization UUID: {err}")
-                    })?);
                 }
                 "--markdown" => {
                     options.markdown = true;
@@ -381,7 +369,7 @@ fn print_help() {
     println!();
     println!("Usage:");
     println!(
-        "  cargo run --bin openestates-profile-serving-bundle -- [--serving <materialization-uuid>] [--limit N] [--fact-key KEY] [--entity ID] [--markdown]"
+        "  cargo run --bin openestates-profile-serving-bundle -- [--limit N] [--fact-key KEY] [--entity ID] [--markdown]"
     );
 }
 

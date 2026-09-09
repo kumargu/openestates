@@ -62,14 +62,13 @@ fn default_project_root() -> PathBuf {
 fn current_serving_bundle_version(
     project_root: &Path,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let current_path = project_root
-        .join("data/lake/manifests/assets/search_serving_bundle/partition=global/current.json");
+    let current_path = project_root.join("data/lake/manifests/catalog/dev.json");
     let current: Value = serde_json::from_slice(&fs::read(current_path)?)?;
     current
-        .get("version")
+        .pointer("/current/bundle_version")
         .and_then(Value::as_str)
         .map(ToString::to_string)
-        .ok_or_else(|| "current serving-bundle pointer is missing version".into())
+        .ok_or_else(|| "catalog pointer is missing current bundle_version".into())
 }
 
 fn resolve_target<'a>(

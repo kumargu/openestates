@@ -3,8 +3,8 @@ use backend::assets::{
     read_google_nearby_place_rows, read_google_place_rows, AssetPartition,
     CanonicalSocietyMaterializer, GoogleNearbyPlaceRecord, GoogleNearbyPlacesWeeklyInput,
     GooglePlaceSnapshotMaterializer, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
-    KgViewRecords, MaterializationId, ReraProjectSnapshotRecord, ReraRegistryMaterializer,
-    ReraRegistryMonthlyInput,
+    MaterializationId, ReraProjectSnapshotRecord, ReraRegistryMaterializer,
+    ReraRegistryMonthlyInput, SocietyGoldRecords,
 };
 use backend::knowledge::KnowledgeGraph;
 use backend::lake::LakeStore;
@@ -388,7 +388,7 @@ async fn google_nearby_snapshot_materializes_raw_parquet_and_derives_category_fa
             && fact.value_json.contains("12.985")
     }));
 
-    let kg_records = KgViewRecords::from_graph_with_skill_facts(
+    let kg_records = SocietyGoldRecords::from_graph_with_skill_facts(
         &KnowledgeGraph::new(),
         &facts.facts,
         &facts.fact_annotations,

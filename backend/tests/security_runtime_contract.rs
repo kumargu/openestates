@@ -100,7 +100,7 @@ async fn production_router_enforces_public_security_boundaries() {
         .clone()
         .oneshot(request(
             Method::POST,
-            "/api/admin/asset-runs",
+            "/api/admin/serving-bundle/reload",
             [192, 0, 2, 14],
             Body::from("{"),
         ))

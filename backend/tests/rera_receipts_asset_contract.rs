@@ -38,10 +38,13 @@ async fn forced_rera_receipt_backfill_materializes_only_the_parallel_raw_asset()
     let report = executor
         .execute(
             &KnowledgeGraph::new(),
-            AssetDagExecutionOptions::new(AssetPartition::global(), now)
-                .with_source_inputs(source_inputs)
-                .with_forced_assets(vec![receipt_asset.clone()])
-                .with_only_forced_assets(true),
+            AssetDagExecutionOptions::new(
+                AssetPartition::new([("society", "receipt-fixture")]),
+                now,
+            )
+            .with_source_inputs(source_inputs)
+            .with_forced_assets(vec![receipt_asset.clone()])
+            .with_only_forced_assets(true),
         )
         .await
         .unwrap();
@@ -92,10 +95,13 @@ async fn source_records_can_only_materialize_from_the_receipt_backfill() {
     executor
         .execute(
             &KnowledgeGraph::new(),
-            AssetDagExecutionOptions::new(AssetPartition::global(), now)
-                .with_source_inputs(receipt_inputs)
-                .with_forced_assets(vec![receipts_asset.clone()])
-                .with_only_forced_assets(true),
+            AssetDagExecutionOptions::new(
+                AssetPartition::new([("society", "receipt-fixture")]),
+                now,
+            )
+            .with_source_inputs(receipt_inputs)
+            .with_forced_assets(vec![receipts_asset.clone()])
+            .with_only_forced_assets(true),
         )
         .await
         .unwrap();
@@ -132,10 +138,13 @@ async fn source_records_can_only_materialize_from_the_receipt_backfill() {
     let report = executor
         .execute(
             &KnowledgeGraph::new(),
-            AssetDagExecutionOptions::new(AssetPartition::global(), now)
-                .with_source_inputs(source_inputs)
-                .with_forced_assets(vec![source_records_asset.clone()])
-                .with_only_forced_assets(true),
+            AssetDagExecutionOptions::new(
+                AssetPartition::new([("society", "receipt-fixture")]),
+                now,
+            )
+            .with_source_inputs(source_inputs)
+            .with_forced_assets(vec![source_records_asset.clone()])
+            .with_only_forced_assets(true),
         )
         .await
         .unwrap();
@@ -160,9 +169,12 @@ async fn source_records_can_only_materialize_from_the_receipt_backfill() {
     let report = executor
         .execute(
             &KnowledgeGraph::new(),
-            AssetDagExecutionOptions::new(AssetPartition::global(), now)
-                .with_forced_assets(vec![claims_asset.clone()])
-                .with_only_forced_assets(true),
+            AssetDagExecutionOptions::new(
+                AssetPartition::new([("society", "receipt-fixture")]),
+                now,
+            )
+            .with_forced_assets(vec![claims_asset.clone()])
+            .with_only_forced_assets(true),
         )
         .await
         .unwrap();

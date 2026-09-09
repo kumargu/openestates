@@ -5,7 +5,6 @@
 //! without reading route business logic.
 
 mod admin_auth;
-pub(crate) mod admin_run;
 mod client_ip;
 mod config;
 mod execution;

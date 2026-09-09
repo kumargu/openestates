@@ -1,25 +1,39 @@
 use std::collections::BTreeMap;
+use std::net::SocketAddr;
+use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
 
+use arc_swap::ArcSwap;
+use axum::body::{to_bytes, Body};
+use axum::extract::ConnectInfo;
+use axum::http::{Request, StatusCode};
+use backend::api::build_app_router_with_lake;
 use backend::assets::{
-    default_openestates_registry, read_skill_fact_artifact_rows, AssetDagExecutionOptions,
-    AssetDagExecutor, AssetMaterializationStore, AssetPartition, AssetSourceInputs,
-    BengaluruMetroStationInput, BengaluruMetroStationsInput, DagRunStatus,
+    default_openestates_registry, load_society_gold_records, read_skill_fact_artifact_rows,
+    AssetDagExecutionOptions, AssetDagExecutor, AssetMaterializationStore, AssetPartition,
+    AssetSourceInputs, BengaluruMetroStationInput, BengaluruMetroStationsInput, DagRunStatus,
     EnvironmentGroundwaterPotentialInput, EnvironmentGroundwaterPotentialZone,
     EnvironmentRingPoint, ExternalImageObservationRecord, ExternalImagesWeeklyInput,
     ExternalListingObservationRecord, ExternalListingsWeeklyInput, GoogleNearbyPlaceRecord,
     GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
-    OsmPowerInfrastructureInput, OsmPowerLineObservationRecord, OsmSocietyAccessInput,
-    ReraProjectPlanFramesInput, ReraProjectSnapshotRecord, ReraRegistryMonthlyInput,
-    SkillFactAnnotationRecord, SkillFactRecord, SourceWatermark, StormwaterDrainObservationRecord,
-    StormwaterDrainRiskInput, BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID,
+    OsmLocalityBoundariesInput, OsmLocalityBoundaryInput, OsmPowerInfrastructureInput,
+    OsmPowerLineObservationRecord, OsmSocietyAccessInput, ReraProjectPlanFramesInput,
+    ReraProjectSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
+    SkillFactRecord, SocietyGoldManifest, SourceEntitySeed, SourceWatermark,
+    StormwaterDrainObservationRecord, StormwaterDrainRiskInput, BUILDER_RERA_AGGREGATES_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
 };
+use backend::catalog::CatalogRecords;
 use backend::knowledge::{FactValue, KnowledgeGraph};
 use backend::lake::LakeStore;
-use backend::serving::ServingBundleLoader;
+use backend::serving::{BundleArtifactKind, ServingBundleBuilder, ServingBundleLoader};
+use backend::state::{AppState, SearchResponseCache};
 use chrono::{TimeZone, Utc};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tempfile::tempdir;
+use tokio::sync::{mpsc, RwLock};
+use tower::ServiceExt;
 
 #[tokio::test]
 async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
@@ -28,7 +42,10 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
     let store = AssetMaterializationStore::new(lake.clone());
     let observed_at = Utc.with_ymd_and_hms(2026, 7, 14, 12, 0, 0).unwrap();
     let projects = fixtures();
-    let partition = AssetPartition::new([("dt", "2026-07-14")]);
+    let partition = AssetPartition::new([
+        ("dt", "2026-07-14"),
+        ("society", "project-enrichment-fixture"),
+    ]);
 
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(
@@ -46,8 +63,7 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
         EXTERNAL_LISTING_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
-        "kg_society_view",
-        "search_serving_bundle",
+        "society_gold_snapshot",
     ] {
         assert!(
             report
@@ -85,10 +101,41 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
         .iter()
         .any(|fact| fact.entity_id == "builder:prestige-estates-projects-limited"));
 
-    let loaded = ServingBundleLoader::new(lake, root.path().join("serving-cache"))
-        .load_current_search_bundle()
+    let gold_manifest_key = report
+        .manifest
+        .steps
+        .iter()
+        .find(|step| step.asset_id.as_str() == "society_gold_snapshot")
+        .and_then(|step| {
+            step.artifacts
+                .iter()
+                .find(|artifact| artifact.key.ends_with("/manifest.json"))
+        })
+        .expect("gold manifest")
+        .key
+        .clone();
+    let gold_manifest: SocietyGoldManifest = lake
+        .get_json(&backend::lake::LakeKey::new(gold_manifest_key).unwrap())
         .await
-        .unwrap()
+        .unwrap();
+    let gold = load_society_gold_records(&lake, &gold_manifest)
+        .await
+        .unwrap();
+    let records = CatalogRecords::from_society_gold(&gold, Vec::new()).unwrap();
+    ServingBundleBuilder::new(lake.clone())
+        .build_from_catalog_records(
+            records.entities,
+            records.facts,
+            records.search_metadata,
+            records.edges,
+            records.rera_evidence,
+            "project-enrichment-fixture",
+        )
+        .await
+        .unwrap();
+    let loaded = ServingBundleLoader::new(lake.clone(), root.path().join("serving-cache"))
+        .load_search_bundle("project-enrichment-fixture")
+        .await
         .unwrap();
     for project in &projects {
         let alias = format!("society:{}", slug(project.name));
@@ -161,6 +208,98 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
         .facts
         .iter()
         .any(|fact| fact.fact_key == "builder_rera_status_breakdown"));
+
+    let topology_artifact = loaded
+        .manifest
+        .artifacts
+        .iter()
+        .find(|artifact| {
+            artifact.kind == BundleArtifactKind::Other
+                && artifact
+                    .key
+                    .ends_with("diagnostics/market_geo_topology.json")
+        })
+        .expect("normal DAG serving should emit topology diagnostics");
+    let topology: Value = serde_json::from_slice(
+        &lake
+            .get_bytes(&backend::lake::LakeKey::new(topology_artifact.key.clone()).unwrap())
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(topology["geo_cell_count"], 1);
+    assert_eq!(topology["point_assignment_count"], 4);
+    assert_eq!(topology["market_coverage_count"], 1);
+    assert_eq!(
+        topology["ambiguous_point_cell_entity_ids"],
+        serde_json::json!([])
+    );
+    assert_eq!(topology["evidence_validation_error"], Value::Null);
+
+    let loaded = Arc::new(loaded);
+    let runtime = backend::data_loader::runtime_snapshot_from_serving_bundle(loaded.clone());
+    assert_eq!(runtime.properties.len(), 3);
+    let whitefield_market_id = loaded
+        .entities
+        .iter()
+        .find(|entity| {
+            entity.name == "Whitefield" && entity.root_source.as_deref() == Some("market_locality")
+        })
+        .map(|entity| entity.entity_id.as_str())
+        .expect("source seed locality should reach the serving entity table");
+    assert_eq!(
+        runtime
+            .bundle
+            .graph_index
+            .covered_cells(whitefield_market_id)
+            .len(),
+        1
+    );
+    let properties = runtime.properties.to_vec();
+    let societies = runtime.societies.to_vec();
+    let areas = runtime.areas.to_vec();
+    let search_index = runtime.search_index.clone();
+    let (search_event_tx, _search_event_rx) = mpsc::channel(8);
+    let state = Arc::new(AppState {
+        execution: backend::security::ExecutionLanes::current(),
+        search_runtime: ArcSwap::from_pointee(runtime),
+        search_cache: SearchResponseCache::new(8),
+        search_revision_caches: backend::state::SearchRevisionCaches::new(8, 8),
+        property_catalog_cache: tokio::sync::Mutex::new(None),
+        search_event_tx,
+        search_log_dropped_count: AtomicU64::new(0),
+        properties: RwLock::new(properties),
+        search_index: RwLock::new(search_index),
+        recommendation_cache: RwLock::new(std::collections::HashMap::new()),
+        areas: RwLock::new(areas),
+        societies: RwLock::new(societies),
+        discovery_config: backend::discovery::load_discovery_config(),
+        map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
+        knowledge: Arc::new(RwLock::new(KnowledgeGraph::new())),
+        project_root: root.path().to_path_buf(),
+        process_started_at: Utc::now(),
+        interest_counter: AtomicU64::new(0),
+        interest_write_lock: tokio::sync::Mutex::new(()),
+    });
+    let response = build_app_router_with_lake(state, lake)
+        .oneshot(
+            Request::builder()
+                .uri("/api/search?q=3BHK%20in%20Whitefield")
+                .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 1], 41000))))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(response.into_body(), 4 * 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["totalMatches"], 3);
+    assert_eq!(body["orderedResultIds"].as_array().unwrap().len(), 3);
 }
 
 struct ProjectFixture {
@@ -256,7 +395,7 @@ fn source_inputs(
                 promoter_name: Some("PRESTIGE ESTATES PROJECTS LIMITED".to_string()),
                 status: Some(project.status.to_string()),
                 project_type: Some("Residential".to_string()),
-                project_address: Some("Bengaluru".to_string()),
+                project_address: Some("Whitefield, Bengaluru".to_string()),
                 area_name: Some("Whitefield".to_string()),
                 district: Some("Bengaluru Urban".to_string()),
                 taluk: None,
@@ -369,7 +508,19 @@ fn source_inputs(
     let first_project = &projects[0];
 
     AssetSourceInputs {
-        source_entities: Vec::new(),
+        source_entities: projects
+            .iter()
+            .map(|project| SourceEntitySeed {
+                entity_id: canonical_id(project.registration),
+                alias_entity_id: Some(format!("society:{}", slug(project.name))),
+                name: project.name.to_string(),
+                area: Some("Whitefield".to_string()),
+                city: Some("Bengaluru".to_string()),
+                project_key: Some(project.registration.to_string()),
+                latitude: Some(project.latitude),
+                longitude: Some(project.longitude),
+            })
+            .collect(),
         rera_registry_monthly: Some(ReraRegistryMonthlyInput {
             snapshot_date: "2026-07".to_string(),
             projects: rera_projects,
@@ -404,7 +555,7 @@ fn source_inputs(
                 address: Some("Whitefield".to_string()),
                 latitude: None,
                 longitude: None,
-                confidence: 0.7,
+                confidence: 0.9,
                 fetched_at: observed_at,
                 fetch_source: "fixture".to_string(),
             }],
@@ -479,6 +630,19 @@ fn source_inputs(
             max_promoted_gallery_frames: None,
             source_health: Vec::new(),
             media_qa_report: None,
+            source_watermarks: watermark.clone(),
+        }),
+        osm_locality_boundaries: Some(OsmLocalityBoundariesInput {
+            snapshot_date: "2026-07-14".to_string(),
+            source_url: "https://www.openstreetmap.org/relation/fixture-whitefield".to_string(),
+            boundaries: vec![OsmLocalityBoundaryInput {
+                osm_id: "relation/fixture-whitefield".to_string(),
+                name: "Fixture Whitefield Cell".to_string(),
+                geometry_geojson: r#"{"type":"Polygon","coordinates":[[[77.70,12.90],[77.80,12.90],[77.80,13.05],[77.70,13.05],[77.70,12.90]]]}"#.to_string(),
+                source_url: "https://www.openstreetmap.org/relation/fixture-whitefield".to_string(),
+                admin_level: Some("10".to_string()),
+                members: Vec::new(),
+            }],
             source_watermarks: watermark.clone(),
         }),
         environment_groundwater_potential: Some(EnvironmentGroundwaterPotentialInput {

@@ -1,5 +1,6 @@
 use backend::assets::{
-    osm_society_access_facts_input, KgViewRecords, OsmSocietyAccessInput, OsmSocietyAccessRecord,
+    osm_society_access_facts_input, OsmSocietyAccessInput, OsmSocietyAccessRecord,
+    SocietyGoldRecords,
 };
 use backend::knowledge::KnowledgeGraph;
 use chrono::{TimeZone, Utc};
@@ -93,7 +94,7 @@ fn society_access_emits_boundary_public_corridor_and_typed_entrance() {
             && fact.source_url.as_deref() == Some("https://www.openstreetmap.org/node/501")
     }));
 
-    let kg_records = KgViewRecords::from_graph_with_skill_facts(
+    let kg_records = SocietyGoldRecords::from_graph_with_skill_facts(
         &KnowledgeGraph::new(),
         &facts.facts,
         &facts.fact_annotations,

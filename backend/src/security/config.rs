@@ -13,7 +13,6 @@ pub struct SecurityTuning {
     pub requests: RequestTuning,
     pub rate_limits: RateLimitTuning,
     pub media: MediaTuning,
-    pub admin: AdminTuning,
     pub retention: RetentionTuning,
     pub interest_storage: InterestStorageTuning,
 }
@@ -77,21 +76,8 @@ pub struct MediaTuning {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct AdminTuning {
-    pub max_source_entities: usize,
-    pub max_source_entity_bytes: usize,
-    pub max_partition_parts: usize,
-    pub max_field_bytes: usize,
-    pub default_source_timeout_seconds: u64,
-    pub max_source_timeout_seconds: u64,
-    pub max_asset_run_log_bytes: u64,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct RetentionTuning {
     pub serving_cache_versions: usize,
-    pub asset_log_files: usize,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -221,18 +207,10 @@ impl SecurityTuning {
             ),
             ("requests.admin_body_bytes", self.requests.admin_body_bytes),
             ("media.stream_concurrency", self.media.stream_concurrency),
-            ("admin.max_source_entities", self.admin.max_source_entities),
-            (
-                "admin.max_source_entity_bytes",
-                self.admin.max_source_entity_bytes,
-            ),
-            ("admin.max_partition_parts", self.admin.max_partition_parts),
-            ("admin.max_field_bytes", self.admin.max_field_bytes),
             (
                 "retention.serving_cache_versions",
                 self.retention.serving_cache_versions,
             ),
-            ("retention.asset_log_files", self.retention.asset_log_files),
             (
                 "interest_storage.max_name_chars",
                 self.interest_storage.max_name_chars,
@@ -258,21 +236,6 @@ impl SecurityTuning {
             non_zero(&format!("{name}.period_ms"), rule.period_ms)?;
             non_zero(&format!("{name}.burst"), rule.burst)?;
         }
-        non_zero(
-            "admin.default_source_timeout_seconds",
-            self.admin.default_source_timeout_seconds,
-        )?;
-        non_zero(
-            "admin.max_source_timeout_seconds",
-            self.admin.max_source_timeout_seconds,
-        )?;
-        if self.admin.default_source_timeout_seconds > self.admin.max_source_timeout_seconds {
-            return Err("admin default timeout cannot exceed its maximum".to_string());
-        }
-        non_zero(
-            "admin.max_asset_run_log_bytes",
-            self.admin.max_asset_run_log_bytes,
-        )?;
         non_zero(
             "interest_storage.max_property_file_bytes",
             self.interest_storage.max_property_file_bytes,
