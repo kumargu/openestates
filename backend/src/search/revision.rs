@@ -1,6 +1,7 @@
+use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::io::Read;
 use std::sync::OnceLock;
 
 use crate::dag_config::search_parser_config;
@@ -8,9 +9,9 @@ use crate::serving::SpatialServingIndex;
 
 use super::ast::{ConstraintExpr, PredicateFamily};
 use super::compiled_plan::{
-    CompiledSearchPlan, GeoCellSearchPolicy, GeoTopologyIndex, ResolvedEntityHandle,
+    CompiledPredicateBinding, CompiledSearchPlan, GeoCellSearchPolicy, ResolvedEntityHandle,
 };
-use super::intent::SearchIntent;
+use super::intent::{SearchIntent, SourceSpan};
 use super::SearchRuntimeVersion;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,8 +24,6 @@ pub enum SearchRevisionOperation {
     Replace,
     Exclude,
     Correct,
-    Undo,
-    Fresh,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,25 +68,75 @@ pub struct TypedSearchRevision {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignedSearchContext {
+    pub version: u32,
     pub revision_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_revision_id: Option<String>,
     pub operation: SearchRevisionOperation,
     pub depth: usize,
     pub active_query: String,
-    pub plan_fingerprint: String,
-    pub runtime_version: SearchRuntimeVersion,
-    pub plan: CompiledSearchPlan,
-    pub ordered_result_ids: Vec<String>,
+    pub semantic_fingerprint: String,
+    pub runtime_lineage: SearchRuntimeVersion,
+    pub intent_ast: PortableIntentAst,
     pub result_fingerprint: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PortableIntentAst {
+    pub version: u32,
+    pub branches: Vec<PortableIntentAstBranch>,
+    pub aggregate_intent: SearchIntent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PortableIntentAstBranch {
+    pub branch_id: String,
+    pub predicates: ConstraintExpr,
+    pub predicate_bindings: Vec<CompiledPredicateBinding>,
+    pub resolved_entities: Vec<ResolvedEntityHandle>,
+}
+
+impl PortableIntentAst {
+    pub fn from_plan(plan: &CompiledSearchPlan) -> Self {
+        Self {
+            version: 1,
+            branches: plan
+                .branches
+                .iter()
+                .map(|branch| PortableIntentAstBranch {
+                    branch_id: branch.branch_id.clone(),
+                    predicates: branch.predicates.clone(),
+                    predicate_bindings: branch.predicate_bindings.clone(),
+                    resolved_entities: branch.resolved_entities.clone(),
+                })
+                .collect(),
+            aggregate_intent: plan.aggregate_intent.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BuyerIntentBranchProjection {
-    pub branch_id: String,
-    pub summary: String,
-    pub source_spans: Vec<super::intent::SourceSpan>,
+    pub id: String,
+    pub predicates: Vec<BuyerIntentPredicateProjection>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuyerIntentPredicateProjection {
+    pub id: String,
+    pub dimension: String,
+    pub polarity: String,
+    pub operator: String,
+    pub value: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_label: Option<String>,
+    pub required: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -99,10 +148,9 @@ pub struct SearchRevisionDescriptor {
     pub operation: SearchRevisionOperation,
     pub depth: usize,
     pub active_query: String,
-    pub plan_fingerprint: String,
-    pub runtime_version: SearchRuntimeVersion,
-    pub buyer_intent: Vec<BuyerIntentBranchProjection>,
-    pub context: String,
+    pub semantic_fingerprint: String,
+    pub state_token: String,
+    pub intent_breakdown: Vec<BuyerIntentBranchProjection>,
 }
 
 /// Classify a single newly compiled utterance against an authenticated parent
@@ -119,38 +167,16 @@ pub fn compile_typed_revision(
     if turn.is_empty() {
         return typed_clarification(SearchRevisionOperation::Refine);
     }
-    if discourse
-        .revision_undo_phrases
-        .iter()
-        .any(|phrase| turn.eq_ignore_ascii_case(phrase))
-    {
-        return TypedSearchRevision {
-            operation: SearchRevisionOperation::Undo,
-            outcome: SearchRevisionOutcome::Candidate,
-            patches: Vec::new(),
-        };
-    }
-
-    let fresh = strip_configured_prefix(turn, &discourse.revision_fresh_prefixes).is_some();
+    let relative_fragment = relative_budget_fragment(parent, fragment, turn);
+    let fragment = relative_fragment.as_ref().unwrap_or(fragment);
     let expand = strip_configured_prefix(turn, &discourse.revision_expand_prefixes).is_some();
     let correction = strip_configured_prefix(turn, &discourse.revision_correction_prefixes)
         .or_else(|| strip_configured_prefix(turn, &discourse.revision_overwrite_prefixes))
         .is_some();
     let exclusion = strip_configured_prefix(turn, &discourse.revision_exclusion_prefixes).is_some();
     let Some(fragment_branch) = fragment.branches.first() else {
-        return typed_clarification(if fresh {
-            SearchRevisionOperation::Fresh
-        } else {
-            SearchRevisionOperation::Refine
-        });
+        return typed_clarification(SearchRevisionOperation::Refine);
     };
-    if fresh {
-        return TypedSearchRevision {
-            operation: SearchRevisionOperation::Fresh,
-            outcome: SearchRevisionOutcome::Candidate,
-            patches: vec![TypedSearchRevisionPatch::ReplaceIntent],
-        };
-    }
     if expand {
         if parent.branches.len() >= limits.max_active_branches {
             return TypedSearchRevision {
@@ -291,19 +317,83 @@ pub fn compile_typed_revision(
     }
 }
 
+fn relative_budget_fragment(
+    parent: &CompiledSearchPlan,
+    fragment: &CompiledSearchPlan,
+    utterance: &str,
+) -> Option<CompiledSearchPlan> {
+    let discourse = &search_parser_config().discourse;
+    let increase =
+        strip_configured_prefix(utterance, &discourse.revision_relative_increase_prefixes)
+            .is_some();
+    let decrease =
+        strip_configured_prefix(utterance, &discourse.revision_relative_decrease_prefixes)
+            .is_some();
+    if !increase && !decrease {
+        return None;
+    }
+    let target = targeted_branch_index(utterance, parent.branches.len()).unwrap_or(0);
+    let base = expression_budget_max(&parent.branches.get(target)?.predicates)?;
+    let parsed = super::parser::parse_query_slots(utterance);
+    let amount = parsed.budget_max.or(parsed.budget_min)?;
+    let corrected = if increase {
+        base.checked_add(amount.value)?
+    } else {
+        base.checked_sub(amount.value)?
+    };
+    let mut resolved = fragment.clone();
+    let branch = resolved.branches.first_mut()?;
+    let expression = ConstraintExpr::term(super::ast::ConstraintTerm::Budget {
+        min: None,
+        max: Some(super::ast::NumericBound {
+            value: corrected,
+            inclusive: true,
+            raw_text: amount.raw_text.clone(),
+        }),
+        span: Some(SourceSpan {
+            start: amount.start,
+            end: amount.end,
+            raw_text: amount.raw_text,
+            source_turn_id: fragment
+                .branches
+                .first()
+                .and_then(|branch| branch.source_spans.first())
+                .map(|span| span.source_turn_id.clone())
+                .unwrap_or_default(),
+        }),
+    });
+    branch.predicates = expression.clone();
+    branch.eligibility_predicates = expression;
+    branch.ranking_intent.budget_min = None;
+    branch.ranking_intent.budget_max = Some(corrected);
+    resolved.aggregate_intent.budget_min = None;
+    resolved.aggregate_intent.budget_max = Some(corrected);
+    Some(resolved)
+}
+
+fn expression_budget_max(expression: &ConstraintExpr) -> Option<u64> {
+    match expression {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
+            clauses.iter().find_map(expression_budget_max)
+        }
+        ConstraintExpr::Not { .. } => None,
+        ConstraintExpr::Term {
+            term: super::ast::ConstraintTerm::Budget { max, .. },
+        } => max.as_ref().map(|bound| bound.value),
+        ConstraintExpr::Term { .. } => None,
+    }
+}
+
 pub fn apply_typed_revision(
     parent: &CompiledSearchPlan,
     fragment: &CompiledSearchPlan,
     revision: &TypedSearchRevision,
-    topology: &GeoTopologyIndex,
+    topology: &crate::graph::GraphIndex,
     spatial_index: Option<&SpatialServingIndex>,
     geo_cell_policy: GeoCellSearchPolicy,
 ) -> Option<CompiledSearchPlan> {
     if revision.outcome != SearchRevisionOutcome::Candidate {
         return None;
-    }
-    if revision.operation == SearchRevisionOperation::Undo {
-        return Some(parent.clone());
     }
     if revision
         .patches
@@ -546,19 +636,9 @@ pub fn render_revision_active_query(
     let utterance = utterance.trim();
     if matches!(
         operation,
-        SearchRevisionOperation::Fresh
-            | SearchRevisionOperation::Replace
-            | SearchRevisionOperation::Rephrase
+        SearchRevisionOperation::Replace | SearchRevisionOperation::Rephrase
     ) {
-        return search_parser_config()
-            .discourse
-            .revision_fresh_prefixes
-            .iter()
-            .filter_map(|prefix| strip_prefix_case_insensitive(utterance, prefix))
-            .next()
-            .unwrap_or(utterance)
-            .trim_matches([',', ':', '-', ' '])
-            .to_string();
+        return utterance.to_string();
     }
     let utterance = if operation == SearchRevisionOperation::Expand {
         strip_configured_prefix(
@@ -647,61 +727,215 @@ fn strip_prefix_case_insensitive<'a>(value: &'a str, prefix: &str) -> Option<&'a
         .and_then(|_| value.get(prefix.len()..))
 }
 
+pub fn intent_breakdown(plan: &CompiledSearchPlan) -> Vec<BuyerIntentBranchProjection> {
+    plan.branches
+        .iter()
+        .map(|branch| {
+            let mut predicates = Vec::new();
+            collect_intent_breakdown(
+                &branch.predicates,
+                false,
+                &mut Vec::new(),
+                &branch.predicate_bindings,
+                &mut predicates,
+            );
+            BuyerIntentBranchProjection {
+                id: branch.branch_id.clone(),
+                predicates,
+            }
+        })
+        .collect()
+}
+
+fn collect_intent_breakdown(
+    expression: &ConstraintExpr,
+    negated: bool,
+    path: &mut Vec<usize>,
+    bindings: &[CompiledPredicateBinding],
+    output: &mut Vec<BuyerIntentPredicateProjection>,
+) {
+    match expression {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
+            for (index, clause) in clauses.iter().enumerate() {
+                path.push(index);
+                collect_intent_breakdown(clause, negated, path, bindings, output);
+                path.pop();
+            }
+        }
+        ConstraintExpr::Not { clause } => {
+            path.push(0);
+            collect_intent_breakdown(clause, !negated, path, bindings, output);
+            path.pop();
+        }
+        ConstraintExpr::Term { term } => {
+            let id = bindings
+                .iter()
+                .find(|binding| binding.path == *path)
+                .map(|binding| binding.predicate_id.clone())
+                .unwrap_or_else(|| {
+                    format!(
+                        "predicate:{}",
+                        path.iter()
+                            .map(usize::to_string)
+                            .collect::<Vec<_>>()
+                            .join(".")
+                    )
+                });
+            let polarity = if negated { "negative" } else { "positive" }.to_string();
+            let projection = match term {
+                super::ast::ConstraintTerm::Bhk { value, .. } => BuyerIntentPredicateProjection {
+                    id,
+                    dimension: "bhk".to_string(),
+                    polarity,
+                    operator: "equals".to_string(),
+                    value: json!(value),
+                    unit: None,
+                    resolved_label: None,
+                    required: true,
+                },
+                super::ast::ConstraintTerm::Area { value, .. } => BuyerIntentPredicateProjection {
+                    id,
+                    dimension: "area".to_string(),
+                    polarity,
+                    operator: "inside".to_string(),
+                    value: json!(value),
+                    unit: None,
+                    resolved_label: Some(value.clone()),
+                    required: true,
+                },
+                super::ast::ConstraintTerm::Society { display_name, .. } => {
+                    BuyerIntentPredicateProjection {
+                        id,
+                        dimension: "society".to_string(),
+                        polarity,
+                        operator: "equals".to_string(),
+                        value: json!(display_name),
+                        unit: None,
+                        resolved_label: Some(display_name.clone()),
+                        required: true,
+                    }
+                }
+                super::ast::ConstraintTerm::Builder { display_name, .. } => {
+                    BuyerIntentPredicateProjection {
+                        id,
+                        dimension: "builder".to_string(),
+                        polarity,
+                        operator: "equals".to_string(),
+                        value: json!(display_name),
+                        unit: None,
+                        resolved_label: Some(display_name.clone()),
+                        required: true,
+                    }
+                }
+                super::ast::ConstraintTerm::Budget { min, max, .. } => {
+                    BuyerIntentPredicateProjection {
+                        id,
+                        dimension: "price".to_string(),
+                        polarity,
+                        operator: match (min, max) {
+                            (Some(_), Some(_)) => "between",
+                            (Some(_), None) => "at_least",
+                            (None, Some(_)) => "at_most",
+                            (None, None) => "unknown",
+                        }
+                        .to_string(),
+                        value: json!({
+                            "min": min.as_ref().map(|bound| bound.value),
+                            "max": max.as_ref().map(|bound| bound.value),
+                        }),
+                        unit: Some("INR".to_string()),
+                        resolved_label: None,
+                        required: true,
+                    }
+                }
+                super::ast::ConstraintTerm::Evidence { constraint, .. } => {
+                    BuyerIntentPredicateProjection {
+                        id,
+                        dimension: constraint.field.clone(),
+                        polarity,
+                        operator: match constraint.operator {
+                            super::intent::ConstraintOperator::Min => "at_least",
+                            super::intent::ConstraintOperator::Max => "at_most",
+                        }
+                        .to_string(),
+                        value: json!(constraint.value),
+                        unit: Some(constraint.unit.clone()),
+                        resolved_label: None,
+                        required: true,
+                    }
+                }
+                super::ast::ConstraintTerm::Spatial {
+                    relation,
+                    display_name,
+                    required,
+                    ..
+                } => BuyerIntentPredicateProjection {
+                    id,
+                    dimension: "geography".to_string(),
+                    polarity,
+                    operator: relation.clone(),
+                    value: json!(display_name),
+                    unit: None,
+                    resolved_label: Some(display_name.clone()),
+                    required: *required,
+                },
+            };
+            output.push(projection);
+        }
+    }
+}
+
 pub fn issue_signed_search_context(
     parent_revision_id: Option<String>,
+    client_mutation_id: &str,
     operation: SearchRevisionOperation,
     depth: usize,
     active_query: String,
     plan: CompiledSearchPlan,
     runtime_version: SearchRuntimeVersion,
     ordered_result_ids: Vec<String>,
-) -> (SignedSearchContext, SearchRevisionDescriptor) {
+) -> Result<(SignedSearchContext, SearchRevisionDescriptor), String> {
     let result_fingerprint = result_membership_fingerprint(&ordered_result_ids);
     let revision_id = revision_id_for_plan(
         parent_revision_id.as_deref(),
+        client_mutation_id,
         operation,
         &plan.semantic_fingerprint,
         &runtime_version,
-        &result_fingerprint,
         depth,
     );
+    let intent_ast = PortableIntentAst::from_plan(&plan);
     let context = SignedSearchContext {
+        version: 1,
         revision_id: revision_id.clone(),
         parent_revision_id: parent_revision_id.clone(),
         operation,
         depth,
         active_query: active_query.clone(),
-        plan_fingerprint: plan.semantic_fingerprint.clone(),
-        runtime_version: runtime_version.clone(),
-        plan,
-        ordered_result_ids,
+        semantic_fingerprint: plan.semantic_fingerprint.clone(),
+        runtime_lineage: runtime_version,
+        intent_ast,
         result_fingerprint,
     };
-    let encoded = encode_signed_context(&context);
+    validate_signed_search_context(&context)?;
+    let encoded = encode_signed_context(&context)?;
     let descriptor = SearchRevisionDescriptor {
         id: revision_id,
         parent_id: parent_revision_id,
         operation,
         depth,
         active_query,
-        plan_fingerprint: context.plan_fingerprint.clone(),
-        runtime_version,
-        buyer_intent: context
-            .plan
-            .branches
-            .iter()
-            .map(|branch| BuyerIntentBranchProjection {
-                branch_id: branch.branch_id.clone(),
-                summary: branch.buyer_summary.clone(),
-                source_spans: branch.source_spans.clone(),
-            })
-            .collect(),
-        context: encoded,
+        semantic_fingerprint: context.semantic_fingerprint.clone(),
+        state_token: encoded,
+        intent_breakdown: intent_breakdown(&plan),
     };
-    (context, descriptor)
+    Ok((context, descriptor))
 }
 
 pub fn decode_signed_search_context(value: &str) -> Result<SignedSearchContext, String> {
+    if value.len() > MAX_ENCODED_TOKEN_BYTES {
+        return Err("revision token exceeds the encoded size limit".to_string());
+    }
     let mut parts = value.split('.');
     if parts.next() != Some("v1") {
         return Err("unsupported revision context version".to_string());
@@ -716,95 +950,57 @@ pub fn decode_signed_search_context(value: &str) -> Result<SignedSearchContext, 
         return Err("invalid revision context framing".to_string());
     }
     let payload = decode_hex(payload_hex)?;
-    let expected = encode_hex(&hmac_sha256(revision_signing_key(), &payload));
-    if !constant_time_eq(signature.as_bytes(), expected.as_bytes()) {
-        return Err("invalid revision context signature".to_string());
-    }
+    let signature = decode_hex(signature)?;
+    verify_hmac(revision_signing_key(), &payload, &signature)?;
     let context: SignedSearchContext = serde_json::from_slice(&payload)
         .map_err(|error| format!("invalid revision context payload: {error}"))?;
     validate_signed_search_context(&context)?;
     Ok(context)
 }
 
-fn encode_signed_context(context: &SignedSearchContext) -> String {
+fn encode_signed_context(context: &SignedSearchContext) -> Result<String, String> {
     let payload = serde_json::to_vec(context).expect("revision context is serializable");
     let signature = hmac_sha256(revision_signing_key(), &payload);
-    format!("v1.{}.{}", encode_hex(&payload), encode_hex(&signature))
+    let encoded = format!("v1.{}.{}", encode_hex(&payload), encode_hex(&signature));
+    if encoded.len() > MAX_ENCODED_TOKEN_BYTES {
+        return Err("revision token exceeds the encoded size limit".to_string());
+    }
+    Ok(encoded)
 }
 
 fn validate_signed_search_context(context: &SignedSearchContext) -> Result<(), String> {
-    let mut validated_plan = context.plan.clone();
-    validated_plan.refresh_semantic_fingerprint();
-    let fingerprint = validated_plan.semantic_fingerprint;
-    if fingerprint != context.plan.semantic_fingerprint || fingerprint != context.plan_fingerprint {
-        return Err("revision plan fingerprint mismatch".to_string());
+    if context.version != 1 || context.intent_ast.version != 1 {
+        return Err("unsupported revision token payload version".to_string());
     }
-    if result_membership_fingerprint(&context.ordered_result_ids) != context.result_fingerprint {
-        return Err("revision result membership mismatch".to_string());
+    if context.intent_ast.branches.is_empty() || context.intent_ast.branches.len() > 8 {
+        return Err("revision intent branch limit exceeded".to_string());
     }
-    let expected_revision = revision_id_for_plan(
-        context.parent_revision_id.as_deref(),
-        context.operation,
-        &context.plan_fingerprint,
-        &context.runtime_version,
-        &context.result_fingerprint,
-        context.depth,
-    );
-    if !constant_time_eq(context.revision_id.as_bytes(), expected_revision.as_bytes()) {
-        return Err("revision identity mismatch".to_string());
-    }
-    validate_plan_evidence(&context.plan)
-}
-
-fn validate_plan_evidence(plan: &CompiledSearchPlan) -> Result<(), String> {
-    for reference in plan
+    let predicate_count = context
+        .intent_ast
         .branches
         .iter()
-        .flat_map(|branch| match &branch.geo_scope {
-            super::compiled_plan::GeoScope::Scoped {
-                seed_cells,
-                expanded_cell_paths,
-                supporting_evidence,
-                ..
-            } => supporting_evidence
-                .iter()
-                .chain(
-                    seed_cells
-                        .iter()
-                        .flat_map(|seed| seed.supporting_evidence.iter()),
-                )
-                .chain(
-                    expanded_cell_paths
-                        .iter()
-                        .flat_map(|path| path.supporting_evidence.iter()),
-                )
-                .collect::<Vec<_>>(),
-            super::compiled_plan::GeoScope::Unresolved { .. } => Vec::new(),
-            super::compiled_plan::GeoScope::BundleWide => Vec::new(),
-        })
-    {
-        reference
-            .validate_for(&reference.subject_entity_id, &plan.snapshot_identity)
-            .map_err(|error| format!("invalid revision evidence identity: {error}"))?;
+        .map(|branch| branch.predicate_bindings.len())
+        .sum::<usize>();
+    if predicate_count > 64 {
+        return Err("revision intent predicate limit exceeded".to_string());
     }
     Ok(())
 }
 
 fn revision_id_for_plan(
     parent_revision_id: Option<&str>,
+    client_mutation_id: &str,
     operation: SearchRevisionOperation,
     plan_fingerprint: &str,
     runtime_version: &SearchRuntimeVersion,
-    result_fingerprint: &str,
     depth: usize,
 ) -> String {
-    let payload = serde_json::to_vec(&serde_json::json!({
+    let payload = serde_json::to_vec(&json!({
         "parentRevisionId": parent_revision_id,
+        "clientMutationId": client_mutation_id,
         "operation": operation,
         "planFingerprint": plan_fingerprint,
         "runtimeVersion": runtime_version,
-        "resultFingerprint": result_fingerprint,
-        "depth": depth,
     }))
     .expect("revision identity payload is serializable");
     let digest = hmac_sha256(revision_signing_key(), &payload);
@@ -835,6 +1031,8 @@ fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
 }
 
 const REVISION_SIGNING_KEY_ENV: &str = "OPENESTATES_REVISION_SIGNING_KEY";
+const MAX_ENCODED_TOKEN_BYTES: usize = 64 * 1024;
+type HmacSha256 = Hmac<Sha256>;
 
 fn revision_signing_key() -> &'static [u8; 32] {
     static KEY: OnceLock<[u8; 32]> = OnceLock::new();
@@ -844,48 +1042,24 @@ fn revision_signing_key() -> &'static [u8; 32] {
                 return Sha256::digest(configured.as_bytes()).into();
             }
         }
-        let mut key = [0_u8; 32];
-        std::fs::File::open("/dev/urandom")
-            .and_then(|mut source| source.read_exact(&mut key))
-            .expect("secure randomness is required when OPENESTATES_REVISION_SIGNING_KEY is unset");
-        key
+        if cfg!(debug_assertions) {
+            return Sha256::digest(b"openestates-local-revision-signing-key-v1").into();
+        }
+        panic!("OPENESTATES_REVISION_SIGNING_KEY is required for revision token continuity");
     })
 }
 
 fn hmac_sha256(key: &[u8], payload: &[u8]) -> [u8; 32] {
-    const BLOCK_SIZE: usize = 64;
-    let mut key_block = [0_u8; BLOCK_SIZE];
-    if key.len() > BLOCK_SIZE {
-        key_block[..32].copy_from_slice(&Sha256::digest(key));
-    } else {
-        key_block[..key.len()].copy_from_slice(key);
-    }
-    let mut inner_pad = [0x36_u8; BLOCK_SIZE];
-    let mut outer_pad = [0x5c_u8; BLOCK_SIZE];
-    for index in 0..BLOCK_SIZE {
-        inner_pad[index] ^= key_block[index];
-        outer_pad[index] ^= key_block[index];
-    }
-    let mut inner = Sha256::new();
-    inner.update(inner_pad);
-    inner.update(payload);
-    let inner_digest = inner.finalize();
-    let mut outer = Sha256::new();
-    outer.update(outer_pad);
-    outer.update(inner_digest);
-    outer.finalize().into()
+    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts arbitrary key lengths");
+    mac.update(payload);
+    mac.finalize().into_bytes().into()
 }
 
-fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
-    if left.len() != right.len() {
-        return false;
-    }
-    left.iter()
-        .zip(right)
-        .fold(0_u8, |difference, (left, right)| {
-            difference | (left ^ right)
-        })
-        == 0
+fn verify_hmac(key: &[u8], payload: &[u8], signature: &[u8]) -> Result<(), String> {
+    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts arbitrary key lengths");
+    mac.update(payload);
+    mac.verify_slice(signature)
+        .map_err(|_| "invalid revision context signature".to_string())
 }
 
 #[cfg(test)]
@@ -897,12 +1071,12 @@ mod tests {
         max_active_branches: 8,
     };
 
-    fn test_plan(compiled_query: super::super::CompiledQuery) -> CompiledSearchPlan {
+    fn test_plan(compiled_query: super::super::IntentAst) -> CompiledSearchPlan {
         CompiledSearchPlan::compile_for_snapshot(
             compiled_query,
             "test-snapshot",
             &[],
-            &GeoTopologyIndex::default(),
+            &crate::graph::GraphIndex::default(),
             None,
             GeoCellSearchPolicy {
                 max_hops: 2,
@@ -914,8 +1088,8 @@ mod tests {
     #[test]
     fn typed_overwrite_replaces_bhk_and_budget_without_dropping_parent_area() {
         let parent_query = "3BHK in Whitefield under 2.5Cr";
-        let base = super::super::CompiledQuery::from_text(parent_query);
-        let parent = test_plan(super::super::CompiledQuery::with_constraints(
+        let base = super::super::IntentAst::from_text(parent_query);
+        let parent = test_plan(super::super::IntentAst::with_constraints(
             parent_query,
             ConstraintExpr::and(vec![
                 base.constraints,
@@ -927,7 +1101,7 @@ mod tests {
             ]),
             base.intent,
         ));
-        let mut fragment = test_plan(super::super::CompiledQuery::from_text(
+        let mut fragment = test_plan(super::super::IntentAst::from_text(
             "Make it 2BHK under 1.6Cr",
         ));
         fragment.assign_source_turn("turn-2");
@@ -947,7 +1121,7 @@ mod tests {
             &parent,
             &fragment,
             &revision,
-            &GeoTopologyIndex::default(),
+            &crate::graph::GraphIndex::default(),
             None,
             GeoCellSearchPolicy {
                 max_hops: 2,
@@ -957,9 +1131,9 @@ mod tests {
         .expect("typed patch applies");
         let predicates = &candidate.branches[0].predicates;
         assert!(predicates.contains_family(PredicateFamily::Area));
-        assert_eq!(candidate.branches[0].constraints.requested_bhks(), [2]);
+        assert_eq!(candidate.branches[0].ranking_intent.requested_bhks(), [2]);
         assert_eq!(
-            candidate.branches[0].constraints.budget_max,
+            candidate.branches[0].ranking_intent.budget_max,
             Some(16_000_000)
         );
         assert!(candidate.branches[0]
@@ -990,8 +1164,8 @@ mod tests {
             .map(|index| format!("{index}BHK under 2Cr"))
             .collect::<Vec<_>>()
             .join(" or ");
-        let parent = test_plan(super::super::CompiledQuery::from_text(&query));
-        let fragment = test_plan(super::super::CompiledQuery::from_text(
+        let parent = test_plan(super::super::IntentAst::from_text(&query));
+        let fragment = test_plan(super::super::IntentAst::from_text(
             "Increase the eighth budget to 3Cr",
         ));
         let revision = compile_typed_revision(

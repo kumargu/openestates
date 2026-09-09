@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
@@ -13,10 +13,8 @@ use backend::graph::GraphIndex;
 use backend::knowledge::{FactValue, KnowledgeGraph};
 use backend::lake::LakeStore;
 use backend::models::Property;
-use backend::search::geo::GeoSearchIndex;
-use backend::search::{
-    decode_signed_search_context, issue_signed_search_context, SearchCapabilityIndex, SearchIndex,
-};
+use backend::search::geo::SpatialEntityIndex;
+use backend::search::{decode_signed_search_context, SearchCapabilityIndex, SearchIndex};
 use backend::security::ExecutionLanes;
 use backend::serving::{
     DerivedEvidence, EvidenceRef, LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest,
@@ -31,345 +29,206 @@ use tokio::sync::{mpsc, RwLock};
 use tower::ServiceExt;
 
 #[tokio::test]
-async fn stateless_revision_route_enforces_runtime_parent_and_safe_outcomes() {
+async fn revision_contract_activates_and_preserves_without_server_journey_state() {
     let app = test_app().await;
-    let parent_query = "3BHK in Hoodi under 2.4 Cr";
-    let parent = get_search(&app, parent_query, 21).await;
+    let parent = get_search(&app, "3BHK in Hoodi under 2.4 Cr", 21).await;
     assert_eq!(parent.0, StatusCode::OK);
-    let parent_context = parent.1["revision"]["context"]
-        .as_str()
-        .expect("direct search issues a signed compiled context");
-    let parent_revision = parent.1["revisionId"]
-        .as_str()
-        .expect("direct search issues a revision correlation id");
-    assert!(parent_revision.starts_with("rev-001-"));
-    assert!(parent.1["astFingerprint"]
-        .as_str()
-        .is_some_and(|fingerprint| fingerprint.starts_with("sha256:")));
+    assert!(parent.1["revision"]["stateToken"].is_string());
+    assert!(parent.1["revision"]["intentBreakdown"].is_array());
+    assert!(parent.1["revision"].get("context").is_none());
 
-    let candidate = post_revision(
+    let activated = post_revision(
         &app,
-        revision_request(parent_context, "Make it under 2.5Cr", "budget-refine"),
+        revision_request(&parent.1, "Make it under 2.5Cr", "budget-refine"),
         22,
     )
     .await;
-    assert_eq!(candidate.0, StatusCode::OK);
-    assert_eq!(candidate.1["outcome"], "candidate");
-    assert_eq!(candidate.1["operation"], "refine");
-    assert!(candidate.1["search"].is_object());
-    assert!(!candidate.1["preserveParent"].as_bool().unwrap());
-    assert_eq!(
-        candidate.1["revisionId"], candidate.1["search"]["revisionId"],
-        "nested ordinary search must expose the same server-issued revision"
-    );
-    let direct_budget = get_search(&app, "3BHK in Hoodi under 2.5Cr", 34).await;
-    assert_eq!(
-        candidate.1["search"]["astFingerprint"], direct_budget.1["astFingerprint"],
-        "response={}",
-        candidate.1
-    );
-    assert_eq!(
-        candidate.1["search"]["orderedResultIds"],
-        direct_budget.1["orderedResultIds"]
-    );
-    let candidate_context = candidate.1["activeRevision"]["context"].as_str().unwrap();
-    let undo = post_revision(
+    assert_eq!(activated.0, StatusCode::OK, "response={}", activated.1);
+    assert_eq!(activated.1["operation"], "refine");
+    assert_eq!(activated.1["outcome"], "activate");
+    assert_eq!(activated.1["catalogRebased"], false);
+    assert!(activated.1["candidate"]["revision"]["stateToken"].is_string());
+
+    let relative = post_revision(
+        &app,
+        revision_request(&parent.1, "Stretch budget by 20 lakh", "relative-budget"),
+        25,
+    )
+    .await;
+    assert_eq!(relative.0, StatusCode::OK, "response={}", relative.1);
+    assert_eq!(relative.1["operation"], "correct");
+    assert_eq!(relative.1["outcome"], "activate");
+    assert!(relative.1["attemptedBreakdown"][0]["predicates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|predicate| {
+            predicate["dimension"] == "price" && predicate["value"]["max"] == 26_000_000_u64
+        }));
+
+    let zero = post_revision(
+        &app,
+        revision_request(&parent.1, "Only 4BHK", "zero-result"),
+        23,
+    )
+    .await;
+    assert_eq!(zero.0, StatusCode::OK);
+    assert_eq!(zero.1["outcome"], "preserveParent");
+    assert!(zero.1.get("candidate").is_none());
+    assert!(zero.1["attemptedBreakdown"][0]["predicates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|predicate| predicate["dimension"] == "bhk" && predicate["value"] == 4));
+
+    let clarification = post_revision(
+        &app,
+        revision_request(&parent.1, "Make it closer", "clarify"),
+        24,
+    )
+    .await;
+    assert_eq!(clarification.1["outcome"], "clarificationRequired");
+    assert!(clarification.1.get("candidate").is_none());
+}
+
+#[tokio::test]
+async fn compact_tokens_are_authenticated_and_bind_parent_results() {
+    let app = test_app().await;
+    let parent = get_search(&app, "3BHK in Hoodi under 2.4 Cr", 31).await;
+    let token = parent.1["revision"]["stateToken"].as_str().unwrap();
+    assert!(token.len() < 64 * 1024);
+    let decoded = decode_signed_search_context(token).unwrap();
+    let payload = serde_json::to_value(decoded).unwrap();
+    assert!(payload.get("intentAst").is_some());
+    for forbidden in [
+        "plan",
+        "orderedResultIds",
+        "evidence",
+        "topology",
+        "resultRows",
+    ] {
+        assert!(
+            !payload.to_string().contains(forbidden),
+            "payload={payload}"
+        );
+    }
+
+    let mut corrupt = token.to_string();
+    let replacement = if corrupt.ends_with('0') { "1" } else { "0" };
+    corrupt.replace_range(corrupt.len() - 1.., replacement);
+    let corrupt_response = post_revision(
         &app,
         json!({
-            "parentContext": candidate_context,
-            "utterance": "undo",
-            "clientIdempotencyKey": "undo-budget",
-            "undoContext": parent_context
+            "parentToken": corrupt,
+            "parentResultIds": parent.1["orderedResultIds"],
+            "utterance": "Make it under 2.5Cr",
+            "clientMutationId": "corrupt"
         }),
         32,
     )
     .await;
-    assert_eq!(undo.0, StatusCode::OK);
-    assert_eq!(undo.1["operation"], "undo");
-    assert_eq!(undo.1["revisionId"], parent.1["revisionId"]);
+    assert_eq!(corrupt_response.0, StatusCode::BAD_REQUEST);
+    assert_eq!(corrupt_response.1["code"], "invalid_parent_token");
 
-    let area_alternative = post_revision(
-        &app,
-        revision_request(parent_context, "Also consider Sarjapur", "area-alternative"),
-        28,
-    )
-    .await;
-    assert_eq!(area_alternative.0, StatusCode::OK);
-    assert_eq!(area_alternative.1["outcome"], "candidate");
-    assert_eq!(area_alternative.1["operation"], "expand");
-    assert!(!area_alternative.1["preserveParent"].as_bool().unwrap());
-    assert_eq!(area_alternative.1["activeBranchCount"], 2);
-    assert_eq!(
-        area_alternative.1["activeRevision"]["buyerIntent"]
-            .as_array()
-            .unwrap()
-            .len(),
-        2
+    let mut mismatched = revision_request(&parent.1, "Make it under 2.5Cr", "mismatch");
+    mismatched["parentResultIds"] = json!(["property:not-the-parent"]);
+    let mismatched = post_revision(&app, mismatched, 33).await;
+    assert_eq!(mismatched.0, StatusCode::CONFLICT);
+    assert_eq!(mismatched.1["code"], "parent_results_mismatch");
+}
+
+#[tokio::test]
+async fn duplicate_submissions_are_deterministic_and_conflicts_are_rejected() {
+    let app = test_app().await;
+    let parent = get_search(&app, "3BHK in Hoodi under 2.4 Cr", 41).await;
+    let request = revision_request(&parent.1, "Make it under 2.5Cr", "same-mutation");
+    let (first, second) = tokio::join!(
+        post_revision(&app, request.clone(), 42),
+        post_revision(&app, request, 43),
     );
+    assert_eq!(first, second);
+    assert_eq!(first.1["outcome"], "activate");
 
-    let zero = post_revision(
-        &app,
-        revision_request(parent_context, "Only 4BHK", "zero-result"),
-        31,
-    )
-    .await;
-    assert_eq!(zero.0, StatusCode::OK);
-    assert!(zero.1["preserveParent"].as_bool().unwrap());
-    assert_eq!(zero.1["revisionId"], parent.1["revisionId"]);
-    assert!(zero.1.get("search").is_none());
-    let attempted =
-        decode_signed_search_context(zero.1["attemptedCandidate"]["context"].as_str().unwrap())
-            .expect("attempted zero-result plan remains inspectable");
-    assert_eq!(attempted.plan.branches[0].constraints.requested_bhks(), [4]);
-    assert!(attempted.plan.branches[0]
-        .predicates
-        .contains_family(backend::search::PredicateFamily::Area));
-
-    let bhk_budget_zero = post_revision(
-        &app,
-        revision_request(
-            parent_context,
-            "Make it 2BHK under 1.6Cr",
-            "bhk-budget-overwrite",
-        ),
-        35,
-    )
-    .await;
-    assert!(bhk_budget_zero.1["preserveParent"].as_bool().unwrap());
-    let attempted = decode_signed_search_context(
-        bhk_budget_zero.1["attemptedCandidate"]["context"]
-            .as_str()
-            .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(attempted.plan.branches[0].constraints.requested_bhks(), [2]);
-    assert_eq!(
-        attempted.plan.branches[0].constraints.budget_max,
-        Some(16_000_000)
-    );
-    assert!(attempted.plan.branches[0]
-        .predicates
-        .contains_family(backend::search::PredicateFamily::Area));
-
-    let fresh = post_revision(
-        &app,
-        revision_request(
-            parent_context,
-            "New search 3BHK in Hoodi under 2.5Cr",
-            "fresh-search",
-        ),
-        33,
-    )
-    .await;
-    assert_eq!(fresh.0, StatusCode::OK);
-    assert_eq!(fresh.1["operation"], "fresh");
-
-    let mut spoofed_context = parent_context.to_string();
-    let replacement = if spoofed_context.ends_with('0') {
-        "1"
-    } else {
-        "0"
-    };
-    spoofed_context.replace_range(spoofed_context.len() - 1.., replacement);
-    let spoofed = post_revision(
-        &app,
-        revision_request(&spoofed_context, "Make it under 2.5Cr", "spoofed"),
-        25,
-    )
-    .await;
-    assert_eq!(spoofed.0, StatusCode::BAD_REQUEST);
-    assert_eq!(spoofed.1["code"], "invalid_parent_context");
-
-    let empty = post_revision(&app, revision_request(parent_context, "   ", "empty"), 26).await;
-    assert_eq!(empty.0, StatusCode::BAD_REQUEST);
-    assert_eq!(empty.1["code"], "invalid_revision_request");
-
-    let mut legacy_shape = revision_request(parent_context, "Only 4BHK", "legacy-shape");
-    legacy_shape["parentQuery"] = json!(parent_query);
-    let rejected_legacy_shape = post_revision(&app, legacy_shape, 36).await;
-    assert_eq!(rejected_legacy_shape.0, StatusCode::UNPROCESSABLE_ENTITY);
-
-    let clarification = post_revision(
-        &app,
-        revision_request(parent_context, "Make it closer", "clarify"),
-        27,
-    )
-    .await;
-    assert_eq!(clarification.0, StatusCode::OK);
-    assert_eq!(clarification.1["outcome"], "requireClarification");
-    assert!(clarification.1.get("search").is_none());
-    assert_eq!(clarification.1["activeQuery"], parent_query);
-
-    let retry = post_revision(
-        &app,
-        revision_request(parent_context, "Make it under 2.5Cr", "budget-refine"),
-        29,
-    )
-    .await;
-    assert_eq!(retry, candidate, "an exact retry returns the same response");
     let conflict = post_revision(
         &app,
-        revision_request(parent_context, "Only 4BHK", "budget-refine"),
-        30,
+        revision_request(&parent.1, "Only 4BHK", "same-mutation"),
+        44,
     )
     .await;
     assert_eq!(conflict.0, StatusCode::CONFLICT);
-    assert_eq!(conflict.1["code"], "idempotency_key_conflict");
+    assert_eq!(conflict.1["code"], "client_mutation_id_conflict");
 }
 
 #[tokio::test]
-async fn equivalent_direct_and_revised_searches_share_ast_results_and_proofs() {
+async fn expansion_limits_and_selected_property_consequences_are_explicit() {
     let app = test_app().await;
-    let parent_query = "3BHK in Hoodi under 2.4 Cr";
-    let equivalent_query = "3 bedrooms in Hoodi costing no more than 2.4 crore";
-    let parent = get_search(&app, parent_query, 31).await;
-    let direct = get_search(&app, equivalent_query, 32).await;
+    let selected_parent = get_search(&app, "3BHK in Hoodi under 2.4 Cr", 51).await;
+    let selected = selected_parent.1["orderedResultIds"][0].as_str().unwrap();
+    let mut exclusion = revision_request(&selected_parent.1, "Only 4BHK", "exclude-selected");
+    exclusion["selectedPropertyId"] = json!(selected);
+    let exclusion = post_revision(&app, exclusion, 52).await;
+    assert_eq!(exclusion.1["outcome"], "preserveParent");
+    assert_eq!(exclusion.1["selectedPropertyConsequence"], "excluded");
+
+    let parent_query = "2BHK under 1Cr or 2BHK under 1.1Cr or 2BHK under 1.2Cr or 2BHK under 1.3Cr or 2BHK under 1.4Cr or 2BHK under 1.5Cr or 2BHK under 1.6Cr or 2BHK under 1.7Cr";
+    let parent = get_search(&app, parent_query, 53).await;
+    let ninth = post_revision(
+        &app,
+        revision_request(&parent.1, "Also consider Sarjapur", "ninth-branch"),
+        54,
+    )
+    .await;
+    assert_eq!(ninth.0, StatusCode::OK);
+    assert_eq!(ninth.1["outcome"], "limitReached");
+    assert!(ninth.1.get("candidate").is_none());
+}
+
+#[tokio::test]
+async fn revision_rebinds_portable_intent_after_catalog_generation_changes() {
+    let (app, state) = test_app_with_state().await;
+    let parent = get_search(&app, "3BHK in Hoodi under 2.4 Cr", 61).await;
     assert_eq!(parent.0, StatusCode::OK);
-    assert_eq!(direct.0, StatusCode::OK);
+
+    let next_root = tempdir().expect("next catalog fixture root").keep();
+    let mut next_bundle = test_bundle(&next_root);
+    next_bundle.manifest.bundle_version = "issue-118-revision-api-fixture-v2".to_string();
+    let next_bundle = Arc::new(next_bundle);
+    let properties = vec![test_property()];
+    let search_index = SearchIndex::build_with_serving_graph(
+        &properties,
+        &next_bundle.entities,
+        &next_bundle.edges,
+    );
+    state
+        .search_runtime
+        .store(Arc::new(SearchRuntimeSnapshot::new(
+            next_bundle,
+            properties,
+            Vec::new(),
+            Vec::new(),
+            search_index,
+        )));
 
     let revised = post_revision(
         &app,
-        revision_request(
-            parent.1["revision"]["context"].as_str().unwrap(),
-            equivalent_query,
-            "equivalent",
-        ),
-        33,
-    )
-    .await;
-    assert_eq!(revised.0, StatusCode::OK);
-    assert_eq!(revised.1["operation"], "rephrase", "response={}", revised.1);
-    assert_eq!(revised.1["outcome"], "candidate");
-    let search = &revised.1["search"];
-    assert_eq!(
-        search["astFingerprint"], direct.1["astFingerprint"],
-        "response={}",
-        revised.1
-    );
-    assert_eq!(search["orderedResultIds"], direct.1["orderedResultIds"]);
-    assert_eq!(search["resultSets"], direct.1["resultSets"]);
-}
-
-#[tokio::test]
-async fn concurrent_revision_retries_share_one_atomic_idempotency_reservation() {
-    let app = test_app().await;
-    let parent = get_search(&app, "3BHK in Hoodi under 2.4 Cr", 51).await;
-    let parent_context = parent.1["revision"]["context"].as_str().unwrap();
-
-    let identical = revision_request(
-        parent_context,
-        "Make it under 2.5Cr",
-        "concurrent-identical",
-    );
-    let (first, second) = tokio::join!(
-        post_revision(&app, identical.clone(), 52),
-        post_revision(&app, identical, 53),
-    );
-    assert_eq!(first.0, StatusCode::OK);
-    assert_eq!(second.0, StatusCode::OK);
-    assert_eq!(first.1, second.1, "waiters clone the leader response");
-
-    let (leader, conflict) = tokio::join!(
-        post_revision(
-            &app,
-            revision_request(parent_context, "Make it under 2.5Cr", "concurrent-conflict",),
-            54,
-        ),
-        post_revision(
-            &app,
-            revision_request(parent_context, "Only 4BHK", "concurrent-conflict"),
-            55,
-        ),
-    );
-    let responses = [leader, conflict];
-    assert_eq!(
-        responses
-            .iter()
-            .filter(|response| response.0 == StatusCode::OK)
-            .count(),
-        1
-    );
-    let conflict = responses
-        .iter()
-        .find(|response| response.0 == StatusCode::CONFLICT)
-        .expect("a differing in-flight fingerprint conflicts");
-    assert_eq!(conflict.1["code"], "idempotency_key_conflict");
-}
-
-#[tokio::test]
-async fn signed_active_query_is_presentation_only_for_revision_execution() {
-    let app = test_app().await;
-    let parent = get_search(&app, "3BHK in Hoodi under 2.4 Cr", 61).await;
-    let parent_context = parent.1["revision"]["context"].as_str().unwrap();
-    let decoded = decode_signed_search_context(parent_context).unwrap();
-    let (_, presentation_only_parent) = issue_signed_search_context(
-        decoded.parent_revision_id.clone(),
-        decoded.operation,
-        decoded.depth,
-        "This display text must not affect execution".to_string(),
-        decoded.plan.clone(),
-        decoded.runtime_version.clone(),
-        decoded.ordered_result_ids.clone(),
-    );
-
-    let original = post_revision(
-        &app,
-        revision_request(parent_context, "Make it under 2.5Cr", "active-original"),
+        revision_request(&parent.1, "Make it under 2.5Cr", "catalog-rebase"),
         62,
-    );
-    let presentation_changed = post_revision(
-        &app,
-        revision_request(
-            &presentation_only_parent.context,
-            "Make it under 2.5Cr",
-            "active-presentation-changed",
-        ),
-        63,
-    );
-    let (original, presentation_changed) = tokio::join!(original, presentation_changed);
-    assert_eq!(original.0, StatusCode::OK);
-    assert_eq!(presentation_changed.0, StatusCode::OK);
-    assert_ne!(
-        original.1["activeQuery"],
-        presentation_changed.1["activeQuery"]
-    );
-    assert_eq!(
-        original.1["search"]["astFingerprint"],
-        presentation_changed.1["search"]["astFingerprint"]
-    );
-    assert_eq!(
-        original.1["search"]["orderedResultIds"],
-        presentation_changed.1["search"]["orderedResultIds"]
-    );
-    assert_eq!(
-        original.1["search"]["resultSets"],
-        presentation_changed.1["search"]["resultSets"]
-    );
-}
-
-#[tokio::test]
-async fn ninth_branch_requires_checkpoint_without_executing_a_candidate() {
-    let app = test_app().await;
-    let parent_query = "2BHK under 1Cr or 2BHK under 1.1Cr or 2BHK under 1.2Cr or 2BHK under 1.3Cr or 2BHK under 1.4Cr or 2BHK under 1.5Cr or 2BHK under 1.6Cr or 2BHK under 1.7Cr";
-    let parent = get_search(&app, parent_query, 41).await;
-    assert_eq!(parent.0, StatusCode::OK);
-    let checkpoint = post_revision(
-        &app,
-        revision_request(
-            parent.1["revision"]["context"].as_str().unwrap(),
-            "Also consider Sarjapur",
-            "ninth-branch",
-        ),
-        42,
     )
     .await;
-    assert_eq!(checkpoint.0, StatusCode::OK, "response={}", checkpoint.1);
-    assert_eq!(checkpoint.1["outcome"], "requireCheckpoint");
-    assert!(checkpoint.1.get("search").is_none());
-    assert_eq!(checkpoint.1["activeBranchCount"], 8);
+    assert_eq!(revised.0, StatusCode::OK, "response={}", revised.1);
+    assert_eq!(revised.1["outcome"], "activate");
+    assert_eq!(revised.1["catalogRebased"], true);
+    assert_eq!(
+        revised.1["candidate"]["runtimeVersion"]["servingBundleVersion"],
+        "issue-118-revision-api-fixture-v2"
+    );
 }
 
 async fn test_app() -> Router {
+    test_app_with_state().await.0
+}
+
+async fn test_app_with_state() -> (Router, Arc<AppState>) {
     let root = tempdir().expect("temporary API fixture root").keep();
     let lake = LakeStore::local(root.join("lake")).expect("temporary lake");
     let bundle = Arc::new(test_bundle(&root));
@@ -394,7 +253,6 @@ async fn test_app() -> Router {
         search_log_dropped_count: AtomicU64::new(0),
         properties: RwLock::new(properties),
         search_index: RwLock::new(search_index),
-        serving_bundle: RwLock::new(Some(bundle)),
         recommendation_cache: RwLock::new(HashMap::new()),
         areas: RwLock::new(Vec::new()),
         societies: RwLock::new(Vec::new()),
@@ -405,9 +263,8 @@ async fn test_app() -> Router {
         process_started_at: Utc::now(),
         interest_counter: AtomicU64::new(0),
         interest_write_lock: tokio::sync::Mutex::new(()),
-        asset_run_active: AtomicBool::new(false),
     });
-    build_app_router_with_lake(state, lake)
+    (build_app_router_with_lake(state.clone(), lake), state)
 }
 
 fn test_bundle(root: &std::path::Path) -> LoadedServingBundle {
@@ -476,6 +333,8 @@ fn test_bundle(root: &std::path::Path) -> LoadedServingBundle {
     let recall_index = TantivyRecallIndex::build_in_dir(&recall_dir, &entities, &facts, &[])
         .expect("fixture recall index");
 
+    let graph_index =
+        GraphIndex::from_serving_bundle(&entities, &edges, "issue-118-revision-api-fixture");
     LoadedServingBundle {
         manifest: ServingBundleManifest {
             bundle_version: "issue-118-revision-api-fixture".to_string(),
@@ -492,20 +351,19 @@ fn test_bundle(root: &std::path::Path) -> LoadedServingBundle {
             quarantined_society_count: 0,
             quarantine_reason_counts: Default::default(),
             entity_parquet_key: "entities.parquet".to_string(),
-            entity_alias_parquet_key: None,
+            entity_alias_parquet_key: "aliases.parquet".to_string(),
             fact_parquet_key: "facts.parquet".to_string(),
             search_metadata_parquet_key: "search.parquet".to_string(),
-            rera_evidence_parquet_key: None,
-            edge_parquet_key: Some("edges.parquet".to_string()),
-            quarantine_report_key: None,
+            rera_evidence_parquet_key: "rera.parquet".to_string(),
+            edge_parquet_key: "edges.parquet".to_string(),
+            quarantine_report_key: "quarantine.json".to_string(),
             schema_key: "schema.json".to_string(),
-            trust_policy_key: "trust.json".to_string(),
             tantivy_index_prefix: "tantivy".to_string(),
             artifacts: Vec::new(),
         },
         entity_alias_index: ServingEntityAliasIndex::default(),
-        graph_index: GraphIndex::from_serving_edges(&edges),
-        geo_index: GeoSearchIndex::from_serving_bundle(&entities, &fact_index),
+        graph_index,
+        entity_index: SpatialEntityIndex::from_serving_bundle(&entities, &fact_index),
         spatial_index: SpatialServingIndex::from_serving_bundle_with_edges(
             &entities,
             &fact_index,
@@ -667,11 +525,12 @@ fn test_property() -> Property {
     }
 }
 
-fn revision_request(parent_context: &str, utterance: &str, key: &str) -> Value {
+fn revision_request(parent: &Value, utterance: &str, key: &str) -> Value {
     json!({
-        "parentContext": parent_context,
+        "parentToken": parent["revision"]["stateToken"],
+        "parentResultIds": parent["orderedResultIds"],
         "utterance": utterance,
-        "clientIdempotencyKey": key
+        "clientMutationId": key
     })
 }
 

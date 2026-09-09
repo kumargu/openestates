@@ -8,8 +8,8 @@ name = "openestates-api"
 path = "src/main.rs"
 
 [[bin]]
-name = "openestates-promote-materialization"
-path = "src/bin/openestates-promote-materialization.rs"
+name = "openestates-catalog"
+path = "src/bin/openestates-catalog.rs"
 
 [lib]
 name = "backend"
@@ -48,6 +48,7 @@ tower = "0.5"
 governor = "0.10.4"
 toml = "0.9.5"
 geo = { version = "0.33.1", default-features = false }
+hmac = "0.13.0"
 
 [dev-dependencies]
 tempfile = "3"
