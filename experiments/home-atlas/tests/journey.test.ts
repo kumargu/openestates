@@ -3,11 +3,16 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  advanceRoadDistance,
   blendCamera,
   buildAerialJourney,
   buildAtlasRoute,
+  clampRoadPlaybackRate,
   pointAlongRoute,
   projectPointOntoRoute,
+  projectStreetHandoff,
+  roadFlightCamera,
+  selectPrimaryAtlasRoute,
 } from "../src/journey.ts";
 
 type InventoryPoint = { lat: number; lng: number };
@@ -88,4 +93,66 @@ test("camera blending takes the shortest path across north", () => {
   });
 
   assert.equal(blendCamera(camera(359), camera(1), 0.5).heading, 0);
+});
+
+
+test("road selection keeps disconnected lines separate and direction explicit", () => {
+  const geometries = [
+    { type: "LineString" as const, coordinates: [[77, 12], [77, 12.0001]] as [number, number][] },
+    {
+      type: "LineString" as const,
+      coordinates: [[77.1, 12.1], [77.1, 12.101], [77.101, 12.102]] as [number, number][],
+    },
+  ];
+  const mapped = selectPrimaryAtlasRoute(geometries);
+  const reversed = selectPrimaryAtlasRoute(geometries, { direction: "reverse" });
+
+  assert.equal(mapped.coordinates.length, 3);
+  assert.deepEqual(mapped.coordinates[0], [77.1, 12.1]);
+  assert.deepEqual(reversed.coordinates[0], [77.101, 12.102]);
+  assert.equal(mapped.coordinates.some(([longitude]) => longitude === 77), false);
+  assert.throws(() => selectPrimaryAtlasRoute([]), /continuous LineString/);
+});
+
+test("road progression is elapsed-time based and clamps the speed lever", () => {
+  const route = buildAtlasRoute({
+    type: "LineString",
+    coordinates: [[77, 12], [77, 12.01]],
+  });
+
+  assert.equal(clampRoadPlaybackRate(0.1), 0.5);
+  assert.equal(clampRoadPlaybackRate(3), 2);
+  assert.equal(advanceRoadDistance(route, 0, 1_000, 0.5), 6);
+  assert.equal(advanceRoadDistance(route, 0, 1_000, 1), 12);
+  assert.equal(advanceRoadDistance(route, 0, 1_000, 2), 24);
+  assert.equal(advanceRoadDistance(route, route.lengthM - 1, 1_000, 2), route.lengthM);
+});
+
+test("road camera keeps the accepted aerial framing responsive", () => {
+  const route = buildAtlasRoute({
+    type: "LineString",
+    coordinates: [[77, 12], [77.001, 12.001]],
+  });
+  const desktop = roadFlightCamera(route, 30, 900, 1_200);
+  const mobile = roadFlightCamera(route, 30, 900, 500);
+
+  assert.equal(desktop.center.altitude, 908);
+  assert.equal(desktop.range, 270);
+  assert.equal(desktop.tilt, 67);
+  assert.equal(mobile.range, 350);
+  assert.ok(Number.isFinite(desktop.heading));
+});
+
+test("Street View handoff projects back onto the aerial route", () => {
+  const route = buildAtlasRoute({
+    type: "LineString",
+    coordinates: [[77, 12], [77, 12.01]],
+  });
+  const routePoint = pointAlongRoute(route, 40);
+  const handoff = projectStreetHandoff(route, routePoint, 370);
+
+  assert.ok(Math.abs(handoff.distanceAlongM - 40) < 0.001);
+  assert.ok(handoff.distanceFromRouteM < 0.001);
+  assert.equal(handoff.heading, 10);
+  assert.deepEqual(handoff.routePoint, routePoint);
 });
