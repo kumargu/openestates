@@ -409,7 +409,7 @@ fn ring(coordinates: &[Vec<f64>]) -> Option<LineString<f64>> {
     }
     let points = coordinates
         .iter()
-        .map(|coordinate| valid_coordinate(coordinate).map(|(x, y)| (x, y)))
+        .map(|coordinate| valid_coordinate(coordinate))
         .collect::<Option<Vec<_>>>()?;
     if points.first() != points.last() {
         return None;

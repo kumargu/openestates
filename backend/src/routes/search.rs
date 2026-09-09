@@ -265,7 +265,11 @@ fn search_runtime_version(snapshot: &SearchRuntimeSnapshot) -> SearchRuntimeVers
     }
 }
 
-fn enqueue_cached_search_logs(state: &AppState, cached: &CachedSearchOutput, query: &str) {
+pub(crate) fn enqueue_cached_search_logs(
+    state: &AppState,
+    cached: &CachedSearchOutput,
+    query: &str,
+) {
     for message in rebase_cached_log_messages(cached.log_messages.clone(), query) {
         enqueue_search_log(state, message);
     }

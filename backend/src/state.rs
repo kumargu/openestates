@@ -182,19 +182,19 @@ enum RevisionIdempotencyEntry {
     },
     Complete {
         request_fingerprint: String,
-        response: crate::routes::search_revisions::SearchRevisionResponse,
+        response: Box<crate::routes::search_revisions::SearchRevisionResponse>,
     },
 }
 
 #[derive(Clone)]
 pub enum RevisionReservationUpdate {
     Pending,
-    Complete(crate::routes::search_revisions::SearchRevisionResponse),
+    Complete(Box<crate::routes::search_revisions::SearchRevisionResponse>),
     Abandoned,
 }
 
 pub enum RevisionIdempotencyLookup {
-    Hit(crate::routes::search_revisions::SearchRevisionResponse),
+    Hit(Box<crate::routes::search_revisions::SearchRevisionResponse>),
     Leader(RevisionIdempotencyReservation),
     Waiter(tokio::sync::watch::Receiver<RevisionReservationUpdate>),
     Conflict,
@@ -323,6 +323,7 @@ impl RevisionIdempotencyReservation {
             return;
         }
 
+        let response = Box::new(response);
         state.entries.insert(
             self.key.clone(),
             RevisionIdempotencyEntry::Complete {

@@ -1352,6 +1352,7 @@ impl<'a> GeoSearchQuery<'a> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn verified_spatial_match(
     subject_entity_id: &str,
     target_entity_id: Option<&str>,

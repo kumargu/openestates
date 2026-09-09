@@ -371,6 +371,7 @@ fn expression_for_segment(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spatial_term_belongs_to_branch(
     term: &ConstraintTerm,
     branch_index: usize,
@@ -704,6 +705,24 @@ impl ConstraintExpr {
         });
     }
 
+    pub fn replace_predicate_paths(&mut self, paths: &[Vec<usize>], replacement: ConstraintExpr) {
+        let expr = std::mem::replace(self, Self::match_all());
+        let mut replaced = false;
+        *self = replace_terms_at_paths(expr, &mut Vec::new(), paths, &replacement, &mut replaced)
+            .unwrap_or_else(Self::match_all);
+    }
+
+    pub fn term_at_path(&self, path: &[usize]) -> Option<&ConstraintTerm> {
+        match (path.split_first(), self) {
+            (None, Self::Term { term }) => Some(term),
+            (Some((index, rest)), Self::And { clauses } | Self::AnyOf { clauses }) => {
+                clauses.get(*index)?.term_at_path(rest)
+            }
+            (Some((0, rest)), Self::Not { clause }) => clause.term_at_path(rest),
+            _ => None,
+        }
+    }
+
     pub fn select_families(&self, families: &[PredicateFamily]) -> Self {
         select_terms(self, families).unwrap_or_else(Self::match_all)
     }
@@ -769,6 +788,60 @@ impl ConstraintExpr {
 
     fn is_match_none(&self) -> bool {
         matches!(self, Self::AnyOf { clauses } if clauses.is_empty())
+    }
+}
+
+fn replace_terms_at_paths(
+    expression: ConstraintExpr,
+    path: &mut Vec<usize>,
+    targets: &[Vec<usize>],
+    replacement: &ConstraintExpr,
+    replaced: &mut bool,
+) -> Option<ConstraintExpr> {
+    if targets.iter().any(|target| target == path) {
+        if *replaced {
+            return None;
+        }
+        *replaced = true;
+        return Some(replacement.clone());
+    }
+    match expression {
+        ConstraintExpr::And { clauses } => {
+            let clauses = clauses
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, clause)| {
+                    path.push(index);
+                    let output =
+                        replace_terms_at_paths(clause, path, targets, replacement, replaced);
+                    path.pop();
+                    output
+                })
+                .collect::<Vec<_>>();
+            (!clauses.is_empty()).then(|| ConstraintExpr::and(clauses))
+        }
+        ConstraintExpr::AnyOf { clauses } => {
+            let clauses = clauses
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, clause)| {
+                    path.push(index);
+                    let output =
+                        replace_terms_at_paths(clause, path, targets, replacement, replaced);
+                    path.pop();
+                    output
+                })
+                .collect::<Vec<_>>();
+            (!clauses.is_empty()).then(|| ConstraintExpr::any_of(clauses))
+        }
+        ConstraintExpr::Not { clause } => {
+            path.push(0);
+            let output = replace_terms_at_paths(*clause, path, targets, replacement, replaced)
+                .map(ConstraintExpr::negated);
+            path.pop();
+            output
+        }
+        term @ ConstraintExpr::Term { .. } => Some(term),
     }
 }
 

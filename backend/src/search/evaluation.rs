@@ -273,6 +273,7 @@ pub struct EvidenceGap {
 /// evidence into a verified match.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "state", content = "detail", rename_all = "camelCase")]
+#[allow(clippy::large_enum_variant)]
 pub enum PredicateEvaluation {
     Satisfied(VerifiedMatch),
     Unsatisfied(EvaluationEvidence),

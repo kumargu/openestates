@@ -41,6 +41,7 @@ use crate::{
 };
 
 pub const CATALOG_FORMAT_VERSION: u32 = 1;
+const CATALOG_MAX_SOURCE_STDOUT_BYTES: usize = 512 * 1024 * 1024;
 const GOLD_FORMAT_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -938,12 +939,13 @@ pub async fn collect_society_from_dag(
         force_refresh_assets: source_assets.clone(),
         source_entities: vec![seed.clone()],
     };
-    let python =
-        std::env::var("OPENESTATES_SOURCE_PYTHON").unwrap_or_else(|_| "python3.11".to_string());
-    let provider = CommandSourceInputProvider::new(python).with_args([
-        OsString::from("-m"),
-        OsString::from("pipeline.collect_asset_sources"),
-    ]);
+    let python = catalog_source_python(std::env::var("OPENESTATES_SOURCE_PYTHON").ok());
+    let provider = CommandSourceInputProvider::new(python)
+        .with_args([
+            OsString::from("-m"),
+            OsString::from("pipeline.collect_asset_sources"),
+        ])
+        .with_max_stdout_bytes(CATALOG_MAX_SOURCE_STDOUT_BYTES);
     let mut source_inputs = provider
         .load(&request, store.lake())
         .await
@@ -976,7 +978,10 @@ pub async fn collect_society_from_dag(
     .with_source_inputs(source_inputs)
     .with_skip_missing_source_inputs(true)
     .with_forced_assets(forced_assets)
-    .with_only_forced_assets(true);
+    .with_only_forced_assets(true)
+    .with_required_assets(vec![
+        AssetId::new(SOCIETY_GOLD_SNAPSHOT_ASSET_ID).expect("static asset id")
+    ]);
     let report = AssetDagExecutor::new(registry, store.lake().clone())
         .execute(&KnowledgeGraph::new(), options)
         .await
@@ -1061,6 +1066,12 @@ pub async fn collect_society_from_dag(
     warnings.sort();
     warnings.dedup();
     Ok((records, warnings))
+}
+
+fn catalog_source_python(configured: Option<String>) -> String {
+    configured
+        .filter(|command| !command.trim().is_empty())
+        .unwrap_or_else(|| "python3".to_string())
 }
 
 impl CatalogRoster {
@@ -1419,6 +1430,16 @@ mod tests {
     use crate::knowledge::FactValue;
     use crate::serving::ServingEntityVisibility;
     use tempfile::tempdir;
+
+    #[test]
+    fn catalog_collector_uses_portable_python_command_with_optional_override() {
+        assert_eq!(catalog_source_python(None), "python3");
+        assert_eq!(catalog_source_python(Some(String::new())), "python3");
+        assert_eq!(
+            catalog_source_python(Some("/opt/python3.12".to_string())),
+            "/opt/python3.12"
+        );
+    }
 
     #[tokio::test]
     async fn add_replace_remove_and_undo_are_atomic_catalog_generations() {

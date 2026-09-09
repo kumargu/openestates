@@ -447,6 +447,7 @@ fn hex_digest(bytes: &[u8]) -> String {
     output
 }
 
+#[allow(clippy::too_many_arguments)]
 fn source_entity_coordinate_fact(
     seed: &SourceEntitySeed,
     fact_key: &str,

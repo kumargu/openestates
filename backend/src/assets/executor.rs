@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -57,6 +57,8 @@ pub struct AssetDagExecutionOptions {
     pub skip_missing_source_inputs: bool,
     #[serde(default)]
     pub only_forced_assets: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_assets: Vec<AssetId>,
     #[serde(default)]
     pub retry_policy: AssetRetryPolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -95,6 +97,7 @@ impl AssetDagExecutionOptions {
             source_scope: SourceEntityResolutionScope::Production,
             skip_missing_source_inputs: false,
             only_forced_assets: false,
+            required_assets: Vec::new(),
             retry_policy: AssetRetryPolicy::default(),
             resume_lease_id: None,
             asset_execution_timeout_ms: DEFAULT_ASSET_EXECUTION_TIMEOUT_MS,
@@ -141,6 +144,11 @@ impl AssetDagExecutionOptions {
 
     pub fn with_only_forced_assets(mut self, only_forced_assets: bool) -> Self {
         self.only_forced_assets = only_forced_assets;
+        self
+    }
+
+    pub fn with_required_assets(mut self, required_assets: Vec<AssetId>) -> Self {
+        self.required_assets = required_assets;
         self
     }
 
@@ -424,6 +432,11 @@ impl AssetDagExecutor {
         self.persist_manifest(&mut manifest, false).await?;
         let mut executed_assets = Vec::new();
         let mut first_error = None;
+        let unavailable_assets = if options.skip_missing_source_inputs {
+            unavailable_planned_assets(&self.registry, &manifest, &options.source_inputs)
+        } else {
+            HashMap::new()
+        };
 
         for step in manifest.steps.clone() {
             if step.status == super::AssetRunStepStatus::Materialized {
@@ -486,23 +499,8 @@ impl AssetDagExecutor {
                 self.persist_manifest(&mut manifest, false).await?;
                 continue;
             }
-            if should_skip_missing_optional_source_input(&asset_id, &options.source_inputs) {
-                manifest.mark_step_skipped(
-                    &asset_id,
-                    Utc::now(),
-                    "optional source input missing; enrichment gap recorded",
-                )?;
-                self.persist_manifest(&mut manifest, false).await?;
-                continue;
-            }
-            if options.skip_missing_source_inputs
-                && should_skip_missing_source_input(&asset_id, &options.source_inputs)
-            {
-                manifest.mark_step_skipped(
-                    &asset_id,
-                    Utc::now(),
-                    "scoped source input missing; skipped",
-                )?;
+            if let Some(reason) = unavailable_assets.get(&asset_id) {
+                manifest.mark_step_skipped(&asset_id, Utc::now(), reason.clone())?;
                 self.persist_manifest(&mut manifest, false).await?;
                 continue;
             }
@@ -632,9 +630,29 @@ impl AssetDagExecutor {
         manifest.finish(completed_at)?;
         manifest.resume_lease = None;
         let promote_current = manifest.promote_current;
+        let required_unavailable = options.required_assets.iter().find_map(|asset_id| {
+            (!manifest.steps.iter().any(|step| {
+                &step.asset_id == asset_id && step.status == super::AssetRunStepStatus::Succeeded
+            }))
+            .then(|| {
+                let reason = manifest
+                    .steps
+                    .iter()
+                    .find(|step| &step.asset_id == asset_id)
+                    .and_then(|step| step.error.clone());
+                (asset_id.clone(), reason)
+            })
+        });
         let persisted = self
-            .persist_manifest(&mut manifest, promote_current)
+            .persist_manifest(
+                &mut manifest,
+                promote_current && required_unavailable.is_none(),
+            )
             .await?;
+
+        if let Some((asset_id, reason)) = required_unavailable {
+            return Err(AssetDagExecutorError::RequiredAssetUnavailable { asset_id, reason });
+        }
 
         if manifest.status == super::DagRunStatus::Failed {
             if let Some(err) = first_error {
@@ -1982,7 +2000,9 @@ impl BuiltInAssetExecutor {
                             &support_rows.fact_annotations,
                         )
                         .await?;
-                Ok(ExecutedAsset::SocietyGoldSnapshot(materialization))
+                Ok(ExecutedAsset::SocietyGoldSnapshot(Box::new(
+                    materialization,
+                )))
             }
             #[cfg(test)]
             Self::TestFailOnce(attempts) => {
@@ -2143,7 +2163,7 @@ fn dependency_record<'a>(
 enum ExecutedAsset {
     Record(MaterializationRecord),
     SkillFacts(MaterializationRecord),
-    SocietyGoldSnapshot(SocietyGoldSnapshotMaterialization),
+    SocietyGoldSnapshot(Box<SocietyGoldSnapshotMaterialization>),
 }
 
 impl ExecutedAsset {
@@ -2190,6 +2210,10 @@ pub enum AssetDagExecutorError {
     SourceCollectionFailed {
         asset_id: AssetId,
         reason: String,
+    },
+    RequiredAssetUnavailable {
+        asset_id: AssetId,
+        reason: Option<String>,
     },
     MissingDependency {
         asset_id: AssetId,
@@ -2290,6 +2314,14 @@ impl fmt::Display for AssetDagExecutorError {
             Self::SourceCollectionFailed { asset_id, reason } => {
                 write!(f, "source collection failed for asset {asset_id}: {reason}")
             }
+            Self::RequiredAssetUnavailable { asset_id, reason } => write!(
+                f,
+                "required asset {asset_id} was unavailable{}",
+                reason
+                    .as_deref()
+                    .map(|reason| format!(": {reason}"))
+                    .unwrap_or_default()
+            ),
             Self::MissingDependency {
                 asset_id,
                 dependency,
@@ -2568,42 +2600,75 @@ fn source_input_error(context: &AssetExecutionContext<'_>) -> AssetDagExecutorEr
     }
 }
 
-fn should_skip_missing_optional_source_input(
-    asset_id: &AssetId,
+fn unavailable_planned_assets(
+    registry: &super::AssetRegistry,
+    manifest: &AssetDagRunManifest,
     source_inputs: &AssetSourceInputs,
-) -> bool {
-    if source_inputs
-        .source_failures
-        .contains_key(asset_id.as_str())
+) -> HashMap<AssetId, String> {
+    let planned = manifest
+        .steps
+        .iter()
+        .filter(|step| step.status == super::AssetRunStepStatus::Planned)
+        .map(|step| step.asset_id.clone())
+        .collect::<HashSet<_>>();
+    let mut unavailable = HashMap::new();
+
+    for asset_id in registry
+        .topological_order()
+        .expect("validated asset registry has a topological order")
     {
-        return false;
+        if !planned.contains(&asset_id) {
+            continue;
+        }
+        if let Some(reason) = source_input_unavailable_reason(&asset_id, source_inputs) {
+            unavailable.insert(asset_id, reason);
+            continue;
+        }
+        let definition = registry
+            .get(&asset_id)
+            .expect("topological order only contains registered assets");
+        if let Some(dependency) = definition.dependencies.iter().find(|dependency| {
+            unavailable.contains_key(*dependency) && !definition.is_optional_dependency(dependency)
+        }) {
+            unavailable.insert(
+                asset_id,
+                format!("required dependency {dependency} was unavailable; skipped"),
+            );
+        }
     }
-    match asset_id.as_str() {
-        BENGALURU_METRO_STATION_FACTS_ASSET_ID => source_inputs.bengaluru_metro_stations.is_none(),
-        OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID => source_inputs.osm_locality_boundaries.is_none(),
-        _ => false,
-    }
+
+    unavailable
 }
 
-fn should_skip_missing_source_input(asset_id: &AssetId, source_inputs: &AssetSourceInputs) -> bool {
-    if source_inputs
-        .source_failures
-        .contains_key(asset_id.as_str())
-    {
-        return false;
+fn source_input_unavailable_reason(
+    asset_id: &AssetId,
+    source_inputs: &AssetSourceInputs,
+) -> Option<String> {
+    if let Some(reason) = source_inputs.source_failures.get(asset_id.as_str()) {
+        return Some(format!(
+            "source collection failed; enrichment gap recorded: {reason}"
+        ));
     }
-    match asset_id.as_str() {
+    let missing = match asset_id.as_str() {
         RERA_RECEIPTS_ASSET_ID => source_inputs.rera_receipts.is_none(),
         RERA_SOURCE_RECORDS_ASSET_ID => source_inputs.rera_source_records.is_none(),
         RERA_REGISTRY_MONTHLY_ASSET_ID => source_inputs.rera_registry_monthly.is_none(),
+        RERA_PROJECT_PLAN_FRAMES_ASSET_ID => source_inputs.rera_project_plan_frames.is_none(),
         GOOGLE_PLACES_WEEKLY_ASSET_ID => source_inputs.google_places_weekly.is_none(),
         GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID => source_inputs.google_nearby_places_weekly.is_none(),
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID => source_inputs.external_listings_weekly.is_none(),
         EXTERNAL_IMAGES_WEEKLY_ASSET_ID => source_inputs.external_images_weekly.is_none(),
+        SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID => {
+            source_inputs.environment_groundwater_potential.is_none()
+        }
         BENGALURU_METRO_STATION_FACTS_ASSET_ID => source_inputs.bengaluru_metro_stations.is_none(),
         OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID => source_inputs.osm_locality_boundaries.is_none(),
+        OSM_SOCIETY_ACCESS_FACTS_ASSET_ID => source_inputs.osm_society_access.is_none(),
+        OSM_POWER_LINE_FACTS_ASSET_ID => source_inputs.osm_power_infrastructure.is_none(),
+        STORMWATER_DRAIN_FACTS_ASSET_ID => source_inputs.stormwater_drains.is_none(),
         _ => false,
-    }
+    };
+    missing.then(|| "source input missing; enrichment gap recorded".to_string())
 }
 
 fn blocked_dependencies(
@@ -2803,30 +2868,6 @@ mod tests {
             .current_record(&asset_id, &AssetPartition::global())
             .await
             .is_err());
-    }
-
-    #[test]
-    fn required_red_flag_source_inputs_do_not_skip_when_missing() {
-        for asset_id in [
-            OSM_POWER_LINE_FACTS_ASSET_ID,
-            STORMWATER_DRAIN_FACTS_ASSET_ID,
-        ] {
-            let asset_id = AssetId::new(asset_id).unwrap();
-
-            assert!(!should_skip_missing_optional_source_input(
-                &asset_id,
-                &AssetSourceInputs::default()
-            ));
-
-            let mut source_inputs = AssetSourceInputs::default();
-            source_inputs
-                .source_failures
-                .insert(asset_id.to_string(), "collector failed".to_string());
-            assert!(!should_skip_missing_optional_source_input(
-                &asset_id,
-                &source_inputs
-            ));
-        }
     }
 
     #[tokio::test]

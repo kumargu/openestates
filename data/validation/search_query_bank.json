@@ -4499,7 +4499,7 @@
       "initial_case_id": "REGION-MIX-003",
       "turns": [
         {
-          "utterance": "3BHK in Sarjapur Road under 2 Cr",
+          "utterance": "Instead, 3BHK in Sarjapur Road under 2 Cr",
           "operation": "replace",
           "candidate_case_id": "REGION-MIX-002",
           "outcome": "activate_candidate",
@@ -4647,6 +4647,46 @@
       "expected_operation": "refine",
       "expected_outcome": "candidate",
       "expected_active_query": "3BHK in Whitefield under 2.5Cr · Make it 2BHK under 1.6Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-ADD-DISTINCT-ANCHOR",
+      "group": "spatial_revision",
+      "parent_query": "3BHK within 2 km of Hoodi Metro under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "And within 2 km of Manipal Hospital",
+      "expected_operation": "refine",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK within 2 km of Hoodi Metro under 2.5Cr · And within 2 km of Manipal Hospital"
+    },
+    {
+      "id": "SPATIAL-REVISION-CORRECT-ANCHOR-BY-IDENTITY",
+      "group": "spatial_revision",
+      "parent_query": "3BHK within 2 km of Hoodi Metro and within 2 km of Manipal Hospital under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Change the distance to within 3 km of Hoodi Metro",
+      "expected_operation": "correct",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK within 2 km of Hoodi Metro and within 2 km of Manipal Hospital under 2.5Cr · Change the distance to within 3 km of Hoodi Metro"
+    },
+    {
+      "id": "SPATIAL-REVISION-EXPAND-MULTIPLE-ALTERNATIVES",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Also consider 2BHK in Hoodi under 2Cr or 3BHK in Kadugodi under 2.7Cr",
+      "expected_operation": "expand",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2Cr or 3BHK in Kadugodi under 2.7Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-IMPLICIT-CONTEXT-RETENTION",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "2BHK under 1.6Cr",
+      "expected_operation": "refine",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr · 2BHK under 1.6Cr"
     },
     {
       "id": "SPATIAL-REVISION-THIRD-BRANCH",

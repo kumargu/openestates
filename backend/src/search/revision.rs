@@ -49,6 +49,7 @@ pub enum TypedSearchRevisionPatch {
     ReplacePredicate {
         branch_ids: Vec<String>,
         families: Vec<PredicateFamily>,
+        predicate_ids: Vec<String>,
         expression: super::ast::ConstraintExpr,
     },
     AddAlternative {
@@ -174,9 +175,6 @@ pub fn compile_typed_revision(
         .or_else(|| strip_configured_prefix(turn, &discourse.revision_overwrite_prefixes))
         .is_some();
     let exclusion = strip_configured_prefix(turn, &discourse.revision_exclusion_prefixes).is_some();
-    let Some(fragment_branch) = fragment.branches.first() else {
-        return typed_clarification(SearchRevisionOperation::Refine);
-    };
     if expand {
         if parent.branches.len() >= limits.max_active_branches {
             return TypedSearchRevision {
@@ -185,18 +183,38 @@ pub fn compile_typed_revision(
                 patches: Vec::new(),
             };
         }
-        if !fragment_branch.predicates.has_terms() {
+        let alternatives = fragment
+            .branches
+            .iter()
+            .filter(|branch| branch.predicates.has_terms())
+            .collect::<Vec<_>>();
+        if alternatives.is_empty() {
             return typed_clarification(SearchRevisionOperation::Expand);
+        }
+        if parent.branches.len() + alternatives.len() > limits.max_active_branches {
+            return TypedSearchRevision {
+                operation: SearchRevisionOperation::Expand,
+                outcome: SearchRevisionOutcome::RequireCheckpoint,
+                patches: Vec::new(),
+            };
         }
         return TypedSearchRevision {
             operation: SearchRevisionOperation::Expand,
             outcome: SearchRevisionOutcome::Candidate,
-            patches: vec![TypedSearchRevisionPatch::AddAlternative {
-                branch_id: format!("branch:{parent_revision_id}:1"),
-                expression: fragment_branch.predicates.clone(),
-            }],
+            patches: alternatives
+                .into_iter()
+                .enumerate()
+                .map(|(index, branch)| TypedSearchRevisionPatch::AddAlternative {
+                    branch_id: format!("branch:{parent_revision_id}:{}", index + 1),
+                    expression: branch.predicates.clone(),
+                })
+                .collect(),
         };
     }
+
+    let Some(fragment_branch) = fragment.branches.first() else {
+        return typed_clarification(SearchRevisionOperation::Refine);
+    };
 
     let families = expression_families(&fragment_branch.predicates);
     if families.is_empty() {
@@ -260,9 +278,7 @@ pub fn compile_typed_revision(
     }
     let explicit_replace = strip_configured_prefix(turn, &discourse.revision_switch_prefixes)
         .is_some()
-        || (families.len() >= 2
-            && strip_configured_prefix(turn, &discourse.revision_continuity_prefixes).is_none()
-            && !correction);
+        || contains_configured_phrase(turn, &discourse.revision_replace_markers);
     if explicit_replace {
         return TypedSearchRevision {
             operation: SearchRevisionOperation::Replace,
@@ -271,20 +287,23 @@ pub fn compile_typed_revision(
         };
     }
 
-    let mut replace_families = families
+    let replace_families = families
         .iter()
         .copied()
-        .filter(|family| is_overwrite_family(family))
+        .filter(|family| {
+            *family != PredicateFamily::Spatial && (correction || is_overwrite_family(family))
+        })
         .collect::<Vec<_>>();
-    if correction && families.contains(&PredicateFamily::Spatial) {
-        replace_families.extend([
-            PredicateFamily::Area,
-            PredicateFamily::Society,
-            PredicateFamily::Spatial,
-        ]);
-        replace_families.sort_by_key(|family| *family as u8);
-        replace_families.dedup();
-    }
+    let spatial_predicate_ids = if correction && families.contains(&PredicateFamily::Spatial) {
+        let predicate_ids =
+            matching_spatial_predicate_ids(parent, &target_ids, &fragment_branch.predicates);
+        if predicate_ids.is_empty() {
+            return typed_clarification(SearchRevisionOperation::Correct);
+        }
+        predicate_ids
+    } else {
+        Vec::new()
+    };
     let operation = if correction {
         SearchRevisionOperation::Correct
     } else {
@@ -295,14 +314,28 @@ pub fn compile_typed_revision(
         patches.push(TypedSearchRevisionPatch::ReplacePredicate {
             branch_ids: target_ids.clone(),
             families: replace_families.clone(),
+            predicate_ids: Vec::new(),
             expression: fragment_branch
                 .predicates
                 .select_families(&replace_families),
         });
     }
+    if !spatial_predicate_ids.is_empty() {
+        patches.push(TypedSearchRevisionPatch::ReplacePredicate {
+            branch_ids: target_ids.clone(),
+            families: Vec::new(),
+            predicate_ids: spatial_predicate_ids,
+            expression: fragment_branch
+                .predicates
+                .select_families(&[PredicateFamily::Spatial]),
+        });
+    }
     let add_families = families
         .into_iter()
-        .filter(|family| !replace_families.contains(family))
+        .filter(|family| {
+            !replace_families.contains(family)
+                && !(*family == PredicateFamily::Spatial && correction)
+        })
         .collect::<Vec<_>>();
     if !add_families.is_empty() {
         patches.push(TypedSearchRevisionPatch::AddPredicate {
@@ -423,12 +456,33 @@ pub fn apply_typed_revision(
             TypedSearchRevisionPatch::ReplacePredicate {
                 branch_ids,
                 families,
+                predicate_ids,
                 expression,
             } => {
                 for (branch_id, predicates) in &mut branches {
                     if branch_ids.contains(branch_id) {
-                        predicates.remove_positive_families(families);
-                        *predicates = conjoin(predicates.clone(), expression.clone());
+                        if !families.is_empty() {
+                            predicates.remove_positive_families(families);
+                            *predicates = conjoin(predicates.clone(), expression.clone());
+                        }
+                        if !predicate_ids.is_empty() {
+                            let paths = parent
+                                .branches
+                                .iter()
+                                .find(|branch| branch.branch_id == *branch_id)
+                                .map(|branch| {
+                                    branch
+                                        .predicate_bindings
+                                        .iter()
+                                        .filter(|binding| {
+                                            predicate_ids.contains(&binding.predicate_id)
+                                        })
+                                        .map(|binding| binding.path.clone())
+                                        .collect::<Vec<_>>()
+                                })
+                                .unwrap_or_default();
+                            predicates.replace_predicate_paths(&paths, expression.clone());
+                        }
                     }
                 }
             }
@@ -612,10 +666,46 @@ fn conjoin(left: ConstraintExpr, right: ConstraintExpr) -> ConstraintExpr {
 }
 
 fn is_overwrite_family(family: &PredicateFamily) -> bool {
-    matches!(
-        family,
-        PredicateFamily::Bhk | PredicateFamily::Budget | PredicateFamily::Spatial
-    )
+    matches!(family, PredicateFamily::Bhk | PredicateFamily::Budget)
+}
+
+fn matching_spatial_predicate_ids(
+    parent: &CompiledSearchPlan,
+    branch_ids: &[String],
+    replacement: &ConstraintExpr,
+) -> Vec<String> {
+    let mut replacement_entities = Vec::new();
+    replacement.evaluate(&mut |term| {
+        if let super::ast::ConstraintTerm::Spatial { entity_id, .. } = term {
+            replacement_entities.push(entity_id.clone());
+        }
+        true
+    });
+    replacement_entities.sort();
+    replacement_entities.dedup();
+
+    parent
+        .branches
+        .iter()
+        .filter(|branch| branch_ids.contains(&branch.branch_id))
+        .flat_map(|branch| {
+            branch.predicate_bindings.iter().filter_map(|binding| {
+                if binding.family != PredicateFamily::Spatial
+                    || binding.polarity != super::ast::PredicatePolarity::Positive
+                {
+                    return None;
+                }
+                match branch.predicates.term_at_path(&binding.path) {
+                    Some(super::ast::ConstraintTerm::Spatial { entity_id, .. })
+                        if replacement_entities.contains(entity_id) =>
+                    {
+                        Some(binding.predicate_id.clone())
+                    }
+                    _ => None,
+                }
+            })
+        })
+        .collect()
 }
 
 fn typed_clarification(operation: SearchRevisionOperation) -> TypedSearchRevision {
@@ -718,6 +808,20 @@ fn strip_configured_prefix<'a>(value: &'a str, prefixes: &[String]) -> Option<&'
         .filter_map(|prefix| strip_prefix_case_insensitive(value, prefix))
         .min_by_key(|remainder| remainder.len())
         .map(|remainder| remainder.trim_start_matches([',', ':', '-', ' ']))
+}
+
+fn contains_configured_phrase(value: &str, phrases: &[String]) -> bool {
+    let tokens = super::parser::query_tokens(value);
+    phrases.iter().any(|phrase| {
+        let phrase_tokens = super::parser::query_tokens(phrase);
+        !phrase_tokens.is_empty()
+            && tokens.windows(phrase_tokens.len()).any(|window| {
+                window
+                    .iter()
+                    .zip(&phrase_tokens)
+                    .all(|(token, expected)| token.eq_ignore_ascii_case(expected))
+            })
+    })
 }
 
 fn strip_prefix_case_insensitive<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
@@ -885,6 +989,7 @@ fn collect_intent_breakdown(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn issue_signed_search_context(
     parent_revision_id: Option<String>,
     client_mutation_id: &str,
@@ -1180,5 +1285,233 @@ mod tests {
             [TypedSearchRevisionPatch::ReplacePredicate { branch_ids, families, .. }]
                 if branch_ids == &["branch-8"] && families == &[PredicateFamily::Budget]
         ));
+    }
+
+    #[test]
+    fn distinct_spatial_refinement_adds_without_replacing_existing_anchor() {
+        let parent = test_plan(super::super::IntentAst::with_constraints(
+            "within 1 km of School A",
+            ConstraintExpr::term(ConstraintTerm::Spatial {
+                relation: "near".to_string(),
+                entity_id: "place:school-a".to_string(),
+                display_name: "School A".to_string(),
+                required: true,
+                category_fact_keys: Vec::new(),
+                distance_limit_km: Some(1.0),
+                span: None,
+            }),
+            SearchIntent::default(),
+        ));
+        let fragment = test_plan(super::super::IntentAst::with_constraints(
+            "and within 2 km of Metro B",
+            ConstraintExpr::term(ConstraintTerm::Spatial {
+                relation: "near".to_string(),
+                entity_id: "place:metro-b".to_string(),
+                display_name: "Metro B".to_string(),
+                required: true,
+                category_fact_keys: Vec::new(),
+                distance_limit_km: Some(2.0),
+                span: None,
+            }),
+            SearchIntent::default(),
+        ));
+        let revision = compile_typed_revision(
+            &parent,
+            &fragment,
+            "and within 2 km of Metro B",
+            "rev-spatial-add",
+            LIMITS,
+        );
+        let candidate = apply_typed_revision(
+            &parent,
+            &fragment,
+            &revision,
+            &crate::graph::GraphIndex::default(),
+            None,
+            GeoCellSearchPolicy {
+                max_hops: 2,
+                max_distance_km: 4.0,
+            },
+        )
+        .unwrap();
+        let mut entities = Vec::new();
+        candidate.branches[0].predicates.evaluate(&mut |term| {
+            if let ConstraintTerm::Spatial { entity_id, .. } = term {
+                entities.push(entity_id.clone());
+            }
+            true
+        });
+        assert_eq!(entities, ["place:school-a", "place:metro-b"]);
+    }
+
+    #[test]
+    fn spatial_correction_replaces_only_the_matching_predicate_identity() {
+        let parent = test_plan(super::super::IntentAst::with_constraints(
+            "near School A and Metro B",
+            ConstraintExpr::and(vec![
+                ConstraintExpr::term(ConstraintTerm::Spatial {
+                    relation: "near".to_string(),
+                    entity_id: "place:school-a".to_string(),
+                    display_name: "School A".to_string(),
+                    required: true,
+                    category_fact_keys: Vec::new(),
+                    distance_limit_km: Some(1.0),
+                    span: None,
+                }),
+                ConstraintExpr::term(ConstraintTerm::Spatial {
+                    relation: "near".to_string(),
+                    entity_id: "place:metro-b".to_string(),
+                    display_name: "Metro B".to_string(),
+                    required: true,
+                    category_fact_keys: Vec::new(),
+                    distance_limit_km: Some(1.0),
+                    span: None,
+                }),
+            ]),
+            SearchIntent::default(),
+        ));
+        let previous_metro_id = parent.branches[0]
+            .predicate_bindings
+            .iter()
+            .find(|binding| binding.semantic_key.contains("place:metro-b"))
+            .unwrap()
+            .predicate_id
+            .clone();
+        let fragment = test_plan(super::super::IntentAst::with_constraints(
+            "change the Metro B distance to 2 km",
+            ConstraintExpr::term(ConstraintTerm::Spatial {
+                relation: "near".to_string(),
+                entity_id: "place:metro-b".to_string(),
+                display_name: "Metro B".to_string(),
+                required: true,
+                category_fact_keys: Vec::new(),
+                distance_limit_km: Some(2.0),
+                span: None,
+            }),
+            SearchIntent::default(),
+        ));
+        let revision = compile_typed_revision(
+            &parent,
+            &fragment,
+            "change the Metro B distance to 2 km",
+            "rev-spatial-correct",
+            LIMITS,
+        );
+        let candidate = apply_typed_revision(
+            &parent,
+            &fragment,
+            &revision,
+            &crate::graph::GraphIndex::default(),
+            None,
+            GeoCellSearchPolicy {
+                max_hops: 2,
+                max_distance_km: 4.0,
+            },
+        )
+        .unwrap();
+        let mut spatial = Vec::new();
+        candidate.branches[0].predicates.evaluate(&mut |term| {
+            if let ConstraintTerm::Spatial {
+                entity_id,
+                distance_limit_km,
+                ..
+            } = term
+            {
+                spatial.push((entity_id.clone(), *distance_limit_km));
+            }
+            true
+        });
+        assert_eq!(
+            spatial,
+            [
+                ("place:school-a".to_string(), Some(1.0)),
+                ("place:metro-b".to_string(), Some(2.0)),
+            ]
+        );
+        assert_eq!(
+            candidate.branches[0]
+                .predicate_bindings
+                .iter()
+                .find(|binding| binding.semantic_key.contains("place:metro-b"))
+                .unwrap()
+                .predicate_id,
+            previous_metro_id
+        );
+    }
+
+    #[test]
+    fn expansion_applies_every_compiled_alternative_atomically() {
+        let parent = test_plan(super::super::IntentAst::from_text("3BHK under 2.5Cr"));
+        let fragment = test_plan(super::super::IntentAst::from_text(
+            "2BHK under 2Cr or 3BHK under 3Cr",
+        ));
+        assert_eq!(fragment.branches.len(), 2);
+        let revision = compile_typed_revision(
+            &parent,
+            &fragment,
+            "Also consider 2BHK under 2Cr or 3BHK under 3Cr",
+            "rev-multi-expand",
+            LIMITS,
+        );
+        assert_eq!(revision.patches.len(), 2);
+        let candidate = apply_typed_revision(
+            &parent,
+            &fragment,
+            &revision,
+            &crate::graph::GraphIndex::default(),
+            None,
+            GeoCellSearchPolicy {
+                max_hops: 2,
+                max_distance_km: 4.0,
+            },
+        )
+        .unwrap();
+        assert_eq!(candidate.branches.len(), 3);
+    }
+
+    #[test]
+    fn short_multi_family_followup_preserves_parent_context_without_reset_phrase() {
+        let base = super::super::IntentAst::from_text("3BHK in Hoodi under 2.4Cr");
+        let parent = test_plan(super::super::IntentAst::with_constraints(
+            "3BHK in Hoodi under 2.4Cr",
+            ConstraintExpr::and(vec![
+                base.constraints,
+                ConstraintExpr::term(ConstraintTerm::Area {
+                    entity_id: Some("area:hoodi".to_string()),
+                    value: "Hoodi".to_string(),
+                    span: None,
+                }),
+            ]),
+            base.intent,
+        ));
+        let fragment = test_plan(super::super::IntentAst::from_text("2BHK under 1.8Cr"));
+        let revision = compile_typed_revision(
+            &parent,
+            &fragment,
+            "2BHK under 1.8Cr",
+            "rev-context",
+            LIMITS,
+        );
+        assert_eq!(revision.operation, SearchRevisionOperation::Refine);
+        let candidate = apply_typed_revision(
+            &parent,
+            &fragment,
+            &revision,
+            &crate::graph::GraphIndex::default(),
+            None,
+            GeoCellSearchPolicy {
+                max_hops: 2,
+                max_distance_km: 4.0,
+            },
+        )
+        .unwrap();
+        assert!(candidate.branches[0]
+            .predicates
+            .contains_family(PredicateFamily::Area));
+        assert_eq!(candidate.branches[0].ranking_intent.requested_bhks(), [2]);
+        assert_eq!(
+            candidate.branches[0].ranking_intent.budget_max,
+            Some(18_000_000)
+        );
     }
 }

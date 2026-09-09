@@ -97,6 +97,47 @@ class OsmLocalityBoundariesTest(unittest.TestCase):
             ],
         )
 
+    def test_relation_with_incomplete_hole_is_rejected(self):
+        payload = {
+            "elements": [
+                {
+                    "type": "relation",
+                    "id": 43,
+                    "tags": {
+                        "boundary": "administrative",
+                        "admin_level": "10",
+                        "name": "Incomplete fixture locality",
+                    },
+                    "members": [
+                        {
+                            "type": "way",
+                            "ref": 200,
+                            "role": "outer",
+                            "geometry": [
+                                {"lat": 12.0, "lon": 77.0},
+                                {"lat": 12.0, "lon": 77.1},
+                                {"lat": 12.1, "lon": 77.1},
+                                {"lat": 12.1, "lon": 77.0},
+                                {"lat": 12.0, "lon": 77.0},
+                            ],
+                        },
+                        {
+                            "type": "way",
+                            "ref": 201,
+                            "role": "inner",
+                            "geometry": [
+                                {"lat": 12.02, "lon": 77.02},
+                                {"lat": 12.02, "lon": 77.03},
+                                {"lat": 12.03, "lon": 77.03},
+                            ],
+                        },
+                    ],
+                }
+            ]
+        }
+
+        self.assertEqual(locality_boundaries_from_overpass(payload), [])
+
     def test_collection_is_scoped_and_watermarked(self):
         payload = {
             "elements": [

@@ -35,20 +35,15 @@ impl Default for CanonicalPlaceIdentityPolicy {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SpatialRole {
     Region,
     Footprint,
+    #[default]
     Destination,
     NetworkNode,
     Route,
-}
-
-impl Default for SpatialRole {
-    fn default() -> Self {
-        Self::Destination
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

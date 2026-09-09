@@ -21,7 +21,7 @@ use backend::serving::{
     ServingEdgeRecord, ServingEntityAliasIndex, ServingEntityRecord, ServingFactIndex,
     ServingFactRecord, SourceObservation, SpatialServingIndex, TantivyRecallIndex,
 };
-use backend::state::{AppState, SearchResponseCache, SearchRuntimeSnapshot};
+use backend::state::{AppState, SearchLogMessage, SearchResponseCache, SearchRuntimeSnapshot};
 use chrono::{TimeZone, Utc};
 use serde_json::{json, Value};
 use tempfile::tempdir;
@@ -138,6 +138,51 @@ async fn compact_tokens_are_authenticated_and_bind_parent_results() {
 }
 
 #[tokio::test]
+async fn revision_utterances_are_bounded_independently_of_the_uri_query_guard() {
+    let app = test_app().await;
+    let parent = get_search(&app, "3BHK in Hoodi under 2.4 Cr", 34).await;
+    let oversized = "a".repeat(
+        backend::security::security_tuning()
+            .requests
+            .max_search_query_bytes
+            + 1,
+    );
+    let response = post_revision(
+        &app,
+        revision_request(&parent.1, &oversized, "oversized-utterance"),
+        35,
+    )
+    .await;
+
+    assert_eq!(response.0, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(response.1["code"], "revision_utterance_too_long");
+}
+
+#[tokio::test]
+async fn activated_revisions_enqueue_search_feedback() {
+    let (app, mut events) = test_app_with_events().await;
+    let parent = get_search(&app, "3BHK in Hoodi under 2.4 Cr", 36).await;
+    let _initial_event = tokio::time::timeout(std::time::Duration::from_secs(1), events.recv())
+        .await
+        .expect("initial search event is enqueued")
+        .expect("search event sender remains open");
+
+    let response = post_revision(
+        &app,
+        revision_request(&parent.1, "Make it under 2.5Cr", "feedback-event"),
+        37,
+    )
+    .await;
+    assert_eq!(response.1["outcome"], "activate");
+    let event = tokio::time::timeout(std::time::Duration::from_secs(1), events.recv())
+        .await
+        .expect("revision search event is enqueued")
+        .expect("search event sender remains open");
+    let SearchLogMessage::SearchEvent(event) = event;
+    assert!(event.query.contains("Make it under 2.5Cr"));
+}
+
+#[tokio::test]
 async fn duplicate_submissions_are_deterministic_and_conflicts_are_rejected() {
     let app = test_app().await;
     let parent = get_search(&app, "3BHK in Hoodi under 2.4 Cr", 41).await;
@@ -224,14 +269,59 @@ async fn revision_rebinds_portable_intent_after_catalog_generation_changes() {
     );
 }
 
+#[tokio::test]
+async fn exact_society_revision_does_not_require_optional_geo_cell_topology() {
+    let (app, _state, _events) = test_app_fixture_with_society_topology(false).await;
+    let parent = get_search(&app, "Fixture Home 3BHK", 63).await;
+    assert_eq!(parent.0, StatusCode::OK);
+    assert!(
+        !parent.1["orderedResultIds"].as_array().unwrap().is_empty(),
+        "response={}",
+        parent.1
+    );
+
+    let revised = post_revision(
+        &app,
+        revision_request(&parent.1, "Make it 3BHK", "exact-society-without-cells"),
+        64,
+    )
+    .await;
+
+    assert_eq!(revised.0, StatusCode::OK, "response={}", revised.1);
+    assert_eq!(revised.1["outcome"], "activate");
+    assert_eq!(
+        revised.1["candidate"]["orderedResultIds"],
+        parent.1["orderedResultIds"]
+    );
+}
+
 async fn test_app() -> Router {
     test_app_with_state().await.0
 }
 
 async fn test_app_with_state() -> (Router, Arc<AppState>) {
+    let (app, state, _events) = test_app_fixture().await;
+    (app, state)
+}
+
+async fn test_app_with_events() -> (Router, mpsc::Receiver<SearchLogMessage>) {
+    let (app, _state, events) = test_app_fixture().await;
+    (app, events)
+}
+
+async fn test_app_fixture() -> (Router, Arc<AppState>, mpsc::Receiver<SearchLogMessage>) {
+    test_app_fixture_with_society_topology(true).await
+}
+
+async fn test_app_fixture_with_society_topology(
+    include_society_topology: bool,
+) -> (Router, Arc<AppState>, mpsc::Receiver<SearchLogMessage>) {
     let root = tempdir().expect("temporary API fixture root").keep();
     let lake = LakeStore::local(root.join("lake")).expect("temporary lake");
-    let bundle = Arc::new(test_bundle(&root));
+    let bundle = Arc::new(test_bundle_with_society_topology(
+        &root,
+        include_society_topology,
+    ));
     let properties = vec![test_property()];
     let search_index =
         SearchIndex::build_with_serving_graph(&properties, &bundle.entities, &bundle.edges);
@@ -242,7 +332,7 @@ async fn test_app_with_state() -> (Router, Arc<AppState>) {
         Vec::new(),
         search_index.clone(),
     );
-    let (search_event_tx, _search_event_rx) = mpsc::channel(8);
+    let (search_event_tx, search_event_rx) = mpsc::channel(8);
     let state = Arc::new(AppState {
         execution: ExecutionLanes::current(),
         search_runtime: ArcSwap::from_pointee(runtime),
@@ -264,16 +354,32 @@ async fn test_app_with_state() -> (Router, Arc<AppState>) {
         interest_counter: AtomicU64::new(0),
         interest_write_lock: tokio::sync::Mutex::new(()),
     });
-    (build_app_router_with_lake(state.clone(), lake), state)
+    (
+        build_app_router_with_lake(state.clone(), lake),
+        state,
+        search_event_rx,
+    )
 }
 
 fn test_bundle(root: &std::path::Path) -> LoadedServingBundle {
+    test_bundle_with_society_topology(root, true)
+}
+
+fn test_bundle_with_society_topology(
+    root: &std::path::Path,
+    include_society_topology: bool,
+) -> LoadedServingBundle {
     let entities = vec![
         serving_entity("area:hoodi", "area", "Hoodi"),
         serving_entity("area:sarjapur", "area", "Sarjapur"),
         serving_entity("area:cell:hoodi", "area", "Internal search cell"),
         serving_entity("area:cell:sarjapur", "area", "Internal search cell"),
         serving_entity("society:fixture-home", "society", "Fixture Home"),
+        serving_entity(
+            "property:fixture-home-3bhk",
+            "property",
+            "Fixture Home 3 BHK",
+        ),
     ];
     let mut facts = vec![
         topology_fact(
@@ -302,32 +408,40 @@ fn test_bundle(root: &std::path::Path) -> LoadedServingBundle {
         "controlled_inventory_option",
         FactValue::Text(json!({"bhk": 3, "price": 23_000_000, "area_sqft": 1_550}).to_string()),
     ));
-    let edges = vec![
-        topology_edge(
-            "society:fixture-home",
-            "in_market_locality",
-            "area:hoodi",
-            &facts[2],
-        ),
-        topology_edge(
-            "society:fixture-home",
-            "occupies_geo_cell",
-            "area:cell:hoodi",
-            &facts[2],
-        ),
-        topology_edge(
-            "area:hoodi",
-            "covers_geo_cell",
-            "area:cell:hoodi",
-            &facts[0],
-        ),
-        topology_edge(
-            "area:sarjapur",
-            "covers_geo_cell",
-            "area:cell:sarjapur",
-            &facts[1],
-        ),
-    ];
+    let mut edges = vec![topology_edge(
+        "property:fixture-home-3bhk",
+        "in_society",
+        "society:fixture-home",
+        &facts[2],
+    )];
+    if include_society_topology {
+        edges.extend([
+            topology_edge(
+                "society:fixture-home",
+                "in_market_locality",
+                "area:hoodi",
+                &facts[2],
+            ),
+            topology_edge(
+                "area:hoodi",
+                "covers_geo_cell",
+                "area:cell:hoodi",
+                &facts[0],
+            ),
+            topology_edge(
+                "area:sarjapur",
+                "covers_geo_cell",
+                "area:cell:sarjapur",
+                &facts[1],
+            ),
+            topology_edge(
+                "society:fixture-home",
+                "occupies_geo_cell",
+                "area:cell:hoodi",
+                &facts[2],
+            ),
+        ]);
+    }
     let fact_index = ServingFactIndex::from_records(facts.clone(), Vec::new());
     let recall_dir = root.join("tantivy");
     let recall_index = TantivyRecallIndex::build_in_dir(&recall_dir, &entities, &facts, &[])

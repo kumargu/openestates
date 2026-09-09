@@ -400,7 +400,7 @@ fn issue_118_revision_scenarios_are_frozen_in_the_unified_bank() {
                 .expect("spatial revision case follows the typed contract")
         })
         .collect::<Vec<_>>();
-    assert_eq!(cases.len(), 15, "Issue 118 revision bank size changed");
+    assert_eq!(cases.len(), 19, "Issue 118 revision bank size changed");
 
     let fixture = issue_118_fixture();
     let snapshot = fixture.runtime_snapshot();
@@ -621,6 +621,50 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
                 assert_eq!(output.intent.budget_max, Some(16_000_000));
                 assert_eq!(output.intent.requested_areas(), ["Whitefield"]);
             }
+            "SPATIAL-REVISION-ADD-DISTINCT-ANCHOR" => {
+                assert_eq!(
+                    output.compiled_plan.branches[0]
+                        .predicate_bindings
+                        .iter()
+                        .filter(|binding| {
+                            binding.family == backend::search::PredicateFamily::Spatial
+                        })
+                        .count(),
+                    2
+                );
+            }
+            "SPATIAL-REVISION-CORRECT-ANCHOR-BY-IDENTITY" => {
+                let mut distances = Vec::new();
+                output.compiled_plan.branches[0]
+                    .predicates
+                    .evaluate(&mut |term| {
+                        if let backend::search::ConstraintTerm::Spatial {
+                            display_name,
+                            distance_limit_km,
+                            ..
+                        } = term
+                        {
+                            distances.push((display_name.clone(), *distance_limit_km));
+                        }
+                        true
+                    });
+                distances.sort_by(|left, right| left.0.cmp(&right.0));
+                assert_eq!(
+                    distances,
+                    [
+                        ("Hoodi Metro".to_string(), Some(3.0)),
+                        ("Manipal Hospital".to_string(), Some(2.0)),
+                    ]
+                );
+            }
+            "SPATIAL-REVISION-EXPAND-MULTIPLE-ALTERNATIVES" => {
+                assert_eq!(output.compiled_plan.branches.len(), 3);
+            }
+            "SPATIAL-REVISION-IMPLICIT-CONTEXT-RETENTION" => {
+                assert_eq!(output.intent.requested_bhks(), [2]);
+                assert_eq!(output.intent.budget_max, Some(16_000_000));
+                assert_eq!(output.intent.requested_areas(), ["Whitefield"]);
+            }
             "SPATIAL-REVISION-THIRD-BRANCH" => {
                 assert_eq!(
                     output.compiled_plan.branches[2].ranking_intent.budget_max,
@@ -647,7 +691,7 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
         }
     }
     assert_eq!(
-        executed, 11,
+        executed, 15,
         "every server-owned candidate scenario must execute"
     );
 }
@@ -769,7 +813,7 @@ fn branch_quality_cohorts_preserve_disconnected_scope_and_branch_local_proof() {
             let society = format!("Cohort Homes {index}");
             builder.add_area(&area);
             builder.add_home(HomeSpec::new(
-                &format!("cohort-home-{index}"),
+                format!("cohort-home-{index}"),
                 &society,
                 &area,
                 2,
@@ -818,8 +862,8 @@ fn sourced_topology_never_erases_logical_spatial_branches() {
     for area in ["Eastfield", "Nextfield", "Northfield"] {
         builder.add_area(area);
         builder.add_home(HomeSpec::new(
-            &format!("home-{}", slug(area)),
-            &format!("{area} Homes"),
+            format!("home-{}", slug(area)),
+            format!("{area} Homes"),
             area,
             3,
             10_000_000,
@@ -1585,7 +1629,7 @@ fn run_controlled_journey(
     limits: JourneyLimits,
 ) {
     assert!(
-        journey.turns.len() + 1 <= limits.max_revision_depth_before_checkpoint,
+        journey.turns.len() < limits.max_revision_depth_before_checkpoint,
         "{} exceeds the revision checkpoint limit",
         journey.id
     );
@@ -1682,6 +1726,7 @@ fn run_controlled_journey(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn evaluate_candidate<'a>(
     journey: &ControlledJourneyCase,
     turn_index: usize,
@@ -3135,7 +3180,7 @@ impl FixtureBuilder {
         longitude: f64,
         source_type: &str,
     ) {
-        self.entities.push(entity(&entity_id, "place", name));
+        self.entities.push(entity(entity_id, "place", name));
         for (fact_key, value) in [
             ("geo.latitude", FactValue::Numeric(latitude)),
             ("geo.longitude", FactValue::Numeric(longitude)),

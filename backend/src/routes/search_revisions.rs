@@ -13,12 +13,13 @@ use crate::search::{
     issue_signed_search_context, render_revision_active_query, result_membership_fingerprint,
     BuyerIntentBranchProjection, CompiledSearchPlan, GeoCellSearchPolicy, GeoScope, SearchResponse,
     SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome, SearchRuntimeVersion,
+    TypedSearchRevision,
 };
 use crate::state::{
     AppState, RevisionIdempotencyLookup, RevisionReservationUpdate, RuntimeVersionKey,
 };
 
-use super::search::compute_search_plan;
+use super::search::{compute_search_plan, enqueue_cached_search_logs};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -81,6 +82,17 @@ struct RevisionError {
     runtime_version: SearchRuntimeVersion,
 }
 
+enum RevisionCompilation {
+    RebaseUnavailable,
+    Ready(Box<RevisionCompilationReady>),
+}
+
+struct RevisionCompilationReady {
+    fragment: CompiledSearchPlan,
+    revision: TypedSearchRevision,
+    candidate_plan: Option<CompiledSearchPlan>,
+}
+
 pub async fn revise_search(
     State(state): State<Arc<AppState>>,
     Json(request): Json<SearchRevisionRequest>,
@@ -95,6 +107,18 @@ pub async fn revise_search(
             StatusCode::BAD_REQUEST,
             "invalid_revision_request",
             "Parent token, utterance, and client mutation ID are required.",
+            runtime_version,
+        );
+    }
+    if request.utterance.len()
+        > crate::security::security_tuning()
+            .requests
+            .max_search_query_bytes
+    {
+        return revision_error(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "revision_utterance_too_long",
+            "The revision utterance is too long.",
             runtime_version,
         );
     }
@@ -163,10 +187,56 @@ pub async fn revise_search(
         return Json(response).into_response();
     }
 
-    let engine = crate::search::SearchEngine::new(&snapshot);
-    let parent_plan = match engine.compile_intent_ast(&parent.intent_ast) {
-        Ok(plan) if !has_unresolved_required_geography(&plan) => plan,
-        _ => {
+    let compilation_snapshot = snapshot.clone();
+    let parent_intent_ast = parent.intent_ast.clone();
+    let parent_revision_id = parent.revision_id.clone();
+    let utterance = request.utterance.clone();
+    let fragment_turn_id = format!("{}:turn", parent.revision_id);
+    let max_active_branches = search_guardrail_config().revisions.max_active_branches;
+    let compilation = state
+        .execution
+        .run_customer_compute(move || {
+            let engine = crate::search::SearchEngine::new(&compilation_snapshot);
+            let Ok(parent_plan) = engine.compile_intent_ast(&parent_intent_ast) else {
+                return RevisionCompilation::RebaseUnavailable;
+            };
+            if has_unresolved_required_geography(&parent_plan) {
+                return RevisionCompilation::RebaseUnavailable;
+            }
+            let fragment = engine.compile_fragment(&utterance, &fragment_turn_id, &parent_plan);
+            let revision = compile_typed_revision(
+                &parent_plan,
+                &fragment,
+                &utterance,
+                &parent_revision_id,
+                SearchRevisionLimits {
+                    max_active_branches,
+                },
+            );
+            let candidate_plan = (revision.outcome == SearchRevisionOutcome::Candidate)
+                .then(|| {
+                    apply_typed_revision(
+                        &parent_plan,
+                        &fragment,
+                        &revision,
+                        &compilation_snapshot.bundle.graph_index,
+                        Some(&compilation_snapshot.bundle.spatial_index),
+                        GeoCellSearchPolicy {
+                            max_hops: compilation_snapshot.geo_cell_max_hops,
+                            max_distance_km: compilation_snapshot.geo_cell_max_distance_km,
+                        },
+                    )
+                })
+                .flatten();
+            RevisionCompilation::Ready(Box::new(RevisionCompilationReady {
+                fragment,
+                revision,
+                candidate_plan,
+            }))
+        })
+        .await;
+    let (fragment, revision, candidate_plan) = match compilation {
+        Ok(RevisionCompilation::RebaseUnavailable) => {
             let response = inactive_response(
                 SearchRevisionOperation::Refine,
                 RevisionActivationOutcome::PreserveParent,
@@ -177,19 +247,23 @@ pub async fn revise_search(
             reservation.complete(response.clone());
             return Json(response).into_response();
         }
+        Ok(RevisionCompilation::Ready(compilation)) => {
+            let RevisionCompilationReady {
+                fragment,
+                revision,
+                candidate_plan,
+            } = *compilation;
+            (fragment, revision, candidate_plan)
+        }
+        Err(_) => {
+            return revision_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "search_unavailable",
+                "Search is temporarily unavailable. Retry this revision.",
+                runtime_version,
+            )
+        }
     };
-
-    let fragment_turn_id = format!("{}:turn", parent.revision_id);
-    let fragment = engine.compile_fragment(&request.utterance, &fragment_turn_id, &parent_plan);
-    let revision = compile_typed_revision(
-        &parent_plan,
-        &fragment,
-        &request.utterance,
-        &parent.revision_id,
-        SearchRevisionLimits {
-            max_active_branches: search_guardrail_config().revisions.max_active_branches,
-        },
-    );
     if revision.outcome != SearchRevisionOutcome::Candidate {
         let (outcome, guidance) = match revision.outcome {
             SearchRevisionOutcome::RequireClarification => (
@@ -212,17 +286,7 @@ pub async fn revise_search(
         return Json(response).into_response();
     }
 
-    let Some(candidate_plan) = apply_typed_revision(
-        &parent_plan,
-        &fragment,
-        &revision,
-        &snapshot.bundle.graph_index,
-        Some(&snapshot.bundle.spatial_index),
-        GeoCellSearchPolicy {
-            max_hops: snapshot.geo_cell_max_hops,
-            max_distance_km: snapshot.geo_cell_max_distance_km,
-        },
-    ) else {
+    let Some(candidate_plan) = candidate_plan else {
         return revision_error(
             StatusCode::BAD_REQUEST,
             "invalid_revision_patch",
@@ -283,6 +347,7 @@ pub async fn revise_search(
             .semantic_insert(semantic_cache_key, output.clone());
         output
     };
+    enqueue_cached_search_logs(&state, &candidate_output, &active_query);
     let candidate_ids = candidate_output.response.ordered_result_ids.clone();
     let delta = result_delta(&request.parent_result_ids, &candidate_ids);
     let selected_property_consequence = request.selected_property_id.as_ref().map(|selected| {
@@ -349,9 +414,46 @@ pub async fn revise_search(
 }
 
 fn has_unresolved_required_geography(plan: &CompiledSearchPlan) -> bool {
-    plan.branches
-        .iter()
-        .any(|branch| matches!(branch.geo_scope, GeoScope::Unresolved { .. }))
+    plan.branches.iter().any(|branch| {
+        let GeoScope::Unresolved { anchors, .. } = &branch.geo_scope else {
+            return false;
+        };
+        anchors.is_empty()
+            || anchors
+                .iter()
+                .any(|anchor| !anchor.entity_type.eq_ignore_ascii_case("society"))
+            || has_positive_non_society_geography(&branch.predicates, false)
+    })
+}
+
+fn has_positive_non_society_geography(
+    expression: &crate::search::ConstraintExpr,
+    negated: bool,
+) -> bool {
+    match expression {
+        crate::search::ConstraintExpr::And { clauses }
+        | crate::search::ConstraintExpr::AnyOf { clauses } => clauses
+            .iter()
+            .any(|clause| has_positive_non_society_geography(clause, negated)),
+        crate::search::ConstraintExpr::Not { clause } => {
+            has_positive_non_society_geography(clause, !negated)
+        }
+        crate::search::ConstraintExpr::Term {
+            term:
+                crate::search::ConstraintTerm::Area {
+                    entity_id: Some(_), ..
+                },
+        } => !negated,
+        crate::search::ConstraintExpr::Term {
+            term:
+                crate::search::ConstraintTerm::Spatial {
+                    entity_id,
+                    required: true,
+                    ..
+                },
+        } => !negated && !entity_id.is_empty(),
+        crate::search::ConstraintExpr::Term { .. } => false,
+    }
 }
 
 fn inactive_response(

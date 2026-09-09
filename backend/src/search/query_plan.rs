@@ -222,7 +222,7 @@ pub(crate) fn discourse_branch_layout_with_plan(
 ) -> Option<DiscourseBranchLayout> {
     let tokens = &plan.tokens;
     let config = &search_parser_config().discourse;
-    let shared_start = first_configured_phrase(&tokens, &config.shared_suffix_markers, 0)
+    let shared_start = first_configured_phrase(tokens, &config.shared_suffix_markers, 0)
         .map(|span| span.start)
         .unwrap_or(query.len());
     let core_tokens = tokens

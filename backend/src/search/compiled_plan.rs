@@ -586,8 +586,8 @@ fn root_for(branches: &[GeoBranch]) -> BoolExpr<BranchId> {
     }
 }
 
-fn compile_geo_scope<'a>(
-    predicates: &'a ConstraintExpr,
+fn compile_geo_scope(
+    predicates: &ConstraintExpr,
     topology: &GraphIndex,
     spatial_index: Option<&SpatialServingIndex>,
     policy: GeoCellSearchPolicy,
@@ -1266,10 +1266,10 @@ fn collect_branch_intent(expression: &ConstraintExpr, negated: bool, intent: &mu
                 merge_min(&mut intent.budget_min, min.as_ref());
                 merge_max(&mut intent.budget_max, max.as_ref());
             }
-            ConstraintTerm::Evidence { constraint, .. } if !negated => {
-                if !intent.hard_constraints.contains(constraint) {
-                    intent.hard_constraints.push(constraint.clone());
-                }
+            ConstraintTerm::Evidence { constraint, .. }
+                if !negated && !intent.hard_constraints.contains(constraint) =>
+            {
+                intent.hard_constraints.push(constraint.clone());
             }
             _ => {}
         },

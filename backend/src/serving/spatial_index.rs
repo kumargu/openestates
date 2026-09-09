@@ -134,11 +134,7 @@ impl SpatialServingIndex {
             .geometry
             .related(area_id, "adjacent_area")
             .into_iter()
-            .chain(
-                self.geometry
-                    .related_incoming(area_id, "adjacent_area")
-                    .into_iter(),
-            )
+            .chain(self.geometry.related_incoming(area_id, "adjacent_area"))
             .map(str::to_string)
             .collect::<Vec<_>>();
         ids.extend(

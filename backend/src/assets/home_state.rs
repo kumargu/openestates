@@ -443,7 +443,6 @@ mod tests {
                 source_url: None,
                 selection_key: "delay:8".to_string(),
             }),
-            ..Default::default()
         };
 
         append_home_state_signals(

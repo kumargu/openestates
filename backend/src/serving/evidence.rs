@@ -184,6 +184,7 @@ pub struct DerivedEvidence {
 }
 
 impl DerivedEvidence {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         snapshot_identity: impl Into<String>,
         subject_entity_id: impl Into<String>,

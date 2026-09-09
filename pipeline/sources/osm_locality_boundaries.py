@@ -161,7 +161,7 @@ def _element_geometry(element: dict[str, Any]) -> dict[str, Any] | None:
         for member in members
         if isinstance(member, dict) and member.get("role") == "inner"
     )
-    if not outers:
+    if not outers or inners is None:
         return None
     polygons: list[list[list[list[float]]]] = [[[point for point in outer]] for outer in outers]
     for inner in inners:
@@ -169,15 +169,21 @@ def _element_geometry(element: dict[str, Any]) -> dict[str, Any] | None:
             (index for index, outer in enumerate(outers) if _point_in_ring(inner[0], outer)),
             None,
         )
-        if owner is not None:
-            polygons[owner].append(inner)
+        if owner is None:
+            return None
+        polygons[owner].append(inner)
     if len(polygons) == 1:
         return {"type": "Polygon", "coordinates": polygons[0]}
     return {"type": "MultiPolygon", "coordinates": polygons}
 
 
-def _join_rings(raw_segments: Any) -> list[list[list[float]]]:
-    segments = [segment for raw in raw_segments if (segment := _line(raw))]
+def _join_rings(raw_segments: Any) -> list[list[list[float]]] | None:
+    segments: list[list[list[float]]] = []
+    for raw in raw_segments:
+        segment = _line(raw)
+        if segment is None:
+            return None
+        segments.append(segment)
     rings: list[list[list[float]]] = []
     while segments:
         current = segments.pop(0)
@@ -191,14 +197,14 @@ def _join_rings(raw_segments: Any) -> list[list[list[float]]]:
                 None,
             )
             if match_index is None:
-                current = []
-                break
+                return None
             segment = segments.pop(match_index)
             if segment[-1] == current[-1]:
                 segment.reverse()
             current.extend(segment[1:])
-        if len(current) >= 4 and current[0] == current[-1]:
-            rings.append(current)
+        if len(current) < 4:
+            return None
+        rings.append(current)
     return rings
 
 

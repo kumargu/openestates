@@ -570,6 +570,7 @@ fn google_nearby_place_facts_from_rows(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn push_nearby_society_fact(
     facts: &mut Vec<SkillFactRecord>,
     entity_id: &str,
