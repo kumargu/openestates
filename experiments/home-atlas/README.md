@@ -31,7 +31,7 @@ The archived `prototype/web/atlas-document.js` has the same constraint: it prese
 | `src/selection.ts` | Stable ordering, numbering, and group/pair visibility |
 | `src/scenes.ts` | Generic category tours with injected buyer-facing copy |
 | `src/presentation.ts` | Society, estate, and township policy derived from `SurfaceSceneResponse` |
-| `src/journey.ts` | Exact route projection, timed journey scenes, and camera interpolation |
+| `src/journey.ts` | Exact route projection, longest-continuous-segment selection, elapsed-time road flight, responsive aerial camera framing, Street View handoff, and camera interpolation |
 | `fixtures/` | Compact Waterford interaction fixture |
 | `prototype/` | Runnable Waterford and Brigade visual reference plus canonical Brigade OSM inventory |
 | `screenshots/` | Review evidence captured from the running Site |
@@ -43,10 +43,11 @@ The archived `prototype/web/atlas-document.js` has the same constraint: it prese
 - Every distance declares its method and target. Straight-line distance is never presented as travel time.
 - Road highlighting describes mapped alignment, not measured width.
 - Scale behavior comes from scene geometry and configurable thresholds, never society-name branches.
-- Route direction is resolved upstream from mapped direction/access and entrance facts. The camera planner preserves the supplied order.
+- Route direction is resolved upstream from mapped direction/access and entrance facts. The camera planner preserves the supplied order; reversal is an explicit adapter option, never a coordinate or society-name heuristic.
 - Buyer copy is injected into scene construction instead of embedded in geometry code.
 - Camera altitude and elevation are presentation metadata, not geographic facts.
-- The existing `useArrivalPlaybackController` remains the playback owner; journey builders produce scenes and do not start a second animation loop.
+- The existing `useArrivalPlaybackController` remains the playback owner; journey builders produce scenes and pure per-frame calculations and do not start a second animation loop.
+- OpenEstates' existing Street View remains the production street-level owner. `projectStreetHandoff` only transfers route position and heading back to the aerial camera.
 - API keys, deployment identity, generated build output, and speculative tower/amenity labels do not belong in this package.
 
 ## Recommended wiring sequence
@@ -55,7 +56,7 @@ The archived `prototype/web/atlas-document.js` has the same constraint: it prese
 2. Run `resolveAtlasPresentation` to select society, estate, or township layout from geometry and named config thresholds.
 3. Adapt scene features into the existing nearby projections and portable selection/camera helpers.
 4. Start with Waterford Metro: group view, numbered list, one selected station, and return home.
-5. Add road descent/walk using the ordered route and `buildAerialJourney`.
+5. Add the accepted aerial road journey using `selectPrimaryAtlasRoute`, `advanceRoadDistance`, and `roadFlightCamera`; connect `projectStreetHandoff` to the existing OpenEstates Street View surface.
 6. Enable the township split-context treatment for Brigade only after the same contracts pass with production scene data.
 7. Fit the controls into the current property-page theme; do not copy the prototype shell pixel-for-pixel.
 
@@ -74,8 +75,8 @@ From `experiments/home-atlas/prototype/`:
 npm run check
 ```
 
-The combined suite covers ten contracts: Waterford source ownership, ordering, visibility, responsive cameras and category tours; Brigade route fidelity, monotonic timing, heading interpolation, and geometry-driven presentation policy.
+The combined suite covers fourteen contracts: Waterford source ownership, ordering, visibility, responsive cameras and category tours; Brigade route fidelity, monotonic timing, heading interpolation, geometry-driven presentation policy, continuous-segment selection, speed bounds, responsive road framing, and Street View-to-aerial projection.
 
 ## Deliberately deferred
 
-This PR does not import the package into buyer-facing UI, alter backend/DAG/config behavior, add another playback controller, or claim that experimental inventory is production evidence. Those changes should arrive as small, reviewable integration slices after this foundation is merged.
+The prototype now includes the accepted calm shell and continuous ECC Road flight as a visual adapter, but this PR does not import the package into buyer-facing UI, alter backend/DAG/config behavior, add another production playback controller, or claim that experimental inventory is production evidence. Those changes should arrive as small, reviewable integration slices after this foundation is merged.
