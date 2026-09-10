@@ -7,13 +7,13 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::dag_config::ui_surfaces_config;
-use crate::proof_focus::ProofFocus;
 use crate::routes::enrichment::kg_entity_refs_for_property;
+use crate::search::proof::{
+    resolve_proof_token, resolved_proof_focus, ProofResolutionError, ResolvedProofFocus,
+};
+use crate::security::security_tuning;
 use crate::state::AppState;
 use crate::surfaces::{build_surface_scene_with_focus, SurfaceSceneResponse};
-
-const MAX_SURFACE_BATCH_PROPERTIES: usize = 24;
-const MAX_SURFACE_IDS: usize = 8;
 
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
@@ -21,9 +21,10 @@ pub struct ErrorResponse {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SurfaceListQuery {
     pub ids: Option<String>,
-    pub focus: Option<String>,
+    pub proof_token: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -66,9 +67,12 @@ pub async fn get_property_surface(
     Path((property_id, surface_id)): Path<(String, String)>,
     Query(query): Query<SurfaceListQuery>,
 ) -> Result<Json<SurfaceSceneResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let focus = parse_focus(query.focus.as_deref())?;
+    let runtime = state.search_runtime.load_full();
+    let focus = resolve_surface_focus(&runtime, &property_id, query.proof_token.as_deref())
+        .map_err(route_error)?;
     let response = build_property_surfaces_response(
         &state,
+        runtime,
         &property_id,
         std::slice::from_ref(&surface_id),
         focus.as_ref(),
@@ -93,8 +97,10 @@ pub async fn list_property_surfaces(
     Query(query): Query<SurfaceListQuery>,
 ) -> Result<Json<PropertySurfacesResponse>, (StatusCode, Json<ErrorResponse>)> {
     let surface_ids = parse_surface_ids(query.ids.as_deref())?;
-    let focus = parse_focus(query.focus.as_deref())?;
-    build_property_surfaces_response(&state, &property_id, &surface_ids, focus.as_ref())
+    let runtime = state.search_runtime.load_full();
+    let focus = resolve_surface_focus(&runtime, &property_id, query.proof_token.as_deref())
+        .map_err(route_error)?;
+    build_property_surfaces_response(&state, runtime, &property_id, &surface_ids, focus.as_ref())
         .await
         .map(Json)
         .map_err(route_error)
@@ -108,19 +114,26 @@ pub async fn get_property_surfaces_batch(
     if request.property_ids.is_empty() {
         return Err(error(StatusCode::BAD_REQUEST, "property_ids_required"));
     }
-    if request.property_ids.len() > MAX_SURFACE_BATCH_PROPERTIES {
+    if request.property_ids.len() > security_tuning().surface_requests.batch_property_limit {
         return Err(error(
             StatusCode::BAD_REQUEST,
             "too_many_property_ids_requested",
         ));
     }
     let surface_ids = validate_surface_ids(request.surface_ids).map_err(route_error)?;
+    let runtime = state.search_runtime.load_full();
     let mut items = Vec::new();
     for property_id in request.property_ids {
         items.push(
-            build_property_surfaces_response(&state, &property_id, &surface_ids, None)
-                .await
-                .map_err(route_error)?,
+            build_property_surfaces_response(
+                &state,
+                runtime.clone(),
+                &property_id,
+                &surface_ids,
+                None,
+            )
+            .await
+            .map_err(route_error)?,
         );
     }
     Ok(Json(SurfaceBatchResponse {
@@ -131,15 +144,20 @@ pub async fn get_property_surfaces_batch(
 
 async fn build_property_surfaces_response(
     state: &Arc<AppState>,
+    runtime: Arc<crate::state::SearchRuntimeSnapshot>,
     property_id: &str,
     surface_ids: &[String],
-    proof_focus: Option<&ProofFocus>,
+    proof_focus: Option<&ResolvedProofFocus>,
 ) -> Result<PropertySurfacesResponse, SurfaceRouteError> {
-    let runtime = state.search_runtime.load_full();
+    if property_id.trim().is_empty()
+        || property_id.len() > security_tuning().surface_requests.max_property_id_bytes
+    {
+        return Err(SurfaceRouteError::bad_request("invalid_property_id"));
+    }
     let property = runtime
-        .properties
-        .iter()
-        .find(|property| property.id == *property_id)
+        .property_by_id
+        .get(property_id)
+        .and_then(|index| runtime.properties.get(*index))
         .cloned()
         .ok_or_else(|| SurfaceRouteError::not_found("property_not_found"))?;
 
@@ -211,28 +229,46 @@ fn parse_surface_ids(ids: Option<&str>) -> Result<Vec<String>, (StatusCode, Json
     .map_err(route_error)
 }
 
-fn parse_focus(
-    focus: Option<&str>,
-) -> Result<Option<ProofFocus>, (StatusCode, Json<ErrorResponse>)> {
-    let Some(focus) = focus.filter(|value| !value.trim().is_empty()) else {
+fn resolve_surface_focus(
+    runtime: &crate::state::SearchRuntimeSnapshot,
+    property_id: &str,
+    proof_token: Option<&str>,
+) -> Result<Option<ResolvedProofFocus>, SurfaceRouteError> {
+    let Some(proof_token) = proof_token.filter(|value| !value.trim().is_empty()) else {
         return Ok(None);
     };
-    serde_json::from_str::<ProofFocus>(focus)
-        .map(Some)
-        .map_err(|_| error(StatusCode::BAD_REQUEST, "invalid_focus"))
+    let resolution = resolve_proof_token(runtime, proof_token, Some(property_id))
+        .map_err(surface_proof_error)?;
+    Ok(resolved_proof_focus(&resolution))
+}
+
+fn surface_proof_error(error: ProofResolutionError) -> SurfaceRouteError {
+    let status = match error {
+        ProofResolutionError::InvalidToken => StatusCode::BAD_REQUEST,
+        ProofResolutionError::MissingEvidence => StatusCode::NOT_FOUND,
+        ProofResolutionError::StaleSnapshot
+        | ProofResolutionError::WrongProperty
+        | ProofResolutionError::WrongSubject
+        | ProofResolutionError::DestinationMismatch => StatusCode::CONFLICT,
+    };
+    SurfaceRouteError::status(status, error.code())
 }
 
 fn validate_surface_ids(surface_ids: Vec<String>) -> Result<Vec<String>, SurfaceRouteError> {
     if surface_ids.is_empty() {
         return Err(SurfaceRouteError::bad_request("surface_ids_required"));
     }
-    if surface_ids.len() > MAX_SURFACE_IDS {
+    let tuning = &security_tuning().surface_requests;
+    if surface_ids.len() > tuning.surface_id_limit {
         return Err(SurfaceRouteError::bad_request(
             "too_many_surface_ids_requested",
         ));
     }
     let mut deduped = Vec::new();
     for surface_id in surface_ids {
+        if surface_id.trim().is_empty() || surface_id.len() > tuning.max_surface_id_bytes {
+            return Err(SurfaceRouteError::bad_request("invalid_surface_id"));
+        }
         if !deduped.iter().any(|existing| existing == &surface_id) {
             deduped.push(surface_id);
         }

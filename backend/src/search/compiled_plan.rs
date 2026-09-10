@@ -151,6 +151,24 @@ pub struct GeoBranch {
     pub fallback_text: Option<String>,
 }
 
+impl GeoBranch {
+    pub(crate) fn restore_portable_ranking_intent(&mut self, ranking_intent: SearchIntent) {
+        self.scoring_query = canonical_scoring_query(
+            &self.eligibility_predicates,
+            &ranking_intent,
+            &self.resolved_entities,
+        );
+        self.recall_query = canonical_recall_query(
+            &self.predicates,
+            &ranking_intent,
+            &self.resolved_entities,
+            &self.scoring_query,
+        );
+        self.ranking_intent = ranking_intent;
+        self.fallback_text = None;
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompiledSearchPlan {
     pub root: BoolExpr<BranchId>,

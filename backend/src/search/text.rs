@@ -3,20 +3,18 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
 use crate::dag_config::{
-    nearby_place_category_for_fact_key, requested_nearby_place_categories,
-    search_resolution_config, ui_surfaces_config,
+    nearby_place_category_for_fact_key, requested_nearby_place_categories, search_resolution_config,
 };
 use crate::knowledge::node::RootSource;
 use crate::knowledge::{FactValue, KnowledgeGraph};
 #[cfg(test)]
 use crate::models::Society;
 use crate::models::{KgEntityRefs, Property};
-use crate::proof_focus::ProofFocus;
 use crate::routes::enrichment::{area_node_id, property_node_id, society_node_id};
 use crate::scoring::BestEffortRankingTier;
 use crate::serving::{
-    GoogleReviewEvidence, ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
-    SocietyFactProjection,
+    EvidenceId, GoogleReviewEvidence, ServingFactIndex, ServingFactRecord,
+    ServingSearchMetadataRecord, SocietyFactProjection,
 };
 
 use super::analyzer;
@@ -35,8 +33,8 @@ use super::schema::{
     TextEvidenceSchema,
 };
 use super::{
-    ConfidenceComponent, ConfidenceScore, MatchExplanation, MatchReason, PreferenceCoverage,
-    SearchResultCard,
+    ConfidenceComponent, ConfidenceScore, MatchEvidenceIdentity, MatchExplanation, MatchReason,
+    PreferenceCoverage, SearchResultCard,
 };
 
 /// Simple text-matching search engine.
@@ -128,7 +126,6 @@ impl CandidateEvaluator {
             || !negative_preferences.is_empty()
             || !intent.hard_constraints.is_empty()
             || has_geo_query;
-        let proof_focus_targets = proof_focus_targets();
         let candidate_ids = if candidate_property_indexes.is_some() {
             None
         } else {
@@ -268,7 +265,6 @@ impl CandidateEvaluator {
 
                 // Boost for preference alignment — collect structured reasons
                 let mut match_reasons: Vec<MatchReason> = Vec::new();
-                let mut proof_focuses: Vec<ProofFocus> = Vec::new();
                 let mut pref_coverage: Vec<PreferenceCoverage> = Vec::new();
                 let mut graph_count: usize = 0;
                 let mut total_facts_consulted: usize = 0;
@@ -292,21 +288,8 @@ impl CandidateEvaluator {
                         confidence: evidence.confidence,
                         source_type: evidence.source_type.clone(),
                         scoring_method: evidence.scoring_method.clone(),
+                        evidence_identity: evidence.evidence_identity.clone(),
                     });
-                    push_proof_focus(
-                        &mut proof_focuses,
-                        &proof_focus_targets,
-                        ProofFocusCandidate {
-                            fact_key: &evidence.fact_key,
-                            matched_label: None,
-                            matched_value: Some(&evidence.display),
-                            requested_constraint: Some(&evidence.preference),
-                            entity_id: None,
-                            distance_m: geo::extract_first_distance_km(&evidence.display)
-                                .and_then(distance_m),
-                            reason: &evidence.reason,
-                        },
-                    );
                     pref_coverage.push(PreferenceCoverage {
                         preference: evidence.preference,
                         status: "matched".into(),
@@ -350,7 +333,6 @@ impl CandidateEvaluator {
                     positive_evidence_score += evidence.score_delta.max(0.0);
                     let preference =
                         named_place_preference(&evidence.place_name, evidence.distance_km);
-                    let focus_reason = format!("matched {}", preference);
                     reasons.push(format!("{}: {}", preference, evidence.display));
                     match_reasons.push(MatchReason {
                         preference: preference.clone(),
@@ -360,20 +342,8 @@ impl CandidateEvaluator {
                         confidence: evidence.confidence,
                         source_type: evidence.source_type.clone(),
                         scoring_method: evidence.scoring_method.clone(),
+                        evidence_identity: evidence.evidence_identity.clone(),
                     });
-                    push_proof_focus(
-                        &mut proof_focuses,
-                        &proof_focus_targets,
-                        ProofFocusCandidate {
-                            fact_key: &evidence.fact_key,
-                            matched_label: Some(&evidence.place_name),
-                            matched_value: Some(&evidence.display),
-                            requested_constraint: Some(&preference),
-                            entity_id: Some(&evidence.place_entity_id),
-                            distance_m: distance_m(evidence.distance_km),
-                            reason: &focus_reason,
-                        },
-                    );
                     pref_coverage.push(PreferenceCoverage {
                         preference,
                         status: if evidence.normalized_score > 0.5 {
@@ -428,21 +398,8 @@ impl CandidateEvaluator {
                                 confidence: evidence.confidence,
                                 source_type: evidence.source_type.clone(),
                                 scoring_method: evidence.scoring_method.clone(),
+                                evidence_identity: evidence.evidence_identity.clone(),
                             });
-                            push_proof_focus(
-                                &mut proof_focuses,
-                                &proof_focus_targets,
-                                ProofFocusCandidate {
-                                    fact_key: &evidence.fact_key,
-                                    matched_label: None,
-                                    matched_value: Some(&evidence.display),
-                                    requested_constraint: Some(pref),
-                                    entity_id: None,
-                                    distance_m: geo::extract_first_distance_km(&evidence.display)
-                                        .and_then(distance_m),
-                                    reason: &evidence.reason,
-                                },
-                            );
                             pref_coverage.push(PreferenceCoverage {
                                 preference: pref.clone(),
                                 status: if evidence.normalized_score > 0.5 {
@@ -491,21 +448,9 @@ impl CandidateEvaluator {
                                 confidence: evidence.confidence,
                                 source_type: evidence.source_type.clone(),
                                 scoring_method: evidence.scoring_method.clone(),
+                                evidence_identity: evidence.evidence_identity.clone(),
                             });
                             let requested_constraint = format!("avoid {}", pref);
-                            push_proof_focus(
-                                &mut proof_focuses,
-                                &proof_focus_targets,
-                                ProofFocusCandidate {
-                                    fact_key: &evidence.fact_key,
-                                    matched_label: None,
-                                    matched_value: Some(&evidence.display),
-                                    requested_constraint: Some(&requested_constraint),
-                                    entity_id: None,
-                                    distance_m: None,
-                                    reason: &evidence.reason,
-                                },
-                            );
                             pref_coverage.push(PreferenceCoverage {
                                 preference: requested_constraint,
                                 status: coverage_status.to_string(),
@@ -696,7 +641,6 @@ impl CandidateEvaluator {
                         tradeoff_label: None,
                         geography_match: None,
                         match_explanation,
-                        proof_focuses,
                         verified_matches,
                         confidence_score,
                     },
@@ -877,149 +821,7 @@ fn diversify_ranked_results(
     *results = diversified;
 }
 
-#[derive(Debug, Clone)]
-struct ProofFocusTarget {
-    surface_id: String,
-    layer_id: String,
-    fact_key: String,
-    destination_kind: String,
-    target_id: String,
-}
-
-struct ProofFocusCandidate<'a> {
-    fact_key: &'a str,
-    matched_label: Option<&'a str>,
-    matched_value: Option<&'a str>,
-    requested_constraint: Option<&'a str>,
-    entity_id: Option<&'a str>,
-    distance_m: Option<u32>,
-    reason: &'a str,
-}
-
-fn proof_focus_targets() -> Vec<ProofFocusTarget> {
-    let Ok(config) = ui_surfaces_config() else {
-        return Vec::new();
-    };
-    let mut targets = Vec::new();
-    for surface in &config.surfaces {
-        if let Some(scene) = surface.scene.as_ref() {
-            let destination_kind = surface
-                .proof_handoff
-                .as_ref()
-                .map(|handoff| handoff.kind.as_str())
-                .unwrap_or("scene");
-            let target_id = surface
-                .proof_handoff
-                .as_ref()
-                .map(|handoff| handoff.target_id.as_str())
-                .unwrap_or(surface.id.as_str());
-            for layer in &scene.layers {
-                for fact_key in layer
-                    .fact_keys
-                    .iter()
-                    .chain(layer.linked_entity_fact_keys.iter())
-                {
-                    push_proof_focus_target(
-                        &mut targets,
-                        &surface.id,
-                        &layer.id,
-                        fact_key,
-                        destination_kind,
-                        target_id,
-                    );
-                }
-            }
-        }
-        let Some(handoff) = surface.proof_handoff.as_ref() else {
-            continue;
-        };
-        if handoff.kind == "scene" {
-            continue;
-        }
-        for fact_key in surface.leaf_keys.iter().chain(handoff.fact_keys.iter()) {
-            push_proof_focus_target(
-                &mut targets,
-                &surface.id,
-                &surface.id,
-                fact_key,
-                &handoff.kind,
-                &handoff.target_id,
-            );
-        }
-    }
-    targets
-}
-
-fn push_proof_focus_target(
-    targets: &mut Vec<ProofFocusTarget>,
-    surface_id: &str,
-    layer_id: &str,
-    fact_key: &str,
-    destination_kind: &str,
-    target_id: &str,
-) {
-    if targets.iter().any(|target| {
-        target.surface_id == surface_id
-            && target.layer_id == layer_id
-            && target.fact_key.eq_ignore_ascii_case(fact_key)
-    }) {
-        return;
-    }
-    targets.push(ProofFocusTarget {
-        surface_id: surface_id.to_string(),
-        layer_id: layer_id.to_string(),
-        fact_key: fact_key.to_string(),
-        destination_kind: destination_kind.to_string(),
-        target_id: target_id.to_string(),
-    });
-}
-
-fn push_proof_focus(
-    focuses: &mut Vec<ProofFocus>,
-    targets: &[ProofFocusTarget],
-    candidate: ProofFocusCandidate<'_>,
-) {
-    for target in targets
-        .iter()
-        .filter(|target| target.fact_key.eq_ignore_ascii_case(candidate.fact_key))
-    {
-        if focuses.iter().any(|existing| {
-            existing.surface_id == target.surface_id
-                && existing.layer_id == target.layer_id
-                && existing.fact_key.eq_ignore_ascii_case(candidate.fact_key)
-                && existing.entity_id.as_deref() == candidate.entity_id
-                && existing.matched_label.as_deref() == candidate.matched_label
-        }) {
-            continue;
-        }
-
-        focuses.push(ProofFocus {
-            surface_id: target.surface_id.clone(),
-            layer_id: target.layer_id.clone(),
-            fact_key: candidate.fact_key.to_string(),
-            destination_kind: Some(target.destination_kind.clone()),
-            target_id: Some(target.target_id.clone()),
-            entity_id: candidate.entity_id.map(str::to_string),
-            feature_id: None,
-            receipt_id: None,
-            matched_label: candidate
-                .matched_label
-                .filter(|value| !value.trim().is_empty())
-                .map(str::to_string),
-            matched_value: candidate
-                .matched_value
-                .filter(|value| !value.trim().is_empty())
-                .map(str::to_string),
-            requested_constraint: candidate
-                .requested_constraint
-                .filter(|value| !value.trim().is_empty())
-                .map(str::to_string),
-            distance_m: candidate.distance_m,
-            reason: candidate.reason.to_string(),
-        });
-    }
-}
-
+#[cfg(test)]
 fn distance_m(distance_km: f64) -> Option<u32> {
     distance_km
         .is_finite()
@@ -1041,6 +843,7 @@ impl From<geo::HaversineEvidence> for NamedPlaceEvidence {
             confidence: evidence.confidence,
             source_type: "Computed".to_string(),
             scoring_method: geo::HAVERSINE_SCORING_METHOD.to_string(),
+            evidence_identity: None,
         }
     }
 }
@@ -1199,6 +1002,7 @@ struct EvidenceMatch {
     source_type: String,
     scoring_method: String,
     reason: String,
+    evidence_identity: Option<MatchEvidenceIdentity>,
 }
 
 struct NamedPlaceEvidence {
@@ -1212,6 +1016,7 @@ struct NamedPlaceEvidence {
     confidence: f32,
     source_type: String,
     scoring_method: String,
+    evidence_identity: Option<MatchEvidenceIdentity>,
 }
 
 fn serving_named_place_evidence_for_entity(
@@ -1334,6 +1139,7 @@ fn named_place_serving_fact_evidence(
         confidence: fact.confidence.min(place.confidence),
         source_type: fact.source_type.clone(),
         scoring_method: geo::NAMED_PLACE_FACT_SCORING_METHOD.to_string(),
+        evidence_identity: match_evidence_identity(fact),
     })
 }
 
@@ -1646,7 +1452,7 @@ fn match_hard_constraints(
             })
             .unwrap_or(ConstraintEvaluation::Missing);
         match serving_evaluation {
-            ConstraintEvaluation::Matched(evidence) => matches.push(evidence),
+            ConstraintEvaluation::Matched(evidence) => matches.push(*evidence),
             ConstraintEvaluation::Failed | ConstraintEvaluation::Missing => return None,
         }
     }
@@ -1691,6 +1497,7 @@ fn runtime_numeric_constraint_evidence(
         source_type: "ServingBundle".to_string(),
         scoring_method: "runtime-field".to_string(),
         reason: format!("proved constraint: {}", constraint.raw_text),
+        evidence_identity: None,
     })
 }
 
@@ -1722,7 +1529,7 @@ fn serving_numeric_constraint_evidence(
         return ConstraintEvaluation::Failed;
     }
     let display_value = canonical_value / query_unit.to_canonical;
-    ConstraintEvaluation::Matched(EvidenceMatch {
+    ConstraintEvaluation::Matched(Box::new(EvidenceMatch {
         preference: constraint.raw_text.clone(),
         fact_key: fact.fact_key.clone(),
         fact_key_rank: usize::MAX,
@@ -1739,7 +1546,8 @@ fn serving_numeric_constraint_evidence(
         source_type: fact.source_type.clone(),
         scoring_method: schema.scoring_method.clone(),
         reason: format!("proved constraint: {}", constraint.raw_text),
-    })
+        evidence_identity: match_evidence_identity(fact),
+    }))
 }
 
 fn aggregate_numeric_constraint_fact<'a>(
@@ -1784,7 +1592,7 @@ fn numeric_constraint_fact_value(
 enum ConstraintEvaluation {
     Missing,
     Failed,
-    Matched(EvidenceMatch),
+    Matched(Box<EvidenceMatch>),
 }
 
 fn serving_preference_evidence(
@@ -2004,6 +1812,7 @@ fn serving_entity_preference_evidence(
                 source_type: fact.source_type.clone(),
                 scoring_method,
                 reason: format!("matches preference: {}", preference),
+                evidence_identity: match_evidence_identity(fact),
             },
         };
         if best_structured
@@ -2065,6 +1874,7 @@ fn serving_entity_preference_evidence(
                     source_type: fact.source_type.clone(),
                     scoring_method: "serving-text".into(),
                     reason: format!("matches preference: {}", preference),
+                    evidence_identity: match_evidence_identity(fact),
                 },
             };
             if best_text
@@ -2145,6 +1955,7 @@ fn serving_entity_negative_preference_evidence(
         let metadata = rows.search_metadata_for_fact_key(&fact.fact_key).next();
         let Some(evidence) = negative_evidence_from_fact(
             &fact.fact_key,
+            match_evidence_identity(fact),
             &fact.value,
             fact.source_type.clone(),
             fact.confidence,
@@ -2178,6 +1989,7 @@ fn serving_entity_negative_preference_evidence(
 #[allow(clippy::too_many_arguments)]
 fn negative_evidence_from_fact(
     fact_key: &str,
+    evidence_identity: Option<MatchEvidenceIdentity>,
     value: &FactValue,
     source_type: String,
     confidence: f32,
@@ -2222,6 +2034,7 @@ fn negative_evidence_from_fact(
             source_type,
             scoring_method: "serving-concern".to_string(),
             reason: negative_reason(preference, score_delta),
+            evidence_identity,
         });
     }
 
@@ -2243,6 +2056,7 @@ fn negative_evidence_from_fact(
                     source_type,
                     scoring_method: "serving-risk-numeric".to_string(),
                     reason: negative_reason(preference, score_delta),
+                    evidence_identity,
                 });
             }
         }
@@ -2268,6 +2082,15 @@ fn negative_evidence_from_fact(
         source_type,
         scoring_method: "serving-risk-text".to_string(),
         reason: negative_reason(preference, score_delta),
+        evidence_identity,
+    })
+}
+
+fn match_evidence_identity(fact: &ServingFactRecord) -> Option<MatchEvidenceIdentity> {
+    let observation = fact.observation.as_ref()?;
+    Some(MatchEvidenceIdentity {
+        subject_entity_id: observation.subject_entity_id.clone(),
+        evidence_id: EvidenceId::Observation(observation.observation_id.clone()),
     })
 }
 
@@ -3566,6 +3389,74 @@ mod tests {
     }
 
     #[test]
+    fn ranking_reason_keeps_the_exact_selected_observation_identity() {
+        let subject = "society:exact-proof";
+        let mut lower = serving_entity_fact(
+            subject,
+            "google_rating",
+            FactValue::Numeric(4.2),
+            "Google",
+            0.7,
+        );
+        let lower_observation = SourceObservation::new(
+            "Google",
+            "lower-rating",
+            subject,
+            Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            Some("https://example.test/lower-rating".to_string()),
+            vec!["asset:proof-selection/v1".to_string()],
+        )
+        .unwrap();
+        lower.observation = Some(lower_observation);
+
+        let mut selected = serving_entity_fact(
+            subject,
+            "google_rating",
+            FactValue::Numeric(4.8),
+            "Google",
+            0.95,
+        );
+        let selected_observation = SourceObservation::new(
+            "Google",
+            "selected-rating",
+            subject,
+            Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            Some("https://example.test/selected-rating".to_string()),
+            vec!["asset:proof-selection/v1".to_string()],
+        )
+        .unwrap();
+        let selected_id = selected_observation.observation_id.clone();
+        selected.observation = Some(selected_observation);
+
+        let index = ServingFactIndex::from_records(
+            vec![lower, selected],
+            vec![serving_entity_metadata(
+                subject,
+                "google_rating",
+                vec!["good reviews"],
+                "HigherIsBetter",
+                1.0,
+                vec![4.2, 4.0],
+            )],
+        );
+        let evidence = serving_entity_preference_evidence(
+            &index,
+            subject,
+            "good reviews",
+            &["google_rating".to_string()],
+            "good reviews",
+        )
+        .expect("configured preference has evidence");
+        assert!(matches!(
+            evidence.evidence_identity,
+            Some(MatchEvidenceIdentity {
+                evidence_id: EvidenceId::Observation(id),
+                ..
+            }) if id == selected_id
+        ));
+    }
+
+    #[test]
     fn required_and_negated_unknown_inventory_predicates_fail_closed() {
         let mut property = local_property(
             "unknown-bhk",
@@ -4056,6 +3947,7 @@ mod tests {
                             FIXTURE_SNAPSHOT_IDENTITY,
                             &observation,
                         )),
+                        evidence_fact_key: None,
                     },
                 )
             })
@@ -4685,11 +4577,6 @@ mod tests {
             .match_reason
             .to_ascii_lowercase()
             .contains("legal safety"));
-        assert!(registration_results[0].proof_focuses.iter().any(|focus| {
-            focus.surface_id == "legal_rera"
-                && focus.destination_kind.as_deref() == Some("section")
-                && focus.target_id.as_deref() == Some("official-record")
-        }));
 
         let mut legal_intent = crate::search::intent::parse_intent("must have legal safety");
         let legal = legal_intent
@@ -4861,7 +4748,6 @@ mod tests {
         assert!(explanation.preference_coverage.iter().any(|coverage| {
             coverage.preference == "RERA registration" && coverage.status == "no_data"
         }));
-        assert!(ordinary_results[0].proof_focuses.is_empty());
 
         let mut required_intent = crate::search::intent::parse_intent("RERA registered");
         required_intent
@@ -6302,7 +6188,7 @@ mod tests {
     }
 
     #[test]
-    fn multiple_named_anchors_emit_independent_reasons_and_proof_focuses() {
+    fn multiple_named_anchors_emit_independent_evaluation_reasons() {
         let properties = vec![
             local_property("both", "Whitefield", "both", 3, 20_000_000, 0, 0.2),
             local_property(
@@ -6455,13 +6341,6 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(reason_keys.contains(&"nearby_hospitals"));
         assert!(reason_keys.contains(&"nearby_tech_parks"));
-        let focus_entity_ids = results[0]
-            .proof_focuses
-            .iter()
-            .filter_map(|focus| focus.entity_id.as_deref())
-            .collect::<Vec<_>>();
-        assert!(focus_entity_ids.contains(&hospital_id));
-        assert!(focus_entity_ids.contains(&office_id));
         let hospital_only = results
             .iter()
             .find(|result| result.card.id == "hospital-only")
@@ -6473,10 +6352,6 @@ mod tests {
                 .reasons
                 .iter()
                 .all(|reason| reason.fact_key != "nearby_tech_parks")));
-        assert!(hospital_only
-            .proof_focuses
-            .iter()
-            .all(|focus| focus.entity_id.as_deref() != Some(office_id)));
     }
 
     #[test]

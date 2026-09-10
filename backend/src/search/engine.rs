@@ -19,7 +19,7 @@ use super::index::SearchIndex;
 use super::intent::{SearchIntent, SourceSpan};
 use super::query_plan::{self, QueryPlan};
 use super::resolver::{is_resolvable_entity_name, slug};
-use super::revision::PortableIntentAst;
+use super::revision::TypedIntentAst;
 use super::schema;
 use super::text::SearchEvaluationContext;
 use super::{
@@ -27,7 +27,6 @@ use super::{
     SearchResultCard, SearchResultSet,
 };
 
-const TANTIVY_RECALL_LIMIT: usize = 128;
 const DIAGNOSTIC_ID_LIMIT: usize = 20;
 const DIAGNOSTIC_SCORE_LIMIT: usize = 8;
 
@@ -193,10 +192,7 @@ impl<'a> SearchEngine<'a> {
 
     /// Bind a portable intent tree to the active serving snapshot. This path
     /// deliberately never reparses the buyer-facing presentation string.
-    pub fn compile_intent_ast(
-        &self,
-        ast: &PortableIntentAst,
-    ) -> Result<CompiledSearchPlan, String> {
+    pub fn compile_intent_ast(&self, ast: &TypedIntentAst) -> Result<CompiledSearchPlan, String> {
         if ast.version != 1 || ast.branches.is_empty() {
             return Err("unsupported or empty intent AST".to_string());
         }
@@ -246,6 +242,7 @@ impl<'a> SearchEngine<'a> {
             branch
                 .resolved_entities
                 .clone_from(&portable.resolved_entities);
+            branch.restore_portable_ranking_intent(portable.ranking_intent.clone());
             for binding in &mut branch.predicate_bindings {
                 if let Some(stable) = portable.predicate_bindings.iter().find(|stable| {
                     stable.family == binding.family
@@ -257,12 +254,15 @@ impl<'a> SearchEngine<'a> {
                 }
             }
         }
-        plan.root = super::compiled_plan::BoolExpr::Any(
-            plan.branches
-                .iter()
-                .map(|branch| super::compiled_plan::BoolExpr::Leaf(branch.branch_id.clone()))
-                .collect(),
-        );
+        let branch_ids = plan
+            .branches
+            .iter()
+            .map(|branch| branch.branch_id.as_str())
+            .collect::<HashSet<_>>();
+        if !portable_root_is_valid(&ast.root, &branch_ids) {
+            return Err("intent AST root references an unknown branch".to_string());
+        }
+        plan.root = ast.root.clone();
         plan.refresh_semantic_fingerprint();
         Ok(plan)
     }
@@ -867,6 +867,23 @@ impl<'a> SearchEngine<'a> {
             diagnostics,
             evidence_gaps,
         }
+    }
+}
+
+fn portable_root_is_valid(
+    root: &super::compiled_plan::BoolExpr<String>,
+    branch_ids: &HashSet<&str>,
+) -> bool {
+    match root {
+        super::compiled_plan::BoolExpr::All(clauses)
+        | super::compiled_plan::BoolExpr::Any(clauses) => {
+            !clauses.is_empty()
+                && clauses
+                    .iter()
+                    .all(|clause| portable_root_is_valid(clause, branch_ids))
+        }
+        super::compiled_plan::BoolExpr::Not(clause) => portable_root_is_valid(clause, branch_ids),
+        super::compiled_plan::BoolExpr::Leaf(branch_id) => branch_ids.contains(branch_id.as_str()),
     }
 }
 
@@ -2026,10 +2043,10 @@ fn tantivy_candidate_ids(
             warning: None,
         };
     }
-    let hits = match serving_bundle
-        .recall_index
-        .search(&recall_query, TANTIVY_RECALL_LIMIT)
-    {
+    let hits = match serving_bundle.recall_index.search(
+        &recall_query,
+        super::schema::ranking_policy().lexical_recall_candidate_limit,
+    ) {
         Ok(hits) => hits,
         Err(err) => {
             let warning = format!("Serving bundle Tantivy recall failed: {err}");
@@ -2351,6 +2368,7 @@ mod tests {
             price_max: Some(10_000_000),
             size_sqft: Some(1_000),
             evidence_reference: Some(evidence.clone()),
+            evidence_fact_key: None,
         };
 
         let bhk_evaluation = option.evaluate_bhk("property:one", subject, 3, snapshot);
@@ -2388,6 +2406,9 @@ mod tests {
             .collect::<Vec<_>>();
         let facts = Vec::new();
         let fact_index = ServingFactIndex::from_records(facts.clone(), Vec::new());
+        let evidence_index =
+            crate::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &[])
+                .expect("engine test evidence index");
         let cache_dir = tempdir().expect("temporary engine test bundle").keep();
         let recall_index = TantivyRecallIndex::build_in_dir(&cache_dir, &entities, &facts, &[])
             .expect("engine test recall index");
@@ -2426,6 +2447,7 @@ mod tests {
             graph_index: GraphIndex::default(),
             recall_index,
             fact_index,
+            evidence_index,
             rera_evidence_index: ReraEvidenceIndex::default(),
             entity_index,
             spatial_index,
@@ -2492,6 +2514,7 @@ mod tests {
                             &snapshot.version_key.serving_bundle_version,
                             &observation,
                         )),
+                        evidence_fact_key: None,
                     },
                 )
             })

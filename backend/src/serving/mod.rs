@@ -36,7 +36,7 @@ pub use builder::{ServingBundleBuilder, ServingBundleError, SERVING_BUNDLE_FORMA
 pub use coordinates::{resolve_serving_coordinates, ServingCoordinates};
 pub use evidence::{
     DerivationId, DerivedEvidence, EvidenceId, EvidenceIdentityError, EvidenceRef, ObservationId,
-    SourceObservation,
+    ServingEvidenceIndex, SourceObservation,
 };
 pub use loader::{LoadedServingBundle, ServingBundleLoadError, ServingBundleLoader};
 pub use market_topology::{

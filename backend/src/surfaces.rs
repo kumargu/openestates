@@ -10,9 +10,9 @@ use crate::dag_config::{
 };
 use crate::knowledge::FactValue;
 use crate::models::{KgEntityRefs, Property};
-use crate::proof_focus::ProofFocus;
 use crate::related_societies::related_society_entity_ids_with_entities;
 use crate::search::geo::{extract_first_distance_km, haversine_km};
+use crate::search::proof::ResolvedProofFocus;
 use crate::serving::{
     resolve_serving_coordinates, LoadedServingBundle, ServingEntityFactRows, ServingFactRecord,
 };
@@ -33,7 +33,7 @@ pub struct SurfaceSceneResponse {
     pub experience: Option<UiSurfaceSceneExperienceConfig>,
     pub viewport: SceneViewport,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub proof_focus: Option<ProofFocus>,
+    pub proof_focus: Option<ResolvedProofFocus>,
     pub layers: Vec<SceneLayer>,
     pub features: Vec<SceneFeature>,
     pub relations: Vec<SceneRelation>,
@@ -275,7 +275,7 @@ pub fn build_surface_scene_with_focus(
     entity_refs: KgEntityRefs,
     bundle: &LoadedServingBundle,
     surface: &UiSurfaceConfig,
-    proof_focus: Option<&ProofFocus>,
+    proof_focus: Option<&ResolvedProofFocus>,
 ) -> Option<SurfaceSceneResponse> {
     let scene_config = surface.scene.as_ref()?;
     let requested_focus = proof_focus.filter(|focus| focus.surface_id == surface.id);
@@ -509,7 +509,7 @@ struct SceneFeatureCandidate {
     receipt: SceneReceipt,
 }
 
-fn candidate_matches_focus(candidate: &SceneFeatureCandidate, focus: &ProofFocus) -> bool {
+fn candidate_matches_focus(candidate: &SceneFeatureCandidate, focus: &ResolvedProofFocus) -> bool {
     if !candidate
         .receipt
         .fact_key
@@ -2110,20 +2110,18 @@ mod tests {
                 }],
             }),
         };
-        let focus = crate::proof_focus::ProofFocus {
+        let focus = crate::search::proof::ResolvedProofFocus {
             surface_id: "around_this_home".to_string(),
             layer_id: "red_flags".to_string(),
             fact_key: "nearby_graveyards".to_string(),
-            destination_kind: Some("scene".to_string()),
-            target_id: Some("around-this-home".to_string()),
+            destination_kind: "scene".to_string(),
+            target_id: "around-this-home".to_string(),
             entity_id: None,
             feature_id: None,
             receipt_id: None,
             matched_label: Some("Burial ground".to_string()),
             matched_value: Some("Burial ground (50 m)".to_string()),
-            requested_constraint: Some("near Burial ground".to_string()),
             distance_m: Some(50),
-            reason: "matched near Burial ground".to_string(),
         };
 
         let scene = build_surface_scene_with_focus(
@@ -2770,6 +2768,9 @@ mod tests {
         facts: Vec<ServingFactRecord>,
     ) -> LoadedServingBundle {
         let fact_index = crate::serving::ServingFactIndex::from_records(facts.clone(), Vec::new());
+        let evidence_index =
+            crate::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &[])
+                .expect("surface test evidence index");
         let temp_dir = tempdir().unwrap();
         let recall_index =
             TantivyRecallIndex::build_in_dir(temp_dir.path(), &entities, &facts, &[]).unwrap();
@@ -2807,6 +2808,7 @@ mod tests {
             graph_index: GraphIndex::default(),
             recall_index,
             fact_index,
+            evidence_index,
             rera_evidence_index: crate::serving::ReraEvidenceIndex::default(),
             entity_index,
             spatial_index,

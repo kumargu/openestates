@@ -8,8 +8,8 @@ use backend::models::{Property, Society};
 use backend::search::geo::SpatialEntityIndex;
 use backend::search::intent::parse_intent;
 use backend::search::{
-    CandidateEvaluationRequest, CandidateEvaluator, IntentAst, SearchEngine, SearchIndex,
-    SearchResponse, SearchRuntimeVersion,
+    CandidateEvaluationRequest, CandidateEvaluator, IntentAst, SearchEngine, SearchExecution,
+    SearchIndex,
 };
 use backend::serving::{
     normalize_alias, DerivedEvidence, EvidenceRef, LoadedServingBundle, ReraEvidenceIndex,
@@ -817,22 +817,13 @@ fn runtime_key(bundle_version: &str) -> RuntimeVersionKey {
     }
 }
 
-fn empty_response(query: &str) -> SearchResponse {
-    let version = runtime_key("test-bundle");
-    SearchResponse {
+fn empty_response(query: &str) -> SearchExecution {
+    SearchExecution {
         query: query.to_string(),
-        revision_id: "rev-001-test".to_string(),
-        revision: None,
         ast_fingerprint: "sha256:test".to_string(),
         result_sets: Vec::new(),
         ordered_result_ids: Vec::new(),
         total_matches: 0,
-        runtime_version: SearchRuntimeVersion {
-            serving_bundle_version: version.serving_bundle_version,
-            scoring_policy_version: version.scoring_policy_version,
-            search_engine_version: version.search_engine_version,
-            semantic_contract_digest: version.semantic_contract_digest,
-        },
         area_context: None,
         state: "no_matches".to_string(),
         search_guidance: None,
@@ -1023,6 +1014,9 @@ fn loaded_bundle_core(
         SpatialServingIndex::from_serving_bundle_with_edges(&entities, &fact_index, &edges);
     let mut graph_index = GraphIndex::from_serving_bundle(&entities, &edges, "efficiency-contract");
     graph_index.add_entity_aliases(&backend::serving::unique_society_aliases(&entities));
+    let evidence_index =
+        backend::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &edges)
+            .expect("efficiency fixture evidence index");
     LoadedServingBundle {
         manifest: ServingBundleManifest {
             bundle_version: "efficiency-contract".to_string(),
@@ -1055,6 +1049,7 @@ fn loaded_bundle_core(
         edges,
         recall_index,
         fact_index,
+        evidence_index,
         rera_evidence_index: ReraEvidenceIndex::default(),
         entity_index,
         spatial_index,
