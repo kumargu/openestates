@@ -14,6 +14,7 @@ import {
   roomDimensions,
 } from "./geometry.ts";
 import { Navigator } from "./navigation.ts";
+import { directRoom, roundRoute } from "./director.ts";
 
 export function validatePlan(plan: HomePlan) {
   if (plan.version !== 1 || plan.units !== "metres")
@@ -87,6 +88,13 @@ export function prepareHome(
       policy.settleSeconds,
       policy.inspectSeconds,
       policy.entranceSeconds,
+      policy.viewHoldSeconds,
+      policy.doorwayMps,
+      policy.accelerationMps2,
+      policy.cornerRadiusM,
+      policy.maxMovingYawError,
+      policy.viewSampleM,
+      policy.minViewDepthM,
     ].every((n) => Number.isFinite(n) && n > 0) ||
     policy.eyeM >= plan.architecture.ceilingM
   )
@@ -104,8 +112,10 @@ export function prepareHome(
     .connects![0];
   const visited = new Set<string>(),
     order: string[] = [];
-  const visit = (id: string) => {
+  const entries = new Map<string, import("./types.ts").Wall>();
+  const visit = (id: string, entry: import("./types.ts").Wall) => {
     if (visited.has(id)) return;
+    entries.set(id, entry);
     visited.add(id);
     order.push(id);
     const neighbors = [...graph.get(id)!].sort((a, b) => {
@@ -116,9 +126,18 @@ export function prepareHome(
         a.localeCompare(b)
       );
     });
-    for (const next of neighbors) visit(next);
+    for (const next of neighbors)
+      visit(
+        next,
+        plan.walls.find(
+          (w) =>
+            w.opening?.kind !== "window" &&
+            w.opening?.connects?.includes(id) &&
+            w.opening?.connects?.includes(next),
+        )!,
+      );
   };
-  visit(root);
+  visit(root, plan.walls.find((w) => w.id === plan.entranceWallId)!);
   if (visited.size !== plan.rooms.length)
     throw new Error(
       `Disconnected rooms: ${plan.rooms
@@ -128,19 +147,26 @@ export function prepareHome(
     );
   const stops: TourStop[] = order.map((roomId) => {
     const room = plan.rooms.find((r) => r.id === roomId)!;
-    const point = interiorPoint(room.polygon, nav.safe),
-      dimensions = roomDimensions(room.polygon, point);
+    const center = interiorPoint(room.polygon, nav.safe),
+      dimensions = roomDimensions(room.polygon, center);
+    const views = directRoom(plan, room, entries.get(roomId)!, nav, policy);
     return {
       roomId,
-      point,
+      point: views[0].point,
       dimensions,
-      heading: heading(dimensions[0].a, dimensions[0].b),
+      heading: views[0].heading,
+      views,
     };
   });
   const entrance = nav.entrance.outside;
   const routes = stops.map((stop, i) => {
     try {
-      return nav.route(i ? stops[i - 1].point : entrance, stop.point);
+      const previous = i ? stops[i - 1].views.at(-1)!.point : entrance;
+      return roundRoute(
+        nav.route(previous, stop.point),
+        nav,
+        policy.cornerRadiusM,
+      );
     } catch (error) {
       throw new Error(`Route to ${stop.roomId}: ${(error as Error).message}`);
     }

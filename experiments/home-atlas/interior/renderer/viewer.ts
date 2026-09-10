@@ -4,18 +4,26 @@ import type { PreparedHome, TourFrame } from "../core/types.ts";
 import { HomeTour } from "../core/playback.ts";
 import { buildArchitecture, vector } from "./architecture.ts";
 import { INTERIOR_THEME as theme } from "./theme.ts";
+import { bounds, mix } from "../core/geometry.ts";
 
 export type ViewMode = "overview" | "walk" | "plan";
 export interface ViewerState {
   frame: TourFrame;
   playing: boolean;
   mode: ViewMode;
+  selectedRoomId?: string | null;
 }
 /** The renderer owns pixels and input; HomeTour owns all movement and timing. */
 export class HomeViewer {
   readonly tour: HomeTour;
   mode: ViewMode = "overview";
   dimensions = true;
+  cutaway = true;
+  private selectedRoomId: string | null = null;
+  private orbitGoal: { position: THREE.Vector3; target: THREE.Vector3 } | null =
+    null;
+  private touchMove: readonly [number, number] = [0, 0];
+  private raycaster = new THREE.Raycaster();
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(58, 1, 0.035, 250);
@@ -44,6 +52,7 @@ export class HomeViewer {
       Math.min(devicePixelRatio, theme.maxPixelRatio),
     );
     this.renderer.shadowMap.enabled = true;
+    this.renderer.localClippingEnabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -74,6 +83,9 @@ export class HomeViewer {
     this.controls.minDistance = 3;
     this.controls.maxDistance = b.span * 3;
     this.controls.maxPolarAngle = Math.PI / 2.1;
+    this.controls.addEventListener("start", () => {
+      this.orbitGoal = null;
+    });
     this.setMode("overview");
     const signal = this.abort.signal;
     let pointer: { id: number; x: number; y: number } | null = null;
@@ -145,6 +157,7 @@ export class HomeViewer {
       "blur",
       () => {
         this.keys.clear();
+        this.touchMove = [0, 0];
         this.tour.pause();
         this.emit();
       },
@@ -156,6 +169,7 @@ export class HomeViewer {
         if (document.hidden) {
           this.tour.pause();
           this.keys.clear();
+          this.touchMove = [0, 0];
           this.emit();
         }
       },
@@ -169,6 +183,7 @@ export class HomeViewer {
       this.camera.fov = w < 600 ? theme.mobileFov : theme.eyeFov;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(w, h);
+      if (this.mode === "overview") this.frameOverview();
     });
     this.resize.observe(host);
     const animate = (now: number) => {
@@ -178,9 +193,11 @@ export class HomeViewer {
       if (this.mode === "walk") {
         const k = this.keys;
         this.tour.move(
-          Number(k.has("w") || k.has("ArrowUp")) -
+          this.touchMove[0] +
+            Number(k.has("w") || k.has("ArrowUp")) -
             Number(k.has("s") || k.has("ArrowDown")),
-          Number(k.has("d") || k.has("ArrowRight")) -
+          this.touchMove[1] +
+            Number(k.has("d") || k.has("ArrowRight")) -
             Number(k.has("a") || k.has("ArrowLeft")),
           dt,
         );
@@ -197,7 +214,16 @@ export class HomeViewer {
               ),
             ),
         );
-      } else this.controls.update();
+      } else {
+        if (this.orbitGoal && this.mode === "overview") {
+          const a = this.tour.reducedMotion ? 1 : 1 - Math.exp(-dt * 4);
+          this.camera.position.lerp(this.orbitGoal.position, a);
+          this.controls.target.lerp(this.orbitGoal.target, a);
+          if (this.camera.position.distanceTo(this.orbitGoal.position) < 0.01)
+            this.orbitGoal = null;
+        }
+        this.controls.update();
+      }
       this.drawMeasurements();
       if (this.mode !== "plan") this.renderer.render(this.scene, this.camera);
       if (now - this.notifyAt > 100) {
@@ -212,24 +238,68 @@ export class HomeViewer {
       frame: { ...this.tour.frame },
       playing: this.tour.playing,
       mode: this.mode,
+      selectedRoomId: this.selectedRoomId,
     });
   }
   setMode(mode: ViewMode) {
+    const previous = this.mode;
     this.mode = mode;
     this.controls.enabled = mode === "overview";
     this.architecture.ceilings.visible = mode === "walk";
+    this.architecture.setCutaway(mode === "overview" && this.cutaway);
+    this.architecture.selectRoom(
+      mode === "overview" ? this.selectedRoomId : null,
+    );
+    if (mode === "walk") {
+      this.camera.fov =
+        this.host.clientWidth < 600 ? theme.mobileFov : theme.eyeFov;
+      this.camera.updateProjectionMatrix();
+    }
+    this.touchMove = [0, 0];
+    this.keys.clear();
     if (mode !== "walk") this.tour.pause();
-    if (mode === "overview") {
-      const b = this.tour.home.bounds;
-      this.controls.target.copy(vector(b.center));
-      this.camera.position.set(
-        b.center[0] + b.span * 0.7,
-        b.span * 1.1,
-        b.center[1] + b.span * 0.8,
-      );
+    if (mode === "overview") this.frameOverview(previous !== "overview");
+    if (previous !== mode && !this.tour.reducedMotion)
+      this.host.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 450,
+        easing: "ease-out",
+      });
+    this.emit();
+  }
+  private frameOverview(immediate = false) {
+    const room = this.tour.home.plan.rooms.find(
+      (r) => r.id === this.selectedRoomId,
+    );
+    const b = room ? bounds(room.polygon) : this.tour.home.bounds;
+    const target = vector(b.center, 0.35),
+      direction = new THREE.Vector3(0.55, 1.35, 0.75).normalize();
+    const vertical = (58 * Math.PI) / 180,
+      horizontal = 2 * Math.atan(Math.tan(vertical / 2) * this.camera.aspect);
+    const distance = Math.max(
+      4,
+      (b.span * 0.8) / Math.sin(Math.min(vertical, horizontal) / 2),
+    );
+    this.camera.fov = 58;
+    this.camera.far = Math.max(250, distance * 3);
+    this.camera.updateProjectionMatrix();
+    this.orbitGoal = {
+      target,
+      position: target.clone().addScaledVector(direction, distance),
+    };
+    if (immediate || this.camera.position.length() < 0.1) {
+      this.camera.position.copy(this.orbitGoal.position);
+      this.controls.target.copy(target);
+      this.orbitGoal = null;
       this.controls.update();
     }
-    this.emit();
+  }
+  setCutaway(enabled: boolean) {
+    this.cutaway = enabled;
+    this.architecture.setCutaway(this.mode === "overview" && enabled);
+  }
+  resetOverview() {
+    this.selectedRoomId = null;
+    this.setMode("overview");
   }
   toggle() {
     if (this.mode !== "walk") this.setMode("walk");
@@ -244,13 +314,18 @@ export class HomeViewer {
     this.emit();
   }
   select(index: number) {
+    if (this.mode !== "walk") {
+      this.selectedRoomId = this.tour.home.stops[index]?.roomId ?? null;
+      this.setMode("overview");
+      return;
+    }
     this.tour.select(index);
     this.setMode("walk");
     this.emit();
   }
-  step(forward: number, right: number) {
-    this.setMode("walk");
-    for (let i = 0; i < 8; i++) this.tour.move(forward, right, 0.05);
+  move(forward: number, right: number) {
+    this.touchMove = [forward, right];
+    if (forward || right) this.tour.pause();
     this.emit();
   }
   private clearMeasurements() {
@@ -306,17 +381,29 @@ export class HomeViewer {
         label.hidden = true;
         return;
       }
-      const h = this.tour.frame.heading,
-        pos = this.tour.frame.position;
-      const ahead = (p: readonly number[]) =>
-        (p[0] - pos[0]) * Math.sin(h) + (p[1] - pos[1]) * Math.cos(h);
-      const end = ahead(d.a) > ahead(d.b) ? d.a : d.b;
-      const p = vector(
-        [pos[0] + (end[0] - pos[0]) * 0.82, pos[1] + (end[1] - pos[1]) * 0.82],
-        0.18,
-      ).project(this.camera);
-      label.hidden =
-        p.z > 1 || p.z < -1 || Math.abs(p.x) > 0.9 || Math.abs(p.y) > 0.87;
+      // Anchor to the actual tape, never interpolate from the camera onto a different line.
+      const anchors = [0.5, 0.25, 0.75, 0.12, 0.88].map((t) =>
+        vector(mix(d.a, d.b, t), 0.12),
+      );
+      const anchor = anchors.find((a) => {
+        const clip = a.clone().project(this.camera);
+        if (
+          clip.z > 1 ||
+          clip.z < -1 ||
+          Math.abs(clip.x) > 0.8 ||
+          Math.abs(clip.y) > 0.75
+        )
+          return false;
+        const dir = a.clone().sub(this.camera.position),
+          length = dir.length();
+        this.raycaster.set(this.camera.position, dir.normalize());
+        this.raycaster.far = length - 0.04;
+        return !this.raycaster.intersectObject(this.architecture.group, true)
+          .length;
+      });
+      label.hidden = !anchor;
+      if (!anchor) return;
+      const p = anchor.clone().project(this.camera);
       label.style.left = `${(p.x * 0.5 + 0.5) * 100}%`;
       label.style.top = `${(-p.y * 0.5 + 0.5) * 100}%`;
     });

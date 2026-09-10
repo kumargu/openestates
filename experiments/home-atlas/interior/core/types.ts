@@ -61,6 +61,14 @@ export interface TourPolicy {
   inspectSeconds: number;
   entranceSeconds: number;
   roomPriority: Record<RoomKind, number>;
+  /** View direction and motion policies, independent of apartment identity. */
+  viewHoldSeconds: number;
+  doorwayMps: number;
+  accelerationMps2: number;
+  cornerRadiusM: number;
+  maxMovingYawError: number;
+  viewSampleM: number;
+  minViewDepthM: number;
 }
 export const DEFAULT_POLICY: Readonly<TourPolicy> = Object.freeze({
   walkMps: 0.8,
@@ -72,6 +80,13 @@ export const DEFAULT_POLICY: Readonly<TourPolicy> = Object.freeze({
   settleSeconds: 1.2,
   inspectSeconds: 10,
   entranceSeconds: 3,
+  viewHoldSeconds: 5,
+  doorwayMps: 0.4,
+  accelerationMps2: 0.45,
+  cornerRadiusM: 0.5,
+  maxMovingYawError: Math.PI / 9,
+  viewSampleM: 0.45,
+  minViewDepthM: 1.2,
   roomPriority: {
     entry: 0,
     living: 1,
@@ -94,6 +109,17 @@ export interface TourStop {
   point: Vec2;
   heading: number;
   dimensions: readonly Dimension[];
+  views: readonly ViewMoment[];
+}
+export interface ViewMoment {
+  purpose: "reveal" | "length" | "connection";
+  point: Vec2;
+  target: Vec2;
+  heading: number;
+  pitch: number;
+  holdSeconds: number;
+  /** Visible depth before a wall/polygon boundary, for review and regression checks. */
+  depthM: number;
 }
 export interface PreparedHome {
   plan: HomePlan;
@@ -121,4 +147,5 @@ export interface TourFrame {
   stopIndex: number;
   progress: number;
   showDimensions: boolean;
+  viewIndex: number;
 }

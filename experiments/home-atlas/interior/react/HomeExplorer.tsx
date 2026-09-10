@@ -1,6 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import type { HomePlan, PreparedHome, TourFrame } from "../core/types.ts";
+import type {
+  Dimension,
+  HomePlan,
+  PreparedHome,
+  TourFrame,
+} from "../core/types.ts";
 import { prepareHome } from "../core/tour.ts";
 import { bounds } from "../core/geometry.ts";
 import type { HomeViewer, ViewerState, ViewMode } from "../renderer/viewer.ts";
@@ -11,6 +16,7 @@ const initial: TourFrame = {
   phase: "entrance",
   roomId: null,
   stopIndex: 0,
+  viewIndex: 0,
   progress: 0,
   showDimensions: false,
 };
@@ -19,11 +25,13 @@ function Plan({
   frame,
   select,
   mini = false,
+  dimensions = [],
 }: {
   plan: HomePlan;
   frame: TourFrame;
   select: (id: string) => void;
   mini?: boolean;
+  dimensions?: readonly Dimension[];
 }) {
   const b = bounds(plan.rooms.flatMap((r) => [...r.polygon]));
   return (
@@ -73,6 +81,19 @@ function Plan({
           pointerEvents="none"
         />
       ))}
+      {dimensions.map((d) => (
+        <line
+          key={d.label}
+          x1={d.a[0]}
+          y1={d.a[1]}
+          x2={d.b[0]}
+          y2={d.b[1]}
+          stroke="#176b5e"
+          strokeWidth=".07"
+          strokeDasharray=".12 .07"
+          pointerEvents="none"
+        />
+      ))}
       <g
         transform={`translate(${frame.position.join(" ")}) rotate(${(-frame.heading * 180) / Math.PI})`}
         pointerEvents="none"
@@ -98,6 +119,7 @@ export function HomeExplorer({ plan }: { plan: HomePlan }) {
     [ready, setReady] = useState(false),
     [roomsOpen, setRoomsOpen] = useState(false),
     [dimensions, setDimensions] = useState(true),
+    [cutaway, setCutaway] = useState(true),
     [speed, setSpeed] = useState("1");
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +128,7 @@ export function HomeExplorer({ plan }: { plan: HomePlan }) {
     setHome(null);
     setSpeed("1");
     setDimensions(true);
+    setCutaway(true);
     const timer = setTimeout(async () => {
       try {
         const prepared = prepareHome(plan);
@@ -130,7 +153,9 @@ export function HomeExplorer({ plan }: { plan: HomePlan }) {
     };
   }, [plan]);
   const f = state.frame,
-    room = plan.rooms.find((r) => r.id === f.roomId),
+    room = plan.rooms.find(
+      (r) => r.id === (state.mode === "walk" ? f.roomId : state.selectedRoomId),
+    ),
     stop = home?.stops[f.stopIndex];
   const select = (id: string) => {
     const i = home?.stops.findIndex((s) => s.roomId === id) ?? -1;
@@ -154,7 +179,11 @@ export function HomeExplorer({ plan }: { plan: HomePlan }) {
             ? "Walking to " +
               plan.rooms.find((r) => r.id === stop?.roomId)?.name
             : f.phase === "inspecting"
-              ? "Take a moment. Look around."
+              ? stop?.views[f.viewIndex]?.purpose === "connection"
+                ? "Back toward the doorway"
+                : stop?.views[f.viewIndex]?.purpose === "length"
+                  ? "The length of the room"
+                  : "Take a moment. Look around."
               : f.phase === "entrance"
                 ? "Your tour begins at the front door"
                 : "Arriving"
@@ -177,7 +206,10 @@ export function HomeExplorer({ plan }: { plan: HomePlan }) {
           About this plan ↗
         </button>
       </header>
-      <section className="he-stage" aria-label="Interactive apartment tour">
+      <section
+        className={`he-stage he-${state.mode}`}
+        aria-label="Interactive apartment tour"
+      >
         <div
           ref={host}
           tabIndex={0}
@@ -242,8 +274,11 @@ export function HomeExplorer({ plan }: { plan: HomePlan }) {
         {error && (
           <div className="he-error" role="alert">
             <strong>The guided view couldn’t open.</strong>
-            <p>{error}</p>
-            <p>The floor plan remains available. No route has been invented.</p>
+            <p>The floor plan remains available.</p>
+            <details>
+              <summary>Details</summary>
+              {error}
+            </details>
           </div>
         )}
         <div className="he-caption">
@@ -251,31 +286,46 @@ export function HomeExplorer({ plan }: { plan: HomePlan }) {
           <h1>
             {state.mode === "walk"
               ? (room?.name ?? "Welcome home")
-              : "A sense of space."}
+              : (room?.name ?? "Your home, room by room")}
           </h1>
           <p>
             {state.mode === "walk"
               ? room?.sourceDimensions
                 ? `On the source plan · ${room.sourceDimensions}`
                 : "Step inside, at your own pace."
-              : "Enter at the front door. Discover every room."}
+              : (room?.sourceDimensions ?? "")}
           </p>
-          {state.mode === "walk" && room && dimensions && (
-            <div className="he-room-dimensions">
-              {home?.stops
-                .find((s) => s.roomId === room.id)
-                ?.dimensions.map((d) => (
-                  <span key={d.label}>
-                    {d.label} <strong>≈ {d.metres.toFixed(2)} m</strong>
-                  </span>
-                ))}
-              <small>Approximate model spans</small>
-            </div>
-          )}
+          {state.mode === "walk" &&
+            room &&
+            dimensions &&
+            (f.showDimensions || !state.playing) && (
+              <div className="he-room-dimensions">
+                {home?.stops
+                  .find((s) => s.roomId === room.id)
+                  ?.dimensions.map((d) => (
+                    <span key={d.label}>
+                      {d.label} <strong>≈ {d.metres.toFixed(2)} m</strong>
+                    </span>
+                  ))}
+                <small>Approximate model spans</small>
+              </div>
+            )}
         </div>
         {state.mode !== "plan" && (
           <div className="he-map">
-            <Plan plan={plan} frame={f} select={select} mini />
+            <Plan
+              plan={plan}
+              frame={
+                state.mode === "walk"
+                  ? f
+                  : { ...f, roomId: state.selectedRoomId ?? null }
+              }
+              select={select}
+              mini
+              dimensions={
+                dimensions && f.showDimensions ? stop?.dimensions : []
+              }
+            />
             <span>
               {state.mode === "walk" ? "YOU ARE HERE" : "THE FLOOR PLAN"}
             </span>
@@ -285,26 +335,74 @@ export function HomeExplorer({ plan }: { plan: HomePlan }) {
           <div className="he-walk-pad" aria-label="Walk manually">
             <button
               aria-label="Walk forward"
-              onClick={() => viewer.current?.step(1, 0)}
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                viewer.current?.move(1, 0);
+              }}
+              onPointerUp={() => viewer.current?.move(0, 0)}
+              onPointerCancel={() => viewer.current?.move(0, 0)}
+              onLostPointerCapture={() => viewer.current?.move(0, 0)}
+              onKeyDown={(e) => {
+                if (e.key === " " || e.key === "Enter")
+                  viewer.current?.move(1, 0);
+              }}
+              onKeyUp={() => viewer.current?.move(0, 0)}
+              onBlur={() => viewer.current?.move(0, 0)}
             >
               ↑
             </button>
             <div>
               <button
                 aria-label="Step left"
-                onClick={() => viewer.current?.step(0, -1)}
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  viewer.current?.move(0, -1);
+                }}
+                onPointerUp={() => viewer.current?.move(0, 0)}
+                onPointerCancel={() => viewer.current?.move(0, 0)}
+                onLostPointerCapture={() => viewer.current?.move(0, 0)}
+                onKeyDown={(e) => {
+                  if (e.key === " " || e.key === "Enter")
+                    viewer.current?.move(0, -1);
+                }}
+                onKeyUp={() => viewer.current?.move(0, 0)}
+                onBlur={() => viewer.current?.move(0, 0)}
               >
                 ←
               </button>
               <button
                 aria-label="Walk backward"
-                onClick={() => viewer.current?.step(-1, 0)}
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  viewer.current?.move(-1, 0);
+                }}
+                onPointerUp={() => viewer.current?.move(0, 0)}
+                onPointerCancel={() => viewer.current?.move(0, 0)}
+                onLostPointerCapture={() => viewer.current?.move(0, 0)}
+                onKeyDown={(e) => {
+                  if (e.key === " " || e.key === "Enter")
+                    viewer.current?.move(-1, 0);
+                }}
+                onKeyUp={() => viewer.current?.move(0, 0)}
+                onBlur={() => viewer.current?.move(0, 0)}
               >
                 ↓
               </button>
               <button
                 aria-label="Step right"
-                onClick={() => viewer.current?.step(0, 1)}
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  viewer.current?.move(0, 1);
+                }}
+                onPointerUp={() => viewer.current?.move(0, 0)}
+                onPointerCancel={() => viewer.current?.move(0, 0)}
+                onLostPointerCapture={() => viewer.current?.move(0, 0)}
+                onKeyDown={(e) => {
+                  if (e.key === " " || e.key === "Enter")
+                    viewer.current?.move(0, 1);
+                }}
+                onKeyUp={() => viewer.current?.move(0, 0)}
+                onBlur={() => viewer.current?.move(0, 0)}
               >
                 →
               </button>
@@ -355,6 +453,24 @@ export function HomeExplorer({ plan }: { plan: HomePlan }) {
               </button>
             )}
             <div className="he-control-divider" />
+            {state.mode === "overview" && (
+              <>
+                <button
+                  aria-pressed={cutaway}
+                  onClick={() => {
+                    setCutaway(!cutaway);
+                    viewer.current?.setCutaway(!cutaway);
+                  }}
+                >
+                  Cutaway
+                </button>
+                {state.selectedRoomId && (
+                  <button onClick={() => viewer.current?.resetOverview()}>
+                    Whole home
+                  </button>
+                )}
+              </>
+            )}
             <label className="he-speed">
               Pace{" "}
               <select
@@ -429,8 +545,8 @@ export function HomeExplorer({ plan }: { plan: HomePlan }) {
             ? "This sample is manually traced from a brochure and has not been architecturally validated."
             : ""}{" "}
           Printed dimensions and approximate model spans are shown separately.
-          For irregular rooms, the two lines measure spans through the
-          viewpoint, not a bounding rectangle.
+          For irregular rooms, the two lines measure spans through a central
+          reference point. They remain fixed as you move around.
         </p>
         <p>
           Finishes, light and unverified ceiling heights are illustrative. No

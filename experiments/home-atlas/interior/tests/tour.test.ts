@@ -3,7 +3,15 @@ import assert from "node:assert/strict";
 import { prepareHome } from "../core/tour.ts";
 import { HomeTour } from "../core/playback.ts";
 import { Navigator } from "../core/navigation.ts";
-import { contains, distance, mix, roomDimensions } from "../core/geometry.ts";
+import {
+  angleDelta,
+  contains,
+  distance,
+  heading,
+  mix,
+  roomDimensions,
+} from "../core/geometry.ts";
+import { rayDepth } from "../core/director.ts";
 import type { Vec2 } from "../core/types.ts";
 import { waterford } from "../fixtures/waterford.ts";
 import { configuration } from "../fixtures/configurations.ts";
@@ -143,7 +151,131 @@ test("reduced motion reaches every stop without animated travel", () => {
   tour.reducedMotion = true;
   tour.play();
   let ticks = 0;
-  while (tour.playing && ticks++ < 10000) tour.tick(1 / 60);
+  const poses = [
+    h.entrance,
+    ...h.stops.flatMap((s) => s.views.map((v) => v.point)),
+  ];
+  while (tour.playing && ticks++ < 10000) {
+    tour.tick(1 / 60);
+    assert.ok(
+      poses.some((p) => distance(p, tour.frame.position) < 0.001),
+      "Reduced motion must not animate intermediate travel",
+    );
+  }
   assert.equal(tour.frame.phase, "complete");
-  assert.ok(ticks / 60 < 40);
+  const expected =
+    h.policy.entranceSeconds +
+    h.stops
+      .flatMap((s) => s.views)
+      .reduce((n, v) => n + v.holdSeconds + h.policy.settleSeconds, 0);
+  assert.ok(
+    Math.abs(ticks / 60 - expected) < 1,
+    "Only planned holds and settling should consume time",
+  );
+});
+
+test("full apartment: every view is held still, turns precede movement, and all views remain reachable", () => {
+  const h = prepareHome(waterford),
+    tour = new HomeTour(h);
+  tour.play();
+  const holds = new Map<string, number>();
+  let ticks = 0;
+  while (tour.playing && ticks++ < 60 * 900) {
+    const before = { ...tour.frame };
+    const f = tour.tick(1 / 60);
+    assert.ok(
+      tour.navigator.clear(before.position, f.position),
+      "Every frame remains collision-free",
+    );
+    const moved = distance(before.position, f.position);
+    assert.ok(
+      moved <= h.policy.walkMps / 60 + 0.006,
+      "No hidden position jump",
+    );
+    if (moved > 0.00001)
+      assert.ok(
+        Math.abs(angleDelta(f.heading, heading(before.position, f.position))) <=
+          h.policy.maxMovingYawError + 0.05,
+        "No sideways travel into doorways",
+      );
+    if (before.phase === "inspecting" && f.phase === "inspecting") {
+      assert.equal(moved, 0);
+      assert.equal(before.heading, f.heading);
+      const key = f.stopIndex + ":" + f.viewIndex;
+      holds.set(key, (holds.get(key) ?? 0) + 1 / 60);
+    }
+  }
+  assert.equal(tour.frame.phase, "complete");
+  h.stops.forEach((s, i) =>
+    s.views.forEach((v, j) =>
+      assert.ok(
+        (holds.get(i + ":" + j) ?? 0) >= v.holdSeconds - 0.08,
+        `${s.roomId}/${v.purpose} got its viewing time`,
+      ),
+    ),
+  );
+});
+
+test("view director looks into room depth; narrow balconies are viewed along their length", () => {
+  for (const plan of [waterford, configuration(1, 0.57)]) {
+    const h = prepareHome(plan);
+    for (const s of h.stops) {
+      const room = plan.rooms.find((r) => r.id === s.roomId)!;
+      for (const v of s.views) {
+        assert.ok(contains(v.target, room.polygon));
+        assert.ok(
+          v.depthM >= h.policy.minViewDepthM,
+          `${room.name} ${v.purpose}: ${v.depthM}m`,
+        );
+      }
+      if (room.kind === "balcony")
+        assert.ok(
+          s.views.some(
+            (v) =>
+              rayDepth(room, v.point, v.heading) >
+              s.dimensions[0].metres * 0.65,
+          ),
+          "Show the usable balcony length",
+        );
+    }
+  }
+});
+
+test("looking around during a pause resumes through a bounded turn, and faster pace preserves inspection duration", () => {
+  const h = prepareHome(configuration(0)),
+    tour = new HomeTour(h);
+  tour.play();
+  let ticks = 0;
+  while (tour.frame.phase !== "inspecting" && ticks++ < 10000)
+    tour.tick(1 / 60);
+  tour.look(1.2, 0.2);
+  const pose = { ...tour.frame };
+  tour.play();
+  tour.tick(1 / 60);
+  assert.ok(
+    Math.abs(angleDelta(pose.heading, tour.frame.heading)) <=
+      h.policy.turnRadiansPerSecond / 60 + 0.001,
+  );
+  assert.deepEqual(tour.frame.position, pose.position);
+  for (const rate of [0.65, 1.25]) {
+    const t = new HomeTour(h);
+    t.rate = rate;
+    t.play();
+    let hold = 0,
+      n = 0;
+    while (t.playing && n++ < 20000) {
+      const before = t.frame.phase;
+      t.tick(1 / 60);
+      if (before === "inspecting" && t.frame.phase === "inspecting")
+        hold += 1 / 60;
+    }
+    assert.ok(
+      Math.abs(
+        hold -
+          h.stops
+            .flatMap((s) => s.views)
+            .reduce((a, v) => a + v.holdSeconds, 0),
+      ) < 0.15,
+    );
+  }
 });

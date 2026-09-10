@@ -18,6 +18,12 @@ export function buildArchitecture(plan: HomePlan) {
     ceiling = material(theme.ceiling),
     frame = material(theme.frame, 0.4),
     trim = material(theme.skirting);
+  const wallMaterials: THREE.Material[] = [plaster, frame, trim];
+  const floors = new Map<
+    string,
+    { material: THREE.MeshStandardMaterial; color: THREE.Color }
+  >();
+  const cut = new THREE.Plane(new THREE.Vector3(0, -1, 0), 1.05);
   function box(
     parent: THREE.Object3D,
     p: [number, number, number],
@@ -70,6 +76,7 @@ export function buildArchitecture(plan: HomePlan) {
       0.66,
     );
     mat.map = texture;
+    floors.set(room.id, { material: mat, color: mat.color.clone() });
     const floor = new THREE.Mesh(geometry, mat);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
@@ -134,6 +141,7 @@ export function buildArchitecture(plan: HomePlan) {
             side: THREE.DoubleSide,
           });
           materials.push(glass);
+          wallMaterials.push(glass);
           panel(a, b, lo + 0.03, hi - 0.03, glass, 0.014);
           panel(a, b, lo, lo + 0.04, frame, 0.22);
           panel(
@@ -145,6 +153,10 @@ export function buildArchitecture(plan: HomePlan) {
             0.08,
           );
         }
+      }
+      if (kind !== "window" && !openPlan) {
+        // A thin floor-level threshold gives an honest scale/transition cue without inventing door swings.
+        panel(a, b, 0.002, 0.014, trim, plan.architecture.wallM + 0.07);
       }
       for (const [s, t] of [
         [0, a],
@@ -160,6 +172,17 @@ export function buildArchitecture(plan: HomePlan) {
   return {
     group,
     ceilings,
+    setCutaway: (enabled: boolean) =>
+      wallMaterials.forEach((m) => {
+        m.clippingPlanes = enabled ? [cut] : [];
+        m.clipShadows = true;
+        m.needsUpdate = true;
+      }),
+    selectRoom: (id: string | null) =>
+      floors.forEach((f, key) => {
+        f.material.color.copy(f.color);
+        if (key === id) f.material.color.lerp(new THREE.Color("#82b6a5"), 0.35);
+      }),
     dispose: () => {
       const geometries = new Set<THREE.BufferGeometry>();
       group.traverse((o) => {

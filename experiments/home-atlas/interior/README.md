@@ -62,13 +62,17 @@ An explicit doorway graph determines the visiting order. Configurable room-kind 
 
 A clearance-aware navigation grid finds a continuous path through wall openings. Line-of-sight simplification removes unnecessary corners only where the full segment remains walkable. A bounded grid fails explicitly if the floor plan is too large or a doorway cannot be traversed. There is no fallback teleport on routing errors.
 
-The clock progresses through entrance, walking, settling and inspecting. Each room receives a ten-second inspection **after arrival and settling**, with a gentle quarter turn to reveal breadth. Pause stops translation, rotation and inspection time together. Manual movement collision-checks every step; resuming replans from the actual position. Room selection also walks from the actual position.
+`core/director.ts` evaluates candidate positions against the room polygon and entrance opening. It scores three viewing rays for usable visible depth, prefers an entrance-side reveal, then plans a view along the room's length. A return view toward the doorway is included only when it has sufficient depth. Views are independent of measurement axes: no unconditional 90-degree inspection sweep remains. Concave geometry clips visibility rays to the connected room interval.
+
+The clock progresses through entrance, walking, settling and inspecting for each compiled view. Multi-view rooms get five seconds **stationary after each arrival and turn**; rooms with a single suitable view get ten seconds. Walking pace does not reduce these holds. Collision-checked rounded corners replace sharp turns where space permits. In tight corners the camera turns before translating; motion cannot continue with more than the configured heading error. Acceleration and doorway speed are independently configured. Pause freezes the whole sequence. Manual movement resumes from the actual position; manual looking resumes through a bounded turn rather than snapping back to the automatic pose.
+
+Dollhouse selection highlights and frames the selected room without entering the tour. Its cutaway exposes the layout; Whole home restores the complete view. Inside mode restores full walls. Framing accounts for the viewport aspect ratio. Touch movement is continuous while a direction button is held, rather than jumping a fixed distance on each click.
 
 Default settings live in `DEFAULT_POLICY`: 0.8 m/s walking, 1.6 m eye height, 0.18 m clearance plus half the wall thickness, 0.13 m grid, 45°/s turning, and a 120,000-node budget. They are named policy values, not apartment-specific camera poses. Long frames are clamped so returning to a hidden tab cannot skip rooms. Hidden tabs pause.
 
 Reduced-motion preference disables animated travel and room panning while retaining explicit stops and inspection time. This intentional nonanimated transition is separate from routing failure; all routes must still validate.
 
-Measurements are polygon-clipped orthogonal spans through the viewpoint, aligned to a room edge. For concave rooms they describe the connected span, not a bounding box or certified architectural length. Both dimensions remain readable in the room caption even when a floor line is outside the camera view.
+Measurements are polygon-clipped orthogonal spans through a fixed central reference point, aligned to a room edge. They do not move when the camera changes viewpoints. For concave rooms they describe the connected span, not a bounding box or certified architectural length. Labels anchor to their actual tape and are hidden when occluded. The mini plan repeats the tape geometry during inspection, and both values remain in the room caption when a floor tape is outside the camera view. Printed source dimensions remain separate.
 
 ## Evidence and visual treatment
 
@@ -96,7 +100,7 @@ At rest the viewport dominates, with a compact floor map and one primary entry a
 
 ## Validation and remaining integration gates
 
-The deterministic tests cover all 13 Waterford spaces, attached-room route traversal, multiple bedroom counts, rotated and concave geometry, blocked/disconnected plans, grid limits, pause and manual resume, collision-safe playback at 30/60 fps, and reduced motion.
+The ten deterministic tests cover all 13 Waterford spaces, attached-room route traversal, multiple bedroom counts, rotated and concave geometry, blocked/disconnected plans, grid limits, pause and manual resume, collision-safe playback at 30/60 fps, and reduced motion. The full-apartment regression advances every frame and verifies no sideways translation, no camera jumps, collision clearance, and the complete stationary hold at every view. Director checks verify forward room depth and usable length views on both balconies. See `REVIEW.md` for evidence limits.
 
 Type checking and the standalone production build are required alongside those tests. Formatting is checked with Prettier. The Site host is built separately from the portable package.
 

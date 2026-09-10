@@ -14,6 +14,85 @@
   flex-direction: column;
   overflow: hidden;
 }
+
+/* Keep the room readable while moving; measurements stay secondary to the space. */
+.he-root .he-caption {
+  max-width: min(430px, 48vw);
+}
+.he-root .he-caption h1 {
+  font-size: clamp(26px, 2.8vw, 40px);
+}
+.he-root .he-caption p,
+.he-root .he-segments button,
+.he-root .he-room-list button,
+.he-root .he-speed select,
+.he-root .he-dimensions {
+  font-size: 14px;
+}
+.he-root .he-caption small,
+.he-root .he-speed,
+.he-root .he-hint,
+.he-root .he-footer,
+.he-root .he-room-dimensions span,
+.he-root .he-room-dimensions small,
+.he-root .he-measure {
+  font-size: 12px;
+}
+.he-root .he-walk-pad button {
+  min-width: 44px;
+  min-height: 44px;
+  touch-action: none;
+}
+.he-root .he-controls button {
+  min-height: 44px;
+}
+.he-root .he-caption:empty {
+  display: none;
+}
+.he-root .he-overview .he-caption {
+  bottom: 125px;
+}
+@media (max-width: 700px) {
+  .he-root .he-header {
+    height: 62px;
+  }
+  .he-root .he-caption {
+    max-width: calc(100% - 125px);
+    bottom: 162px;
+    left: 16px;
+  }
+  .he-root .he-caption h1 {
+    font-size: 26px;
+  }
+  .he-root .he-caption p {
+    font-size: 12px;
+  }
+  .he-root .he-room-dimensions {
+    gap: 4px;
+  }
+  .he-root .he-room-dimensions span {
+    padding: 4px;
+  }
+  .he-root .he-hint {
+    max-width: 280px;
+    text-align: center;
+  }
+  .he-root .he-controls {
+    max-width: 100%;
+  }
+  .he-root .he-footer {
+    height: auto;
+    min-height: 36px;
+    font-size: 11px;
+  }
+  .he-root .he-footer span:last-child {
+    display: none;
+  }
+  .he-root .he-walk-pad {
+    bottom: 325px;
+    right: 12px;
+  }
+}
 .he-root * {
   box-sizing: border-box;
 }
