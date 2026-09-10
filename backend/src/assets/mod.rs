@@ -1,16 +1,15 @@
-//! Asset graph contracts for crawling, enrichment, KG views, and serving bundles.
+//! Asset graph contracts for crawling, enrichment, and society gold.
 //!
 //! An asset is a durable data product, not a Python or Rust function. Crawler
 //! and enrichment code can change, but the asset IDs, partitions, manifests,
 //! and current pointers are the stable contract.
 //!
-//! Storage contract: raw, silver, gold, and serving tables are Parquet part
-//! files. JSON is reserved for small control-plane files such as manifests,
-//! schema descriptors, trust policy, and current pointers.
+//! Storage contract: raw, silver, and gold tables are Parquet part files. JSON
+//! is reserved for small control-plane files such as manifests, schema
+//! descriptors, and current pointers. The catalog compiles gold into serving.
 
 pub mod approach_road;
 pub mod canonical_nodes;
-pub mod catalog_releases;
 pub mod compaction;
 pub mod environment;
 pub mod executor;
@@ -18,7 +17,7 @@ pub mod fan_in;
 pub mod geometry;
 pub mod google;
 pub mod home_state;
-pub mod kg_view;
+pub mod locality;
 pub mod materialization;
 pub mod media;
 pub mod osm_access;
@@ -26,7 +25,6 @@ pub mod osm_power;
 pub mod paths;
 pub mod planner;
 pub mod project_enrichment;
-pub mod promotion;
 pub mod reddit;
 pub mod registry;
 pub mod rera;
@@ -36,6 +34,7 @@ pub mod rera_plans;
 pub mod rera_source_records;
 pub mod run_manifest;
 pub mod skill_facts;
+pub mod society_gold;
 pub mod source_inputs;
 pub mod source_provider;
 mod source_resolution;
@@ -48,16 +47,9 @@ pub use approach_road::{
     ApproachRoadGraphMaterializer, ApproachRoadGraphRows, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
 };
 pub use canonical_nodes::{read_canonical_node_rows, CanonicalNodeRows, CanonicalNodesError};
-pub use catalog_releases::{
-    CatalogEnvironment, CatalogMembership, CatalogMembershipKind, CatalogRelease,
-    CatalogReleaseChanges, CatalogReleaseError, CatalogReleaseId, CatalogReleaseStore,
-    CatalogTombstone, CatalogValidationStatus, DerivedCatalogAssets, EnvironmentPointer,
-    PinnedMaterialization, PromoteCatalogReleaseOptions, QualityGateResult, QualityGateStatus,
-    QualityReport,
-};
 pub use compaction::{
-    CurrentProjectFactsError, CurrentProjectFactsMaterialization, CurrentProjectFactsMaterializer,
-    CURRENT_PROJECT_FACTS_ASSET_ID,
+    SocietyFactSnapshotError, SocietyFactSnapshotMaterialization, SocietyFactSnapshotMaterializer,
+    SOCIETY_FACT_SNAPSHOT_ASSET_ID,
 };
 pub use environment::{
     society_groundwater_potential_facts_input, EnvironmentGroundwaterPotentialInput,
@@ -84,11 +76,9 @@ pub use google::{
     GooglePlacesWeeklyInput, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
 };
 pub use home_state::{home_state_signals_input, HOME_STATE_SIGNALS_ASSET_ID};
-pub use kg_view::{
-    load_kg_view_records, KgSocietyViewMaterialization, KgSocietyViewMaterializeError,
-    KgSocietyViewMaterializer, KgViewArtifact, KgViewArtifactKind, KgViewEdgeRecord,
-    KgViewEntityRecord, KgViewFactAnnotationRecord, KgViewFactRecord, KgViewManifest,
-    KgViewRecords, KG_SOCIETY_VIEW_ASSET_ID,
+pub use locality::{
+    osm_locality_boundary_facts_input, LocalityAssetError, OsmLocalityBoundariesInput,
+    OsmLocalityBoundaryInput, OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
 };
 pub use materialization::AssetMaterializationStore;
 pub use media::{
@@ -115,10 +105,6 @@ pub use project_enrichment::{
     ExternalListingObservationRecord, ExternalListingsWeeklyInput, ObservationSnapshotManifest,
     ProjectEnrichmentAssetError, ProjectEnrichmentMaterializer, BUILDER_RERA_AGGREGATES_ASSET_ID,
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
-};
-pub use promotion::{
-    promote_search_serving_release, validate_search_serving_convergence,
-    validate_search_serving_lineage, ServingReleasePromotion, ServingReleasePromotionError,
 };
 pub use reddit::{
     RedditThreadSnapshotManifest, RedditThreadSnapshotMaterialization,
@@ -171,6 +157,13 @@ pub use skill_facts::{
     SkillFactManifest, SkillFactMaterialization, SkillFactMaterializeError, SkillFactMaterializer,
     SkillFactRecord, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
     REDDIT_RESIDENT_FACTS_ASSET_ID,
+};
+pub use society_gold::{
+    load_society_gold_records, SocietyGoldArtifact, SocietyGoldArtifactKind, SocietyGoldEdgeRecord,
+    SocietyGoldEntityRecord, SocietyGoldFactAnnotationRecord, SocietyGoldFactRecord,
+    SocietyGoldManifest, SocietyGoldRecords, SocietyGoldSnapshotMaterialization,
+    SocietyGoldSnapshotMaterializeError, SocietyGoldSnapshotMaterializer,
+    SOCIETY_GOLD_SNAPSHOT_ASSET_ID,
 };
 pub use source_inputs::{
     AssetSourceInputs, RedditThreadsDailyInput, SkillFactsInput, SourceInputCollectionPlan,

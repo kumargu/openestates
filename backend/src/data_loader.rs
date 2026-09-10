@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, OnceLock};
 
 use arc_swap::ArcSwap;
@@ -28,21 +28,13 @@ use crate::state::{
     search_log_queue_capacity_from_env, spawn_search_log_worker, AppState, SearchResponseCache,
     SearchRuntimeSnapshot,
 };
-use crate::{
-    assets::{CatalogEnvironment, CatalogReleaseId, CatalogReleaseStore, MaterializationId},
-    lake::LakeStoreLocation,
-    serving::ServingBundleLoadError,
-};
-
-pub const SERVING_ENV_ENV: &str = "OPENESTATES_SERVING_ENV";
-pub const SERVING_RELEASE_ID_ENV: &str = "OPENESTATES_SERVING_RELEASE_ID";
-pub const SERVING_MATERIALIZATION_ID_ENV: &str = "OPENESTATES_SERVING_MATERIALIZATION_ID";
+use crate::{catalog::CatalogStore, lake::LakeStoreLocation, serving::ServingBundleLoadError};
 
 pub type RuntimeServingSnapshot = SearchRuntimeSnapshot;
 
 /// Load all data and construct the full AppState.
 ///
-/// The promoted serving bundle is the canonical request-path data source.
+/// The active catalog serving bundle is the canonical request-path data source.
 /// Legacy `data/knowledge` JSON is intentionally not loaded into runtime state.
 pub async fn load_app_state(project_root: &Path) -> AppState {
     load_app_state_with_execution(project_root, ExecutionLanes::current()).await
@@ -52,12 +44,9 @@ pub async fn load_app_state_with_execution(
     project_root: &Path,
     execution: ExecutionLanes,
 ) -> AppState {
-    let serving_bundle = load_serving_bundle(project_root)
+    let bundle = load_serving_bundle(project_root)
         .await
         .unwrap_or_else(|err| panic!("Serving bundle startup contract failed: {err}"));
-    let bundle = serving_bundle
-        .as_ref()
-        .unwrap_or_else(|| panic!("No promoted serving bundle found. Run the asset DAG first."));
 
     let graph = KnowledgeGraph::new();
     println!("Runtime knowledge graph starts empty; serving bundle is the only startup corpus");
@@ -98,18 +87,21 @@ pub async fn load_app_state_with_execution(
     let map_overlays = crate::routes::map_overlays::load_city_map_overlays(project_root);
     let knowledge = Arc::new(RwLock::new(graph));
     let (search_event_tx, search_event_rx) = mpsc::channel(search_log_queue_capacity_from_env());
-    spawn_search_log_worker(&execution, knowledge.clone(), search_event_rx);
+    let search_event_lake = LakeStoreLocation::from_env(project_root)
+        .and_then(|location| location.open())
+        .unwrap_or_else(|err| panic!("Search event lake startup contract failed: {err}"));
+    spawn_search_log_worker(&execution, search_event_lake, search_event_rx);
 
     AppState {
         execution,
         search_runtime: ArcSwap::from_pointee(search_runtime),
         search_cache: SearchResponseCache::from_env(),
+        search_revision_caches: crate::state::SearchRevisionCaches::from_config(),
         property_catalog_cache: tokio::sync::Mutex::new(None),
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),
         properties: RwLock::new(properties),
         search_index: RwLock::new(search_index),
-        serving_bundle: RwLock::new(serving_bundle),
         recommendation_cache: RwLock::new(std::collections::HashMap::new()),
         areas: RwLock::new(areas),
         societies: RwLock::new(societies),
@@ -120,7 +112,6 @@ pub async fn load_app_state_with_execution(
         process_started_at: chrono::Utc::now(),
         interest_counter: AtomicU64::new(0),
         interest_write_lock: tokio::sync::Mutex::new(()),
-        asset_run_active: AtomicBool::new(false),
     }
 }
 
@@ -135,9 +126,7 @@ pub fn runtime_snapshot_from_serving_bundle(
     SearchRuntimeSnapshot::new(bundle, properties, societies, areas, search_index)
 }
 
-pub async fn load_serving_bundle(
-    project_root: &Path,
-) -> Result<Option<Arc<LoadedServingBundle>>, String> {
+pub async fn load_serving_bundle(project_root: &Path) -> Result<Arc<LoadedServingBundle>, String> {
     let lake_location = LakeStoreLocation::from_env(project_root).map_err(|err| err.to_string())?;
     load_serving_bundle_from_location(project_root, lake_location).await
 }
@@ -145,7 +134,7 @@ pub async fn load_serving_bundle(
 async fn load_serving_bundle_from_location(
     project_root: &Path,
     lake_location: LakeStoreLocation,
-) -> Result<Option<Arc<LoadedServingBundle>>, String> {
+) -> Result<Arc<LoadedServingBundle>, String> {
     let cache_root = project_root.join("data").join("cache").join("serving");
     let lake = lake_location
         .open()
@@ -153,18 +142,15 @@ async fn load_serving_bundle_from_location(
 
     let loader = ServingBundleLoader::new(lake, cache_root);
     match load_selected_search_bundle(&loader).await {
-        Ok(Some(bundle)) => {
+        Ok(bundle) => {
             println!(
                 "Loaded serving bundle {} with {} entities and {} facts",
                 bundle.manifest.bundle_version,
                 bundle.manifest.entity_count,
                 bundle.manifest.fact_count
             );
-            Ok(Some(Arc::new(bundle)))
+            Ok(Arc::new(bundle))
         }
-        Ok(None) => Err(format!(
-            "selected catalog release points to no serving bundle at {lake_location}"
-        )),
         Err(err) => Err(format!(
             "failed to load promoted search serving bundle from {lake_location}: {err}"
         )),
@@ -173,53 +159,19 @@ async fn load_serving_bundle_from_location(
 
 async fn load_selected_search_bundle(
     loader: &ServingBundleLoader,
-) -> Result<Option<LoadedServingBundle>, ServingBundleLoadError> {
-    if let Ok(value) = std::env::var(SERVING_MATERIALIZATION_ID_ENV) {
-        let materialization_id = value.parse::<MaterializationId>().map_err(|err| {
-            ServingBundleLoadError::Configuration(format!(
-                "{SERVING_MATERIALIZATION_ID_ENV} must be a materialization UUID: {err}"
-            ))
-        })?;
-        return loader
-            .load_search_bundle_by_materialization(&materialization_id)
-            .await;
-    }
-    let explicit_release = std::env::var(SERVING_RELEASE_ID_ENV).ok();
-    let explicit_environment = std::env::var(SERVING_ENV_ENV).ok();
-
-    let release_id = match explicit_release {
-        Some(value) => value.parse::<CatalogReleaseId>().map_err(|err| {
-            ServingBundleLoadError::Configuration(format!(
-                "{SERVING_RELEASE_ID_ENV} must be a catalog release UUID: {err}"
-            ))
-        })?,
-        None => {
-            let environment = explicit_environment
-                .as_deref()
-                .unwrap_or("dev")
-                .parse::<CatalogEnvironment>()
-                .map_err(ServingBundleLoadError::Configuration)?;
-            let store = CatalogReleaseStore::new(loader.lake().clone());
-            let pointer = store
-                .current_pointer(environment)
-                .await
-                .map_err(ServingBundleLoadError::Lake)?
-                .ok_or_else(|| {
-                    ServingBundleLoadError::Configuration(format!(
-                        "{SERVING_ENV_ENV}={environment} has no catalog release pointer"
-                    ))
-                })?;
-            pointer.release_id
-        }
-    };
-
-    let store = CatalogReleaseStore::new(loader.lake().clone());
-    let release = store
-        .release(&release_id)
+) -> Result<LoadedServingBundle, ServingBundleLoadError> {
+    let pointer = CatalogStore::new(loader.lake().clone())
+        .pointer()
         .await
-        .map_err(ServingBundleLoadError::Lake)?;
+        .map_err(|error| ServingBundleLoadError::Configuration(error.to_string()))?
+        .ok_or_else(|| {
+            ServingBundleLoadError::Configuration(
+                "the dev catalog has no serving bundle; run openestates-catalog rebuild"
+                    .to_string(),
+            )
+        })?;
     loader
-        .load_search_bundle_by_materialization(&release.derived_assets.serving_materialization_id)
+        .load_search_bundle(&pointer.current.bundle_version)
         .await
 }
 
@@ -415,7 +367,7 @@ fn representative_property_from_serving_society(
         description_summary: latest_text(Some(rows), "summary")
             .unwrap_or_else(|| format!("{society_name} in {area}")),
         transparency_tags,
-        source_reference: format!("search_serving_bundle:{bundle_version}"),
+        source_reference: format!("catalog_bundle:{bundle_version}"),
     }
 }
 
@@ -626,7 +578,7 @@ fn property_from_serving_entity(
         hero_image: latest_text(rows, "hero_image").unwrap_or_default(),
         description_summary,
         transparency_tags,
-        source_reference: format!("search_serving_bundle:{bundle_version}"),
+        source_reference: format!("catalog_bundle:{bundle_version}"),
     }
 }
 
@@ -991,6 +943,8 @@ fn resolution_policies() -> &'static ResolutionPoliciesFile {
             never_default_fact_prefixes: Vec::new(),
             source_caps: HashMap::new(),
             coordinate_sources: HashMap::new(),
+            spatial_topology: Default::default(),
+            market_locality: Default::default(),
             overrides: HashMap::new(),
         })
     })
@@ -1028,7 +982,9 @@ fn latest_fact<'a>(
             ) {
                 std::cmp::Ordering::Less
             } else {
-                left.learned_at.cmp(&right.learned_at)
+                right
+                    .stable_selection_key()
+                    .cmp(&left.stable_selection_key())
             }
         })
 }
@@ -1777,7 +1733,7 @@ mod tests {
             Ok(_) => panic!("explicit lake without a promoted bundle should fail"),
             Err(err) => err,
         };
-        assert!(err.contains("OPENESTATES_SERVING_ENV=dev has no catalog release pointer"));
+        assert!(err.contains("the dev catalog has no serving bundle"));
 
         assert!(
             load_serving_bundle_from_location(root.path(), lake_location)
@@ -1794,6 +1750,7 @@ mod tests {
                 entity_type: "property".to_string(),
                 name: "3 BHK in Prestige Lavender Fields".to_string(),
                 root_source: Some("discovered".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
             ServingEntityRecord {
@@ -1801,6 +1758,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Prestige Lavender Fields".to_string(),
                 root_source: Some("rera".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
         ];
@@ -1883,7 +1841,7 @@ mod tests {
         assert_eq!(property.price_max, None);
         assert_eq!(property.carpet_area_sqft, 2_000);
         assert_eq!(property.possession_status, "Completed");
-        assert_eq!(property.source_reference, "search_serving_bundle:bundle-v1");
+        assert_eq!(property.source_reference, "catalog_bundle:bundle-v1");
 
         let society = society_from_serving_entity(&entities[1], &fact_index, &[]);
         assert_eq!(society.id, "soc-prestige-lavender-fields");
@@ -1897,6 +1855,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Brigade Lakefront Crimson".to_string(),
             root_source: Some("discovered".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -1981,6 +1940,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Godrej Splendour".to_string(),
                 root_source: Some("rera".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
             ServingEntityRecord {
@@ -1988,6 +1948,7 @@ mod tests {
                 entity_type: "area".to_string(),
                 name: "Whitefield".to_string(),
                 root_source: Some("rera".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
         ];
@@ -1997,6 +1958,7 @@ mod tests {
             to_entity_id: "area:whitefield".to_string(),
             confidence: 1.0,
             source_type: "Rera".to_string(),
+            derivation: None,
         }];
         let fact_index = ServingFactIndex::from_records(
             vec![
@@ -2031,6 +1993,7 @@ mod tests {
             entity_type: "property".to_string(),
             name: "3 BHK in Svamitva Soul Spring".to_string(),
             root_source: Some("discovered".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2071,6 +2034,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Godrej Splendour".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2104,6 +2068,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Prestige Elm Park".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2150,6 +2115,7 @@ mod tests {
                 entity_type: "property".to_string(),
                 name: "3 BHK in Prestige Waterford".to_string(),
                 root_source: Some("external_listing".to_string()),
+                visibility: Default::default(),
                 searchable_text: "3 BHK in Prestige Waterford".to_string(),
             },
             ServingEntityRecord {
@@ -2157,6 +2123,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Prestige Elm Park".to_string(),
                 root_source: Some("builder_official".to_string()),
+                visibility: Default::default(),
                 searchable_text: "Prestige Elm Park".to_string(),
             },
         ];
@@ -2197,6 +2164,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Prestige Elm Park".to_string(),
                 root_source: Some("rera".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
             ServingEntityRecord {
@@ -2204,6 +2172,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Prestige Elm Park".to_string(),
                 root_source: Some("rera".to_string()),
+                visibility: Default::default(),
                 searchable_text: String::new(),
             },
         ];
@@ -2242,6 +2211,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "RERA Only Project".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2268,6 +2238,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Pursuit of a Radical Rhapsody Phase 2".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2320,6 +2291,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Priced Project".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(
@@ -2706,6 +2678,7 @@ mod tests {
             model: None,
             skill_id: Some("test".to_string()),
             learned_at: Utc.timestamp_opt(1, 0).unwrap(),
+            observation: None,
         }
     }
 
@@ -2740,12 +2713,38 @@ mod tests {
     }
 
     #[test]
+    fn timestamps_do_not_select_runtime_facts() {
+        let entity_id = "society:stable-selection";
+        let mut stable = serving_fact(
+            entity_id,
+            "summary",
+            FactValue::Text("alpha".to_string()),
+            0.9,
+        );
+        stable.learned_at = Utc.timestamp_opt(1, 0).unwrap();
+        let mut later = serving_fact(
+            entity_id,
+            "summary",
+            FactValue::Text("zeta".to_string()),
+            0.9,
+        );
+        later.learned_at = Utc.timestamp_opt(2, 0).unwrap();
+        let index = ServingFactIndex::from_records(vec![later, stable], Vec::new());
+
+        assert_eq!(
+            latest_text(index.entity(entity_id), "summary"),
+            Some("alpha".to_string())
+        );
+    }
+
+    #[test]
     fn serving_properties_without_price_remain_in_runtime_catalog_when_configured() {
         let entities = vec![ServingEntityRecord {
             entity_id: "property:discovered-prestige-lakeside-habitat-3bhk".to_string(),
             entity_type: "property".to_string(),
             name: "3 BHK in Prestige Lakeside Habitat".to_string(),
             root_source: Some("discovered".to_string()),
+            visibility: Default::default(),
             searchable_text: "3 BHK in Prestige Lakeside Habitat".to_string(),
         }];
         let property_id = "property:discovered-prestige-lakeside-habitat-3bhk";
@@ -2780,6 +2779,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Promising Unknown Config".to_string(),
             root_source: Some("discovered".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let fact_index = ServingFactIndex::from_records(

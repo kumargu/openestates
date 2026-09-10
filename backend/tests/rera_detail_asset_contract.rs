@@ -147,6 +147,9 @@ fn fact(
         learned_at,
         run_id: "collector-fetch_rera-2026-07-14".to_string(),
         input_hash: format!("sha256:{fact_key}"),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     }
 }
 

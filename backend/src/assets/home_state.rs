@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use chrono::{DateTime, Utc};
 
 use crate::knowledge::FactValue;
 use crate::lake::LakeStore;
@@ -15,9 +15,6 @@ pub const HOME_STATE_SIGNALS_ASSET_ID: &str = "home_state_signals";
 
 #[derive(Debug, Clone, Default)]
 struct HomeStateSourceFacts {
-    start_date: Option<SourceTextFact>,
-    completion_date: Option<SourceTextFact>,
-    original_completion_date: Option<SourceTextFact>,
     delay_months: Option<SourceNumericFact>,
     status: Option<SourceTextFact>,
 }
@@ -25,15 +22,15 @@ struct HomeStateSourceFacts {
 #[derive(Debug, Clone)]
 struct SourceTextFact {
     value: String,
-    learned_at: DateTime<Utc>,
     source_url: Option<String>,
+    selection_key: String,
 }
 
 #[derive(Debug, Clone)]
 struct SourceNumericFact {
     value: f64,
-    learned_at: DateTime<Utc>,
     source_url: Option<String>,
+    selection_key: String,
 }
 
 pub async fn home_state_signals_input(
@@ -48,13 +45,6 @@ pub async fn home_state_signals_input(
     for fact in rows.facts {
         let entry = by_entity.entry(fact.entity_id.clone()).or_default();
         match fact.fact_key.as_str() {
-            "rera_start_date" | "project_start_date" => update_text(&mut entry.start_date, &fact)?,
-            "rera_completion_date" | "project_revised_completion_date" => {
-                update_text(&mut entry.completion_date, &fact)?
-            }
-            "rera_original_completion_date" | "project_original_completion_date" => {
-                update_text(&mut entry.original_completion_date, &fact)?
-            }
             "rera_delay_months" => update_numeric(&mut entry.delay_months, &fact)?,
             "rera_status" => update_text(&mut entry.status, &fact)?,
             _ => {}
@@ -103,35 +93,24 @@ fn append_home_state_signals(
     facts: &mut Vec<SkillFactRecord>,
     annotations: &mut Vec<SkillFactAnnotationRecord>,
 ) -> Result<(), ProjectEnrichmentAssetError> {
-    let completion = source
-        .completion_date
+    let evidence_source = stable_evidence_source(source);
+    let explicit_delay = source
+        .delay_months
         .as_ref()
-        .and_then(|fact| parse_rera_date(&fact.value));
-    let original_completion = source
-        .original_completion_date
-        .as_ref()
-        .and_then(|fact| parse_rera_date(&fact.value));
-    let latest_fact = latest_source_fact(source);
+        .is_some_and(|fact| fact.value > 0.0);
 
-    if let Some(completion) = completion {
-        let state = if completion <= as_of.date_naive() {
-            "delivered"
-        } else if source
-            .delay_months
-            .as_ref()
-            .is_some_and(|fact| fact.value > 0.0)
-        {
-            "delayed"
-        } else {
-            "under_construction"
-        };
+    if let Some(state) = source
+        .status
+        .as_ref()
+        .and_then(|fact| explicit_home_state(&fact.value, explicit_delay))
+    {
         append_fact(
             entity_id,
             "home_state",
             FactValue::Text(state.to_string()),
             0.9,
-            latest_fact.source_url.clone(),
-            latest_fact.learned_at.max(as_of),
+            evidence_source.source_url.clone(),
+            as_of,
             run_id,
             "Home state: {value}",
             &home_state_preferences(state),
@@ -143,8 +122,8 @@ fn append_home_state_signals(
             "project_delivery_state",
             FactValue::Text(project_delivery_state(state, source.delay_months.as_ref())),
             0.9,
-            latest_fact.source_url.clone(),
-            latest_fact.learned_at.max(as_of),
+            evidence_source.source_url.clone(),
+            as_of,
             run_id,
             "Delivery state: {value}",
             &[
@@ -157,112 +136,6 @@ fn append_home_state_signals(
             facts,
             annotations,
         )?;
-
-        if completion <= as_of.date_naive() {
-            let years = completed_years(completion, as_of.date_naive());
-            let age_years = completed_years_precise(completion, as_of.date_naive());
-            append_fact(
-                entity_id,
-                "home_age_years",
-                FactValue::Numeric(age_years),
-                0.85,
-                source
-                    .completion_date
-                    .as_ref()
-                    .and_then(|fact| fact.source_url.clone()),
-                latest_fact.learned_at.max(as_of),
-                run_id,
-                "Estimated home age: {value} years",
-                &[
-                    "new property",
-                    "newly delivered",
-                    "old society",
-                    "property age",
-                ],
-                facts,
-                annotations,
-            )?;
-            append_fact(
-                entity_id,
-                "project_age_years",
-                FactValue::Numeric(age_years),
-                0.85,
-                source
-                    .completion_date
-                    .as_ref()
-                    .and_then(|fact| fact.source_url.clone()),
-                latest_fact.learned_at.max(as_of),
-                run_id,
-                "Project age: {value} years",
-                &["1 year old", "new property", "old society", "property age"],
-                facts,
-                annotations,
-            )?;
-            let bucket = age_bucket(years);
-            append_fact(
-                entity_id,
-                "home_age_bucket",
-                FactValue::Text(bucket.to_string()),
-                0.85,
-                source
-                    .completion_date
-                    .as_ref()
-                    .and_then(|fact| fact.source_url.clone()),
-                latest_fact.learned_at.max(as_of),
-                run_id,
-                "Home age: {value}",
-                &age_bucket_preferences(bucket),
-                facts,
-                annotations,
-            )?;
-            append_fact(
-                entity_id,
-                "project_age_bucket",
-                FactValue::Text(project_age_bucket(years).to_string()),
-                0.85,
-                source
-                    .completion_date
-                    .as_ref()
-                    .and_then(|fact| fact.source_url.clone()),
-                latest_fact.learned_at.max(as_of),
-                run_id,
-                "Project age: {value}",
-                &age_bucket_preferences(project_age_bucket(years)),
-                facts,
-                annotations,
-            )?;
-        }
-    } else if source
-        .status
-        .as_ref()
-        .is_some_and(|fact| status_suggests_under_construction(&fact.value))
-    {
-        append_fact(
-            entity_id,
-            "home_state",
-            FactValue::Text("under_construction".to_string()),
-            0.75,
-            latest_fact.source_url.clone(),
-            latest_fact.learned_at.max(as_of),
-            run_id,
-            "Home state: {value}",
-            &home_state_preferences("under_construction"),
-            facts,
-            annotations,
-        )?;
-        append_fact(
-            entity_id,
-            "project_delivery_state",
-            FactValue::Text("under_construction".to_string()),
-            0.75,
-            latest_fact.source_url.clone(),
-            latest_fact.learned_at.max(as_of),
-            run_id,
-            "Delivery state: {value}",
-            &["under construction", "upcoming"],
-            facts,
-            annotations,
-        )?;
     }
 
     if let Some(delay) = source.delay_months.as_ref().filter(|fact| fact.value > 0.0) {
@@ -272,7 +145,7 @@ fn append_home_state_signals(
             FactValue::Text("delayed".to_string()),
             0.9,
             delay.source_url.clone(),
-            delay.learned_at.max(as_of),
+            as_of,
             run_id,
             "Timeline state: {value}",
             &["delayed", "avoid delayed", "possession delay"],
@@ -285,46 +158,13 @@ fn append_home_state_signals(
             FactValue::Text("delayed".to_string()),
             0.9,
             delay.source_url.clone(),
-            delay.learned_at.max(as_of),
+            as_of,
             run_id,
             "Project timeline: {value}",
             &["delayed", "avoid delayed", "possession delay"],
             facts,
             annotations,
         )?;
-    } else if let (Some(original), Some(completion), Some(fact)) = (
-        original_completion,
-        completion,
-        source.original_completion_date.as_ref(),
-    ) {
-        if completion <= original {
-            append_fact(
-                entity_id,
-                "home_timeline_state",
-                FactValue::Text("on_track".to_string()),
-                0.8,
-                fact.source_url.clone(),
-                latest_fact.learned_at.max(as_of),
-                run_id,
-                "Timeline state: {value}",
-                &["on time", "not delayed", "avoid delayed"],
-                facts,
-                annotations,
-            )?;
-            append_fact(
-                entity_id,
-                "project_timeline_state",
-                FactValue::Text("on_track".to_string()),
-                0.8,
-                fact.source_url.clone(),
-                latest_fact.learned_at.max(as_of),
-                run_id,
-                "Project timeline: {value}",
-                &["on time", "not delayed", "avoid delayed"],
-                facts,
-                annotations,
-            )?;
-        }
     }
 
     Ok(())
@@ -338,14 +178,15 @@ fn update_text(
     if value.trim().is_empty() {
         return Ok(());
     }
+    let selection_key = source_fact_selection_key(fact);
     if target
         .as_ref()
-        .is_none_or(|current| fact.learned_at > current.learned_at)
+        .is_none_or(|current| selection_key < current.selection_key)
     {
         *target = Some(SourceTextFact {
             value,
-            learned_at: fact.learned_at,
             source_url: fact.source_url.clone(),
+            selection_key,
         });
     }
     Ok(())
@@ -359,47 +200,54 @@ fn update_numeric(
     if !value.is_finite() {
         return Ok(());
     }
+    let selection_key = source_fact_selection_key(fact);
     if target
         .as_ref()
-        .is_none_or(|current| fact.learned_at > current.learned_at)
+        .is_none_or(|current| selection_key < current.selection_key)
     {
         *target = Some(SourceNumericFact {
             value,
-            learned_at: fact.learned_at,
             source_url: fact.source_url.clone(),
+            selection_key,
         });
     }
     Ok(())
 }
 
-fn latest_source_fact(source: &HomeStateSourceFacts) -> SourceTextFact {
+fn source_fact_selection_key(fact: &SkillFactRecord) -> String {
+    let payload = serde_json::to_vec(&(
+        &fact.fact_key,
+        &fact.value_json,
+        &fact.source_type,
+        &fact.source_url,
+        &fact.input_hash,
+        &fact.observation_provider,
+        &fact.provider_observation_id,
+        &fact.asset_lineage,
+    ))
+    .expect("source fact identity fields are serializable");
+    sha256_hex(&payload)
+}
+
+fn stable_evidence_source(source: &HomeStateSourceFacts) -> SourceTextFact {
     let mut candidates = Vec::new();
-    if let Some(fact) = &source.start_date {
-        candidates.push(fact.clone());
-    }
-    if let Some(fact) = &source.completion_date {
-        candidates.push(fact.clone());
-    }
-    if let Some(fact) = &source.original_completion_date {
-        candidates.push(fact.clone());
-    }
     if let Some(fact) = &source.status {
         candidates.push(fact.clone());
     }
     if let Some(fact) = &source.delay_months {
         candidates.push(SourceTextFact {
             value: fact.value.to_string(),
-            learned_at: fact.learned_at,
             source_url: fact.source_url.clone(),
+            selection_key: fact.selection_key.clone(),
         });
     }
     candidates
         .into_iter()
-        .max_by_key(|fact| fact.learned_at)
+        .min_by(|left, right| left.selection_key.cmp(&right.selection_key))
         .unwrap_or_else(|| SourceTextFact {
             value: String::new(),
-            learned_at: as_epoch(),
             source_url: None,
+            selection_key: String::new(),
         })
 }
 
@@ -455,6 +303,9 @@ fn append_fact(
         learned_at,
         run_id: run_id.to_string(),
         input_hash: sha256_hex(format!("{entity_id}:{fact_key}:{value_json}").as_bytes()),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     });
     annotations.push(SkillFactAnnotationRecord {
         entity_id: entity_id.to_string(),
@@ -466,47 +317,6 @@ fn append_fact(
         scoring_thresholds_json: "[]".to_string(),
     });
     Ok(())
-}
-
-fn parse_rera_date(value: &str) -> Option<NaiveDate> {
-    let trimmed = value.trim();
-    for format in ["%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d.%m.%Y"] {
-        if let Ok(date) = NaiveDate::parse_from_str(trimmed, format) {
-            return Some(date);
-        }
-    }
-    None
-}
-
-fn completed_years(completion: NaiveDate, as_of: NaiveDate) -> i32 {
-    let mut years = as_of.year() - completion.year();
-    if (as_of.month(), as_of.day()) < (completion.month(), completion.day()) {
-        years -= 1;
-    }
-    years.max(0)
-}
-
-fn completed_years_precise(completion: NaiveDate, as_of: NaiveDate) -> f64 {
-    let days = as_of.signed_duration_since(completion).num_days().max(0) as f64;
-    (days / 365.2425 * 10.0).round() / 10.0
-}
-
-fn age_bucket(years: i32) -> &'static str {
-    match years {
-        0 => "newly delivered",
-        1..=4 => "1-5 yrs old",
-        5..=9 => "5-10 yrs old",
-        _ => "10+ yrs old",
-    }
-}
-
-fn project_age_bucket(years: i32) -> &'static str {
-    match years {
-        0..=1 => "new_0_1y",
-        2..=5 => "young_1_5y",
-        6..=10 => "mature_5_10y",
-        _ => "old_10y_plus",
-    }
 }
 
 fn home_state_preferences(state: &str) -> Vec<&'static str> {
@@ -523,29 +333,6 @@ fn home_state_preferences(state: &str) -> Vec<&'static str> {
     }
 }
 
-fn age_bucket_preferences(bucket: &str) -> Vec<&'static str> {
-    match bucket {
-        "newly delivered" | "new_0_1y" => {
-            vec![
-                "new property",
-                "newly delivered",
-                "new society",
-                "1 year old",
-            ]
-        }
-        "1-5 yrs old" | "young_1_5y" => {
-            vec!["recently delivered", "newer society", "property age"]
-        }
-        "5-10 yrs old" | "mature_5_10y" => {
-            vec!["established society", "old society", "property age"]
-        }
-        "10+ yrs old" | "old_10y_plus" => {
-            vec!["old society", "mature society", "established society"]
-        }
-        _ => vec!["property age"],
-    }
-}
-
 fn project_delivery_state(state: &str, delay: Option<&SourceNumericFact>) -> String {
     let delayed = delay.is_some_and(|fact| fact.value > 0.0);
     match (state, delayed) {
@@ -558,16 +345,26 @@ fn project_delivery_state(state: &str, delay: Option<&SourceNumericFact>) -> Str
     .to_string()
 }
 
-fn status_suggests_under_construction(value: &str) -> bool {
+fn explicit_home_state(value: &str, delayed: bool) -> Option<&'static str> {
     let normalized = value.to_ascii_lowercase();
-    normalized.contains("approved")
+    if normalized.contains("complete")
+        || normalized.contains("delivered")
+        || normalized.contains("ready")
+    {
+        Some("delivered")
+    } else if normalized.contains("approved")
         || normalized.contains("ongoing")
         || normalized.contains("under")
         || normalized.contains("construction")
-}
-
-fn as_epoch() -> DateTime<Utc> {
-    DateTime::from_timestamp(0, 0).unwrap_or_else(Utc::now)
+    {
+        Some(if delayed {
+            "delayed"
+        } else {
+            "under_construction"
+        })
+    } else {
+        None
+    }
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -587,15 +384,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn derives_delivered_age_without_duplicate_delay_value() {
+    fn explicit_status_does_not_create_time_derived_age() {
         let run_id = MaterializationId::new();
         let mut facts = Vec::new();
         let mut annotations = Vec::new();
         let source = HomeStateSourceFacts {
-            completion_date: Some(SourceTextFact {
-                value: "31/10/2019".to_string(),
-                learned_at: Utc::now(),
+            status: Some(SourceTextFact {
+                value: "Completed".to_string(),
                 source_url: Some("https://rera.example/project".to_string()),
+                selection_key: "status:completed".to_string(),
             }),
             ..Default::default()
         };
@@ -615,18 +412,7 @@ mod tests {
         assert!(facts
             .iter()
             .any(|fact| fact.fact_key == "home_state" && fact.value_json.contains("delivered")));
-        assert!(facts.iter().any(|fact| fact.fact_key == "home_age_years"));
-        assert!(facts
-            .iter()
-            .any(|fact| fact.fact_key == "home_age_bucket"
-                && fact.value_json.contains("5-10 yrs old")));
-        assert!(facts
-            .iter()
-            .any(|fact| fact.fact_key == "project_age_years"));
-        assert!(facts
-            .iter()
-            .any(|fact| fact.fact_key == "project_age_bucket"
-                && fact.value_json.contains("mature_5_10y")));
+        assert!(!facts.iter().any(|fact| fact.fact_key.contains("age")));
         assert!(facts
             .iter()
             .any(|fact| fact.fact_key == "project_delivery_state"
@@ -642,22 +428,21 @@ mod tests {
     }
 
     #[test]
-    fn delayed_future_completion_gets_buyer_state() {
+    fn explicit_delay_and_status_get_buyer_state() {
         let run_id = MaterializationId::new();
         let mut facts = Vec::new();
         let mut annotations = Vec::new();
         let source = HomeStateSourceFacts {
-            completion_date: Some(SourceTextFact {
-                value: "31/10/2027".to_string(),
-                learned_at: Utc::now(),
+            status: Some(SourceTextFact {
+                value: "Ongoing".to_string(),
                 source_url: None,
+                selection_key: "status:ongoing".to_string(),
             }),
             delay_months: Some(SourceNumericFact {
                 value: 8.0,
-                learned_at: Utc::now(),
                 source_url: None,
+                selection_key: "delay:8".to_string(),
             }),
-            ..Default::default()
         };
 
         append_home_state_signals(

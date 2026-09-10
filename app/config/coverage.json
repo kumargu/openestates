@@ -108,7 +108,7 @@
   "belongs_in_lake_not_config": [
     {
       "role": "Entity instances (society:*, road:*, property:*)",
-      "target": "data/lake/gold/kg_society_view/.../entities.parquet"
+      "target": "data/lake/gold/society_catalog/society={society}/snapshot={snapshot_id}/entities/part-00000.parquet"
     },
     {
       "role": "Edge instances (society → road)",
@@ -120,7 +120,7 @@
     },
     {
       "role": "Promoted serving bundle version",
-      "target": "data/lake/manifests/assets/search_serving_bundle/.../current.json"
+      "target": "data/lake/manifests/catalog/dev.json"
     }
   ],
   "legacy_migrate_to_app_config": [
@@ -164,7 +164,7 @@
       },
       {
         "item": "Gold KG edges table schema",
-        "location": "app/config/lake/layout.json gold/kg_society_view"
+        "location": "app/config/lake/layout.json gold/society_catalog"
       },
       {
         "item": "EntityContext response contract (example clauses + prerequisites)",

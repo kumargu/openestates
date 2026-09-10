@@ -1,22 +1,26 @@
 use std::collections::HashMap;
 
 use backend::assets::{
-    read_skill_fact_artifact_rows, KgSocietyViewMaterializer, SkillFactAnnotationRecord,
-    SkillFactMaterializer, SkillFactRecord,
+    read_skill_fact_artifact_rows, SkillFactAnnotationRecord, SkillFactMaterializer,
+    SkillFactRecord, SocietyGoldSnapshotMaterializer,
 };
+use backend::catalog::CatalogRecords;
 use backend::knowledge::fact::{FactSource, FactValue, ScoringHint, SourceType, SourcedFact};
 use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::LakeStore;
 use backend::models::{Property, Society};
 use backend::search::{
-    CompiledQuery, SearchIndex, SearchResultCard, TextSearch, TextSearchRequest,
+    CandidateEvaluationRequest, CandidateEvaluator, IntentAst, SearchIndex, SearchResultCard,
 };
 use backend::serving::{
-    BundleArtifactKind, SearchServingBundleMaterializer, ServingBundleLoader, ServingFactIndex,
+    BundleArtifactKind, ServingBundleBuilder, ServingBundleLoader, ServingFactIndex,
 };
 use chrono::Utc;
 use tempfile::tempdir;
+
+mod search_support;
+use search_support::{inventory_context, inventory_options};
 
 const SQM_PER_ACRE: f64 = 4046.8564224;
 
@@ -194,10 +198,10 @@ fn canonical_calculator_facts_do_not_affect_search_without_annotation() {
 
 struct SearchWorld {
     properties: Vec<Property>,
-    societies: Vec<Society>,
     society_names: HashMap<String, String>,
     graph: KnowledgeGraph,
     index: SearchIndex,
+    inventory_options: HashMap<String, backend::search::InventoryOption>,
 }
 
 impl SearchWorld {
@@ -211,19 +215,20 @@ impl SearchWorld {
             .map(|society| (society.id.clone(), society.name.clone()))
             .collect::<HashMap<_, _>>();
         let index = SearchIndex::build(&properties);
+        let inventory_options = inventory_options(&properties);
 
         Self {
             properties,
-            societies,
             society_names,
             graph: KnowledgeGraph::new(),
             index,
+            inventory_options,
         }
     }
 
     fn run(&self, query: &str) -> Vec<SearchResultCard> {
-        let compiled_query = CompiledQuery::from_text(query);
-        TextSearch::search(TextSearchRequest {
+        let compiled_query = IntentAst::from_text(query);
+        CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &self.properties,
             search_index: Some(&self.index),
             extra_candidate_ids: None,
@@ -231,9 +236,10 @@ impl SearchWorld {
             geo_query: None,
             serving_facts: None,
             society_names: &self.society_names,
-            societies: &self.societies,
-            compiled_query: &compiled_query,
-            graph: Some(&self.graph),
+            query: &compiled_query.raw,
+            intent: &compiled_query.intent,
+            constraints: &compiled_query.constraints,
+            evaluation: inventory_context(&self.inventory_options),
         })
     }
 
@@ -242,8 +248,8 @@ impl SearchWorld {
         query: &str,
         serving_facts: &ServingFactIndex,
     ) -> Vec<SearchResultCard> {
-        let compiled_query = CompiledQuery::from_text(query);
-        TextSearch::search(TextSearchRequest {
+        let compiled_query = IntentAst::from_text(query);
+        CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &self.properties,
             search_index: Some(&self.index),
             extra_candidate_ids: None,
@@ -251,9 +257,10 @@ impl SearchWorld {
             geo_query: None,
             serving_facts: Some(serving_facts),
             society_names: &self.society_names,
-            societies: &self.societies,
-            compiled_query: &compiled_query,
-            graph: Some(&self.graph),
+            query: &compiled_query.raw,
+            intent: &compiled_query.intent,
+            constraints: &compiled_query.constraints,
+            evaluation: inventory_context(&self.inventory_options),
         })
     }
 
@@ -380,7 +387,6 @@ async fn serving_index_with_resident_fact_metadata(
     scoring_direction: Option<&str>,
 ) -> ServingFactIndex {
     let lake_root = tempdir().unwrap();
-    let cache_root = tempdir().unwrap();
     let lake = LakeStore::local(lake_root.path()).unwrap();
     let support_materialization = SkillFactMaterializer::new(lake.clone())
         .materialize_and_promote(
@@ -407,6 +413,9 @@ async fn serving_index_with_resident_fact_metadata(
                 learned_at: Utc::now(),
                 run_id: "run-reddit-support-2026-07-13".to_string(),
                 input_hash: "sha256:reddit-green".to_string(),
+                observation_provider: None,
+                provider_observation_id: None,
+                asset_lineage: Vec::new(),
             }],
             &[SkillFactAnnotationRecord {
                 entity_id: "society:large-green".to_string(),
@@ -426,7 +435,7 @@ async fn serving_index_with_resident_fact_metadata(
         read_skill_fact_artifact_rows(&lake, std::slice::from_ref(&support_materialization.record))
             .await
             .unwrap();
-    let kg_materialization = KgSocietyViewMaterializer::new(lake.clone())
+    let kg_materialization = SocietyGoldSnapshotMaterializer::new(lake.clone())
         .materialize_and_promote_with_skill_facts(
             graph,
             "2026-07-13T06:00Z",
@@ -443,15 +452,23 @@ async fn serving_index_with_resident_fact_metadata(
             .facts
             .iter()
             .any(|fact| fact.fact_key == "resident_greenery_signal"),
-        "KG view should fan in the support fact"
+        "society gold snapshot should fan in the support fact"
     );
-    let serving_materialization = SearchServingBundleMaterializer::new(lake.clone())
-        .materialize_and_promote_from_kg_view(&kg_materialization, "2026-07-13T06:00Z")
+    let records =
+        CatalogRecords::from_society_gold(&kg_materialization.records, Vec::new()).unwrap();
+    let serving_manifest = ServingBundleBuilder::new(lake.clone())
+        .build_from_catalog_records(
+            records.entities,
+            records.facts,
+            records.search_metadata,
+            records.edges,
+            records.rera_evidence,
+            "2026-07-13T06:00Z",
+        )
         .await
         .unwrap();
     assert!(
-        serving_materialization
-            .manifest
+        serving_manifest
             .artifacts
             .iter()
             .find(|artifact| artifact.kind == BundleArtifactKind::FactsParquet)
@@ -459,17 +476,16 @@ async fn serving_index_with_resident_fact_metadata(
             .is_some_and(|count| count > 0),
         "serving bundle should contain fanned-in facts"
     );
+    let cache_root = tempdir().unwrap();
     ServingBundleLoader::new(lake, cache_root.path())
-        .load_current_search_bundle()
+        .load_search_bundle("2026-07-13T06:00Z")
         .await
         .unwrap()
-        .expect("serving bundle should load")
         .fact_index
 }
 
 async fn serving_index_with_rera_land_facts(graph: &KnowledgeGraph) -> ServingFactIndex {
     let lake_root = tempdir().unwrap();
-    let cache_root = tempdir().unwrap();
     let lake = LakeStore::local(lake_root.path()).unwrap();
     let now = Utc::now();
     let facts = [
@@ -491,6 +507,9 @@ async fn serving_index_with_rera_land_facts(graph: &KnowledgeGraph) -> ServingFa
         learned_at: now,
         run_id: "run-rera-proof-2026-07-13".to_string(),
         input_hash: format!("sha256:{entity_id}"),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     })
     .collect::<Vec<_>>();
     let annotations = facts
@@ -522,7 +541,7 @@ async fn serving_index_with_rera_land_facts(graph: &KnowledgeGraph) -> ServingFa
         read_skill_fact_artifact_rows(&lake, std::slice::from_ref(&support_materialization.record))
             .await
             .unwrap();
-    let kg_materialization = KgSocietyViewMaterializer::new(lake.clone())
+    let kg_materialization = SocietyGoldSnapshotMaterializer::new(lake.clone())
         .materialize_and_promote_with_skill_facts(
             graph,
             "2026-07-13T06:00Z",
@@ -539,33 +558,40 @@ async fn serving_index_with_rera_land_facts(graph: &KnowledgeGraph) -> ServingFa
             .facts
             .iter()
             .any(|fact| fact.fact_key == "rera_total_land_area_sqm"),
-        "KG view should fan in RERA support facts"
+        "society gold snapshot should fan in RERA support facts"
     );
-    let serving_materialization = SearchServingBundleMaterializer::new(lake.clone())
-        .materialize_and_promote_from_kg_view(&kg_materialization, "2026-07-13T06:00Z")
+    let records =
+        CatalogRecords::from_society_gold(&kg_materialization.records, Vec::new()).unwrap();
+    let serving_manifest = ServingBundleBuilder::new(lake.clone())
+        .build_from_catalog_records(
+            records.entities,
+            records.facts,
+            records.search_metadata,
+            records.edges,
+            records.rera_evidence,
+            "2026-07-13T06:00Z",
+        )
         .await
         .unwrap();
     assert!(
-        serving_materialization
-            .manifest
+        serving_manifest
             .artifacts
             .iter()
             .find(|artifact| artifact.kind == BundleArtifactKind::FactsParquet)
             .and_then(|artifact| artifact.row_count)
             .is_some_and(|count| count > 0),
         "serving bundle should contain RERA facts; artifacts={:?}",
-        serving_materialization
-            .manifest
+        serving_manifest
             .artifacts
             .iter()
             .map(|artifact| (&artifact.kind, artifact.row_count))
             .collect::<Vec<_>>()
     );
+    let cache_root = tempdir().unwrap();
     ServingBundleLoader::new(lake, cache_root.path())
-        .load_current_search_bundle()
+        .load_search_bundle("2026-07-13T06:00Z")
         .await
         .unwrap()
-        .expect("serving bundle should load")
         .fact_index
 }
 

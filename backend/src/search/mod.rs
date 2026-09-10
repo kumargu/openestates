@@ -1,8 +1,9 @@
 pub mod analyzer;
 pub mod ast;
 pub mod capabilities;
+pub mod compiled_plan;
 pub mod engine;
-pub mod focus;
+pub mod evaluation;
 pub mod geo;
 pub mod guard;
 pub mod index;
@@ -10,24 +11,39 @@ pub mod intent;
 pub(crate) mod parser;
 pub(crate) mod query_plan;
 pub mod resolver;
+pub mod revision;
 pub mod schema;
 pub mod text;
 
-pub use ast::{CompiledQuery, ConstraintExpr, ConstraintTerm};
+pub use ast::{ConstraintExpr, ConstraintTerm, IntentAst, PredicateFamily, PredicatePolarity};
 pub use capabilities::SearchCapabilityIndex;
+pub use compiled_plan::{
+    BoolExpr, BranchId, CompiledSearchPlan, GeoAnchor, GeoBranch, GeoCellPath, GeoCellSearchPolicy,
+    GeoCellSeed, GeoScope, GeoScopeResolution, ResolvedEntityHandle,
+};
 pub use engine::{
     CandidateScore, SearchDiagnostics, SearchEngine, SearchEvidenceGap, SearchLayerTiming,
     SearchRecallDiagnostics,
 };
-pub use focus::{build_search_result_focus, FocusBuildInputs, SearchResultFocus};
+pub use evaluation::{
+    BooleanEvaluation, EvaluationEvidence, EvaluationState, EvidenceGap, InventoryOption,
+    PredicateEvaluation, VerifiedMatch,
+};
 pub use guard::{
     guard_search_query, named_society_alternatives_guidance, no_results_guidance, SearchGuidance,
 };
 pub use index::SearchIndex;
 pub use intent::{SearchIntent, SourceSpan};
-pub use text::{TextSearch, TextSearchRequest};
+pub use revision::{
+    apply_typed_revision, compile_typed_revision, decode_signed_search_context, intent_breakdown,
+    issue_signed_search_context, render_revision_active_query, result_membership_fingerprint,
+    BuyerIntentBranchProjection, PortableIntentAst, PortableIntentAstBranch,
+    SearchRevisionDescriptor, SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
+    SignedSearchContext, TypedSearchRevision, TypedSearchRevisionPatch,
+};
+pub use text::{CandidateEvaluationRequest, CandidateEvaluator, SearchEvaluationContext};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::models::{AreaProfile, PropertyCard};
 use crate::proof_focus::ProofFocus;
@@ -100,6 +116,28 @@ pub struct ConfidenceScore {
     pub components: Vec<ConfidenceComponent>,
 }
 
+/// How a branch's evidenced geography admitted and ordered a result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GeographyMatchKind {
+    ExactSociety,
+    SameMarketLocality,
+    CellNearby,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeographyMatch {
+    pub kind: GeographyMatchKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_path: Vec<String>,
+    pub hops: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub distance_km: Option<f64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_refs: Vec<crate::serving::EvidenceRef>,
+}
+
 /// A search result that includes full PropertyCard data plus match info.
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchResultCard {
@@ -112,12 +150,18 @@ pub struct SearchResultCard {
     pub match_tier: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tradeoff_label: Option<String>,
+    #[serde(rename = "geographyMatch", skip_serializing_if = "Option::is_none")]
+    pub geography_match: Option<GeographyMatch>,
     /// Structured match explanation — present when query has preferences.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub match_explanation: Option<MatchExplanation>,
     /// Generic detail-surface focus handles backed by the same proof reasons.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub proof_focuses: Vec<ProofFocus>,
+    /// Exact predicate observations used for hard eligibility. These are the
+    /// machine-readable receipts behind ranking and proof projections.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verified_matches: Vec<VerifiedMatch>,
     /// Data confidence score — how trustworthy is this result's data?
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence_score: Option<ConfidenceScore>,
@@ -153,18 +197,25 @@ pub struct KnowledgeContext {
 
 /// Buyer-safe search response. Internal parsing, diagnostics and enrichment
 /// gaps stay in logs/admin surfaces rather than leaking into product copy.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchRuntimeVersion {
     pub serving_bundle_version: String,
     pub scoring_policy_version: u32,
     pub search_engine_version: String,
+    pub semantic_contract_digest: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResponse {
     pub query: String,
+    /// Stateless server-issued correlation ID for the active search intent.
+    pub revision_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision: Option<SearchRevisionDescriptor>,
+    /// Fingerprint of the semantic AST actually executed by SearchEngine.
+    pub ast_fingerprint: String,
     pub result_sets: Vec<SearchResultSet>,
     /// Canonical traversal order after cross-branch result limiting.
     pub ordered_result_ids: Vec<String>,

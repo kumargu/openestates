@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::environment::EnvironmentGroundwaterPotentialInput;
+use super::locality::OsmLocalityBoundariesInput;
 use super::osm_access::OsmSocietyAccessInput;
 use super::osm_power::OsmPowerInfrastructureInput;
 use super::source_provider::SourceEntitySeed;
@@ -13,13 +14,13 @@ use super::{
     ExternalListingsWeeklyInput, GoogleNearbyPlacesWeeklyInput, GooglePlacesWeeklyInput,
     PlanReason, RedditThreadSnapshotRecord, ReraProjectPlanFramesInput, ReraReceiptsSourceInput,
     ReraRegistryMonthlyInput, ReraSourceRecordsInput, SkillFactAnnotationRecord, SkillFactRecord,
-    SourceWatermark, BENGALURU_METRO_STATION_FACTS_ASSET_ID, CURRENT_PROJECT_FACTS_ASSET_ID,
-    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID,
-    OSM_SOCIETY_ACCESS_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID,
-    RERA_REGISTRY_MONTHLY_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
+    SourceWatermark, BENGALURU_METRO_STATION_FACTS_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
+    OSM_POWER_LINE_FACTS_ASSET_ID, OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
+    RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    RERA_SOURCE_RECORDS_ASSET_ID, SOCIETY_FACT_SNAPSHOT_ASSET_ID,
     SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID, STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 
@@ -58,6 +59,8 @@ pub struct AssetSourceInputs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bengaluru_metro_stations: Option<BengaluruMetroStationsInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub osm_locality_boundaries: Option<OsmLocalityBoundariesInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub osm_society_access: Option<OsmSocietyAccessInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub osm_power_infrastructure: Option<OsmPowerInfrastructureInput>,
@@ -85,6 +88,7 @@ impl AssetSourceInputs {
             EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
             BENGALURU_METRO_STATION_FACTS_ASSET_ID,
+            super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
             OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
             STORMWATER_DRAIN_FACTS_ASSET_ID,
@@ -107,6 +111,7 @@ impl AssetSourceInputs {
                 | EXTERNAL_IMAGES_WEEKLY_ASSET_ID
                 | SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID
                 | BENGALURU_METRO_STATION_FACTS_ASSET_ID
+                | super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID
                 | OSM_SOCIETY_ACCESS_FACTS_ASSET_ID
                 | OSM_POWER_LINE_FACTS_ASSET_ID
                 | STORMWATER_DRAIN_FACTS_ASSET_ID
@@ -167,6 +172,7 @@ impl AssetSourceInputs {
         );
         for raw_asset_id in [
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+            super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
             OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
             STORMWATER_DRAIN_FACTS_ASSET_ID,
@@ -175,7 +181,7 @@ impl AssetSourceInputs {
                 &mut requested_assets,
                 &mut force_assets,
                 plan.run_entries()
-                    .any(|entry| entry.asset_id.as_str() == CURRENT_PROJECT_FACTS_ASSET_ID),
+                    .any(|entry| entry.asset_id.as_str() == SOCIETY_FACT_SNAPSHOT_ASSET_ID),
                 raw_asset_id,
                 false,
             );
@@ -240,6 +246,7 @@ impl AssetSourceInputs {
         );
         for raw_asset_id in [
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+            super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
             OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
             STORMWATER_DRAIN_FACTS_ASSET_ID,
@@ -248,7 +255,7 @@ impl AssetSourceInputs {
                 &mut requested_assets,
                 &mut force_assets,
                 manifest.steps.iter().any(|step| {
-                    step.asset_id.as_str() == CURRENT_PROJECT_FACTS_ASSET_ID
+                    step.asset_id.as_str() == SOCIETY_FACT_SNAPSHOT_ASSET_ID
                         && step_needs_replay(step)
                 }),
                 raw_asset_id,
@@ -380,8 +387,8 @@ mod tests {
     }
 
     #[test]
-    fn resumed_current_project_facts_request_required_red_flag_source_inputs() {
-        let plan = test_plan([test_run_entry(CURRENT_PROJECT_FACTS_ASSET_ID)]);
+    fn resumed_society_fact_snapshot_request_required_red_flag_source_inputs() {
+        let plan = test_plan([test_run_entry(SOCIETY_FACT_SNAPSHOT_ASSET_ID)]);
         let mut manifest = AssetDagRunManifest::from_plan_with_version(&plan, "resume-required");
         manifest.steps[0].status = AssetRunStepStatus::Blocked;
 
@@ -389,6 +396,8 @@ mod tests {
 
         for asset_id in [
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+            super::super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
+            OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
             STORMWATER_DRAIN_FACTS_ASSET_ID,
         ] {

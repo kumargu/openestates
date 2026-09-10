@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use serde_json::Value;
 
@@ -9,7 +9,7 @@ use crate::dag_config::{
 use crate::knowledge::FactValue;
 
 use super::{
-    QuarantinedSociety, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex,
+    EvidenceId, QuarantinedSociety, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex,
     ServingFactRecord, ServingQuarantineReport, ServingSearchMetadataRecord,
 };
 
@@ -132,29 +132,79 @@ pub(crate) fn classify_and_prune(
         &removed_society_ids,
         &removed_property_ids,
     );
+    let entities = entities
+        .into_iter()
+        .filter(|entity| !removed_entity_ids.contains(&entity.entity_id))
+        .collect();
+    let facts = facts
+        .into_iter()
+        .filter(|fact| !removed_entity_ids.contains(&fact.entity_id))
+        .collect::<Vec<_>>();
+    let search_metadata = search_metadata
+        .into_iter()
+        .filter(|metadata| !removed_entity_ids.contains(&metadata.entity_id))
+        .collect();
+    let edges = edges
+        .into_iter()
+        .filter(|edge| {
+            !removed_entity_ids.contains(&edge.from_entity_id)
+                && !removed_entity_ids.contains(&edge.to_entity_id)
+        })
+        .collect::<Vec<_>>();
+    let edges = retain_evidence_closed_edges(edges, &facts);
 
     Ok(EligibleServingRecords {
-        entities: entities
-            .into_iter()
-            .filter(|entity| !removed_entity_ids.contains(&entity.entity_id))
-            .collect(),
-        facts: facts
-            .into_iter()
-            .filter(|fact| !removed_entity_ids.contains(&fact.entity_id))
-            .collect(),
-        search_metadata: search_metadata
-            .into_iter()
-            .filter(|metadata| !removed_entity_ids.contains(&metadata.entity_id))
-            .collect(),
-        edges: edges
-            .into_iter()
-            .filter(|edge| {
-                !removed_entity_ids.contains(&edge.from_entity_id)
-                    && !removed_entity_ids.contains(&edge.to_entity_id)
-            })
-            .collect(),
+        entities,
+        facts,
+        search_metadata,
+        edges,
         quarantine,
     })
+}
+
+/// Keep only derivations whose complete evidence chain survives eligibility
+/// pruning. A derived edge can depend on another derived edge, so admit edges
+/// from observations outward instead of checking the unpruned edge set once.
+fn retain_evidence_closed_edges(
+    edges: Vec<ServingEdgeRecord>,
+    facts: &[ServingFactRecord],
+) -> Vec<ServingEdgeRecord> {
+    let mut available = facts
+        .iter()
+        .filter_map(|fact| fact.observation.as_ref())
+        .map(|observation| EvidenceId::Observation(observation.observation_id.clone()))
+        .collect::<HashSet<_>>();
+    let mut admitted = HashSet::new();
+
+    loop {
+        let mut progressed = false;
+        for derivation in edges.iter().filter_map(|edge| edge.derivation.as_ref()) {
+            let evidence_id = EvidenceId::Derivation(derivation.derivation_id.clone());
+            if admitted.contains(&evidence_id)
+                || !derivation
+                    .input_evidence
+                    .iter()
+                    .all(|reference| available.contains(&reference.evidence_id))
+            {
+                continue;
+            }
+            available.insert(evidence_id.clone());
+            admitted.insert(evidence_id);
+            progressed = true;
+        }
+        if !progressed {
+            break;
+        }
+    }
+
+    edges
+        .into_iter()
+        .filter(|edge| {
+            edge.derivation.as_ref().is_none_or(|derivation| {
+                admitted.contains(&EvidenceId::Derivation(derivation.derivation_id.clone()))
+            })
+        })
+        .collect()
 }
 
 fn society_groups(entities: &[ServingEntityRecord]) -> BTreeMap<String, SocietyGroup> {
@@ -531,6 +581,7 @@ mod tests {
 
     use super::*;
     use crate::dag_config::{EligibilityValuePredicate, ProjectedPropertyRequirement};
+    use crate::serving::{DerivedEvidence, EvidenceRef, SourceObservation};
 
     fn policy() -> ServingEligibilityFile {
         ServingEligibilityFile {
@@ -584,6 +635,7 @@ mod tests {
             entity_type: entity_type.to_string(),
             name: name.to_string(),
             root_source: Some("test".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }
     }
@@ -601,6 +653,7 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at: Utc::now(),
+            observation: None,
         }
     }
 
@@ -623,6 +676,7 @@ mod tests {
             to_entity_id: to.to_string(),
             confidence: 1.0,
             source_type: "Manual".to_string(),
+            derivation: None,
         }
     }
 
@@ -907,5 +961,119 @@ mod tests {
             .entities
             .iter()
             .any(|entity| entity.entity_id == "property:promising"));
+    }
+
+    #[test]
+    fn evidence_pruning_retains_only_chains_grounded_in_surviving_observations() {
+        let snapshot = "test-evidence-closure";
+        let observed_at = Utc::now();
+        let surviving_observation = SourceObservation::new(
+            "Fixture",
+            "surviving",
+            "society:surviving",
+            observed_at,
+            None,
+            vec!["asset:fixture/run:one".to_string()],
+        )
+        .unwrap();
+        let removed_observation = SourceObservation::new(
+            "Fixture",
+            "removed",
+            "society:removed",
+            observed_at,
+            None,
+            vec!["asset:fixture/run:one".to_string()],
+        )
+        .unwrap();
+        let mut surviving_fact = fact("society:surviving", "fixture.value", FactValue::Bool(true));
+        surviving_fact.observation = Some(surviving_observation.clone());
+
+        let grounded = DerivedEvidence::new(
+            snapshot,
+            "society:surviving",
+            Some("area:cell:a".to_string()),
+            "occupies_geo_cell",
+            "fixture",
+            Some(1.0),
+            Some("boolean".to_string()),
+            "fixture-v1",
+            1.0,
+            vec![EvidenceRef::for_observation(
+                snapshot,
+                &surviving_observation,
+            )],
+        )
+        .unwrap();
+        let grounded_child = DerivedEvidence::new(
+            snapshot,
+            "area:market:whitefield",
+            Some("area:cell:a".to_string()),
+            "covers_geo_cell",
+            "fixture",
+            Some(1.0),
+            Some("boolean".to_string()),
+            "fixture-v1",
+            1.0,
+            vec![EvidenceRef::for_derivation(&grounded)],
+        )
+        .unwrap();
+        let dangling = DerivedEvidence::new(
+            snapshot,
+            "society:removed",
+            Some("area:cell:b".to_string()),
+            "occupies_geo_cell",
+            "fixture",
+            Some(1.0),
+            Some("boolean".to_string()),
+            "fixture-v1",
+            1.0,
+            vec![EvidenceRef::for_observation(snapshot, &removed_observation)],
+        )
+        .unwrap();
+        let dangling_child = DerivedEvidence::new(
+            snapshot,
+            "area:market:whitefield",
+            Some("area:cell:b".to_string()),
+            "covers_geo_cell",
+            "fixture",
+            Some(1.0),
+            Some("boolean".to_string()),
+            "fixture-v1",
+            1.0,
+            vec![EvidenceRef::for_derivation(&dangling)],
+        )
+        .unwrap();
+        let derived_edge = |derivation: DerivedEvidence| ServingEdgeRecord {
+            from_entity_id: derivation.subject_entity_id.clone(),
+            edge_type: derivation.relation.clone(),
+            to_entity_id: derivation.target_entity_id.clone().unwrap(),
+            confidence: derivation.confidence,
+            source_type: "Fixture".to_string(),
+            derivation: Some(derivation),
+        };
+
+        let retained = retain_evidence_closed_edges(
+            vec![
+                derived_edge(grounded_child.clone()),
+                derived_edge(dangling_child),
+                derived_edge(grounded.clone()),
+                derived_edge(dangling),
+                edge("area:cell:a", "adjacent_area", "area:cell:b"),
+            ],
+            &[surviving_fact],
+        );
+
+        assert_eq!(retained.len(), 3);
+        assert!(retained.iter().any(|edge| {
+            edge.derivation
+                .as_ref()
+                .is_some_and(|derivation| derivation.derivation_id == grounded.derivation_id)
+        }));
+        assert!(retained.iter().any(|edge| {
+            edge.derivation
+                .as_ref()
+                .is_some_and(|derivation| derivation.derivation_id == grounded_child.derivation_id)
+        }));
+        assert!(retained.iter().any(|edge| edge.derivation.is_none()));
     }
 }

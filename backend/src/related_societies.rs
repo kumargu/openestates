@@ -174,6 +174,7 @@ mod tests {
                 model: None,
                 skill_id: None,
                 learned_at: Utc.timestamp_opt(10, 0).unwrap(),
+                observation: None,
             }],
             Vec::new(),
         );
@@ -237,6 +238,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Godrej Air".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Godrej Air".to_string(),
             },
             ServingEntityRecord {
@@ -244,6 +246,7 @@ mod tests {
                 entity_type: "society".to_string(),
                 name: "Godrej Air".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Godrej Air high voltage transmission line nearby".to_string(),
             },
         ];
@@ -261,6 +264,7 @@ mod tests {
                     model: None,
                     skill_id: None,
                     learned_at: Utc.timestamp_opt(10, 0).unwrap(),
+                    observation: None,
                 },
                 ServingFactRecord {
                     entity_id: "society:rera-godrej-air".to_string(),
@@ -274,6 +278,7 @@ mod tests {
                     model: None,
                     skill_id: None,
                     learned_at: Utc.timestamp_opt(10, 0).unwrap(),
+                    observation: None,
                 },
             ],
             Vec::new(),

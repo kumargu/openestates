@@ -20,8 +20,9 @@ use crate::parquet_data::{
 };
 
 use super::{
-    ServingEdgeRecord, ServingEntityAliasRecord, ServingEntityRecord, ServingFactRecord,
-    ServingReraEvidenceRecord, ServingSearchMetadataRecord,
+    DerivedEvidence, ServingEdgeRecord, ServingEntityAliasRecord, ServingEntityRecord,
+    ServingEntityVisibility, ServingFactRecord, ServingReraEvidenceRecord,
+    ServingSearchMetadataRecord,
 };
 
 pub fn write_entities_parquet(
@@ -32,6 +33,7 @@ pub fn write_entities_parquet(
         Field::new("entity_type", DataType::Utf8, false),
         Field::new("name", DataType::Utf8, false),
         Field::new("root_source", DataType::Utf8, true),
+        Field::new("visibility", DataType::Utf8, false),
         Field::new("searchable_text", DataType::Utf8, false),
     ]));
 
@@ -47,6 +49,11 @@ pub fn write_entities_parquet(
             string_array(entities.iter().map(|entity| entity.entity_type.clone())),
             string_array(entities.iter().map(|entity| entity.name.clone())),
             optional_string_array(root_sources),
+            string_array(
+                entities
+                    .iter()
+                    .map(|entity| entity.visibility.as_str().to_string()),
+            ),
             string_array(entities.iter().map(|entity| entity.searchable_text.clone())),
         ],
     )
@@ -63,14 +70,24 @@ pub fn read_entities_parquet(bytes: &[u8]) -> Result<Vec<ServingEntityRecord>, P
         let entity_type = string_column(&batch, "entity_type")?;
         let name = string_column(&batch, "name")?;
         let root_source = string_column(&batch, "root_source")?;
+        let visibility = string_column(&batch, "visibility")?;
         let searchable_text = string_column(&batch, "searchable_text")?;
 
         for row in 0..batch.num_rows() {
+            let visibility_value = required_string(visibility, row, "visibility")?;
+            let visibility =
+                ServingEntityVisibility::parse(&visibility_value).ok_or_else(|| {
+                    ParquetReadError::InvalidTypedValue {
+                        row,
+                        message: format!("unknown serving entity visibility {visibility_value:?}"),
+                    }
+                })?;
             records.push(ServingEntityRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 entity_type: required_string(entity_type, row, "entity_type")?,
                 name: required_string(name, row, "name")?,
                 root_source: optional_string(root_source, row),
+                visibility,
                 searchable_text: required_string(searchable_text, row, "searchable_text")?,
             });
         }
@@ -131,6 +148,22 @@ pub fn read_entity_aliases_parquet(
 }
 
 pub fn write_facts_parquet(facts: &[ServingFactRecord]) -> Result<Vec<u8>, ParquetWriteError> {
+    let observation_json = facts
+        .iter()
+        .enumerate()
+        .map(|(row, fact)| {
+            fact.validate_observation()
+                .map_err(|error| ParquetWriteError::InvalidEvidence {
+                    row,
+                    message: error.to_string(),
+                })?;
+            fact.observation
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()
+                .map_err(ParquetWriteError::Json)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let typed_values = facts
         .iter()
         .map(|fact| {
@@ -152,6 +185,7 @@ pub fn write_facts_parquet(facts: &[ServingFactRecord]) -> Result<Vec<u8>, Parqu
         Field::new("model", DataType::Utf8, true),
         Field::new("skill_id", DataType::Utf8, true),
         Field::new("learned_at", DataType::Utf8, false),
+        Field::new("observation_json", DataType::Utf8, true),
     ]);
     let schema = Arc::new(Schema::new(fields));
 
@@ -170,6 +204,7 @@ pub fn write_facts_parquet(facts: &[ServingFactRecord]) -> Result<Vec<u8>, Parqu
         optional_string_array(facts.iter().map(|fact| fact.model.clone()).collect()),
         optional_string_array(facts.iter().map(|fact| fact.skill_id.clone()).collect()),
         string_array(facts.iter().map(|fact| fact.learned_at.to_rfc3339())),
+        optional_string_array(observation_json),
     ]);
 
     let batch = RecordBatch::try_new(schema.clone(), columns).map_err(ParquetWriteError::Arrow)?;
@@ -238,21 +273,24 @@ pub fn read_facts_parquet(bytes: &[u8]) -> Result<Vec<ServingFactRecord>, Parque
         let fact_key = string_column(&batch, "fact_key")?;
         let value_type = string_column(&batch, "value_type")?;
         let value_text = optional_string_column(&batch, "value_text")?;
-        let legacy_value_json = optional_string_column(&batch, "value_json")?;
         let confidence = float32_column(&batch, "confidence")?;
         let source_type = string_column(&batch, "source_type")?;
         let source_url = string_column(&batch, "source_url")?;
         let model = string_column(&batch, "model")?;
         let skill_id = string_column(&batch, "skill_id")?;
         let learned_at = string_column(&batch, "learned_at")?;
+        let observation_json = optional_string_column(&batch, "observation_json")?;
 
         for row in 0..batch.num_rows() {
             let value_type = required_string(value_type, row, "value_type")?;
             let typed_value = typed_value_from_batch(&batch, row);
-            let value =
-                fact_value_from_batch(typed_value.as_ref(), legacy_value_json, row, &value_type)?;
+            let value = fact_value_from_batch(typed_value.as_ref(), row, &value_type)?;
             let typed_value_text = typed_value.and_then(|value| value.value_text);
-            records.push(ServingFactRecord {
+            let observation = observation_json
+                .and_then(|column| optional_string(column, row))
+                .map(|encoded| serde_json::from_str(&encoded))
+                .transpose()?;
+            let record = ServingFactRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 fact_key: required_string(fact_key, row, "fact_key")?,
                 value_type,
@@ -271,7 +309,15 @@ pub fn read_facts_parquet(bytes: &[u8]) -> Result<Vec<ServingFactRecord>, Parque
                     "learned_at",
                 )?)?
                 .with_timezone(&Utc),
-            });
+                observation,
+            };
+            record
+                .validate_observation()
+                .map_err(|error| ParquetReadError::InvalidEvidence {
+                    row,
+                    message: error.to_string(),
+                })?;
+            records.push(record);
         }
     }
     Ok(records)
@@ -286,8 +332,6 @@ pub fn read_search_metadata_parquet(
         let entity_id = string_column(&batch, "entity_id")?;
         let fact_key = string_column(&batch, "fact_key")?;
         let display_template = string_column(&batch, "display_template")?;
-        let legacy_answers_preferences_json =
-            optional_string_column(&batch, "answers_preferences_json")?;
         let scoring_direction = string_column(&batch, "scoring_direction")?;
         let scoring_weight = float32_column(&batch, "scoring_weight")?;
 
@@ -303,11 +347,7 @@ pub fn read_search_metadata_parquet(
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 fact_key: required_string(fact_key, row, "fact_key")?,
                 display_template: optional_string(display_template, row),
-                answers_preferences: answers_preferences_from_batch(
-                    &batch,
-                    legacy_answers_preferences_json,
-                    row,
-                )?,
+                answers_preferences: answers_preferences_from_batch(&batch, row)?,
                 scoring_direction: optional_string(scoring_direction, row),
                 scoring_weight: optional_f32(scoring_weight, row),
                 scoring_thresholds,
@@ -388,16 +428,9 @@ fn optional_string_array(values: Vec<Option<String>>) -> ArrayRef {
 
 fn fact_value_from_batch(
     typed_value: Option<&TypedFactValue>,
-    legacy_json: Option<&StringArray>,
     row: usize,
     value_type: &str,
 ) -> Result<FactValue, ParquetReadError> {
-    if let Some(legacy_json) = legacy_json {
-        let value = serde_json::from_str(&required_string(legacy_json, row, "value_json")?)?;
-        validate_read_fact_value_type(value_type, &value, row)?;
-        return Ok(value);
-    }
-
     let typed_value = typed_value.ok_or_else(|| ParquetReadError::InvalidTypedValue {
         row,
         message: "missing typed fact value columns".to_string(),
@@ -421,35 +454,10 @@ fn validate_fact_value_type(value_type: &str, value: &FactValue) -> Result<(), P
     })
 }
 
-fn validate_read_fact_value_type(
-    value_type: &str,
-    value: &FactValue,
-    row: usize,
-) -> Result<(), ParquetReadError> {
-    if TypedFactValue::value_type_matches(value_type, value) {
-        return Ok(());
-    }
-    Err(ParquetReadError::InvalidTypedValue {
-        row,
-        message: format!(
-            "value_type {value_type} does not match fact value type {}",
-            TypedFactValue::value_type_for(value)
-        ),
-    })
-}
-
 fn answers_preferences_from_batch(
     batch: &RecordBatch,
-    legacy_json: Option<&StringArray>,
     row: usize,
 ) -> Result<Vec<String>, ParquetReadError> {
-    if let Some(legacy_json) = legacy_json {
-        return Ok(serde_json::from_str(&required_string(
-            legacy_json,
-            row,
-            "answers_preferences_json",
-        )?)?);
-    }
     Ok(
         match optional_string_list_column_value(batch, ANSWERS_PREFERENCES_COLUMN, row) {
             Ok(OptionalListColumn::Values(values)) => values,
@@ -560,6 +568,10 @@ pub enum ParquetWriteError {
         value_type: String,
         actual_type: String,
     },
+    InvalidEvidence {
+        row: usize,
+        message: String,
+    },
     Json(serde_json::Error),
     Parquet(parquet::errors::ParquetError),
 }
@@ -575,6 +587,9 @@ impl fmt::Display for ParquetWriteError {
                 f,
                 "serving fact value_type {value_type} does not match fact value type {actual_type}"
             ),
+            Self::InvalidEvidence { row, message } => {
+                write!(f, "invalid serving evidence at row {row}: {message}")
+            }
             Self::Json(err) => write!(f, "serving Parquet JSON serialization error: {err}"),
             Self::Parquet(err) => write!(f, "Parquet write error: {err}"),
         }
@@ -592,6 +607,10 @@ pub enum ParquetReadError {
         expected: &'static str,
     },
     InvalidTypedValue {
+        row: usize,
+        message: String,
+    },
+    InvalidEvidence {
         row: usize,
         message: String,
     },
@@ -618,6 +637,9 @@ impl fmt::Display for ParquetReadError {
             }
             Self::InvalidTypedValue { row, message } => {
                 write!(f, "invalid typed fact value at row {row}: {message}")
+            }
+            Self::InvalidEvidence { row, message } => {
+                write!(f, "invalid serving evidence at row {row}: {message}")
             }
             Self::InvalidReraEvidenceSociety {
                 row,
@@ -663,12 +685,42 @@ impl From<parquet::errors::ParquetError> for ParquetReadError {
 }
 
 pub fn write_edges_parquet(edges: &[ServingEdgeRecord]) -> Result<Vec<u8>, ParquetWriteError> {
+    let derivations = edges
+        .iter()
+        .enumerate()
+        .map(|(row, edge)| {
+            if let Some(derivation) = &edge.derivation {
+                edge.validate_derivation(&derivation.snapshot_identity)
+                    .map_err(|message| ParquetWriteError::InvalidEvidence { row, message })?;
+            }
+            let encoded = edge
+                .derivation
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()
+                .map_err(ParquetWriteError::Json)?;
+            if let (Some(original), Some(encoded)) = (&edge.derivation, &encoded) {
+                let decoded: DerivedEvidence =
+                    serde_json::from_str(encoded).map_err(ParquetWriteError::Json)?;
+                decoded.validate().map_err(|error| {
+                    ParquetWriteError::InvalidEvidence {
+                        row,
+                        message: format!(
+                            "derivation is not stable across JSON serialization: {error}; original={original:?}; decoded={decoded:?}"
+                        ),
+                    }
+                })?;
+            }
+            Ok(encoded)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let schema = Arc::new(Schema::new(vec![
         Field::new("from_entity_id", DataType::Utf8, false),
         Field::new("edge_type", DataType::Utf8, false),
         Field::new("to_entity_id", DataType::Utf8, false),
         Field::new("confidence", DataType::Float32, false),
         Field::new("source_type", DataType::Utf8, false),
+        Field::new("derivation_json", DataType::Utf8, true),
     ]));
     let batch = RecordBatch::try_new(
         schema.clone(),
@@ -680,6 +732,7 @@ pub fn write_edges_parquet(edges: &[ServingEdgeRecord]) -> Result<Vec<u8>, Parqu
                 edges.iter().map(|edge| edge.confidence).collect::<Vec<_>>(),
             )) as ArrayRef,
             string_array(edges.iter().map(|edge| edge.source_type.clone())),
+            optional_string_array(derivations),
         ],
     )
     .map_err(ParquetWriteError::Arrow)?;
@@ -701,16 +754,132 @@ pub fn read_edges_parquet(bytes: &[u8]) -> Result<Vec<ServingEdgeRecord>, Parque
                 expected: "float32",
             })?;
         let source_type = string_column(&batch, "source_type")?;
+        let derivation_json = optional_string_column(&batch, "derivation_json")?;
 
         for row in 0..batch.num_rows() {
-            records.push(ServingEdgeRecord {
+            let derivation = derivation_json
+                .and_then(|column| optional_string(column, row))
+                .map(|encoded| serde_json::from_str(&encoded))
+                .transpose()?;
+            let edge = ServingEdgeRecord {
                 from_entity_id: required_string(from_entity_id, row, "from_entity_id")?,
                 edge_type: required_string(edge_type, row, "edge_type")?,
                 to_entity_id: required_string(to_entity_id, row, "to_entity_id")?,
                 confidence: confidence.value(row),
                 source_type: required_string(source_type, row, "source_type")?,
-            });
+                derivation,
+            };
+            if let Some(derivation) = &edge.derivation {
+                edge.validate_derivation(&derivation.snapshot_identity)
+                    .map_err(|message| ParquetReadError::InvalidEvidence {
+                        row,
+                        message: format!(
+                            "{} -[{}]-> {}: {message}; derivation={derivation:?}",
+                            edge.from_entity_id, edge.edge_type, edge.to_entity_id,
+                        ),
+                    })?;
+            }
+            records.push(edge);
         }
     }
     Ok(records)
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+
+    use super::*;
+    use crate::serving::{DerivedEvidence, EvidenceRef, SourceObservation};
+
+    fn fact(observation: Option<SourceObservation>) -> ServingFactRecord {
+        ServingFactRecord {
+            entity_id: "society:one".to_string(),
+            fact_key: "test_fact".to_string(),
+            value_type: "text".to_string(),
+            value_text: Some("value".to_string()),
+            value: FactValue::Text("value".to_string()),
+            confidence: 0.9,
+            source_type: "OpenStreetMap".to_string(),
+            source_url: Some("https://www.openstreetmap.org/way/1".to_string()),
+            model: None,
+            skill_id: Some("test".to_string()),
+            learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            observation,
+        }
+    }
+
+    fn observation(subject: &str) -> SourceObservation {
+        SourceObservation::new(
+            "OpenStreetMap",
+            "way/1",
+            subject,
+            Utc.timestamp_opt(1_699_999_000, 0).unwrap(),
+            Some("https://www.openstreetmap.org/way/1".to_string()),
+            vec!["asset:osm/version:v1".to_string()],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn fact_observation_survives_parquet_round_trip() {
+        let expected = fact(Some(observation("society:one")));
+
+        let bytes = write_facts_parquet(std::slice::from_ref(&expected)).unwrap();
+        let actual = read_facts_parquet(&bytes).unwrap();
+
+        assert_eq!(actual, vec![expected]);
+    }
+
+    #[test]
+    fn fact_observation_must_reference_the_fact_subject() {
+        let error = write_facts_parquet(&[fact(Some(observation("society:other")))])
+            .expect_err("cross-subject evidence must fail closed");
+
+        assert!(matches!(error, ParquetWriteError::InvalidEvidence { .. }));
+        assert!(error.to_string().contains("evidence subject mismatch"));
+    }
+
+    #[test]
+    fn edge_derivation_survives_parquet_round_trip() {
+        let subject = observation("society:one");
+        let target = SourceObservation::new(
+            "OpenStreetMap",
+            "relation/2",
+            "area:one",
+            Utc.timestamp_opt(1_699_999_000, 0).unwrap(),
+            Some("https://www.openstreetmap.org/relation/2".to_string()),
+            vec!["asset:osm/version:v1".to_string()],
+        )
+        .unwrap();
+        let derivation = DerivedEvidence::new(
+            "bundle:v1",
+            "society:one",
+            Some("area:one".to_string()),
+            "in_area",
+            "footprint_containment",
+            Some(1.939_540_455_560_791_8),
+            Some("km".to_string()),
+            "spatial-distance-v1",
+            0.812_345_7,
+            vec![
+                EvidenceRef::for_observation("bundle:v1", &subject),
+                EvidenceRef::for_observation("bundle:v1", &target),
+            ],
+        )
+        .unwrap();
+        let expected = ServingEdgeRecord {
+            from_entity_id: "society:one".to_string(),
+            edge_type: "in_area".to_string(),
+            to_entity_id: "area:one".to_string(),
+            confidence: 0.812_345_7,
+            source_type: "SpatialTopology".to_string(),
+            derivation: Some(derivation),
+        };
+
+        let bytes = write_edges_parquet(std::slice::from_ref(&expected)).unwrap();
+        let actual = read_edges_parquet(&bytes).unwrap();
+
+        assert_eq!(actual, vec![expected]);
+    }
 }

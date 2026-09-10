@@ -22,8 +22,6 @@ OpenEstates is not trying to win by having the biggest pile of listings. The wed
 
 ## 0. Before Writing Any Code
 
-**Always read `.claude/skills/coding-practices.md` before writing any code.** It contains the full quality bar, design philosophy, Rust/TypeScript/Python patterns, latency budgets, testing requirements, and the pre-ship checklist. Do not skip this.
-
 **Before shipping buyer-facing UI**, also run `.claude/skills/ui-critic.md` — a human product-design pass for sticky-note cards, heading clutter, duplicate facts, agent-jargon copy, and fake page jumps.
 
 ### Buyer-facing UI / ThreeUI research gate
@@ -146,6 +144,7 @@ crawl/source input -> normalize -> DAG asset -> serving bundle -> Rust API -> UI
 ```
 
 Rules:
+- Collected buyer-relevant DAG data is not complete until search can consume it through generic typed serving views; collection-only assets are an architecture gap, not searchable coverage.
 - If a fact appears in the UI, it should come from a promoted DAG-backed serving bundle or from a deterministic computation over DAG facts.
 - Joins against heavy source datasets must happen offline during DAG materialization, not on the request path. For example, society coordinates should be joined to groundwater polygons, drain networks, flood points, metro updates, or other source layers ahead of time, then served as scoped facts with provenance.
 - Canonicalizing entity IDs must preserve runtime alias lookup across facts, graph edges, and spatial/proximity indexes; test each path using the ID carried by runtime properties.
@@ -194,6 +193,66 @@ bank; select compatible groups through its named suites.
   frozen expectation only for an explicit product decision, and record why.
 
 When fixing a search example, add regression coverage for the generic intent class, not only the named example. A query like "near Bagmane" may expose the issue, but the test should prove named-place intent, numeric constraints, source-backed preferences, and tie-break ordering continue to work for arbitrary configured dimensions.
+
+### Test investment discipline
+
+While the architecture is changing rapidly, default to high-value vertical
+contracts rather than broad unit-test coverage. The primary gates are the
+frozen query bank, focused integration or DAG-to-serving contracts, API smoke
+tests, compile/type checks, and the search hardcoding audit.
+
+- Small unit tests remain worthwhile only for compact, deterministic safety
+  invariants whose contracts are already stable, such as evidence identity,
+  row-order stability, four-state Boolean logic, and exact geometry.
+- Prefer extending an existing integration or query-bank scenario over adding
+  duplicate synthetic fixture builders. Keep existing tests; when fixture
+  plumbing changes, update the fixture without cloning it or weakening its
+  product assertion.
+- Add regression coverage when a failure exposes generic product behavior, not
+  when it only mirrors an evolving implementation detail. Record whether a new
+  test caught a real bug or merely encoded an expectation.
+- Run the narrow relevant gate plus compile/type checks after a small change.
+  Run broader suites at coherent milestones, not after every tiny checkpoint.
+- Once the architecture and contracts stabilize, add broader unit regression
+  coverage in a focused pass where its maintenance cost is justified.
+
+### Architecture replacement discipline
+
+- Do not add backward-compatibility shims unless the user explicitly requests
+  them. This product is pre-production; prefer rebuilding local artifacts and
+  deleting the superseded path.
+- A replacement is incomplete until the old parser, evaluator, constructor, or
+  projection is deleted in the same checkpoint.
+- One semantic concept may have only one authoritative runtime representation.
+  A compiled plan must be the object execution consumes, not a summary created
+  after execution.
+- Preserve predicate and branch IDs, exact source spans, operators, typed
+  values and units, resolution state, and evidence bindings through execution.
+  Never reparse rendered or reconstructed query text.
+- Recall returns candidate IDs only. It never proves eligibility or creates a
+  buyer-facing reason.
+- A required predicate may return `Satisfied` only with durable evidence.
+  Ranking, explanations, proof focus, and API proofs must project from that
+  same evaluation.
+- Never recover numeric, spatial, or identity meaning from display strings on
+  the request path.
+- A capability is searchable only when its eligible evidence policy, evaluator,
+  and proof projection are all bound and validated.
+- Controlled fixtures must not provide stronger evidence than the production
+  materializer. Prove production parity with one materializer-to-bundle-to-API
+  contract before treating a mock scenario as covered.
+- When a module gains a second parser, evaluator, branch constructor, or proof
+  generator, stop and consolidate instead of extending both paths.
+
+### Time metadata is not product logic
+
+Observation and ingestion timestamps exist for provenance, diagnostics, and
+display only. Product and domain code must not compare, subtract, or order
+timestamps to infer age, freshness, current state, eligibility, matching,
+confidence, scoring, or ranking. Property facts must win or fail on explicit
+evidence and configured semantics, not on when a row happened to be written.
+Operational retry scheduling, run-duration measurement, and provenance capture
+are allowed because they do not create buyer facts or change product meaning.
 
 Search work must run as a proof loop, not as accumulated code:
 - Start each search-quality session with a chain audit: list the relevant local commits or touched files, map them to the current milestone, and call out anything that looks like duplicated, bypassed, or accidentally productized experimental behavior.
@@ -450,7 +509,9 @@ At the start of each day of work:
 
 1. Review the previous day's output — read the code, check it compiles/runs.
 2. Accept or fix — build on solid work; fix broken work before adding scope.
-3. Checkpoint after each meaningful unit — compile, test, manual check. Don't stack 5 unverified changes.
+3. Checkpoint after each meaningful unit — compile, run the narrow relevant
+   gate, and manually check where useful. Run broader suites at coherent
+   milestones. Don't stack 5 unverified changes.
 
 Do not start fresh each day and ignore what was built. That leads to conflicting and duplicated code.
 
@@ -506,7 +567,6 @@ Read the matching skill file **before** starting any task that falls under it:
 
 | Skill | File | Purpose |
 |-------|------|---------|
-| Coding Practices | `.claude/skills/coding-practices.md` | Quality bar, patterns, testing, latency budgets |
 | UI Critic | `.claude/skills/ui-critic.md` | Human UI review: sticky-note chrome, clutter, buyer copy, same-page modes |
 
 ---

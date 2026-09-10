@@ -7,13 +7,12 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::Deserialize;
 
-use crate::knowledge::edge::Relation;
 use crate::knowledge::search_event::EnrichmentGap;
-use crate::knowledge::{KnowledgeGraph, SearchEvent};
+use crate::knowledge::SearchEvent;
 use crate::search::{
-    guard_search_query, intent, no_results_guidance, schema, KnowledgeContext, SearchEngine,
-    SearchEvidenceGap, SearchResponse, SearchResultCard, SearchResultSet, SearchRuntimeVersion,
-    SourcedClaim,
+    guard_search_query, intent, issue_signed_search_context, no_results_guidance, schema,
+    SearchEngine, SearchEvidenceGap, SearchResponse, SearchResultSet, SearchRevisionOperation,
+    SearchRuntimeVersion,
 };
 use crate::state::{
     AppState, CachedSearchOutput, SearchCacheKey, SearchCacheLookup, SearchLogMessage,
@@ -40,8 +39,12 @@ pub async fn search_properties(
     let runtime_version = search_runtime_version(&snapshot);
 
     if query.trim().is_empty() {
-        return Ok(Json(SearchResponse {
-            query,
+        let ast_fingerprint = crate::search::ast::semantic_search_fingerprint(&[], &[]);
+        let mut response = SearchResponse {
+            query: query.clone(),
+            revision_id: String::new(),
+            revision: None,
+            ast_fingerprint,
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
             total_matches: 0,
@@ -49,7 +52,10 @@ pub async fn search_properties(
             area_context: None,
             state: "no_matches".to_string(),
             search_guidance: None,
-        }));
+        };
+        let plan = SearchEngine::new(&snapshot).compile_initial(&query, "root");
+        attach_initial_revision(&mut response, &plan);
+        return Ok(Json(response));
     }
 
     if let Some(guarded) = guard_search_query(&query) {
@@ -58,6 +64,7 @@ pub async fn search_properties(
             // the guardrail. If deterministic local recall has a concrete
             // candidate, let ranking handle the query instead of rejecting it.
         } else {
+            let ast_fingerprint = crate::search::ast::semantic_search_fingerprint(&[], &[]);
             let mut event = SearchEvent::new(query.clone(), guarded.intent.clone(), 0);
             event.enrichment_gaps.push(EnrichmentGap {
                 entity_id: "search:guardrail".to_string(),
@@ -66,8 +73,11 @@ pub async fn search_properties(
             });
             enqueue_search_log(&state, SearchLogMessage::SearchEvent(event));
 
-            return Ok(Json(SearchResponse {
-                query,
+            let mut response = SearchResponse {
+                query: query.clone(),
+                revision_id: String::new(),
+                revision: None,
+                ast_fingerprint,
                 result_sets: Vec::new(),
                 ordered_result_ids: Vec::new(),
                 total_matches: 0,
@@ -75,7 +85,10 @@ pub async fn search_properties(
                 area_context: None,
                 state: "no_matches".to_string(),
                 search_guidance: Some(guarded.guidance),
-            }));
+            };
+            let plan = SearchEngine::new(&snapshot).compile_initial(&query, "root");
+            attach_initial_revision(&mut response, &plan);
+            return Ok(Json(response));
         }
     }
 
@@ -84,20 +97,18 @@ pub async fn search_properties(
         match state.search_cache.lookup_or_reserve(&cache_key).await {
             SearchCacheLookup::Hit(cached) => {
                 enqueue_cached_search_logs(&state, &cached, &query);
-                return Ok(Json(rebase_cached_response(
-                    cached.response.as_ref(),
-                    &query,
-                )));
+                let mut response = rebase_cached_response(cached.response.as_ref(), &query);
+                attach_initial_revision(&mut response, cached.compiled_plan.as_ref());
+                return Ok(Json(response));
             }
             SearchCacheLookup::Waiter(mut receiver) => {
                 match receiver.wait_for(Option::is_some).await {
                     Ok(cached) => {
                         let cached = cached.as_ref().expect("watch predicate requires a value");
                         enqueue_cached_search_logs(&state, cached, &query);
-                        return Ok(Json(rebase_cached_response(
-                            cached.response.as_ref(),
-                            &query,
-                        )));
+                        let mut response = rebase_cached_response(cached.response.as_ref(), &query);
+                        attach_initial_revision(&mut response, cached.compiled_plan.as_ref());
+                        return Ok(Json(response));
                     }
                     Err(_) => continue,
                 }
@@ -107,11 +118,10 @@ pub async fn search_properties(
         }
     };
 
-    let graph = state.knowledge.read().await.clone();
     let work_query = query.clone();
     let computed = match state
         .execution
-        .run_customer_compute(move || compute_search(snapshot, graph, work_query))
+        .run_customer_compute(move || compute_search(snapshot, work_query))
         .await
     {
         Ok(output) => output,
@@ -120,28 +130,56 @@ pub async fn search_properties(
     for message in computed.log_messages.clone() {
         enqueue_search_log(&state, message);
     }
-    let response = computed.response.as_ref().clone();
+    let mut response = computed.response.as_ref().clone();
+    attach_initial_revision(&mut response, computed.compiled_plan.as_ref());
     reservation.complete(computed).await;
 
     Ok(Json(response))
 }
 
-fn compute_search(
+fn attach_initial_revision(
+    response: &mut SearchResponse,
+    plan: &crate::search::CompiledSearchPlan,
+) {
+    let (_, descriptor) = issue_signed_search_context(
+        None,
+        "initial",
+        SearchRevisionOperation::Initial,
+        1,
+        response.query.clone(),
+        plan.clone(),
+        response.runtime_version.clone(),
+        response.ordered_result_ids.clone(),
+    )
+    .expect("an initial search must fit revision token limits");
+    response.revision_id.clone_from(&descriptor.id);
+    response.revision = Some(descriptor);
+}
+
+pub(crate) fn compute_search(
     snapshot: Arc<SearchRuntimeSnapshot>,
-    graph: KnowledgeGraph,
     query: String,
 ) -> CachedSearchOutput {
-    let serving_facts = Some(&snapshot.bundle.fact_index);
-    let engine_output = SearchEngine {
-        properties: &snapshot.properties,
-        search_index: &snapshot.search_index,
-        serving_bundle: Some(snapshot.bundle.as_ref()),
-        society_names: &snapshot.society_names,
-        property_by_id: Some(&snapshot.property_by_id),
-        societies: &snapshot.societies,
-        graph: Some(&graph),
-    }
-    .search(&query);
+    let engine_output = SearchEngine::new(&snapshot).search(&query);
+    build_search_output(snapshot, query, engine_output)
+}
+
+pub(crate) fn compute_search_plan(
+    snapshot: Arc<SearchRuntimeSnapshot>,
+    plan: crate::search::CompiledSearchPlan,
+    active_query: String,
+) -> Option<CachedSearchOutput> {
+    let engine_output = SearchEngine::new(&snapshot).execute_plan(plan)?;
+    Some(build_search_output(snapshot, active_query, engine_output))
+}
+
+fn build_search_output(
+    snapshot: Arc<SearchRuntimeSnapshot>,
+    query: String,
+    engine_output: crate::search::engine::SearchEngineOutput,
+) -> CachedSearchOutput {
+    let compiled_plan = Arc::new(engine_output.compiled_plan.clone());
+    let ast_fingerprint = engine_output.compiled_plan.semantic_fingerprint.clone();
     let parsed_intent = engine_output.intent;
     let results = engine_output.results;
     let result_sets = engine_output.result_sets;
@@ -162,10 +200,7 @@ fn compute_search(
     });
 
     let results_returned = results.len();
-    let evidence_claims = result_evidence_claims(&results);
-
-    // --- Extract knowledge context from the graph ---
-    let (_knowledge_context, graph_nodes_hit, enrichment_gaps) = {
+    let (graph_nodes_hit, mut enrichment_gaps) = {
         let mut matched_society_ids: Vec<String> = Vec::new();
         for result in &results {
             if let Some(society_id) = snapshot
@@ -181,20 +216,16 @@ fn compute_search(
             }
         }
 
-        let (mut knowledge_context, graph_nodes_hit, mut enrichment_gaps) = build_knowledge_context(
-            &graph,
-            serving_facts,
+        let (graph_nodes_hit, enrichment_gaps) = build_serving_enrichment_gaps(
+            &snapshot.bundle.fact_index,
+            &snapshot.bundle.graph_index,
+            &snapshot.bundle.entities,
             &matched_society_ids,
             &parsed_intent,
-            evidence_claims,
         );
-        merge_search_evidence_gaps(
-            &mut knowledge_context,
-            &mut enrichment_gaps,
-            &search_evidence_gaps,
-        );
-        (knowledge_context, graph_nodes_hit, enrichment_gaps)
+        (graph_nodes_hit, enrichment_gaps)
     };
+    merge_search_evidence_gaps(&mut enrichment_gaps, &search_evidence_gaps);
     // --- Log search event ---
     let mut event = SearchEvent::new(query.clone(), parsed_intent.clone(), results_returned);
     event.graph_nodes_hit = graph_nodes_hit;
@@ -203,6 +234,9 @@ fn compute_search(
     let total_matches = unique_result_count(&result_sets);
     let response = SearchResponse {
         query,
+        revision_id: String::new(),
+        revision: None,
+        ast_fingerprint,
         result_sets,
         ordered_result_ids,
         total_matches,
@@ -217,6 +251,7 @@ fn compute_search(
     };
     CachedSearchOutput {
         response: Arc::new(response),
+        compiled_plan,
         log_messages,
     }
 }
@@ -226,10 +261,15 @@ fn search_runtime_version(snapshot: &SearchRuntimeSnapshot) -> SearchRuntimeVers
         serving_bundle_version: snapshot.version_key.serving_bundle_version.clone(),
         scoring_policy_version: snapshot.version_key.scoring_policy_version,
         search_engine_version: snapshot.version_key.search_engine_version.clone(),
+        semantic_contract_digest: snapshot.version_key.semantic_contract_digest.clone(),
     }
 }
 
-fn enqueue_cached_search_logs(state: &AppState, cached: &CachedSearchOutput, query: &str) {
+pub(crate) fn enqueue_cached_search_logs(
+    state: &AppState,
+    cached: &CachedSearchOutput,
+    query: &str,
+) {
     for message in rebase_cached_log_messages(cached.log_messages.clone(), query) {
         enqueue_search_log(state, message);
     }
@@ -244,7 +284,6 @@ fn unique_result_count(result_sets: &[SearchResultSet]) -> usize {
 }
 
 fn merge_search_evidence_gaps(
-    knowledge_context: &mut KnowledgeContext,
     enrichment_gaps: &mut Vec<EnrichmentGap>,
     search_gaps: &[SearchEvidenceGap],
 ) {
@@ -257,11 +296,8 @@ fn merge_search_evidence_gaps(
         }) {
             continue;
         }
-        if knowledge_context.learning_gaps.len() < MAX_LEARNING_GAPS_PER_SEARCH {
-            knowledge_context.learning_gaps.push(format!(
-                "{}: missing {} data",
-                gap.entity_id, gap.missing_fact
-            ));
+        if enrichment_gaps.len() >= MAX_LEARNING_GAPS_PER_SEARCH {
+            break;
         }
         enrichment_gaps.push(EnrichmentGap {
             entity_id: gap.entity_id.clone(),
@@ -318,80 +354,59 @@ fn push_unique_string(values: &mut Vec<String>, value: String) {
 }
 
 // ---------------------------------------------------------------------------
-// Knowledge context builder — graph-first
+// Serving-backed enrichment diagnostics
 // ---------------------------------------------------------------------------
 
-/// Build knowledge context from the graph for matched results.
-/// Returns (KnowledgeContext, graph_nodes_hit, enrichment_gaps).
-fn build_knowledge_context(
-    graph: &KnowledgeGraph,
-    serving_facts: Option<&crate::serving::ServingFactIndex>,
+fn build_serving_enrichment_gaps(
+    serving_facts: &crate::serving::ServingFactIndex,
+    graph: &crate::graph::GraphIndex,
+    entities: &[crate::serving::ServingEntityRecord],
     society_ids: &[String],
     intent: &intent::SearchIntent,
-    claims: Vec<SourcedClaim>,
-) -> (KnowledgeContext, Vec<String>, Vec<EnrichmentGap>) {
-    let mut nodes_consulted = 0;
-    let mut learning_gaps = Vec::new();
+) -> (Vec<String>, Vec<EnrichmentGap>) {
     let mut graph_nodes_hit = Vec::new();
     let mut enrichment_gaps = Vec::new();
 
     for society_id in society_ids {
-        if learning_gaps.len() >= MAX_LEARNING_GAPS_PER_SEARCH {
+        if enrichment_gaps.len() >= MAX_LEARNING_GAPS_PER_SEARCH {
             break;
         }
         let node_id = society_node_id(society_id);
-        let node = graph.get_node(&node_id);
-        if node.is_some()
-            || serving_facts
-                .and_then(|facts| facts.entity(&node_id))
-                .is_some()
-        {
-            nodes_consulted += 1;
-        }
-
-        if node.is_some() {
+        if serving_facts.entity(&node_id).is_some() {
             graph_nodes_hit.push(node_id.clone());
-
-            // Record related nodes consulted while evaluating query evidence gaps.
-            for edge in graph.edges_from(&node_id) {
-                if !matches!(edge.relation, Relation::BuiltBy | Relation::SocietyInArea) {
-                    continue;
-                }
-                if graph.get_node(&edge.to).is_some() {
-                    graph_nodes_hit.push(edge.to.clone());
+            for related_id in graph.targets_out(&node_id, &["built_by", "in_area"]) {
+                if serving_facts.entity(&related_id).is_some() {
+                    push_unique_string(&mut graph_nodes_hit, related_id);
                 }
             }
         }
 
-        let entity_name = node
-            .map(|node| node.name.as_str())
+        let entity_name = entities
+            .iter()
+            .find(|entity| entity.entity_id == node_id)
+            .map(|entity| entity.name.as_str())
             .unwrap_or_else(|| fallback_entity_name(&node_id));
 
         for pref in gap_preferences(intent) {
-            for needed_fact in missing_gap_fact_keys(graph, serving_facts, &node_id, node, &pref) {
+            for needed_fact in missing_gap_fact_keys(serving_facts, graph, &node_id, &pref) {
                 push_learning_gap(
-                    &mut learning_gaps,
                     &mut enrichment_gaps,
                     entity_name,
                     &node_id,
                     &needed_fact,
                     &pref.reason,
                 );
-                if learning_gaps.len() >= MAX_LEARNING_GAPS_PER_SEARCH {
+                if enrichment_gaps.len() >= MAX_LEARNING_GAPS_PER_SEARCH {
                     break;
                 }
             }
-            if learning_gaps.len() >= MAX_LEARNING_GAPS_PER_SEARCH {
+            if enrichment_gaps.len() >= MAX_LEARNING_GAPS_PER_SEARCH {
                 break;
             }
         }
     }
 
     for inventory_type in &intent.unsupported_inventory_types {
-        learning_gaps.push(format!(
-            "Unsupported inventory request: {} inventory is not in the current apartment corpus",
-            inventory_type
-        ));
         enrichment_gaps.push(EnrichmentGap {
             entity_id: format!("inventory:{}", inventory_type.replace(' ', "-")),
             missing_fact: "inventory_type".to_string(),
@@ -399,46 +414,7 @@ fn build_knowledge_context(
         });
     }
 
-    let context = KnowledgeContext {
-        claims,
-        nodes_consulted,
-        learning_gaps,
-    };
-
-    (context, graph_nodes_hit, enrichment_gaps)
-}
-
-fn result_evidence_claims(results: &[SearchResultCard]) -> Vec<SourcedClaim> {
-    const MAX_KNOWLEDGE_CLAIMS: usize = 12;
-
-    let mut claims = Vec::new();
-    for result in results {
-        let Some(explanation) = &result.match_explanation else {
-            continue;
-        };
-        let entity_name = if result.card.society_name.trim().is_empty() {
-            result.card.title.clone()
-        } else {
-            result.card.society_name.clone()
-        };
-        for reason in &explanation.reasons {
-            let claim = SourcedClaim {
-                entity_name: entity_name.clone(),
-                claim: reason.display.clone(),
-                confidence: reason.confidence,
-                source_type: reason.source_type.clone(),
-            };
-            if !claims.iter().any(|existing: &SourcedClaim| {
-                existing.entity_name == claim.entity_name && existing.claim == claim.claim
-            }) {
-                claims.push(claim);
-                if claims.len() == MAX_KNOWLEDGE_CLAIMS {
-                    return claims;
-                }
-            }
-        }
-    }
-    claims
+    (graph_nodes_hit, enrichment_gaps)
 }
 
 struct GapPreference {
@@ -497,27 +473,24 @@ fn gap_preferences(intent: &intent::SearchIntent) -> Vec<GapPreference> {
 }
 
 fn missing_gap_fact_keys(
-    graph: &KnowledgeGraph,
-    serving_facts: Option<&crate::serving::ServingFactIndex>,
+    serving_facts: &crate::serving::ServingFactIndex,
+    graph: &crate::graph::GraphIndex,
     node_id: &str,
-    node: Option<&crate::knowledge::node::Node>,
     pref: &GapPreference,
 ) -> Vec<String> {
     if !pref.gap_fact_keys.is_empty() {
         return pref
             .gap_fact_keys
             .iter()
-            .filter(|fact_key| {
-                !has_exact_gap_evidence(graph, serving_facts, node_id, node, fact_key)
-            })
+            .filter(|fact_key| !has_exact_gap_evidence(serving_facts, graph, node_id, fact_key))
             .cloned()
             .collect();
     }
 
-    if serving_facts.is_some_and(|facts| serving_has_gap_evidence(facts, node_id, pref))
-        || node.is_some_and(|node| node_has_gap_evidence(node, pref))
-        || related_node_has_gap_evidence(graph, node_id, Relation::BuiltBy, pref)
-        || related_node_has_gap_evidence(graph, node_id, Relation::SocietyInArea, pref)
+    if serving_has_gap_evidence(serving_facts, node_id, pref)
+        || related_entity_ids(graph, node_id)
+            .iter()
+            .any(|entity_id| serving_has_gap_evidence(serving_facts, entity_id, pref))
     {
         return Vec::new();
     }
@@ -533,16 +506,15 @@ fn missing_gap_fact_keys(
 }
 
 fn has_exact_gap_evidence(
-    graph: &KnowledgeGraph,
-    serving_facts: Option<&crate::serving::ServingFactIndex>,
+    serving_facts: &crate::serving::ServingFactIndex,
+    graph: &crate::graph::GraphIndex,
     node_id: &str,
-    node: Option<&crate::knowledge::node::Node>,
     fact_key: &str,
 ) -> bool {
-    serving_facts.is_some_and(|facts| serving_has_exact_fact(facts, node_id, fact_key))
-        || node.is_some_and(|node| node_has_exact_fact(node, fact_key))
-        || related_node_has_exact_fact(graph, node_id, Relation::BuiltBy, fact_key)
-        || related_node_has_exact_fact(graph, node_id, Relation::SocietyInArea, fact_key)
+    serving_has_exact_fact(serving_facts, node_id, fact_key)
+        || related_entity_ids(graph, node_id)
+            .iter()
+            .any(|entity_id| serving_has_exact_fact(serving_facts, entity_id, fact_key))
 }
 
 fn serving_has_exact_fact(
@@ -559,32 +531,13 @@ fn serving_has_exact_fact(
     })
 }
 
-fn node_has_exact_fact(node: &crate::knowledge::node::Node, fact_key: &str) -> bool {
-    node.facts.iter().any(|fact| {
-        fact.key.eq_ignore_ascii_case(fact_key)
-            && fact.confidence >= schema::ranking_policy().min_support_evidence_confidence
-            && sourced_fact_value_is_usable(&fact.value)
-    })
-}
-
-fn related_node_has_exact_fact(
-    graph: &KnowledgeGraph,
-    node_id: &str,
-    relation: Relation,
-    fact_key: &str,
-) -> bool {
-    graph.edges_from(node_id).iter().any(|edge| {
-        edge.relation == relation
-            && graph
-                .get_node(&edge.to)
-                .is_some_and(|related| node_has_exact_fact(related, fact_key))
-    })
+fn related_entity_ids(graph: &crate::graph::GraphIndex, node_id: &str) -> Vec<String> {
+    graph.targets_out(node_id, &["built_by", "in_area"])
 }
 
 fn push_learning_gap(
-    learning_gaps: &mut Vec<String>,
     enrichment_gaps: &mut Vec<EnrichmentGap>,
-    entity_name: &str,
+    _entity_name: &str,
     entity_id: &str,
     missing_fact: &str,
     reason: &str,
@@ -595,7 +548,6 @@ fn push_learning_gap(
         return;
     }
 
-    learning_gaps.push(format!("{entity_name}: missing {missing_fact} data"));
     enrichment_gaps.push(EnrichmentGap {
         entity_id: entity_id.to_string(),
         missing_fact: missing_fact.to_string(),
@@ -605,12 +557,6 @@ fn push_learning_gap(
 
 fn fallback_entity_name(node_id: &str) -> &str {
     node_id.strip_prefix("society:").unwrap_or(node_id)
-}
-
-fn node_has_gap_evidence(node: &crate::knowledge::node::Node, pref: &GapPreference) -> bool {
-    node.facts
-        .iter()
-        .any(|fact| fact_matches_gap_preference(fact, pref))
 }
 
 fn serving_has_gap_evidence(
@@ -653,38 +599,6 @@ fn serving_fact_value_is_usable(value: &crate::knowledge::FactValue) -> bool {
     }
 }
 
-fn sourced_fact_value_is_usable(value: &crate::knowledge::FactValue) -> bool {
-    serving_fact_value_is_usable(value)
-}
-
-fn related_node_has_gap_evidence(
-    graph: &KnowledgeGraph,
-    node_id: &str,
-    relation: Relation,
-    pref: &GapPreference,
-) -> bool {
-    graph.edges_from(node_id).iter().any(|edge| {
-        edge.relation == relation
-            && graph
-                .get_node(&edge.to)
-                .is_some_and(|related| node_has_gap_evidence(related, pref))
-    })
-}
-
-fn fact_matches_gap_preference(fact: &crate::knowledge::SourcedFact, pref: &GapPreference) -> bool {
-    fact.confidence >= schema::ranking_policy().min_support_evidence_confidence
-        && sourced_fact_value_is_usable(&fact.value)
-        && (pref
-            .candidate_fact_keys
-            .iter()
-            .any(|key| fact.key.eq_ignore_ascii_case(key))
-            || fact.answers_preferences.iter().any(|answer| {
-                pref.match_labels
-                    .iter()
-                    .any(|label| fuzzy_preference_match(answer, label))
-            }))
-}
-
 fn fuzzy_preference_match(left: &str, right: &str) -> bool {
     let left = left.to_lowercase();
     let right = right.to_lowercase();
@@ -702,6 +616,7 @@ mod tests {
             serving_bundle_version: "test-bundle".to_string(),
             scoring_policy_version: 1,
             search_engine_version: "test-search".to_string(),
+            semantic_contract_digest: "sha256:test".to_string(),
         }
     }
 
@@ -709,6 +624,9 @@ mod tests {
     fn buyer_response_exposes_result_sets_without_internal_search_state() {
         let response = SearchResponse {
             query: "3bhk whitefield".to_string(),
+            revision_id: "rev-001-test".to_string(),
+            revision: None,
+            ast_fingerprint: "sha256:test".to_string(),
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
             total_matches: 0,
@@ -723,7 +641,10 @@ mod tests {
         assert_eq!(value["resultSets"], serde_json::json!([]));
         assert_eq!(value["orderedResultIds"], serde_json::json!([]));
         assert_eq!(value["totalMatches"], 0);
-        assert_eq!(value["runtimeVersion"]["servingBundleVersion"], "test-bundle");
+        assert_eq!(
+            value["runtimeVersion"]["servingBundleVersion"],
+            "test-bundle"
+        );
         assert_eq!(value["state"], "no_matches");
         assert!(value.get("searchGuidance").is_none());
         for internal in [
@@ -741,6 +662,9 @@ mod tests {
     fn buyer_response_can_expose_guidance_without_parser_state() {
         let response = SearchResponse {
             query: "find me something good".to_string(),
+            revision_id: "rev-001-test".to_string(),
+            revision: None,
+            ast_fingerprint: "sha256:test".to_string(),
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
             total_matches: 0,
@@ -762,12 +686,7 @@ mod tests {
     }
 
     #[test]
-    fn search_evidence_gaps_are_recorded_only_in_debug_context() {
-        let mut context = KnowledgeContext {
-            claims: Vec::new(),
-            nodes_consulted: 0,
-            learning_gaps: Vec::new(),
-        };
+    fn search_evidence_gaps_are_deduplicated_for_offline_enrichment() {
         let mut enrichment_gaps = Vec::new();
         let search_gaps = vec![
             SearchEvidenceGap {
@@ -782,18 +701,12 @@ mod tests {
             },
         ];
 
-        merge_search_evidence_gaps(&mut context, &mut enrichment_gaps, &search_gaps);
+        merge_search_evidence_gaps(&mut enrichment_gaps, &search_gaps);
 
-        assert_eq!(context.learning_gaps.len(), 2);
         assert_eq!(enrichment_gaps.len(), 2);
         assert_eq!(enrichment_gaps[0].missing_fact, "geo.latitude");
 
-        merge_search_evidence_gaps(&mut context, &mut enrichment_gaps, &search_gaps);
-        assert_eq!(
-            context.learning_gaps.len(),
-            2,
-            "gaps should be deduplicated"
-        );
+        merge_search_evidence_gaps(&mut enrichment_gaps, &search_gaps);
         assert_eq!(enrichment_gaps.len(), 2, "gaps should be deduplicated");
     }
 
@@ -822,6 +735,9 @@ mod tests {
         });
         let response = SearchResponse {
             query: "3bhk whitefield".to_string(),
+            revision_id: "rev-001-test".to_string(),
+            revision: None,
+            ast_fingerprint: "sha256:test".to_string(),
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
             total_matches: 0,
@@ -879,22 +795,14 @@ mod tests {
 
     #[test]
     fn test_negative_preference_gap_uses_structured_fact_key() {
-        use crate::knowledge::node::{Node, NodeType};
-
-        let mut graph = crate::knowledge::KnowledgeGraph::new();
-        graph.add_node(Node::new(
-            "society:test-society",
-            NodeType::Society,
-            "Test Society",
-        ));
-
+        let serving_facts = crate::serving::ServingFactIndex::from_records(Vec::new(), Vec::new());
         let intent = crate::search::intent::parse_intent("3bhk whitefield no waterlogging");
-        let (_, _, enrichment_gaps) = build_knowledge_context(
-            &graph,
-            None,
+        let (_, enrichment_gaps) = build_serving_enrichment_gaps(
+            &serving_facts,
+            &crate::graph::GraphIndex::default(),
+            &[],
             &["test-society".to_string()],
             &intent,
-            Vec::new(),
         );
 
         assert!(
@@ -914,18 +822,17 @@ mod tests {
 
     #[test]
     fn serving_only_runtime_emits_configured_gap_keys() {
-        let graph = crate::knowledge::KnowledgeGraph::new();
         let serving_facts = crate::serving::ServingFactIndex::from_records(Vec::new(), Vec::new());
         let intent = crate::search::intent::parse_intent(
             "Need 3BHK Whitefield under 2.4Cr. no tanker dependency or daily water stress",
         );
 
-        let (_, _, enrichment_gaps) = build_knowledge_context(
-            &graph,
-            Some(&serving_facts),
+        let (_, enrichment_gaps) = build_serving_enrichment_gaps(
+            &serving_facts,
+            &crate::graph::GraphIndex::default(),
+            &[],
             &["soc-test-society".to_string()],
             &intent,
-            Vec::new(),
         );
 
         assert!(
@@ -977,6 +884,7 @@ mod tests {
             model: None,
             skill_id: Some("reddit_resident_facts".to_string()),
             learned_at: Utc::now(),
+            observation: None,
         };
 
         let empty = ServingFactIndex::from_records(
@@ -1014,12 +922,15 @@ mod tests {
     }
 
     #[test]
-    fn test_no_kg_node_still_matches_hard_constraints() {
+    fn test_property_without_serving_facts_still_matches_hard_inventory() {
         // A property whose society has no KG node should still match hard constraints
         // (area, BHK) but not receive legacy preference scoring.
-        use crate::search::{CompiledQuery, TextSearch, TextSearchRequest};
-
-        let graph = crate::knowledge::KnowledgeGraph::new();
+        use crate::search::{
+            CandidateEvaluationRequest, CandidateEvaluator, IntentAst, InventoryOption,
+            SearchEvaluationContext,
+        };
+        use crate::serving::{EvidenceRef, SourceObservation};
+        use chrono::{TimeZone, Utc};
 
         // Create a property with fields that match legacy preferences
         let prop = crate::models::Property {
@@ -1069,9 +980,34 @@ mod tests {
         };
 
         let properties = vec![prop];
-        let societies: Vec<crate::models::Society> = vec![];
         let mut society_names = std::collections::HashMap::new();
         society_names.insert("no-kg-society".to_string(), "No KG Society".to_string());
+        let society_entity_id = "society:no-kg-society";
+        let snapshot_identity = "route-search-fixture";
+        let observation = SourceObservation::new(
+            "RouteSearchFixture",
+            "no-kg-prop",
+            society_entity_id,
+            Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            Some("https://example.test/no-kg-prop".to_string()),
+            vec!["asset:route-search-fixture/v1".to_string()],
+        )
+        .unwrap();
+        let inventory_options = std::collections::HashMap::from([(
+            "no-kg-prop".to_string(),
+            InventoryOption {
+                property_id: "no-kg-prop".to_string(),
+                society_id: society_entity_id.to_string(),
+                bhk: Some(3),
+                price_min: Some(10_000_000),
+                price_max: Some(10_000_000),
+                size_sqft: Some(1_500),
+                evidence_reference: Some(EvidenceRef::for_observation(
+                    snapshot_identity,
+                    &observation,
+                )),
+            },
+        )]);
 
         let intent = crate::search::SearchIntent {
             area: Some("TestArea".into()),
@@ -1096,8 +1032,8 @@ mod tests {
         };
 
         let compiled_query =
-            CompiledQuery::from_text_with_intent("3bhk TestArea metro access quiet", intent);
-        let results = TextSearch::search(TextSearchRequest {
+            IntentAst::from_text_with_intent("3bhk TestArea metro access quiet", intent);
+        let results = CandidateEvaluator::search(CandidateEvaluationRequest {
             properties: &properties,
             search_index: None,
             extra_candidate_ids: None,
@@ -1105,9 +1041,14 @@ mod tests {
             geo_query: None,
             serving_facts: None,
             society_names: &society_names,
-            societies: &societies,
-            compiled_query: &compiled_query,
-            graph: Some(&graph),
+            query: &compiled_query.raw,
+            intent: &compiled_query.intent,
+            constraints: &compiled_query.constraints,
+            evaluation: SearchEvaluationContext {
+                options: &inventory_options,
+                spatial_matches: &std::collections::HashMap::new(),
+                snapshot_identity,
+            },
         });
 
         assert_eq!(
@@ -1121,20 +1062,12 @@ mod tests {
             "Should have positive score from hard-constraint floor"
         );
 
-        // Confidence should still be computed (low, since no KG node)
+        // Inventory evidence admits the property, but confidence is not invented
+        // when the serving fact index has no evidence for the society.
         assert!(
-            result.confidence_score.is_some(),
-            "Should have confidence score"
+            result.confidence_score.is_none(),
+            "confidence requires serving evidence"
         );
-        let conf = result.confidence_score.as_ref().unwrap();
-        // With no KG node, source_quality=0.3, coverage=0.0, freshness=0.3, match=0.0
-        // Weighted: 0.3*0.4 + 0.0*0.2 + 0.3*0.2 + 0.0*0.2 = 0.18
-        assert!(
-            conf.overall < 0.4,
-            "Confidence should be low without KG data, got {}",
-            conf.overall
-        );
-        assert_eq!(conf.label, "Low");
     }
 }
 
@@ -1150,7 +1083,7 @@ fn guarded_search_has_local_recall(
         return false;
     }
 
-    let compiled = crate::search::CompiledQuery::from_text(query);
+    let compiled = crate::search::IntentAst::from_text(query);
     !snapshot
         .search_index
         .recall_named_entity_ids(&compiled)

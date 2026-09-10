@@ -33,11 +33,11 @@ use super::{
     SourceWatermark,
 };
 
-pub const KG_SOCIETY_VIEW_ASSET_ID: &str = "kg_society_view";
-const KG_SOCIETY_VIEW_FORMAT_VERSION: u32 = 2;
+pub const SOCIETY_GOLD_SNAPSHOT_ASSET_ID: &str = "society_gold_snapshot";
+const SOCIETY_GOLD_SNAPSHOT_FORMAT_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct KgViewEntityRecord {
+pub struct SocietyGoldEntityRecord {
     pub entity_id: String,
     pub entity_type: String,
     pub name: String,
@@ -48,7 +48,7 @@ pub struct KgViewEntityRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct KgViewFactRecord {
+pub struct SocietyGoldFactRecord {
     pub entity_id: String,
     pub fact_key: String,
     pub fact_version: u32,
@@ -62,6 +62,12 @@ pub struct KgViewFactRecord {
     pub skill_id: Option<String>,
     pub triggered_by: Option<String>,
     pub learned_at: DateTime<Utc>,
+    #[serde(default)]
+    pub observation_provider: Option<String>,
+    #[serde(default)]
+    pub provider_observation_id: Option<String>,
+    #[serde(default)]
+    pub asset_lineage: Vec<String>,
 }
 
 /// Optional annotations layered over canonical facts.
@@ -69,7 +75,7 @@ pub struct KgViewFactRecord {
 /// Search can consume these fields, but the main fact table remains reusable by
 /// calculators, benchmark jobs, valuation jobs, and future decision products.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct KgViewFactAnnotationRecord {
+pub struct SocietyGoldFactAnnotationRecord {
     pub entity_id: String,
     pub fact_key: String,
     pub display_template: Option<String>,
@@ -80,7 +86,7 @@ pub struct KgViewFactAnnotationRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct KgViewEdgeRecord {
+pub struct SocietyGoldEdgeRecord {
     pub from_entity_id: String,
     pub to_entity_id: String,
     pub relation: String,
@@ -94,20 +100,20 @@ pub struct KgViewEdgeRecord {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct KgViewRecords {
-    pub entities: Vec<KgViewEntityRecord>,
-    pub facts: Vec<KgViewFactRecord>,
-    pub fact_annotations: Vec<KgViewFactAnnotationRecord>,
-    pub edges: Vec<KgViewEdgeRecord>,
+pub struct SocietyGoldRecords {
+    pub entities: Vec<SocietyGoldEntityRecord>,
+    pub facts: Vec<SocietyGoldFactRecord>,
+    pub fact_annotations: Vec<SocietyGoldFactAnnotationRecord>,
+    pub edges: Vec<SocietyGoldEdgeRecord>,
     pub content_hash: String,
 }
 
-impl KgViewRecords {
+impl SocietyGoldRecords {
     pub fn from_graph(graph: &KnowledgeGraph) -> Result<Self, serde_json::Error> {
         let mut entities: Vec<_> = graph
             .nodes
             .values()
-            .map(|node| KgViewEntityRecord {
+            .map(|node| SocietyGoldEntityRecord {
                 entity_id: node.id.clone(),
                 entity_type: node.node_type.to_string(),
                 name: node.name.clone(),
@@ -123,7 +129,7 @@ impl KgViewRecords {
         let mut fact_annotations = Vec::new();
         for node in graph.nodes.values() {
             for fact in &node.facts {
-                facts.push(KgViewFactRecord {
+                facts.push(SocietyGoldFactRecord {
                     entity_id: node.id.clone(),
                     fact_key: fact.key.clone(),
                     fact_version: fact.version,
@@ -137,6 +143,9 @@ impl KgViewRecords {
                     skill_id: fact.source.skill_id.clone(),
                     triggered_by: fact.source.triggered_by.clone(),
                     learned_at: fact.learned_at,
+                    observation_provider: None,
+                    provider_observation_id: None,
+                    asset_lineage: Vec::new(),
                 });
 
                 let scoring_direction = fact
@@ -149,7 +158,7 @@ impl KgViewRecords {
                     .as_ref()
                     .map(|hint| hint.thresholds.as_slice())
                     .unwrap_or(&[]);
-                fact_annotations.push(KgViewFactAnnotationRecord {
+                fact_annotations.push(SocietyGoldFactAnnotationRecord {
                     entity_id: node.id.clone(),
                     fact_key: fact.key.clone(),
                     display_template: fact.display_template.clone(),
@@ -166,7 +175,7 @@ impl KgViewRecords {
         let mut edges: Vec<_> = graph
             .edges
             .iter()
-            .map(|edge| KgViewEdgeRecord {
+            .map(|edge| SocietyGoldEdgeRecord {
                 from_entity_id: edge.from.clone(),
                 to_entity_id: edge.to.clone(),
                 relation: format!("{:?}", edge.relation),
@@ -200,17 +209,17 @@ impl KgViewRecords {
         graph: &KnowledgeGraph,
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
-    ) -> Result<Self, KgSocietyViewMaterializeError> {
+    ) -> Result<Self, SocietyGoldSnapshotMaterializeError> {
         Self::from_graph_with_asset_rows(graph, &[], &[], support_facts, support_annotations)
     }
 
     pub fn from_graph_with_asset_rows(
         graph: &KnowledgeGraph,
-        canonical_entities: &[KgViewEntityRecord],
-        canonical_edges: &[KgViewEdgeRecord],
+        canonical_entities: &[SocietyGoldEntityRecord],
+        canonical_edges: &[SocietyGoldEdgeRecord],
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
-    ) -> Result<Self, KgSocietyViewMaterializeError> {
+    ) -> Result<Self, SocietyGoldSnapshotMaterializeError> {
         let mut records = Self::from_graph(graph)?;
         let canonical_aliases = canonical_society_alias_map(canonical_entities)?;
         records.rewrite_entity_references(&canonical_aliases);
@@ -240,7 +249,7 @@ impl KgViewRecords {
     fn remove_entities(
         &mut self,
         entity_ids: &HashSet<String>,
-    ) -> Result<(), KgSocietyViewMaterializeError> {
+    ) -> Result<(), SocietyGoldSnapshotMaterializeError> {
         if entity_ids.is_empty() {
             return Ok(());
         }
@@ -266,9 +275,9 @@ impl KgViewRecords {
 
     fn merge_canonical_rows(
         &mut self,
-        canonical_entities: &[KgViewEntityRecord],
-        canonical_edges: &[KgViewEdgeRecord],
-    ) -> Result<(), KgSocietyViewMaterializeError> {
+        canonical_entities: &[SocietyGoldEntityRecord],
+        canonical_edges: &[SocietyGoldEdgeRecord],
+    ) -> Result<(), SocietyGoldSnapshotMaterializeError> {
         let mut entity_positions: HashMap<_, _> = self
             .entities
             .iter()
@@ -338,9 +347,9 @@ impl KgViewRecords {
         &mut self,
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
-    ) -> Result<(), KgSocietyViewMaterializeError> {
-        let support_place_entities = support_place_entities(support_facts)?;
-        merge_synthesized_entities(&mut self.entities, support_place_entities);
+    ) -> Result<(), SocietyGoldSnapshotMaterializeError> {
+        let support_spatial_entities = support_spatial_entities(support_facts)?;
+        merge_synthesized_entities(&mut self.entities, support_spatial_entities);
         let mut accepted_entities: HashSet<String> = self
             .entities
             .iter()
@@ -369,7 +378,7 @@ impl KgViewRecords {
             .filter(|fact| accepted_entities.contains(&fact.entity_id))
         {
             let fact_value: FactValue = serde_json::from_str(&fact.value_json)?;
-            let record = KgViewFactRecord {
+            let record = SocietyGoldFactRecord {
                 entity_id: fact.entity_id.clone(),
                 fact_key: fact.fact_key.clone(),
                 fact_version: 1,
@@ -383,6 +392,9 @@ impl KgViewRecords {
                 skill_id: fact.skill_id.clone(),
                 triggered_by: fact.triggered_by.clone(),
                 learned_at: fact.learned_at,
+                observation_provider: fact.observation_provider.clone(),
+                provider_observation_id: fact.provider_observation_id.clone(),
+                asset_lineage: fact.asset_lineage.clone(),
             };
             support_fact_keys.insert((record.entity_id.clone(), record.fact_key.clone()));
             support_fact_records.push(record);
@@ -397,7 +409,7 @@ impl KgViewRecords {
                     .contains(&(annotation.entity_id.clone(), annotation.fact_key.clone()))
             })
         {
-            support_annotation_records.push(KgViewFactAnnotationRecord {
+            support_annotation_records.push(SocietyGoldFactAnnotationRecord {
                 entity_id: annotation.entity_id.clone(),
                 fact_key: annotation.fact_key.clone(),
                 display_template: annotation.display_template.clone(),
@@ -436,10 +448,10 @@ impl KgViewRecords {
     }
 }
 
-pub async fn load_kg_view_records(
+pub async fn load_society_gold_records(
     lake: &LakeStore,
-    manifest: &KgViewManifest,
-) -> Result<KgViewRecords, KgSocietyViewMaterializeError> {
+    manifest: &SocietyGoldManifest,
+) -> Result<SocietyGoldRecords, SocietyGoldSnapshotMaterializeError> {
     let entities = read_entities_parquet(
         &lake
             .get_bytes(&LakeKey::new(manifest.entity_parquet_key.clone()).map_err(LakeError::Key)?)
@@ -464,7 +476,7 @@ pub async fn load_kg_view_records(
             .await?,
     )?;
     let content_hash = content_hash(&entities, &facts, &fact_annotations, &edges)?;
-    Ok(KgViewRecords {
+    Ok(SocietyGoldRecords {
         entities,
         facts,
         fact_annotations,
@@ -474,8 +486,8 @@ pub async fn load_kg_view_records(
 }
 
 fn merge_synthesized_entities(
-    entities: &mut Vec<KgViewEntityRecord>,
-    synthesized: Vec<KgViewEntityRecord>,
+    entities: &mut Vec<SocietyGoldEntityRecord>,
+    synthesized: Vec<SocietyGoldEntityRecord>,
 ) {
     if synthesized.is_empty() {
         return;
@@ -501,29 +513,38 @@ fn merge_synthesized_entities(
     entities.sort_by(|left, right| left.entity_id.cmp(&right.entity_id));
 }
 
-fn support_place_entities(
+fn support_spatial_entities(
     support_facts: &[SkillFactRecord],
-) -> Result<Vec<KgViewEntityRecord>, KgSocietyViewMaterializeError> {
+) -> Result<Vec<SocietyGoldEntityRecord>, SocietyGoldSnapshotMaterializeError> {
     let coordinate_entities = super::compaction::resolve_coordinate_fact_records(support_facts)?
         .into_iter()
         .map(|fact| fact.entity_id)
         .collect::<HashSet<_>>();
-    let mut by_entity = BTreeMap::<String, SupportPlaceEntity>::new();
+    let mut by_entity = BTreeMap::<String, SupportSpatialEntity>::new();
     for fact in support_facts
         .iter()
-        .filter(|fact| fact.entity_id.starts_with("place:"))
+        .filter(|fact| fact.entity_id.starts_with("place:") || fact.entity_id.starts_with("area:"))
     {
         let value = serde_json::from_str::<FactValue>(&fact.value_json)?;
-        let entry = by_entity
-            .entry(fact.entity_id.clone())
-            .or_insert_with(|| SupportPlaceEntity {
-                entity_id: fact.entity_id.clone(),
-                name: None,
-                has_coordinates: coordinate_entities.contains(&fact.entity_id),
-                root_source: Some(fact.source_type.to_ascii_lowercase()),
-                created_at: fact.learned_at,
-                updated_at: fact.learned_at,
-            });
+        let entity_type = if fact.entity_id.starts_with("area:") {
+            "area"
+        } else {
+            "place"
+        };
+        let entry =
+            by_entity
+                .entry(fact.entity_id.clone())
+                .or_insert_with(|| SupportSpatialEntity {
+                    entity_id: fact.entity_id.clone(),
+                    entity_type: entity_type.to_string(),
+                    name: None,
+                    has_coordinates: coordinate_entities.contains(&fact.entity_id),
+                    has_geometry: false,
+                    is_market_locality: false,
+                    root_source: Some(fact.source_type.to_ascii_lowercase()),
+                    created_at: fact.learned_at,
+                    updated_at: fact.learned_at,
+                });
         entry.created_at = entry.created_at.min(fact.learned_at);
         entry.updated_at = entry.updated_at.max(fact.learned_at);
         if entry.root_source.is_none() && !fact.source_type.trim().is_empty() {
@@ -532,6 +553,14 @@ fn support_place_entities(
         match (fact.fact_key.as_str(), value) {
             ("place.name", FactValue::Text(name)) if !name.trim().is_empty() => {
                 entry.name = Some(name.trim().to_string());
+            }
+            ("market.locality_name", FactValue::Text(name)) if !name.trim().is_empty() => {
+                entry.name = Some(name.trim().to_string());
+                entry.is_market_locality = true;
+                entry.root_source = Some("market_locality".to_string());
+            }
+            ("geo.geometry_geojson", FactValue::Text(geometry)) if !geometry.trim().is_empty() => {
+                entry.has_geometry = true;
             }
             _ => {}
         }
@@ -543,24 +572,32 @@ fn support_place_entities(
         .collect())
 }
 
-struct SupportPlaceEntity {
+struct SupportSpatialEntity {
     entity_id: String,
+    entity_type: String,
     name: Option<String>,
     has_coordinates: bool,
+    has_geometry: bool,
+    is_market_locality: bool,
     root_source: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
 
-impl SupportPlaceEntity {
-    fn into_record(self) -> Option<KgViewEntityRecord> {
+impl SupportSpatialEntity {
+    fn into_record(self) -> Option<SocietyGoldEntityRecord> {
         let name = self.name?;
-        if !self.has_coordinates {
+        let has_required_geometry = match self.entity_type.as_str() {
+            "area" => self.has_geometry || self.is_market_locality,
+            "place" => self.has_coordinates,
+            _ => false,
+        };
+        if !has_required_geometry {
             return None;
         }
-        Some(KgViewEntityRecord {
+        Some(SocietyGoldEntityRecord {
             entity_id: self.entity_id,
-            entity_type: "place".to_string(),
+            entity_type: self.entity_type,
             name,
             root_source: self.root_source,
             fact_count: 0,
@@ -588,8 +625,8 @@ fn slug(value: &str) -> String {
 }
 
 fn canonical_society_alias_map(
-    canonical_entities: &[KgViewEntityRecord],
-) -> Result<HashMap<String, String>, KgSocietyViewMaterializeError> {
+    canonical_entities: &[SocietyGoldEntityRecord],
+) -> Result<HashMap<String, String>, SocietyGoldSnapshotMaterializeError> {
     let mut aliases = HashMap::new();
     for entity in canonical_entities
         .iter()
@@ -598,12 +635,12 @@ fn canonical_society_alias_map(
         let alias_entity_id = format!("society:{}", slug(&entity.name));
         if let Some(existing) = aliases.insert(alias_entity_id.clone(), entity.entity_id.clone()) {
             if existing != entity.entity_id {
-                return Err(KgSocietyViewMaterializeError::InvalidCanonicalIdentity(
-                    format!(
+                return Err(
+                    SocietyGoldSnapshotMaterializeError::InvalidCanonicalIdentity(format!(
                         "{alias_entity_id} maps to both {existing} and {}",
                         entity.entity_id
-                    ),
-                ));
+                    )),
+                );
             }
         }
     }
@@ -647,7 +684,7 @@ fn rewrite_skill_annotations(
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum KgViewArtifactKind {
+pub enum SocietyGoldArtifactKind {
     EntitiesParquet,
     FactsParquet,
     FactAnnotationsParquet,
@@ -656,8 +693,8 @@ pub enum KgViewArtifactKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct KgViewArtifact {
-    pub kind: KgViewArtifactKind,
+pub struct SocietyGoldArtifact {
+    pub kind: SocietyGoldArtifactKind,
     pub key: String,
     pub format: String,
     pub content_hash: String,
@@ -667,7 +704,7 @@ pub struct KgViewArtifact {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct KgViewManifest {
+pub struct SocietyGoldManifest {
     pub view_version: String,
     pub format_version: u32,
     pub created_at: DateTime<Utc>,
@@ -680,23 +717,23 @@ pub struct KgViewManifest {
     pub fact_parquet_key: String,
     pub fact_annotation_parquet_key: String,
     pub edge_parquet_key: String,
-    pub artifacts: Vec<KgViewArtifact>,
+    pub artifacts: Vec<SocietyGoldArtifact>,
 }
 
 #[derive(Clone)]
-pub struct KgSocietyViewMaterializer {
+pub struct SocietyGoldSnapshotMaterializer {
     lake: LakeStore,
     materializations: AssetMaterializationStore,
 }
 
 #[derive(Debug, Clone)]
-pub struct KgSocietyViewMaterialization {
-    pub manifest: KgViewManifest,
+pub struct SocietyGoldSnapshotMaterialization {
+    pub manifest: SocietyGoldManifest,
     pub record: MaterializationRecord,
-    pub records: KgViewRecords,
+    pub records: SocietyGoldRecords,
 }
 
-impl KgSocietyViewMaterializer {
+impl SocietyGoldSnapshotMaterializer {
     pub fn new(lake: LakeStore) -> Self {
         let materializations = AssetMaterializationStore::new(lake.clone());
         Self {
@@ -711,7 +748,7 @@ impl KgSocietyViewMaterializer {
         view_version: impl Into<String>,
         source_watermarks: Vec<SourceWatermark>,
         parent_materializations: Vec<MaterializationId>,
-    ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
+    ) -> Result<SocietyGoldSnapshotMaterialization, SocietyGoldSnapshotMaterializeError> {
         self.materialize_and_promote_with_skill_facts(
             graph,
             view_version,
@@ -732,7 +769,7 @@ impl KgSocietyViewMaterializer {
         parent_materializations: Vec<MaterializationId>,
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
-    ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
+    ) -> Result<SocietyGoldSnapshotMaterialization, SocietyGoldSnapshotMaterializeError> {
         let materialization = self
             .materialize_for_run_with_skill_facts(
                 graph,
@@ -759,7 +796,7 @@ impl KgSocietyViewMaterializer {
         parent_materializations: Vec<MaterializationId>,
         run_id: MaterializationId,
         partition: AssetPartition,
-    ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
+    ) -> Result<SocietyGoldSnapshotMaterialization, SocietyGoldSnapshotMaterializeError> {
         let materialization = self
             .materialize_for_run(
                 graph,
@@ -784,7 +821,7 @@ impl KgSocietyViewMaterializer {
         parent_materializations: Vec<MaterializationId>,
         run_id: MaterializationId,
         partition: AssetPartition,
-    ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
+    ) -> Result<SocietyGoldSnapshotMaterialization, SocietyGoldSnapshotMaterializeError> {
         self.materialize_for_run_inner(
             graph,
             view_version,
@@ -811,7 +848,7 @@ impl KgSocietyViewMaterializer {
         partition: AssetPartition,
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
-    ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
+    ) -> Result<SocietyGoldSnapshotMaterialization, SocietyGoldSnapshotMaterializeError> {
         self.materialize_for_run_with_asset_rows(
             graph,
             view_version,
@@ -836,11 +873,11 @@ impl KgSocietyViewMaterializer {
         parent_materializations: Vec<MaterializationId>,
         run_id: MaterializationId,
         partition: AssetPartition,
-        canonical_entities: &[KgViewEntityRecord],
-        canonical_edges: &[KgViewEdgeRecord],
+        canonical_entities: &[SocietyGoldEntityRecord],
+        canonical_edges: &[SocietyGoldEdgeRecord],
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
-    ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
+    ) -> Result<SocietyGoldSnapshotMaterialization, SocietyGoldSnapshotMaterializeError> {
         self.materialize_for_run_inner(
             graph,
             view_version,
@@ -865,13 +902,13 @@ impl KgSocietyViewMaterializer {
         parent_materializations: Vec<MaterializationId>,
         run_id: MaterializationId,
         partition: AssetPartition,
-        canonical_entities: &[KgViewEntityRecord],
-        canonical_edges: &[KgViewEdgeRecord],
+        canonical_entities: &[SocietyGoldEntityRecord],
+        canonical_edges: &[SocietyGoldEdgeRecord],
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
-    ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
+    ) -> Result<SocietyGoldSnapshotMaterialization, SocietyGoldSnapshotMaterializeError> {
         let view_version = view_version.into();
-        let records = KgViewRecords::from_graph_with_asset_rows(
+        let records = SocietyGoldRecords::from_graph_with_asset_rows(
             graph,
             canonical_entities,
             canonical_edges,
@@ -880,7 +917,7 @@ impl KgSocietyViewMaterializer {
         )?;
 
         let entity_key = AssetPathBuilder::gold_asset_key(
-            KG_SOCIETY_VIEW_ASSET_ID,
+            SOCIETY_GOLD_SNAPSHOT_ASSET_ID,
             &view_version,
             "entities/part-00000.parquet",
         );
@@ -890,7 +927,7 @@ impl KgSocietyViewMaterializer {
             .await?;
 
         let fact_key = AssetPathBuilder::gold_asset_key(
-            KG_SOCIETY_VIEW_ASSET_ID,
+            SOCIETY_GOLD_SNAPSHOT_ASSET_ID,
             &view_version,
             "facts/part-00000.parquet",
         );
@@ -900,7 +937,7 @@ impl KgSocietyViewMaterializer {
             .await?;
 
         let fact_annotation_key = AssetPathBuilder::gold_asset_key(
-            KG_SOCIETY_VIEW_ASSET_ID,
+            SOCIETY_GOLD_SNAPSHOT_ASSET_ID,
             &view_version,
             "fact_annotations/part-00000.parquet",
         );
@@ -913,7 +950,7 @@ impl KgSocietyViewMaterializer {
             .await?;
 
         let edge_key = AssetPathBuilder::gold_asset_key(
-            KG_SOCIETY_VIEW_ASSET_ID,
+            SOCIETY_GOLD_SNAPSHOT_ASSET_ID,
             &view_version,
             "edges/part-00000.parquet",
         );
@@ -924,34 +961,34 @@ impl KgSocietyViewMaterializer {
 
         let artifacts = vec![
             artifact(
-                KgViewArtifactKind::EntitiesParquet,
+                SocietyGoldArtifactKind::EntitiesParquet,
                 &entity_meta,
                 "application/vnd.apache.parquet",
                 Some(records.entities.len() as u64),
             ),
             artifact(
-                KgViewArtifactKind::FactsParquet,
+                SocietyGoldArtifactKind::FactsParquet,
                 &fact_meta,
                 "application/vnd.apache.parquet",
                 Some(records.facts.len() as u64),
             ),
             artifact(
-                KgViewArtifactKind::FactAnnotationsParquet,
+                SocietyGoldArtifactKind::FactAnnotationsParquet,
                 &fact_annotation_meta,
                 "application/vnd.apache.parquet",
                 Some(records.fact_annotations.len() as u64),
             ),
             artifact(
-                KgViewArtifactKind::EdgesParquet,
+                SocietyGoldArtifactKind::EdgesParquet,
                 &edge_meta,
                 "application/vnd.apache.parquet",
                 Some(records.edges.len() as u64),
             ),
         ];
 
-        let manifest = KgViewManifest {
+        let manifest = SocietyGoldManifest {
             view_version: view_version.clone(),
-            format_version: KG_SOCIETY_VIEW_FORMAT_VERSION,
+            format_version: SOCIETY_GOLD_SNAPSHOT_FORMAT_VERSION,
             created_at: Utc::now(),
             graph_content_hash: records.content_hash.clone(),
             entity_count: records.entities.len() as u64,
@@ -966,7 +1003,7 @@ impl KgSocietyViewMaterializer {
         };
 
         let manifest_key = AssetPathBuilder::gold_asset_key(
-            KG_SOCIETY_VIEW_ASSET_ID,
+            SOCIETY_GOLD_SNAPSHOT_ASSET_ID,
             &view_version,
             "manifest.json",
         );
@@ -988,7 +1025,7 @@ impl KgSocietyViewMaterializer {
         record_watermarks.extend(source_watermarks);
 
         let record = MaterializationRecord::succeeded(
-            AssetId::new(KG_SOCIETY_VIEW_ASSET_ID)
+            AssetId::new(SOCIETY_GOLD_SNAPSHOT_ASSET_ID)
                 .expect("static KG society view asset id is valid"),
             AssetStage::Gold,
             partition,
@@ -1007,7 +1044,7 @@ impl KgSocietyViewMaterializer {
 
         self.materializations.write_materialization(&record).await?;
 
-        Ok(KgSocietyViewMaterialization {
+        Ok(SocietyGoldSnapshotMaterialization {
             manifest,
             record,
             records,
@@ -1016,8 +1053,8 @@ impl KgSocietyViewMaterializer {
 }
 
 fn write_entities_parquet(
-    entities: &[KgViewEntityRecord],
-) -> Result<Vec<u8>, KgSocietyViewMaterializeError> {
+    entities: &[SocietyGoldEntityRecord],
+) -> Result<Vec<u8>, SocietyGoldSnapshotMaterializeError> {
     let schema = Arc::new(Schema::new(vec![
         Field::new("entity_id", DataType::Utf8, false),
         Field::new("entity_type", DataType::Utf8, false),
@@ -1045,14 +1082,14 @@ fn write_entities_parquet(
             string_array(entities.iter().map(|entity| entity.updated_at.to_rfc3339())),
         ],
     )
-    .map_err(KgSocietyViewMaterializeError::Arrow)?;
+    .map_err(SocietyGoldSnapshotMaterializeError::Arrow)?;
 
     write_batch(batch)
 }
 
 fn write_facts_parquet(
-    facts: &[KgViewFactRecord],
-) -> Result<Vec<u8>, KgSocietyViewMaterializeError> {
+    facts: &[SocietyGoldFactRecord],
+) -> Result<Vec<u8>, SocietyGoldSnapshotMaterializeError> {
     let typed_values = facts
         .iter()
         .map(|fact| {
@@ -1060,7 +1097,7 @@ fn write_facts_parquet(
             validate_fact_value_type(&fact.value_type, &value)?;
             Ok(TypedFactValue::from_fact_value(&value))
         })
-        .collect::<Result<Vec<_>, KgSocietyViewMaterializeError>>()?;
+        .collect::<Result<Vec<_>, SocietyGoldSnapshotMaterializeError>>()?;
 
     let mut fields = vec![
         Field::new("entity_id", DataType::Utf8, false),
@@ -1077,6 +1114,9 @@ fn write_facts_parquet(
         Field::new("skill_id", DataType::Utf8, true),
         Field::new("triggered_by", DataType::Utf8, true),
         Field::new("learned_at", DataType::Utf8, false),
+        Field::new("observation_provider", DataType::Utf8, true),
+        Field::new("provider_observation_id", DataType::Utf8, true),
+        string_list_field("asset_lineage", false),
     ]);
     let schema = Arc::new(Schema::new(fields));
 
@@ -1102,25 +1142,32 @@ fn write_facts_parquet(
         optional_string_array(facts.iter().map(|fact| fact.skill_id.clone())),
         optional_string_array(facts.iter().map(|fact| fact.triggered_by.clone())),
         string_array(facts.iter().map(|fact| fact.learned_at.to_rfc3339())),
+        optional_string_array(facts.iter().map(|fact| fact.observation_provider.clone())),
+        optional_string_array(
+            facts
+                .iter()
+                .map(|fact| fact.provider_observation_id.clone()),
+        ),
+        string_list_array(facts.iter().map(|fact| Some(fact.asset_lineage.clone()))),
     ]);
 
     let batch = RecordBatch::try_new(schema.clone(), columns)
-        .map_err(KgSocietyViewMaterializeError::Arrow)?;
+        .map_err(SocietyGoldSnapshotMaterializeError::Arrow)?;
 
     write_batch(batch)
 }
 
 fn write_fact_annotations_parquet(
-    annotations: &[KgViewFactAnnotationRecord],
-) -> Result<Vec<u8>, KgSocietyViewMaterializeError> {
+    annotations: &[SocietyGoldFactAnnotationRecord],
+) -> Result<Vec<u8>, SocietyGoldSnapshotMaterializeError> {
     let answers_preferences = annotations
         .iter()
         .map(|record| parse_string_vec(&record.answers_preferences_json).map(Some))
-        .collect::<Result<Vec<_>, KgSocietyViewMaterializeError>>()?;
+        .collect::<Result<Vec<_>, SocietyGoldSnapshotMaterializeError>>()?;
     let scoring_thresholds = annotations
         .iter()
         .map(|record| parse_f64_vec(&record.scoring_thresholds_json).map(Some))
-        .collect::<Result<Vec<_>, KgSocietyViewMaterializeError>>()?;
+        .collect::<Result<Vec<_>, SocietyGoldSnapshotMaterializeError>>()?;
 
     let schema = Arc::new(Schema::new(vec![
         Field::new("entity_id", DataType::Utf8, false),
@@ -1157,14 +1204,14 @@ fn write_fact_annotations_parquet(
             float64_list_array(scoring_thresholds.into_iter()),
         ],
     )
-    .map_err(KgSocietyViewMaterializeError::Arrow)?;
+    .map_err(SocietyGoldSnapshotMaterializeError::Arrow)?;
 
     write_batch(batch)
 }
 
 fn write_edges_parquet(
-    edges: &[KgViewEdgeRecord],
-) -> Result<Vec<u8>, KgSocietyViewMaterializeError> {
+    edges: &[SocietyGoldEdgeRecord],
+) -> Result<Vec<u8>, SocietyGoldSnapshotMaterializeError> {
     let schema = Arc::new(Schema::new(vec![
         Field::new("from_entity_id", DataType::Utf8, false),
         Field::new("to_entity_id", DataType::Utf8, false),
@@ -1195,14 +1242,14 @@ fn write_edges_parquet(
             optional_string_array(edges.iter().map(|edge| edge.triggered_by.clone())),
         ],
     )
-    .map_err(KgSocietyViewMaterializeError::Arrow)?;
+    .map_err(SocietyGoldSnapshotMaterializeError::Arrow)?;
 
     write_batch(batch)
 }
 
 fn read_entities_parquet(
     bytes: &[u8],
-) -> Result<Vec<KgViewEntityRecord>, KgSocietyViewMaterializeError> {
+) -> Result<Vec<SocietyGoldEntityRecord>, SocietyGoldSnapshotMaterializeError> {
     let mut records = Vec::new();
     for batch in parquet_batches(bytes)? {
         let entity_id = string_column(&batch, "entity_id")?;
@@ -1213,7 +1260,7 @@ fn read_entities_parquet(
         let created_at = string_column(&batch, "created_at")?;
         let updated_at = string_column(&batch, "updated_at")?;
         for row in 0..batch.num_rows() {
-            records.push(KgViewEntityRecord {
+            records.push(SocietyGoldEntityRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 entity_type: required_string(entity_type, row, "entity_type")?,
                 name: required_string(name, row, "name")?,
@@ -1229,7 +1276,7 @@ fn read_entities_parquet(
 
 fn read_facts_parquet(
     bytes: &[u8],
-) -> Result<Vec<KgViewFactRecord>, KgSocietyViewMaterializeError> {
+) -> Result<Vec<SocietyGoldFactRecord>, SocietyGoldSnapshotMaterializeError> {
     let mut records = Vec::new();
     for batch in parquet_batches(bytes)? {
         let entity_id = string_column(&batch, "entity_id")?;
@@ -1243,19 +1290,21 @@ fn read_facts_parquet(
         let skill_id = string_column(&batch, "skill_id")?;
         let triggered_by = string_column(&batch, "triggered_by")?;
         let learned_at = string_column(&batch, "learned_at")?;
+        let observation_provider = optional_string_column(&batch, "observation_provider")?;
+        let provider_observation_id = optional_string_column(&batch, "provider_observation_id")?;
         for row in 0..batch.num_rows() {
             let value_type = required_string(value_type, row, "value_type")?;
             let typed = typed_value_from_batch(&batch, row).ok_or_else(|| {
-                KgSocietyViewMaterializeError::Read(format!(
+                SocietyGoldSnapshotMaterializeError::Read(format!(
                     "KG fact row {row} has no typed value columns"
                 ))
             })?;
             let value = typed.to_fact_value(&value_type).ok_or_else(|| {
-                KgSocietyViewMaterializeError::Read(format!(
+                SocietyGoldSnapshotMaterializeError::Read(format!(
                     "KG fact row {row} typed value does not match {value_type}"
                 ))
             })?;
-            records.push(KgViewFactRecord {
+            records.push(SocietyGoldFactRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 fact_key: required_string(fact_key, row, "fact_key")?,
                 fact_version: required_u32(fact_version, row, "fact_version")?,
@@ -1269,6 +1318,11 @@ fn read_facts_parquet(
                 skill_id: optional_string(skill_id, row),
                 triggered_by: optional_string(triggered_by, row),
                 learned_at: parse_timestamp(&required_string(learned_at, row, "learned_at")?)?,
+                observation_provider: observation_provider
+                    .and_then(|column| optional_string(column, row)),
+                provider_observation_id: provider_observation_id
+                    .and_then(|column| optional_string(column, row)),
+                asset_lineage: optional_string_list(&batch, "asset_lineage", row)?,
             });
         }
     }
@@ -1277,7 +1331,7 @@ fn read_facts_parquet(
 
 fn read_fact_annotations_parquet(
     bytes: &[u8],
-) -> Result<Vec<KgViewFactAnnotationRecord>, KgSocietyViewMaterializeError> {
+) -> Result<Vec<SocietyGoldFactAnnotationRecord>, SocietyGoldSnapshotMaterializeError> {
     let mut records = Vec::new();
     for batch in parquet_batches(bytes)? {
         let entity_id = string_column(&batch, "entity_id")?;
@@ -1289,7 +1343,7 @@ fn read_fact_annotations_parquet(
             let answers_preferences =
                 required_string_list(&batch, ANSWERS_PREFERENCES_COLUMN, row)?;
             let scoring_thresholds = required_f64_list(&batch, SCORING_THRESHOLDS_COLUMN, row)?;
-            records.push(KgViewFactAnnotationRecord {
+            records.push(SocietyGoldFactAnnotationRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 fact_key: required_string(fact_key, row, "fact_key")?,
                 display_template: optional_string(display_template, row),
@@ -1305,7 +1359,7 @@ fn read_fact_annotations_parquet(
 
 fn read_edges_parquet(
     bytes: &[u8],
-) -> Result<Vec<KgViewEdgeRecord>, KgSocietyViewMaterializeError> {
+) -> Result<Vec<SocietyGoldEdgeRecord>, SocietyGoldSnapshotMaterializeError> {
     let mut records = Vec::new();
     for batch in parquet_batches(bytes)? {
         let from_entity_id = string_column(&batch, "from_entity_id")?;
@@ -1319,7 +1373,7 @@ fn read_edges_parquet(
         let skill_id = string_column(&batch, "skill_id")?;
         let triggered_by = string_column(&batch, "triggered_by")?;
         for row in 0..batch.num_rows() {
-            records.push(KgViewEdgeRecord {
+            records.push(SocietyGoldEdgeRecord {
                 from_entity_id: required_string(from_entity_id, row, "from_entity_id")?,
                 to_entity_id: required_string(to_entity_id, row, "to_entity_id")?,
                 relation: required_string(relation, row, "relation")?,
@@ -1336,68 +1390,83 @@ fn read_edges_parquet(
     Ok(records)
 }
 
-fn parquet_batches(bytes: &[u8]) -> Result<Vec<RecordBatch>, KgSocietyViewMaterializeError> {
+fn parquet_batches(bytes: &[u8]) -> Result<Vec<RecordBatch>, SocietyGoldSnapshotMaterializeError> {
     let reader = ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes))
-        .map_err(KgSocietyViewMaterializeError::Parquet)?
+        .map_err(SocietyGoldSnapshotMaterializeError::Parquet)?
         .build()
-        .map_err(KgSocietyViewMaterializeError::Parquet)?;
+        .map_err(SocietyGoldSnapshotMaterializeError::Parquet)?;
     reader
-        .map(|batch| batch.map_err(KgSocietyViewMaterializeError::Arrow))
+        .map(|batch| batch.map_err(SocietyGoldSnapshotMaterializeError::Arrow))
         .collect()
 }
 
 fn string_column<'a>(
     batch: &'a RecordBatch,
     name: &str,
-) -> Result<&'a StringArray, KgSocietyViewMaterializeError> {
+) -> Result<&'a StringArray, SocietyGoldSnapshotMaterializeError> {
     let index = batch
         .schema()
         .index_of(name)
-        .map_err(|error| KgSocietyViewMaterializeError::Read(error.to_string()))?;
+        .map_err(|error| SocietyGoldSnapshotMaterializeError::Read(error.to_string()))?;
     batch
         .column(index)
         .as_any()
         .downcast_ref::<StringArray>()
-        .ok_or_else(|| KgSocietyViewMaterializeError::Read(format!("{name} is not Utf8")))
+        .ok_or_else(|| SocietyGoldSnapshotMaterializeError::Read(format!("{name} is not Utf8")))
+}
+
+fn optional_string_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<Option<&'a StringArray>, SocietyGoldSnapshotMaterializeError> {
+    let Ok(index) = batch.schema().index_of(name) else {
+        return Ok(None);
+    };
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .map(Some)
+        .ok_or_else(|| SocietyGoldSnapshotMaterializeError::Read(format!("{name} is not Utf8")))
 }
 
 fn float32_column<'a>(
     batch: &'a RecordBatch,
     name: &str,
-) -> Result<&'a Float32Array, KgSocietyViewMaterializeError> {
+) -> Result<&'a Float32Array, SocietyGoldSnapshotMaterializeError> {
     let index = batch
         .schema()
         .index_of(name)
-        .map_err(|error| KgSocietyViewMaterializeError::Read(error.to_string()))?;
+        .map_err(|error| SocietyGoldSnapshotMaterializeError::Read(error.to_string()))?;
     batch
         .column(index)
         .as_any()
         .downcast_ref::<Float32Array>()
-        .ok_or_else(|| KgSocietyViewMaterializeError::Read(format!("{name} is not Float32")))
+        .ok_or_else(|| SocietyGoldSnapshotMaterializeError::Read(format!("{name} is not Float32")))
 }
 
 fn uint32_column<'a>(
     batch: &'a RecordBatch,
     name: &str,
-) -> Result<&'a UInt32Array, KgSocietyViewMaterializeError> {
+) -> Result<&'a UInt32Array, SocietyGoldSnapshotMaterializeError> {
     let index = batch
         .schema()
         .index_of(name)
-        .map_err(|error| KgSocietyViewMaterializeError::Read(error.to_string()))?;
+        .map_err(|error| SocietyGoldSnapshotMaterializeError::Read(error.to_string()))?;
     batch
         .column(index)
         .as_any()
         .downcast_ref::<UInt32Array>()
-        .ok_or_else(|| KgSocietyViewMaterializeError::Read(format!("{name} is not UInt32")))
+        .ok_or_else(|| SocietyGoldSnapshotMaterializeError::Read(format!("{name} is not UInt32")))
 }
 
 fn required_string(
     array: &StringArray,
     row: usize,
     column: &str,
-) -> Result<String, KgSocietyViewMaterializeError> {
+) -> Result<String, SocietyGoldSnapshotMaterializeError> {
     if array.is_null(row) {
-        return Err(KgSocietyViewMaterializeError::Read(format!(
+        return Err(SocietyGoldSnapshotMaterializeError::Read(format!(
             "{column} is null at row {row}"
         )));
     }
@@ -1412,9 +1481,9 @@ fn required_f32(
     array: &Float32Array,
     row: usize,
     column: &str,
-) -> Result<f32, KgSocietyViewMaterializeError> {
+) -> Result<f32, SocietyGoldSnapshotMaterializeError> {
     if array.is_null(row) {
-        return Err(KgSocietyViewMaterializeError::Read(format!(
+        return Err(SocietyGoldSnapshotMaterializeError::Read(format!(
             "{column} is null at row {row}"
         )));
     }
@@ -1429,9 +1498,9 @@ fn required_u32(
     array: &UInt32Array,
     row: usize,
     column: &str,
-) -> Result<u32, KgSocietyViewMaterializeError> {
+) -> Result<u32, SocietyGoldSnapshotMaterializeError> {
     if array.is_null(row) {
-        return Err(KgSocietyViewMaterializeError::Read(format!(
+        return Err(SocietyGoldSnapshotMaterializeError::Read(format!(
             "{column} is null at row {row}"
         )));
     }
@@ -1442,14 +1511,27 @@ fn required_string_list(
     batch: &RecordBatch,
     column: &str,
     row: usize,
-) -> Result<Vec<String>, KgSocietyViewMaterializeError> {
+) -> Result<Vec<String>, SocietyGoldSnapshotMaterializeError> {
     match optional_string_list_column_value(batch, column, row)
-        .map_err(KgSocietyViewMaterializeError::Read)?
+        .map_err(SocietyGoldSnapshotMaterializeError::Read)?
     {
         OptionalListColumn::Values(values) => Ok(values),
         OptionalListColumn::Missing | OptionalListColumn::Null => Err(
-            KgSocietyViewMaterializeError::Read(format!("{column} is missing at row {row}")),
+            SocietyGoldSnapshotMaterializeError::Read(format!("{column} is missing at row {row}")),
         ),
+    }
+}
+
+fn optional_string_list(
+    batch: &RecordBatch,
+    column: &str,
+    row: usize,
+) -> Result<Vec<String>, SocietyGoldSnapshotMaterializeError> {
+    match optional_string_list_column_value(batch, column, row)
+        .map_err(SocietyGoldSnapshotMaterializeError::Read)?
+    {
+        OptionalListColumn::Values(values) => Ok(values),
+        OptionalListColumn::Missing | OptionalListColumn::Null => Ok(Vec::new()),
     }
 }
 
@@ -1457,36 +1539,36 @@ fn required_f64_list(
     batch: &RecordBatch,
     column: &str,
     row: usize,
-) -> Result<Vec<f64>, KgSocietyViewMaterializeError> {
+) -> Result<Vec<f64>, SocietyGoldSnapshotMaterializeError> {
     match optional_f64_list_column_value(batch, column, row)
-        .map_err(KgSocietyViewMaterializeError::Read)?
+        .map_err(SocietyGoldSnapshotMaterializeError::Read)?
     {
         OptionalListColumn::Values(values) => Ok(values),
         OptionalListColumn::Missing | OptionalListColumn::Null => Err(
-            KgSocietyViewMaterializeError::Read(format!("{column} is missing at row {row}")),
+            SocietyGoldSnapshotMaterializeError::Read(format!("{column} is missing at row {row}")),
         ),
     }
 }
 
-fn parse_timestamp(value: &str) -> Result<DateTime<Utc>, KgSocietyViewMaterializeError> {
+fn parse_timestamp(value: &str) -> Result<DateTime<Utc>, SocietyGoldSnapshotMaterializeError> {
     DateTime::parse_from_rfc3339(value)
         .map(|value| value.with_timezone(&Utc))
-        .map_err(|error| KgSocietyViewMaterializeError::Read(error.to_string()))
+        .map_err(|error| SocietyGoldSnapshotMaterializeError::Read(error.to_string()))
 }
 
-fn write_batch(batch: RecordBatch) -> Result<Vec<u8>, KgSocietyViewMaterializeError> {
+fn write_batch(batch: RecordBatch) -> Result<Vec<u8>, SocietyGoldSnapshotMaterializeError> {
     let props = WriterProperties::builder()
         .set_compression(Compression::ZSTD(ZstdLevel::default()))
         .build();
     let mut bytes = Vec::new();
     let mut writer = ArrowWriter::try_new(&mut bytes, batch.schema(), Some(props))
-        .map_err(KgSocietyViewMaterializeError::Parquet)?;
+        .map_err(SocietyGoldSnapshotMaterializeError::Parquet)?;
     writer
         .write(&batch)
-        .map_err(KgSocietyViewMaterializeError::Parquet)?;
+        .map_err(SocietyGoldSnapshotMaterializeError::Parquet)?;
     writer
         .close()
-        .map_err(KgSocietyViewMaterializeError::Parquet)?;
+        .map_err(SocietyGoldSnapshotMaterializeError::Parquet)?;
     Ok(bytes)
 }
 
@@ -1498,34 +1580,34 @@ fn optional_string_array(values: impl Iterator<Item = Option<String>>) -> ArrayR
     Arc::new(StringArray::from(values.collect::<Vec<_>>()))
 }
 
-fn parse_string_vec(value: &str) -> Result<Vec<String>, KgSocietyViewMaterializeError> {
+fn parse_string_vec(value: &str) -> Result<Vec<String>, SocietyGoldSnapshotMaterializeError> {
     Ok(serde_json::from_str(value)?)
 }
 
-fn parse_f64_vec(value: &str) -> Result<Vec<f64>, KgSocietyViewMaterializeError> {
+fn parse_f64_vec(value: &str) -> Result<Vec<f64>, SocietyGoldSnapshotMaterializeError> {
     Ok(serde_json::from_str(value)?)
 }
 
 fn validate_fact_value_type(
     value_type: &str,
     value: &FactValue,
-) -> Result<(), KgSocietyViewMaterializeError> {
+) -> Result<(), SocietyGoldSnapshotMaterializeError> {
     if TypedFactValue::value_type_matches(value_type, value) {
         return Ok(());
     }
-    Err(KgSocietyViewMaterializeError::InvalidFactValueType {
+    Err(SocietyGoldSnapshotMaterializeError::InvalidFactValueType {
         value_type: value_type.to_string(),
         actual_type: TypedFactValue::value_type_for(value).to_string(),
     })
 }
 
 fn artifact(
-    kind: KgViewArtifactKind,
+    kind: SocietyGoldArtifactKind,
     meta: &ArtifactMetadata,
     format: &str,
     row_count: Option<u64>,
-) -> KgViewArtifact {
-    KgViewArtifact {
+) -> SocietyGoldArtifact {
+    SocietyGoldArtifact {
         kind,
         key: meta.key.to_string(),
         format: format.to_string(),
@@ -1560,9 +1642,9 @@ fn metadata_json(metadata: &HashMap<String, String>) -> String {
     serde_json::to_string(metadata).expect("edge metadata should serialize")
 }
 
-fn dedupe_facts(facts: Vec<KgViewFactRecord>) -> Vec<KgViewFactRecord> {
+fn dedupe_facts(facts: Vec<SocietyGoldFactRecord>) -> Vec<SocietyGoldFactRecord> {
     let multi_value_fact_keys = multi_value_fact_keys();
-    let mut by_key = BTreeMap::<FactDedupeKey, KgViewFactRecord>::new();
+    let mut by_key = BTreeMap::<FactDedupeKey, SocietyGoldFactRecord>::new();
     for fact in facts {
         let key = FactDedupeKey {
             entity_id: fact.entity_id.clone(),
@@ -1593,7 +1675,7 @@ fn multi_value_fact_keys() -> HashSet<String> {
         .unwrap_or_default()
 }
 
-fn repeat_fact_identity(fact: &KgViewFactRecord) -> RepeatFactIdentity {
+fn repeat_fact_identity(fact: &SocietyGoldFactRecord) -> RepeatFactIdentity {
     RepeatFactIdentity {
         source_type: fact.source_type.clone(),
         source_url_or_value: fact
@@ -1604,7 +1686,7 @@ fn repeat_fact_identity(fact: &KgViewFactRecord) -> RepeatFactIdentity {
     }
 }
 
-fn sort_facts(facts: &mut [KgViewFactRecord]) {
+fn sort_facts(facts: &mut [SocietyGoldFactRecord]) {
     facts.sort_by(|left, right| {
         left.entity_id
             .cmp(&right.entity_id)
@@ -1613,11 +1695,11 @@ fn sort_facts(facts: &mut [KgViewFactRecord]) {
             .then(left.source_type.cmp(&right.source_type))
             .then(left.source_url.cmp(&right.source_url))
             .then(left.skill_id.cmp(&right.skill_id))
-            .then(left.learned_at.cmp(&right.learned_at))
+            .then(left.value_json.cmp(&right.value_json))
     });
 }
 
-fn better_fact(existing: &KgViewFactRecord, candidate: &KgViewFactRecord) -> bool {
+fn better_fact(existing: &SocietyGoldFactRecord, candidate: &SocietyGoldFactRecord) -> bool {
     if existing.entity_id == candidate.entity_id && existing.fact_key == candidate.fact_key {
         if let Ok(policies) = load_resolution_policies() {
             if better_source_type_for_fact(
@@ -1645,7 +1727,16 @@ fn better_fact(existing: &KgViewFactRecord, candidate: &KgViewFactRecord) -> boo
 
     candidate.confidence > existing.confidence
         || ((candidate.confidence - existing.confidence).abs() < f32::EPSILON
-            && candidate.learned_at > existing.learned_at)
+            && stable_fact_selection_key(candidate) > stable_fact_selection_key(existing))
+}
+
+fn stable_fact_selection_key(fact: &SocietyGoldFactRecord) -> (&str, &str, &str, &str) {
+    (
+        fact.value_json.as_str(),
+        fact.source_url.as_deref().unwrap_or_default(),
+        fact.provider_observation_id.as_deref().unwrap_or_default(),
+        fact.skill_id.as_deref().unwrap_or_default(),
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -1663,9 +1754,9 @@ struct RepeatFactIdentity {
 }
 
 fn dedupe_fact_annotations(
-    annotations: Vec<KgViewFactAnnotationRecord>,
-) -> Vec<KgViewFactAnnotationRecord> {
-    let mut by_key = BTreeMap::<(String, String), KgViewFactAnnotationRecord>::new();
+    annotations: Vec<SocietyGoldFactAnnotationRecord>,
+) -> Vec<SocietyGoldFactAnnotationRecord> {
+    let mut by_key = BTreeMap::<(String, String), SocietyGoldFactAnnotationRecord>::new();
     for annotation in annotations {
         let key = (annotation.entity_id.clone(), annotation.fact_key.clone());
         match by_key.get(&key) {
@@ -1684,7 +1775,7 @@ fn dedupe_fact_annotations(
     annotations
 }
 
-fn sort_fact_annotations(annotations: &mut [KgViewFactAnnotationRecord]) {
+fn sort_fact_annotations(annotations: &mut [SocietyGoldFactAnnotationRecord]) {
     annotations.sort_by(|left, right| {
         left.entity_id
             .cmp(&right.entity_id)
@@ -1692,7 +1783,7 @@ fn sort_fact_annotations(annotations: &mut [KgViewFactAnnotationRecord]) {
     });
 }
 
-fn annotation_quality(annotation: &KgViewFactAnnotationRecord) -> i32 {
+fn annotation_quality(annotation: &SocietyGoldFactAnnotationRecord) -> i32 {
     let mut quality = 0;
     if annotation.display_template.is_some() {
         quality += 1;
@@ -1707,10 +1798,10 @@ fn annotation_quality(annotation: &KgViewFactAnnotationRecord) -> i32 {
 }
 
 fn content_hash(
-    entities: &[KgViewEntityRecord],
-    facts: &[KgViewFactRecord],
-    fact_annotations: &[KgViewFactAnnotationRecord],
-    edges: &[KgViewEdgeRecord],
+    entities: &[SocietyGoldEntityRecord],
+    facts: &[SocietyGoldFactRecord],
+    fact_annotations: &[SocietyGoldFactAnnotationRecord],
+    edges: &[SocietyGoldEdgeRecord],
 ) -> Result<String, serde_json::Error> {
     let bytes = serde_json::to_vec(&(entities, facts, fact_annotations, edges))?;
     let mut hasher = Sha256::new();
@@ -1724,7 +1815,7 @@ fn content_hash(
 }
 
 #[derive(Debug)]
-pub enum KgSocietyViewMaterializeError {
+pub enum SocietyGoldSnapshotMaterializeError {
     Arrow(arrow::error::ArrowError),
     InvalidFactValueType {
         value_type: String,
@@ -1734,52 +1825,52 @@ pub enum KgSocietyViewMaterializeError {
     Lake(LakeError),
     Parquet(parquet::errors::ParquetError),
     Read(String),
-    Coordinate(super::CurrentProjectFactsError),
+    Coordinate(super::SocietyFactSnapshotError),
     InvalidCanonicalIdentity(String),
 }
 
-impl fmt::Display for KgSocietyViewMaterializeError {
+impl fmt::Display for SocietyGoldSnapshotMaterializeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Arrow(err) => write!(f, "KG view Arrow record batch error: {err}"),
+            Self::Arrow(err) => write!(f, "society gold Arrow record batch error: {err}"),
             Self::InvalidFactValueType {
                 value_type,
                 actual_type,
             } => write!(
                 f,
-                "KG view fact value_type {value_type} does not match fact value type {actual_type}"
+                "society gold fact value_type {value_type} does not match fact value type {actual_type}"
             ),
-            Self::Json(err) => write!(f, "KG view JSON error: {err}"),
-            Self::Lake(err) => write!(f, "KG view lake error: {err}"),
-            Self::Parquet(err) => write!(f, "KG view Parquet error: {err}"),
-            Self::Read(err) => write!(f, "KG view read error: {err}"),
-            Self::Coordinate(err) => write!(f, "KG view coordinate resolution error: {err}"),
+            Self::Json(err) => write!(f, "society gold JSON error: {err}"),
+            Self::Lake(err) => write!(f, "society gold lake error: {err}"),
+            Self::Parquet(err) => write!(f, "society gold Parquet error: {err}"),
+            Self::Read(err) => write!(f, "society gold read error: {err}"),
+            Self::Coordinate(err) => write!(f, "society gold coordinate resolution error: {err}"),
             Self::InvalidCanonicalIdentity(message) => {
                 write!(
                     f,
-                    "KG view canonical society identity is ambiguous: {message}"
+                    "society gold canonical society identity is ambiguous: {message}"
                 )
             }
         }
     }
 }
 
-impl std::error::Error for KgSocietyViewMaterializeError {}
+impl std::error::Error for SocietyGoldSnapshotMaterializeError {}
 
-impl From<serde_json::Error> for KgSocietyViewMaterializeError {
+impl From<serde_json::Error> for SocietyGoldSnapshotMaterializeError {
     fn from(err: serde_json::Error) -> Self {
         Self::Json(err)
     }
 }
 
-impl From<LakeError> for KgSocietyViewMaterializeError {
+impl From<LakeError> for SocietyGoldSnapshotMaterializeError {
     fn from(err: LakeError) -> Self {
         Self::Lake(err)
     }
 }
 
-impl From<super::CurrentProjectFactsError> for KgSocietyViewMaterializeError {
-    fn from(err: super::CurrentProjectFactsError) -> Self {
+impl From<super::SocietyFactSnapshotError> for SocietyGoldSnapshotMaterializeError {
+    fn from(err: super::SocietyFactSnapshotError) -> Self {
         Self::Coordinate(err)
     }
 }
@@ -1794,10 +1885,37 @@ mod tests {
     use crate::knowledge::{FactValue, SourcedFact};
 
     #[test]
+    fn kg_fact_provenance_survives_parquet_round_trip() {
+        let expected = SocietyGoldFactRecord {
+            entity_id: "society:one".to_string(),
+            fact_key: "listing_3bhk".to_string(),
+            fact_version: 1,
+            value_type: "numeric".to_string(),
+            value_text: Some("2".to_string()),
+            value_json: serde_json::to_string(&FactValue::Numeric(2.0)).unwrap(),
+            confidence: 0.8,
+            source_type: "ExternalListing".to_string(),
+            source_url: Some("https://example.test/listing/one".to_string()),
+            model: None,
+            skill_id: Some("external_listing_facts".to_string()),
+            triggered_by: Some("asset_dag".to_string()),
+            learned_at: Utc::now(),
+            observation_provider: Some("Magicbricks".to_string()),
+            provider_observation_id: Some("external_listing_record:sha256:abc".to_string()),
+            asset_lineage: vec!["materialization:raw-one".to_string()],
+        };
+
+        let bytes = write_facts_parquet(std::slice::from_ref(&expected)).unwrap();
+        let actual = read_facts_parquet(&bytes).unwrap();
+
+        assert_eq!(actual, vec![expected]);
+    }
+
+    #[test]
     fn duplicate_canonical_society_names_fail_before_kg_merge() {
         let learned_at = Utc.with_ymd_and_hms(2026, 8, 16, 7, 0, 0).unwrap();
         let canonical_entities = [
-            KgViewEntityRecord {
+            SocietyGoldEntityRecord {
                 entity_id: "society:rera-first".to_string(),
                 entity_type: "society".to_string(),
                 name: "Arvind Bel Air".to_string(),
@@ -1806,7 +1924,7 @@ mod tests {
                 created_at: learned_at,
                 updated_at: learned_at,
             },
-            KgViewEntityRecord {
+            SocietyGoldEntityRecord {
                 entity_id: "society:rera-second".to_string(),
                 entity_type: "society".to_string(),
                 name: "Arvind Bel Air".to_string(),
@@ -1817,7 +1935,7 @@ mod tests {
             },
         ];
 
-        let error = KgViewRecords::from_graph_with_asset_rows(
+        let error = SocietyGoldRecords::from_graph_with_asset_rows(
             &KnowledgeGraph::new(),
             &canonical_entities,
             &[],
@@ -1860,7 +1978,7 @@ mod tests {
         });
         graph.add_node(alias);
 
-        let canonical_entities = vec![KgViewEntityRecord {
+        let canonical_entities = vec![SocietyGoldEntityRecord {
             entity_id: "society:rera-a19f2cf2456fc549".to_string(),
             entity_type: "society".to_string(),
             name: "Prestige Lavender Fields".to_string(),
@@ -1888,7 +2006,7 @@ mod tests {
             skill_annotation("society:prestige-lavender-fields", "google_rating"),
         ];
 
-        let records = KgViewRecords::from_graph_with_asset_rows(
+        let records = SocietyGoldRecords::from_graph_with_asset_rows(
             &graph,
             &canonical_entities,
             &[],
@@ -1934,6 +2052,76 @@ mod tests {
     }
 
     #[test]
+    fn polygon_backed_area_facts_enter_typed_society_gold() {
+        let learned_at = Utc.with_ymd_and_hms(2026, 9, 5, 7, 0, 0).unwrap();
+        let area_id = "area:osm:relation-123";
+        let facts = vec![
+            skill_fact(
+                area_id,
+                "place.name",
+                FactValue::Text("Fixture locality".to_string()),
+                learned_at,
+            ),
+            skill_fact(
+                area_id,
+                "geo.geometry_geojson",
+                FactValue::Text(
+                    r#"{"type":"Polygon","coordinates":[[[77.0,12.0],[77.1,12.0],[77.1,12.1],[77.0,12.0]]]}"#
+                        .to_string(),
+                ),
+                learned_at,
+            ),
+        ];
+
+        let records = SocietyGoldRecords::from_graph_with_skill_facts(
+            &KnowledgeGraph::new(),
+            &facts,
+            &[
+                skill_annotation(area_id, "place.name"),
+                skill_annotation(area_id, "geo.geometry_geojson"),
+            ],
+        )
+        .unwrap();
+
+        assert!(records.entities.iter().any(|entity| {
+            entity.entity_id == area_id
+                && entity.entity_type == "area"
+                && entity.name == "Fixture locality"
+        }));
+        assert_eq!(
+            records
+                .facts
+                .iter()
+                .filter(|fact| fact.entity_id == area_id)
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn area_name_without_polygon_does_not_create_serving_truth() {
+        let learned_at = Utc.with_ymd_and_hms(2026, 9, 5, 7, 0, 0).unwrap();
+        let area_id = "area:osm:relation-123";
+        let records = SocietyGoldRecords::from_graph_with_skill_facts(
+            &KnowledgeGraph::new(),
+            &[skill_fact(
+                area_id,
+                "place.name",
+                FactValue::Text("Fixture locality".to_string()),
+                learned_at,
+            )],
+            &[skill_annotation(area_id, "place.name")],
+        )
+        .unwrap();
+
+        assert!(records
+            .entities
+            .iter()
+            .all(|entity| entity.entity_id != area_id));
+        assert!(records.facts.iter().all(|fact| fact.entity_id != area_id));
+    }
+
+    #[test]
     fn merge_preserves_repeatable_nearby_facts_by_source() {
         let learned_at = Utc.with_ymd_and_hms(2026, 7, 22, 7, 0, 0).unwrap();
         let mut graph = KnowledgeGraph::new();
@@ -1961,8 +2149,9 @@ mod tests {
         manipal.source_url = Some("https://www.google.com/maps/place/manipal".to_string());
         manipal.skill_id = Some("fetch_google_nearby_places".to_string());
 
-        let records = KgViewRecords::from_graph_with_skill_facts(&graph, &[aster, manipal], &[])
-            .expect("repeatable nearby facts should merge");
+        let records =
+            SocietyGoldRecords::from_graph_with_skill_facts(&graph, &[aster, manipal], &[])
+                .expect("repeatable nearby facts should merge");
         let hospital_values = records
             .facts
             .iter()
@@ -1980,6 +2169,33 @@ mod tests {
         assert!(hospital_values
             .iter()
             .any(|value| value.contains("Manipal Hospital")));
+    }
+
+    #[test]
+    fn market_locality_fact_admits_geometryless_area_entity() {
+        let learned_at = Utc.with_ymd_and_hms(2026, 9, 8, 7, 0, 0).unwrap();
+        let fact = skill_fact(
+            "area:market:whitefield",
+            "market.locality_name",
+            FactValue::Text("Whitefield".to_string()),
+            learned_at,
+        );
+
+        let records = SocietyGoldRecords::from_graph_with_skill_facts(
+            &KnowledgeGraph::new(),
+            std::slice::from_ref(&fact),
+            &[],
+        )
+        .unwrap();
+
+        let entity = records
+            .entities
+            .iter()
+            .find(|entity| entity.entity_id == fact.entity_id)
+            .unwrap();
+        assert_eq!(entity.entity_type, "area");
+        assert_eq!(entity.name, "Whitefield");
+        assert_eq!(entity.root_source.as_deref(), Some("market_locality"));
     }
 
     fn skill_fact(
@@ -2010,6 +2226,9 @@ mod tests {
             learned_at,
             run_id: "test-run".to_string(),
             input_hash: format!("{entity_id}:{fact_key}"),
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         }
     }
 

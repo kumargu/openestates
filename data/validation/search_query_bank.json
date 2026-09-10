@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-08-23",
+  "generated_at": "2026-09-06",
   "description": "Single source of truth for controlled and live search queries. Suites select compatible case groups without splitting cases across files.",
   "case_groups": [
     {
@@ -59,7 +59,30 @@
         "This is the single executable controlled-search bank. Live DAG/materialization banks remain separate.",
         "Each case selects a reusable fixture profile and declares typed semantics plus buyer-visible result/proof expectations.",
         "The regional profile spans Whitefield, Sarjapur Road, and North Bengaluru with varied prices, configurations, lifecycle states, ratings, noise evidence, and named metro anchors.",
+        "Geography-first product decision: a positive society mention derives its sourced area without becoming an eligibility filter; eligible exact-society homes lead that branch before area alternatives, while searches without sourced geography remain bundle-wide and rank primarily by configured Google review quality.",
         "Entity names are controlled benchmark instances, never parser aliases or production hardcoding."
+      ]
+    },
+    {
+      "id": "controlled_journey",
+      "kind": "controlled",
+      "mode": "controlled_search_journeys",
+      "notes": [
+        "Journey turns reference controlled_product cases instead of copying resolved full queries or expected search behavior.",
+        "Every candidate revision executes through the same controlled SearchEngine fixture and expectation contract as its referenced atomic case.",
+        "Only the active revision affects ranking; prior revisions exist for consequence checks, undo, and checkpointing, not cumulative personalization.",
+        "The default experiment caps one active intent at eight explainable alternatives and twelve revisions before a checkpoint; three and eight are measured cohorts, while sixteen remains a power-user stress cohort until its explanations are proven usable.",
+        "The eight-branch sequence is a deliberate stress journey assembled from realistic turns, not a claim that buyers normally enumerate eight fully specified areas in one sitting.",
+        "Area-only follow-ups, task switches such as buy to rent, hard-constraint overwrite semantics, and checkpoint recovery remain explicit intent/architecture gaps before API or UI wiring."
+      ]
+    },
+    {
+      "id": "spatial_revision",
+      "kind": "controlled",
+      "mode": "issue_118_revision_contract",
+      "notes": [
+        "These are the frozen Issue 118 stateless revision scenarios; named places are test inputs, never parser aliases.",
+        "Candidate queries must execute through the ordinary SearchEngine, while clarification and checkpoint outcomes preserve the safe parent query."
       ]
     },
     {
@@ -125,6 +148,27 @@
       "runner": "rust_controlled",
       "case_groups": [
         "controlled_product"
+      ]
+    },
+    {
+      "id": "controlled_journey",
+      "runner": "rust_controlled_journey",
+      "limits": {
+        "max_active_branches": 8,
+        "max_revision_depth_before_checkpoint": 12,
+        "measured_branch_quality_cohorts": [3, 8, 16],
+        "deferred_branch_stress_cohort": 16
+      },
+      "case_groups": [
+        "controlled_product",
+        "controlled_journey"
+      ]
+    },
+    {
+      "id": "spatial_revision",
+      "runner": "rust_spatial_revision",
+      "case_groups": [
+        "spatial_revision"
       ]
     },
     {
@@ -2251,12 +2295,12 @@
       "expected_semantics": {
         "branches": [
           {
-            "society": "Godrej Air",
+            "area": "Hoodi",
             "bhk": 3,
             "budget_max": 26000000
           },
           {
-            "society": "Godrej Lakeside Orchard",
+            "area": "Sarjapur Road",
             "bhk": 4,
             "budget_max": 31000000
           }
@@ -2266,7 +2310,10 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
           ],
           [
             "mock-lakeside-orchard-4bhk"
@@ -2385,7 +2432,7 @@
     },
     {
       "id": "CONV-SEM-009",
-      "category": "dual_commute_proof_with_balance_ranking",
+      "category": "bundle_wide_balanced_commute_with_dual_proof",
       "query": "My office is near Bagmane Tech Park and my partner works near Manipal Hospital Whitefield. Find homes with measured distance evidence to both, prioritizing the better-balanced commute.",
       "expected_semantics": {},
       "fixture": "core",
@@ -2419,7 +2466,7 @@
     },
     {
       "id": "BUYER-LANG-001",
-      "category": "simple_exact_society",
+      "category": "society_as_sourced_area_anchor",
       "query": "Godrej Air",
       "expected_semantics": {
         "society": "Godrej Air"
@@ -2427,7 +2474,10 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
           ]
         ]
       },
@@ -2490,7 +2540,10 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
           ]
         ]
       },
@@ -2584,7 +2637,7 @@
     {
       "id": "BUYER-LANG-009",
       "category": "review_paraphrase",
-      "query": "Ready 3BHK near Bagmane Tech Park under ₹2.4 Cr. People living there should genuinely rate it well.",
+      "query": "Ready 3BHK near Bagmane Tech Park under ₹2.4 Cr. Resident reviews matter more to me now.",
       "expected_semantics": {
         "bhk": 3,
         "budget_max": 24000000,
@@ -2789,7 +2842,7 @@
     },
     {
       "id": "DECISION-RANK-001",
-      "category": "explicit_preference_priority",
+      "category": "explicit_preference_priority_order",
       "query": "Among ready-to-move 3BHKs near Bagmane Tech Park under ₹2.4 Cr, rank quietness first and resident reviews second.",
       "expected_semantics": {
         "bhk": 3,
@@ -2818,7 +2871,7 @@
     },
     {
       "id": "DECISION-RANK-002",
-      "category": "accepted_tradeoff_with_compensating_strengths",
+      "category": "combined_preferences_with_accepted_tradeoff",
       "query": "I can tolerate traffic if the society is quiet and strongly reviewed. Show ready-to-move 3BHKs near Bagmane Tech Park under ₹2.4 Cr.",
       "expected_semantics": {
         "bhk": 3,
@@ -2847,7 +2900,7 @@
     },
     {
       "id": "DECISION-RANK-003",
-      "category": "hard_evidence_gate_then_soft_decision",
+      "category": "hard_evidence_gate_then_explicit_priority_order",
       "query": "Only consider ready-to-move 3BHKs near Bagmane Tech Park under ₹2.4 Cr with Google rating at least 4.2. Among those, choose the quieter home even if another has the higher rating.",
       "expected_semantics": {
         "bhk": 3,
@@ -2881,7 +2934,7 @@
     },
     {
       "id": "MULTI-OR-001",
-      "category": "shared_society_dual_configuration",
+      "category": "society_anchored_area_dual_configuration",
       "query": "Godrej Air 2BHK or 3BHK",
       "expected_semantics": {
         "society": "Godrej Air",
@@ -2891,11 +2944,11 @@
         ],
         "branches": [
           {
-            "society": "Godrej Air",
+            "area": "Hoodi",
             "bhk": 2
           },
           {
-            "society": "Godrej Air",
+            "area": "Hoodi",
             "bhk": 3
           }
         ]
@@ -2906,7 +2959,10 @@
             "mock-godrej-air-2bhk"
           ],
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
           ]
         ],
         "unique_result_ids": true
@@ -2916,7 +2972,7 @@
     },
     {
       "id": "MULTI-OR-002",
-      "category": "shared_society_three_configuration_alternatives",
+      "category": "society_anchored_area_three_configuration_alternatives",
       "query": "Godrej Air 2BHK or 3BHK or 4BHK",
       "expected_semantics": {
         "society": "Godrej Air",
@@ -2932,7 +2988,10 @@
             "mock-godrej-air-2bhk"
           ],
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
           ]
         ],
         "excludes": [
@@ -2945,7 +3004,7 @@
     },
     {
       "id": "MULTI-OR-003",
-      "category": "shared_society_branch_specific_budgets",
+      "category": "society_anchored_area_branch_specific_budgets",
       "query": "Godrej Air 2BHK under 2 Cr or 3BHK under 2.4 Cr",
       "expected_semantics": {
         "society": "Godrej Air",
@@ -2955,12 +3014,12 @@
         ],
         "branches": [
           {
-            "society": "Godrej Air",
+            "area": "Hoodi",
             "bhk": 2,
             "budget_max": 20000000
           },
           {
-            "society": "Godrej Air",
+            "area": "Hoodi",
             "bhk": 3,
             "budget_max": 24000000
           }
@@ -2972,7 +3031,9 @@
             "mock-godrej-air-2bhk"
           ],
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk"
           ]
         ],
         "unique_result_ids": true
@@ -3054,7 +3115,10 @@
             "mock-godrej-air-2bhk"
           ],
           [
-            "mock-godrej-air-3bhk"
+            "mock-godrej-air-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk"
           ],
           [
             "mock-prestige-song-3bhk"
@@ -3095,7 +3159,7 @@
     },
     {
       "id": "MULTI-OR-008",
-      "category": "shared_named_place_dual_configuration",
+      "category": "named_place_intent_ranked_dual_configuration",
       "query": "Near Hoodi Metro, 2BHK or 3BHK",
       "expected_semantics": {
         "bhks": [
@@ -3106,16 +3170,40 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-godrej-air-2bhk"
+            "mock-godrej-air-2bhk",
+            "mock-metro-home-2bhk",
+            "mock-or-decoy-2-00",
+            "mock-or-decoy-2-01",
+            "mock-or-decoy-2-02",
+            "mock-or-decoy-2-03",
+            "mock-or-decoy-2-04",
+            "mock-or-decoy-2-05",
+            "mock-or-decoy-2-06",
+            "mock-or-decoy-2-07",
+            "mock-or-decoy-2-08",
+            "mock-or-decoy-2-09",
+            "mock-or-decoy-2-10",
+            "mock-or-decoy-2-11",
+            "mock-or-decoy-2-12",
+            "mock-or-decoy-2-13"
           ],
           [
-            "mock-dual-place-3bhk",
+            "mock-hoodi-only-3bhk",
+            "mock-hoodi-alternative-3bhk",
+            "mock-hoodi-expensive-3bhk",
             "mock-godrej-air-3bhk",
             "mock-balanced-commute-3bhk",
-            "mock-hoodi-only-3bhk",
+            "mock-dual-place-3bhk",
             "mock-manipal-only-3bhk",
-            "mock-hoodi-alternative-3bhk",
-            "mock-hoodi-expensive-3bhk"
+            "mock-quiet-reviewed-3bhk",
+            "mock-missing-noise-3bhk",
+            "mock-or-decoy-3-00",
+            "mock-or-decoy-3-01",
+            "mock-or-decoy-3-02",
+            "mock-or-decoy-3-03",
+            "mock-or-decoy-3-04",
+            "mock-or-decoy-3-05",
+            "mock-or-decoy-3-06"
           ]
         ],
         "unique_result_ids": true
@@ -3125,7 +3213,7 @@
     },
     {
       "id": "MULTI-OR-009",
-      "category": "shared_trailing_named_place_dual_configuration",
+      "category": "branch_scoped_named_place_dual_configuration",
       "query": "2BHK near Hoodi Metro or 3BHK",
       "expected_semantics": {
         "bhks": [
@@ -3136,16 +3224,40 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-godrej-air-2bhk"
+            "mock-godrej-air-2bhk",
+            "mock-metro-home-2bhk",
+            "mock-or-decoy-2-00",
+            "mock-or-decoy-2-01",
+            "mock-or-decoy-2-02",
+            "mock-or-decoy-2-03",
+            "mock-or-decoy-2-04",
+            "mock-or-decoy-2-05",
+            "mock-or-decoy-2-06",
+            "mock-or-decoy-2-07",
+            "mock-or-decoy-2-08",
+            "mock-or-decoy-2-09",
+            "mock-or-decoy-2-10",
+            "mock-or-decoy-2-11",
+            "mock-or-decoy-2-12",
+            "mock-or-decoy-2-13"
           ],
           [
-            "mock-dual-place-3bhk",
+            "mock-quiet-reviewed-3bhk",
+            "mock-missing-noise-3bhk",
             "mock-godrej-air-3bhk",
+            "mock-dual-place-3bhk",
             "mock-balanced-commute-3bhk",
-            "mock-hoodi-only-3bhk",
-            "mock-manipal-only-3bhk",
-            "mock-hoodi-alternative-3bhk",
-            "mock-hoodi-expensive-3bhk"
+            "mock-or-decoy-3-00",
+            "mock-or-decoy-3-01",
+            "mock-or-decoy-3-02",
+            "mock-or-decoy-3-03",
+            "mock-or-decoy-3-04",
+            "mock-or-decoy-3-05",
+            "mock-or-decoy-3-06",
+            "mock-or-decoy-3-07",
+            "mock-or-decoy-3-08",
+            "mock-or-decoy-3-09",
+            "mock-or-decoy-3-10"
           ]
         ],
         "unique_result_ids": true
@@ -3262,7 +3374,6 @@
           ]
         },
         "excludes": [
-          "mock-north-family-3bhk",
           "mock-whitefield-family-3bhk"
         ]
       },
@@ -3335,7 +3446,7 @@
     },
     {
       "id": "REGION-MIX-008",
-      "category": "shared_north_metro_bhk_alternatives",
+      "category": "shared_named_place_bhk_alternatives",
       "query": "2BHK or 3BHK near Nagawara Metro under 1.8 Cr",
       "fixture": "regional",
       "expected_semantics": {
@@ -3349,10 +3460,16 @@
       "fixture_expectation": {
         "result_sets": [
           [
-            "mock-north-value-2bhk"
+            "mock-north-value-2bhk",
+            "mock-sarjapur-value-2bhk",
+            "mock-whitefield-value-2bhk",
+            "mock-bellandur-value-2bhk",
+            "mock-devanahalli-value-2bhk",
+            "mock-electronic-city-value-2bhk"
           ],
           [
-            "mock-north-family-3bhk"
+            "mock-north-family-3bhk",
+            "mock-electronic-city-3bhk"
           ]
         ],
         "required_proof_labels": {
@@ -3364,8 +3481,6 @@
           ]
         },
         "excludes": [
-          "mock-whitefield-value-2bhk",
-          "mock-sarjapur-value-2bhk",
           "mock-metro-home-2bhk"
         ],
         "non_empty_result_sets": 2,
@@ -4031,6 +4146,685 @@
         "zero_results": true
       },
       "group": "unknown_project"
+    },
+    {
+      "id": "JOURNEY-ATOM-001",
+      "category": "journey_additive_ready_place_refinement",
+      "query": "Ready-to-move 3BHK in Hoodi near Bagmane Tech Park under ₹2.4 Cr",
+      "expected_semantics": {
+        "area": "Hoodi",
+        "bhk": 3,
+        "budget_max": 24000000,
+        "home_state": "ready_to_move",
+        "near": "Bagmane Tech Park"
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-godrej-air-3bhk"
+        ],
+        "excludes": [
+          "mock-bagmane-under-construction-3bhk",
+          "mock-hoodi-expensive-3bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-002",
+      "category": "journey_additive_quiet_refinement",
+      "query": "Ready-to-move quiet 3BHK in Hoodi near Bagmane Tech Park under ₹2.4 Cr",
+      "expected_semantics": {
+        "area": "Hoodi",
+        "bhk": 3,
+        "budget_max": 24000000,
+        "home_state": "ready_to_move",
+        "near": "Bagmane Tech Park",
+        "positive_preferences": [
+          "quiet neighborhood"
+        ]
+      },
+      "fixture_expectation": {
+        "includes": [
+          "mock-godrej-air-3bhk"
+        ],
+        "excludes": [
+          "mock-bagmane-under-construction-3bhk",
+          "mock-hoodi-expensive-3bhk"
+        ]
+      },
+      "fixture": "buyer_language",
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-003",
+      "category": "journey_two_region_or_budgets",
+      "query": "Whitefield 2BHK under 1.6 Cr or Sarjapur Road 3BHK under 2 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "branches": [
+          {
+            "area": "Whitefield",
+            "bhk": 2,
+            "budget_max": 16000000
+          },
+          {
+            "area": "Sarjapur Road",
+            "bhk": 3,
+            "budget_max": 20000000
+          }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          [
+            "mock-whitefield-value-2bhk"
+          ],
+          [
+            "mock-sarjapur-family-3bhk"
+          ]
+        ],
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-004",
+      "category": "journey_four_area_alternatives",
+      "query": "Whitefield 2BHK under 1.6 Cr or Sarjapur Road 3BHK under 2 Cr or North Bengaluru 3BHK under 1.8 Cr or Bellandur 2BHK under 1.7 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "branches": [
+          { "area": "Whitefield", "bhk": 2, "budget_max": 16000000 },
+          { "area": "Sarjapur Road", "bhk": 3, "budget_max": 20000000 },
+          { "area": "North Bengaluru", "bhk": 3, "budget_max": 18000000 },
+          { "area": "Bellandur", "bhk": 2, "budget_max": 17000000 }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-whitefield-value-2bhk"],
+          ["mock-sarjapur-family-3bhk"],
+          ["mock-north-family-3bhk"],
+          ["mock-bellandur-value-2bhk"]
+        ],
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-005",
+      "category": "journey_five_area_alternatives",
+      "query": "Whitefield 2BHK under 1.6 Cr or Sarjapur Road 3BHK under 2 Cr or North Bengaluru 3BHK under 1.8 Cr or Bellandur 2BHK under 1.7 Cr or HSR Layout 3BHK under 2.5 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "branches": [
+          { "area": "Whitefield", "bhk": 2, "budget_max": 16000000 },
+          { "area": "Sarjapur Road", "bhk": 3, "budget_max": 20000000 },
+          { "area": "North Bengaluru", "bhk": 3, "budget_max": 18000000 },
+          { "area": "Bellandur", "bhk": 2, "budget_max": 17000000 },
+          { "area": "HSR Layout", "bhk": 3, "budget_max": 25000000 }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-whitefield-value-2bhk"],
+          ["mock-sarjapur-family-3bhk"],
+          ["mock-north-family-3bhk"],
+          ["mock-bellandur-value-2bhk"],
+          ["mock-hsr-family-3bhk"]
+        ],
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-006",
+      "category": "journey_six_area_alternatives",
+      "query": "Whitefield 2BHK under 1.6 Cr or Sarjapur Road 3BHK under 2 Cr or North Bengaluru 3BHK under 1.8 Cr or Bellandur 2BHK under 1.7 Cr or HSR Layout 3BHK under 2.5 Cr or Devanahalli 2BHK under 1.2 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "branches": [
+          { "area": "Whitefield", "bhk": 2, "budget_max": 16000000 },
+          { "area": "Sarjapur Road", "bhk": 3, "budget_max": 20000000 },
+          { "area": "North Bengaluru", "bhk": 3, "budget_max": 18000000 },
+          { "area": "Bellandur", "bhk": 2, "budget_max": 17000000 },
+          { "area": "HSR Layout", "bhk": 3, "budget_max": 25000000 },
+          { "area": "Devanahalli", "bhk": 2, "budget_max": 12000000 }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-whitefield-value-2bhk"],
+          ["mock-sarjapur-family-3bhk"],
+          ["mock-north-family-3bhk"],
+          ["mock-bellandur-value-2bhk"],
+          ["mock-hsr-family-3bhk"],
+          ["mock-devanahalli-value-2bhk"]
+        ],
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-007",
+      "category": "journey_seven_area_alternatives",
+      "query": "Whitefield 2BHK under 1.6 Cr or Sarjapur Road 3BHK under 2 Cr or North Bengaluru 3BHK under 1.8 Cr or Bellandur 2BHK under 1.7 Cr or HSR Layout 3BHK under 2.5 Cr or Devanahalli 2BHK under 1.2 Cr or Yelahanka 3BHK under 1.9 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "branches": [
+          { "area": "Whitefield", "bhk": 2, "budget_max": 16000000 },
+          { "area": "Sarjapur Road", "bhk": 3, "budget_max": 20000000 },
+          { "area": "North Bengaluru", "bhk": 3, "budget_max": 18000000 },
+          { "area": "Bellandur", "bhk": 2, "budget_max": 17000000 },
+          { "area": "HSR Layout", "bhk": 3, "budget_max": 25000000 },
+          { "area": "Devanahalli", "bhk": 2, "budget_max": 12000000 },
+          { "area": "Yelahanka", "bhk": 3, "budget_max": 19000000 }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-whitefield-value-2bhk"],
+          ["mock-sarjapur-family-3bhk"],
+          ["mock-north-family-3bhk"],
+          ["mock-bellandur-value-2bhk"],
+          ["mock-hsr-family-3bhk"],
+          ["mock-devanahalli-value-2bhk"],
+          ["mock-yelahanka-family-3bhk"]
+        ],
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-ATOM-008",
+      "category": "journey_eight_area_alternatives",
+      "query": "Whitefield 2BHK under 1.6 Cr or Sarjapur Road 3BHK under 2 Cr or North Bengaluru 3BHK under 1.8 Cr or Bellandur 2BHK under 1.7 Cr or HSR Layout 3BHK under 2.5 Cr or Devanahalli 2BHK under 1.2 Cr or Yelahanka 3BHK under 1.9 Cr or Electronic City 2BHK under 1.1 Cr",
+      "fixture": "regional",
+      "expected_semantics": {
+        "branches": [
+          { "area": "Whitefield", "bhk": 2, "budget_max": 16000000 },
+          { "area": "Sarjapur Road", "bhk": 3, "budget_max": 20000000 },
+          { "area": "North Bengaluru", "bhk": 3, "budget_max": 18000000 },
+          { "area": "Bellandur", "bhk": 2, "budget_max": 17000000 },
+          { "area": "HSR Layout", "bhk": 3, "budget_max": 25000000 },
+          { "area": "Devanahalli", "bhk": 2, "budget_max": 12000000 },
+          { "area": "Yelahanka", "bhk": 3, "budget_max": 19000000 },
+          { "area": "Electronic City", "bhk": 2, "budget_max": 11000000 }
+        ]
+      },
+      "fixture_expectation": {
+        "result_sets": [
+          ["mock-whitefield-value-2bhk"],
+          ["mock-sarjapur-family-3bhk"],
+          ["mock-north-family-3bhk"],
+          ["mock-bellandur-value-2bhk"],
+          ["mock-hsr-family-3bhk"],
+          ["mock-devanahalli-value-2bhk"],
+          ["mock-yelahanka-family-3bhk"],
+          ["mock-electronic-city-value-2bhk"]
+        ],
+        "unique_result_ids": true
+      },
+      "group": "controlled_product"
+    },
+    {
+      "id": "JOURNEY-REFINE-001",
+      "group": "controlled_journey",
+      "fixture": "buyer_language",
+      "initial_case_id": "BUYER-LANG-002",
+      "turns": [
+        {
+          "utterance": "Make it ready to move and near Bagmane Tech Park",
+          "operation": "refine",
+          "candidate_case_id": "JOURNEY-ATOM-001",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-001",
+          "candidate_effect": "same_membership"
+        },
+        {
+          "utterance": "And quieter",
+          "operation": "refine",
+          "candidate_case_id": "JOURNEY-ATOM-002",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-002",
+          "candidate_effect": "same_membership"
+        }
+      ]
+    },
+    {
+      "id": "JOURNEY-REPHRASE-001",
+      "group": "controlled_journey",
+      "fixture": "buyer_language",
+      "initial_case_id": "BUYER-LANG-002",
+      "turns": [
+        {
+          "utterance": "3 bedrooms in Hoodi costing no more than 2.4 crore",
+          "operation": "rephrase",
+          "candidate_case_id": "BUYER-LANG-018",
+          "outcome": "activate_candidate",
+          "active_case_id": "BUYER-LANG-018",
+          "candidate_effect": "same_order"
+        }
+      ]
+    },
+    {
+      "id": "JOURNEY-EXPAND-001",
+      "group": "controlled_journey",
+      "fixture": "regional",
+      "initial_case_id": "REGION-MIX-001",
+      "turns": [
+        {
+          "utterance": "Also consider 3BHK in Sarjapur Road under 2 Cr",
+          "operation": "expand",
+          "candidate_case_id": "JOURNEY-ATOM-003",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-003",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 3BHK in North Bengaluru under 1.8 Cr",
+          "operation": "expand",
+          "candidate_case_id": "REGION-MIX-007",
+          "outcome": "activate_candidate",
+          "active_case_id": "REGION-MIX-007",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 2BHK in Bellandur under 1.7 Cr",
+          "operation": "expand",
+          "candidate_case_id": "JOURNEY-ATOM-004",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-004",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 3BHK in HSR Layout under 2.5 Cr",
+          "operation": "expand",
+          "candidate_case_id": "JOURNEY-ATOM-005",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-005",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 2BHK in Devanahalli under 1.2 Cr",
+          "operation": "expand",
+          "candidate_case_id": "JOURNEY-ATOM-006",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-006",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 3BHK in Yelahanka under 1.9 Cr",
+          "operation": "expand",
+          "candidate_case_id": "JOURNEY-ATOM-007",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-007",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 2BHK in Electronic City under 1.1 Cr",
+          "operation": "expand",
+          "candidate_case_id": "JOURNEY-ATOM-008",
+          "outcome": "activate_candidate",
+          "active_case_id": "JOURNEY-ATOM-008",
+          "candidate_effect": "adds_branch"
+        },
+        {
+          "utterance": "Also consider 3BHK in South Bengaluru under 2 Cr",
+          "operation": "expand",
+          "outcome": "require_checkpoint",
+          "active_case_id": "JOURNEY-ATOM-008"
+        }
+      ]
+    },
+    {
+      "id": "JOURNEY-CLARIFY-001",
+      "group": "controlled_journey",
+      "fixture": "regional",
+      "initial_case_id": "REGION-MIX-001",
+      "turns": [
+        {
+          "utterance": "Also consider another independent area",
+          "operation": "expand",
+          "outcome": "require_clarification",
+          "active_case_id": "REGION-MIX-001"
+        }
+      ]
+    },
+    {
+      "id": "JOURNEY-SWITCH-001",
+      "group": "controlled_journey",
+      "fixture": "regional",
+      "initial_case_id": "REGION-MIX-003",
+      "turns": [
+        {
+          "utterance": "Instead, 3BHK in Sarjapur Road under 2 Cr",
+          "operation": "replace",
+          "candidate_case_id": "REGION-MIX-002",
+          "outcome": "activate_candidate",
+          "active_case_id": "REGION-MIX-002",
+          "candidate_effect": "different_membership"
+        }
+      ]
+    },
+    {
+      "id": "JOURNEY-ZERO-001",
+      "group": "controlled_journey",
+      "fixture": "buyer_language",
+      "initial_case_id": "BUYER-LANG-001",
+      "turns": [
+        {
+          "utterance": "Only 4BHK",
+          "operation": "correct",
+          "candidate_case_id": "BUYER-LANG-014",
+          "outcome": "preserve_parent",
+          "active_case_id": "BUYER-LANG-001",
+          "candidate_effect": "zero_results"
+        }
+      ]
+    },
+    {
+      "id": "JOURNEY-PREFERENCE-SHIFT-001",
+      "group": "controlled_journey",
+      "fixture": "buyer_language",
+      "initial_case_id": "BUYER-LANG-008",
+      "turns": [
+        {
+          "utterance": "Ready 3BHK near Bagmane Tech Park under ₹2.4 Cr. Resident reviews matter more to me now.",
+          "operation": "replace",
+          "candidate_case_id": "BUYER-LANG-009",
+          "outcome": "activate_candidate",
+          "active_case_id": "BUYER-LANG-009",
+          "candidate_effect": "same_membership"
+        }
+      ]
+    },
+    {
+      "id": "SPATIAL-REVISION-READY",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Make it ready to move",
+      "expected_operation": "refine",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr · Make it ready to move"
+    },
+    {
+      "id": "SPATIAL-REVISION-TWO-ANCHORS",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Near both Hoodi Metro and Manipal Hospital",
+      "expected_operation": "refine",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr · Near both Hoodi Metro and Manipal Hospital"
+    },
+    {
+      "id": "SPATIAL-REVISION-BUDGET",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Increase the budget to 3Cr",
+      "expected_operation": "correct",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr · Increase the budget to 3Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-KADUGODI",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Alternatively consider 3BHK in Kadugodi under 2.7Cr",
+      "expected_operation": "expand",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr or 3BHK in Kadugodi under 2.7Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-HOODI-BRANCH",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Also consider 2BHK in Hoodi under 2Cr",
+      "expected_operation": "expand",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-EXCLUDE",
+      "group": "spatial_revision",
+      "parent_query": "3BHK around Whitefield under 3Cr",
+      "parent_branch_count": 1,
+      "utterance": "Exclude Varthur",
+      "expected_operation": "exclude",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK around Whitefield under 3Cr · Exclude Varthur"
+    },
+    {
+      "id": "SPATIAL-REVISION-REPLACE",
+      "group": "spatial_revision",
+      "parent_query": "3BHK around Whitefield under 3Cr",
+      "parent_branch_count": 1,
+      "utterance": "Instead, search for plots in North Bengaluru under 1.5Cr",
+      "expected_operation": "replace",
+      "expected_outcome": "candidate",
+      "expected_active_query": "Instead, search for plots in North Bengaluru under 1.5Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-REPHRASE",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Hoodi under 2.4 Cr",
+      "parent_branch_count": 1,
+      "utterance": "3 bedrooms in Hoodi costing no more than 2.4 crore",
+      "expected_operation": "rephrase",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3 bedrooms in Hoodi costing no more than 2.4 crore"
+    },
+    {
+      "id": "SPATIAL-REVISION-CLARIFY",
+      "group": "spatial_revision",
+      "parent_query": "3BHK near Hoodi under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Make it closer",
+      "expected_operation": "refine",
+      "expected_outcome": "require_clarification"
+    },
+    {
+      "id": "SPATIAL-REVISION-CHECKPOINT",
+      "group": "spatial_revision",
+      "parent_query": "Whitefield 2BHK under 1.6Cr or Sarjapur Road 3BHK under 2Cr or North Bengaluru 3BHK under 1.8Cr or Bellandur 2BHK under 1.7Cr or HSR Layout 3BHK under 2.5Cr or Devanahalli 2BHK under 1.2Cr or Yelahanka 3BHK under 1.9Cr or Electronic City 2BHK under 1.1Cr",
+      "parent_branch_count": 8,
+      "utterance": "Also consider Sarjapur",
+      "expected_operation": "expand",
+      "expected_outcome": "require_checkpoint"
+    },
+    {
+      "id": "SPATIAL-REVISION-OVERWRITE-BHK-BUDGET",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Make it 2BHK under 1.6Cr",
+      "expected_operation": "refine",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr · Make it 2BHK under 1.6Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-ADD-DISTINCT-ANCHOR",
+      "group": "spatial_revision",
+      "parent_query": "3BHK within 2 km of Hoodi Metro under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "And within 2 km of Manipal Hospital",
+      "expected_operation": "refine",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK within 2 km of Hoodi Metro under 2.5Cr · And within 2 km of Manipal Hospital"
+    },
+    {
+      "id": "SPATIAL-REVISION-CORRECT-ANCHOR-BY-IDENTITY",
+      "group": "spatial_revision",
+      "parent_query": "3BHK within 2 km of Hoodi Metro and within 2 km of Manipal Hospital under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Change the distance to within 3 km of Hoodi Metro",
+      "expected_operation": "correct",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK within 2 km of Hoodi Metro and within 2 km of Manipal Hospital under 2.5Cr · Change the distance to within 3 km of Hoodi Metro"
+    },
+    {
+      "id": "SPATIAL-REVISION-EXPAND-MULTIPLE-ALTERNATIVES",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Also consider 2BHK in Hoodi under 2Cr or 3BHK in Kadugodi under 2.7Cr",
+      "expected_operation": "expand",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2Cr or 3BHK in Kadugodi under 2.7Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-IMPLICIT-CONTEXT-RETENTION",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "2BHK under 1.6Cr",
+      "expected_operation": "refine",
+      "expected_outcome": "candidate",
+      "expected_active_query": "3BHK in Whitefield under 2.5Cr · 2BHK under 1.6Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-THIRD-BRANCH",
+      "group": "spatial_revision",
+      "parent_query": "Whitefield 2BHK under 1.6Cr or Sarjapur Road 3BHK under 2Cr or North Bengaluru 3BHK under 1.8Cr",
+      "parent_branch_count": 3,
+      "utterance": "Increase the third budget to 2.2Cr",
+      "expected_operation": "correct",
+      "expected_outcome": "candidate",
+      "expected_active_query": "Whitefield 2BHK under 1.6Cr or Sarjapur Road 3BHK under 2Cr or North Bengaluru 3BHK under 1.8Cr · Increase the third budget to 2.2Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-EIGHTH-BRANCH",
+      "group": "spatial_revision",
+      "parent_query": "Whitefield 2BHK under 1.6Cr or Sarjapur Road 3BHK under 2Cr or North Bengaluru 3BHK under 1.8Cr or Bellandur 2BHK under 1.7Cr or HSR Layout 3BHK under 2.5Cr or Devanahalli 2BHK under 1.2Cr or Yelahanka 3BHK under 1.9Cr or Electronic City 2BHK under 1.1Cr",
+      "parent_branch_count": 8,
+      "utterance": "Increase the eighth budget to 1.4Cr",
+      "expected_operation": "correct",
+      "expected_outcome": "candidate",
+      "expected_active_query": "Whitefield 2BHK under 1.6Cr or Sarjapur Road 3BHK under 2Cr or North Bengaluru 3BHK under 1.8Cr or Bellandur 2BHK under 1.7Cr or HSR Layout 3BHK under 2.5Cr or Devanahalli 2BHK under 1.2Cr or Yelahanka 3BHK under 1.9Cr or Electronic City 2BHK under 1.1Cr · Increase the eighth budget to 1.4Cr"
+    },
+    {
+      "id": "SPATIAL-REVISION-UNDO",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Undo",
+      "expected_operation": "undo",
+      "expected_outcome": "candidate"
+    },
+    {
+      "id": "SPATIAL-REVISION-FRESH",
+      "group": "spatial_revision",
+      "parent_query": "3BHK in Whitefield under 2.5Cr",
+      "parent_branch_count": 1,
+      "utterance": "Start over: 2BHK in Hoodi under 2Cr",
+      "expected_operation": "fresh",
+      "expected_outcome": "candidate",
+      "expected_active_query": "2BHK in Hoodi under 2Cr"
+    },
+    {
+      "id": "GEO-CELL-001",
+      "category": "bare_society_geo_cell_recall",
+      "query": "Godrej Air",
+      "expected_semantics": {"society": "Godrej Air"},
+      "fixture_expectation": {
+        "first_id": "geo-air-2",
+        "includes": ["geo-alpha-prime-3", "geo-same-cell-3", "geo-waterford-3", "geo-two-hop-3"],
+        "excludes": ["geo-far-3", "geo-song-3"]
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
+    },
+    {
+      "id": "GEO-CELL-002",
+      "category": "exact_society_rejected_by_budget",
+      "query": "Godrej Air 2BHK under 2Cr",
+      "expected_semantics": {"society": "Godrej Air", "bhk": 2, "budget_max": 20000000},
+      "fixture_expectation": {
+        "first_id": "geo-alpha-value-2",
+        "excludes": ["geo-air-2"]
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
+    },
+    {
+      "id": "GEO-CELL-003",
+      "category": "named_market_locality_geo_cell_recall",
+      "query": "3BHK in Alpha under 2.5Cr",
+      "expected_semantics": {"area": "Alpha", "bhk": 3, "budget_max": 25000000, "allows_cell_nearby": true},
+      "fixture_expectation": {
+        "ordered_prefix": ["geo-air-3", "geo-alpha-prime-3"],
+        "includes": ["geo-same-cell-3", "geo-waterford-3", "geo-two-hop-3"],
+        "excludes": ["geo-far-3", "geo-song-3"]
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
+    },
+    {
+      "id": "GEO-CELL-004",
+      "category": "named_place_distance_before_geo_cohort",
+      "query": "3BHK within 1 km of Anchor School under 2.5Cr",
+      "expected_semantics": {"bhk": 3, "near": "Anchor School", "distance_max_km": 1.0, "budget_max": 25000000},
+      "fixture_expectation": {
+        "includes": ["geo-air-3", "geo-alpha-prime-3", "geo-same-cell-3"],
+        "excludes": ["geo-waterford-3", "geo-two-hop-3", "geo-far-3", "geo-song-3"]
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
+    },
+    {
+      "id": "GEO-CELL-005",
+      "category": "godrej_waterford_chained_geo_branches",
+      "query": "Godrej Air 2BHK or Prestige Waterford 3BHK",
+      "expected_semantics": {
+        "branches": [
+          {"society": "Godrej Air", "bhk": 2, "allows_cell_nearby": true},
+          {"society": "Prestige Waterford", "bhk": 3, "allows_cell_nearby": true}
+        ]
+      },
+      "fixture_expectation": {
+        "result_set_ordered_prefixes": [["geo-air-2"], ["geo-waterford-3"]],
+        "non_empty_result_sets": 2,
+        "unique_result_ids": true
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
+    },
+    {
+      "id": "GEO-CELL-006",
+      "category": "disconnected_prestige_song_branch",
+      "query": "Godrej Air 2BHK or Prestige Song of the South 3BHK",
+      "expected_semantics": {
+        "branches": [
+          {"society": "Godrej Air", "bhk": 2, "allows_cell_nearby": true},
+          {"society": "Prestige Song of the South", "bhk": 3, "allows_cell_nearby": true}
+        ]
+      },
+      "fixture_expectation": {
+        "result_set_ordered_prefixes": [["geo-air-2"], ["geo-song-3"]],
+        "non_empty_result_sets": 2,
+        "unique_result_ids": true
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
+    },
+    {
+      "id": "GEO-CELL-007",
+      "category": "bundle_wide_configuration_branches_unchanged",
+      "query": "2BHK or 3BHK",
+      "expected_semantics": {"bhks": [2, 3]},
+      "fixture_expectation": {
+        "non_empty_result_sets": 2,
+        "unique_result_ids": true,
+        "includes": ["geo-air-2", "geo-air-3", "geo-song-3"]
+      },
+      "fixture": "geo_cells",
+      "group": "controlled_product"
     }
   ]
 }

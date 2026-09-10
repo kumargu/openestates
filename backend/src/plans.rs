@@ -304,6 +304,7 @@ mod tests {
                 model: None,
                 skill_id: Some("promote_rera_project_plans".to_string()),
                 learned_at: Utc::now(),
+                observation: None,
             }],
             Vec::new(),
         )

@@ -1,5 +1,6 @@
 use backend::assets::{
-    osm_society_access_facts_input, KgViewRecords, OsmSocietyAccessInput, OsmSocietyAccessRecord,
+    osm_society_access_facts_input, OsmSocietyAccessInput, OsmSocietyAccessRecord,
+    SocietyGoldRecords,
 };
 use backend::knowledge::KnowledgeGraph;
 use chrono::{TimeZone, Utc};
@@ -59,9 +60,14 @@ fn society_access_emits_boundary_public_corridor_and_typed_entrance() {
             && !fact.fact_key.starts_with("route.")
             && !fact.value_json.contains("ground_access")
     }));
+    assert!(facts.facts.iter().all(|fact| {
+        fact.observation_provider.as_deref() == Some("OpenStreetMap")
+            && fact.provider_observation_id.as_deref() == Some("waterford-access")
+            && fact.asset_lineage == ["asset:osm_society_access_facts/run:test-run"]
+    }));
     assert!(facts.facts.iter().any(|fact| {
         fact.entity_id == "society:prestige-waterford"
-            && fact.fact_key == "society.boundary_geojson"
+            && fact.fact_key == "geo.geometry_geojson"
             && fact.source_url.as_deref() == Some("https://www.openstreetmap.org/way/133630420")
     }));
     assert!(facts.facts.iter().any(|fact| {
@@ -88,7 +94,7 @@ fn society_access_emits_boundary_public_corridor_and_typed_entrance() {
             && fact.source_url.as_deref() == Some("https://www.openstreetmap.org/node/501")
     }));
 
-    let kg_records = KgViewRecords::from_graph_with_skill_facts(
+    let kg_records = SocietyGoldRecords::from_graph_with_skill_facts(
         &KnowledgeGraph::new(),
         &facts.facts,
         &facts.fact_annotations,
@@ -99,6 +105,11 @@ fn society_access_emits_boundary_public_corridor_and_typed_entrance() {
     }));
     assert!(kg_records.entities.iter().any(|entity| {
         entity.entity_id.starts_with("place:society-entrance:") && entity.entity_type == "place"
+    }));
+    assert!(kg_records.facts.iter().all(|fact| {
+        fact.observation_provider.as_deref() == Some("OpenStreetMap")
+            && fact.provider_observation_id.as_deref() == Some("waterford-access")
+            && fact.asset_lineage == ["asset:osm_society_access_facts/run:test-run"]
     }));
 }
 

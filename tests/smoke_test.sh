@@ -287,6 +287,40 @@ check "Empty search returns empty results" \
   '(.resultSets | length == 0) and .totalMatches == 0 and .state == "no_matches"' \
   "expected empty results for empty query"
 
+PARENT_SEARCH=$(curl -s "${BASE}/api/search?q=3BHK%20in%20Whitefield%20under%202.5Cr")
+RUNTIME_VERSION=$(echo "$PARENT_SEARCH" | jq -c '.runtimeVersion')
+PARENT_REVISION_ID=$(echo "$PARENT_SEARCH" | jq -r '.revisionId')
+if echo "$PARENT_SEARCH" | jq -e '(.revisionId | startswith("rev-001-")) and (.astFingerprint | startswith("sha256:"))' >/dev/null; then
+  PASS=$((PASS + 1))
+  printf "  %s Direct search returns revision correlation and AST fingerprint\n" "$(green "✓")"
+else
+  FAIL=$((FAIL + 1))
+  ERRORS+="  FAIL: Direct search revision contract — expected revisionId and astFingerprint\n"
+  printf "  %s Direct search revision contract — expected revisionId and astFingerprint\n" "$(red "✗")"
+fi
+REVISION_REQUEST=$(jq -cn \
+  --argjson runtime "$RUNTIME_VERSION" \
+  --arg parent_revision_id "$PARENT_REVISION_ID" \
+  '{parentRevisionId:$parent_revision_id,parentQuery:"3BHK in Whitefield under 2.5Cr",parentBranchCount:1,expectedRuntimeVersion:$runtime,utterance:"Make it ready to move",clientIdempotencyKey:"smoke-turn-002"}')
+check_post "POST /api/search/revisions executes a candidate through ordinary search" \
+  "${BASE}/api/search/revisions" \
+  "$REVISION_REQUEST" \
+  '.outcome == "candidate" and .operation == "refine" and (.astFingerprint | startswith("sha256:")) and (.intentProjection.branches | length == 1) and (.search | has("resultSets", "orderedResultIds", "runtimeVersion")) and (.resultDelta | has("added", "removed", "retained", "reordered"))' \
+  "expected a pinned, buyer-safe revision response with ordinary search results"
+
+STALE_REVISION_REQUEST=$(echo "$REVISION_REQUEST" | jq -c '.expectedRuntimeVersion.searchEngineVersion = "stale-engine"')
+STALE_REVISION_CODE=$(curl -s -X POST -H "Content-Type: application/json" \
+  -d "$STALE_REVISION_REQUEST" -o /tmp/oe_revision_conflict.json -w "%{http_code}" \
+  "${BASE}/api/search/revisions" 2>/dev/null || echo "000")
+if [[ "$STALE_REVISION_CODE" == "409" ]] && jq -e '.code == "runtime_version_changed"' /tmp/oe_revision_conflict.json >/dev/null; then
+  PASS=$((PASS + 1))
+  printf "  %s Revision rejects a stale runtime version\n" "$(green "✓")"
+else
+  FAIL=$((FAIL + 1))
+  ERRORS+="  FAIL: Revision stale runtime — expected 409 runtime_version_changed\n"
+  printf "  %s Revision stale runtime — expected 409 runtime_version_changed\n" "$(red "✗")"
+fi
+
 SOCIETY_FIXTURE=$(curl -s "${BASE}/api/properties" 2>/dev/null | jq -r '
   [.[].society_name // empty | select(length > 0)] as $names
   | ($names | unique) as $unique_names

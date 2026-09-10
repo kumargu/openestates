@@ -94,6 +94,26 @@ pub struct DiscourseParserConfig {
     pub ranking_scope_end_markers: Vec<String>,
     #[serde(default)]
     pub scoped_exclusion_markers: Vec<String>,
+    #[serde(default)]
+    pub revision_expand_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_continuity_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_switch_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_replace_markers: Vec<String>,
+    #[serde(default)]
+    pub revision_correction_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_overwrite_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_relative_increase_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_relative_decrease_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_exclusion_prefixes: Vec<String>,
+    #[serde(default)]
+    pub revision_ambiguous_spatial_refinements: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -145,7 +165,11 @@ pub struct RelationParserConfig {
 pub struct RelationAliasConfig {
     pub alias: String,
     #[serde(default)]
+    pub operator: Option<String>,
+    #[serde(default)]
     pub requires_distance_limit: bool,
+    #[serde(default)]
+    pub required_by_default: bool,
     #[serde(default)]
     pub default_distance_limit_km: Option<f64>,
 }
@@ -337,6 +361,78 @@ fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
         config
             .discourse
             .scoped_exclusion_markers
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_expand_prefixes",
+        config
+            .discourse
+            .revision_expand_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_continuity_prefixes",
+        config
+            .discourse
+            .revision_continuity_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_switch_prefixes",
+        config
+            .discourse
+            .revision_switch_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_replace_markers",
+        config
+            .discourse
+            .revision_replace_markers
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_correction_prefixes",
+        config
+            .discourse
+            .revision_correction_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_overwrite_prefixes",
+        config
+            .discourse
+            .revision_overwrite_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_relative_increase_prefixes",
+        config
+            .discourse
+            .revision_relative_increase_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_relative_decrease_prefixes",
+        config
+            .discourse
+            .revision_relative_decrease_prefixes
+            .iter()
+            .map(String::as_str),
+    )?;
+    validate_aliases(
+        "parser.discourse.revision_exclusion_prefixes",
+        config
+            .discourse
+            .revision_exclusion_prefixes
             .iter()
             .map(String::as_str),
     )?;

@@ -282,7 +282,7 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 - [x] `dag_config` loaders for manifest, asset registry, crawl policies
 - [ ] `cargo test` asset registry tests pass from JSON loader only (no embedded fallback)
-- [ ] `openestates-run-assets --dry-run` produces identical plan
+- [ ] `openestates-catalog rebuild` follows the configured DAG plan
 - [ ] Parquet output byte-identical for a fixed fixture run (or schema-compatible)
 
 **Storage check:** No new lake tables; manifest keys unchanged.
@@ -348,7 +348,7 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 1. `canonical_society_nodes` from RERA-backed project identity
 2. `road_segment` + `place` nodes where enrichment provides them
 3. KG edges in gold from DAG assets: `society→area`, `society→road`, `society→place`
-4. **Serving bundle includes `edges/part-00000.parquet`** (copied from gold `kg_society_view`)
+4. **Serving bundle includes `edges/part-00000.parquet`** (copied from gold `society_gold_snapshot`)
 5. Rust loads edges into `AppState` via `GraphIndex` (`edges_from` / `edges_to`)
 6. Bounded `walk_out(anchor, hops, max_depth=2)` — unit tests only, no HTTP (Phase 10)
 7. Search hard filters read property facts (BHK, price, area) from promoted serving facts
@@ -602,7 +602,7 @@ Full checklist: `app/config/coverage.json` → `graph_ui_readiness`.
 | Rust unit/integration | `cargo test` |
 | Search quality | `pipeline/eval_search.py` + `data/validation/search_quality_benchmark.json` |
 | Frontend types | `npx tsc --noEmit` |
-| DAG plan | `openestates-run-assets --dry-run` |
+| Catalog rebuild | `openestates-catalog rebuild` |
 | Parquet schema | serving `schema.json` format_version |
 
 ### 7.2 Per-run artifacts (lake)

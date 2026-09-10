@@ -9,7 +9,7 @@ use crate::dag_config::{
 };
 use crate::knowledge::FactValue;
 
-use super::{ServingEntityFactRows, ServingFactRecord};
+use super::{ServingEntityFactRows, ServingFactRecord, SourceObservation};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ServingCoordinates {
@@ -18,6 +18,7 @@ pub struct ServingCoordinates {
     pub confidence: f32,
     pub source_type: String,
     pub learned_at: DateTime<Utc>,
+    pub observations: Vec<SourceObservation>,
 }
 
 pub fn resolve_serving_coordinates(
@@ -46,6 +47,8 @@ pub fn resolve_serving_coordinates(
         let candidate = AxisValue {
             value,
             confidence: fact.confidence,
+            observation: fact.observation.clone(),
+            identity: fact.stable_selection_key(),
         };
         match axis {
             Axis::Latitude => update_axis(&mut observation.latitude, candidate),
@@ -53,11 +56,11 @@ pub fn resolve_serving_coordinates(
         }
     }
 
-    let mut complete = observations
+    let complete = observations
         .values()
         .filter_map(|observation| {
-            let latitude = observation.latitude?;
-            let longitude = observation.longitude?;
+            let latitude = observation.latitude.as_ref()?;
+            let longitude = observation.longitude.as_ref()?;
             Some((
                 CoordinatePairCandidate {
                     source_type: &observation.source_type,
@@ -65,17 +68,16 @@ pub fn resolve_serving_coordinates(
                     longitude: longitude.value,
                     confidence: latitude.confidence.min(longitude.confidence),
                 },
-                observation.learned_at,
+                observation,
             ))
         })
         .collect::<Vec<_>>();
-    complete.sort_by_key(|item| std::cmp::Reverse(item.1));
     let resolved = resolve_coordinate_pair(
         scope,
         complete.iter().map(|(candidate, _)| *candidate),
         policies,
     )?;
-    let learned_at = complete
+    let selected = complete
         .iter()
         .find(|(candidate, _)| {
             normalize_source_type(candidate.source_type)
@@ -83,13 +85,33 @@ pub fn resolve_serving_coordinates(
                 && candidate.latitude == resolved.latitude
                 && candidate.longitude == resolved.longitude
         })
-        .map(|(_, learned_at)| *learned_at)?;
+        .map(|(_, observation)| *observation)?;
+    let mut selected_observations = [
+        selected
+            .latitude
+            .as_ref()
+            .and_then(|axis| axis.observation.clone()),
+        selected
+            .longitude
+            .as_ref()
+            .and_then(|axis| axis.observation.clone()),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    selected_observations.sort_by(|left, right| {
+        left.observation_id
+            .as_str()
+            .cmp(right.observation_id.as_str())
+    });
+    selected_observations.dedup_by(|left, right| left.observation_id == right.observation_id);
     Some(ServingCoordinates {
         latitude: resolved.latitude,
         longitude: resolved.longitude,
         confidence: resolved.confidence,
         source_type: resolved.source_type,
-        learned_at,
+        learned_at: selected.learned_at,
+        observations: selected_observations,
     })
 }
 
@@ -102,20 +124,23 @@ fn coordinate_policies() -> Option<&'static ResolutionPoliciesFile> {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct ObservationKey {
-    source_type: String,
-    source_url: String,
-    skill_id: String,
-    learned_at: DateTime<Utc>,
+    identity: String,
 }
 
 impl ObservationKey {
     fn from_fact(fact: &ServingFactRecord) -> Self {
-        Self {
-            source_type: normalize_source_type(&fact.source_type),
-            source_url: fact.source_url.clone().unwrap_or_default(),
-            skill_id: fact.skill_id.clone().unwrap_or_default(),
-            learned_at: fact.learned_at,
-        }
+        let identity = fact.observation.as_ref().map_or_else(
+            || {
+                format!(
+                    "legacy|{}|{}|{}",
+                    normalize_source_type(&fact.source_type),
+                    fact.source_url.as_deref().unwrap_or_default(),
+                    fact.skill_id.as_deref().unwrap_or_default()
+                )
+            },
+            |observation| observation.observation_id.as_str().to_string(),
+        );
+        Self { identity }
     }
 }
 
@@ -127,10 +152,12 @@ struct PartialCoordinate {
     learned_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct AxisValue {
     value: f64,
     confidence: f32,
+    observation: Option<SourceObservation>,
+    identity: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -140,10 +167,13 @@ enum Axis {
 }
 
 fn update_axis(slot: &mut Option<AxisValue>, candidate: AxisValue) {
-    if slot
-        .as_ref()
-        .is_none_or(|current| candidate.confidence > current.confidence)
-    {
+    let replace = slot.as_ref().is_none_or(|current| {
+        candidate.confidence > current.confidence
+            || (candidate.confidence == current.confidence
+                && (candidate.identity.as_str(), candidate.value.to_bits())
+                    > (current.identity.as_str(), current.value.to_bits()))
+    });
+    if replace {
         *slot = Some(candidate);
     }
 }
@@ -195,22 +225,23 @@ mod tests {
     }
 
     #[test]
-    fn prefers_newer_equal_confidence_observation() {
-        let mut older_latitude = fact("geo.latitude", 12.8, "Google", "https://older", 0.9);
-        let mut older_longitude = fact("geo.longitude", 77.5, "Google", "https://older", 0.9);
+    fn timestamps_do_not_select_equal_confidence_observations() {
+        let older_at = Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap();
         let newer_at = Utc.with_ymd_and_hms(2026, 8, 1, 0, 0, 0).unwrap();
-        let mut newer_latitude = fact("geo.latitude", 12.9, "Google", "https://newer", 0.9);
-        let mut newer_longitude = fact("geo.longitude", 77.6, "Google", "https://newer", 0.9);
-        older_latitude.learned_at = newer_at - chrono::Duration::days(1);
-        older_longitude.learned_at = newer_at - chrono::Duration::days(1);
-        newer_latitude.learned_at = newer_at;
-        newer_longitude.learned_at = newer_at;
+        let mut stable_latitude = fact("geo.latitude", 12.8, "Google", "https://a", 0.9);
+        let mut stable_longitude = fact("geo.longitude", 77.5, "Google", "https://a", 0.9);
+        let mut later_latitude = fact("geo.latitude", 12.9, "Google", "https://b", 0.9);
+        let mut later_longitude = fact("geo.longitude", 77.6, "Google", "https://b", 0.9);
+        stable_latitude.learned_at = older_at;
+        stable_longitude.learned_at = older_at;
+        later_latitude.learned_at = newer_at;
+        later_longitude.learned_at = newer_at;
         let index = ServingFactIndex::from_records(
             vec![
-                older_latitude,
-                older_longitude,
-                newer_latitude,
-                newer_longitude,
+                later_longitude,
+                stable_latitude,
+                later_latitude,
+                stable_longitude,
             ],
             Vec::new(),
         );
@@ -221,8 +252,8 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!((resolved.latitude, resolved.longitude), (12.9, 77.6));
-        assert_eq!(resolved.learned_at, newer_at);
+        assert_eq!((resolved.latitude, resolved.longitude), (12.8, 77.5));
+        assert_eq!(resolved.learned_at, older_at);
     }
 
     fn fact(
@@ -244,6 +275,7 @@ mod tests {
             model: None,
             skill_id: Some("coordinate-test".to_string()),
             learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+            observation: None,
         }
     }
 }

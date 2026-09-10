@@ -1,37 +1,43 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use lru::LruCache;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 use crate::discovery::DiscoveryConfig;
 use crate::knowledge::KnowledgeGraph;
 use crate::knowledge::SearchEvent;
+use crate::lake::{LakeKey, LakeStore};
 use crate::models::{AreaProfile, Property, Society};
 use crate::recommendations::RecommendationResponse;
+use crate::routes::enrichment::society_node_id;
 use crate::scoring::scoring_policy;
-use crate::search::{SearchIndex, SearchResponse};
+use crate::search::{InventoryOption, SearchIndex, SearchResponse};
 use crate::security::security_tuning;
 use crate::security::ExecutionLanes;
 use crate::serving::LoadedServingBundle;
 
-pub const SEARCH_ENGINE_VERSION: &str = "openestates-search-runtime-v2";
+pub const SEARCH_ENGINE_VERSION: &str = "openestates-search-runtime-v3";
 
 pub struct SearchRuntimeSnapshot {
     pub bundle: Arc<LoadedServingBundle>,
     pub properties: Arc<[Property]>,
     pub property_by_id: HashMap<String, usize>,
+    pub inventory_options: HashMap<String, InventoryOption>,
     pub search_index: SearchIndex,
     pub societies: Arc<[Society]>,
     pub society_names: HashMap<String, String>,
     pub areas: Arc<[AreaProfile]>,
+    pub geo_cell_max_hops: u8,
+    pub geo_cell_max_distance_km: f64,
     pub version_key: RuntimeVersionKey,
 }
 
@@ -56,16 +62,44 @@ impl SearchRuntimeSnapshot {
             serving_bundle_version: bundle.manifest.bundle_version.clone(),
             scoring_policy_version: scoring_policy().version,
             search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
+            semantic_contract_digest: semantic_contract_digest().to_string(),
         };
-
+        let geo_cell_policy = crate::dag_config::load_resolution_policies()
+            .map(|policies| policies.spatial_topology)
+            .unwrap_or_default();
+        let inventory_options = properties
+            .iter()
+            .filter_map(|property| {
+                let property_society_id = society_node_id(&property.society_id);
+                let society_entity_id = search_index
+                    .society_entity_id_for_property(&property.id)
+                    .map(str::to_string)
+                    .or_else(|| {
+                        bundle
+                            .fact_index
+                            .entity(&property_society_id)
+                            .map(|_| property_society_id)
+                    })?;
+                InventoryOption::from_serving_observation(
+                    property,
+                    &society_entity_id,
+                    &bundle.fact_index,
+                    &version_key.serving_bundle_version,
+                )
+                .map(|option| (property.id.clone(), option))
+            })
+            .collect();
         Self {
             bundle,
             properties: Arc::from(properties),
             property_by_id,
+            inventory_options,
             search_index,
             societies: Arc::from(societies),
             society_names,
             areas: Arc::from(areas),
+            geo_cell_max_hops: geo_cell_policy.geo_cell_max_hops,
+            geo_cell_max_distance_km: geo_cell_policy.geo_cell_max_distance_km,
             version_key,
         }
     }
@@ -76,6 +110,34 @@ pub struct RuntimeVersionKey {
     pub serving_bundle_version: String,
     pub scoring_policy_version: u32,
     pub search_engine_version: String,
+    pub semantic_contract_digest: String,
+}
+
+pub fn semantic_contract_digest() -> &'static str {
+    static DIGEST: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    DIGEST.get_or_init(|| {
+        let mut digest = Sha256::new();
+        for config in [
+            include_bytes!("../../app/config/dag/search_intent.json").as_slice(),
+            include_bytes!("../../app/config/dag/search_guardrails.json").as_slice(),
+            include_bytes!("../../app/config/dag/scoring_policy.json").as_slice(),
+            include_bytes!("../../app/config/dag/fact_registry.json").as_slice(),
+            include_bytes!("../../app/config/dag/nearby_place_categories.json").as_slice(),
+            include_bytes!("../../app/config/dag/resolution_policies.json").as_slice(),
+            include_bytes!("../../app/config/dag/ontology.json").as_slice(),
+        ] {
+            digest.update((config.len() as u64).to_be_bytes());
+            digest.update(config);
+        }
+        let digest = digest.finalize();
+        format!(
+            "sha256:{}",
+            digest
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        )
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -96,7 +158,217 @@ impl SearchCacheKey {
 #[derive(Clone)]
 pub struct CachedSearchOutput {
     pub response: Arc<SearchResponse>,
+    pub compiled_plan: Arc<crate::search::CompiledSearchPlan>,
     pub log_messages: Vec<SearchLogMessage>,
+}
+
+pub struct SearchRevisionCaches {
+    idempotency: Arc<std::sync::Mutex<RevisionIdempotencyState>>,
+    semantic: std::sync::Mutex<LruCache<String, CachedSearchOutput>>,
+}
+
+struct RevisionIdempotencyState {
+    entries: HashMap<String, RevisionIdempotencyEntry>,
+    completed_order: VecDeque<String>,
+    completed_capacity: usize,
+    next_reservation_id: u64,
+}
+
+enum RevisionIdempotencyEntry {
+    InFlight {
+        request_fingerprint: String,
+        reservation_id: u64,
+        sender: tokio::sync::watch::Sender<RevisionReservationUpdate>,
+    },
+    Complete {
+        request_fingerprint: String,
+        response: Box<crate::routes::search_revisions::SearchRevisionResponse>,
+    },
+}
+
+#[derive(Clone)]
+pub enum RevisionReservationUpdate {
+    Pending,
+    Complete(Box<crate::routes::search_revisions::SearchRevisionResponse>),
+    Abandoned,
+}
+
+pub enum RevisionIdempotencyLookup {
+    Hit(Box<crate::routes::search_revisions::SearchRevisionResponse>),
+    Leader(RevisionIdempotencyReservation),
+    Waiter(tokio::sync::watch::Receiver<RevisionReservationUpdate>),
+    Conflict,
+}
+
+pub struct RevisionIdempotencyReservation {
+    inner: Arc<std::sync::Mutex<RevisionIdempotencyState>>,
+    key: String,
+    reservation_id: u64,
+    completed: bool,
+}
+
+impl SearchRevisionCaches {
+    pub fn from_config() -> Self {
+        let revisions = &crate::dag_config::search_guardrail_config().revisions;
+        Self::new(
+            revisions.idempotency_cache_capacity,
+            revisions.semantic_cache_capacity,
+        )
+    }
+
+    pub fn new(idempotency_capacity: usize, semantic_capacity: usize) -> Self {
+        let semantic_capacity =
+            NonZeroUsize::new(semantic_capacity.max(1)).expect("capacity is non-zero");
+        Self {
+            idempotency: Arc::new(std::sync::Mutex::new(RevisionIdempotencyState {
+                entries: HashMap::new(),
+                completed_order: VecDeque::new(),
+                completed_capacity: idempotency_capacity.max(1),
+                next_reservation_id: 0,
+            })),
+            semantic: std::sync::Mutex::new(LruCache::new(semantic_capacity)),
+        }
+    }
+
+    pub fn lookup_or_reserve(
+        &self,
+        parent_revision_id: &str,
+        client_key: &str,
+        request_fingerprint: &str,
+    ) -> RevisionIdempotencyLookup {
+        let key = format!("{parent_revision_id}\0{client_key}");
+        let mut state = self
+            .idempotency
+            .lock()
+            .expect("revision idempotency cache lock poisoned");
+        if let Some(entry) = state.entries.get(&key) {
+            return match entry {
+                RevisionIdempotencyEntry::Complete {
+                    request_fingerprint: existing,
+                    response,
+                } if existing == request_fingerprint => {
+                    RevisionIdempotencyLookup::Hit(response.clone())
+                }
+                RevisionIdempotencyEntry::InFlight {
+                    request_fingerprint: existing,
+                    sender,
+                    ..
+                } if existing == request_fingerprint => {
+                    RevisionIdempotencyLookup::Waiter(sender.subscribe())
+                }
+                _ => RevisionIdempotencyLookup::Conflict,
+            };
+        }
+
+        let (sender, _receiver) = tokio::sync::watch::channel(RevisionReservationUpdate::Pending);
+        state.next_reservation_id = state.next_reservation_id.wrapping_add(1);
+        let reservation_id = state.next_reservation_id;
+        state.entries.insert(
+            key.clone(),
+            RevisionIdempotencyEntry::InFlight {
+                request_fingerprint: request_fingerprint.to_string(),
+                reservation_id,
+                sender,
+            },
+        );
+        RevisionIdempotencyLookup::Leader(RevisionIdempotencyReservation {
+            inner: self.idempotency.clone(),
+            key,
+            reservation_id,
+            completed: false,
+        })
+    }
+
+    pub fn semantic_get(&self, key: &str) -> Option<CachedSearchOutput> {
+        self.semantic
+            .lock()
+            .expect("semantic revision cache lock poisoned")
+            .get(key)
+            .cloned()
+    }
+
+    pub fn semantic_insert(&self, key: String, output: CachedSearchOutput) {
+        self.semantic
+            .lock()
+            .expect("semantic revision cache lock poisoned")
+            .put(key, output);
+    }
+}
+
+impl RevisionIdempotencyReservation {
+    pub fn complete(mut self, response: crate::routes::search_revisions::SearchRevisionResponse) {
+        let mut state = self
+            .inner
+            .lock()
+            .expect("revision idempotency cache lock poisoned");
+        let Some(RevisionIdempotencyEntry::InFlight {
+            request_fingerprint,
+            reservation_id,
+            sender,
+        }) = state.entries.remove(&self.key)
+        else {
+            self.completed = true;
+            return;
+        };
+        if reservation_id != self.reservation_id {
+            state.entries.insert(
+                self.key.clone(),
+                RevisionIdempotencyEntry::InFlight {
+                    request_fingerprint,
+                    reservation_id,
+                    sender,
+                },
+            );
+            self.completed = true;
+            return;
+        }
+
+        let response = Box::new(response);
+        state.entries.insert(
+            self.key.clone(),
+            RevisionIdempotencyEntry::Complete {
+                request_fingerprint,
+                response: response.clone(),
+            },
+        );
+        state.completed_order.push_back(self.key.clone());
+        let _ = sender.send(RevisionReservationUpdate::Complete(response));
+        while state.completed_order.len() > state.completed_capacity {
+            if let Some(oldest) = state.completed_order.pop_front() {
+                if matches!(
+                    state.entries.get(&oldest),
+                    Some(RevisionIdempotencyEntry::Complete { .. })
+                ) {
+                    state.entries.remove(&oldest);
+                }
+            }
+        }
+        self.completed = true;
+    }
+}
+
+impl Drop for RevisionIdempotencyReservation {
+    fn drop(&mut self) {
+        if self.completed {
+            return;
+        }
+        let Ok(mut state) = self.inner.lock() else {
+            return;
+        };
+        let is_current = matches!(
+            state.entries.get(&self.key),
+            Some(RevisionIdempotencyEntry::InFlight { reservation_id, .. })
+                if *reservation_id == self.reservation_id
+        );
+        if !is_current {
+            return;
+        }
+        if let Some(RevisionIdempotencyEntry::InFlight { sender, .. }) =
+            state.entries.remove(&self.key)
+        {
+            let _ = sender.send(RevisionReservationUpdate::Abandoned);
+        }
+    }
 }
 
 pub struct SearchResponseCache {
@@ -316,15 +588,34 @@ pub fn search_log_queue_capacity_from_env() -> usize {
 
 pub fn spawn_search_log_worker(
     execution: &ExecutionLanes,
-    knowledge: Arc<RwLock<KnowledgeGraph>>,
+    lake: LakeStore,
     mut rx: mpsc::Receiver<SearchLogMessage>,
 ) {
     execution.spawn_internal(async move {
         while let Some(message) = rx.recv().await {
             match message {
                 SearchLogMessage::SearchEvent(event) => {
-                    let mut graph = knowledge.write().await;
-                    graph.log_search(event, security_tuning().search_cache.event_history);
+                    let timestamp = event.timestamp;
+                    let payload =
+                        serde_json::to_vec(&event).expect("search events are serializable");
+                    let digest = Sha256::digest(&payload)
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>();
+                    let key = format!(
+                        "raw/source=search_events/dt={}/run_id=runtime/{}-{}.json",
+                        timestamp.format("%Y-%m-%d"),
+                        timestamp.format("%Y%m%dT%H%M%S%.9fZ"),
+                        &digest[..16],
+                    );
+                    let Ok(key) = LakeKey::new(key) else {
+                        continue;
+                    };
+                    let _ = lake
+                        .put_json_if(&key, &event, |existing: Option<&SearchEvent>| {
+                            existing.is_none()
+                        })
+                        .await;
                 }
             }
         }
@@ -340,6 +631,8 @@ pub struct AppState {
     pub search_runtime: ArcSwap<SearchRuntimeSnapshot>,
     /// Bounded optimization cache for non-debug search responses.
     pub search_cache: SearchResponseCache,
+    /// Atomic revision idempotency reservations and compiled-plan result reuse.
+    pub search_revision_caches: SearchRevisionCaches,
     /// One serialized full-catalog response per active runtime version. This
     /// prevents repeated anonymous reads from rebuilding and serializing ~1 MiB.
     pub property_catalog_cache: tokio::sync::Mutex<Option<(String, bytes::Bytes)>>,
@@ -352,8 +645,6 @@ pub struct AppState {
     pub properties: RwLock<Vec<Property>>,
     /// Local recall index rebuilt from app-owned property data.
     pub search_index: RwLock<SearchIndex>,
-    /// Optional compiled KG serving bundle loaded from the local/S3-shaped lake.
-    pub serving_bundle: RwLock<Option<Arc<LoadedServingBundle>>>,
     /// In-process cache keyed by property + bundle + scoring policy + engine version.
     pub recommendation_cache: RwLock<std::collections::HashMap<String, RecommendationResponse>>,
     pub areas: RwLock<Vec<AreaProfile>>,
@@ -372,8 +663,6 @@ pub struct AppState {
     pub interest_counter: AtomicU64,
     /// Serializes bounded interest-file accounting and appends.
     pub interest_write_lock: tokio::sync::Mutex<()>,
-    /// Prevents authenticated admin requests from spawning overlapping asset runs.
-    pub asset_run_active: AtomicBool,
 }
 
 impl AppState {
@@ -396,6 +685,7 @@ mod tests {
             serving_bundle_version: bundle.to_string(),
             scoring_policy_version: 1,
             search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
+            semantic_contract_digest: semantic_contract_digest().to_string(),
         }
     }
 
@@ -404,6 +694,9 @@ mod tests {
         CachedSearchOutput {
             response: Arc::new(SearchResponse {
                 query: query.to_string(),
+                revision_id: "rev-001-test".to_string(),
+                revision: None,
+                ast_fingerprint: "sha256:test".to_string(),
                 result_sets: Vec::new(),
                 ordered_result_ids: Vec::new(),
                 total_matches: 0,
@@ -411,13 +704,95 @@ mod tests {
                     serving_bundle_version: version.serving_bundle_version,
                     scoring_policy_version: version.scoring_policy_version,
                     search_engine_version: version.search_engine_version,
+                    semantic_contract_digest: version.semantic_contract_digest,
                 },
                 area_context: None,
                 state: "no_matches".to_string(),
                 search_guidance: None,
             }),
+            compiled_plan: Arc::new(crate::search::CompiledSearchPlan::compile_for_snapshot(
+                crate::search::IntentAst::from_text(query),
+                "test-bundle",
+                &[],
+                &crate::graph::GraphIndex::default(),
+                None,
+                crate::search::GeoCellSearchPolicy {
+                    max_hops: 2,
+                    max_distance_km: 4.0,
+                },
+            )),
             log_messages: Vec::new(),
         }
+    }
+
+    #[tokio::test]
+    async fn abandoned_revision_reservation_wakes_waiters_and_can_be_reacquired() {
+        let caches = SearchRevisionCaches::new(2, 2);
+        let RevisionIdempotencyLookup::Leader(leader) =
+            caches.lookup_or_reserve("parent", "client", "fingerprint")
+        else {
+            panic!("first caller leads");
+        };
+        let RevisionIdempotencyLookup::Waiter(mut waiter) =
+            caches.lookup_or_reserve("parent", "client", "fingerprint")
+        else {
+            panic!("identical concurrent caller waits");
+        };
+        assert!(matches!(
+            caches.lookup_or_reserve("parent", "client", "different"),
+            RevisionIdempotencyLookup::Conflict
+        ));
+
+        drop(leader);
+        waiter.changed().await.expect("cancellation update arrives");
+        assert!(matches!(
+            waiter.borrow().clone(),
+            RevisionReservationUpdate::Abandoned
+        ));
+        assert!(matches!(
+            caches.lookup_or_reserve("parent", "client", "fingerprint"),
+            RevisionIdempotencyLookup::Leader(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn search_event_worker_writes_immutable_lake_event_without_graph_history() {
+        let temp = tempfile::tempdir().expect("temporary event lake");
+        let lake = LakeStore::local(temp.path()).expect("local event lake");
+        let lanes = ExecutionLanes::current();
+        let (tx, rx) = mpsc::channel(2);
+        spawn_search_log_worker(&lanes, lake.clone(), rx);
+
+        let event = SearchEvent::new(
+            "3bhk near metro".to_string(),
+            crate::search::intent::parse_intent("3bhk near metro"),
+            2,
+        );
+        tx.send(SearchLogMessage::SearchEvent(event.clone()))
+            .await
+            .expect("event queue accepts message");
+        drop(tx);
+
+        let prefix = crate::lake::LakePrefix::new("raw/source=search_events")
+            .expect("static event prefix is valid");
+        let keys = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                let keys = lake.list_keys(&prefix).await.expect("event keys list");
+                if !keys.is_empty() {
+                    break keys;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("worker writes the event promptly");
+
+        assert_eq!(keys.len(), 1);
+        assert!(keys[0].as_str().contains("/run_id=runtime/"));
+        let written: SearchEvent = lake.get_json(&keys[0]).await.expect("event round trips");
+        assert_eq!(written.query, event.query);
+        assert_eq!(written.results_returned, event.results_returned);
+        assert_eq!(KnowledgeGraph::new().stats().search_events, 0);
     }
 
     #[tokio::test]

@@ -313,21 +313,36 @@
       "clause_joiners": ["and", "also", "plus"],
       "aliases": [
         {
-          "alias": "near"
+          "alias": "near",
+          "operator": "near"
         },
         {
-          "alias": "nearby"
+          "alias": "nearby",
+          "operator": "near"
         },
         {
-          "alias": "near by"
+          "alias": "near by",
+          "operator": "near"
         },
         {
           "alias": "within",
+          "operator": "near",
           "requires_distance_limit": true
         },
         {
           "alias": "close to",
+          "operator": "near",
           "default_distance_limit_km": 2.0
+        },
+        {
+          "alias": "inside",
+          "operator": "inside",
+          "required_by_default": true
+        },
+        {
+          "alias": "adjacent to",
+          "operator": "adjacent",
+          "required_by_default": true
         }
       ]
     },
@@ -337,10 +352,54 @@
       "conditional_branch_starters": ["if"],
       "conjunctive_relation_markers": ["both"],
       "paired_branch_joiners": ["with"],
-      "branch_ordinals": ["first", "second"],
+      "branch_ordinals": ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"],
       "ranking_instruction_prefixes": ["rank only by", "rank", "choose"],
       "ranking_scope_end_markers": ["even if"],
       "scoped_exclusion_markers": ["unless"],
+      "revision_expand_prefixes": [
+        "also consider",
+        "also show",
+        "add as an alternative",
+        "alternatively consider"
+      ],
+      "revision_continuity_prefixes": [
+        "keep the same search, but",
+        "keep the same search but",
+        "keep the same search",
+        "make it",
+        "and"
+      ],
+      "revision_switch_prefixes": [
+        "start over",
+        "forget that",
+        "instead"
+      ],
+      "revision_replace_markers": [
+        "matter more",
+        "matters more",
+        "prioritize"
+      ],
+      "revision_correction_prefixes": [
+        "i meant",
+        "change the",
+        "increase the",
+        "decrease the",
+        "stretch budget by",
+        "increase budget by",
+        "raise budget by",
+        "reduce budget by",
+        "decrease budget by"
+      ],
+      "revision_overwrite_prefixes": ["actually", "only"],
+      "revision_relative_increase_prefixes": ["stretch budget by", "increase budget by", "raise budget by"],
+      "revision_relative_decrease_prefixes": ["reduce budget by", "decrease budget by"],
+      "revision_exclusion_prefixes": ["exclude", "avoid", "not"],
+      "revision_ambiguous_spatial_refinements": [
+        "closer",
+        "nearer",
+        "farther",
+        "further away"
+      ],
       "shared_suffix_markers": [
         "but not",
         "but only",

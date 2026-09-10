@@ -1,9 +1,3 @@
-use std::fs::File;
-use std::sync::Arc;
-
-use arrow::array::{ArrayRef, Float32Array, StringArray};
-use arrow::datatypes::{DataType, Field, Schema};
-use arrow::record_batch::RecordBatch;
 use backend::knowledge::fact::{
     FactSource, FactValue, ScoringDirection, ScoringHint, SourceType, SourcedFact,
 };
@@ -11,12 +5,14 @@ use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::{LakeKey, LakeStore};
 use backend::serving::{
-    hydrate_tantivy_index, read_facts_parquet, read_search_metadata_parquet, BundleArtifactKind,
-    ServingBundleBuilder, ServingBundleManifest, TantivyRecallIndex,
+    hydrate_tantivy_index, read_edges_parquet, read_entities_parquet, read_facts_parquet,
+    read_search_metadata_parquet, BundleArtifactKind, ServingBundleBuilder, ServingBundleLoader,
+    ServingBundleManifest, ServingEntityRecord, ServingEntityVisibility, ServingFactRecord,
+    ServingSearchMetadataRecord, SourceObservation, TantivyRecallIndex,
 };
 use chrono::Utc;
-use parquet::arrow::ArrowWriter;
 use parquet::file::reader::{FileReader, SerializedFileReader};
+use std::fs::File;
 use tempfile::tempdir;
 
 #[tokio::test]
@@ -24,9 +20,17 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let graph = mock_graph();
+    let (entities, facts, metadata) = catalog_records_from_graph(&graph);
 
     let manifest = ServingBundleBuilder::new(lake.clone())
-        .build_from_graph(&graph, "2026-07-12T18:30Z")
+        .build_from_catalog_records(
+            entities,
+            facts,
+            metadata,
+            Vec::new(),
+            Vec::new(),
+            "2026-07-12T18:30Z",
+        )
         .await
         .unwrap();
 
@@ -35,7 +39,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert_eq!(manifest.search_metadata_count, 18);
     assert_eq!(manifest.rera_evidence_count, 0);
     assert_eq!(manifest.edge_count, 0);
-    assert_eq!(manifest.eligibility_policy_version, 4);
+    assert_eq!(manifest.eligibility_policy_version, 5);
     assert_eq!(manifest.quarantined_society_count, 0);
     assert_eq!(
         manifest.entity_parquet_key,
@@ -61,6 +65,27 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         .artifacts
         .iter()
         .any(|artifact| artifact.kind == BundleArtifactKind::QuarantineJson));
+    let mut legacy_manifest = serde_json::to_value(&manifest).unwrap();
+    legacy_manifest
+        .as_object_mut()
+        .unwrap()
+        .insert("trust_policy_key".to_string(), serde_json::json!("retired"));
+    assert!(serde_json::from_value::<ServingBundleManifest>(legacy_manifest).is_err());
+    let topology_gaps = manifest
+        .artifacts
+        .iter()
+        .find(|artifact| {
+            artifact
+                .key
+                .ends_with("diagnostics/spatial_topology_gaps.json")
+        })
+        .expect("spatial topology gaps remain inspectable in the bundle");
+    let topology_gap_body = lake
+        .get_text(&LakeKey::new(topology_gaps.key.clone()).unwrap())
+        .await
+        .unwrap();
+    let topology_gap_json: serde_json::Value = serde_json::from_str(&topology_gap_body).unwrap();
+    assert_eq!(topology_gap_json["classification"], "data_gap");
 
     let entity_bytes = lake
         .get_bytes(&LakeKey::new(manifest.entity_parquet_key.clone()).unwrap())
@@ -74,6 +99,10 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         .get_bytes(&LakeKey::new(manifest.search_metadata_parquet_key.clone()).unwrap())
         .await
         .unwrap();
+    let edge_bytes = lake
+        .get_bytes(&LakeKey::new(manifest.edge_parquet_key.clone()).unwrap())
+        .await
+        .unwrap();
     assert_is_parquet(&entity_bytes);
     assert_is_parquet(&fact_bytes);
     assert_is_parquet(&search_metadata_bytes);
@@ -82,6 +111,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert_eq!(parquet_rows(&search_metadata_bytes), 18);
     let fact_columns = parquet_columns(&fact_bytes);
     let search_metadata_columns = parquet_columns(&search_metadata_bytes);
+    let edge_columns = parquet_columns(&edge_bytes);
     assert!(fact_columns.contains(&"value_text".to_string()));
     assert!(fact_columns.contains(&"value_number".to_string()));
     assert!(fact_columns.contains(&"value_tags".to_string()));
@@ -89,6 +119,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert!(!fact_columns.contains(&"answers_preferences_json".to_string()));
     assert!(search_metadata_columns.contains(&"answers_preferences".to_string()));
     assert!(!search_metadata_columns.contains(&"answers_preferences_json".to_string()));
+    assert!(edge_columns.contains(&"derivation_json".to_string()));
 
     let fact_records = read_facts_parquet(&fact_bytes).unwrap();
     let land_area = fact_records
@@ -116,7 +147,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/manifest.json").unwrap();
     let manifest_body = lake.get_text(&manifest_key).await.unwrap();
     let manifest_json: serde_json::Value = serde_json::from_str(&manifest_body).unwrap();
-    assert_eq!(manifest_json["format_version"], 8);
+    assert_eq!(manifest_json["format_version"], 12);
     assert!(manifest_json["entity_alias_parquet_key"]
         .as_str()
         .is_some_and(|key| key.ends_with("entity_aliases/part-00000.parquet")));
@@ -129,6 +160,8 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert!(schema_body.contains("\"entity_aliases\""));
     assert!(schema_body.contains("\"value_number\""));
     assert!(schema_body.contains("\"answers_preferences\""));
+    assert!(schema_body.contains("\"observation_json\""));
+    assert!(schema_body.contains("\"derivation_json\""));
     assert!(!schema_body.contains("value_json"));
     assert!(!schema_body.contains("answers_preferences_json"));
 
@@ -145,80 +178,344 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert!(hits[0].matched_fields.iter().any(|field| field == "body"));
 }
 
-#[test]
-fn serving_manifest_allows_optional_sidecar_artifact_kinds() {
-    let manifest_body = r#"{
-      "bundle_version": "bundle-with-sidecar",
-      "format_version": 5,
-      "created_at": "2026-08-03T18:25:24.188555Z",
-      "entity_count": 1,
-      "fact_count": 1,
-      "search_metadata_count": 1,
-      "edge_count": 0,
-      "entity_parquet_key": "serving/search_bundle/version=bundle/entities/part-00000.parquet",
-      "fact_parquet_key": "serving/search_bundle/version=bundle/facts/part-00000.parquet",
-      "search_metadata_parquet_key": "serving/search_bundle/version=bundle/search_metadata/part-00000.parquet",
-      "edge_parquet_key": null,
-      "semantic_embedding_parquet_key": null,
-      "ontology_embedding_parquet_key": "serving/search_bundle/version=bundle/ontology_embeddings/part-00000.parquet",
-      "schema_key": "serving/search_bundle/version=bundle/schema.json",
-      "trust_policy_key": "serving/search_bundle/version=bundle/trust_policy.json",
-      "tantivy_index_prefix": "serving/search_bundle/version=bundle/tantivy_index",
-      "artifacts": [
-        {
-          "kind": "ontology_embeddings_parquet",
-          "key": "serving/search_bundle/version=bundle/ontology_embeddings/part-00000.parquet",
-          "format": "application/vnd.apache.parquet",
-          "content_hash": "hash",
-          "hash_algorithm": "sha256",
-          "size_bytes": 10,
-          "row_count": 1
-        },
-        {
-          "kind": "tantivy_index_file",
-          "key": "serving/search_bundle/version=bundle/tantivy_index/meta.json",
-          "format": "application/octet-stream",
-          "content_hash": "hash",
-          "hash_algorithm": "sha256",
-          "size_bytes": 10,
-          "row_count": null
-        }
-      ]
-    }"#;
+#[tokio::test]
+async fn normal_serving_build_materializes_internal_geo_cells_and_excludes_their_names() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let version = "geo-cell-normal-dag-fixture";
+    let entities = vec![
+        serving_entity(
+            "area:market:whitefield",
+            "area",
+            "Whitefield",
+            "market_locality",
+        ),
+        serving_entity(
+            "area:osm:cell-a",
+            "area",
+            "Secret Ward Alpha",
+            "openstreetmap",
+        ),
+        serving_entity(
+            "area:osm:cell-b",
+            "area",
+            "Secret Ward Beta",
+            "openstreetmap",
+        ),
+        serving_entity("place:school", "place", "Fixture School", "google"),
+    ];
+    let learned_at = Utc::now();
+    let facts = vec![
+        observed_serving_fact(
+            "area:market:whitefield",
+            "market.locality_name",
+            FactValue::Text("Whitefield".to_string()),
+            "SourceEntitySeed",
+            "market-name",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "area:osm:cell-a",
+            "place.name",
+            FactValue::Text("Secret Ward Alpha".to_string()),
+            "OpenStreetMap",
+            "cell-a-name",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "area:osm:cell-a",
+            "area.admin_level",
+            FactValue::Text("10".to_string()),
+            "OpenStreetMap",
+            "cell-a-level",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "area:osm:cell-a",
+            "geo.geometry_geojson",
+            FactValue::Text(
+                r#"{"type":"Polygon","coordinates":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}"#
+                    .to_string(),
+            ),
+            "OpenStreetMap",
+            "cell-a-geometry",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "area:osm:cell-b",
+            "place.name",
+            FactValue::Text("Secret Ward Beta".to_string()),
+            "OpenStreetMap",
+            "cell-b-name",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "area:osm:cell-b",
+            "area.admin_level",
+            FactValue::Text("10".to_string()),
+            "OpenStreetMap",
+            "cell-b-level",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "area:osm:cell-b",
+            "geo.geometry_geojson",
+            FactValue::Text(
+                r#"{"type":"Polygon","coordinates":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}"#
+                    .to_string(),
+            ),
+            "OpenStreetMap",
+            "cell-b-geometry",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "place:school",
+            "google_place_address",
+            FactValue::Text("Main Road, Whitefield, Bengaluru".to_string()),
+            "Google",
+            "school-address",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "place:school",
+            "geo.latitude",
+            FactValue::Numeric(2.0),
+            "Google",
+            "school-coordinate",
+            learned_at,
+        ),
+        observed_serving_fact(
+            "place:school",
+            "geo.longitude",
+            FactValue::Numeric(2.0),
+            "Google",
+            "school-coordinate",
+            learned_at,
+        ),
+    ];
+    let metadata = facts.iter().map(serving_metadata).collect();
 
-    let manifest: ServingBundleManifest = serde_json::from_str(manifest_body).unwrap();
+    let manifest = ServingBundleBuilder::new(lake.clone())
+        .build_from_catalog_records(entities, facts, metadata, Vec::new(), Vec::new(), version)
+        .await
+        .unwrap();
+    let cache = tempdir().unwrap();
+    let bundle = ServingBundleLoader::new(lake.clone(), cache.path())
+        .load_search_bundle(version)
+        .await
+        .unwrap();
 
-    assert!(manifest
-        .artifacts
-        .iter()
-        .any(|artifact| artifact.kind == BundleArtifactKind::Other));
+    for cell_id in ["area:osm:cell-a", "area:osm:cell-b"] {
+        let cell = bundle
+            .entities
+            .iter()
+            .find(|entity| entity.entity_id == cell_id)
+            .unwrap();
+        assert_eq!(cell.visibility, ServingEntityVisibility::Internal);
+        assert!(cell.searchable_text.is_empty());
+    }
+    assert!(bundle.edges.iter().any(|edge| {
+        edge.from_entity_id == "place:school"
+            && edge.edge_type == "in_market_locality"
+            && edge.to_entity_id == "area:market:whitefield"
+            && edge.derivation.is_some()
+    }));
+    assert!(bundle.edges.iter().any(|edge| {
+        edge.from_entity_id == "place:school"
+            && edge.edge_type == "occupies_geo_cell"
+            && edge.to_entity_id == "area:osm:cell-a"
+            && edge.derivation.is_some()
+    }));
+    assert!(bundle.edges.iter().any(|edge| {
+        edge.from_entity_id == "area:market:whitefield"
+            && edge.edge_type == "covers_geo_cell"
+            && edge.to_entity_id == "area:osm:cell-a"
+            && edge.derivation.is_some()
+    }));
+    let hydrated = tempdir().unwrap();
+    hydrate_tantivy_index(&lake, &manifest, hydrated.path())
+        .await
+        .unwrap();
+    assert!(TantivyRecallIndex::open(hydrated.path())
+        .unwrap()
+        .search("Secret Ward Alpha", 10)
+        .unwrap()
+        .is_empty());
+
+    let entity_bytes = lake
+        .get_bytes(&LakeKey::new(manifest.entity_parquet_key).unwrap())
+        .await
+        .unwrap();
     assert_eq!(
-        manifest.artifacts[1].kind,
-        BundleArtifactKind::TantivyIndexFile
+        read_entities_parquet(&entity_bytes).unwrap(),
+        bundle.entities
     );
+    let edge_bytes = lake
+        .get_bytes(&LakeKey::new(manifest.edge_parquet_key).unwrap())
+        .await
+        .unwrap();
+    let edges = read_edges_parquet(&edge_bytes).unwrap();
+    assert!(edges
+        .iter()
+        .filter_map(|edge| edge.derivation.as_ref())
+        .all(|derivation| derivation
+            .input_evidence
+            .iter()
+            .all(|evidence| evidence.snapshot_identity == version)));
+}
+
+fn serving_entity(
+    entity_id: &str,
+    entity_type: &str,
+    name: &str,
+    root_source: &str,
+) -> ServingEntityRecord {
+    ServingEntityRecord {
+        entity_id: entity_id.to_string(),
+        entity_type: entity_type.to_string(),
+        name: name.to_string(),
+        root_source: Some(root_source.to_string()),
+        visibility: ServingEntityVisibility::Searchable,
+        searchable_text: name.to_string(),
+    }
+}
+
+fn observed_serving_fact(
+    entity_id: &str,
+    fact_key: &str,
+    value: FactValue,
+    source_type: &str,
+    provider_id: &str,
+    learned_at: chrono::DateTime<Utc>,
+) -> ServingFactRecord {
+    let value_type = match value {
+        FactValue::Numeric(_) => "numeric",
+        FactValue::Bool(_) => "bool",
+        FactValue::Tags(_) => "tags",
+        FactValue::Score { .. } => "score",
+        FactValue::Text(_) => "text",
+    };
+    let value_text = match &value {
+        FactValue::Text(value) => Some(value.clone()),
+        FactValue::Numeric(value) => Some(value.to_string()),
+        FactValue::Bool(value) => Some(value.to_string()),
+        _ => None,
+    };
+    ServingFactRecord {
+        entity_id: entity_id.to_string(),
+        fact_key: fact_key.to_string(),
+        value_type: value_type.to_string(),
+        value_text,
+        value,
+        confidence: 0.95,
+        source_type: source_type.to_string(),
+        source_url: Some("https://example.test/source".to_string()),
+        model: None,
+        skill_id: Some("normal-dag-fixture".to_string()),
+        learned_at,
+        observation: Some(
+            SourceObservation::new(
+                source_type,
+                provider_id,
+                entity_id,
+                learned_at,
+                Some("https://example.test/source".to_string()),
+                vec!["asset:normal-dag-fixture/run:1".to_string()],
+            )
+            .unwrap(),
+        ),
+    }
+}
+
+fn serving_metadata(fact: &ServingFactRecord) -> ServingSearchMetadataRecord {
+    ServingSearchMetadataRecord {
+        entity_id: fact.entity_id.clone(),
+        fact_key: fact.fact_key.clone(),
+        display_template: None,
+        answers_preferences: Vec::new(),
+        scoring_direction: None,
+        scoring_weight: None,
+        scoring_thresholds: Vec::new(),
+    }
 }
 
 #[test]
-fn legacy_json_serving_parquet_reads_into_typed_runtime_records() {
-    let facts = read_facts_parquet(&legacy_facts_parquet()).unwrap();
-    assert_eq!(facts.len(), 1);
-    assert_eq!(facts[0].entity_id, "society:legacy-green");
-    assert_eq!(
-        facts[0].value,
-        FactValue::Text("Legacy residents mention trees".to_string())
-    );
-    assert_eq!(
-        facts[0].value_text.as_deref(),
-        Some("Legacy residents mention trees")
-    );
+fn serving_manifest_requires_the_complete_format_12_contract() {
+    let old_manifest = r#"{"bundle_version":"old","format_version":5}"#;
+    assert!(serde_json::from_str::<ServingBundleManifest>(old_manifest).is_err());
+}
 
-    let metadata = read_search_metadata_parquet(&legacy_search_metadata_parquet()).unwrap();
-    assert_eq!(metadata.len(), 1);
-    assert_eq!(
-        metadata[0].answers_preferences,
-        vec!["greenery".to_string(), "trees".to_string()]
-    );
-    assert_eq!(metadata[0].scoring_direction.as_deref(), Some("TextMatch"));
+fn catalog_records_from_graph(
+    graph: &KnowledgeGraph,
+) -> (
+    Vec<ServingEntityRecord>,
+    Vec<ServingFactRecord>,
+    Vec<ServingSearchMetadataRecord>,
+) {
+    let mut entities = Vec::new();
+    let mut facts = Vec::new();
+    let mut metadata = Vec::new();
+    for node in graph.nodes.values() {
+        entities.push(ServingEntityRecord {
+            entity_id: node.id.clone(),
+            entity_type: "society".to_string(),
+            name: node.name.clone(),
+            root_source: node.root_source.map(|_| "rera".to_string()),
+            visibility: ServingEntityVisibility::Searchable,
+            searchable_text: String::new(),
+        });
+        let mut current = std::collections::BTreeMap::new();
+        for sourced in &node.facts {
+            current
+                .entry(sourced.key.as_str())
+                .and_modify(|existing: &mut &SourcedFact| {
+                    if sourced.version > existing.version {
+                        *existing = sourced;
+                    }
+                })
+                .or_insert(sourced);
+        }
+        for sourced in current.into_values() {
+            let value_type = match &sourced.value {
+                FactValue::Numeric(_) => "numeric",
+                FactValue::Text(_) => "text",
+                FactValue::Bool(_) => "bool",
+                FactValue::Tags(_) => "tags",
+                FactValue::Score { .. } => "score",
+            };
+            facts.push(ServingFactRecord {
+                entity_id: node.id.clone(),
+                fact_key: sourced.key.clone(),
+                value_type: value_type.to_string(),
+                value_text: None,
+                value: sourced.value.clone(),
+                confidence: sourced.confidence,
+                source_type: format!("{:?}", sourced.source.source_type),
+                source_url: sourced.source.url.clone(),
+                model: sourced.source.model.clone(),
+                skill_id: sourced.source.skill_id.clone(),
+                learned_at: sourced.learned_at,
+                observation: None,
+            });
+            metadata.push(ServingSearchMetadataRecord {
+                entity_id: node.id.clone(),
+                fact_key: sourced.key.clone(),
+                display_template: sourced.display_template.clone(),
+                answers_preferences: sourced.answers_preferences.clone(),
+                scoring_direction: sourced
+                    .scoring_hint
+                    .as_ref()
+                    .map(|_| "text_match".to_string()),
+                scoring_weight: sourced.scoring_hint.as_ref().map(|hint| hint.weight),
+                scoring_thresholds: sourced
+                    .scoring_hint
+                    .as_ref()
+                    .map(|hint| hint.thresholds.clone())
+                    .unwrap_or_default(),
+            });
+        }
+    }
+    (entities, facts, metadata)
 }
 
 fn mock_graph() -> KnowledgeGraph {
@@ -353,88 +650,14 @@ fn parquet_rows(bytes: &[u8]) -> i64 {
 }
 
 fn parquet_columns(bytes: &[u8]) -> Vec<String> {
-    let mut reader = parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(
+    let reader = parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(
         bytes::Bytes::copy_from_slice(bytes),
     )
-    .unwrap()
-    .build()
     .unwrap();
-    let batch = reader.next().unwrap().unwrap();
-    batch
+    reader
         .schema()
         .fields()
         .iter()
         .map(|field| field.name().to_string())
         .collect()
-}
-
-fn legacy_facts_parquet() -> Vec<u8> {
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("entity_id", DataType::Utf8, false),
-        Field::new("fact_key", DataType::Utf8, false),
-        Field::new("value_type", DataType::Utf8, false),
-        Field::new("value_text", DataType::Utf8, true),
-        Field::new("value_json", DataType::Utf8, false),
-        Field::new("confidence", DataType::Float32, false),
-        Field::new("source_type", DataType::Utf8, false),
-        Field::new("source_url", DataType::Utf8, true),
-        Field::new("model", DataType::Utf8, true),
-        Field::new("skill_id", DataType::Utf8, true),
-        Field::new("learned_at", DataType::Utf8, false),
-    ]));
-    write_legacy_parquet(
-        schema,
-        vec![
-            string_array(["society:legacy-green"]),
-            string_array(["resident_greenery_signal"]),
-            string_array(["text"]),
-            optional_string_array([Some("Legacy residents mention trees")]),
-            string_array([r#"{"type":"Text","data":"Legacy residents mention trees"}"#]),
-            Arc::new(Float32Array::from(vec![0.71])) as ArrayRef,
-            string_array(["Reddit"]),
-            optional_string_array([Some("https://reddit.com/r/BangaloreRealEstates/legacy")]),
-            optional_string_array([None]),
-            optional_string_array([Some("legacy_skill")]),
-            string_array(["2026-07-13T00:00:00Z"]),
-        ],
-    )
-}
-
-fn legacy_search_metadata_parquet() -> Vec<u8> {
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("entity_id", DataType::Utf8, false),
-        Field::new("fact_key", DataType::Utf8, false),
-        Field::new("display_template", DataType::Utf8, true),
-        Field::new("answers_preferences_json", DataType::Utf8, false),
-        Field::new("scoring_direction", DataType::Utf8, true),
-        Field::new("scoring_weight", DataType::Float32, true),
-    ]));
-    write_legacy_parquet(
-        schema,
-        vec![
-            string_array(["society:legacy-green"]),
-            string_array(["resident_greenery_signal"]),
-            optional_string_array([Some("Resident signal: {value}")]),
-            string_array([r#"["greenery","trees"]"#]),
-            optional_string_array([Some("TextMatch")]),
-            Arc::new(Float32Array::from(vec![Some(1.4)])) as ArrayRef,
-        ],
-    )
-}
-
-fn write_legacy_parquet(schema: Arc<Schema>, columns: Vec<ArrayRef>) -> Vec<u8> {
-    let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
-    let mut bytes = Vec::new();
-    let mut writer = ArrowWriter::try_new(&mut bytes, schema, None).unwrap();
-    writer.write(&batch).unwrap();
-    writer.close().unwrap();
-    bytes
-}
-
-fn string_array<const N: usize>(values: [&str; N]) -> ArrayRef {
-    Arc::new(StringArray::from(Vec::from(values)))
-}
-
-fn optional_string_array<const N: usize>(values: [Option<&str>; N]) -> ArrayRef {
-    Arc::new(StringArray::from(Vec::from(values)))
 }

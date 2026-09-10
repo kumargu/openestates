@@ -1,116 +1,77 @@
-# Serving bundle release
+# Catalog and serving bundle lifecycle
 
-The serving bundle is the runtime commit point. A release is usable only when
-its Parquet/Tantivy artifacts, pinned lineage, and every local media reference
-are available together.
-
-Format 7 classifies societies before serving artifacts are written. A society
-enters the clean bundle when its projected discovery cards have usable media.
-Price, inventory, RERA, road, review, and other optional evidence may be absent;
-those gaps affect matching and ranking rather than removing the society. The policy lives in
-`app/config/dag/serving_eligibility.json`; fact keys and edge types are not
-branched in the builder.
-
-Eligibility policy version 4 prunes an unusable card independently. A society
-remains discoverable when at least one image-backed card survives, including a
-society card whose price and BHK configuration are still unknown.
-
-Buyer-visible cards must also have an area and positive size. This mirrors the
-release gates so a bundle cannot retain a card that its own validator rejects.
-
-An individually unusable property row is removed with its facts and incident
-edges. If no eligible card remains—or society identity is ambiguous—the whole
-society is removed atomically. Related area, road, builder, and place entities
-remain when a retained society still references them. The builder
-writes `quarantine/societies.json` with stable reason codes, source bundle
-version, affected entity IDs, and a manifest hash. It does not copy or mutate
-durable DAG facts. Fixing those facts therefore readmits the society on the
-next build without a repair API.
-
-## One-command promotion
-
-Promote an existing candidate:
-
-```bash
-cd backend
-CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo run \
-  --bin openestates-promote-materialization -- \
-  --asset search_serving_bundle \
-  --materialization <materialization-uuid>
-```
-
-The command performs the full preflight, writes
-`frontend/media-manifest.json`, promotes the pinned lineage, and changes the
-serving pointer last. Any failed gate exits non-zero before the pointer change.
-The manifest is a frontend deployment certificate: its `assets` inventory must
-remain empty because validated `/media/*` objects are served from the lake and
-are deliberately not packaged by Vite.
-
-Audit the current release without changing state:
-
-```bash
-cd backend
-CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo run \
-  --bin openestates-promote-materialization -- \
-  --asset search_serving_bundle --current --check-only
-```
-
-Normal production DAG runs use the same pre-promotion validator. Catalog
-release validate/promote/rollback commands also run it.
-
-## Convergence and rollback
-
-Partitioned DAG assets may advance independently. A forward promotion is
-allowed only after `current_project_facts` pins every dependency partition that
-is current at promotion time; KG and the serving bundle must then pin that
-checkpoint. Immutable bundle validation is separate from this live check so a
-previously validated release remains a usable rollback snapshot.
-
-Keep every bundle referenced by a dev, staging, or production environment;
-every bundle or ancestor referenced by an in-progress DAG run; the current
-production release; and the five preceding validated production releases.
-Future cleanup must be reachability-based, print a dry-run plan first, and
-observe a grace period. Bundle version numbers are labels, not a safe deletion
-order.
-
-## Release gates
-
-- materialization succeeded and pinned lineage is coherent
-- manifest version matches the materialization version
-- all artifacts remain under the immutable bundle version prefix
-- every artifact size and SHA-256 matches the manifest
-- required Parquet, schema, trust-policy, and Tantivy artifacts exist
-- format 7 policy version and hashed quarantine report agree
-- recomputing eligibility over the clean records excludes no society
-- pre-format-7 bundles remain inspectable but cannot be promoted
-- manifest row counts match decoded tables
-- every local URL nested anywhere in serving facts resolves
-- gallery media bytes match their recorded `content_sha256`
-- the frontend deployment manifest is generated only from a passing candidate
-- every frontend production build rejects frontend-packaged media
-- image URLs use immutable content hashes and are streamed from the configured lake
-
-## Media storage
-
-Project images live at:
+The development catalog has one commit point:
 
 ```text
-media/images/sha256/{first-two-hash-characters}/{sha256}.{canonical-extension}
+manifests/catalog/dev.json
 ```
 
-The same logical key is used under local `data/lake` and the configured S3
-prefix. Original imports are retained once and indexed by
-`media/inventory/*.json`; serving facts point to bounded delivery copies.
-`/media/*` responses stream from `LakeStore` and content-addressed images use a
-one-year immutable browser/CDN cache. `/societies/*` is retired and fails both
-release promotion and frontend builds.
+It points to the current immutable roster and format-12 serving bundle, and
+retains the immediately previous generation for `undo`.
 
-The media materializer verifies magic bytes, canonicalizes extensions, rejects
-declared-hash mismatches, deduplicates identical content, and carries forward
-existing lake-backed observations across weekly snapshots. Collector downloads
-are temporary `data/cache/media_ingest` inputs only. A cache reset cannot remove
-an already-promoted gallery.
+## Data flow
 
-The first migration archived 723 society originals and 4 launch images. The
-active delivery set is 383 unique bounded browser-safe JPEG/WebP images (45.9 MiB, 363 KiB
-maximum), down from 152.2 MiB in the frontend bundle.
+```text
+scoped society DAG → immutable society gold snapshot
+active society snapshots → offline global topology/proximity derivation → one serving bundle
+validated bundle → CAS update of dev.json
+```
+
+Society collection is isolated. Adding or replacing a society does not rerun
+the other society DAGs. Bundle assembly still reads every active snapshot so
+the API and search process load one compact Parquet bundle and one Tantivy
+index, never per-society files.
+
+The immutable roster referenced by `manifests/catalog/dev.json` is authoritative.
+`data/catalog/bootstrap_roster.json` is used only for the first `rebuild` when
+no catalog pointer exists; commands never rewrite it. Each active generation
+stores a roster that pins the exact gold snapshots used by that bundle.
+
+## Commands
+
+```bash
+cd backend
+cargo run --bin openestates-catalog -- add <society-seed.json>
+cargo run --bin openestates-catalog -- remove <society-id>
+cargo run --bin openestates-catalog -- rebuild
+cargo run --bin openestates-catalog -- undo
+```
+
+- `add` is an upsert and atomically replaces a matching RERA/runtime identity.
+- `remove` omits the society from the next generation.
+- `rebuild` recollects every seed in the authoritative roster, then rebuilds
+  global topology and proximity while assembling the new bundle. It does not
+  use old society gold or serving output.
+- `undo` swaps current and previous generations.
+
+Every mutating command builds and validates first, then compare-and-swaps the
+pointer. A corrupt snapshot, structural error, empty projected property set,
+or CAS conflict leaves `dev` unchanged.
+
+## Validation boundary
+
+Activation blocks on corrupt artifacts or schema, duplicate canonical
+identities, dangling or contradictory relations/evidence, an explicit
+property entity linked to zero or multiple societies, an empty catalog, or a
+failed operation. Missing optional enrichment and serving quarantines are
+warnings. Geographic search continues to fail closed when topology evidence
+is unavailable.
+
+The bundle validator verifies hashes, row counts, typed Parquet schemas,
+Tantivy artifacts, projected properties, eligibility, evidence relations, and
+every local media reference. There is no frontend manifest mutation and no
+separate create/validate/promote workflow.
+
+After a successful pointer swap, cleanup retains only current and previous
+bundles, rosters, and referenced gold/topology snapshots. It also removes the
+retired release, environment, serving-materialization, and asset-pointer data.
+
+## Runtime
+
+The Rust API reads `manifests/catalog/dev.json`, loads its one format-12 bundle,
+hydrates one local Tantivy index, and keeps the serving state in memory. There
+is no alternate runtime pointer or materialization override.
+
+Project media stays in immutable lake keys under
+`media/images/sha256/{prefix}/{sha256}.{extension}` and is streamed by the
+backend. Cache output is rebuildable and never source truth.

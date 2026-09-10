@@ -1,8 +1,8 @@
 use std::fs::File;
 
 use backend::assets::{
-    AssetId, AssetMaterializationStore, AssetPartition, KgSocietyViewMaterializer,
-    SkillFactAnnotationRecord, SkillFactRecord, KG_SOCIETY_VIEW_ASSET_ID,
+    AssetId, AssetMaterializationStore, AssetPartition, SkillFactAnnotationRecord, SkillFactRecord,
+    SocietyGoldSnapshotMaterializer, SOCIETY_GOLD_SNAPSHOT_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -11,43 +11,42 @@ use backend::knowledge::fact::{
 use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::{LakeKey, LakeStore};
-use backend::serving::SearchServingBundleMaterializer;
 use chrono::Utc;
 use parquet::file::reader::{FileReader, SerializedFileReader};
 use tempfile::tempdir;
 
 #[tokio::test]
-async fn kg_society_view_materializes_gold_parquet_and_serving_lineage() {
+async fn society_gold_snapshot_materializes_gold_parquet_and_lineage() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let graph = mock_graph();
 
-    let kg_materialization = KgSocietyViewMaterializer::new(lake.clone())
+    let kg_materialization = SocietyGoldSnapshotMaterializer::new(lake.clone())
         .materialize_and_promote(&graph, "2026-07-13T00:00Z", Vec::new(), Vec::new())
         .await
         .unwrap();
 
     assert_eq!(kg_materialization.manifest.entity_count, 2);
-    assert_eq!(kg_materialization.manifest.format_version, 2);
+    assert_eq!(kg_materialization.manifest.format_version, 3);
     assert_eq!(kg_materialization.manifest.fact_count, 3);
     assert_eq!(kg_materialization.manifest.fact_annotation_count, 3);
     assert_eq!(kg_materialization.manifest.edge_count, 1);
     assert_eq!(kg_materialization.manifest.graph_content_hash.len(), 64);
     assert_eq!(
         kg_materialization.manifest.entity_parquet_key,
-        "gold/kg_society_view/version=2026-07-13t00-00z/entities/part-00000.parquet"
+        "gold/society_gold_snapshot/version=2026-07-13t00-00z/entities/part-00000.parquet"
     );
     assert_eq!(
         kg_materialization.manifest.fact_parquet_key,
-        "gold/kg_society_view/version=2026-07-13t00-00z/facts/part-00000.parquet"
+        "gold/society_gold_snapshot/version=2026-07-13t00-00z/facts/part-00000.parquet"
     );
     assert_eq!(
         kg_materialization.manifest.fact_annotation_parquet_key,
-        "gold/kg_society_view/version=2026-07-13t00-00z/fact_annotations/part-00000.parquet"
+        "gold/society_gold_snapshot/version=2026-07-13t00-00z/fact_annotations/part-00000.parquet"
     );
     assert_eq!(
         kg_materialization.manifest.edge_parquet_key,
-        "gold/kg_society_view/version=2026-07-13t00-00z/edges/part-00000.parquet"
+        "gold/society_gold_snapshot/version=2026-07-13t00-00z/edges/part-00000.parquet"
     );
 
     let entity_bytes = lake
@@ -98,7 +97,7 @@ async fn kg_society_view_materializes_gold_parquet_and_serving_lineage() {
     let materializations = AssetMaterializationStore::new(lake.clone());
     let current_kg = materializations
         .current_record(
-            &AssetId::new(KG_SOCIETY_VIEW_ASSET_ID).unwrap(),
+            &AssetId::new(SOCIETY_GOLD_SNAPSHOT_ASSET_ID).unwrap(),
             &AssetPartition::global(),
         )
         .await
@@ -112,25 +111,6 @@ async fn kg_society_view_materializes_gold_parquet_and_serving_lineage() {
         watermark.source == "knowledge_graph_content_hash"
             && watermark.high_watermark == kg_materialization.manifest.graph_content_hash
     }));
-
-    let search_materialization = SearchServingBundleMaterializer::new(lake)
-        .materialize_and_promote_from_kg_view(&kg_materialization, "2026-07-13T00:00Z")
-        .await
-        .unwrap();
-
-    assert_eq!(
-        search_materialization.record.parent_materializations,
-        vec![kg_materialization.record.materialization_id.clone()]
-    );
-    assert!(search_materialization
-        .record
-        .source_watermarks
-        .iter()
-        .any(|watermark| {
-            watermark.source == KG_SOCIETY_VIEW_ASSET_ID
-                && watermark.high_watermark
-                    == kg_materialization.record.materialization_id.to_string()
-        }));
 }
 
 #[tokio::test]
@@ -176,6 +156,9 @@ async fn kg_support_fact_merge_preserves_canonical_fact_versions() {
         learned_at: Utc::now(),
         run_id: "run-reddit-facts-2026-07-13".to_string(),
         input_hash: "sha256:reddit-alpha".to_string(),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     };
     let support_annotations = vec![
         SkillFactAnnotationRecord {
@@ -198,7 +181,7 @@ async fn kg_support_fact_merge_preserves_canonical_fact_versions() {
         },
     ];
 
-    let materialization = KgSocietyViewMaterializer::new(lake)
+    let materialization = SocietyGoldSnapshotMaterializer::new(lake)
         .materialize_and_promote_with_skill_facts(
             &graph,
             "2026-07-13T00:00Z",

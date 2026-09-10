@@ -7,7 +7,7 @@ use backend::recommendations::{
     build_recommendation_branches, RecommendationBranch, RecommendationBranchInputs,
 };
 use backend::routes::properties::PropertyEvidenceResponse;
-use backend::search::{geo::GeoSearchIndex, SearchCapabilityIndex};
+use backend::search::{geo::SpatialEntityIndex, SearchCapabilityIndex};
 use backend::serving::{
     LoadedServingBundle, ReraEvidenceIndex, ServingBundleManifest, ServingEdgeRecord,
     ServingEntityAliasIndex, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
@@ -468,6 +468,7 @@ fn build_bundle(case: &ScenarioCase, specs: &[PropertySpec]) -> LoadedServingBun
             entity_type: "society".to_string(),
             name: spec.society.clone(),
             root_source: Some("mock_contract".to_string()),
+            visibility: Default::default(),
             searchable_text: spec.society.clone(),
         })
         .collect::<Vec<_>>();
@@ -510,6 +511,7 @@ fn build_bundle(case: &ScenarioCase, specs: &[PropertySpec]) -> LoadedServingBun
             to_entity_id: edge.to_entity_id.clone(),
             confidence: 1.0,
             source_type: "MockGraph".to_string(),
+            derivation: None,
         })
         .collect::<Vec<_>>();
     for target in edges
@@ -522,6 +524,7 @@ fn build_bundle(case: &ScenarioCase, specs: &[PropertySpec]) -> LoadedServingBun
             entity_type: "place".to_string(),
             name: target.trim_start_matches("place:").replace('-', " "),
             root_source: Some("mock_contract".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         });
     }
@@ -530,7 +533,7 @@ fn build_bundle(case: &ScenarioCase, specs: &[PropertySpec]) -> LoadedServingBun
     let temp_dir = tempdir().expect("temporary recommendation Tantivy directory");
     let recall_index = TantivyRecallIndex::build_in_dir(temp_dir.path(), &entities, &facts, &[])
         .expect("controlled recommendation recall index");
-    let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
+    let entity_index = SpatialEntityIndex::from_serving_bundle(&entities, &fact_index);
     let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
     for spec in specs
         .iter()
@@ -544,7 +547,8 @@ fn build_bundle(case: &ScenarioCase, specs: &[PropertySpec]) -> LoadedServingBun
         );
     }
     let search_capabilities = SearchCapabilityIndex::from_bundle(&entities, &fact_index);
-    let graph_index = GraphIndex::from_serving_edges(&edges);
+    let graph_index =
+        GraphIndex::from_serving_bundle(&entities, &edges, "recommendation-scenarios-v1");
 
     LoadedServingBundle {
         manifest: ServingBundleManifest {
@@ -562,14 +566,13 @@ fn build_bundle(case: &ScenarioCase, specs: &[PropertySpec]) -> LoadedServingBun
             quarantined_society_count: 0,
             quarantine_reason_counts: BTreeMap::new(),
             entity_parquet_key: "entities.parquet".to_string(),
-            entity_alias_parquet_key: None,
+            entity_alias_parquet_key: "aliases.parquet".to_string(),
             fact_parquet_key: "facts.parquet".to_string(),
             search_metadata_parquet_key: "search.parquet".to_string(),
-            rera_evidence_parquet_key: None,
-            edge_parquet_key: Some("edges.parquet".to_string()),
-            quarantine_report_key: None,
+            rera_evidence_parquet_key: "rera.parquet".to_string(),
+            edge_parquet_key: "edges.parquet".to_string(),
+            quarantine_report_key: "quarantine.json".to_string(),
             schema_key: "schema.json".to_string(),
-            trust_policy_key: "trust.json".to_string(),
             tantivy_index_prefix: "tantivy".to_string(),
             artifacts: Vec::new(),
         },
@@ -580,7 +583,7 @@ fn build_bundle(case: &ScenarioCase, specs: &[PropertySpec]) -> LoadedServingBun
         recall_index,
         fact_index,
         rera_evidence_index: ReraEvidenceIndex::default(),
-        geo_index,
+        entity_index,
         spatial_index,
         search_capabilities,
         cache_dir: temp_dir.keep(),
@@ -614,6 +617,7 @@ fn serving_fact(entity_id: &str, fact: &FactSpec) -> ServingFactRecord {
         model: None,
         skill_id: Some("recommendation_scenarios_contract".to_string()),
         learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+        observation: None,
     }
 }
 
@@ -630,6 +634,7 @@ fn numeric_fact(entity_id: &str, key: &str, value: f64, source: &str) -> Serving
         model: None,
         skill_id: Some("recommendation_scenarios_contract".to_string()),
         learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+        observation: None,
     }
 }
 

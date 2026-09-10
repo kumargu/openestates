@@ -26,8 +26,8 @@ use super::skill_facts::{
 };
 use super::{
     ArtifactRef, AssetId, AssetMaterializationStore, AssetPartition, AssetPathBuilder, AssetStage,
-    KgViewEdgeRecord, KgViewEntityRecord, MaterializationId, MaterializationRecord,
-    SkillFactAnnotationRecord, SkillFactRecord, SkillFactsInput, SourceWatermark,
+    MaterializationId, MaterializationRecord, SkillFactAnnotationRecord, SkillFactRecord,
+    SkillFactsInput, SocietyGoldEdgeRecord, SocietyGoldEntityRecord, SourceWatermark,
 };
 
 pub const RERA_REGISTRY_MONTHLY_ASSET_ID: &str = "rera_registry_monthly";
@@ -103,8 +103,8 @@ pub struct ReraAssetManifest {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CanonicalSocietyRows {
-    pub entities: Vec<KgViewEntityRecord>,
-    pub edges: Vec<KgViewEdgeRecord>,
+    pub entities: Vec<SocietyGoldEntityRecord>,
+    pub edges: Vec<SocietyGoldEdgeRecord>,
     pub mappings: Vec<ReraCanonicalMappingRecord>,
 }
 
@@ -437,9 +437,10 @@ fn merge_current_fact_rows(
         let replace = current
             .get(&key)
             .is_none_or(|(existing, existing_is_detail)| {
-                fact.learned_at > existing.learned_at
-                    || (fact.learned_at == existing.learned_at
-                        && (!*existing_is_detail || fact.confidence > existing.confidence))
+                !*existing_is_detail
+                    || fact.confidence > existing.confidence
+                    || (fact.confidence == existing.confidence
+                        && stable_rera_fact_identity(&fact) < stable_rera_fact_identity(existing))
             });
         if replace {
             current.insert(key.clone(), (fact, true));
@@ -460,6 +461,15 @@ fn merge_current_fact_rows(
         }
     }
     (facts, annotations)
+}
+
+fn stable_rera_fact_identity(fact: &SkillFactRecord) -> (&str, &str, &str, &str) {
+    (
+        fact.value_json.as_str(),
+        fact.source_url.as_deref().unwrap_or_default(),
+        fact.provider_observation_id.as_deref().unwrap_or_default(),
+        fact.run_id.as_str(),
+    )
 }
 
 fn remove_untrusted_rera_coordinate_facts(rows: &mut super::SkillFactArtifactRows) {
@@ -521,8 +531,8 @@ pub async fn read_canonical_society_rows(
 }
 
 fn canonical_rows(projects: &[ReraProjectSnapshotRecord]) -> CanonicalSocietyRows {
-    let mut entities = BTreeMap::<String, KgViewEntityRecord>::new();
-    let mut edges = BTreeMap::<(String, String, String), KgViewEdgeRecord>::new();
+    let mut entities = BTreeMap::<String, SocietyGoldEntityRecord>::new();
+    let mut edges = BTreeMap::<(String, String, String), SocietyGoldEdgeRecord>::new();
     let mut mappings = BTreeMap::<String, ReraCanonicalMappingRecord>::new();
     let canonical_names = phase_canonical_names(projects);
     let phase_group_slugs = canonical_names
@@ -682,7 +692,7 @@ fn is_phase_designator(value: &str) -> bool {
 }
 
 fn insert_entity(
-    entities: &mut BTreeMap<String, KgViewEntityRecord>,
+    entities: &mut BTreeMap<String, SocietyGoldEntityRecord>,
     entity_id: String,
     entity_type: &str,
     name: &str,
@@ -690,7 +700,7 @@ fn insert_entity(
 ) {
     entities
         .entry(entity_id.clone())
-        .or_insert_with(|| KgViewEntityRecord {
+        .or_insert_with(|| SocietyGoldEntityRecord {
             entity_id,
             entity_type: entity_type.to_string(),
             name: name.to_string(),
@@ -702,14 +712,14 @@ fn insert_entity(
 }
 
 fn insert_edge(
-    edges: &mut BTreeMap<(String, String, String), KgViewEdgeRecord>,
+    edges: &mut BTreeMap<(String, String, String), SocietyGoldEdgeRecord>,
     from: &str,
     to: &str,
     relation: &str,
     source_url: &str,
 ) {
     let key = (from.to_string(), to.to_string(), relation.to_string());
-    edges.entry(key).or_insert_with(|| KgViewEdgeRecord {
+    edges.entry(key).or_insert_with(|| SocietyGoldEdgeRecord {
         from_entity_id: from.to_string(),
         to_entity_id: to.to_string(),
         relation: relation.to_string(),
@@ -866,6 +876,9 @@ fn push_fact(
         learned_at: project.fetched_at,
         run_id: run_id.to_string(),
         input_hash,
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     });
     annotations.push(SkillFactAnnotationRecord {
         entity_id: entity_id.to_string(),
@@ -934,7 +947,9 @@ fn write_rera_projects(records: &[ReraProjectSnapshotRecord]) -> Result<Vec<u8>,
     write_batch(batch)
 }
 
-pub(crate) fn write_entities(records: &[KgViewEntityRecord]) -> Result<Vec<u8>, ReraAssetError> {
+pub(crate) fn write_entities(
+    records: &[SocietyGoldEntityRecord],
+) -> Result<Vec<u8>, ReraAssetError> {
     let schema = Arc::new(Schema::new(vec![
         Field::new("entity_id", DataType::Utf8, false),
         Field::new("entity_type", DataType::Utf8, false),
@@ -964,7 +979,7 @@ pub(crate) fn write_entities(records: &[KgViewEntityRecord]) -> Result<Vec<u8>, 
     write_batch(batch)
 }
 
-pub(crate) fn write_edges(records: &[KgViewEdgeRecord]) -> Result<Vec<u8>, ReraAssetError> {
+pub(crate) fn write_edges(records: &[SocietyGoldEdgeRecord]) -> Result<Vec<u8>, ReraAssetError> {
     let schema = Arc::new(Schema::new(vec![
         Field::new("from_entity_id", DataType::Utf8, false),
         Field::new("to_entity_id", DataType::Utf8, false),
@@ -1031,13 +1046,15 @@ fn write_mappings(records: &[ReraCanonicalMappingRecord]) -> Result<Vec<u8>, Rer
     write_batch(batch)
 }
 
-pub(crate) fn read_entities(bytes: Vec<u8>) -> Result<Vec<KgViewEntityRecord>, ReraAssetError> {
+pub(crate) fn read_entities(
+    bytes: Vec<u8>,
+) -> Result<Vec<SocietyGoldEntityRecord>, ReraAssetError> {
     let mut reader = ParquetRecordBatchReaderBuilder::try_new(Bytes::from(bytes))?.build()?;
     let mut rows = Vec::new();
     for batch in &mut reader {
         let batch = batch?;
         for row in 0..batch.num_rows() {
-            rows.push(KgViewEntityRecord {
+            rows.push(SocietyGoldEntityRecord {
                 entity_id: required_string(&batch, "entity_id", row)?,
                 entity_type: required_string(&batch, "entity_type", row)?,
                 name: required_string(&batch, "name", row)?,
@@ -1051,13 +1068,13 @@ pub(crate) fn read_entities(bytes: Vec<u8>) -> Result<Vec<KgViewEntityRecord>, R
     Ok(rows)
 }
 
-pub(crate) fn read_edges(bytes: Vec<u8>) -> Result<Vec<KgViewEdgeRecord>, ReraAssetError> {
+pub(crate) fn read_edges(bytes: Vec<u8>) -> Result<Vec<SocietyGoldEdgeRecord>, ReraAssetError> {
     let mut reader = ParquetRecordBatchReaderBuilder::try_new(Bytes::from(bytes))?.build()?;
     let mut rows = Vec::new();
     for batch in &mut reader {
         let batch = batch?;
         for row in 0..batch.num_rows() {
-            rows.push(KgViewEdgeRecord {
+            rows.push(SocietyGoldEdgeRecord {
                 from_entity_id: required_string(&batch, "from_entity_id", row)?,
                 to_entity_id: required_string(&batch, "to_entity_id", row)?,
                 relation: required_string(&batch, "relation", row)?,
@@ -1546,6 +1563,9 @@ mod tests {
             learned_at,
             run_id: "test".to_string(),
             input_hash: "test".to_string(),
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         }
     }
 

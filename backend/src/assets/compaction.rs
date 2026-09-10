@@ -3,6 +3,7 @@ use std::fmt;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::dag_config::{
     self, load_resolution_policies, normalize_source_type, resolve_coordinate_pair,
@@ -12,6 +13,7 @@ use crate::knowledge::FactValue;
 use crate::lake::{LakeError, LakeStore};
 
 use super::skill_facts::{write_fact_annotations_parquet, write_facts_parquet};
+use super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID;
 use super::{
     read_skill_fact_artifact_rows, ArtifactRef, AssetId, AssetMaterializationStore, AssetPartition,
     AssetPathBuilder, AssetStage, MaterializationId, MaterializationRecord,
@@ -19,8 +21,8 @@ use super::{
     SourceEntityResolutionScope, SourceEntitySeed, SourceWatermark,
 };
 
-pub const CURRENT_PROJECT_FACTS_ASSET_ID: &str = "current_project_facts";
-const CURRENT_PROJECT_FACTS_FORMAT_VERSION: u32 = 1;
+pub const SOCIETY_FACT_SNAPSHOT_ASSET_ID: &str = "society_fact_snapshot";
+const SOCIETY_FACT_SNAPSHOT_FORMAT_VERSION: u32 = 1;
 const PROJECT_CLAIM_FACTS_POLICY_ID: &str = "project_claim_facts";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,7 +51,7 @@ struct CompactionPolicyOutput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CurrentProjectFactsManifest {
+pub struct SocietyFactSnapshotManifest {
     pub asset_id: String,
     pub format_version: u32,
     pub policy_id: String,
@@ -66,18 +68,18 @@ pub struct CurrentProjectFactsManifest {
 }
 
 #[derive(Debug, Clone)]
-pub struct CurrentProjectFactsMaterialization {
-    pub manifest: CurrentProjectFactsManifest,
+pub struct SocietyFactSnapshotMaterialization {
+    pub manifest: SocietyFactSnapshotManifest,
     pub record: MaterializationRecord,
 }
 
 #[derive(Clone)]
-pub struct CurrentProjectFactsMaterializer {
+pub struct SocietyFactSnapshotMaterializer {
     lake: LakeStore,
     materializations: AssetMaterializationStore,
 }
 
-impl CurrentProjectFactsMaterializer {
+impl SocietyFactSnapshotMaterializer {
     pub fn new(lake: LakeStore) -> Self {
         Self {
             materializations: AssetMaterializationStore::new(lake.clone()),
@@ -95,14 +97,29 @@ impl CurrentProjectFactsMaterializer {
         source_entities: &[SourceEntitySeed],
         source_scope: SourceEntityResolutionScope,
         learned_at: DateTime<Utc>,
-    ) -> Result<CurrentProjectFactsMaterialization, CurrentProjectFactsError> {
+    ) -> Result<SocietyFactSnapshotMaterialization, SocietyFactSnapshotError> {
         let policy = load_project_claim_facts_policy()?;
         let rows = read_skill_fact_artifact_rows(&self.lake, parent_records).await?;
         let scoped_aliases = scoped_alias_map(source_entities, source_scope);
         let run_id = dag_run_id.to_string();
-        let mut input_facts =
-            scoped_fact_records(rows.facts, source_entities, source_scope, &run_id)?;
+        let topology_run_ids = parent_records
+            .iter()
+            .filter(|record| record.asset_id.as_str() == OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID)
+            .map(|record| record.run_id.to_string())
+            .collect::<HashSet<_>>();
+        let mut input_facts = scoped_fact_records(
+            rows.facts,
+            source_entities,
+            source_scope,
+            &run_id,
+            &topology_run_ids,
+        )?;
         input_facts.extend(source_entity_coordinate_facts(
+            source_entities,
+            &dag_run_id,
+            learned_at,
+        ));
+        input_facts.extend(source_entity_market_locality_facts(
             source_entities,
             &dag_run_id,
             learned_at,
@@ -127,7 +144,7 @@ impl CurrentProjectFactsMaterializer {
         let part_file_name = compaction_part_file_name(&policy, 0);
 
         let fact_key = AssetPathBuilder::gold_asset_key(
-            CURRENT_PROJECT_FACTS_ASSET_ID,
+            SOCIETY_FACT_SNAPSHOT_ASSET_ID,
             version,
             &format!("facts/{part_file_name}"),
         );
@@ -137,7 +154,7 @@ impl CurrentProjectFactsMaterializer {
             .await?;
 
         let fact_annotation_key = AssetPathBuilder::gold_asset_key(
-            CURRENT_PROJECT_FACTS_ASSET_ID,
+            SOCIETY_FACT_SNAPSHOT_ASSET_ID,
             version,
             &format!("fact_annotations/{part_file_name}"),
         );
@@ -150,7 +167,7 @@ impl CurrentProjectFactsMaterializer {
             .await?;
 
         let manifest_key = AssetPathBuilder::gold_asset_key(
-            CURRENT_PROJECT_FACTS_ASSET_ID,
+            SOCIETY_FACT_SNAPSHOT_ASSET_ID,
             version,
             "manifest.json",
         );
@@ -162,9 +179,9 @@ impl CurrentProjectFactsMaterializer {
             ArtifactRef::parquet(fact_meta),
             ArtifactRef::parquet(fact_annotation_meta),
         ];
-        let manifest = CurrentProjectFactsManifest {
-            asset_id: CURRENT_PROJECT_FACTS_ASSET_ID.to_string(),
-            format_version: CURRENT_PROJECT_FACTS_FORMAT_VERSION,
+        let manifest = SocietyFactSnapshotManifest {
+            asset_id: SOCIETY_FACT_SNAPSHOT_ASSET_ID.to_string(),
+            format_version: SOCIETY_FACT_SNAPSHOT_FORMAT_VERSION,
             policy_id: policy.id.clone(),
             policy_enabled: policy.enabled,
             created_at: Utc::now(),
@@ -181,7 +198,7 @@ impl CurrentProjectFactsMaterializer {
         artifacts.push(ArtifactRef::json(manifest_meta));
         artifacts.sort_by(|left, right| left.key.cmp(&right.key));
 
-        let asset = AssetId::new(CURRENT_PROJECT_FACTS_ASSET_ID)
+        let asset = AssetId::new(SOCIETY_FACT_SNAPSHOT_ASSET_ID)
             .expect("static current project facts asset id is valid");
         let record = MaterializationRecord::succeeded(
             asset,
@@ -196,7 +213,7 @@ impl CurrentProjectFactsMaterializer {
         .with_row_count(facts.len() as u64);
         self.materializations.write_materialization(&record).await?;
 
-        Ok(CurrentProjectFactsMaterialization { manifest, record })
+        Ok(SocietyFactSnapshotMaterialization { manifest, record })
     }
 }
 
@@ -205,12 +222,13 @@ fn scoped_fact_records(
     source_entities: &[SourceEntitySeed],
     source_scope: SourceEntityResolutionScope,
     run_id: &str,
-) -> Result<Vec<SkillFactRecord>, CurrentProjectFactsError> {
+    topology_run_ids: &HashSet<String>,
+) -> Result<Vec<SkillFactRecord>, SocietyFactSnapshotError> {
     if source_scope == SourceEntityResolutionScope::Production {
         return Ok(records);
     }
     if source_entities.is_empty() {
-        return Err(CurrentProjectFactsError::InvalidScope(
+        return Err(SocietyFactSnapshotError::InvalidScope(
             "scoped compaction requires at least one source entity".to_string(),
         ));
     }
@@ -231,7 +249,10 @@ fn scoped_fact_records(
     allowed_entity_ids.extend(
         records
             .iter()
-            .filter(|record| record.run_id == run_id && !record.entity_id.starts_with("society:"))
+            .filter(|record| {
+                !record.entity_id.starts_with("society:")
+                    && (record.run_id == run_id || topology_run_ids.contains(&record.run_id))
+            })
             .map(|record| record.entity_id.clone()),
     );
 
@@ -309,6 +330,8 @@ fn source_entity_coordinate_facts(
         .iter()
         .filter_map(|seed| Some((seed, seed.latitude?, seed.longitude?)))
         .flat_map(|(seed, latitude, longitude)| {
+            let provider_observation_id = source_entity_seed_observation_id(seed);
+            let asset_lineage = vec![format!("asset:source_entity_seed/run:{run_id}")];
             let input_hash = format!(
                 "source-entity-seed:{}:{latitude:.7}:{longitude:.7}",
                 seed.entity_id
@@ -321,6 +344,8 @@ fn source_entity_coordinate_facts(
                     run_id,
                     learned_at,
                     &input_hash,
+                    &provider_observation_id,
+                    &asset_lineage,
                 ),
                 source_entity_coordinate_fact(
                     seed,
@@ -329,12 +354,100 @@ fn source_entity_coordinate_facts(
                     run_id,
                     learned_at,
                     &input_hash,
+                    &provider_observation_id,
+                    &asset_lineage,
                 ),
             ]
         })
         .collect()
 }
 
+fn source_entity_market_locality_facts(
+    source_entities: &[SourceEntitySeed],
+    run_id: &MaterializationId,
+    learned_at: DateTime<Utc>,
+) -> Vec<SkillFactRecord> {
+    let mut areas = BTreeMap::<String, Vec<&SourceEntitySeed>>::new();
+    for seed in source_entities {
+        let Some(area) = seed
+            .area
+            .as_deref()
+            .map(str::trim)
+            .filter(|area| !area.is_empty())
+        else {
+            continue;
+        };
+        areas
+            .entry(normalize_market_locality_name(area))
+            .or_default()
+            .push(seed);
+    }
+
+    areas
+        .into_iter()
+        .map(|(normalized_name, mut seeds)| {
+            seeds.sort_by(|left, right| left.entity_id.cmp(&right.entity_id));
+            let display_name = seeds
+                .iter()
+                .filter_map(|seed| seed.area.as_deref().map(str::trim))
+                .min()
+                .unwrap_or(normalized_name.as_str())
+                .to_string();
+            let name_digest = hex_digest(&Sha256::digest(normalized_name.as_bytes()));
+            let entity_id = format!("area:market:{}", &name_digest[..16]);
+            let encoded = serde_json::to_vec(&(
+                entity_id.as_str(),
+                display_name.as_str(),
+                seeds
+                    .iter()
+                    .map(|seed| seed.entity_id.as_str())
+                    .collect::<Vec<_>>(),
+            ))
+            .expect("market-locality source rows serialize");
+            let observation_digest = hex_digest(&Sha256::digest(encoded));
+            SkillFactRecord {
+                entity_id,
+                fact_key: "market.locality_name".to_string(),
+                value_type: "text".to_string(),
+                value_json: serde_json::to_string(&FactValue::Text(display_name))
+                    .expect("market-locality name serializes"),
+                confidence: 0.95,
+                source_type: "SourceEntitySeed".to_string(),
+                source_url: None,
+                model: None,
+                skill_id: Some("source_entity_seed".to_string()),
+                triggered_by: None,
+                learned_at,
+                run_id: run_id.to_string(),
+                input_hash: observation_digest.clone(),
+                observation_provider: Some("SourceEntitySeed".to_string()),
+                provider_observation_id: Some(format!(
+                    "market_locality_seed:sha256:{observation_digest}"
+                )),
+                asset_lineage: vec![format!("asset:source_entity_seed/run:{run_id}")],
+            }
+        })
+        .collect()
+}
+
+fn normalize_market_locality_name(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        write!(&mut output, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    output
+}
+
+#[allow(clippy::too_many_arguments)]
 fn source_entity_coordinate_fact(
     seed: &SourceEntitySeed,
     fact_key: &str,
@@ -342,6 +455,8 @@ fn source_entity_coordinate_fact(
     run_id: &MaterializationId,
     learned_at: DateTime<Utc>,
     input_hash: &str,
+    provider_observation_id: &str,
+    asset_lineage: &[String],
 ) -> SkillFactRecord {
     SkillFactRecord {
         entity_id: seed.entity_id.clone(),
@@ -358,17 +473,31 @@ fn source_entity_coordinate_fact(
         learned_at,
         run_id: run_id.to_string(),
         input_hash: input_hash.to_string(),
+        observation_provider: Some("SourceEntitySeed".to_string()),
+        provider_observation_id: Some(provider_observation_id.to_string()),
+        asset_lineage: asset_lineage.to_vec(),
     }
 }
 
-fn load_project_claim_facts_policy() -> Result<CompactionPolicy, CurrentProjectFactsError> {
+fn source_entity_seed_observation_id(seed: &SourceEntitySeed) -> String {
+    let encoded = serde_json::to_vec(seed).expect("source entity seeds serialize");
+    let digest = Sha256::digest(encoded);
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write as _;
+        write!(&mut hex, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    format!("source_entity_seed:sha256:{hex}")
+}
+
+fn load_project_claim_facts_policy() -> Result<CompactionPolicy, SocietyFactSnapshotError> {
     let path = dag_config::dag_root().join("compaction_policies.json");
     let file: CompactionPolicyFile = dag_config::load_json(&path)?;
     file.policies
         .into_iter()
         .find(|policy| policy.id == PROJECT_CLAIM_FACTS_POLICY_ID)
         .ok_or_else(|| {
-            CurrentProjectFactsError::PolicyMissing(PROJECT_CLAIM_FACTS_POLICY_ID.to_string())
+            SocietyFactSnapshotError::PolicyMissing(PROJECT_CLAIM_FACTS_POLICY_ID.to_string())
         })
 }
 
@@ -384,7 +513,7 @@ fn compaction_part_file_name(policy: &CompactionPolicy, part_number: u32) -> Str
 
 fn compact_fact_records(
     records: Vec<SkillFactRecord>,
-) -> Result<Vec<SkillFactRecord>, CurrentProjectFactsError> {
+) -> Result<Vec<SkillFactRecord>, SocietyFactSnapshotError> {
     let policies = load_resolution_policies()?;
     let mut coordinate_observations =
         HashMap::<String, HashMap<CoordinateObservationKey, PartialCoordinateObservation>>::new();
@@ -438,13 +567,15 @@ fn compact_fact_records(
             })
             .collect::<Vec<_>>();
         complete.sort_by(|(left, _, _), (right, _, _)| {
-            right
-                .learned_at
-                .cmp(&left.learned_at)
-                .then_with(|| left.source_type.cmp(&right.source_type))
+            left.source_type
+                .cmp(&right.source_type)
                 .then_with(|| left.source_url.cmp(&right.source_url))
                 .then_with(|| left.skill_id.cmp(&right.skill_id))
                 .then_with(|| left.run_id.cmp(&right.run_id))
+                .then_with(|| {
+                    left.provider_observation_id
+                        .cmp(&right.provider_observation_id)
+                })
         });
         let Some(resolved) = resolve_coordinate_pair(
             scope,
@@ -485,7 +616,7 @@ fn compact_fact_records(
 
 pub(super) fn resolve_coordinate_fact_records(
     records: &[SkillFactRecord],
-) -> Result<Vec<SkillFactRecord>, CurrentProjectFactsError> {
+) -> Result<Vec<SkillFactRecord>, SocietyFactSnapshotError> {
     compact_fact_records(
         records
             .iter()
@@ -501,7 +632,7 @@ struct CoordinateObservationKey {
     source_url: String,
     skill_id: String,
     run_id: String,
-    learned_at: chrono::DateTime<Utc>,
+    provider_observation_id: String,
 }
 
 impl CoordinateObservationKey {
@@ -511,7 +642,7 @@ impl CoordinateObservationKey {
             source_url: record.source_url.clone().unwrap_or_default(),
             skill_id: record.skill_id.clone().unwrap_or_default(),
             run_id: record.run_id.clone(),
-            learned_at: record.learned_at,
+            provider_observation_id: record.provider_observation_id.clone().unwrap_or_default(),
         }
     }
 }
@@ -540,7 +671,19 @@ fn update_coordinate_axis(slot: &mut Option<CoordinateAxis>, record: SkillFactRe
 fn fact_precedes(candidate: &SkillFactRecord, existing: &SkillFactRecord) -> bool {
     candidate.confidence < existing.confidence
         || (candidate.confidence == existing.confidence
-            && candidate.learned_at <= existing.learned_at)
+            && stable_fact_identity(candidate) <= stable_fact_identity(existing))
+}
+
+fn stable_fact_identity(record: &SkillFactRecord) -> (&str, &str, &str, &str) {
+    (
+        record.value_json.as_str(),
+        record.source_url.as_deref().unwrap_or_default(),
+        record
+            .provider_observation_id
+            .as_deref()
+            .unwrap_or_default(),
+        record.run_id.as_str(),
+    )
 }
 
 fn compact_fact_annotations(
@@ -585,7 +728,7 @@ fn compaction_watermarks(
 }
 
 #[derive(Debug)]
-pub enum CurrentProjectFactsError {
+pub enum SocietyFactSnapshotError {
     Config(dag_config::DagConfigError),
     Json(serde_json::Error),
     Lake(LakeError),
@@ -594,7 +737,7 @@ pub enum CurrentProjectFactsError {
     InvalidScope(String),
 }
 
-impl fmt::Display for CurrentProjectFactsError {
+impl fmt::Display for SocietyFactSnapshotError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Config(err) => write!(f, "current project facts config error: {err}"),
@@ -609,9 +752,9 @@ impl fmt::Display for CurrentProjectFactsError {
     }
 }
 
-impl std::error::Error for CurrentProjectFactsError {}
+impl std::error::Error for SocietyFactSnapshotError {}
 
-impl From<dag_config::DagConfigError> for CurrentProjectFactsError {
+impl From<dag_config::DagConfigError> for SocietyFactSnapshotError {
     fn from(err: dag_config::DagConfigError) -> Self {
         Self::Config(err)
     }
@@ -663,7 +806,7 @@ mod coordinate_tests {
     }
 
     #[test]
-    fn coordinate_compaction_prefers_fresher_equal_confidence_observation() {
+    fn coordinate_compaction_uses_stable_equal_confidence_observation() {
         let older_at = Utc.with_ymd_and_hms(2026, 7, 30, 0, 0, 0).unwrap();
         let fresher_at = Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap();
         let records = vec![
@@ -731,6 +874,9 @@ mod coordinate_tests {
             learned_at,
             run_id: observation.to_string(),
             input_hash: observation.to_string(),
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         }
     }
 
@@ -746,19 +892,19 @@ mod coordinate_tests {
     }
 }
 
-impl From<LakeError> for CurrentProjectFactsError {
+impl From<LakeError> for SocietyFactSnapshotError {
     fn from(err: LakeError) -> Self {
         Self::Lake(err)
     }
 }
 
-impl From<serde_json::Error> for CurrentProjectFactsError {
+impl From<serde_json::Error> for SocietyFactSnapshotError {
     fn from(err: serde_json::Error) -> Self {
         Self::Json(err)
     }
 }
 
-impl From<SkillFactMaterializeError> for CurrentProjectFactsError {
+impl From<SkillFactMaterializeError> for SocietyFactSnapshotError {
     fn from(err: SkillFactMaterializeError) -> Self {
         Self::SkillFact(err)
     }
@@ -785,11 +931,14 @@ mod tests {
             learned_at: Utc.timestamp_opt(learned_at, 0).unwrap(),
             run_id: "run".to_string(),
             input_hash: "hash".to_string(),
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         }
     }
 
     #[test]
-    fn compact_fact_records_keeps_highest_confidence_then_freshest() {
+    fn compact_fact_records_keeps_highest_confidence_then_stable_identity() {
         let mut older = fact("society:one", "project_unit_count", 0.8, 10);
         older.value_json = "\"older\"".to_string();
         let mut fresher = fact("society:one", "project_unit_count", 0.8, 20);
@@ -799,7 +948,7 @@ mod tests {
         let compacted = compact_fact_records(vec![older, fresher, weaker]).unwrap();
 
         assert_eq!(compacted.len(), 1);
-        assert_eq!(compacted[0].value_json, "\"fresher\"");
+        assert_eq!(compacted[0].value_json, "\"older\"");
     }
 
     #[test]
@@ -820,6 +969,43 @@ mod tests {
         };
 
         assert_eq!(compaction_part_file_name(&policy, 7), "chunk-00007.parquet");
+    }
+
+    #[test]
+    fn source_entity_areas_emit_one_observed_market_locality_fact() {
+        let run_id = MaterializationId::new();
+        let learned_at = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
+        let seeds = [
+            SourceEntitySeed {
+                entity_id: "society:one".to_string(),
+                alias_entity_id: None,
+                name: "One".to_string(),
+                area: Some(" Whitefield ".to_string()),
+                city: Some("Bengaluru".to_string()),
+                project_key: None,
+                latitude: None,
+                longitude: None,
+            },
+            SourceEntitySeed {
+                entity_id: "society:two".to_string(),
+                alias_entity_id: None,
+                name: "Two".to_string(),
+                area: Some("whitefield".to_string()),
+                city: Some("Bengaluru".to_string()),
+                project_key: None,
+                latitude: None,
+                longitude: None,
+            },
+        ];
+
+        let facts = source_entity_market_locality_facts(&seeds, &run_id, learned_at);
+
+        assert_eq!(facts.len(), 1);
+        assert_eq!(facts[0].fact_key, "market.locality_name");
+        assert!(facts[0].entity_id.starts_with("area:market:"));
+        assert_eq!(facts[0].source_type, "SourceEntitySeed");
+        assert!(facts[0].provider_observation_id.is_some());
+        assert!(!facts[0].asset_lineage.is_empty());
     }
 
     #[test]
@@ -853,6 +1039,7 @@ mod tests {
             &seeds,
             SourceEntityResolutionScope::Scoped,
             "current-run",
+            &HashSet::new(),
         )
         .unwrap();
         let entity_ids = scoped
@@ -867,6 +1054,50 @@ mod tests {
                 "place:selected-school",
                 "builder:selected"
             ])
+        );
+    }
+
+    #[test]
+    fn scoped_compaction_keeps_snapshot_owned_locality_topology() {
+        let mut locality_name = fact("area:osm:cell", "place.name", 1.0, 10);
+        locality_name.run_id = "topology-run".to_string();
+        let mut locality_geometry = fact("area:osm:cell", "geo.geometry_geojson", 1.0, 10);
+        locality_geometry.run_id = "topology-run".to_string();
+        let mut unrelated_place = fact("place:unrelated", "place.name", 1.0, 10);
+        unrelated_place.run_id = "other-run".to_string();
+        let records = vec![
+            fact("society:selected", "title", 1.0, 10),
+            locality_name,
+            locality_geometry,
+            unrelated_place,
+        ];
+        let seeds = vec![SourceEntitySeed {
+            entity_id: "society:selected".to_string(),
+            alias_entity_id: None,
+            name: "Selected".to_string(),
+            area: None,
+            city: Some("Bengaluru".to_string()),
+            project_key: None,
+            latitude: None,
+            longitude: None,
+        }];
+
+        let scoped = scoped_fact_records(
+            records,
+            &seeds,
+            SourceEntityResolutionScope::Scoped,
+            "current-run",
+            &HashSet::from(["topology-run".to_string()]),
+        )
+        .unwrap();
+        let entity_ids = scoped
+            .iter()
+            .map(|fact| fact.entity_id.as_str())
+            .collect::<HashSet<_>>();
+
+        assert_eq!(
+            entity_ids,
+            HashSet::from(["society:selected", "area:osm:cell"])
         );
     }
 
@@ -893,6 +1124,7 @@ mod tests {
             &seeds,
             SourceEntityResolutionScope::Scoped,
             "current-run",
+            &HashSet::new(),
         )
         .unwrap();
 
@@ -939,6 +1171,7 @@ mod tests {
             &[],
             SourceEntityResolutionScope::Scoped,
             "current-run",
+            &HashSet::new(),
         )
         .unwrap_err();
 

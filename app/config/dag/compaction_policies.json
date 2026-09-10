@@ -9,7 +9,7 @@
         "silver/project_claim_facts_delta",
         "gold/rera_project_facts"
       ],
-      "output_dataset": "gold/current_project_facts",
+      "output_dataset": "gold/society_fact_snapshot",
       "partition_keys": [
         "city",
         "area"
@@ -31,11 +31,6 @@
       ],
       "current_fact_order": [
         {
-          "field": "is_retracted",
-          "direction": "ascending",
-          "reason": "Non-retracted assertions stay visible unless a tombstone wins for the same source."
-        },
-        {
           "field": "source_priority",
           "direction": "descending",
           "reason": "RERA/computed/manual verified facts should beat lower-trust duplicates."
@@ -46,9 +41,9 @@
           "reason": "Higher-confidence observations win inside the same trust tier."
         },
         {
-          "field": "learned_at",
-          "direction": "descending",
-          "reason": "Fresh facts win when trust and confidence tie."
+          "field": "stable_fact_identity",
+          "direction": "ascending",
+          "reason": "Content and source identity provide a deterministic tie-break without timestamp product logic."
         }
       ],
       "source_priority": {

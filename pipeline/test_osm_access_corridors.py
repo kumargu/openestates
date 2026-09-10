@@ -248,6 +248,8 @@ class OsmSocietyAccessTests(unittest.TestCase):
         self.assertIn('relation["type"="multipolygon"]', query)
         self.assertIn('node["barrier"="gate"]', query)
         self.assertIn('node["entrance"~"^(main|yes)$"]', query)
+        self.assertIn("out body center geom;", query)
+        self.assertNotIn("out tags center geom;", query)
 
 
 if __name__ == "__main__":

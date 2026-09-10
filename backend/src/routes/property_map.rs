@@ -773,11 +773,10 @@ fn layer_records<'a>(
         }
     }
     records.sort_by(|left, right| {
-        right
-            .learned_at
-            .cmp(&left.learned_at)
-            .then_with(|| left.source_url.cmp(&right.source_url))
-            .then_with(|| left.entity_id.cmp(&right.entity_id))
+        right.confidence.total_cmp(&left.confidence).then_with(|| {
+            left.stable_selection_key()
+                .cmp(&right.stable_selection_key())
+        })
     });
     records.dedup_by(|left, right| {
         left.entity_id == right.entity_id
@@ -1117,7 +1116,12 @@ fn related_society_groundwater_fact<'a>(
         rows.facts
             .iter()
             .filter(|fact| fact.fact_key == fact_key)
-            .max_by_key(|fact| fact.learned_at)
+            .max_by(|left, right| {
+                left.confidence.total_cmp(&right.confidence).then_with(|| {
+                    left.stable_selection_key()
+                        .cmp(&right.stable_selection_key())
+                })
+            })
     })
 }
 
@@ -1340,6 +1344,7 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at: Utc.timestamp_opt(learned_at, 0).unwrap(),
+            observation: None,
         }
     }
 

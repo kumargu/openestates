@@ -20,7 +20,7 @@ async fn dag_plan_captures_freshness_and_dependency_propagation() {
     let registry = default_openestates_registry();
     let planner = AssetPlanner::new(registry.clone(), materializations.clone());
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
-    let partition = AssetPartition::new([("dt", "2026-07-13")]);
+    let partition = AssetPartition::new([("dt", "2026-07-13"), ("society", "fixture-society")]);
 
     let rera_record = materialization(
         "rera_registry_monthly",
@@ -104,7 +104,7 @@ async fn manual_rera_receipts_stay_out_of_normal_runs_until_forced() {
     let registry = default_openestates_registry();
     let planner = AssetPlanner::new(registry, materializations);
     let now = Utc.with_ymd_and_hms(2026, 8, 9, 12, 0, 0).unwrap();
-    let partition = AssetPartition::global();
+    let partition = AssetPartition::new([("society", "fixture-society")]);
 
     let normal = planner
         .plan_partition_details(&partition, now)
@@ -187,7 +187,7 @@ async fn dag_plan_resolves_current_records_by_asset_partition() {
     let registry = default_openestates_registry();
     let planner = AssetPlanner::new(registry, materializations.clone());
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
-    let run_partition = AssetPartition::new([("dt", "2026-07-13")]);
+    let run_partition = AssetPartition::new([("dt", "2026-07-13"), ("society", "fixture-society")]);
     let google_fact_partition = AssetPartition::new([("source", "google")]);
 
     let rera = materialization_in_partition(
@@ -257,7 +257,8 @@ async fn dag_plan_resolves_current_records_by_asset_partition() {
         ]
     );
 
-    let next_day_partition = AssetPartition::new([("dt", "2026-07-14")]);
+    let next_day_partition =
+        AssetPartition::new([("dt", "2026-07-14"), ("society", "fixture-society")]);
     let next_day_plan = planner
         .plan_partition_details(&next_day_partition, now + Duration::days(1))
         .await
@@ -271,20 +272,23 @@ async fn dag_plan_resolves_current_records_by_asset_partition() {
         PlanDecision::Skip
     );
 
-    let kg_entry = plan_entry(&plan, "kg_society_view");
-    assert_eq!(kg_entry.partition, AssetPartition::global());
+    let kg_entry = plan_entry(&plan, "society_gold_snapshot");
+    assert_eq!(
+        kg_entry.partition,
+        AssetPartition::new([("society", "fixture-society")])
+    );
     assert_eq!(kg_entry.decision, PlanDecision::Run);
     assert_eq!(kg_entry.reason, Some(PlanReason::Missing));
 }
 
 #[tokio::test]
-async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
+async fn dag_plan_fans_all_current_support_partitions_into_society_gold_lineage() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let materializations = AssetMaterializationStore::new(lake);
     let planner = AssetPlanner::new(default_openestates_registry(), materializations.clone());
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
-    let run_partition = AssetPartition::new([("dt", "2026-07-13")]);
+    let run_partition = AssetPartition::new([("dt", "2026-07-13"), ("society", "fixture-society")]);
 
     let rera = materialization_in_partition(
         "rera_registry_monthly",
@@ -423,7 +427,7 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
     );
     write_current(&materializations, &home_state_facts).await;
     let stale_kg = materialization_in_partition(
-        "kg_society_view",
+        "society_gold_snapshot",
         AssetStage::Gold,
         "2026-07-12",
         vec![
@@ -436,7 +440,7 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             home_state_facts.materialization_id.clone(),
         ],
         now - Duration::hours(1),
-        AssetPartition::global(),
+        AssetPartition::new([("society", "fixture-society")]),
     );
     write_current(&materializations, &stale_kg).await;
 
@@ -445,12 +449,12 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         .await
         .unwrap();
 
-    let kg_entry = plan_entry(&plan, "kg_society_view");
+    let kg_entry = plan_entry(&plan, "society_gold_snapshot");
     assert_eq!(kg_entry.decision, PlanDecision::Run);
     assert_eq!(
         kg_entry.reason,
         Some(PlanReason::DependencyPending {
-            asset_id: asset_id("current_project_facts")
+            asset_id: asset_id("society_fact_snapshot")
         })
     );
 
@@ -488,6 +492,15 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         AssetPartition::global(),
     );
     write_current(&materializations, &metro_station_facts).await;
+    let locality_boundary_facts = materialization_in_partition(
+        "osm_locality_boundary_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        Vec::new(),
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &locality_boundary_facts).await;
     let osm_society_access_facts = materialization_in_partition(
         "osm_society_access_facts",
         AssetStage::Silver,
@@ -527,8 +540,8 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         AssetPartition::global(),
     );
     write_current(&materializations, &rera_project_plan_frames).await;
-    let current_project_facts = materialization_in_partition(
-        "current_project_facts",
+    let society_fact_snapshot = materialization_in_partition(
+        "society_fact_snapshot",
         AssetStage::Gold,
         "2026-07-13",
         vec![
@@ -542,26 +555,27 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             home_state_facts.materialization_id.clone(),
             groundwater_facts.materialization_id.clone(),
             metro_station_facts.materialization_id.clone(),
+            locality_boundary_facts.materialization_id.clone(),
             osm_society_access_facts.materialization_id.clone(),
             osm_power_line_facts.materialization_id.clone(),
             stormwater_drain_facts.materialization_id.clone(),
         ],
         now,
-        AssetPartition::global(),
+        AssetPartition::new([("society", "fixture-society")]),
     );
-    write_current(&materializations, &current_project_facts).await;
+    write_current(&materializations, &society_fact_snapshot).await;
 
     let fresh_kg = materialization_in_partition(
-        "kg_society_view",
+        "society_gold_snapshot",
         AssetStage::Gold,
         "2026-07-13",
         vec![
             canonical.materialization_id.clone(),
-            current_project_facts.materialization_id.clone(),
+            society_fact_snapshot.materialization_id.clone(),
             approach_road_facts.materialization_id.clone(),
         ],
         now,
-        AssetPartition::global(),
+        AssetPartition::new([("society", "fixture-society")]),
     );
     write_current(&materializations, &fresh_kg).await;
 
@@ -569,7 +583,7 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         .plan_partition_details(&run_partition, now)
         .await
         .unwrap();
-    let kg_entry = plan_entry(&plan, "kg_society_view");
+    let kg_entry = plan_entry(&plan, "society_gold_snapshot");
     assert_eq!(
         kg_entry.decision,
         PlanDecision::Skip,
@@ -1073,7 +1087,7 @@ fn exact_resume_rejects_legacy_manifests_without_a_snapshot_contract() {
 }
 
 #[tokio::test]
-async fn older_completed_run_cannot_replace_newer_current_run() {
+async fn current_run_pointer_tracks_the_latest_writer() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let run_store = AssetRunManifestStore::new(lake);
@@ -1098,10 +1112,10 @@ async fn older_completed_run_cannot_replace_newer_current_run() {
     run_store.write_manifest(&newer).await.unwrap();
 
     assert!(run_store.promote_current(&newer).await.unwrap());
-    assert!(!run_store.promote_current(&older).await.unwrap());
+    assert!(run_store.promote_current(&older).await.unwrap());
     assert_eq!(
         run_store.current_manifest(&partition).await.unwrap().run_id,
-        newer.run_id
+        older.run_id
     );
 }
 

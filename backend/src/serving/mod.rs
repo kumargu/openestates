@@ -8,54 +8,75 @@ pub mod aliases;
 pub mod builder;
 pub mod coordinates;
 mod eligibility;
+pub mod evidence;
 pub mod loader;
-pub mod materializer;
+pub mod market_topology;
 pub mod parquet;
 pub mod projection;
 pub mod proximity;
-pub mod release_validation;
 pub mod rera;
+pub mod spatial_geometry;
+pub mod spatial_identity;
 pub mod spatial_index;
 pub mod tantivy_index;
+pub mod topology;
 pub mod types;
+pub mod validator;
 
 pub use aliases::{
     materialize_society_aliases, normalize_alias, validate_society_aliases,
     ServingEntityAliasError, ServingEntityAliasGroup, ServingEntityAliasIndex,
     ServingEntityAliasRecord,
 };
-pub use builder::{ServingBundleBuilder, ServingBundleError};
+pub(crate) use builder::{
+    current_serving_annotations, current_serving_facts, serving_edge_records,
+    serving_entity_records, serving_fact_records, serving_search_metadata_records,
+};
+pub use builder::{ServingBundleBuilder, ServingBundleError, SERVING_BUNDLE_FORMAT_VERSION};
 pub use coordinates::{resolve_serving_coordinates, ServingCoordinates};
+pub use evidence::{
+    DerivationId, DerivedEvidence, EvidenceId, EvidenceIdentityError, EvidenceRef, ObservationId,
+    SourceObservation,
+};
 pub use loader::{LoadedServingBundle, ServingBundleLoadError, ServingBundleLoader};
-pub use materializer::{
-    SearchServingBundleMaterialization, SearchServingBundleMaterializeError,
-    SearchServingBundleMaterializer,
+pub use market_topology::{
+    derive_market_geo_topology, remove_derived_market_geo_topology_edges, MarketGeoTopologyReport,
 };
 pub use parquet::{
     read_edges_parquet, read_entities_parquet, read_entity_aliases_parquet, read_facts_parquet,
-    read_rera_evidence_parquet, read_search_metadata_parquet, write_entity_aliases_parquet,
-    write_rera_evidence_parquet, ParquetReadError,
+    read_rera_evidence_parquet, read_search_metadata_parquet, write_edges_parquet,
+    write_entities_parquet, write_entity_aliases_parquet, write_facts_parquet,
+    write_rera_evidence_parquet, write_search_metadata_parquet, ParquetReadError,
+    ParquetWriteError,
 };
 pub use projection::{GoogleReviewEvidence, ProjectedFact, SocietyFactProjection};
 pub use proximity::{derive_proximity_records, DerivedProximityRecords};
-pub use release_validation::{
-    validate_search_serving_candidate, write_frontend_media_manifest, FrontendMediaAsset,
-    FrontendMediaManifest, ServingBundleValidationError, ServingBundleValidationIssue,
-    ServingBundleValidationReport,
-};
 pub use rera::{
     project_rera_evidence, ReraEvidenceEntity, ReraEvidenceEvent, ReraEvidenceIndex,
     ReraEvidenceSeries, ReraEvidenceSeriesPoint, ReraEvidenceSource, ReraRegulatoryCoverage,
     ReraServingProjectionError, ServingReraEvidenceRecord, RERA_EVIDENCE_SCHEMA_VERSION,
 };
-pub use spatial_index::{SpatialPoint, SpatialServingIndex};
+pub use spatial_geometry::{SpatialBounds, SpatialFeature, SpatialGeometry, SpatialGeometryIndex};
+pub use spatial_identity::{
+    bound_provider_entity_ids, canonical_spatial_role, is_canonical_spatial_entity,
+    materialize_canonical_spatial_identities, provider_entity_ids,
+    remove_canonical_spatial_identities, validate_canonical_spatial_identities,
+    CanonicalSpatialIdentityReport, CANONICAL_IDENTITY_ALGORITHM, CANONICAL_SPATIAL_ROOT_SOURCE,
+    PROVIDER_BINDING_EDGE,
+};
+pub use spatial_index::{SpatialDistance, SpatialPoint, SpatialServingIndex};
 pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,
 };
+pub use topology::{derive_spatial_topology, SpatialTopologyReport};
 pub use types::{
-    unique_society_aliases, BundleArtifact, BundleArtifactKind, QuarantinedSociety,
-    ServingBundleManifest, ServingBundleSchema, ServingColumnSchema, ServingEdgeRecord,
-    ServingEntityFactRows, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
-    ServingQuarantineReport, ServingSearchMetadataRecord, ServingTableSchema, TrustPolicy,
-    SEARCH_SERVING_BUNDLE_ASSET_ID,
+    unique_society_aliases, validate_serving_edge_evidence, BundleArtifact, BundleArtifactKind,
+    QuarantinedSociety, ServingBundleManifest, ServingBundleSchema, ServingColumnSchema,
+    ServingEdgeRecord, ServingEntityFactRows, ServingEntityRecord, ServingEntityVisibility,
+    ServingFactIndex, ServingFactRecord, ServingQuarantineReport, ServingSearchMetadataRecord,
+    ServingTableSchema,
+};
+pub use validator::{
+    validate_search_serving_candidate, ServingBundleValidationError, ServingBundleValidationIssue,
+    ServingBundleValidationReport,
 };

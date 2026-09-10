@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "description": "Society-centric OpenStreetMap boundaries, explicit entrances and sourced public approach corridors.",
   "collector": {
     "source_id": "openstreetmap_society_access",
@@ -42,6 +42,6 @@
     "association_fact_key": "entrance.association_method"
   },
   "society_boundary": {
-    "geometry_fact_key": "society.boundary_geojson"
+    "geometry_fact_key": "geo.geometry_geojson"
   }
 }

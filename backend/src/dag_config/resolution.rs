@@ -18,7 +18,110 @@ pub struct ResolutionPoliciesFile {
     #[serde(default)]
     pub coordinate_sources: HashMap<String, CoordinateSourcePolicy>,
     #[serde(default)]
+    pub spatial_topology: SpatialTopologyPolicy,
+    #[serde(default)]
+    pub market_locality: MarketLocalityPolicy,
+    #[serde(default)]
     pub overrides: HashMap<String, ResolutionOverride>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MarketLocalityPolicy {
+    #[serde(default)]
+    pub direct_address_fact_keys: Vec<String>,
+    #[serde(default)]
+    pub direct_address_allowed_sources: Vec<String>,
+    #[serde(default = "default_minimum_market_address_confidence")]
+    pub minimum_direct_address_confidence: f32,
+    #[serde(default = "default_market_neighborhood_radius_km")]
+    pub neighborhood_radius_km: f64,
+    #[serde(default = "default_market_name_fact_key")]
+    pub market_name_fact_key: String,
+}
+
+impl Default for MarketLocalityPolicy {
+    fn default() -> Self {
+        Self {
+            direct_address_fact_keys: Vec::new(),
+            direct_address_allowed_sources: Vec::new(),
+            minimum_direct_address_confidence: default_minimum_market_address_confidence(),
+            neighborhood_radius_km: default_market_neighborhood_radius_km(),
+            market_name_fact_key: default_market_name_fact_key(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpatialTopologyPolicy {
+    pub minimum_society_overlap_ratio: f64,
+    pub minimum_area_containment_ratio: f64,
+    pub minimum_point_confidence: f32,
+    pub ambiguity_epsilon: f64,
+    #[serde(default = "default_true")]
+    pub require_matching_admin_level_for_adjacency: bool,
+    #[serde(default = "default_geo_cell_admin_level")]
+    pub geo_cell_admin_level: u8,
+    #[serde(default = "default_geo_cell_area_sources")]
+    pub geo_cell_area_sources: Vec<String>,
+    #[serde(default = "default_minimum_geo_cell_overlap_ratio")]
+    pub minimum_geo_cell_overlap_ratio: f64,
+    #[serde(default = "default_geo_cell_max_hops")]
+    pub geo_cell_max_hops: u8,
+    #[serde(default = "default_geo_cell_max_distance_km")]
+    pub geo_cell_max_distance_km: f64,
+}
+
+impl Default for SpatialTopologyPolicy {
+    fn default() -> Self {
+        Self {
+            minimum_society_overlap_ratio: 0.5,
+            minimum_area_containment_ratio: 0.99,
+            minimum_point_confidence: 0.5,
+            ambiguity_epsilon: 1e-9,
+            require_matching_admin_level_for_adjacency: true,
+            geo_cell_admin_level: default_geo_cell_admin_level(),
+            geo_cell_area_sources: default_geo_cell_area_sources(),
+            minimum_geo_cell_overlap_ratio: default_minimum_geo_cell_overlap_ratio(),
+            geo_cell_max_hops: default_geo_cell_max_hops(),
+            geo_cell_max_distance_km: default_geo_cell_max_distance_km(),
+        }
+    }
+}
+
+fn default_geo_cell_admin_level() -> u8 {
+    10
+}
+
+fn default_geo_cell_area_sources() -> Vec<String> {
+    vec!["openstreetmap".to_string()]
+}
+
+fn default_minimum_geo_cell_overlap_ratio() -> f64 {
+    0.01
+}
+
+fn default_geo_cell_max_hops() -> u8 {
+    2
+}
+
+fn default_geo_cell_max_distance_km() -> f64 {
+    4.0
+}
+
+fn default_minimum_market_address_confidence() -> f32 {
+    0.8
+}
+
+fn default_market_neighborhood_radius_km() -> f64 {
+    4.0
+}
+
+fn default_market_name_fact_key() -> String {
+    "market.locality_name".to_string()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -75,7 +178,43 @@ pub fn resolution_policies_path() -> std::path::PathBuf {
 }
 
 pub fn load_resolution_policies() -> Result<ResolutionPoliciesFile, DagConfigError> {
-    load_json(&resolution_policies_path())
+    let policies: ResolutionPoliciesFile = load_json(&resolution_policies_path())?;
+    let topology = &policies.spatial_topology;
+    let market = &policies.market_locality;
+    if !(0.0..=1.0).contains(&topology.minimum_society_overlap_ratio)
+        || !(0.0..=1.0).contains(&topology.minimum_area_containment_ratio)
+        || !(0.0..=1.0).contains(&topology.minimum_point_confidence)
+        || !(0.0..=1.0).contains(&topology.minimum_geo_cell_overlap_ratio)
+        || !topology.ambiguity_epsilon.is_finite()
+        || topology.ambiguity_epsilon < 0.0
+        || topology.geo_cell_admin_level == 0
+        || topology.geo_cell_admin_level > 12
+        || topology.geo_cell_max_hops == 0
+        || !topology.geo_cell_max_distance_km.is_finite()
+        || topology.geo_cell_max_distance_km <= 0.0
+        || topology.geo_cell_area_sources.is_empty()
+        || topology
+            .geo_cell_area_sources
+            .iter()
+            .any(|source| source.trim().is_empty())
+        || !(0.0..=1.0).contains(&market.minimum_direct_address_confidence)
+        || !market.neighborhood_radius_km.is_finite()
+        || market.neighborhood_radius_km <= 0.0
+        || market.market_name_fact_key.trim().is_empty()
+        || market
+            .direct_address_fact_keys
+            .iter()
+            .any(|key| key.trim().is_empty())
+        || market
+            .direct_address_allowed_sources
+            .iter()
+            .any(|source| source.trim().is_empty())
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "spatial and market-locality policies contain invalid values".to_string(),
+        ));
+    }
+    Ok(policies)
 }
 
 pub fn source_tier_rank(source_type: &str, policies: &ResolutionPoliciesFile) -> u32 {

@@ -87,7 +87,7 @@ def society_access_overpass_query(
         f'  node["barrier"="gate"]({south:.7f},{west:.7f},{north:.7f},{east:.7f});\n'
         f'  node["entrance"~"^(main|yes)$"]'
         f"({south:.7f},{west:.7f},{north:.7f},{east:.7f});\n"
-        ");\nout tags center geom;"
+        ");\nout body center geom;"
     )
 
 

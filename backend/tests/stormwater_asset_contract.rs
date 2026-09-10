@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use backend::assets::{
-    stormwater_drain_facts_input, KgViewRecords, StormwaterDrainObservationRecord,
+    stormwater_drain_facts_input, SocietyGoldRecords, StormwaterDrainObservationRecord,
     StormwaterDrainRiskInput,
 };
 use backend::knowledge::KnowledgeGraph;
@@ -134,7 +134,7 @@ fn stormwater_drain_facts_emit_rajakaluve_risk_and_geometry() {
         .iter()
         .any(|fact| fact.value_json.contains("Far SWD")));
 
-    let kg_records = KgViewRecords::from_graph_with_skill_facts(
+    let kg_records = SocietyGoldRecords::from_graph_with_skill_facts(
         &KnowledgeGraph::new(),
         &facts.facts,
         &facts.fact_annotations,

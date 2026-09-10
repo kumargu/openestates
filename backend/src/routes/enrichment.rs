@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
 use crate::knowledge::edge::Relation;
@@ -847,10 +847,8 @@ pub fn extract_builder_trust(graph: &KnowledgeGraph, society_id: &str) -> Option
     builder_trust_from_facts(&builder.facts)
 }
 
-// ---------------------------------------------------------------------------
-// Data freshness extraction — how recent and rich the data is
-// ---------------------------------------------------------------------------
-
+/// Legacy optional API shape. Search and detail responses do not calculate
+/// freshness or age from timestamps.
 #[derive(Serialize, Clone, Debug, Default)]
 pub struct DataFreshness {
     /// ISO timestamp of last enrichment
@@ -863,45 +861,6 @@ pub struct DataFreshness {
     pub fact_count: u32,
     /// Breakdown of facts by source type, e.g. {"Rera": 5, "Reddit": 3}
     pub source_breakdown: HashMap<String, u32>,
-}
-
-/// Extract data freshness information from a society's KG node.
-/// Returns None if the society has no KG node.
-pub fn extract_data_freshness(graph: &KnowledgeGraph, society_id: &str) -> Option<DataFreshness> {
-    let node_id = society_node_id(society_id);
-    let node = graph.get_node(&node_id)?;
-
-    // Use the most recent learned_at from any fact for freshness, falling back to node updated_at
-    let most_recent_fact_ts = node.facts.iter().map(|f| f.learned_at).max();
-    let effective_ts = most_recent_fact_ts.unwrap_or(node.updated_at);
-    let last_enriched = effective_ts.to_rfc3339();
-    let days_ago = (Utc::now() - effective_ts).num_days().max(0) as u32;
-
-    let freshness_label = if days_ago < 7 {
-        "Fresh".to_string()
-    } else if days_ago < 30 {
-        "Recent".to_string()
-    } else if days_ago < 90 {
-        "Stale".to_string()
-    } else {
-        "Very stale".to_string()
-    };
-
-    let fact_count = node.facts.len() as u32;
-
-    let mut source_breakdown: HashMap<String, u32> = HashMap::new();
-    for fact in &node.facts {
-        let source_name = format!("{:?}", fact.source.source_type);
-        *source_breakdown.entry(source_name).or_insert(0) += 1;
-    }
-
-    Some(DataFreshness {
-        last_enriched,
-        days_ago,
-        freshness_label,
-        fact_count,
-        source_breakdown,
-    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1069,9 +1028,6 @@ pub fn enrich_property_card(
     let builder_delivery_display =
         extract_builder_trust(graph, &p.society_id).and_then(|bt| bt.delivery_display);
 
-    // Extract data freshness from the society KG node
-    let data_freshness = extract_data_freshness(graph, &p.society_id);
-
     PropertyCard {
         id: p.id.clone(),
         kg_entity_refs: kg_entity_refs_for_property(p, graph),
@@ -1106,7 +1062,7 @@ pub fn enrich_property_card(
         project_status_display,
         home_state_display: None,
         builder_delivery_display,
-        data_freshness,
+        data_freshness: None,
         floor_plan_preview_url: None,
         plan_carpet_area_sqft: None,
         plan_sale_area_sqft: None,

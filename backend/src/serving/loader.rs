@@ -1,27 +1,24 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use crate::assets::{
-    AssetId, AssetMaterializationStore, AssetPartition, AssetPathBuilder, MaterializationId,
-    MaterializationRecord, MaterializationStatus,
-};
+use crate::assets::AssetPathBuilder;
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
+use super::SERVING_BUNDLE_FORMAT_VERSION;
 use super::{
     hydrate_tantivy_index, read_edges_parquet, read_entities_parquet, read_entity_aliases_parquet,
     read_facts_parquet, read_rera_evidence_parquet, read_search_metadata_parquet,
-    validate_society_aliases, ParquetReadError, ReraEvidenceIndex, ServingBundleManifest,
-    ServingEdgeRecord, ServingEntityAliasIndex, ServingEntityAliasRecord, ServingEntityRecord,
-    ServingFactIndex, SpatialServingIndex, TantivyIndexError, TantivyRecallIndex,
-    SEARCH_SERVING_BUNDLE_ASSET_ID,
+    validate_serving_edge_evidence, validate_society_aliases, ParquetReadError, ReraEvidenceIndex,
+    ServingBundleManifest, ServingEdgeRecord, ServingEntityAliasIndex, ServingEntityAliasRecord,
+    ServingEntityRecord, ServingFactIndex, SpatialServingIndex, TantivyIndexError,
+    TantivyRecallIndex,
 };
 use crate::graph::GraphIndex;
-use crate::search::geo::GeoSearchIndex;
+use crate::search::geo::SpatialEntityIndex;
 
 #[derive(Clone)]
 pub struct ServingBundleLoader {
     lake: LakeStore,
-    materializations: AssetMaterializationStore,
     cache_root: PathBuf,
 }
 
@@ -34,7 +31,7 @@ pub struct LoadedServingBundle {
     pub recall_index: TantivyRecallIndex,
     pub fact_index: ServingFactIndex,
     pub rera_evidence_index: ReraEvidenceIndex,
-    pub geo_index: GeoSearchIndex,
+    pub entity_index: SpatialEntityIndex,
     pub spatial_index: SpatialServingIndex,
     pub search_capabilities: crate::search::SearchCapabilityIndex,
     pub cache_dir: PathBuf,
@@ -42,10 +39,8 @@ pub struct LoadedServingBundle {
 
 impl ServingBundleLoader {
     pub fn new(lake: LakeStore, cache_root: impl Into<PathBuf>) -> Self {
-        let materializations = AssetMaterializationStore::new(lake.clone());
         Self {
             lake,
-            materializations,
             cache_root: cache_root.into(),
         }
     }
@@ -54,57 +49,25 @@ impl ServingBundleLoader {
         &self.lake
     }
 
-    pub async fn load_current_search_bundle(
+    pub async fn load_search_bundle(
         &self,
-    ) -> Result<Option<LoadedServingBundle>, ServingBundleLoadError> {
-        let asset_id = AssetId::new(SEARCH_SERVING_BUNDLE_ASSET_ID)
-            .expect("search serving bundle asset id is static and valid");
-        let partition = AssetPartition::global();
-        let record = match self
-            .materializations
-            .current_record(&asset_id, &partition)
-            .await
-        {
-            Ok(record) => record,
-            Err(err) if err.is_not_found() => return Ok(None),
-            Err(err) => return Err(ServingBundleLoadError::Lake(err)),
-        };
-
-        self.load_search_bundle_record(record).await.map(Some)
-    }
-
-    pub async fn load_search_bundle_by_materialization(
-        &self,
-        materialization_id: &MaterializationId,
-    ) -> Result<Option<LoadedServingBundle>, ServingBundleLoadError> {
-        let asset_id = AssetId::new(SEARCH_SERVING_BUNDLE_ASSET_ID)
-            .expect("search serving bundle asset id is static and valid");
-        let record = match self
-            .materializations
-            .record_by_id_for_asset(&asset_id, materialization_id)
-            .await
-        {
-            Ok(Some(record)) => record,
-            Ok(None) => return Ok(None),
-            Err(err) => return Err(ServingBundleLoadError::Lake(err)),
-        };
-        self.load_search_bundle_record(record).await.map(Some)
-    }
-
-    async fn load_search_bundle_record(
-        &self,
-        record: MaterializationRecord,
+        bundle_version: &str,
     ) -> Result<LoadedServingBundle, ServingBundleLoadError> {
-        if record.status != MaterializationStatus::Succeeded {
-            return Err(ServingBundleLoadError::CurrentMaterializationNotSucceeded {
-                asset_id: record.asset_id.to_string(),
-                status: record.status,
-            });
-        }
-
-        let manifest_key = manifest_key_for_record(&record)?;
+        let manifest_key = AssetPathBuilder::serving_bundle_key(bundle_version, "manifest.json");
         let manifest: ServingBundleManifest = self.lake.get_json(&manifest_key).await?;
-        let cache_dir = self.cache_dir_for(&record);
+        if manifest.bundle_version != bundle_version {
+            return Err(ServingBundleLoadError::Configuration(format!(
+                "serving manifest is bundle {}, expected {bundle_version}",
+                manifest.bundle_version
+            )));
+        }
+        if manifest.format_version != SERVING_BUNDLE_FORMAT_VERSION {
+            return Err(ServingBundleLoadError::Configuration(format!(
+                "serving bundle format is {}, expected {SERVING_BUNDLE_FORMAT_VERSION}",
+                manifest.format_version
+            )));
+        }
+        let cache_dir = self.cache_dir_for(&manifest);
 
         if !cache_dir.exists() {
             hydrate_atomically(&self.lake, &manifest, &cache_dir).await?;
@@ -120,13 +83,19 @@ impl ServingBundleLoader {
         let edges = load_edges(&self.lake, &manifest).await?;
         let aliases = super::types::unique_society_aliases(&entities);
         let mut fact_index = load_fact_index(&self.lake, &manifest).await?;
+        validate_serving_edge_evidence(&edges, fact_index.all_facts(), &manifest.bundle_version)
+            .map_err(ServingBundleLoadError::Configuration)?;
         fact_index.add_society_aliases(&entities);
+        fact_index.add_canonical_spatial_bindings(&edges);
         let mut rera_evidence_index = load_rera_evidence_index(&self.lake, &manifest).await?;
         rera_evidence_index.add_aliases(&aliases);
-        let mut graph_index = GraphIndex::from_serving_edges(&edges);
+        let mut graph_index =
+            GraphIndex::from_serving_bundle(&entities, &edges, &manifest.bundle_version);
         graph_index.add_entity_aliases(&aliases);
-        let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
-        let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
+        let entity_index =
+            SpatialEntityIndex::from_serving_bundle_with_edges(&entities, &fact_index, &edges);
+        let spatial_index =
+            SpatialServingIndex::from_serving_bundle_with_edges(&entities, &fact_index, &edges);
         let search_capabilities =
             crate::search::SearchCapabilityIndex::from_bundle(&entities, &fact_index);
         Ok(LoadedServingBundle {
@@ -138,17 +107,17 @@ impl ServingBundleLoader {
             recall_index,
             fact_index,
             rera_evidence_index,
-            geo_index,
+            entity_index,
             spatial_index,
             search_capabilities,
             cache_dir,
         })
     }
 
-    fn cache_dir_for(&self, record: &MaterializationRecord) -> PathBuf {
+    fn cache_dir_for(&self, manifest: &ServingBundleManifest) -> PathBuf {
         self.cache_root
             .join("search_bundle")
-            .join(format!("materialization={}", record.materialization_id))
+            .join(format!("version={}", manifest.bundle_version))
             .join("tantivy_index")
     }
 }
@@ -167,10 +136,8 @@ async fn load_entity_aliases(
     lake: &LakeStore,
     manifest: &ServingBundleManifest,
 ) -> Result<Vec<ServingEntityAliasRecord>, ServingBundleLoadError> {
-    let Some(key) = manifest.entity_alias_parquet_key.as_ref() else {
-        return Ok(Vec::new());
-    };
-    let alias_key = LakeKey::new(key.clone()).map_err(ServingBundleLoadError::Key)?;
+    let alias_key = LakeKey::new(manifest.entity_alias_parquet_key.clone())
+        .map_err(ServingBundleLoadError::Key)?;
     let alias_bytes = lake.get_bytes(&alias_key).await?;
     Ok(read_entity_aliases_parquet(&alias_bytes)?)
 }
@@ -179,10 +146,8 @@ async fn load_edges(
     lake: &LakeStore,
     manifest: &ServingBundleManifest,
 ) -> Result<Vec<ServingEdgeRecord>, ServingBundleLoadError> {
-    let Some(edge_key) = manifest.edge_parquet_key.as_ref() else {
-        return Ok(Vec::new());
-    };
-    let edge_key = LakeKey::new(edge_key.clone()).map_err(ServingBundleLoadError::Key)?;
+    let edge_key =
+        LakeKey::new(manifest.edge_parquet_key.clone()).map_err(ServingBundleLoadError::Key)?;
     let edge_bytes = lake.get_bytes(&edge_key).await?;
     Ok(read_edges_parquet(&edge_bytes)?)
 }
@@ -206,30 +171,12 @@ async fn load_rera_evidence_index(
     lake: &LakeStore,
     manifest: &ServingBundleManifest,
 ) -> Result<ReraEvidenceIndex, ServingBundleLoadError> {
-    let Some(key) = manifest.rera_evidence_parquet_key.as_ref() else {
-        return Ok(ReraEvidenceIndex::default());
-    };
-    let key = LakeKey::new(key.clone()).map_err(ServingBundleLoadError::Key)?;
+    let key = LakeKey::new(manifest.rera_evidence_parquet_key.clone())
+        .map_err(ServingBundleLoadError::Key)?;
     let bytes = lake.get_bytes(&key).await?;
     Ok(ReraEvidenceIndex::from_records(read_rera_evidence_parquet(
         &bytes,
     )?))
-}
-
-fn manifest_key_for_record(
-    record: &MaterializationRecord,
-) -> Result<LakeKey, ServingBundleLoadError> {
-    let key = record
-        .artifacts
-        .iter()
-        .find(|artifact| {
-            artifact.content_type == "application/json" && artifact.key.ends_with("/manifest.json")
-        })
-        .map(|artifact| artifact.key.clone())
-        .unwrap_or_else(|| {
-            AssetPathBuilder::serving_bundle_key(&record.version, "manifest.json").to_string()
-        });
-    LakeKey::new(key).map_err(ServingBundleLoadError::Key)
 }
 
 async fn hydrate_atomically(
@@ -271,10 +218,6 @@ pub enum ServingBundleLoadError {
     Lake(LakeError),
     Parquet(ParquetReadError),
     Tantivy(TantivyIndexError),
-    CurrentMaterializationNotSucceeded {
-        asset_id: String,
-        status: MaterializationStatus,
-    },
 }
 
 impl fmt::Display for ServingBundleLoadError {
@@ -288,10 +231,6 @@ impl fmt::Display for ServingBundleLoadError {
             Self::Lake(err) => write!(f, "serving bundle load lake error: {err}"),
             Self::Parquet(err) => write!(f, "serving bundle Parquet load error: {err}"),
             Self::Tantivy(err) => write!(f, "serving bundle recall index error: {err}"),
-            Self::CurrentMaterializationNotSucceeded { asset_id, status } => write!(
-                f,
-                "current materialization for {asset_id} is not succeeded: {status:?}"
-            ),
         }
     }
 }

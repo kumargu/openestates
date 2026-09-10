@@ -860,18 +860,7 @@ impl AssetRunManifestStore {
             updated_at: Utc::now(),
         };
         let key = AssetPathBuilder::current_dag_run_pointer_key(&manifest.partition);
-        self.lake
-            .put_json_if(&key, &pointer, |current: Option<&CurrentDagRunPointer>| {
-                let Some(current) = current else {
-                    return true;
-                };
-                let current_time = current.run_created_at.unwrap_or(current.updated_at);
-                current.run_id == manifest.run_id
-                    || manifest.created_at > current_time
-                    || (manifest.created_at == current_time
-                        && manifest.run_id.to_string() > current.run_id.to_string())
-            })
-            .await
+        self.lake.put_json(&key, &pointer).await.map(|_| true)
     }
 
     pub async fn current_pointer(

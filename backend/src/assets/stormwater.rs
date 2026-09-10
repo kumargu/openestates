@@ -415,6 +415,9 @@ fn push_fact(
                 format!("{entity_id}:{fact_key}:{}:{value_json}", record.drain_id).as_bytes()
             )
         ),
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     });
     if annotation_keys.insert((entity_id.to_string(), fact_key.to_string())) {
         annotations.push(SkillFactAnnotationRecord {

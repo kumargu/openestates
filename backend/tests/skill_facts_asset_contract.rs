@@ -67,6 +67,9 @@ async fn reddit_resident_facts_materialize_as_silver_parquet_with_raw_lineage() 
                 learned_at: Utc.with_ymd_and_hms(2026, 7, 13, 4, 35, 0).unwrap(),
                 run_id: run_id.to_string(),
                 input_hash: "sha256:reddit-alpha".to_string(),
+                observation_provider: None,
+                provider_observation_id: None,
+                asset_lineage: Vec::new(),
             }],
             &[SkillFactAnnotationRecord {
                 entity_id: "society:large-green".to_string(),
@@ -87,7 +90,7 @@ async fn reddit_resident_facts_materialize_as_silver_parquet_with_raw_lineage() 
         .unwrap();
 
     assert_eq!(materialization.manifest.fact_count, 1);
-    assert_eq!(materialization.manifest.format_version, 2);
+    assert_eq!(materialization.manifest.format_version, 3);
     assert_eq!(materialization.manifest.fact_annotation_count, 1);
     assert_eq!(
         materialization.manifest.fact_parquet_key,
@@ -247,6 +250,9 @@ async fn skill_fact_typed_parquet_round_trips_values_and_annotations() {
             learned_at,
             run_id: "run-typed-facts".to_string(),
             input_hash: format!("sha256:{key}"),
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         })
         .collect::<Vec<_>>();
     let annotations = vec![SkillFactAnnotationRecord {
@@ -327,6 +333,9 @@ async fn skill_fact_reader_rejects_corrupt_artifact_metadata() {
                 learned_at: Utc.with_ymd_and_hms(2026, 7, 13, 4, 35, 0).unwrap(),
                 run_id: "run-reddit-facts-2026-07-13".to_string(),
                 input_hash: "sha256:reddit-alpha".to_string(),
+                observation_provider: None,
+                provider_observation_id: None,
+                asset_lineage: Vec::new(),
             }],
             &[SkillFactAnnotationRecord {
                 entity_id: "society:large-green".to_string(),

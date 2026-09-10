@@ -8,12 +8,18 @@ use crate::dag_config::{
 use crate::knowledge::FactValue;
 use crate::models::Property;
 use crate::serving::{
-    resolve_serving_coordinates, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
-    ServingSearchMetadataRecord, SpatialServingIndex,
+    bound_provider_entity_ids, is_canonical_spatial_entity, resolve_serving_coordinates,
+    DerivedEvidence, EvidenceRef, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex,
+    ServingFactRecord, ServingSearchMetadataRecord, SpatialGeometryIndex, SpatialServingIndex,
 };
 
 use super::analyzer;
+use super::ast::ConstraintTerm;
+use super::evaluation::{
+    BooleanEvaluation, EvaluationEvidence, EvidenceGap, PredicateEvaluation, VerifiedMatch,
+};
 use super::index::SearchIndex;
+use super::intent::SourceSpan;
 use super::parser;
 use super::query_plan::{QueryPlan, QueryRelationClause, RelationRequirement};
 use super::resolver::query_contains_lower_text;
@@ -94,14 +100,14 @@ pub(crate) fn normalized_distance_score(
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct GeoSearchIndex {
+pub struct SpatialEntityIndex {
     places: Vec<GeoPlace>,
     society_coordinates: Vec<EntityCoordinates>,
 }
 
 #[derive(Debug, Clone)]
 pub struct GeoSearchQuery<'a> {
-    index: &'a GeoSearchIndex,
+    index: &'a SpatialEntityIndex,
     places: Vec<ResolvedGeoPlace>,
     clauses: Vec<ResolvedGeoClause>,
     unresolved_targets: Vec<String>,
@@ -111,7 +117,9 @@ pub struct GeoSearchQuery<'a> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ResolvedGeoClause {
+    pub relation: String,
     pub target_text: String,
+    pub target_span: SourceSpan,
     pub place_entity_ids: Vec<String>,
     pub category_fact_keys: Vec<String>,
     pub distance_limit_km: Option<f64>,
@@ -159,21 +167,53 @@ struct EntityCoordinates {
     confidence: f32,
 }
 
-impl GeoSearchIndex {
+impl SpatialEntityIndex {
     pub fn from_serving_bundle(
         entities: &[ServingEntityRecord],
         fact_index: &ServingFactIndex,
     ) -> Self {
+        Self::from_serving_bundle_with_edges(entities, fact_index, &[])
+    }
+
+    pub fn from_serving_bundle_with_edges(
+        entities: &[ServingEntityRecord],
+        fact_index: &ServingFactIndex,
+        edges: &[ServingEdgeRecord],
+    ) -> Self {
+        let mut bound_fact_index = fact_index.clone();
+        bound_fact_index.add_canonical_spatial_bindings(edges);
+        let fact_index = &bound_fact_index;
         let mut places = Vec::new();
         let mut society_coordinates = Vec::new();
         let mut society_coordinate_ids = HashSet::<String>::new();
-        for entity in entities {
-            let Some(coordinates) = coordinates_for_entity(fact_index, &entity.entity_id) else {
-                continue;
-            };
+        let geometry = SpatialGeometryIndex::from_serving_bundle(entities, fact_index, edges);
+        let bound_provider_ids = bound_provider_entity_ids(edges);
+        for entity in entities
+            .iter()
+            .filter(|entity| entity.visibility.is_searchable())
+        {
             if entity.entity_type.eq_ignore_ascii_case("place")
                 || entity.entity_type.eq_ignore_ascii_case("area")
             {
+                if bound_provider_ids.contains(entity.entity_id.as_str())
+                    && !is_canonical_spatial_entity(entity)
+                {
+                    continue;
+                }
+                let coordinates =
+                    coordinates_for_entity(fact_index, &entity.entity_id).or_else(|| {
+                        geometry.representative_coordinate(&entity.entity_id).map(
+                            |(latitude, longitude, confidence)| EntityCoordinates {
+                                entity_id: entity.entity_id.clone(),
+                                latitude,
+                                longitude,
+                                confidence,
+                            },
+                        )
+                    });
+                let Some(coordinates) = coordinates else {
+                    continue;
+                };
                 places.push(GeoPlace {
                     entity_id: entity.entity_id.clone(),
                     name: entity.name.clone(),
@@ -184,6 +224,10 @@ impl GeoSearchIndex {
                     match_tokens: significant_place_tokens(&entity.name),
                 });
             } else if entity.entity_type.eq_ignore_ascii_case("society") {
+                let Some(coordinates) = coordinates_for_entity(fact_index, &entity.entity_id)
+                else {
+                    continue;
+                };
                 society_coordinate_ids.insert(coordinates.entity_id.clone());
                 society_coordinates.push(coordinates);
             }
@@ -215,7 +259,17 @@ impl GeoSearchIndex {
         self.query_with_plan(&plan)
     }
 
+    #[cfg(test)]
     pub(crate) fn query_with_plan(&self, plan: &QueryPlan) -> Option<GeoSearchQuery<'_>> {
+        self.query_with_plan_and_area_context(plan, None, &[])
+    }
+
+    pub(crate) fn query_with_plan_and_area_context(
+        &self,
+        plan: &QueryPlan,
+        spatial_index: Option<&SpatialServingIndex>,
+        area_context_ids: &[String],
+    ) -> Option<GeoSearchQuery<'_>> {
         if plan.clauses.is_empty() {
             return None;
         }
@@ -223,11 +277,20 @@ impl GeoSearchIndex {
         let mut clauses = Vec::new();
         let mut unresolved_targets = Vec::new();
         for relation in &plan.clauses {
-            let mut resolved = self
-                .resolve_query_places(&relation.target_text, relation.place_family_id.as_deref());
+            let scoped_subject = scoped_subject_text(&relation.target_text);
+            let identity_target = scoped_subject.unwrap_or(&relation.target_text);
+            let has_specific_identity = target_has_identity_tokens(identity_target);
+            let mut resolved =
+                self.resolve_query_places(identity_target, relation.place_family_id.as_deref());
+            resolved = select_unambiguous_places(
+                resolved,
+                spatial_index,
+                area_context_ids,
+                scoped_subject.is_some(),
+            );
             let resolved_from_target = !resolved.is_empty();
             let mut resolved_from_scoped_anchor = false;
-            if resolved.is_empty() {
+            if resolved.is_empty() && !has_specific_identity {
                 if let Some(scoped_anchor) = scoped_anchor_text(&relation.target_text) {
                     // A contextual anchor such as "my office in Marathahalli"
                     // resolves the area after `in`; it is not itself an office entity.
@@ -235,12 +298,10 @@ impl GeoSearchIndex {
                     resolved_from_scoped_anchor = !resolved.is_empty();
                 }
             }
-            let unresolved_named_hard_clause = relation.requirement == RelationRequirement::Hard
-                && !resolved_from_target
-                && !resolved_from_scoped_anchor
-                && target_has_identity_tokens(&relation.target_text);
+            let unresolved_specific_clause =
+                !resolved_from_target && !resolved_from_scoped_anchor && has_specific_identity;
             let allow_category_fallback = relation.place_family_id.is_some()
-                && !unresolved_named_hard_clause
+                && !unresolved_specific_clause
                 && (!resolved_from_target || resolved_from_scoped_anchor);
             let category_fact_keys = if allow_category_fallback {
                 requested_nearby_place_categories(&relation.target_text.to_ascii_lowercase())
@@ -267,7 +328,14 @@ impl GeoSearchIndex {
                 }
             }
             clauses.push(ResolvedGeoClause {
+                relation: relation.relation.clone(),
                 target_text: relation.target_text.clone(),
+                target_span: SourceSpan {
+                    source_turn_id: String::new(),
+                    start: relation.target_span.start,
+                    end: relation.target_span.end,
+                    raw_text: relation.target_text.clone(),
+                },
                 place_entity_ids,
                 category_fact_keys,
                 distance_limit_km: relation.distance_limit_km,
@@ -275,11 +343,120 @@ impl GeoSearchIndex {
             });
         }
         let max_distance_km = relation_distance_limit(plan.clauses.as_slice());
-        (!clauses.is_empty()).then_some(GeoSearchQuery {
+        (!clauses.is_empty() || !unresolved_targets.is_empty()).then_some(GeoSearchQuery {
             index: self,
             places,
             clauses,
             unresolved_targets,
+            max_distance_km,
+            allowed_society_ids: None,
+        })
+    }
+
+    /// Rehydrate spatial evaluation directly from the authenticated compiled
+    /// predicates. This deliberately performs no buyer-text parsing or fuzzy
+    /// resolution; every entity id was already resolved when its source turn
+    /// was compiled.
+    pub(crate) fn bind_compiled_spatial_predicates(
+        &self,
+        terms: &[ConstraintTerm],
+    ) -> Option<GeoSearchQuery<'_>> {
+        if terms.is_empty() {
+            return None;
+        }
+
+        let mut places = Vec::new();
+        let mut clauses = Vec::<ResolvedGeoClause>::new();
+        for term in terms {
+            let ConstraintTerm::Spatial {
+                relation,
+                entity_id,
+                display_name,
+                required,
+                category_fact_keys,
+                distance_limit_km,
+                span,
+            } = term
+            else {
+                continue;
+            };
+            let target_span = span.clone().unwrap_or_else(|| SourceSpan {
+                source_turn_id: String::new(),
+                start: 0,
+                end: 0,
+                raw_text: display_name.clone(),
+            });
+            let clause_index = clauses.iter().position(|clause| {
+                clause.relation == *relation
+                    && clause.target_span == target_span
+                    && clause.category_fact_keys == *category_fact_keys
+                    && clause.distance_limit_km == *distance_limit_km
+                    && clause.requirement
+                        == if *required {
+                            RelationRequirement::Hard
+                        } else {
+                            RelationRequirement::Coverage
+                        }
+            });
+            let index = clause_index.unwrap_or_else(|| {
+                clauses.push(ResolvedGeoClause {
+                    relation: relation.clone(),
+                    target_text: display_name.clone(),
+                    target_span,
+                    place_entity_ids: Vec::new(),
+                    category_fact_keys: category_fact_keys.clone(),
+                    distance_limit_km: *distance_limit_km,
+                    requirement: if *required {
+                        RelationRequirement::Hard
+                    } else {
+                        RelationRequirement::Coverage
+                    },
+                });
+                clauses.len() - 1
+            });
+            if entity_id.is_empty() {
+                continue;
+            }
+            let Some(place) = self
+                .places
+                .iter()
+                .find(|place| place.entity_id == *entity_id)
+            else {
+                continue;
+            };
+            if !clauses[index].place_entity_ids.contains(entity_id) {
+                clauses[index].place_entity_ids.push(entity_id.clone());
+            }
+            if !places
+                .iter()
+                .any(|existing: &ResolvedGeoPlace| existing.entity_id == *entity_id)
+            {
+                places.push(ResolvedGeoPlace {
+                    entity_id: place.entity_id.clone(),
+                    name: place.name.clone(),
+                    category: place.category.clone(),
+                    latitude: place.latitude,
+                    longitude: place.longitude,
+                    confidence: place.confidence,
+                    match_score: 1.0,
+                });
+            }
+        }
+        clauses.retain(|clause| {
+            !clause.place_entity_ids.is_empty() || !clause.category_fact_keys.is_empty()
+        });
+        if clauses.is_empty() {
+            return None;
+        }
+        let max_distance_km = clauses
+            .iter()
+            .filter_map(|clause| clause.distance_limit_km)
+            .min_by(|left, right| left.total_cmp(right));
+        Some(GeoSearchQuery {
+            index: self,
+            places,
+            clauses,
+            unresolved_targets: Vec::new(),
             max_distance_km,
             allowed_society_ids: None,
         })
@@ -456,8 +633,14 @@ impl<'a> GeoSearchQuery<'a> {
 
     #[cfg(test)]
     pub(crate) fn candidate_property_ids(&self, properties: &[Property]) -> Vec<String> {
+        if !self.unresolved_targets.is_empty() {
+            return Vec::new();
+        }
         let mut ids = Vec::new();
-        let has_hard_clauses = self.has_hard_clauses();
+        let has_hard_clauses = self
+            .clauses
+            .iter()
+            .any(|clause| clause.requirement == RelationRequirement::Hard);
         for property in properties {
             if !property.is_listable() {
                 continue;
@@ -488,6 +671,9 @@ impl<'a> GeoSearchQuery<'a> {
         search_index: &SearchIndex,
         eligible_property_ids: Option<&HashSet<String>>,
     ) -> Vec<String> {
+        if !self.unresolved_targets.is_empty() {
+            return Vec::new();
+        }
         let hard_clauses = self
             .clauses
             .iter()
@@ -508,14 +694,6 @@ impl<'a> GeoSearchQuery<'a> {
             );
             combined = Some(match combined {
                 None => candidates,
-                Some(existing) if self.has_hard_clauses() => existing
-                    .into_iter()
-                    .filter_map(|(entity_id, distance)| {
-                        candidates
-                            .get(&entity_id)
-                            .map(|other| (entity_id, distance.max(*other)))
-                    })
-                    .collect(),
                 Some(mut existing) => {
                     for (entity_id, distance) in candidates {
                         existing
@@ -540,9 +718,38 @@ impl<'a> GeoSearchQuery<'a> {
         eligible_property_ids: Option<&HashSet<String>>,
         clause: &ResolvedGeoClause,
     ) -> HashMap<String, f64> {
+        if clause.relation.eq_ignore_ascii_case("inside") {
+            return self.topology_societies_for_clause(
+                spatial_index,
+                search_index,
+                eligible_property_ids,
+                clause,
+                false,
+            );
+        }
+        if clause.relation.eq_ignore_ascii_case("adjacent") {
+            return self.topology_societies_for_clause(
+                spatial_index,
+                search_index,
+                eligible_property_ids,
+                clause,
+                true,
+            );
+        }
         let policy = schema::ranking_policy();
         let mut candidates = HashMap::<String, f64>::new();
         for place in self.places_for_clause(clause) {
+            if place.entity_id.starts_with("area:") {
+                for society_id in spatial_index.society_ids_inside(&place.entity_id) {
+                    if entity_has_eligible_property(
+                        search_index,
+                        &society_id,
+                        eligible_property_ids,
+                    ) {
+                        candidates.insert(society_id, 0.0);
+                    }
+                }
+            }
             let nearest = if let Some(radius_km) = clause.distance_limit_km {
                 spatial_index
                     .points_within_radius(place.latitude, place.longitude, radius_km)
@@ -586,12 +793,45 @@ impl<'a> GeoSearchQuery<'a> {
         }
     }
 
+    fn topology_societies_for_clause(
+        &self,
+        spatial_index: &SpatialServingIndex,
+        search_index: &SearchIndex,
+        eligible_property_ids: Option<&HashSet<String>>,
+        clause: &ResolvedGeoClause,
+        adjacent: bool,
+    ) -> HashMap<String, f64> {
+        let mut candidates = HashMap::new();
+        for place in self.places_for_clause(clause) {
+            let area_ids = if adjacent {
+                spatial_index.adjacent_area_ids(&place.entity_id)
+            } else {
+                vec![place.entity_id.clone()]
+            };
+            for area_id in area_ids {
+                for society_id in spatial_index.society_ids_inside(&area_id) {
+                    if entity_has_eligible_property(
+                        search_index,
+                        &society_id,
+                        eligible_property_ids,
+                    ) {
+                        candidates.insert(society_id, 0.0);
+                    }
+                }
+            }
+        }
+        candidates
+    }
+
     pub(crate) fn serving_fact_candidate_property_ids(
         &self,
         search_index: &SearchIndex,
         fact_index: &ServingFactIndex,
         eligible_property_ids: Option<&HashSet<String>>,
     ) -> Vec<String> {
+        if !self.unresolved_targets.is_empty() {
+            return Vec::new();
+        }
         let mut candidates = HashMap::new();
         for (entity_id, rows) in fact_index.rows() {
             let property_ids = search_index.property_ids_for_entity_id(entity_id);
@@ -621,20 +861,23 @@ impl<'a> GeoSearchQuery<'a> {
         &self,
         rows: &crate::serving::ServingEntityFactRows,
     ) -> Option<f64> {
-        if self.has_hard_clauses() {
-            self.clauses
-                .iter()
-                .filter(|clause| clause.requirement == RelationRequirement::Hard)
+        let hard = self
+            .clauses
+            .iter()
+            .filter(|clause| clause.requirement == RelationRequirement::Hard)
+            .collect::<Vec<_>>();
+        if !hard.is_empty() {
+            return hard
+                .into_iter()
                 .map(|clause| self.society_rows_match_clause_distance(rows, clause))
-                .try_fold(0.0_f64, |farthest, distance| {
-                    distance.map(|distance| farthest.max(distance))
-                })
-        } else {
-            self.clauses
-                .iter()
-                .filter_map(|clause| self.society_rows_match_clause_distance(rows, clause))
-                .min_by(f64::total_cmp)
+                .collect::<Option<Vec<_>>>()?
+                .into_iter()
+                .min_by(f64::total_cmp);
         }
+        self.clauses
+            .iter()
+            .filter_map(|clause| self.society_rows_match_clause_distance(rows, clause))
+            .min_by(f64::total_cmp)
     }
 
     fn society_rows_match_clause_distance(
@@ -642,13 +885,22 @@ impl<'a> GeoSearchQuery<'a> {
         rows: &crate::serving::ServingEntityFactRows,
         clause: &ResolvedGeoClause,
     ) -> Option<f64> {
+        self.society_rows_match_clause_distance_fact(rows, clause)
+            .map(|(distance, _)| distance)
+    }
+
+    fn society_rows_match_clause_distance_fact<'facts>(
+        &self,
+        rows: &'facts crate::serving::ServingEntityFactRows,
+        clause: &ResolvedGeoClause,
+    ) -> Option<(f64, &'facts ServingFactRecord)> {
         rows.facts
             .iter()
             .filter(|fact| {
                 fact.confidence >= schema::ranking_policy().min_support_evidence_confidence
             })
             .filter_map(|fact| {
-                clause
+                let distance = clause
                     .category_fact_keys
                     .iter()
                     .find_map(|fact_key| {
@@ -676,9 +928,10 @@ impl<'a> GeoSearchQuery<'a> {
                                 })
                             })
                             .min_by(f64::total_cmp)
-                    })
+                    })?;
+                Some((distance, fact))
             })
-            .min_by(f64::total_cmp)
+            .min_by(|left, right| left.0.total_cmp(&right.0))
     }
 
     pub(crate) fn evidence_for_society(&self, society_id: &str) -> Vec<HaversineEvidence> {
@@ -722,8 +975,300 @@ impl<'a> GeoSearchQuery<'a> {
             .collect()
     }
 
+    pub(crate) fn verified_matches_for_property(
+        &self,
+        property: &Property,
+        search_index: &SearchIndex,
+        spatial_index: &SpatialServingIndex,
+        fact_index: &ServingFactIndex,
+        snapshot_identity: &str,
+    ) -> Vec<VerifiedMatch> {
+        let society_entity_id = search_index
+            .society_entity_id_for_property(&property.id)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("society:{}", property.society_id));
+        self.clauses
+            .iter()
+            .map(|clause| {
+                self.evaluate_clause(
+                    &society_entity_id,
+                    clause,
+                    spatial_index,
+                    fact_index,
+                    snapshot_identity,
+                )
+            })
+            .filter(|evaluation| evaluation.is_satisfied())
+            .flat_map(|evaluation| evaluation.verified_matches)
+            .collect()
+    }
+
+    fn evaluate_clause(
+        &self,
+        society_entity_id: &str,
+        clause: &ResolvedGeoClause,
+        spatial_index: &SpatialServingIndex,
+        fact_index: &ServingFactIndex,
+        snapshot_identity: &str,
+    ) -> BooleanEvaluation {
+        let target_evaluations = self
+            .places_for_clause(clause)
+            .map(|place| {
+                self.evaluate_target(
+                    society_entity_id,
+                    clause,
+                    place,
+                    spatial_index,
+                    snapshot_identity,
+                )
+            })
+            .collect::<Vec<_>>();
+        if !target_evaluations.is_empty() {
+            return BooleanEvaluation::any(target_evaluations);
+        }
+
+        let fact_distance = fact_index
+            .entity(society_entity_id)
+            .and_then(|rows| self.society_rows_match_clause_distance_fact(rows, clause));
+        match fact_distance {
+            Some((distance_km, fact)) => match fact.observation.as_ref().and_then(|observation| {
+                verified_spatial_match(
+                    society_entity_id,
+                    None,
+                    clause,
+                    "serving_distance_fact",
+                    Some(distance_km),
+                    fact.confidence,
+                    snapshot_identity,
+                    vec![EvidenceRef::for_observation(snapshot_identity, observation)],
+                )
+            }) {
+                Some(matched) => {
+                    BooleanEvaluation::from_predicate(PredicateEvaluation::Satisfied(matched))
+                }
+                None => {
+                    BooleanEvaluation::from_predicate(PredicateEvaluation::Unknown(EvidenceGap {
+                        predicate: clause.target_text.clone(),
+                        reason: "spatial fact has no durable source observation".to_string(),
+                    }))
+                }
+            },
+            None => BooleanEvaluation::from_predicate(PredicateEvaluation::Unknown(EvidenceGap {
+                predicate: clause.target_text.clone(),
+                reason: "no compatible sourced spatial observation".to_string(),
+            })),
+        }
+    }
+
+    fn evaluate_target(
+        &self,
+        society_entity_id: &str,
+        clause: &ResolvedGeoClause,
+        place: &ResolvedGeoPlace,
+        spatial_index: &SpatialServingIndex,
+        snapshot_identity: &str,
+    ) -> BooleanEvaluation {
+        let relation = clause.relation.to_ascii_lowercase();
+        let evaluation = match relation.as_str() {
+            "inside" => spatial_index
+                .relation_derivation(
+                    society_entity_id,
+                    "in_area",
+                    &place.entity_id,
+                    snapshot_identity,
+                )
+                .and_then(|derivation| {
+                    verified_spatial_derivation_match(
+                        society_entity_id,
+                        Some(&place.entity_id),
+                        clause,
+                        derivation,
+                        snapshot_identity,
+                    )
+                })
+                .map_or_else(
+                    || {
+                        PredicateEvaluation::Unknown(EvidenceGap {
+                            predicate: format!("inside {}", place.name),
+                            reason: "no qualified containment derivation".to_string(),
+                        })
+                    },
+                    PredicateEvaluation::Satisfied,
+                ),
+            "adjacent" => {
+                let adjacent_area = spatial_index
+                    .adjacent_area_ids(&place.entity_id)
+                    .into_iter()
+                    .find(|area_id| {
+                        spatial_index
+                            .relation_derivation(
+                                society_entity_id,
+                                "in_area",
+                                area_id,
+                                snapshot_identity,
+                            )
+                            .is_some()
+                            && spatial_index
+                                .relation_derivation(
+                                    area_id,
+                                    "adjacent_area",
+                                    &place.entity_id,
+                                    snapshot_identity,
+                                )
+                                .is_some()
+                    });
+                if let Some(adjacent_area) = adjacent_area {
+                    let containment = spatial_index.relation_derivation(
+                        society_entity_id,
+                        "in_area",
+                        &adjacent_area,
+                        snapshot_identity,
+                    );
+                    let adjacency = spatial_index.relation_derivation(
+                        &adjacent_area,
+                        "adjacent_area",
+                        &place.entity_id,
+                        snapshot_identity,
+                    );
+                    match (containment, adjacency) {
+                        (Some(containment), Some(adjacency)) => verified_spatial_match(
+                            society_entity_id,
+                            Some(&place.entity_id),
+                            clause,
+                            "sourced_area_adjacency",
+                            Some(1.0),
+                            containment.confidence.min(adjacency.confidence),
+                            snapshot_identity,
+                            vec![
+                                EvidenceRef::for_derivation(containment),
+                                EvidenceRef::for_derivation(adjacency),
+                            ],
+                        )
+                        .map_or_else(
+                            || {
+                                PredicateEvaluation::Unknown(EvidenceGap {
+                                    predicate: format!("adjacent to {}", place.name),
+                                    reason: "invalid adjacency derivation chain".to_string(),
+                                })
+                            },
+                            PredicateEvaluation::Satisfied,
+                        ),
+                        _ => PredicateEvaluation::Unknown(EvidenceGap {
+                            predicate: format!("adjacent to {}", place.name),
+                            reason: "no qualified adjacency derivation chain".to_string(),
+                        }),
+                    }
+                } else {
+                    PredicateEvaluation::Unknown(EvidenceGap {
+                        predicate: format!("adjacent to {}", place.name),
+                        reason: "no sourced same-level adjacency relation".to_string(),
+                    })
+                }
+            }
+            "near" => match spatial_index.distance_between(
+                society_entity_id,
+                &place.entity_id,
+                snapshot_identity,
+            ) {
+                Some(distance) => {
+                    if clause
+                        .distance_limit_km
+                        .is_some_and(|limit| distance.distance_km > limit)
+                    {
+                        PredicateEvaluation::Unsatisfied(EvaluationEvidence {
+                            predicate: format!("near {}", place.name),
+                            reason: format!(
+                                "{:.3} km exceeds the requested bound",
+                                distance.distance_km
+                            ),
+                        })
+                    } else {
+                        verified_spatial_match(
+                            society_entity_id,
+                            Some(&place.entity_id),
+                            clause,
+                            distance.metric,
+                            Some(distance.distance_km),
+                            distance.confidence,
+                            snapshot_identity,
+                            distance.evidence_refs,
+                        )
+                        .map_or_else(
+                            || {
+                                PredicateEvaluation::Unknown(EvidenceGap {
+                                    predicate: format!("near {}", place.name),
+                                    reason: "distance inputs have no durable observations"
+                                        .to_string(),
+                                })
+                            },
+                            PredicateEvaluation::Satisfied,
+                        )
+                    }
+                }
+                None => PredicateEvaluation::Unknown(EvidenceGap {
+                    predicate: format!("near {}", place.name),
+                    reason: "no compatible footprint or coordinate evidence".to_string(),
+                }),
+            },
+            _ => PredicateEvaluation::Unsupported(relation),
+        };
+        BooleanEvaluation::from_predicate(evaluation)
+    }
+
     pub(crate) fn resolved_places(&self) -> &[ResolvedGeoPlace] {
         &self.places
+    }
+
+    pub(crate) fn ast_terms(&self) -> Vec<ConstraintTerm> {
+        let mut terms = Vec::new();
+        for clause in &self.clauses {
+            let mut has_named_target = false;
+            for place in self.places_for_clause(clause) {
+                has_named_target = true;
+                let category_fact_keys = if clause.category_fact_keys.is_empty() {
+                    place
+                        .category
+                        .as_deref()
+                        .map(|place_category| {
+                            nearby_place_categories_config()
+                                .categories
+                                .iter()
+                                .filter(|category| {
+                                    nearby_place_fact_key_matches_category(
+                                        &category.fact_key,
+                                        place_category,
+                                    )
+                                })
+                                .map(|category| category.fact_key.clone())
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                } else {
+                    clause.category_fact_keys.clone()
+                };
+                terms.push(ConstraintTerm::Spatial {
+                    relation: clause.relation.clone(),
+                    entity_id: place.entity_id.clone(),
+                    display_name: place.name.clone(),
+                    required: clause.requirement == RelationRequirement::Hard,
+                    category_fact_keys,
+                    distance_limit_km: clause.distance_limit_km,
+                    span: Some(clause.target_span.clone()),
+                });
+            }
+            if !has_named_target && !clause.category_fact_keys.is_empty() {
+                terms.push(ConstraintTerm::Spatial {
+                    relation: clause.relation.clone(),
+                    entity_id: String::new(),
+                    display_name: clause.target_text.clone(),
+                    required: clause.requirement == RelationRequirement::Hard,
+                    category_fact_keys: clause.category_fact_keys.clone(),
+                    distance_limit_km: clause.distance_limit_km,
+                    span: Some(clause.target_span.clone()),
+                });
+            }
+        }
+        terms
     }
 
     pub(crate) fn resolved_clauses(&self) -> &[ResolvedGeoClause] {
@@ -787,12 +1332,6 @@ impl<'a> GeoSearchQuery<'a> {
         terms
     }
 
-    fn has_hard_clauses(&self) -> bool {
-        self.clauses
-            .iter()
-            .any(|clause| clause.requirement == RelationRequirement::Hard)
-    }
-
     #[cfg(test)]
     fn coordinates_match_clause(
         &self,
@@ -811,6 +1350,87 @@ impl<'a> GeoSearchQuery<'a> {
                 .is_none_or(|max_distance| distance_km <= max_distance)
         })
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn verified_spatial_match(
+    subject_entity_id: &str,
+    target_entity_id: Option<&str>,
+    clause: &ResolvedGeoClause,
+    metric: &str,
+    value: Option<f64>,
+    confidence: f32,
+    snapshot_identity: &str,
+    input_evidence: Vec<EvidenceRef>,
+) -> Option<VerifiedMatch> {
+    let unit = value.map(|_| {
+        if metric.contains("distance") {
+            "km"
+        } else {
+            "boolean"
+        }
+        .to_string()
+    });
+    let derivation = DerivedEvidence::new(
+        snapshot_identity,
+        subject_entity_id,
+        target_entity_id.map(str::to_string),
+        &clause.relation,
+        metric,
+        value,
+        unit.clone(),
+        "spatial-evaluator-v2",
+        confidence,
+        input_evidence,
+    )
+    .ok()?;
+    let evidence_reference = EvidenceRef::for_derivation(&derivation);
+    Some(VerifiedMatch {
+        subject_entity_id: subject_entity_id.to_string(),
+        target_entity_id: target_entity_id.map(str::to_string),
+        predicate: clause.target_text.clone(),
+        relation: clause.relation.clone(),
+        metric: metric.to_string(),
+        value,
+        unit,
+        observation_ids: Vec::new(),
+        evidence_refs: vec![evidence_reference],
+        derived_evidence: Some(derivation),
+        algorithm_version: "spatial-evaluator-v2".to_string(),
+        confidence,
+        snapshot_identity: snapshot_identity.to_string(),
+    })
+}
+
+fn verified_spatial_derivation_match(
+    subject_entity_id: &str,
+    target_entity_id: Option<&str>,
+    clause: &ResolvedGeoClause,
+    derivation: &DerivedEvidence,
+    snapshot_identity: &str,
+) -> Option<VerifiedMatch> {
+    if derivation.subject_entity_id != subject_entity_id
+        || derivation.target_entity_id.as_deref() != target_entity_id
+        || derivation.snapshot_identity != snapshot_identity
+        || derivation.validate().is_err()
+    {
+        return None;
+    }
+    Some(VerifiedMatch {
+        subject_entity_id: subject_entity_id.to_string(),
+        target_entity_id: target_entity_id.map(str::to_string),
+        predicate: clause.target_text.clone(),
+        relation: clause.relation.clone(),
+        metric: derivation.metric.clone(),
+        value: derivation.value,
+        unit: derivation.unit.clone(),
+        observation_ids: Vec::new(),
+        evidence_refs: vec![EvidenceRef::for_derivation(derivation)],
+        derived_evidence: Some(derivation.clone()),
+        algorithm_version: derivation.algorithm_version.clone(),
+        confidence: derivation.confidence,
+        snapshot_identity: snapshot_identity.to_string(),
+    })
 }
 
 fn ranked_distance_candidates(
@@ -863,6 +1483,56 @@ fn scoped_anchor_text(target: &str) -> Option<&str> {
                 .map(|index| target[index + pattern.len()..].trim())
         })
         .find(|anchor| !anchor.is_empty())
+}
+
+fn scoped_subject_text(target: &str) -> Option<&str> {
+    let target_lower = target.to_ascii_lowercase();
+    search_resolution_config()
+        .named_entity_scope_prefixes
+        .iter()
+        .filter_map(|prefix| {
+            let pattern = format!(" {prefix} ");
+            target_lower
+                .find(&pattern)
+                .map(|index| target[..index].trim())
+        })
+        .find(|subject| !subject.is_empty())
+}
+
+fn select_unambiguous_places(
+    resolved: Vec<ResolvedGeoPlace>,
+    spatial_index: Option<&SpatialServingIndex>,
+    area_context_ids: &[String],
+    context_is_part_of_target: bool,
+) -> Vec<ResolvedGeoPlace> {
+    if resolved.is_empty() {
+        return resolved;
+    }
+    if area_context_ids.is_empty() {
+        return (resolved.len() == 1)
+            .then(|| resolved.into_iter().next().expect("one resolved place"))
+            .into_iter()
+            .collect();
+    }
+    if resolved.len() == 1 && !context_is_part_of_target {
+        return resolved;
+    }
+    let Some(spatial_index) = spatial_index else {
+        return Vec::new();
+    };
+    let mut compatible = resolved
+        .into_iter()
+        .filter(|place| {
+            spatial_index
+                .area_scope_ids(&place.entity_id)
+                .iter()
+                .any(|area_id| area_context_ids.contains(area_id))
+        })
+        .collect::<Vec<_>>();
+    (compatible.len() == 1)
+        .then(|| compatible.pop().expect("one compatible place"))
+        .into_iter()
+        .collect()
 }
 
 fn target_has_identity_tokens(target: &str) -> bool {
@@ -969,21 +1639,24 @@ fn place_category_for_entity(fact_index: &ServingFactIndex, entity_id: &str) -> 
         .iter()
         .filter(|fact| fact.fact_key.eq_ignore_ascii_case("place.category"))
         .filter_map(|fact| match &fact.value {
-            FactValue::Text(value) if !value.trim().is_empty() => {
-                Some((value.trim(), fact.confidence, fact.learned_at))
-            }
+            FactValue::Text(value) if !value.trim().is_empty() => Some((value.trim(), fact)),
             FactValue::Tags(values) => values
                 .iter()
                 .find(|value| !value.trim().is_empty())
-                .map(|value| (value.trim(), fact.confidence, fact.learned_at)),
+                .map(|value| (value.trim(), fact)),
             _ => None,
         })
         .max_by(|left, right| {
             left.1
-                .total_cmp(&right.1)
-                .then_with(|| left.2.cmp(&right.2))
+                .confidence
+                .total_cmp(&right.1.confidence)
+                .then_with(|| {
+                    left.1
+                        .stable_selection_key()
+                        .cmp(&right.1.stable_selection_key())
+                })
         })
-        .map(|(category, _, _)| category.to_string())
+        .map(|(category, _)| category.to_string())
 }
 
 fn remove_exact_places_contained_in_longer_match(places: &mut Vec<ResolvedGeoPlace>) {
@@ -1294,7 +1967,7 @@ mod tests {
 
     #[test]
     fn ranked_geo_candidates_gate_evidence_on_generic_structured_matches() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![GeoPlace {
                 entity_id: "place:bagmane".to_string(),
                 name: "Bagmane Tech Park".to_string(),
@@ -1332,6 +2005,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Near Society".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: "Near Society".to_string(),
         }];
         let edges = vec![crate::serving::ServingEdgeRecord {
@@ -1340,6 +2014,7 @@ mod tests {
             edge_type: "in_society".to_string(),
             confidence: 1.0,
             source_type: "unit-test".to_string(),
+            derivation: None,
         }];
         let search_index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
         query.restrict_evidence_to_properties(&properties, &search_index, &["near".to_string()]);
@@ -1404,7 +2079,7 @@ mod tests {
 
     #[test]
     fn society_coordinate_lookup_normalizes_runtime_soc_prefix() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: Vec::new(),
             society_coordinates: vec![EntityCoordinates {
                 entity_id: "society:sumadhura-capitol-residences".to_string(),
@@ -1473,6 +2148,7 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at: chrono::Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+            observation: None,
         }
     }
 
@@ -1494,6 +2170,7 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at: chrono::Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+            observation: None,
         }
     }
 
@@ -1547,7 +2224,7 @@ mod tests {
 
     #[test]
     fn exact_place_mentions_do_not_expand_to_generic_place_family_matches() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![
                 GeoPlace {
                     entity_id: "place:hm".to_string(),
@@ -1579,7 +2256,7 @@ mod tests {
 
     #[test]
     fn explicit_metro_family_rejects_competing_park_entities() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![
                 GeoPlace {
                     entity_id: "place:kadugodi-park".to_string(),
@@ -1603,17 +2280,26 @@ mod tests {
             society_coordinates: Vec::new(),
         };
 
+        let raw_query = "3bhk near Kadugodi Metro";
         let query = index
-            .query("3bhk near Kadugodi Metro")
+            .query(raw_query)
             .expect("explicit metro clause should resolve");
 
         assert_eq!(query.resolved_places().len(), 1);
         assert_eq!(query.resolved_places()[0].entity_id, "place:kadugodi-metro");
+        let ast_terms = query.ast_terms();
+        let [ConstraintTerm::Spatial {
+            span: Some(span), ..
+        }] = ast_terms.as_slice()
+        else {
+            panic!("resolved relation should compile to one spanned spatial predicate");
+        };
+        assert_eq!(&raw_query[span.start..span.end], "Kadugodi Metro");
     }
 
     #[test]
     fn named_place_without_radius_recalls_and_proves_inventory_beyond_scoring_boundary() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![GeoPlace {
                 entity_id: "place:bagmane".to_string(),
                 name: "Bagmane Tech Park".to_string(),
@@ -1653,7 +2339,7 @@ mod tests {
 
     #[test]
     fn distinctive_partial_place_token_resolves_named_place() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![
                 GeoPlace {
                     entity_id: "place:hospital".to_string(),
@@ -1690,7 +2376,7 @@ mod tests {
 
     #[test]
     fn distinctive_two_token_name_resolves_place_with_long_tagline() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![GeoPlace {
                 entity_id: "place:school".to_string(),
                 name: "Northstar High - Learn. Lead. Succeed".to_string(),
@@ -1716,7 +2402,7 @@ mod tests {
 
     #[test]
     fn generic_place_family_tokens_do_not_resolve_as_named_places() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![
                 GeoPlace {
                     entity_id: "place:hm".to_string(),
@@ -1752,7 +2438,7 @@ mod tests {
 
     #[test]
     fn generic_place_family_clauses_do_not_fuzzily_resolve_named_places() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![GeoPlace {
                 entity_id: "place:montessori".to_string(),
                 name: "Mont Ivy Montessori Preschools Near Me".to_string(),
@@ -1784,7 +2470,7 @@ mod tests {
             significant_place_tokens("Tech Park").is_empty(),
             "generic place tokens should come from scoring policy config"
         );
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![GeoPlace {
                 entity_id: "place:generic-tech-park".to_string(),
                 name: "Tech Park".to_string(),
@@ -1805,7 +2491,7 @@ mod tests {
 
     #[test]
     fn place_mentions_without_relation_do_not_trigger_geo_query() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![GeoPlace {
                 entity_id: "place:deens".to_string(),
                 name: "Deens Academy".to_string(),
@@ -1826,12 +2512,16 @@ mod tests {
 
     #[test]
     fn unsupported_or_named_targets_do_not_fall_back_to_partial_category_words() {
-        let index = GeoSearchIndex::default();
+        let index = SpatialEntityIndex::default();
 
-        assert!(index.query("3bhk near a police station").is_none());
-        assert!(index
+        let unsupported = index
+            .query("3bhk near a police station")
+            .expect("unresolved identity should remain diagnostic");
+        assert_eq!(unsupported.unresolved_targets(), ["a police station"]);
+        let missing_named = index
             .query("2bhk near Basavanpura Lake under 2cr")
-            .is_none());
+            .expect("missing named place should remain diagnostic");
+        assert_eq!(missing_named.unresolved_targets(), ["basavanpura lake"]);
     }
 
     #[test]
@@ -1842,6 +2532,7 @@ mod tests {
                 entity_type: "area".to_string(),
                 name: "Whitefield".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -1849,6 +2540,7 @@ mod tests {
                 entity_type: "area".to_string(),
                 name: "Marathahalli".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Marathahalli".to_string(),
             },
         ];
@@ -1861,7 +2553,7 @@ mod tests {
             ],
             Vec::new(),
         );
-        let index = GeoSearchIndex::from_serving_bundle(&entities, &facts);
+        let index = SpatialEntityIndex::from_serving_bundle(&entities, &facts);
 
         let query = index
             .query(
@@ -1894,6 +2586,37 @@ mod tests {
     }
 
     #[test]
+    fn polygon_only_area_resolves_without_fabricating_coordinate_facts() {
+        let area_id = "area:osm:relation-123";
+        let entities = vec![ServingEntityRecord {
+            entity_id: area_id.to_string(),
+            entity_type: "area".to_string(),
+            name: "Fixture Locality".to_string(),
+            root_source: Some("openstreetmap".to_string()),
+            visibility: Default::default(),
+            searchable_text: "Fixture Locality".to_string(),
+        }];
+        let facts = ServingFactIndex::from_records(
+            vec![serving_text_fact(
+                area_id,
+                "geo.geometry_geojson",
+                r#"{"type":"Polygon","coordinates":[[[77.0,12.0],[77.1,12.0],[77.1,12.1],[77.0,12.0]]]}"#,
+                "OpenStreetMap",
+            )],
+            Vec::new(),
+        );
+
+        let index = SpatialEntityIndex::from_serving_bundle(&entities, &facts);
+        let query = index
+            .query("3BHK inside Fixture Locality")
+            .expect("polygon-backed areas should resolve by serving identity");
+
+        assert_eq!(query.resolved_clauses().len(), 1);
+        assert_eq!(query.resolved_clauses()[0].relation, "inside");
+        assert_eq!(query.resolved_clauses()[0].place_entity_ids, [area_id]);
+    }
+
+    #[test]
     fn hard_multi_clause_recall_requires_every_distance_bound_clause() {
         let hospital_id = "place:google:manipal";
         let office_id = "place:google:itpb";
@@ -1903,6 +2626,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Whitefield".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -1910,6 +2634,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "International Tech Park Bengaluru ITPB".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "International Tech Park Bengaluru ITPB".to_string(),
             },
             ServingEntityRecord {
@@ -1917,6 +2642,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Hebbal".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Hebbal".to_string(),
             },
             ServingEntityRecord {
@@ -1924,6 +2650,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital EPIP Whitefield".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital EPIP Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -1931,6 +2658,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Clinics Begur".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Clinics Begur".to_string(),
             },
             ServingEntityRecord {
@@ -1938,6 +2666,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Varthur Road".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Varthur Road".to_string(),
             },
             ServingEntityRecord {
@@ -1945,6 +2674,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Yeshwanthpur".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Yeshwanthpur".to_string(),
             },
         ];
@@ -2007,7 +2737,7 @@ mod tests {
             local_property("outside-office-limit", "outside-office-limit"),
             local_property("wrong-hospital", "wrong-hospital"),
         ];
-        let index = GeoSearchIndex::from_serving_bundle(&entities, &facts);
+        let index = SpatialEntityIndex::from_serving_bundle(&entities, &facts);
         let query = index
             .query("3bhk within 1 km of Manipal Hospital Whitefield and within 3 km of ITPB")
             .expect("both hard anchors should resolve");
@@ -2036,6 +2766,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Whitefield".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -2043,6 +2774,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "International Tech Park Bengaluru ITPB".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "International Tech Park Bengaluru ITPB".to_string(),
             },
             ServingEntityRecord {
@@ -2050,6 +2782,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Hebbal".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Hebbal".to_string(),
             },
             ServingEntityRecord {
@@ -2057,6 +2790,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital EPIP Whitefield".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital EPIP Whitefield".to_string(),
             },
             ServingEntityRecord {
@@ -2064,6 +2798,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Clinics Begur".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Clinics Begur".to_string(),
             },
             ServingEntityRecord {
@@ -2071,6 +2806,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Varthur Road".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Varthur Road".to_string(),
             },
             ServingEntityRecord {
@@ -2078,6 +2814,7 @@ mod tests {
                 entity_type: "place".to_string(),
                 name: "Manipal Hospital Yeshwanthpur".to_string(),
                 root_source: None,
+                visibility: Default::default(),
                 searchable_text: "Manipal Hospital Yeshwanthpur".to_string(),
             },
         ];
@@ -2166,7 +2903,7 @@ mod tests {
             ],
             Vec::new(),
         );
-        let index = GeoSearchIndex::from_serving_bundle(&entities, &facts);
+        let index = SpatialEntityIndex::from_serving_bundle(&entities, &facts);
         let query = index
             .query("3bhk within 1 km of Manipal Hospital and within 3 km of ITPB")
             .expect("both hard anchors should resolve");
@@ -2176,13 +2913,13 @@ mod tests {
         ];
         let candidate_ids = query.candidate_property_ids(&properties);
 
-        assert_eq!(candidate_ids, vec!["both"]);
-        assert!(query.unresolved_targets().is_empty());
+        assert!(candidate_ids.is_empty());
+        assert_eq!(query.unresolved_targets(), ["manipal hospital"]);
     }
 
     #[test]
     fn longest_exact_place_name_suppresses_contained_entity() {
-        let index = GeoSearchIndex {
+        let index = SpatialEntityIndex {
             places: vec![
                 GeoPlace {
                     entity_id: "place:area:banashankari".to_string(),

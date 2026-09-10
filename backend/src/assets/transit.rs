@@ -247,6 +247,11 @@ fn push_fact(
         learned_at,
         run_id: run_id.to_string(),
         input_hash: station_fact_hash(station, fact_key),
+        observation_provider: Some("OpenStreetMap".to_string()),
+        provider_observation_id: Some(format!("osm:{}", station.station_id.trim())),
+        asset_lineage: vec![format!(
+            "asset:{BENGALURU_METRO_STATION_FACTS_ASSET_ID}/run:{run_id}"
+        )],
     });
     let key = (entity_id.to_string(), fact_key.to_string());
     if annotation_keys.insert(key) {
@@ -561,5 +566,10 @@ mod tests {
             .fact_annotations
             .iter()
             .any(|annotation| annotation.fact_key == "transit.lines"));
+        assert!(output.facts.iter().all(|fact| {
+            fact.observation_provider.as_deref() == Some("OpenStreetMap")
+                && fact.provider_observation_id.as_deref() == Some("osm:node/1")
+                && fact.asset_lineage == ["asset:bengaluru_metro_station_facts/run:run-1"]
+        }));
     }
 }

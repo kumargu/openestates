@@ -13,6 +13,9 @@
     "never_default": true
   },
   "runtime": {
+    "society_identity_fact_keys": [
+      "rera_number"
+    ],
     "multi_value_fact_keys": [
       "nearby_schools",
       "nearby_metro_stations",
@@ -4127,6 +4130,69 @@
       }
     },
     {
+      "fact_key": "market.locality_name",
+      "bucket": "geo",
+      "label": "market locality name",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "area"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "SourceEntitySeed"
+      ],
+      "display_template": "Market locality: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "area.admin_level",
+      "bucket": "geo",
+      "label": "administrative level",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "area"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "Administrative level: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "area.osm_boundary_members",
+      "bucket": "geo",
+      "label": "OSM boundary members",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "area"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": null,
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
       "fact_key": "place.types",
       "bucket": "geo",
       "label": "place types",
@@ -4212,44 +4278,24 @@
       }
     },
     {
-      "fact_key": "society.boundary_geojson",
-      "bucket": "geo",
-      "label": "society boundary",
-      "lens": "proof",
-      "polarity": "neutral",
-      "scopes": [
-        "society"
-      ],
-      "enrichment_terms": [],
-      "answers_preferences": [
-        "society boundary",
-        "site outline",
-        "project footprint"
-      ],
-      "never_default": true,
-      "source_types": [
-        "OpenStreetMap"
-      ],
-      "display_template": null,
-      "scoring_hint": {
-        "direction": "text_match",
-        "weight": 0.0
-      }
-    },
-    {
       "fact_key": "geo.geometry_geojson",
       "bucket": "geo",
       "label": "geometry GeoJSON",
       "lens": "proof",
       "polarity": "neutral",
       "scopes": [
-        "place"
+        "area",
+        "place",
+        "society"
       ],
       "enrichment_terms": [],
       "answers_preferences": [
         "map overlay",
         "geometry",
-        "geojson"
+        "geojson",
+        "society boundary",
+        "site outline",
+        "project footprint"
       ],
       "never_default": true,
       "source_types": [
@@ -8094,7 +8140,7 @@
       }
     }
   ],
-  "fact_count": 139,
+  "fact_count": 142,
   "excluded_search_fact_keys": [
     "google_review_cards",
     "google_review_snippets"

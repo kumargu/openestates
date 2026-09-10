@@ -1,11 +1,40 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::knowledge::FactValue;
 
-pub const SEARCH_SERVING_BUNDLE_ASSET_ID: &str = "search_serving_bundle";
+use super::evidence::{DerivedEvidence, EvidenceId, EvidenceIdentityError, SourceObservation};
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ServingEntityVisibility {
+    #[default]
+    Searchable,
+    Internal,
+}
+
+impl ServingEntityVisibility {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Searchable => "searchable",
+            Self::Internal => "internal",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "searchable" => Some(Self::Searchable),
+            "internal" => Some(Self::Internal),
+            _ => None,
+        }
+    }
+
+    pub fn is_searchable(self) -> bool {
+        self == Self::Searchable
+    }
+}
 
 /// One entity row in the request-path bundle.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -14,6 +43,8 @@ pub struct ServingEntityRecord {
     pub entity_type: String,
     pub name: String,
     pub root_source: Option<String>,
+    #[serde(default)]
+    pub visibility: ServingEntityVisibility,
     pub searchable_text: String,
 }
 
@@ -31,6 +62,46 @@ pub struct ServingFactRecord {
     pub model: Option<String>,
     pub skill_id: Option<String>,
     pub learned_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observation: Option<SourceObservation>,
+}
+
+impl ServingFactRecord {
+    pub fn validate_observation(&self) -> Result<(), EvidenceIdentityError> {
+        let Some(observation) = &self.observation else {
+            return Ok(());
+        };
+        observation.validate()?;
+        if observation.subject_entity_id != self.entity_id {
+            return Err(EvidenceIdentityError::SubjectMismatch {
+                expected: self.entity_id.clone(),
+                actual: observation.subject_entity_id.clone(),
+            });
+        }
+        Ok(())
+    }
+
+    pub(crate) fn stable_selection_key(&self) -> String {
+        let value = serde_json::to_string(&self.value).unwrap_or_default();
+        self.observation.as_ref().map_or_else(
+            || {
+                format!(
+                    "{}|{}|{}|{}|{value}",
+                    self.source_type,
+                    self.source_url.as_deref().unwrap_or_default(),
+                    self.skill_id.as_deref().unwrap_or_default(),
+                    self.fact_key
+                )
+            },
+            |observation| {
+                format!(
+                    "{}|{}|{value}",
+                    observation.observation_id.as_str(),
+                    self.fact_key
+                )
+            },
+        )
+    }
 }
 
 /// One graph edge row in the request-path bundle.
@@ -41,6 +112,95 @@ pub struct ServingEdgeRecord {
     pub to_entity_id: String,
     pub confidence: f32,
     pub source_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub derivation: Option<DerivedEvidence>,
+}
+
+impl ServingEdgeRecord {
+    pub fn validate_derivation(&self, snapshot_identity: &str) -> Result<(), String> {
+        let Some(derivation) = &self.derivation else {
+            return Ok(());
+        };
+        derivation.validate().map_err(|error| error.to_string())?;
+        if derivation.snapshot_identity != snapshot_identity
+            || derivation.subject_entity_id != self.from_entity_id
+            || derivation.target_entity_id.as_deref() != Some(self.to_entity_id.as_str())
+            || derivation.relation != self.edge_type
+            || derivation.confidence != self.confidence
+        {
+            return Err("edge derivation does not match its relation row".to_string());
+        }
+        Ok(())
+    }
+}
+
+pub fn validate_serving_edge_evidence<'a>(
+    edges: &[ServingEdgeRecord],
+    facts: impl IntoIterator<Item = &'a ServingFactRecord>,
+    snapshot_identity: &str,
+) -> Result<(), String> {
+    let mut evidence_subjects = HashMap::<EvidenceId, String>::new();
+    for fact in facts {
+        fact.validate_observation()
+            .map_err(|error| format!("fact {}/{}: {error}", fact.entity_id, fact.fact_key))?;
+        let Some(observation) = &fact.observation else {
+            continue;
+        };
+        insert_evidence_subject(
+            &mut evidence_subjects,
+            EvidenceId::Observation(observation.observation_id.clone()),
+            &observation.subject_entity_id,
+        )?;
+    }
+    for edge in edges {
+        edge.validate_derivation(snapshot_identity)
+            .map_err(|error| {
+                format!(
+                    "edge {} -[{}]-> {} has invalid derivation: {error}",
+                    edge.from_entity_id, edge.edge_type, edge.to_entity_id
+                )
+            })?;
+        if let Some(derivation) = &edge.derivation {
+            insert_evidence_subject(
+                &mut evidence_subjects,
+                EvidenceId::Derivation(derivation.derivation_id.clone()),
+                &derivation.subject_entity_id,
+            )?;
+        }
+    }
+    for edge in edges {
+        let Some(derivation) = &edge.derivation else {
+            continue;
+        };
+        for reference in &derivation.input_evidence {
+            let Some(actual_subject) = evidence_subjects.get(&reference.evidence_id) else {
+                return Err(format!(
+                    "edge {} -[{}]-> {} has a dangling input evidence reference",
+                    edge.from_entity_id, edge.edge_type, edge.to_entity_id
+                ));
+            };
+            if actual_subject != &reference.subject_entity_id {
+                return Err(format!(
+                    "edge {} -[{}]-> {} has a cross-subject input evidence reference",
+                    edge.from_entity_id, edge.edge_type, edge.to_entity_id
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn insert_evidence_subject(
+    evidence_subjects: &mut HashMap<EvidenceId, String>,
+    evidence_id: EvidenceId,
+    subject_entity_id: &str,
+) -> Result<(), String> {
+    if let Some(existing) = evidence_subjects.insert(evidence_id, subject_entity_id.to_string()) {
+        if existing != subject_entity_id {
+            return Err("one evidence identity is bound to multiple subjects".to_string());
+        }
+    }
+    Ok(())
 }
 
 /// Search-specific metadata layered over canonical fact rows.
@@ -57,6 +217,7 @@ pub struct ServingSearchMetadataRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServingBundleSchema {
     pub format_version: u32,
     pub storage_format: String,
@@ -65,6 +226,7 @@ pub struct ServingBundleSchema {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServingTableSchema {
     pub name: String,
     pub path: String,
@@ -72,6 +234,7 @@ pub struct ServingTableSchema {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServingColumnSchema {
     pub name: String,
     pub logical_type: String,
@@ -127,6 +290,49 @@ impl ServingFactIndex {
             }
             if let Some(rows) = self.by_entity.get(&canonical_id).cloned() {
                 self.by_entity.insert(alias, rows);
+            }
+        }
+    }
+
+    pub fn add_canonical_spatial_bindings(&mut self, edges: &[ServingEdgeRecord]) {
+        let mut providers_by_canonical = BTreeMap::<String, BTreeSet<String>>::new();
+        for edge in edges.iter().filter(|edge| {
+            edge.edge_type
+                .eq_ignore_ascii_case(super::PROVIDER_BINDING_EDGE)
+        }) {
+            providers_by_canonical
+                .entry(edge.from_entity_id.clone())
+                .or_default()
+                .insert(edge.to_entity_id.clone());
+        }
+        for (canonical_id, provider_ids) in providers_by_canonical {
+            let mut facts = Vec::new();
+            let mut metadata = Vec::new();
+            for provider_id in provider_ids {
+                if let Some(rows) = self.by_entity.get(&provider_id) {
+                    facts.extend(rows.facts.clone());
+                    metadata.extend(rows.search_metadata.clone());
+                }
+            }
+            facts.sort_by_key(ServingFactRecord::stable_selection_key);
+            metadata.sort_by(|left, right| {
+                left.fact_key
+                    .cmp(&right.fact_key)
+                    .then_with(|| left.entity_id.cmp(&right.entity_id))
+            });
+            let mut rows = ServingEntityFactRows {
+                facts,
+                search_metadata: metadata,
+                search_metadata_by_fact_key: HashMap::new(),
+            };
+            for (index, metadata) in rows.search_metadata.iter().enumerate() {
+                rows.search_metadata_by_fact_key
+                    .entry(metadata.fact_key.to_ascii_lowercase())
+                    .or_default()
+                    .push(index);
+            }
+            if !rows.facts.is_empty() {
+                self.by_entity.insert(canonical_id, rows);
             }
         }
     }
@@ -214,14 +420,13 @@ pub enum BundleArtifactKind {
     SearchMetadataParquet,
     ReraEvidenceParquet,
     SchemaJson,
-    TrustPolicyJson,
     QuarantineJson,
     TantivyIndexFile,
-    #[serde(other)]
     Other,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BundleArtifact {
     pub kind: BundleArtifactKind,
     pub key: String,
@@ -233,6 +438,7 @@ pub struct BundleArtifact {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServingQuarantineReport {
     pub format_version: u32,
     pub eligibility_policy_version: u32,
@@ -243,6 +449,7 @@ pub struct ServingQuarantineReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct QuarantinedSociety {
     pub runtime_society_id: String,
     pub society_entity_ids: Vec<String>,
@@ -250,31 +457,6 @@ pub struct QuarantinedSociety {
     pub property_entity_ids: Vec<String>,
     pub projected_property_ids: Vec<String>,
     pub reason_codes: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TrustPolicy {
-    pub version: u32,
-    pub proof_sources: Vec<String>,
-    pub support_sources: Vec<String>,
-    pub ai_source_max_confidence: f32,
-}
-
-impl Default for TrustPolicy {
-    fn default() -> Self {
-        Self {
-            version: 1,
-            proof_sources: vec!["Rera".to_string(), "Bbmp".to_string(), "Manual".to_string()],
-            support_sources: vec![
-                "Reddit".to_string(),
-                "Google".to_string(),
-                "News".to_string(),
-                "Computed".to_string(),
-                "BuilderOfficial".to_string(),
-            ],
-            ai_source_max_confidence: 0.5,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -298,6 +480,7 @@ mod tests {
                 model: None,
                 skill_id: None,
                 learned_at,
+                observation: None,
             }],
             Vec::new(),
         );
@@ -306,6 +489,7 @@ mod tests {
             entity_type: "society".to_string(),
             name: "Prestige Falcon City".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }]);
 
@@ -318,42 +502,31 @@ mod tests {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServingBundleManifest {
     pub bundle_version: String,
     pub format_version: u32,
     pub created_at: DateTime<Utc>,
     pub entity_count: u64,
-    #[serde(default)]
     pub entity_alias_count: u64,
     pub fact_count: u64,
     pub search_metadata_count: u64,
-    #[serde(default)]
     pub rera_evidence_count: u64,
     /// RERA evidence collected for societies outside this bundle's catalog.
     /// These rows remain in durable RERA assets but are never exposed at runtime.
-    #[serde(default)]
     pub excluded_rera_evidence_society_ids: Vec<String>,
-    #[serde(default)]
     pub edge_count: u64,
-    #[serde(default)]
     pub eligibility_policy_version: u32,
-    #[serde(default)]
     pub quarantined_society_count: u64,
-    #[serde(default)]
     pub quarantine_reason_counts: BTreeMap<String, u64>,
     pub entity_parquet_key: String,
-    #[serde(default)]
-    pub entity_alias_parquet_key: Option<String>,
+    pub entity_alias_parquet_key: String,
     pub fact_parquet_key: String,
     pub search_metadata_parquet_key: String,
-    #[serde(default)]
-    pub rera_evidence_parquet_key: Option<String>,
-    #[serde(default)]
-    pub edge_parquet_key: Option<String>,
-    #[serde(default)]
-    pub quarantine_report_key: Option<String>,
+    pub rera_evidence_parquet_key: String,
+    pub edge_parquet_key: String,
+    pub quarantine_report_key: String,
     pub schema_key: String,
-    pub trust_policy_key: String,
     pub tantivy_index_prefix: String,
     pub artifacts: Vec<BundleArtifact>,
 }

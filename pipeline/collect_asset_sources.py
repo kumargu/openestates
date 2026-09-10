@@ -36,6 +36,7 @@ from pipeline.skills.fetch_rera import (
 )
 from pipeline.skills.rera_regulatory_intelligence import (
     DocumentScope,
+    RegulatoryIntelligenceError,
     build_regulatory_source_records,
     load_policy as load_rera_regulatory_policy,
     redacted_document,
@@ -152,6 +153,7 @@ EXTERNAL_LISTINGS_WEEKLY = "external_listings_weekly"
 EXTERNAL_IMAGES_WEEKLY = "external_images_weekly"
 SOCIETY_GROUNDWATER_POTENTIAL_FACTS = "society_groundwater_potential_facts"
 BENGALURU_METRO_STATION_FACTS = "bengaluru_metro_station_facts"
+OSM_LOCALITY_BOUNDARY_FACTS = "osm_locality_boundary_facts"
 OSM_POWER_LINE_FACTS = "osm_power_line_facts"
 OSM_SOCIETY_ACCESS_FACTS = "osm_society_access_facts"
 STORMWATER_DRAIN_FACTS = "stormwater_drain_facts"
@@ -183,6 +185,7 @@ SUPPORTED_ASSETS = frozenset(
         EXTERNAL_IMAGES_WEEKLY,
         SOCIETY_GROUNDWATER_POTENTIAL_FACTS,
         BENGALURU_METRO_STATION_FACTS,
+        OSM_LOCALITY_BOUNDARY_FACTS,
         OSM_SOCIETY_ACCESS_FACTS,
         OSM_POWER_LINE_FACTS,
         STORMWATER_DRAIN_FACTS,
@@ -298,6 +301,17 @@ def collect_asset_sources(
                 record_source_failure(
                     source_failures, [BENGALURU_METRO_STATION_FACTS], error
                 )
+    if OSM_LOCALITY_BOUNDARY_FACTS in requested:
+        try:
+            from pipeline.sources.osm_locality_boundaries import collect_locality_boundaries
+
+            output["osm_locality_boundaries"] = collect_locality_boundaries(
+                snapshot_date,
+                os.environ.get("OPENESTATES_OVERPASS_API_URL") or OVERPASS_API_URL,
+                fetch_overpass_json,
+            )
+        except Exception as error:
+            record_source_failure(source_failures, [OSM_LOCALITY_BOUNDARY_FACTS], error)
     if OSM_SOCIETY_ACCESS_FACTS in requested:
         try:
             output["osm_society_access"] = collect_osm_society_access(
@@ -1556,14 +1570,11 @@ def skip_reddit_collection() -> bool:
 
 
 def empty_reddit_assets(request: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    from pipeline.skills.reddit_poc_import import collect_reddit_poc_fact_rows
-
     planned_at = normalized_planned_at(request)
     partition = partition_values(request)
     snapshot_date = partition.get("dt") or planned_at[:10]
     subreddit = partition.get("subreddit") or "BangaloreRealEstates"
     watermark = {"source": "reddit_skipped", "high_watermark": planned_at}
-    poc_facts, poc_annotations = collect_reddit_poc_fact_rows(snapshot_date)
     return (
         {
             "snapshot_date": snapshot_date,
@@ -1574,8 +1585,8 @@ def empty_reddit_assets(request: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[s
         {
             "source": "reddit",
             "snapshot_date": snapshot_date,
-            "facts": poc_facts,
-            "fact_annotations": poc_annotations,
+            "facts": [],
+            "fact_annotations": [],
             "source_watermarks": [watermark],
         },
     )
@@ -2448,12 +2459,19 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
                 "crawl_run_id": snapshot["crawl_run_id"],
             }
         )
-    if force_refresh and scoped_rera_entities(request):
-        regulatory_payloads = capture_scoped_rera_regulatory_payloads(request)
-    else:
-        regulatory_payloads = load_scoped_rera_regulatory_payloads(request)
-        if len(regulatory_payloads) < len(scoped_rera_entities(request)):
+    try:
+        if force_refresh and scoped_rera_entities(request):
             regulatory_payloads = capture_scoped_rera_regulatory_payloads(request)
+        else:
+            regulatory_payloads = load_scoped_rera_regulatory_payloads(request)
+            if len(regulatory_payloads) < len(scoped_rera_entities(request)):
+                regulatory_payloads = capture_scoped_rera_regulatory_payloads(request)
+    except RegulatoryIntelligenceError as error:
+        logger.warning(
+            "K-RERA regulatory lists unavailable; leaving regulatory coverage empty: %s",
+            error,
+        )
+        regulatory_payloads = []
     regulatory_receipt_keys = set()
     for payload in regulatory_payloads:
         for receipt in payload["receipts"]:

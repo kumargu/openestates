@@ -32,6 +32,8 @@ pub(crate) struct BhkConstraint {
     pub polarity: SlotPolarity,
     pub start: usize,
     pub end: usize,
+    pub cluster_start: usize,
+    pub cluster_end: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -200,14 +202,8 @@ fn amounts_form_budget_range(
     config: &UnitValueParserConfig,
 ) -> bool {
     let between_tokens = &tokens[left.end.min(tokens.len())..right.start.min(tokens.len())];
-    let has_connector = between_tokens
-        .iter()
-        .any(|token| is_range_connector(token, config))
-        || between_tokens.is_empty();
-    let has_between_prefix = tokens
-        .get(..left.start)
-        .is_some_and(|prefix| phrase_matches_suffix(prefix, "between"));
-    has_between_prefix || has_connector
+    between_tokens.is_empty()
+        || matches!(between_tokens, [connector] if is_range_connector(connector, config))
 }
 
 fn collect_money_amounts(
@@ -455,16 +451,13 @@ fn parse_bhks(tokens: &[SpannedToken], config: &BhkParserConfig) -> Vec<BhkConst
     while index < tokens.len() {
         match parse_bhk_cluster(tokens, index, config) {
             Some((mut constraints, consumed)) if consumed > 0 => {
-                let (polarity, clause_start) = cluster_polarity(tokens, index, config);
-                let raw_text = tokens[clause_start..index + consumed]
-                    .iter()
-                    .map(|token| token.text.as_str())
-                    .collect::<Vec<_>>()
-                    .join(" ");
+                let (polarity, _) = cluster_polarity(tokens, index, config);
+                let cluster_start = tokens[index].start;
+                let cluster_end = tokens[index + consumed - 1].end;
                 for constraint in &mut constraints {
                     constraint.polarity = polarity;
-                    constraint.start = tokens[clause_start].start;
-                    constraint.raw_text = raw_text.clone();
+                    constraint.cluster_start = cluster_start;
+                    constraint.cluster_end = cluster_end;
                     found.push(constraint.clone());
                 }
                 index += consumed;
@@ -480,7 +473,7 @@ fn parse_bhk_cluster(
     start: usize,
     config: &BhkParserConfig,
 ) -> Option<(Vec<BhkConstraint>, usize)> {
-    let mut values = Vec::new();
+    let mut constraints = Vec::new();
     let mut cursor = start;
     let mut saw_unit = false;
 
@@ -489,14 +482,19 @@ fn parse_bhk_cluster(
             break;
         }
 
-        if !values.is_empty() && is_bhk_joiner(&tokens[cursor].text, config) {
+        if !constraints.is_empty() && is_bhk_joiner(&tokens[cursor].text, config) {
             cursor += 1;
             continue;
         }
 
         if let Some((value, _unit)) = parse_compound_bhk_unit(&tokens[cursor].text, config) {
             if bhk_in_range(value, config) {
-                push_unique_bhk(&mut values, value);
+                push_unique_bhk_constraint(
+                    &mut constraints,
+                    value,
+                    &tokens[cursor],
+                    &tokens[cursor],
+                );
                 saw_unit = true;
                 cursor += 1;
                 continue;
@@ -511,7 +509,12 @@ fn parse_bhk_cluster(
                 .and_then(|token| matching_alias(&token.text, &config.unit_aliases));
             if unit_on_token.is_some() || unit_next.is_some() || saw_unit {
                 for value in alts {
-                    push_unique_bhk(&mut values, value);
+                    let end_token = if unit_on_token.is_none() && unit_next.is_some() {
+                        &tokens[cursor + 1]
+                    } else {
+                        &tokens[cursor]
+                    };
+                    push_unique_bhk_constraint(&mut constraints, value, &tokens[cursor], end_token);
                 }
                 if unit_on_token.is_some() {
                     saw_unit = true;
@@ -548,7 +551,12 @@ fn parse_bhk_cluster(
                 .is_some_and(|token| is_bhk_joiner(&token.text, config));
 
             if unit_next.is_some() {
-                push_unique_bhk(&mut values, value);
+                push_unique_bhk_constraint(
+                    &mut constraints,
+                    value,
+                    &tokens[cursor],
+                    &tokens[cursor + 1],
+                );
                 saw_unit = true;
                 cursor += 2;
                 continue;
@@ -556,7 +564,12 @@ fn parse_bhk_cluster(
             if next_is_joiner
                 || (next_is_bhk_number && (next_next_is_unit || next_next_is_joiner || saw_unit))
             {
-                push_unique_bhk(&mut values, value);
+                push_unique_bhk_constraint(
+                    &mut constraints,
+                    value,
+                    &tokens[cursor],
+                    &tokens[cursor],
+                );
                 cursor += 1;
                 continue;
             }
@@ -565,27 +578,9 @@ fn parse_bhk_cluster(
         break;
     }
 
-    if values.is_empty() || !saw_unit {
+    if constraints.is_empty() || !saw_unit {
         return None;
     }
-
-    let raw_text = values
-        .iter()
-        .map(|value| format!("{value} bhk"))
-        .collect::<Vec<_>>()
-        .join(" or ");
-    let span_start = tokens[start].start;
-    let span_end = tokens[cursor.saturating_sub(1).max(start)].end;
-    let constraints = values
-        .into_iter()
-        .map(|value| BhkConstraint {
-            value,
-            raw_text: raw_text.clone(),
-            polarity: SlotPolarity::Include,
-            start: span_start,
-            end: span_end,
-        })
-        .collect();
     Some((constraints, cursor - start))
 }
 
@@ -629,9 +624,29 @@ fn is_bhk_joiner(token: &str, config: &BhkParserConfig) -> bool {
         .any(|joiner| token.eq_ignore_ascii_case(joiner))
 }
 
-fn push_unique_bhk(values: &mut Vec<u32>, value: u32) {
-    if !values.contains(&value) {
-        values.push(value);
+fn push_unique_bhk_constraint(
+    constraints: &mut Vec<BhkConstraint>,
+    value: u32,
+    start_token: &SpannedToken,
+    end_token: &SpannedToken,
+) {
+    if !constraints
+        .iter()
+        .any(|constraint| constraint.value == value)
+    {
+        constraints.push(BhkConstraint {
+            value,
+            raw_text: if start_token.start == end_token.start {
+                start_token.text.clone()
+            } else {
+                format!("{} {}", start_token.text, end_token.text)
+            },
+            polarity: SlotPolarity::Include,
+            start: start_token.start,
+            end: end_token.end,
+            cluster_start: start_token.start,
+            cluster_end: end_token.end,
+        });
     }
 }
 
@@ -1536,6 +1551,34 @@ mod tests {
                 .map(|budget| &query[budget.start..budget.end])
                 .collect::<Vec<_>>(),
             vec!["2Cr", "4Cr"]
+        );
+    }
+
+    #[test]
+    fn does_not_form_budget_ranges_across_discourse_branches() {
+        let query = "If it’s in Electronic City, keep it below ₹1.8 Cr; if it’s on Kanakapura Road, I can stretch to ₹2.4 Cr—but I need a 3BHK either way.";
+        let slots = parse_query_slots(query);
+
+        assert_eq!(slots.budgets.len(), 2);
+        assert_eq!(
+            slots
+                .budgets
+                .iter()
+                .map(|budget| (budget.min.as_ref(), budget.max.as_ref()))
+                .map(|(min, max)| (min.map(|bound| bound.value), max.map(|bound| bound.value)))
+                .collect::<Vec<_>>(),
+            vec![(None, Some(18_000_000)), (None, Some(24_000_000))]
+        );
+
+        let genuine_range = parse_query_slots("Between ₹1.8 Cr and ₹2.4 Cr");
+        assert_eq!(genuine_range.budgets.len(), 1);
+        assert_eq!(
+            genuine_range.budget_min.map(|bound| bound.value),
+            Some(18_000_000)
+        );
+        assert_eq!(
+            genuine_range.budget_max.map(|bound| bound.value),
+            Some(24_000_000)
         );
     }
 

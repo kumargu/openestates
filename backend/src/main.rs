@@ -76,8 +76,6 @@ fn main() {
         println!("Environment file: {}", path.display());
     }
     println!("  POST /api/admin/serving-bundle/reload");
-    println!("  GET  /api/admin/asset-runs/current");
-    println!("  POST /api/admin/asset-runs");
 
     customer_http_runtime.block_on(async move {
         let listener = tokio::net::TcpListener::bind(&bind_address)

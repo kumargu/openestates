@@ -155,6 +155,9 @@ fn groundwater_fact(
         learned_at,
         run_id: run_id.to_string(),
         input_hash,
+        observation_provider: None,
+        provider_observation_id: None,
+        asset_lineage: Vec::new(),
     })
 }
 
@@ -347,7 +350,6 @@ struct CoordinateObservationKey {
     source_url: String,
     skill_id: String,
     run_id: String,
-    learned_at: DateTime<Utc>,
 }
 
 impl CoordinateObservationKey {
@@ -357,7 +359,6 @@ impl CoordinateObservationKey {
             source_url: fact.source_url.clone().unwrap_or_default(),
             skill_id: fact.skill_id.clone().unwrap_or_default(),
             run_id: fact.run_id.clone(),
-            learned_at: fact.learned_at,
         }
     }
 }
@@ -385,10 +386,8 @@ fn select_coordinate_candidate(
         })
         .collect::<Vec<_>>();
     complete.sort_by(|(left, _, _), (right, _, _)| {
-        right
-            .learned_at
-            .cmp(&left.learned_at)
-            .then_with(|| left.source_type.cmp(&right.source_type))
+        left.source_type
+            .cmp(&right.source_type)
             .then_with(|| left.source_url.cmp(&right.source_url))
             .then_with(|| left.skill_id.cmp(&right.skill_id))
             .then_with(|| left.run_id.cmp(&right.run_id))
@@ -631,6 +630,9 @@ mod tests {
             learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
             run_id: "test".to_string(),
             input_hash: "test".to_string(),
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         }
     }
 }

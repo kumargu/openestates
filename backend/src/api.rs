@@ -20,16 +20,17 @@ struct HealthResponse {
     process_started_at: String,
     scoring_policy_version: u32,
     recommendation_engine_version: &'static str,
-    serving_bundle_version: Option<String>,
+    serving_bundle_version: String,
 }
 
 async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     let serving_bundle_version = state
-        .serving_bundle
-        .read()
-        .await
-        .as_ref()
-        .map(|bundle| bundle.manifest.bundle_version.clone());
+        .search_runtime
+        .load()
+        .bundle
+        .manifest
+        .bundle_version
+        .clone();
     Json(HealthResponse {
         service: "openestates-api",
         status: "ok",
@@ -102,10 +103,15 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
         Router::new().route("/api/properties", get(routes::properties::list_properties)),
     );
 
-    let search_routes = Router::new().route(
-        "/api/search",
-        security.protect_search(get(routes::search::search_properties)),
-    );
+    let search_routes = Router::new()
+        .route(
+            "/api/search",
+            security.protect_search(get(routes::search::search_properties)),
+        )
+        .route(
+            "/api/search/revisions",
+            security.protect_search(post(routes::search_revisions::revise_search)),
+        );
 
     let batch_routes = security.protect_batch_reads(
         Router::new()
@@ -129,14 +135,6 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
             .route(
                 "/api/admin/serving-bundle/reload",
                 post(routes::admin::reload_serving_bundle),
-            )
-            .route(
-                "/api/admin/asset-runs/current",
-                get(routes::admin::current_asset_run),
-            )
-            .route(
-                "/api/admin/asset-runs",
-                post(routes::admin::trigger_asset_run),
             ),
     );
 

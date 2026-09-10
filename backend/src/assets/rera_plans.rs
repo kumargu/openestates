@@ -183,6 +183,9 @@ async fn rera_project_plan_frames_input_with_cache_root(
             learned_at,
             run_id: run_id.to_string(),
             input_hash: sha256_hex(payload_text.as_bytes()),
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         });
         annotations.push(SkillFactAnnotationRecord {
             entity_id: project.society_entity_id.clone(),

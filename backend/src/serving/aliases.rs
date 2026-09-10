@@ -506,6 +506,7 @@ mod tests {
             entity_type: entity_type.to_string(),
             name: name.to_string(),
             root_source: None,
+            visibility: Default::default(),
             searchable_text: name.to_string(),
         }
     }
@@ -517,6 +518,7 @@ mod tests {
             to_entity_id: builder_id.to_string(),
             confidence: 1.0,
             source_type: "Rera".to_string(),
+            derivation: None,
         }
     }
 

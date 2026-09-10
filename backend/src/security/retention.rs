@@ -10,40 +10,26 @@ pub fn prune_rebuildable_serving_cache(project_root: &Path, active_cache_dir: &P
         .join("cache")
         .join("serving")
         .join("search_bundle");
-    let active_materialization = active_cache_dir
+    let active_bundle = active_cache_dir
         .ancestors()
         .find(|path| {
             path.parent() == Some(root.as_path())
                 && path
                     .file_name()
                     .and_then(|name| name.to_str())
-                    .is_some_and(|name| name.starts_with("materialization="))
+                    .is_some_and(|name| name.starts_with("version="))
         })
         .map(Path::to_path_buf);
-    let mut entries = versioned_entries(&root, "materialization=");
+    let mut entries = versioned_entries(&root, "version=");
     entries.sort_by_key(|(_, modified)| std::cmp::Reverse(*modified));
 
     let versions_to_keep = security_tuning().retention.serving_cache_versions;
     for (index, (path, _)) in entries.into_iter().enumerate() {
-        if index < versions_to_keep || active_materialization.as_ref() == Some(&path) {
+        if index < versions_to_keep || active_bundle.as_ref() == Some(&path) {
             continue;
         }
         if let Err(error) = fs::remove_dir_all(&path) {
             eprintln!("WARN: failed to prune rebuildable serving cache {path:?}: {error}");
-        }
-    }
-}
-
-pub fn prune_asset_run_logs(log_dir: &Path, active_log: Option<&Path>) {
-    let mut entries = regular_log_entries(log_dir);
-    entries.sort_by_key(|(_, modified)| std::cmp::Reverse(*modified));
-    let files_to_keep = security_tuning().retention.asset_log_files;
-    for (index, (path, _)) in entries.into_iter().enumerate() {
-        if index < files_to_keep || active_log == Some(path.as_path()) {
-            continue;
-        }
-        if let Err(error) = fs::remove_file(&path) {
-            eprintln!("WARN: failed to prune asset-run log {path:?}: {error}");
         }
     }
 }
@@ -70,27 +56,6 @@ fn versioned_entries(root: &Path, prefix: &str) -> Vec<(PathBuf, SystemTime)> {
         .collect()
 }
 
-fn regular_log_entries(root: &Path) -> Vec<(PathBuf, SystemTime)> {
-    let Ok(entries) = fs::read_dir(root) else {
-        return Vec::new();
-    };
-    entries
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let file_type = entry.file_type().ok()?;
-            let path = entry.path();
-            if !file_type.is_file() || file_type.is_symlink() || path.extension()? != "log" {
-                return None;
-            }
-            let modified = entry
-                .metadata()
-                .and_then(|metadata| metadata.modified())
-                .unwrap_or(SystemTime::UNIX_EPOCH);
-            Some((path, modified))
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,12 +67,12 @@ mod tests {
         for index in 0..12 {
             fs::create_dir_all(
                 cache_root
-                    .join(format!("materialization={index}"))
+                    .join(format!("version={index}"))
                     .join("tantivy_index"),
             )
             .unwrap();
         }
-        let active = cache_root.join("materialization=0/tantivy_index");
+        let active = cache_root.join("version=0/tantivy_index");
         prune_rebuildable_serving_cache(root.path(), &active);
 
         assert!(active.exists());

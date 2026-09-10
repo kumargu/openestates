@@ -32,6 +32,8 @@ pub struct FactRegistryFile {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct FactRegistryRuntime {
     #[serde(default)]
+    pub society_identity_fact_keys: Vec<String>,
+    #[serde(default)]
     pub multi_value_fact_keys: Vec<String>,
 }
 

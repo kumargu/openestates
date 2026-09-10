@@ -1607,7 +1607,7 @@ mod tests {
 
     use super::*;
     use crate::graph::GraphIndex;
-    use crate::search::geo::GeoSearchIndex;
+    use crate::search::geo::SpatialEntityIndex;
     use crate::serving::{
         ServingBundleManifest, ServingEdgeRecord, ServingEntityRecord, SpatialServingIndex,
         TantivyRecallIndex,
@@ -2622,6 +2622,7 @@ mod tests {
                 to_entity_id: "road:one".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "society:one".to_string(),
@@ -2629,6 +2630,7 @@ mod tests {
                 to_entity_id: "road:one".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "society:one".to_string(),
@@ -2636,6 +2638,7 @@ mod tests {
                 to_entity_id: "place:metro".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
             ServingEdgeRecord {
                 from_entity_id: "society:two".to_string(),
@@ -2643,6 +2646,7 @@ mod tests {
                 to_entity_id: "road:two".to_string(),
                 confidence: 0.9,
                 source_type: "test".to_string(),
+                derivation: None,
             },
         ];
 
@@ -2698,6 +2702,7 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            observation: None,
         }
     }
 
@@ -2707,6 +2712,7 @@ mod tests {
             entity_type: entity_type.to_string(),
             name: name.to_string(),
             root_source: None,
+            visibility: Default::default(),
             searchable_text: name.to_string(),
         }
     }
@@ -2767,7 +2773,7 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let recall_index =
             TantivyRecallIndex::build_in_dir(temp_dir.path(), &entities, &facts, &[]).unwrap();
-        let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
+        let entity_index = SpatialEntityIndex::from_serving_bundle(&entities, &fact_index);
         let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
         LoadedServingBundle {
             manifest: ServingBundleManifest {
@@ -2785,14 +2791,13 @@ mod tests {
                 quarantined_society_count: 0,
                 quarantine_reason_counts: Default::default(),
                 entity_parquet_key: "entities.parquet".to_string(),
-                entity_alias_parquet_key: None,
+                entity_alias_parquet_key: "aliases.parquet".to_string(),
                 fact_parquet_key: "facts.parquet".to_string(),
                 search_metadata_parquet_key: "search.parquet".to_string(),
-                rera_evidence_parquet_key: None,
-                edge_parquet_key: None,
-                quarantine_report_key: None,
+                rera_evidence_parquet_key: "rera.parquet".to_string(),
+                edge_parquet_key: "edges.parquet".to_string(),
+                quarantine_report_key: "quarantine.json".to_string(),
                 schema_key: "schema.json".to_string(),
-                trust_policy_key: "trust.json".to_string(),
                 tantivy_index_prefix: "tantivy".to_string(),
                 artifacts: Vec::new(),
             },
@@ -2803,7 +2808,7 @@ mod tests {
             recall_index,
             fact_index,
             rera_evidence_index: crate::serving::ReraEvidenceIndex::default(),
-            geo_index,
+            entity_index,
             spatial_index,
             search_capabilities: crate::search::SearchCapabilityIndex::default(),
             cache_dir: temp_dir.keep(),

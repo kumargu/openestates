@@ -1,18 +1,177 @@
+use std::collections::BTreeMap;
 use std::fs;
 
 use backend::assets::{
     default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetDefinition,
-    AssetId, AssetMaterializationStore, AssetPartition, AssetPartitionPolicy, AssetRegistry,
-    AssetSourceInputs, AssetStage, CanonicalSocietyMaterializer, CommandSourceInputProvider,
-    CostTier, GooglePlaceSnapshotMaterializer, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
-    MaterializationId, MaterializationRecord, RefreshCadence, ReraProjectSnapshotRecord,
-    ReraRegistryMaterializer, ReraRegistryMonthlyInput, SourceInputProvider,
-    SourceInputProviderError, SourceInputRequest, SourceWatermark, TrustTier,
+    AssetId, AssetMaterializationStore, AssetPartition, AssetPartitionPolicy, AssetPathBuilder,
+    AssetRegistry, AssetRunStepStatus, AssetSourceInputs, AssetStage, CanonicalSocietyMaterializer,
+    CommandSourceInputProvider, CostTier, DagRunStatus, GooglePlaceSnapshotMaterializer,
+    GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput, MaterializationId, MaterializationRecord,
+    RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
+    SourceEntityResolutionScope, SourceEntitySeed, SourceInputProvider, SourceInputProviderError,
+    SourceInputRequest, SourceWatermark, TrustTier,
 };
 use backend::knowledge::KnowledgeGraph;
 use backend::lake::LakeStore;
 use chrono::{TimeZone, Utc};
+use sha2::{Digest, Sha256};
 use tempfile::tempdir;
+
+#[tokio::test]
+async fn scoped_dag_skips_failed_optional_source_branches_without_losing_gold() {
+    let temp = tempdir().unwrap();
+    let lake = LakeStore::local(temp.path()).unwrap();
+    let now = Utc.with_ymd_and_hms(2026, 9, 10, 1, 0, 0).unwrap();
+    let registration = "PRM/KA/RERA/OPTIONAL/000001";
+    let digest = Sha256::digest(registration.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let canonical_id = format!("society:rera-{}", &digest[..16]);
+    let seed = SourceEntitySeed {
+        entity_id: canonical_id,
+        alias_entity_id: Some("society:optional-enrichment-fixture".to_string()),
+        name: "Optional Enrichment Fixture".to_string(),
+        area: Some("Whitefield".to_string()),
+        city: Some("Bengaluru".to_string()),
+        project_key: Some(registration.to_string()),
+        latitude: None,
+        longitude: None,
+    };
+    let failed_sources = [
+        "bengaluru_metro_station_facts",
+        "osm_locality_boundary_facts",
+        "osm_society_access_facts",
+        "osm_power_line_facts",
+        "stormwater_drain_facts",
+    ];
+    let source_failures = failed_sources
+        .iter()
+        .map(|asset_id| ((*asset_id).to_string(), "upstream unavailable".to_string()))
+        .collect::<BTreeMap<_, _>>();
+    let source_inputs = AssetSourceInputs {
+        source_entities: vec![seed],
+        source_failures,
+        rera_registry_monthly: Some(ReraRegistryMonthlyInput {
+            snapshot_date: "2026-09-10".to_string(),
+            projects: vec![ReraProjectSnapshotRecord {
+                ack_number: None,
+                registration_number: Some(registration.to_string()),
+                project_name: "Optional Enrichment Fixture".to_string(),
+                promoter_name: Some("Fixture Builder".to_string()),
+                status: Some("Approved".to_string()),
+                project_type: Some("Apartment".to_string()),
+                project_address: Some("Whitefield, Bengaluru".to_string()),
+                area_name: Some("Whitefield".to_string()),
+                district: Some("Bengaluru Urban".to_string()),
+                taluk: Some("Bengaluru East".to_string()),
+                total_land_area_sqm: Some(10_000.0),
+                land_litigation: Some(false),
+                source_url: "https://rera.karnataka.gov.in/fixture".to_string(),
+                fetched_at: now,
+            }],
+            detail_facts: Vec::new(),
+            detail_fact_annotations: Vec::new(),
+            source_watermarks: Vec::new(),
+        }),
+        ..AssetSourceInputs::default()
+    };
+    let registry = default_openestates_registry();
+    let forced_assets = registry
+        .definitions()
+        .iter()
+        .map(|definition| definition.id.clone())
+        .collect();
+
+    let report = AssetDagExecutor::new(registry, lake)
+        .execute(
+            &KnowledgeGraph::new(),
+            AssetDagExecutionOptions::new(
+                AssetPartition::new([("society", "optional-enrichment-fixture")]),
+                now,
+            )
+            .with_version("optional-enrichment-contract")
+            .with_source_scope(SourceEntityResolutionScope::Scoped)
+            .with_source_inputs(source_inputs)
+            .with_skip_missing_source_inputs(true)
+            .with_forced_assets(forced_assets)
+            .with_only_forced_assets(true)
+            .with_required_assets(vec![AssetId::new("society_gold_snapshot").unwrap()]),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
+    for asset_id in failed_sources {
+        let step = report
+            .manifest
+            .steps
+            .iter()
+            .find(|step| step.asset_id.as_str() == asset_id)
+            .unwrap();
+        assert_eq!(step.status, AssetRunStepStatus::Skipped, "{asset_id}");
+        assert!(
+            step.error
+                .as_deref()
+                .unwrap_or_default()
+                .contains("enrichment gap recorded"),
+            "{asset_id}: {:?}",
+            step.error
+        );
+    }
+    assert_eq!(
+        report
+            .manifest
+            .steps
+            .iter()
+            .find(|step| step.asset_id.as_str() == "society_gold_snapshot")
+            .unwrap()
+            .status,
+        AssetRunStepStatus::Succeeded
+    );
+}
+
+#[tokio::test]
+async fn required_source_failure_cannot_promote_a_dag_run_pointer() {
+    let temp = tempdir().unwrap();
+    let lake = LakeStore::local(temp.path()).unwrap();
+    let now = Utc.with_ymd_and_hms(2026, 9, 10, 1, 0, 0).unwrap();
+    let partition = AssetPartition::new([("society", "required-source-fixture")]);
+    let registry = default_openestates_registry();
+    let forced_assets = registry
+        .definitions()
+        .iter()
+        .map(|definition| definition.id.clone())
+        .collect();
+    let mut source_inputs = AssetSourceInputs::default();
+    source_inputs.source_failures.insert(
+        "rera_registry_monthly".to_string(),
+        "required registry unavailable".to_string(),
+    );
+
+    let error = AssetDagExecutor::new(registry, lake.clone())
+        .execute(
+            &KnowledgeGraph::new(),
+            AssetDagExecutionOptions::new(partition.clone(), now)
+                .with_source_inputs(source_inputs)
+                .with_skip_missing_source_inputs(true)
+                .with_forced_assets(forced_assets)
+                .with_only_forced_assets(true)
+                .with_required_assets(vec![AssetId::new("society_gold_snapshot").unwrap()]),
+        )
+        .await
+        .unwrap_err();
+
+    assert!(error
+        .to_string()
+        .contains("required asset society_gold_snapshot was unavailable"));
+    let pointer = AssetPathBuilder::current_dag_run_pointer_key(&partition);
+    assert!(lake
+        .artifact_metadata(&pointer)
+        .await
+        .unwrap_err()
+        .is_not_found());
+}
 
 #[cfg(unix)]
 #[tokio::test]
@@ -227,8 +386,11 @@ async fn requested_assets_follow_the_dag_plan_and_skip_fresh_rera() {
         .unwrap();
 
     let executor = AssetDagExecutor::new(default_openestates_registry(), lake);
-    let partition =
-        AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
+    let partition = AssetPartition::new([
+        ("dt", "2026-07-14"),
+        ("society", "source-provider-fixture"),
+        ("subreddit", "BangaloreRealEstates"),
+    ]);
     let plan = executor.plan(&partition, now).await.unwrap();
     let requested = AssetSourceInputs::requested_asset_ids(&plan);
 

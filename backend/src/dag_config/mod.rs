@@ -13,7 +13,7 @@
 //! | `ui_surfaces.json` | UI surface → leaves | Frontend/API mappers |
 //! | `evidence_sections.json` | Property evidence section metadata | Property detail API |
 //! | `search_intent.json` | Buyer archetypes | Search intent (migration pending) |
-//! | `serving_eligibility.json` | Clean-bundle admission policy | Serving bundle builder + release validator |
+//! | `serving_eligibility.json` | Clean-bundle admission policy | Serving bundle builder + structural validator |
 //! | `crawl_policies/*.json` | Crawl skip/cadence | Python collectors |
 //!
 //! **Instances** (society:*, road:*, fact values) live in `data/lake/` Parquet only.
@@ -63,8 +63,8 @@ pub use nearby_place_categories::{
     load_nearby_place_categories, load_nearby_place_categories_from_path,
     nearby_place_categories_config, nearby_place_categories_path,
     nearby_place_category_for_fact_key, nearby_place_fact_key_matches_category,
-    requested_nearby_place_categories, DerivedDistanceRisk, NearbyPlaceCategoriesFile,
-    NearbyPlaceCategory,
+    requested_nearby_place_categories, CanonicalPlaceIdentityPolicy, DerivedDistanceRisk,
+    NearbyPlaceCategoriesFile, NearbyPlaceCategory, SpatialRole,
 };
 pub use rera_decision_labels::{
     load_rera_decision_labels, load_rera_decision_labels_from_path, rera_decision_labels_config,
@@ -83,14 +83,15 @@ pub use resolution::{
     better_source_type, better_source_type_for_fact, buyer_visible_fact, coordinate_source_allowed,
     load_resolution_policies, normalize_source_type, resolve_coordinate_pair,
     source_allowed_for_fact, source_tier_rank, valid_coordinate_pair, CoordinateEntityScope,
-    CoordinatePairCandidate, CoordinateSourcePolicy, ResolutionPoliciesFile,
-    ResolvedCoordinatePair,
+    CoordinatePairCandidate, CoordinateSourcePolicy, MarketLocalityPolicy, ResolutionPoliciesFile,
+    ResolvedCoordinatePair, SpatialTopologyPolicy,
 };
 pub use search_guardrails::{
     load_search_guardrails, load_search_guardrails_from_path, search_guardrail_config,
     search_guardrails_path, AssistantDirectedQuestionConfig, HomeIntentDetectionConfig,
     PhraseGuardrailConfig, SearchGuardrailFile, SearchGuardrailGuidanceConfig,
-    SearchGuidanceTemplate, StructuredSignalScores, TooShortGuardrailConfig, WeightedTermGroup,
+    SearchGuidanceTemplate, SearchRevisionGuardrailConfig, StructuredSignalScores,
+    TooShortGuardrailConfig, WeightedTermGroup,
 };
 pub use search_intent::{
     area_alias_entries, load_search_intent, load_search_intent_from_path, search_intent_path,

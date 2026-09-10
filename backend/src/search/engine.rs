@@ -3,55 +3,47 @@ use std::time::Instant;
 
 use serde::Serialize;
 
-use crate::dag_config::{area_alias_entries, search_resolution_config};
-use crate::knowledge::KnowledgeGraph;
-use crate::models::{Property, Society};
+use crate::dag_config::search_resolution_config;
+use crate::models::Property;
 use crate::serving::{
     LoadedServingBundle, ServingEntityAliasIndex, ServingEntityRecord, TantivyRecallHit,
 };
-use crate::state::SEARCH_ENGINE_VERSION;
+use crate::state::{SearchRuntimeSnapshot, SEARCH_ENGINE_VERSION};
 
-use super::ast::{CompiledQuery, ResolvedEntityConstraint};
+use super::ast::{ConstraintExpr, ConstraintTerm, IntentAst, ResolvedEntityConstraint};
+use super::compiled_plan::{
+    CompiledSearchPlan, GeoCellSearchPolicy, GeoScope, ResolvedEntityHandle,
+};
 use super::geo;
 use super::index::SearchIndex;
-use super::intent::SearchIntent;
+use super::intent::{SearchIntent, SourceSpan};
 use super::query_plan::{self, QueryPlan};
-use super::resolver::{is_resolvable_entity_name, query_contains_lower_text, slug};
+use super::resolver::{is_resolvable_entity_name, slug};
+use super::revision::PortableIntentAst;
 use super::schema;
-use super::{SearchResultCard, SearchResultSet, TextSearch, TextSearchRequest};
+use super::text::SearchEvaluationContext;
+use super::{
+    CandidateEvaluationRequest, CandidateEvaluator, GeographyMatch, GeographyMatchKind,
+    SearchResultCard, SearchResultSet,
+};
 
 const TANTIVY_RECALL_LIMIT: usize = 128;
-const UNSTRUCTURED_LOCAL_CANDIDATE_LIMIT: usize = 16;
 const DIAGNOSTIC_ID_LIMIT: usize = 20;
 const DIAGNOSTIC_SCORE_LIMIT: usize = 8;
 
 pub struct SearchEngine<'a> {
-    pub properties: &'a [Property],
-    pub search_index: &'a SearchIndex,
-    pub serving_bundle: Option<&'a LoadedServingBundle>,
-    pub society_names: &'a HashMap<String, String>,
-    pub property_by_id: Option<&'a HashMap<String, usize>>,
-    pub societies: &'a [Society],
-    pub graph: Option<&'a KnowledgeGraph>,
+    snapshot: &'a SearchRuntimeSnapshot,
 }
 
 #[derive(Debug, Clone)]
 pub struct SearchEngineOutput {
+    pub compiled_plan: CompiledSearchPlan,
     pub intent: SearchIntent,
     pub results: Vec<SearchResultCard>,
     pub result_sets: Vec<SearchResultSet>,
     pub eligible_result_count: usize,
     pub diagnostics: SearchDiagnostics,
     pub evidence_gaps: Vec<SearchEvidenceGap>,
-}
-
-#[derive(Debug, Clone)]
-pub struct RecallSet {
-    pub structured_candidate_ids: Vec<String>,
-    pub structured_total_count: usize,
-    pub tantivy_candidate_ids: Vec<String>,
-    pub merged_extra_candidate_ids: Option<Vec<String>>,
-    pub ranking_candidate_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -92,6 +84,8 @@ pub struct ResolvedSearchEntity {
     pub match_source: String,
     pub matched_text: String,
     pub polarity: String,
+    #[serde(skip)]
+    pub source_span: Option<SourceSpan>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -107,11 +101,26 @@ pub struct SearchRecallDiagnostics {
     pub structured_total_count: usize,
     pub structured_count: usize,
     pub tantivy_count: usize,
+    pub tantivy_branch_additions: usize,
     pub merged_extra_count: usize,
     pub structured_sample: Vec<String>,
     pub tantivy_sample: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub tantivy_entity_sample: Vec<TantivyHitDiagnostic>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub branches: Vec<BranchRecallDiagnostics>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchRecallDiagnostics {
+    pub branch_id: String,
+    pub structured_count: usize,
+    pub tantivy_count: usize,
+    pub spatial_count: usize,
+    pub merged_count: usize,
+    pub tantivy_additions: usize,
+    pub spatial_additions: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -158,423 +167,686 @@ struct TantivyRecallResult {
     warning: Option<String>,
 }
 
+struct PreparedSearchBranch {
+    plan_compiled_query: IntentAst,
+    serving_resolved_entities: Vec<ResolvedSearchEntity>,
+    unresolved_entity_clause: Option<String>,
+}
+
 impl<'a> SearchEngine<'a> {
+    pub fn new(snapshot: &'a SearchRuntimeSnapshot) -> Self {
+        Self { snapshot }
+    }
+
     pub fn search(&self, query: &str) -> SearchEngineOutput {
-        if let Some(branch_queries) = query_plan::paired_ordinal_branch_queries(query) {
-            if branch_queries
-                .iter()
-                .all(|branch| self.branch_has_search_anchor(branch))
-            {
-                return self.search_independent_branches(query, &branch_queries);
+        let plan = self.compile_initial(query, "root");
+        self.execute_plan(plan)
+            .expect("a freshly compiled plan must target the active snapshot")
+    }
+
+    pub fn compile_initial(&self, query: &str, source_turn_id: &str) -> CompiledSearchPlan {
+        let top_level_plan = query_plan::compile_query_plan(query);
+        let aggregate_intent = query_plan::project_search_intent(query, &top_level_plan);
+        let prepared = self.prepare_branch_from_plan(query, top_level_plan, aggregate_intent, &[]);
+        self.compile_prepared_plan(&prepared, source_turn_id)
+    }
+
+    /// Bind a portable intent tree to the active serving snapshot. This path
+    /// deliberately never reparses the buyer-facing presentation string.
+    pub fn compile_intent_ast(
+        &self,
+        ast: &PortableIntentAst,
+    ) -> Result<CompiledSearchPlan, String> {
+        if ast.version != 1 || ast.branches.is_empty() {
+            return Err("unsupported or empty intent AST".to_string());
+        }
+        let branch_predicates = ast
+            .branches
+            .iter()
+            .map(|branch| branch.predicates.clone())
+            .collect::<Vec<_>>();
+        let compiled_query = IntentAst {
+            raw: String::new(),
+            constraints: ConstraintExpr::any_of(branch_predicates.clone()),
+            branches: branch_predicates,
+            intent: ast.aggregate_intent.clone(),
+        };
+        let resolved_entities = ast
+            .branches
+            .iter()
+            .flat_map(|branch| branch.resolved_entities.iter().cloned())
+            .fold(
+                Vec::<ResolvedEntityHandle>::new(),
+                |mut entities, entity| {
+                    if !entities.iter().any(|existing| {
+                        existing.entity_id == entity.entity_id
+                            && existing.source_span == entity.source_span
+                    }) {
+                        entities.push(entity);
+                    }
+                    entities
+                },
+            );
+        let mut plan = CompiledSearchPlan::compile_for_snapshot(
+            compiled_query,
+            self.snapshot.version_key.serving_bundle_version.as_str(),
+            &resolved_entities,
+            &self.snapshot.bundle.graph_index,
+            Some(&self.snapshot.bundle.spatial_index),
+            GeoCellSearchPolicy {
+                max_hops: self.snapshot.geo_cell_max_hops,
+                max_distance_km: self.snapshot.geo_cell_max_distance_km,
+            },
+        );
+        if plan.branches.len() != ast.branches.len() {
+            return Err("intent AST branch count changed while binding".to_string());
+        }
+        for (branch, portable) in plan.branches.iter_mut().zip(&ast.branches) {
+            branch.branch_id.clone_from(&portable.branch_id);
+            branch
+                .resolved_entities
+                .clone_from(&portable.resolved_entities);
+            for binding in &mut branch.predicate_bindings {
+                if let Some(stable) = portable.predicate_bindings.iter().find(|stable| {
+                    stable.family == binding.family
+                        && stable.polarity == binding.polarity
+                        && (stable.semantic_key == binding.semantic_key
+                            || stable.path == binding.path)
+                }) {
+                    binding.predicate_id.clone_from(&stable.predicate_id);
+                }
             }
         }
-        if let Some(branch_queries) = self.discourse_branch_queries(query) {
-            return self.search_independent_branches(query, &branch_queries);
-        }
-        self.search_single(query)
+        plan.root = super::compiled_plan::BoolExpr::Any(
+            plan.branches
+                .iter()
+                .map(|branch| super::compiled_plan::BoolExpr::Leaf(branch.branch_id.clone()))
+                .collect(),
+        );
+        plan.refresh_semantic_fingerprint();
+        Ok(plan)
     }
 
-    fn search_independent_branches(
+    pub fn compile_fragment(
         &self,
-        query: &str,
-        branch_queries: &[String],
-    ) -> SearchEngineOutput {
-        let started_at = Instant::now();
-        let outputs = branch_queries
+        fragment: &str,
+        source_turn_id: &str,
+        parent: &CompiledSearchPlan,
+    ) -> CompiledSearchPlan {
+        let trimmed = fragment.trim();
+        let compiled_fragment = crate::dag_config::search_parser_config()
+            .discourse
+            .revision_continuity_prefixes
             .iter()
-            .map(|branch| self.search_single(branch))
+            .filter_map(|prefix| {
+                trimmed
+                    .get(..prefix.len())
+                    .filter(|candidate| candidate.eq_ignore_ascii_case(prefix))
+                    .and_then(|_| trimmed.get(prefix.len()..))
+            })
+            .map(|remainder| remainder.trim_start_matches([',', ':', '-', ' ']))
+            .filter(|remainder| !remainder.is_empty())
+            .min_by_key(|remainder| remainder.len())
+            .unwrap_or(trimmed);
+        let offset = compiled_fragment.as_ptr() as usize - fragment.as_ptr() as usize;
+        let top_level_plan = query_plan::compile_query_plan(compiled_fragment);
+        let aggregate_intent =
+            query_plan::project_search_intent(compiled_fragment, &top_level_plan);
+        let inherited_area_context_ids = parent
+            .branches
+            .iter()
+            .flat_map(|branch| match &branch.geo_scope {
+                GeoScope::Scoped {
+                    market_locality_ids,
+                    ..
+                } => market_locality_ids.clone(),
+                GeoScope::Unresolved { .. } => Vec::new(),
+                GeoScope::BundleWide => Vec::new(),
+            })
+            .collect::<HashSet<_>>()
+            .into_iter()
             .collect::<Vec<_>>();
-        combine_branch_outputs(query, outputs, started_at.elapsed().as_secs_f64() * 1000.0)
+        let prepared = self.prepare_branch_from_plan(
+            compiled_fragment,
+            top_level_plan.clone(),
+            aggregate_intent,
+            &inherited_area_context_ids,
+        );
+        let mut plan = self.compile_prepared_plan(&prepared, source_turn_id);
+        if plan
+            .branches
+            .iter()
+            .all(|branch| !branch.predicates.has_terms() && branch.resolved_entities.is_empty())
+        {
+            if let Some(relation_start) = first_relation_start(&top_level_plan) {
+                let relation_fragment = &compiled_fragment[relation_start..];
+                let relation_query_plan = query_plan::compile_query_plan(relation_fragment);
+                let relation_intent =
+                    query_plan::project_search_intent(relation_fragment, &relation_query_plan);
+                let mut relation_prepared = self.prepare_branch_from_plan(
+                    relation_fragment,
+                    relation_query_plan,
+                    relation_intent,
+                    &inherited_area_context_ids,
+                );
+                let merged_intent = merge_fragment_intent(
+                    &plan.aggregate_intent,
+                    &relation_prepared.plan_compiled_query.intent,
+                );
+                relation_prepared.plan_compiled_query.intent = merged_intent;
+                let mut relation_plan =
+                    self.compile_prepared_plan(&relation_prepared, source_turn_id);
+                if relation_plan.branches.iter().any(|branch| {
+                    branch.predicates.has_terms() || !branch.resolved_entities.is_empty()
+                }) {
+                    relation_plan.shift_source_spans(offset + relation_start);
+                    return relation_plan;
+                }
+            }
+        }
+        plan.shift_source_spans(offset);
+        plan
     }
 
-    fn discourse_branch_queries(&self, query: &str) -> Option<Vec<String>> {
-        let layout = query_plan::discourse_branch_layout(query)?;
-        let shared_suffix = layout
-            .shared_suffix
-            .map(|suffix| query[suffix.start..suffix.end].trim());
-        let segment_queries = layout
-            .segments
-            .iter()
-            .map(|segment| {
-                let branch = query[segment.start..segment.end].trim();
-                shared_suffix
-                    .map(|shared| format!("{branch} {shared}"))
-                    .unwrap_or_else(|| branch.to_string())
-            })
-            .collect::<Vec<_>>();
-        if self.has_implicit_shared_scope_prefix(&segment_queries)
-            || self.has_implicit_shared_geo_suffix(&segment_queries)
-        {
+    /// Execute an already compiled, snapshot-pinned plan. No source query is
+    /// parsed or resolved on this path.
+    pub fn execute_plan(&self, plan: CompiledSearchPlan) -> Option<SearchEngineOutput> {
+        if plan.snapshot_identity != self.snapshot.version_key.serving_bundle_version {
             return None;
         }
-        segment_queries
+        Some(self.execute_compiled_plan(plan))
+    }
+
+    fn compile_prepared_plan(
+        &self,
+        prepared: &PreparedSearchBranch,
+        source_turn_id: &str,
+    ) -> CompiledSearchPlan {
+        let resolved_entities = prepared
+            .serving_resolved_entities
             .iter()
-            .all(|branch| self.branch_has_search_anchor(branch))
-            .then_some(segment_queries)
-    }
-
-    fn has_implicit_shared_scope_prefix(&self, branch_queries: &[String]) -> bool {
-        let Some((first, remaining)) = branch_queries.split_first() else {
-            return false;
-        };
-        if !self.has_resolved_branch_scope(first) {
-            return false;
-        }
-        remaining
-            .iter()
-            .any(|branch| self.is_unscoped_structured_alternative(branch))
-    }
-
-    fn has_implicit_shared_geo_suffix(&self, branch_queries: &[String]) -> bool {
-        let Some((last, preceding)) = branch_queries.split_last() else {
-            return false;
-        };
-        !preceding.is_empty()
-            && self.has_resolved_geo_scope(last)
-            && preceding
-                .iter()
-                .all(|branch| self.is_bare_bhk_alternative(branch))
-    }
-
-    fn has_resolved_geo_scope(&self, query: &str) -> bool {
-        let plan = query_plan::compile_query_plan(query);
-        self.serving_bundle
-            .and_then(|bundle| bundle.geo_index.query_with_plan(&plan))
-            .is_some()
-    }
-
-    fn is_bare_bhk_alternative(&self, query: &str) -> bool {
-        let plan = query_plan::compile_query_plan(query);
-        !plan.slots.bhks.is_empty()
-            && plan.slots.budgets.is_empty()
-            && plan.areas.is_empty()
-            && plan.clauses.is_empty()
-            && plan.evidence.is_empty()
-            && self.is_unscoped_structured_alternative(query)
-    }
-
-    fn is_unscoped_structured_alternative(&self, query: &str) -> bool {
-        if self.has_resolved_branch_scope(query) || self.has_unresolved_named_scope(query) {
-            return false;
-        }
-        let plan = query_plan::compile_query_plan(query);
-        let intent = query_plan::project_search_intent(query, &plan);
-        intent.preferences.is_empty()
-            && intent.positive_preferences.is_empty()
-            && intent.negative_preferences.is_empty()
-            && intent.ranking_priorities.is_empty()
-            && intent.accepted_tradeoffs.is_empty()
-            && intent.hard_constraints.is_empty()
-            && intent.excluded_areas.is_empty()
-            && intent.excluded_societies.is_empty()
-            && intent.excluded_builders.is_empty()
-            && intent.exclude_bhks.is_empty()
-            && intent.unsupported_inventory_types.is_empty()
-    }
-
-    fn has_resolved_branch_scope(&self, query: &str) -> bool {
-        if !self.resolved_scope_entities(query).is_empty() {
-            return true;
-        }
-        let plan = query_plan::compile_query_plan(query);
-        self.serving_bundle
-            .and_then(|bundle| bundle.geo_index.query_with_plan(&plan))
-            .is_some()
-    }
-
-    fn resolved_scope_entities(&self, query: &str) -> Vec<ResolvedSearchEntity> {
-        let plan = query_plan::compile_query_plan(query);
-        let intent = query_plan::project_search_intent(query, &plan);
-        resolve_serving_query_entities(query, &plan, &intent, self.serving_bundle, self.properties)
-            .into_iter()
-            .filter(|entity| {
-                entity.polarity != "exclusion"
-                    && ["area", "society", "builder"]
-                        .iter()
-                        .any(|entity_type| entity.entity_type.eq_ignore_ascii_case(entity_type))
+            .map(|entity| ResolvedEntityHandle {
+                entity_id: entity.entity_id.clone(),
+                entity_type: entity.entity_type.clone(),
+                display_name: entity.name.clone(),
+                source_span: entity.source_span.clone(),
             })
-            .collect()
-    }
-
-    fn has_unresolved_named_scope(&self, query: &str) -> bool {
-        let plan = query_plan::compile_query_plan(query);
-        let intent = query_plan::project_search_intent(query, &plan);
-        let resolved = resolve_serving_query_entities(
-            query,
-            &plan,
-            &intent,
-            self.serving_bundle,
-            self.properties,
-        );
-        let geo_query = self
-            .serving_bundle
-            .and_then(|bundle| bundle.geo_index.query_with_plan(&plan));
-        unsupported_qualifier_clause(query, &plan).is_some()
-            || unresolved_named_entity_clause(query, &plan, &resolved, geo_query.as_ref()).is_some()
-    }
-
-    fn branch_has_search_anchor(&self, query: &str) -> bool {
-        let plan = query_plan::compile_query_plan(query);
-        if !plan.slots.bhks.is_empty()
-            || !plan.slots.budgets.is_empty()
-            || !plan.areas.is_empty()
-            || !plan.clauses.is_empty()
-            || !plan.evidence.is_empty()
-        {
-            return true;
-        }
-        let intent = query_plan::project_search_intent(query, &plan);
-        !resolve_serving_query_entities(query, &plan, &intent, self.serving_bundle, self.properties)
-            .is_empty()
-    }
-
-    fn search_single(&self, query: &str) -> SearchEngineOutput {
-        let mut timer = SearchTimer::start();
-
-        let query_plan = timer.measure("query_plan_compile", || {
-            query_plan::compile_query_plan(query)
-        });
-        let parsed_intent = timer.measure("intent_parse", || {
-            query_plan::project_search_intent(query, &query_plan)
-        });
-
-        let mut geo_query = timer.measure("geo_resolve", || {
-            self.serving_bundle
-                .and_then(|bundle| bundle.geo_index.query_with_plan(&query_plan))
-        });
-        let serving_resolved_entities = timer.measure("serving_entity_resolution", || {
-            resolve_serving_query_entities(
-                query,
-                &query_plan,
-                &parsed_intent,
-                self.serving_bundle,
-                self.properties,
-            )
-        });
-        let requested_societies = serving_resolved_entities
-            .iter()
-            .filter(|entity| {
-                entity.polarity != "exclusion" && entity.entity_type.eq_ignore_ascii_case("society")
-            })
-            .map(|entity| entity.name.clone())
             .collect::<Vec<_>>();
-        let entity_constraints = resolved_entity_constraints(query, &serving_resolved_entities);
-        let compiled_query = timer.measure("intent_constraints", || {
-            let intent =
-                apply_resolved_constraints(parsed_intent.clone(), &serving_resolved_entities);
-            CompiledQuery::compile(query, &query_plan, intent, &entity_constraints)
+        let mut plan = CompiledSearchPlan::compile_for_snapshot(
+            prepared.plan_compiled_query.clone(),
+            self.snapshot.version_key.serving_bundle_version.as_str(),
+            &resolved_entities,
+            &self.snapshot.bundle.graph_index,
+            Some(&self.snapshot.bundle.spatial_index),
+            GeoCellSearchPolicy {
+                max_hops: self.snapshot.geo_cell_max_hops,
+                max_distance_km: self.snapshot.geo_cell_max_distance_km,
+            },
+        );
+        plan.assign_source_turn(source_turn_id);
+        if prepared.unresolved_entity_clause.is_some() {
+            for branch in &mut plan.branches {
+                if branch.geo_scope.is_bundle_wide() {
+                    branch.geo_scope = GeoScope::Unresolved {
+                        anchors: Vec::new(),
+                        requested: prepared.unresolved_entity_clause.iter().cloned().collect(),
+                        reason:
+                            super::compiled_plan::GeoScopeResolution::UnresolvedExplicitGeography,
+                    };
+                }
+            }
+        }
+        plan.refresh_semantic_fingerprint();
+        plan
+    }
+
+    fn prepare_branch_from_plan(
+        &self,
+        query: &str,
+        query_plan: QueryPlan,
+        parsed_intent: SearchIntent,
+        inherited_area_context_ids: &[String],
+    ) -> PreparedSearchBranch {
+        let mut serving_resolved_entities = resolve_serving_query_entities(
+            query,
+            &query_plan,
+            &parsed_intent,
+            Some(self.snapshot.bundle.as_ref()),
+            &self.snapshot.properties,
+        );
+        let mut area_context_ids =
+            explicit_area_context_ids(query, &query_plan, &serving_resolved_entities);
+        for area_id in inherited_area_context_ids {
+            if !area_context_ids.contains(area_id) {
+                area_context_ids.push(area_id.clone());
+            }
+        }
+        let geo_query = self
+            .snapshot
+            .bundle
+            .entity_index
+            .query_with_plan_and_area_context(
+                &query_plan,
+                Some(&self.snapshot.bundle.spatial_index),
+                &area_context_ids,
+            );
+        retain_relation_compatible_entities(
+            query,
+            &query_plan,
+            geo_query.as_ref(),
+            &mut serving_resolved_entities,
+        );
+        if let Some(spatial_query) = geo_query.as_ref() {
+            for clause in spatial_query
+                .resolved_clauses()
+                .iter()
+                .filter(|clause| clause.place_entity_ids.is_empty())
+            {
+                let normalized_target = normalized_place_family_target(&clause.target_text);
+                let Some(family) =
+                    search_resolution_config()
+                        .place_families
+                        .iter()
+                        .find(|family| {
+                            normalized_place_family_target(&family.label) == normalized_target
+                                || family.aliases.iter().any(|alias| {
+                                    normalized_place_family_target(alias) == normalized_target
+                                })
+                        })
+                else {
+                    continue;
+                };
+                let entity = ResolvedSearchEntity {
+                    entity_id: format!("place_family:{}", family.id),
+                    entity_type: "place_family".to_string(),
+                    name: family.label.clone(),
+                    match_kind: "configured_place_family".to_string(),
+                    match_source: "compiled_plan".to_string(),
+                    matched_text: clause.target_text.clone(),
+                    polarity: "positive".to_string(),
+                    source_span: Some(clause.target_span.clone()),
+                };
+                if !serving_resolved_entities.iter().any(|existing| {
+                    existing.entity_id == entity.entity_id
+                        && existing.source_span == entity.source_span
+                }) {
+                    serving_resolved_entities.push(entity);
+                }
+            }
+        }
+        let entity_constraints = resolved_entity_constraints(&serving_resolved_entities);
+        let intent = apply_resolved_constraints(parsed_intent, &serving_resolved_entities);
+        let mut compiled_query =
+            IntentAst::compile(query, &query_plan, intent, &entity_constraints);
+        if let Some(layout) = query_plan::paired_ordinal_branch_layout(&query_plan) {
+            let segments = layout
+                .segments
+                .iter()
+                .map(|span| (span.start, span.end))
+                .collect::<Vec<_>>();
+            let bhk_spans = layout
+                .bhk_spans
+                .iter()
+                .map(|span| (span.start, span.end))
+                .collect::<Vec<_>>();
+            compiled_query.align_paired_ordinal_branches(&segments, &bhk_spans);
+        }
+        let discourse_layout = query_plan::discourse_branch_layout_with_plan(query, &query_plan);
+        let discourse_segments = discourse_layout.as_ref().map(|layout| {
+            layout
+                .segments
+                .iter()
+                .map(|span| (span.start, span.end))
+                .collect::<Vec<_>>()
         });
-        let intent = &compiled_query.intent;
-        let unresolved_entity_clause =
-            unsupported_qualifier_clause(query, &query_plan).or_else(|| {
+        if let Some(layout) = discourse_layout.as_ref() {
+            compiled_query.align_discourse_branches(
+                discourse_segments.as_deref().unwrap_or_default(),
+                layout.shared_suffix.as_ref().map(|span| span.start),
+            );
+        }
+        let mut plan_compiled_query = compiled_query;
+        if let Some(spatial_query) = geo_query.as_ref() {
+            let mut spatial_terms = spatial_query.ast_terms();
+            for term in &mut spatial_terms {
+                let ConstraintTerm::Spatial {
+                    entity_id, span, ..
+                } = term
+                else {
+                    continue;
+                };
+                if let Some(resolved_span) = serving_resolved_entities
+                    .iter()
+                    .find(|entity| entity.entity_id == *entity_id)
+                    .and_then(|entity| entity.source_span.clone())
+                {
+                    *span = Some(resolved_span);
+                }
+            }
+            // Keep optional named-place terms in the authoritative plan so
+            // branch recall and proof projection retain the resolved target.
+            // The execution query below drops optional spatial terms from
+            // hard eligibility; lexical recall can never satisfy them.
+            plan_compiled_query.add_spatial_plan_constraints(
+                spatial_terms.clone(),
+                discourse_segments.as_deref(),
+                discourse_layout
+                    .as_ref()
+                    .and_then(|layout| layout.shared_suffix.as_ref().map(|span| span.start)),
+            );
+        }
+        let unresolved_entity_clause = unsupported_qualifier_clause(query, &query_plan)
+            .or_else(|| {
                 unresolved_named_entity_clause(
                     query,
                     &query_plan,
                     &serving_resolved_entities,
                     geo_query.as_ref(),
                 )
+            })
+            .filter(|clause| {
+                !constraint_has_unbound_area(&plan_compiled_query.constraints, clause)
+                    && !serving_resolved_entities.iter().any(|entity| {
+                        entity.polarity != "exclusion"
+                            && (entity.name.eq_ignore_ascii_case(clause)
+                                || entity.matched_text.eq_ignore_ascii_case(clause))
+                    })
             });
-        let unavailable_required_capability = self.serving_bundle.and_then(|bundle| {
-            intent
-                .positive_preferences
-                .iter()
-                .chain(intent.negative_preferences.iter())
-                .filter(|preference| preference.required)
-                .find(|preference| !bundle.search_capabilities.supports_preference(preference))
-                .map(|preference| preference.raw_text.clone())
-        });
-
-        let mut structured_candidate_ids = timer.measure("structured_recall", || {
-            self.search_index.recall_ids(&compiled_query)
-        });
-        let structured_total_count = structured_candidate_ids.len();
-        if !has_filter_intent(&compiled_query)
-            && structured_candidate_ids.len() > UNSTRUCTURED_LOCAL_CANDIDATE_LIMIT
-        {
-            structured_candidate_ids.truncate(UNSTRUCTURED_LOCAL_CANDIDATE_LIMIT);
+        PreparedSearchBranch {
+            plan_compiled_query,
+            serving_resolved_entities,
+            unresolved_entity_clause,
         }
-        let eligible_property_ids =
-            (has_filter_intent(&compiled_query) || !requested_societies.is_empty()).then(|| {
-                self.search_index
-                    .recall_constraint_ids(&compiled_query)
+    }
+
+    fn execute_compiled_plan(&self, compiled_plan: CompiledSearchPlan) -> SearchEngineOutput {
+        let mut timer = SearchTimer::start();
+        let snapshot_identity = self.snapshot.version_key.serving_bundle_version.as_str();
+        let serving_facts = Some(&self.snapshot.bundle.fact_index);
+        let mut structured_ids = Vec::new();
+        let mut tantivy_ids = Vec::new();
+        let mut merged_ids = Vec::new();
+        let mut tantivy_hits = Vec::new();
+        let mut geo_hit_samples = Vec::new();
+        let mut warnings = Vec::new();
+        let mut evidence_gaps = Vec::new();
+        let mut branch_diagnostics = Vec::new();
+        let mut branch_results = Vec::with_capacity(compiled_plan.branches.len());
+
+        for branch in &compiled_plan.branches {
+            let structured = timer.measure("structured_recall", || {
+                self.snapshot
+                    .search_index
+                    .recall_plan_ids(&branch.scoring_query, &branch.eligibility_predicates)
+            });
+            let eligible_property_ids = branch.eligibility_predicates.has_terms().then(|| {
+                self.snapshot
+                    .search_index
+                    .recall_constraint_expr_ids(&branch.eligibility_predicates)
                     .into_iter()
                     .collect::<HashSet<_>>()
             });
-
-        let tantivy_recall = timer.measure("tantivy_recall", || {
-            tantivy_candidate_ids(self.serving_bundle, query, self.search_index)
-        });
-
-        let geo_candidate_ids = timer.measure("geo_recall", || {
-            let coordinate_candidates = geo_query
-                .as_ref()
-                .zip(self.serving_bundle)
-                .map(|(query, bundle)| {
-                    query
-                        .spatial_candidate_society_ids(
-                            &bundle.spatial_index,
-                            self.search_index,
-                            eligible_property_ids.as_ref(),
-                        )
-                        .into_iter()
-                        .flat_map(|entity_id| {
-                            self.search_index.property_ids_for_entity_id(&entity_id)
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-            let serving_fact_candidates = geo_query
-                .as_ref()
-                .and_then(|query| {
-                    self.serving_bundle.map(|bundle| {
+            let tantivy = timer.measure("tantivy_recall", || {
+                tantivy_candidate_ids(
+                    Some(self.snapshot.bundle.as_ref()),
+                    &branch.recall_query,
+                    &self.snapshot.search_index,
+                )
+            });
+            let mut geo_query = self
+                .snapshot
+                .bundle
+                .entity_index
+                .bind_compiled_spatial_predicates(&branch.spatial_predicates);
+            let spatial = timer.measure("geo_recall", || {
+                let coordinate_candidates = geo_query
+                    .as_ref()
+                    .map(|query| {
+                        query
+                            .spatial_candidate_society_ids(
+                                &self.snapshot.bundle.spatial_index,
+                                &self.snapshot.search_index,
+                                eligible_property_ids.as_ref(),
+                            )
+                            .into_iter()
+                            .flat_map(|entity_id| {
+                                self.snapshot
+                                    .search_index
+                                    .property_ids_for_entity_id(&entity_id)
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let fact_candidates = geo_query
+                    .as_ref()
+                    .map(|query| {
                         query.serving_fact_candidate_property_ids(
-                            self.search_index,
-                            &bundle.fact_index,
+                            &self.snapshot.search_index,
+                            &self.snapshot.bundle.fact_index,
                             eligible_property_ids.as_ref(),
                         )
                     })
-                })
-                .unwrap_or_default();
-            merge_candidate_ids(
-                optional_non_empty(coordinate_candidates),
-                serving_fact_candidates,
-            )
-            .unwrap_or_default()
-        });
-        if let Some(query) = geo_query.as_mut() {
-            query.restrict_evidence_to_properties(
-                self.properties,
-                self.search_index,
-                &geo_candidate_ids,
-            );
-        }
+                    .unwrap_or_default();
+                merge_candidate_ids(optional_non_empty(coordinate_candidates), fact_candidates)
+                    .unwrap_or_default()
+            });
 
-        let resolved_geo_constraint = geo_query.as_ref().is_some_and(|query| !query.is_empty());
-        let extra_candidate_ids = if resolved_geo_constraint {
-            optional_non_empty(geo_candidate_ids.clone())
-        } else {
-            merge_candidate_ids(
-                optional_non_empty(tantivy_recall.property_ids.clone()),
-                geo_candidate_ids.clone(),
-            )
-        };
-        let ranking_candidate_ids = if resolved_geo_constraint {
-            Some(
-                geo_candidate_ids
-                    .iter()
-                    .filter(|property_id| {
-                        eligible_property_ids
-                            .as_ref()
-                            .is_none_or(|eligible| eligible.contains(*property_id))
-                    })
-                    .cloned()
-                    .collect(),
-            )
-        } else {
-            merge_candidate_ids(
-                optional_non_empty(structured_candidate_ids.clone()),
-                extra_candidate_ids.clone().unwrap_or_default(),
-            )
-        };
-        let recall_set = RecallSet {
-            structured_candidate_ids,
-            structured_total_count,
-            tantivy_candidate_ids: tantivy_recall.property_ids.clone(),
-            merged_extra_candidate_ids: extra_candidate_ids,
-            ranking_candidate_ids,
-        };
-        let serving_facts = self.serving_bundle.map(|bundle| &bundle.fact_index);
-        let ranking_graph = if serving_facts.is_some() {
-            None
-        } else {
-            self.graph
-        };
-        let ranking_candidate_indexes = recall_set
-            .ranking_candidate_ids
-            .as_ref()
-            .and_then(|ids| candidate_property_indexes(ids, self.property_by_id));
+            let mut verified_spatial_matches = HashMap::new();
+            if let Some(query) = geo_query.as_ref() {
+                for property_id in &spatial {
+                    let Some(property) = self
+                        .snapshot
+                        .property_by_id
+                        .get(property_id)
+                        .and_then(|index| self.snapshot.properties.get(*index))
+                    else {
+                        continue;
+                    };
+                    let matches = query.verified_matches_for_property(
+                        property,
+                        &self.snapshot.search_index,
+                        &self.snapshot.bundle.spatial_index,
+                        &self.snapshot.bundle.fact_index,
+                        snapshot_identity,
+                    );
+                    if !matches.is_empty() {
+                        verified_spatial_matches.insert(property_id.clone(), matches);
+                    }
+                }
+            }
+            if let Some(query) = geo_query.as_mut() {
+                query.restrict_evidence_to_properties(
+                    &self.snapshot.properties,
+                    &self.snapshot.search_index,
+                    &spatial,
+                );
+                evidence_gaps.extend(unresolved_proximity_gaps(Some(query)));
+                geo_hit_samples.extend(sample_geo_hits(Some(query)));
+            }
 
-        let results = timer.measure("ranking", || {
-            if unresolved_entity_clause.is_some()
-                || unavailable_required_capability.is_some()
-                || (resolved_geo_constraint
-                    && recall_set
-                        .ranking_candidate_ids
-                        .as_ref()
-                        .is_some_and(Vec::is_empty))
-            {
+            let mut candidates = structured.clone();
+            let mut tantivy_additions = 0;
+            let mut spatial_additions = 0;
+            for property_id in &tantivy.property_ids {
+                if !candidates.contains(property_id) {
+                    candidates.push(property_id.clone());
+                    tantivy_additions += 1;
+                }
+            }
+            for property_id in &spatial {
+                if !candidates.contains(property_id) {
+                    candidates.push(property_id.clone());
+                    spatial_additions += 1;
+                }
+            }
+            if branch_has_required_spatial_predicate(&branch.predicates) {
+                let spatial = spatial.iter().collect::<HashSet<_>>();
+                candidates.retain(|property_id| spatial.contains(property_id));
+            }
+
+            let mut geography_matches = HashMap::new();
+            if !branch.geo_scope.is_bundle_wide() {
+                candidates.retain(|property_id| {
+                    let Some(society_id) = self
+                        .snapshot
+                        .search_index
+                        .society_entity_id_for_property(property_id)
+                    else {
+                        return false;
+                    };
+                    let Some(geography_match) = geography_match_for_property(
+                        &branch.geo_scope,
+                        society_id,
+                        &self.snapshot.bundle.graph_index,
+                        &self.snapshot.bundle.spatial_index,
+                        snapshot_identity,
+                    ) else {
+                        return false;
+                    };
+                    geography_matches.insert(property_id.clone(), geography_match);
+                    true
+                });
+            }
+
+            let unavailable_capability = branch
+                .ranking_intent
+                .positive_preferences
+                .iter()
+                .chain(branch.ranking_intent.negative_preferences.iter())
+                .filter(|preference| preference.required)
+                .find(|preference| {
+                    !self
+                        .snapshot
+                        .bundle
+                        .search_capabilities
+                        .supports_preference(preference)
+                });
+            let mut results = if let Some(capability) = unavailable_capability {
+                warnings.push(format!(
+                    "unavailable search capability: {}",
+                    capability.raw_text
+                ));
                 Vec::new()
             } else {
-                TextSearch::search(TextSearchRequest {
-                    properties: self.properties,
-                    search_index: Some(self.search_index),
-                    extra_candidate_ids: recall_set.ranking_candidate_ids.as_deref(),
-                    candidate_property_indexes: ranking_candidate_indexes.clone(),
-                    geo_query: geo_query.as_ref(),
-                    serving_facts,
-                    society_names: self.society_names,
-                    societies: self.societies,
-                    compiled_query: &compiled_query,
-                    graph: ranking_graph,
+                let candidate_indexes =
+                    candidate_property_indexes(&candidates, Some(&self.snapshot.property_by_id));
+                timer.measure("ranking", || {
+                    CandidateEvaluator::search(CandidateEvaluationRequest {
+                        properties: &self.snapshot.properties,
+                        search_index: Some(&self.snapshot.search_index),
+                        extra_candidate_ids: None,
+                        candidate_property_indexes: candidate_indexes,
+                        geo_query: geo_query.as_ref(),
+                        serving_facts,
+                        society_names: &self.snapshot.society_names,
+                        query: &branch.scoring_query,
+                        intent: &branch.ranking_intent,
+                        constraints: &branch.eligibility_predicates,
+                        evaluation: SearchEvaluationContext {
+                            options: &self.snapshot.inventory_options,
+                            spatial_matches: &verified_spatial_matches,
+                            snapshot_identity,
+                        },
+                    })
                 })
+            };
+            for result in &mut results {
+                result.geography_match = geography_matches.get(&result.card.id).cloned();
             }
-        });
-        let eligible_result_count = results.len();
-        let mut evidence_gaps = Vec::new();
-        evidence_gaps.extend(unresolved_proximity_gaps(geo_query.as_ref()));
-        let result_sets = build_result_sets(
-            &compiled_query,
-            &results,
-            self.properties,
-            self.property_by_id,
-            self.search_index,
-            serving_facts,
-        );
+            sort_geography_cohorts(&mut results);
+
+            extend_unique_strings(&mut structured_ids, &structured);
+            extend_unique_strings(&mut tantivy_ids, &tantivy.property_ids);
+            extend_unique_strings(&mut merged_ids, &candidates);
+            tantivy_hits.extend(tantivy.entity_hits);
+            if let Some(warning) = tantivy.warning {
+                warnings.push(warning);
+            }
+            if let GeoScope::Unresolved {
+                reason, requested, ..
+            } = &branch.geo_scope
+            {
+                warnings.push(format!(
+                    "unresolved geography scope: {reason:?}{}",
+                    requested
+                        .first()
+                        .map(|value| format!(" ({value})"))
+                        .unwrap_or_default()
+                ));
+            }
+            branch_diagnostics.push(BranchRecallDiagnostics {
+                branch_id: branch.branch_id.clone(),
+                structured_count: structured.len(),
+                tantivy_count: tantivy.property_ids.len(),
+                spatial_count: spatial.len(),
+                merged_count: candidates.len(),
+                tantivy_additions,
+                spatial_additions,
+            });
+            branch_results.push(results);
+        }
+
+        let eligible_result_count = branch_results
+            .iter()
+            .flatten()
+            .map(|result| result.card.id.as_str())
+            .collect::<HashSet<_>>()
+            .len();
+        let result_sets = build_result_sets(&compiled_plan, branch_results);
         let (result_sets, results) =
             limit_result_sets(result_sets, schema::ranking_policy().result_limit);
 
-        let resolved_entities = timer.measure("entity_resolution", || {
-            resolve_query_entities(
-                query,
-                intent,
-                &serving_resolved_entities,
-                &results,
-                geo_query.as_ref(),
-            )
-        });
+        let resolved_entities = compiled_plan
+            .branches
+            .iter()
+            .flat_map(|branch| branch.resolved_entities.iter())
+            .map(|entity| ResolvedSearchEntity {
+                entity_id: entity.entity_id.clone(),
+                entity_type: entity.entity_type.clone(),
+                name: entity.display_name.clone(),
+                match_kind: "compiled".to_string(),
+                match_source: "compiled_plan".to_string(),
+                matched_text: entity.display_name.clone(),
+                polarity: "resolved".to_string(),
+                source_span: entity.source_span.clone(),
+            })
+            .fold(Vec::new(), |mut values, entity| {
+                if !values
+                    .iter()
+                    .any(|existing: &ResolvedSearchEntity| existing.entity_id == entity.entity_id)
+                {
+                    values.push(entity);
+                }
+                values
+            });
         let total_duration_ms = timer.started_at.elapsed().as_secs_f64() * 1000.0;
-        let mut warnings = tantivy_recall.warning.into_iter().collect::<Vec<_>>();
-        if let Some(clause) = unresolved_entity_clause {
-            warnings.push(format!("unresolved named entity clause: {clause}"));
-        }
-        if let Some(capability) = unavailable_required_capability {
-            warnings.push(format!("unavailable search capability: {capability}"));
-        }
         let mut diagnostics = SearchDiagnostics {
             layer_timings: timer.finish(),
             runtime: SearchRuntimeDiagnostics {
-                serving_bundle_version: self
-                    .serving_bundle
-                    .map(|bundle| bundle.manifest.bundle_version.clone()),
+                serving_bundle_version: Some(
+                    self.snapshot.version_key.serving_bundle_version.clone(),
+                ),
                 search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
             },
             resolved: SearchResolutionDiagnostics {
                 entities: resolved_entities,
             },
             recall: SearchRecallDiagnostics {
-                structured_total_count: recall_set.structured_total_count,
-                structured_count: recall_set.structured_candidate_ids.len(),
-                tantivy_count: recall_set.tantivy_candidate_ids.len(),
-                merged_extra_count: recall_set
-                    .merged_extra_candidate_ids
-                    .as_ref()
-                    .map_or(0, Vec::len),
-                structured_sample: sample_ids(&recall_set.structured_candidate_ids),
-                tantivy_sample: sample_ids(&recall_set.tantivy_candidate_ids),
-                tantivy_entity_sample: sample_tantivy_hits(&tantivy_recall.entity_hits)
+                structured_total_count: structured_ids.len(),
+                structured_count: structured_ids.len(),
+                tantivy_count: tantivy_ids.len(),
+                tantivy_branch_additions: branch_diagnostics
+                    .iter()
+                    .map(|branch| branch.tantivy_additions)
+                    .sum(),
+                merged_extra_count: merged_ids.len(),
+                structured_sample: sample_ids(&structured_ids),
+                tantivy_sample: sample_ids(&tantivy_ids),
+                tantivy_entity_sample: sample_tantivy_hits(&tantivy_hits)
                     .into_iter()
-                    .chain(sample_geo_hits(geo_query.as_ref()))
+                    .chain(geo_hit_samples)
                     .collect(),
+                branches: branch_diagnostics,
             },
             top_candidate_scores: candidate_scores(&results),
             evidence_gaps: evidence_gaps.clone(),
@@ -585,8 +857,10 @@ impl<'a> SearchEngine<'a> {
             duration_ms: total_duration_ms,
         });
 
+        let intent = compiled_plan.aggregate_intent.clone();
         SearchEngineOutput {
-            intent: intent.clone(),
+            compiled_plan,
+            intent,
             results,
             result_sets,
             eligible_result_count,
@@ -596,60 +870,85 @@ impl<'a> SearchEngine<'a> {
     }
 }
 
-fn combine_branch_outputs(
-    query: &str,
-    outputs: Vec<SearchEngineOutput>,
-    total_duration_ms: f64,
-) -> SearchEngineOutput {
-    let mut intent =
-        query_plan::project_search_intent(query, &query_plan::compile_query_plan(query));
-    let mut result_sets = Vec::new();
-    let mut evidence_gaps = Vec::new();
-    for (index, output) in outputs.iter().enumerate() {
-        merge_branch_intent_resolution(&mut intent, &output.intent);
-        for gap in &output.evidence_gaps {
-            if !evidence_gaps.iter().any(|existing: &SearchEvidenceGap| {
-                existing.entity_id == gap.entity_id && existing.missing_fact == gap.missing_fact
-            }) {
-                evidence_gaps.push(gap.clone());
-            }
-        }
-        let branch_results = output
-            .result_sets
+fn normalized_place_family_target(value: &str) -> String {
+    let resolution = search_resolution_config();
+    super::parser::query_tokens(value)
+        .into_iter()
+        .filter(|token| {
+            !resolution
+                .ignored_entity_names
+                .iter()
+                .chain(resolution.generic_scope_nouns.iter())
+                .any(|ignored| ignored.eq_ignore_ascii_case(token))
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn constraint_has_unbound_area(expression: &ConstraintExpr, label: &str) -> bool {
+    match expression {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => clauses
             .iter()
-            .flat_map(|set| set.results.iter().cloned())
-            .collect::<Vec<_>>();
-        if branch_results.is_empty() {
-            continue;
+            .any(|clause| constraint_has_unbound_area(clause, label)),
+        ConstraintExpr::Not { .. } => false,
+        ConstraintExpr::Term {
+            term:
+                ConstraintTerm::Area {
+                    entity_id: None,
+                    value,
+                    ..
+                },
+        } => value.eq_ignore_ascii_case(label),
+        ConstraintExpr::Term { .. } => false,
+    }
+}
+
+fn first_relation_start(plan: &QueryPlan) -> Option<usize> {
+    let relations = &crate::dag_config::search_parser_config().relations.aliases;
+    plan.tokens.iter().enumerate().find_map(|(index, token)| {
+        relations.iter().find_map(|relation| {
+            let alias_tokens = super::parser::query_tokens(&relation.alias);
+            (!alias_tokens.is_empty()
+                && index + alias_tokens.len() <= plan.tokens.len()
+                && plan.tokens[index..index + alias_tokens.len()]
+                    .iter()
+                    .zip(alias_tokens)
+                    .all(|(token, alias)| token.text.eq_ignore_ascii_case(&alias)))
+            .then_some(token.start)
+        })
+    })
+}
+
+fn merge_fragment_intent(left: &SearchIntent, right: &SearchIntent) -> SearchIntent {
+    let mut merged = right.clone();
+    for preference in &left.positive_preferences {
+        if !merged.positive_preferences.contains(preference) {
+            merged.positive_preferences.push(preference.clone());
         }
-        let label = output
-            .result_sets
-            .first()
-            .map(|set| set.label.clone())
-            .filter(|label| !label.is_empty())
-            .unwrap_or_else(|| format!("Option {}", index + 1));
-        result_sets.push(SearchResultSet {
-            branch_id: format!("branch-{}", index + 1),
-            label,
-            results: branch_results,
-        });
     }
-    let eligible_result_count = outputs
-        .iter()
-        .map(|output| output.eligible_result_count)
-        .sum();
-    let (result_sets, results) =
-        limit_result_sets(result_sets, schema::ranking_policy().result_limit);
-    let diagnostics =
-        combine_branch_diagnostics(&outputs, &results, &evidence_gaps, total_duration_ms);
-    SearchEngineOutput {
-        intent,
-        results,
-        result_sets,
-        eligible_result_count,
-        diagnostics,
-        evidence_gaps,
+    for preference in &left.negative_preferences {
+        if !merged.negative_preferences.contains(preference) {
+            merged.negative_preferences.push(preference.clone());
+        }
     }
+    for preference in &left.preferences {
+        if !merged.preferences.contains(preference) {
+            merged.preferences.push(preference.clone());
+        }
+    }
+    merged.positive_preferences.sort_by_key(|preference| {
+        schema::positive_preference_patterns()
+            .iter()
+            .position(|pattern| pattern.label.eq_ignore_ascii_case(&preference.raw_text))
+            .unwrap_or(usize::MAX)
+    });
+    merged.negative_preferences.sort_by_key(|preference| {
+        schema::negative_preference_patterns()
+            .iter()
+            .position(|pattern| pattern.label.eq_ignore_ascii_case(&preference.raw_text))
+            .unwrap_or(usize::MAX)
+    });
+    merged
 }
 
 fn limit_result_sets(
@@ -661,7 +960,6 @@ fn limit_result_sets(
     }
 
     let mut positions = vec![0usize; result_sets.len()];
-    let mut selected_by_set = vec![Vec::new(); result_sets.len()];
     let mut selected = Vec::with_capacity(result_limit);
     let mut selected_ids = HashSet::new();
 
@@ -673,7 +971,6 @@ fn limit_result_sets(
                 if !selected_ids.insert(result.card.id.clone()) {
                     continue;
                 }
-                selected_by_set[set_index].push(result.clone());
                 selected.push(result.clone());
                 made_progress = true;
                 break;
@@ -689,137 +986,201 @@ fn limit_result_sets(
 
     let limited_sets = result_sets
         .into_iter()
-        .zip(selected_by_set)
-        .filter_map(|(mut result_set, results)| {
-            if results.is_empty() {
+        .filter_map(|mut result_set| {
+            result_set
+                .results
+                .retain(|result| selected_ids.contains(&result.card.id));
+            if result_set.results.is_empty() {
                 return None;
             }
-            result_set.results = results;
             Some(result_set)
         })
         .collect();
     (limited_sets, selected)
 }
 
-fn merge_branch_intent_resolution(intent: &mut SearchIntent, branch: &SearchIntent) {
-    for area in branch.requested_areas() {
-        push_unique_string(&mut intent.areas, area);
+fn sort_geography_cohorts(results: &mut [SearchResultCard]) {
+    results.sort_by_key(
+        |result| match result.geography_match.as_ref().map(|value| value.kind) {
+            Some(GeographyMatchKind::ExactSociety) => 0,
+            Some(GeographyMatchKind::SameMarketLocality) => 1,
+            Some(GeographyMatchKind::CellNearby) => 2,
+            None => 3,
+        },
+    );
+}
+
+fn geography_match_for_property(
+    scope: &GeoScope,
+    society_id: &str,
+    topology: &crate::graph::GraphIndex,
+    spatial_index: &crate::serving::SpatialServingIndex,
+    snapshot_identity: &str,
+) -> Option<GeographyMatch> {
+    if let GeoScope::Unresolved { anchors, .. } = scope {
+        return anchors
+            .iter()
+            .any(|anchor| {
+                anchor.entity_type.eq_ignore_ascii_case("society") && anchor.entity_id == society_id
+            })
+            .then(|| GeographyMatch {
+                kind: GeographyMatchKind::ExactSociety,
+                cell_path: Vec::new(),
+                hops: 0,
+                distance_km: None,
+                evidence_refs: Vec::new(),
+            });
     }
-    intent.area = (intent.areas.len() == 1).then(|| intent.areas[0].clone());
-    for bhk in branch.requested_bhks() {
-        if !intent.bhks.contains(&bhk) {
-            intent.bhks.push(bhk);
+    let GeoScope::Scoped {
+        anchors,
+        market_locality_ids,
+        seed_cells,
+        expanded_cell_paths,
+        max_distance_km,
+        ..
+    } = scope
+    else {
+        return None;
+    };
+    let exact_society = anchors.iter().any(|anchor| {
+        anchor.entity_type.eq_ignore_ascii_case("society") && anchor.entity_id == society_id
+    });
+
+    let market_membership = topology
+        .market_memberships(society_id)
+        .iter()
+        .find(|membership| market_locality_ids.contains(&membership.target_entity_id))
+        .map(|membership| membership.evidence_refs.clone());
+    let occupied_paths = topology
+        .occupied_cells(society_id)
+        .iter()
+        .filter_map(|occupancy| {
+            let path = expanded_cell_paths.iter().find(|path| {
+                path.cell_ids
+                    .last()
+                    .is_some_and(|cell| cell == &occupancy.target_entity_id)
+            })?;
+            Some((path, occupancy.evidence_refs.clone()))
+        })
+        .collect::<Vec<_>>();
+    let best_path = occupied_paths.iter().min_by(|(left, _), (right, _)| {
+        left.hops
+            .cmp(&right.hops)
+            .then_with(|| left.distance_km.total_cmp(&right.distance_km))
+            .then_with(|| left.cell_ids.cmp(&right.cell_ids))
+    });
+    let distance = geography_candidate_distance(
+        anchors,
+        seed_cells,
+        society_id,
+        spatial_index,
+        snapshot_identity,
+    );
+
+    let (kind, path, hops, mut evidence_refs) = if exact_society {
+        let (path, occupancy) = best_path?;
+        (
+            GeographyMatchKind::ExactSociety,
+            path.cell_ids.clone(),
+            path.hops,
+            occupancy.clone(),
+        )
+    } else if let Some(membership) = market_membership {
+        let (path, hops) = best_path
+            .map(|(path, _)| (path.cell_ids.clone(), path.hops))
+            .unwrap_or_default();
+        (
+            GeographyMatchKind::SameMarketLocality,
+            path,
+            hops,
+            membership,
+        )
+    } else {
+        let (path, occupancy) = best_path?;
+        let distance = distance.as_ref()?;
+        if distance.distance_km > *max_distance_km {
+            return None;
         }
+        (
+            GeographyMatchKind::CellNearby,
+            path.cell_ids.clone(),
+            path.hops,
+            occupancy.clone(),
+        )
+    };
+    if let Some((path, _)) = best_path {
+        extend_unique_refs(&mut evidence_refs, path.supporting_evidence.clone());
     }
-    intent.bhk = (intent.bhks.len() == 1).then(|| intent.bhks[0]);
-    for area in &branch.excluded_areas {
-        push_unique_string(&mut intent.excluded_areas, area);
+    if let Some(distance) = &distance {
+        extend_unique_refs(&mut evidence_refs, distance.evidence_refs.clone());
     }
-    for society in &branch.excluded_societies {
-        push_unique_string(&mut intent.excluded_societies, society);
-    }
-    for builder in &branch.excluded_builders {
-        push_unique_string(&mut intent.excluded_builders, builder);
+    Some(GeographyMatch {
+        kind,
+        cell_path: path,
+        hops,
+        distance_km: distance.map(|distance| distance.distance_km),
+        evidence_refs,
+    })
+}
+
+fn extend_unique_strings(target: &mut Vec<String>, values: &[String]) {
+    for value in values {
+        if !target.contains(value) {
+            target.push(value.clone());
+        }
     }
 }
 
-fn combine_branch_diagnostics(
-    outputs: &[SearchEngineOutput],
-    results: &[SearchResultCard],
-    evidence_gaps: &[SearchEvidenceGap],
-    total_duration_ms: f64,
-) -> SearchDiagnostics {
-    let mut diagnostics = outputs
-        .first()
-        .map(|output| output.diagnostics.clone())
-        .unwrap_or_else(|| SearchDiagnostics {
-            layer_timings: Vec::new(),
-            runtime: SearchRuntimeDiagnostics {
-                serving_bundle_version: None,
-                search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
-            },
-            resolved: SearchResolutionDiagnostics {
-                entities: Vec::new(),
-            },
-            recall: SearchRecallDiagnostics {
-                structured_total_count: 0,
-                structured_count: 0,
-                tantivy_count: 0,
-                merged_extra_count: 0,
-                structured_sample: Vec::new(),
-                tantivy_sample: Vec::new(),
-                tantivy_entity_sample: Vec::new(),
-            },
-            top_candidate_scores: Vec::new(),
-            evidence_gaps: Vec::new(),
-            warnings: Vec::new(),
-        });
-    diagnostics.layer_timings.clear();
-    diagnostics.resolved.entities.clear();
-    diagnostics.recall.structured_total_count = 0;
-    diagnostics.recall.structured_count = 0;
-    diagnostics.recall.tantivy_count = 0;
-    diagnostics.recall.merged_extra_count = 0;
-    diagnostics.recall.structured_sample.clear();
-    diagnostics.recall.tantivy_sample.clear();
-    diagnostics.recall.tantivy_entity_sample.clear();
-    diagnostics.warnings.clear();
-    for output in outputs {
-        for timing in &output.diagnostics.layer_timings {
-            if timing.layer == "total" {
-                continue;
-            }
-            if let Some(existing) = diagnostics
-                .layer_timings
-                .iter_mut()
-                .find(|existing| existing.layer == timing.layer)
-            {
-                existing.duration_ms += timing.duration_ms;
-            } else {
-                diagnostics.layer_timings.push(timing.clone());
-            }
-        }
-        for entity in &output.diagnostics.resolved.entities {
-            if !diagnostics.resolved.entities.iter().any(|existing| {
-                existing.entity_id == entity.entity_id
-                    && existing.matched_text == entity.matched_text
-                    && existing.polarity == entity.polarity
-            }) {
-                diagnostics.resolved.entities.push(entity.clone());
-            }
-        }
-        diagnostics.recall.structured_total_count +=
-            output.diagnostics.recall.structured_total_count;
-        diagnostics.recall.structured_count += output.diagnostics.recall.structured_count;
-        diagnostics.recall.tantivy_count += output.diagnostics.recall.tantivy_count;
-        diagnostics.recall.merged_extra_count += output.diagnostics.recall.merged_extra_count;
-        for id in &output.diagnostics.recall.structured_sample {
-            push_unique_string(&mut diagnostics.recall.structured_sample, id);
-        }
-        for id in &output.diagnostics.recall.tantivy_sample {
-            push_unique_string(&mut diagnostics.recall.tantivy_sample, id);
-        }
-        for hit in &output.diagnostics.recall.tantivy_entity_sample {
-            if !diagnostics
-                .recall
-                .tantivy_entity_sample
-                .iter()
-                .any(|existing| existing.entity_id == hit.entity_id)
-            {
-                diagnostics.recall.tantivy_entity_sample.push(hit.clone());
-            }
-        }
-        for warning in &output.diagnostics.warnings {
-            push_unique_string(&mut diagnostics.warnings, warning);
+fn geography_candidate_distance(
+    anchors: &[super::compiled_plan::GeoAnchor],
+    seed_cells: &[super::compiled_plan::GeoCellSeed],
+    society_id: &str,
+    spatial_index: &crate::serving::SpatialServingIndex,
+    snapshot_identity: &str,
+) -> Option<crate::serving::SpatialDistance> {
+    let non_area_anchors = anchors
+        .iter()
+        .filter(|anchor| !anchor.entity_type.eq_ignore_ascii_case("area"))
+        .map(|anchor| anchor.entity_id.as_str())
+        .collect::<Vec<_>>();
+    if !non_area_anchors.is_empty() {
+        return non_area_anchors
+            .into_iter()
+            .filter_map(|anchor| {
+                spatial_index.distance_between(anchor, society_id, snapshot_identity)
+            })
+            .min_by(|left, right| left.distance_km.total_cmp(&right.distance_km));
+    }
+    seed_cells
+        .iter()
+        .filter_map(|seed| {
+            spatial_index.distance_from_entity_to_area(society_id, &seed.cell_id, snapshot_identity)
+        })
+        .min_by(|left, right| left.distance_km.total_cmp(&right.distance_km))
+}
+
+fn extend_unique_refs(
+    target: &mut Vec<crate::serving::EvidenceRef>,
+    values: Vec<crate::serving::EvidenceRef>,
+) {
+    for value in values {
+        if !target.contains(&value) {
+            target.push(value);
         }
     }
-    diagnostics.layer_timings.push(SearchLayerTiming {
-        layer: "total".to_string(),
-        duration_ms: total_duration_ms,
-    });
-    diagnostics.top_candidate_scores = candidate_scores(results);
-    diagnostics.evidence_gaps = evidence_gaps.to_vec();
-    diagnostics
+}
+
+fn branch_has_required_spatial_predicate(expression: &ConstraintExpr) -> bool {
+    match expression {
+        ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
+            clauses.iter().any(branch_has_required_spatial_predicate)
+        }
+        ConstraintExpr::Not { clause } => branch_has_required_spatial_predicate(clause),
+        ConstraintExpr::Term {
+            term: ConstraintTerm::Spatial { required, .. },
+        } => *required,
+        ConstraintExpr::Term { .. } => false,
+    }
 }
 
 fn unsupported_qualifier_clause(query: &str, plan: &QueryPlan) -> Option<String> {
@@ -860,73 +1221,36 @@ fn unsupported_qualifier_clause(query: &str, plan: &QueryPlan) -> Option<String>
 }
 
 fn build_result_sets(
-    compiled_query: &CompiledQuery,
-    results: &[SearchResultCard],
-    properties: &[Property],
-    property_by_id: Option<&HashMap<String, usize>>,
-    search_index: &SearchIndex,
-    serving_facts: Option<&crate::serving::ServingFactIndex>,
+    compiled_plan: &CompiledSearchPlan,
+    branch_results: Vec<Vec<SearchResultCard>>,
 ) -> Vec<SearchResultSet> {
-    let branches = compiled_query.constraints.flat_branches();
-    let branch_count = branches.len();
-    branches
-        .into_iter()
-        .enumerate()
-        .filter_map(|(index, branch)| {
-            let mut branch_results = Vec::new();
-            for result in results {
-                let property = property_by_id
-                    .and_then(|by_id| by_id.get(&result.card.id))
-                    .and_then(|property_index| properties.get(*property_index))
-                    .or_else(|| {
-                        properties
-                            .iter()
-                            .find(|property| property.id == result.card.id)
-                    });
-                let Some(property) = property else {
-                    continue;
-                };
-                let exact = branch.evaluate(&mut |term| {
-                    super::text::property_matches_constraint_term_with_index(
-                        property,
-                        term,
-                        Some(search_index),
-                        serving_facts,
-                    )
-                });
-                if !exact {
-                    continue;
-                }
-                let mut result = result.clone();
-                result.match_tier = "exact".to_string();
+    compiled_plan
+        .branches
+        .iter()
+        .zip(branch_results)
+        .filter_map(|(branch, mut results)| {
+            for result in &mut results {
                 result.tradeoff_label = None;
-                branch_results.push(result);
             }
-            if branch_results.is_empty() {
+            if results.is_empty() {
                 return None;
             }
-            let mut label = branch.buyer_label();
+            let mut label = branch.buyer_summary.clone();
             if label.is_empty() {
-                label = if branch_count == 1 {
-                    "Matches".to_string()
-                } else {
-                    format!("Option {}", index + 1)
-                };
+                label = "Matches".to_string();
             }
             Some(SearchResultSet {
-                branch_id: format!("branch-{}", index + 1),
+                branch_id: branch.branch_id.clone(),
                 label,
-                results: branch_results,
+                results,
             })
         })
         .collect()
 }
 
 fn resolved_entity_constraints(
-    query: &str,
     resolved_entities: &[ResolvedSearchEntity],
 ) -> Vec<ResolvedEntityConstraint> {
-    let query_lower = query.to_ascii_lowercase();
     let mut constraints = Vec::new();
     for entity in resolved_entities.iter().filter(|entity| {
         ["area", "society", "builder"]
@@ -934,35 +1258,21 @@ fn resolved_entity_constraints(
             .any(|entity_type| entity.entity_type.eq_ignore_ascii_case(entity_type))
     }) {
         let exclusion = entity.polarity == "exclusion";
-        for (start, end) in resolved_occurrence_ranges(&query_lower, entity) {
-            let constraint = ResolvedEntityConstraint {
-                entity_id: entity.entity_id.clone(),
-                entity_type: entity.entity_type.clone(),
-                display_name: entity.name.clone(),
-                span: crate::search::intent::SourceSpan {
-                    start,
-                    end,
-                    raw_text: query[start..end].to_string(),
-                },
-                exclusion,
-            };
-            if !constraints.contains(&constraint) {
-                constraints.push(constraint);
-            }
+        let Some(span) = entity.source_span.clone() else {
+            continue;
+        };
+        let constraint = ResolvedEntityConstraint {
+            entity_id: entity.entity_id.clone(),
+            entity_type: entity.entity_type.clone(),
+            display_name: entity.name.clone(),
+            span,
+            exclusion,
+        };
+        if !constraints.contains(&constraint) {
+            constraints.push(constraint);
         }
     }
     constraints
-}
-
-fn resolved_occurrence_ranges(
-    query_lower: &str,
-    entity: &ResolvedSearchEntity,
-) -> Vec<(usize, usize)> {
-    let exclusion = entity.polarity == "exclusion";
-    exact_entity_match_ranges(query_lower, &entity.matched_text)
-        .into_iter()
-        .filter(|(start, _)| match_has_exclusion_prefix(query_lower, *start) == exclusion)
-        .collect()
 }
 
 fn apply_resolved_constraints(
@@ -1016,9 +1326,9 @@ fn resolve_serving_query_entities(
     plan: &QueryPlan,
     intent: &SearchIntent,
     serving_bundle: Option<&LoadedServingBundle>,
-    properties: &[Property],
+    _properties: &[Property],
 ) -> Vec<ResolvedSearchEntity> {
-    let mut entities = resolve_runtime_area_query_entities(query, intent, properties);
+    let mut entities = Vec::new();
     let Some(bundle) = serving_bundle else {
         return entities;
     };
@@ -1031,35 +1341,81 @@ fn resolve_serving_query_entities(
             &bundle.entity_alias_index,
         ),
     );
+    prefer_market_locality_area_matches(&bundle.edges, &mut entities);
+    let bound_provider_ids = crate::serving::bound_provider_entity_ids(&bundle.edges);
+    entities.retain(|entity| {
+        !entity.entity_type.eq_ignore_ascii_case("place")
+            || !bound_provider_ids.contains(entity.entity_id.as_str())
+    });
     remove_entities_only_mentioned_inside_longer_match(query, &mut entities);
     entities
 }
 
-fn remove_entities_only_mentioned_inside_longer_match(
-    query: &str,
+fn prefer_market_locality_area_matches(
+    edges: &[crate::serving::ServingEdgeRecord],
     entities: &mut Vec<ResolvedSearchEntity>,
 ) {
-    let query_lower = query.to_ascii_lowercase();
+    let market_area_ids = edges
+        .iter()
+        .filter(|edge| edge.edge_type.eq_ignore_ascii_case("in_market_locality"))
+        .map(|edge| edge.to_entity_id.as_str())
+        .collect::<HashSet<_>>();
+    let preferred = entities
+        .iter()
+        .filter(|entity| {
+            entity.entity_type.eq_ignore_ascii_case("area")
+                && market_area_ids.contains(entity.entity_id.as_str())
+        })
+        .filter_map(|entity| {
+            Some((
+                entity.name.to_ascii_lowercase(),
+                entity.polarity.clone(),
+                entity.source_span.as_ref()?.start,
+                entity.source_span.as_ref()?.end,
+            ))
+        })
+        .collect::<HashSet<_>>();
+    entities.retain(|entity| {
+        !entity.entity_type.eq_ignore_ascii_case("area")
+            || market_area_ids.contains(entity.entity_id.as_str())
+            || entity.source_span.as_ref().is_none_or(|span| {
+                !preferred.contains(&(
+                    entity.name.to_ascii_lowercase(),
+                    entity.polarity.clone(),
+                    span.start,
+                    span.end,
+                ))
+            })
+    });
+}
+
+fn remove_entities_only_mentioned_inside_longer_match(
+    _query: &str,
+    entities: &mut Vec<ResolvedSearchEntity>,
+) {
     let entity_ranges = entities
         .iter()
-        .map(|entity| exact_entity_match_ranges(&query_lower, &entity.matched_text))
+        .map(|entity| {
+            entity
+                .source_span
+                .as_ref()
+                .map(|span| (span.start, span.end))
+        })
         .collect::<Vec<_>>();
     let keep = entities
         .iter()
         .enumerate()
         .map(|(candidate_index, candidate)| {
-            entity_ranges[candidate_index]
-                .iter()
-                .any(|candidate_range| {
-                    !entities.iter().enumerate().any(|(other_index, other)| {
-                        other_index != candidate_index
-                            && other.matched_text.len() > candidate.matched_text.len()
-                            && entity_ranges[other_index].iter().any(|other_range| {
-                                other_range.0 <= candidate_range.0
-                                    && other_range.1 >= candidate_range.1
-                            })
+            let Some(candidate_range) = entity_ranges[candidate_index] else {
+                return true;
+            };
+            !entities.iter().enumerate().any(|(other_index, other)| {
+                other_index != candidate_index
+                    && other.matched_text.len() > candidate.matched_text.len()
+                    && entity_ranges[other_index].is_some_and(|other_range| {
+                        other_range.0 <= candidate_range.0 && other_range.1 >= candidate_range.1
                     })
-                })
+            })
         })
         .collect::<Vec<_>>();
     let mut index = 0;
@@ -1067,6 +1423,95 @@ fn remove_entities_only_mentioned_inside_longer_match(
         let retain = keep[index];
         index += 1;
         retain
+    });
+}
+
+fn explicit_area_context_ids(
+    query: &str,
+    plan: &QueryPlan,
+    entities: &[ResolvedSearchEntity],
+) -> Vec<String> {
+    let query_lower = query.to_ascii_lowercase();
+    let mut ids = entities
+        .iter()
+        .filter(|entity| {
+            entity.polarity != "exclusion"
+                && entity.entity_type.eq_ignore_ascii_case("area")
+                && entity.source_span.as_ref().is_some_and(|span| {
+                    area_range_is_explicit_context(&query_lower, plan, (span.start, span.end))
+                })
+        })
+        .map(|entity| entity.entity_id.clone())
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+fn area_range_is_explicit_context(
+    query_lower: &str,
+    plan: &QueryPlan,
+    range: (usize, usize),
+) -> bool {
+    let containing_relations = plan
+        .clauses
+        .iter()
+        .filter(|clause| {
+            clause.place_family_id.is_some()
+                && clause.target_span.start <= range.0
+                && clause.target_span.end >= range.1
+        })
+        .collect::<Vec<_>>();
+    if containing_relations.is_empty() {
+        return true;
+    }
+    let prefix_text = query_lower[..range.0].trim_end();
+    search_resolution_config()
+        .named_entity_scope_prefixes
+        .iter()
+        .any(|prefix| {
+            prefix_text.strip_suffix(prefix).is_some_and(|before| {
+                before
+                    .chars()
+                    .next_back()
+                    .is_none_or(|ch| !ch.is_alphanumeric())
+            })
+        })
+}
+
+fn retain_relation_compatible_entities(
+    query: &str,
+    plan: &QueryPlan,
+    geo_query: Option<&geo::GeoSearchQuery<'_>>,
+    entities: &mut Vec<ResolvedSearchEntity>,
+) {
+    let query_lower = query.to_ascii_lowercase();
+    let resolved_place_ids = geo_query
+        .into_iter()
+        .flat_map(|query| query.resolved_places())
+        .map(|place| place.entity_id.as_str())
+        .collect::<HashSet<_>>();
+    entities.retain(|entity| {
+        let ranges = entity
+            .source_span
+            .as_ref()
+            .map(|span| (span.start, span.end))
+            .into_iter()
+            .collect::<Vec<_>>();
+        if entity.entity_type.eq_ignore_ascii_case("place") {
+            let belongs_to_relation = ranges.iter().any(|range| {
+                plan.clauses.iter().any(|clause| {
+                    clause.target_span.start <= range.0 && clause.target_span.end >= range.1
+                })
+            });
+            return !belongs_to_relation || resolved_place_ids.contains(entity.entity_id.as_str());
+        }
+        if entity.entity_type.eq_ignore_ascii_case("area") {
+            return ranges
+                .iter()
+                .any(|range| area_range_is_explicit_context(&query_lower, plan, *range));
+        }
+        true
     });
 }
 
@@ -1099,7 +1544,6 @@ fn unresolved_named_entity_clause(
         return Some(target.clone());
     }
 
-    let query_lower = query.to_ascii_lowercase();
     query_plan::unresolved_named_entity_clause(
         query,
         plan,
@@ -1112,17 +1556,16 @@ fn unresolved_named_entity_clause(
                 })
             })
         },
-        |span| entity_scope_is_fully_resolved(&query_lower, plan, resolved_entities, span),
+        |span| entity_scope_is_fully_resolved(plan, resolved_entities, span),
     )
     .or_else(|| {
         query_plan::unresolved_residual_clause(query, plan, |span| {
-            entity_scope_is_fully_resolved(&query_lower, plan, resolved_entities, span)
+            entity_scope_is_fully_resolved(plan, resolved_entities, span)
         })
     })
 }
 
 fn entity_scope_is_fully_resolved(
-    query_lower: &str,
     plan: &QueryPlan,
     resolved_entities: &[ResolvedSearchEntity],
     span: query_plan::ByteSpan,
@@ -1131,11 +1574,12 @@ fn entity_scope_is_fully_resolved(
         .areas
         .iter()
         .map(|area| (area.span.start, area.span.end))
-        .chain(
-            resolved_entities
-                .iter()
-                .flat_map(|entity| exact_entity_match_ranges(query_lower, &entity.matched_text)),
-        )
+        .chain(resolved_entities.iter().filter_map(|entity| {
+            entity
+                .source_span
+                .as_ref()
+                .map(|span| (span.start, span.end))
+        }))
         .collect::<Vec<_>>();
     let config = search_resolution_config();
 
@@ -1181,57 +1625,6 @@ fn unresolved_proximity_gaps(
         .collect()
 }
 
-fn resolve_runtime_area_query_entities(
-    query: &str,
-    intent: &SearchIntent,
-    properties: &[Property],
-) -> Vec<ResolvedSearchEntity> {
-    let resolution_config = search_resolution_config();
-    let query_lower = query.to_ascii_lowercase();
-    let mut entities = Vec::new();
-    let mut area_names = properties
-        .iter()
-        .filter_map(|property| {
-            let area = property.area.trim();
-            (!area.is_empty()).then_some(area)
-        })
-        .collect::<Vec<_>>();
-    area_names.sort_unstable_by_key(|area| area.to_ascii_lowercase());
-    area_names.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
-
-    for area in area_names {
-        if !is_resolvable_entity_name(area, resolution_config) {
-            continue;
-        }
-        for (start, end) in exact_entity_match_ranges(&query_lower, area) {
-            let polarity = if match_has_exclusion_prefix(&query_lower, start) {
-                "exclusion"
-            } else {
-                "positive"
-            };
-            if polarity == "positive"
-                && intent
-                    .excluded_areas
-                    .iter()
-                    .any(|excluded| excluded.eq_ignore_ascii_case(area))
-            {
-                continue;
-            }
-            entities.push(ResolvedSearchEntity {
-                entity_id: format!("area:{}", slug(area)),
-                entity_type: "area".to_string(),
-                name: area.to_string(),
-                match_kind: "runtime_area_name".to_string(),
-                match_source: "serving_entity".to_string(),
-                matched_text: query[start..end].to_string(),
-                polarity: polarity.to_string(),
-            });
-        }
-    }
-
-    entities
-}
-
 fn resolve_serving_query_entities_from_records_with_alias_index(
     query: &str,
     plan: &QueryPlan,
@@ -1244,7 +1637,8 @@ fn resolve_serving_query_entities_from_records_with_alias_index(
     let mut entities = Vec::new();
 
     for entity in entities_source {
-        if !is_serving_resolvable_entity_type(&entity.entity_type)
+        if !entity.visibility.is_searchable()
+            || !is_serving_resolvable_entity_type(&entity.entity_type)
             || !is_resolvable_entity_name(&entity.name, resolution_config)
         {
             continue;
@@ -1271,6 +1665,12 @@ fn resolve_serving_query_entities_from_records_with_alias_index(
                 match_source: "serving_entity".to_string(),
                 matched_text: query[start..end].to_string(),
                 polarity: polarity.to_string(),
+                source_span: Some(SourceSpan {
+                    source_turn_id: String::new(),
+                    start,
+                    end,
+                    raw_text: query[start..end].to_string(),
+                }),
             });
         }
     }
@@ -1316,6 +1716,12 @@ fn resolve_serving_query_entities_from_records_with_alias_index(
                     match_source: "serving_alias_index".to_string(),
                     matched_text: query[start..end].to_string(),
                     polarity: polarity.to_string(),
+                    source_span: Some(SourceSpan {
+                        source_turn_id: String::new(),
+                        start,
+                        end,
+                        raw_text: query[start..end].to_string(),
+                    }),
                 });
             }
         }
@@ -1339,7 +1745,8 @@ fn fuzzy_society_name_matches(
         std::collections::BTreeMap::<(usize, usize), Vec<(usize, &ServingEntityRecord)>>::new();
 
     for entity in entities_source.iter().filter(|entity| {
-        entity.entity_type.eq_ignore_ascii_case("society")
+        entity.visibility.is_searchable()
+            && entity.entity_type.eq_ignore_ascii_case("society")
             && is_resolvable_entity_name(&entity.name, resolution_config)
     }) {
         let name_tokens = entity_name_tokens(&entity.name);
@@ -1423,6 +1830,12 @@ fn fuzzy_society_name_matches(
             } else {
                 "positive".to_string()
             },
+            source_span: Some(SourceSpan {
+                source_turn_id: String::new(),
+                start,
+                end,
+                raw_text: query[start..end].to_string(),
+            }),
         });
     }
     resolved
@@ -1552,168 +1965,6 @@ fn prefix_ends_with_phrase(prefix: &str, phrase: &str) -> bool {
         .is_none_or(|ch| !ch.is_ascii_alphanumeric())
 }
 
-fn resolve_query_entities(
-    query: &str,
-    intent: &SearchIntent,
-    serving_resolved_entities: &[ResolvedSearchEntity],
-    results: &[SearchResultCard],
-    geo_query: Option<&geo::GeoSearchQuery<'_>>,
-) -> Vec<ResolvedSearchEntity> {
-    let resolution_config = search_resolution_config();
-    let query_lower = query.to_ascii_lowercase();
-    let mut entities = Vec::new();
-    for entity in serving_resolved_entities {
-        push_resolved(&mut entities, entity.clone());
-        if entities.len() >= DIAGNOSTIC_ID_LIMIT {
-            return entities;
-        }
-    }
-
-    for area in intent.requested_areas() {
-        let matched_text = matched_area_query_text(&query_lower, area);
-        push_resolved(
-            &mut entities,
-            ResolvedSearchEntity {
-                entity_id: format!("area:{}", slug(area)),
-                entity_type: "area".to_string(),
-                name: area.to_string(),
-                match_kind: "area_alias".to_string(),
-                match_source: "parser_broad_region".to_string(),
-                matched_text,
-                polarity: "positive".to_string(),
-            },
-        );
-    }
-    for area in &intent.excluded_areas {
-        let matched_text = matched_area_query_text(&query_lower, area);
-        push_resolved(
-            &mut entities,
-            ResolvedSearchEntity {
-                entity_id: format!("area:{}", slug(area)),
-                entity_type: "area".to_string(),
-                name: area.to_string(),
-                match_kind: "area_alias".to_string(),
-                match_source: "parser_broad_region".to_string(),
-                matched_text,
-                polarity: "exclusion".to_string(),
-            },
-        );
-    }
-
-    if let Some(geo_query) = geo_query {
-        for place in geo_query.resolved_places() {
-            push_resolved(
-                &mut entities,
-                ResolvedSearchEntity {
-                    entity_id: place.entity_id.clone(),
-                    entity_type: "place".to_string(),
-                    name: place.name.clone(),
-                    match_kind: "place_name".to_string(),
-                    match_source: "geo_place".to_string(),
-                    matched_text: place.name.clone(),
-                    polarity: "positive".to_string(),
-                },
-            );
-            if entities.len() >= DIAGNOSTIC_ID_LIMIT {
-                return entities;
-            }
-        }
-    }
-
-    for result in results {
-        if is_resolvable_entity_name(&result.card.society_name, resolution_config)
-            && query_contains_lower_text(&query_lower, &result.card.society_name)
-        {
-            push_resolved(
-                &mut entities,
-                ResolvedSearchEntity {
-                    entity_id: result.card.kg_entity_refs.society_entity_id.clone(),
-                    entity_type: "society".to_string(),
-                    name: result.card.society_name.clone(),
-                    match_kind: "result_society_name".to_string(),
-                    match_source: "result_entity".to_string(),
-                    matched_text: result.card.society_name.clone(),
-                    polarity: "positive".to_string(),
-                },
-            );
-        }
-
-        if is_resolvable_entity_name(&result.card.builder_name, resolution_config)
-            && query_contains_lower_text(&query_lower, &result.card.builder_name)
-        {
-            if let Some(builder_entity_id) = result.card.kg_entity_refs.builder_entity_id.as_ref() {
-                push_resolved(
-                    &mut entities,
-                    ResolvedSearchEntity {
-                        entity_id: builder_entity_id.clone(),
-                        entity_type: "builder".to_string(),
-                        name: result.card.builder_name.clone(),
-                        match_kind: "result_builder_name".to_string(),
-                        match_source: "result_entity".to_string(),
-                        matched_text: result.card.builder_name.clone(),
-                        polarity: "positive".to_string(),
-                    },
-                );
-            }
-        }
-
-        if entities.len() >= DIAGNOSTIC_ID_LIMIT {
-            return entities;
-        }
-    }
-
-    for family in &resolution_config.place_families {
-        if !family
-            .aliases
-            .iter()
-            .any(|pattern| query_contains_lower_text(&query_lower, pattern))
-        {
-            continue;
-        }
-        push_resolved(
-            &mut entities,
-            ResolvedSearchEntity {
-                entity_id: format!("place_family:{}", family.id),
-                entity_type: "place_family".to_string(),
-                name: family.label.clone(),
-                match_kind: "place_family_alias".to_string(),
-                match_source: "parser_broad_region".to_string(),
-                matched_text: family
-                    .aliases
-                    .iter()
-                    .find(|pattern| query_contains_lower_text(&query_lower, pattern))
-                    .cloned()
-                    .unwrap_or_else(|| family.id.clone()),
-                polarity: "positive".to_string(),
-            },
-        );
-    }
-
-    entities
-}
-
-fn matched_area_query_text(query_lower: &str, canonical: &str) -> String {
-    if query_contains_lower_text(query_lower, canonical) {
-        return canonical.to_string();
-    }
-    area_alias_entries()
-        .iter()
-        .filter(|entry| entry.canonical.eq_ignore_ascii_case(canonical))
-        .flat_map(|entry| entry.aliases.iter())
-        .find(|alias| query_contains_lower_text(query_lower, alias))
-        .cloned()
-        .unwrap_or_else(|| canonical.to_string())
-}
-
-fn push_resolved(entities: &mut Vec<ResolvedSearchEntity>, entity: ResolvedSearchEntity) {
-    if entities.iter().any(|existing| {
-        existing.entity_id == entity.entity_id && existing.polarity == entity.polarity
-    }) {
-        return;
-    }
-    entities.push(entity);
-}
-
 fn push_unique_string(values: &mut Vec<String>, value: &str) {
     if !values
         .iter()
@@ -1751,10 +2002,6 @@ impl SearchTimer {
     }
 }
 
-fn has_filter_intent(query: &CompiledQuery) -> bool {
-    query.constraints.has_terms()
-}
-
 fn tantivy_candidate_ids(
     serving_bundle: Option<&LoadedServingBundle>,
     query: &str,
@@ -1767,9 +2014,21 @@ fn tantivy_candidate_ids(
             warning: None,
         };
     };
+    let recall_query = super::analyzer::search_tokens(query, super::schema::query_stopwords())
+        .into_iter()
+        .map(|term| format!("{term:?}"))
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    if recall_query.is_empty() {
+        return TantivyRecallResult {
+            property_ids: Vec::new(),
+            entity_hits: Vec::new(),
+            warning: None,
+        };
+    }
     let hits = match serving_bundle
         .recall_index
-        .search(query, TANTIVY_RECALL_LIMIT)
+        .search(&recall_query, TANTIVY_RECALL_LIMIT)
     {
         Ok(hits) => hits,
         Err(err) => {
@@ -1886,16 +2145,25 @@ fn candidate_scores(results: &[SearchResultCard]) -> Vec<CandidateScore> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use std::time::Duration;
 
     use chrono::{TimeZone, Utc};
+    use tempfile::tempdir;
 
     use crate::dag_config::SearchResolutionConfig;
+    use crate::graph::GraphIndex;
     use crate::knowledge::FactValue;
+    use crate::models::Society;
+    use crate::search::evaluation::{EvaluationState, InventoryOption};
+    use crate::search::geo::SpatialEntityIndex;
     use crate::search::intent::SearchIntent;
+    use crate::search::SearchCapabilityIndex;
     use crate::serving::{
-        materialize_society_aliases, normalize_alias, ServingEdgeRecord, ServingEntityAliasIndex,
+        materialize_society_aliases, normalize_alias, EvidenceRef, LoadedServingBundle,
+        ReraEvidenceIndex, ServingBundleManifest, ServingEdgeRecord, ServingEntityAliasIndex,
         ServingEntityAliasRecord, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
+        SourceObservation, SpatialServingIndex, TantivyRecallIndex,
     };
 
     use super::*;
@@ -1958,6 +2226,7 @@ mod tests {
             entity_type: entity_type.to_string(),
             name: name.to_string(),
             root_source: None,
+            visibility: Default::default(),
             searchable_text: name.to_string(),
         }
     }
@@ -1991,6 +2260,7 @@ mod tests {
             to_entity_id: builder_id.to_string(),
             confidence: 1.0,
             source_type: "Rera".to_string(),
+            derivation: None,
         }
     }
 
@@ -2055,31 +2325,178 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            observation: None,
         }
     }
 
+    #[test]
+    fn inventory_predicates_share_one_validated_evidence_reference() {
+        let subject = "society:one";
+        let snapshot = "bundle:v9";
+        let observation = SourceObservation::new(
+            "FixtureProvider",
+            "listing-one",
+            subject,
+            Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+            Some("https://example.test/listing-one".to_string()),
+            vec!["asset:external-listings/v1".to_string()],
+        )
+        .unwrap();
+        let evidence = EvidenceRef::for_observation(snapshot, &observation);
+        let option = InventoryOption {
+            property_id: "property:one".to_string(),
+            society_id: subject.to_string(),
+            bhk: Some(3),
+            price_min: Some(10_000_000),
+            price_max: Some(10_000_000),
+            size_sqft: Some(1_000),
+            evidence_reference: Some(evidence.clone()),
+        };
+
+        let bhk_evaluation = option.evaluate_bhk("property:one", subject, 3, snapshot);
+        let price_evaluation =
+            option.evaluate_budget("property:one", subject, None, Some(10_000_000), snapshot);
+        let bhk = &bhk_evaluation.verified_matches[0];
+        let price = &price_evaluation.verified_matches[0];
+
+        assert_eq!(bhk.evidence_refs, vec![evidence.clone()]);
+        assert_eq!(price.evidence_refs, vec![evidence]);
+        assert_eq!(
+            option
+                .evaluate_bhk("property:one", subject, 3, "bundle:other")
+                .state,
+            EvaluationState::Unknown
+        );
+    }
+
     fn run_search_for_test(query: &str, properties: &[Property]) -> SearchEngineOutput {
-        let search_index = SearchIndex::build(properties);
-        let society_names = properties
+        let snapshot = test_runtime_snapshot(properties);
+        SearchEngine::new(&snapshot).search(query)
+    }
+
+    fn test_runtime_snapshot(properties: &[Property]) -> SearchRuntimeSnapshot {
+        let entities = properties
             .iter()
-            .map(|property| (property.society_id.clone(), property.society_id.clone()))
-            .collect::<HashMap<_, _>>();
-        let property_by_id = properties
+            .map(|property| ServingEntityRecord {
+                entity_id: format!("society:{}", property.society_id),
+                entity_type: "society".to_string(),
+                name: property.society_id.clone(),
+                root_source: Some("engine_test".to_string()),
+                visibility: Default::default(),
+                searchable_text: property.society_id.clone(),
+            })
+            .collect::<Vec<_>>();
+        let facts = Vec::new();
+        let fact_index = ServingFactIndex::from_records(facts.clone(), Vec::new());
+        let cache_dir = tempdir().expect("temporary engine test bundle").keep();
+        let recall_index = TantivyRecallIndex::build_in_dir(&cache_dir, &entities, &facts, &[])
+            .expect("engine test recall index");
+        let entity_index = SpatialEntityIndex::from_serving_bundle(&entities, &fact_index);
+        let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
+        let search_index = SearchIndex::build_with_serving_entities(properties, &entities);
+        let bundle = LoadedServingBundle {
+            manifest: ServingBundleManifest {
+                bundle_version: "engine-unit-test".to_string(),
+                format_version: 1,
+                created_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+                entity_count: entities.len() as u64,
+                entity_alias_count: 0,
+                fact_count: 0,
+                search_metadata_count: 0,
+                rera_evidence_count: 0,
+                excluded_rera_evidence_society_ids: Vec::new(),
+                edge_count: 0,
+                eligibility_policy_version: 0,
+                quarantined_society_count: 0,
+                quarantine_reason_counts: Default::default(),
+                entity_parquet_key: "entities.parquet".to_string(),
+                entity_alias_parquet_key: "aliases.parquet".to_string(),
+                fact_parquet_key: "facts.parquet".to_string(),
+                search_metadata_parquet_key: "search.parquet".to_string(),
+                rera_evidence_parquet_key: "rera.parquet".to_string(),
+                edge_parquet_key: "edges.parquet".to_string(),
+                quarantine_report_key: "quarantine.json".to_string(),
+                schema_key: "schema.json".to_string(),
+                tantivy_index_prefix: "tantivy".to_string(),
+                artifacts: Vec::new(),
+            },
+            entities,
+            entity_alias_index: ServingEntityAliasIndex::default(),
+            edges: Vec::new(),
+            graph_index: GraphIndex::default(),
+            recall_index,
+            fact_index,
+            rera_evidence_index: ReraEvidenceIndex::default(),
+            entity_index,
+            spatial_index,
+            search_capabilities: SearchCapabilityIndex::default(),
+            cache_dir,
+        };
+        let mut snapshot = SearchRuntimeSnapshot::new(
+            Arc::new(bundle),
+            properties.to_vec(),
+            properties
+                .iter()
+                .map(|property| Society {
+                    id: property.society_id.clone(),
+                    name: property.society_id.clone(),
+                    area: property.area.clone(),
+                    city: property.city.clone(),
+                    builder_name: property.builder_name.clone(),
+                    year_built: 0,
+                    total_units: 0,
+                    summary: String::new(),
+                    maintenance_sentiment: String::new(),
+                    livability_sentiment: String::new(),
+                    common_positives: Vec::new(),
+                    common_complaints: Vec::new(),
+                    review_summary: String::new(),
+                    google_reviews_url: None,
+                    future_google_place_name: String::new(),
+                    future_google_place_id: None,
+                    future_review_enrichment_status: String::new(),
+                })
+                .collect(),
+            Vec::new(),
+            search_index,
+        );
+        snapshot.inventory_options = properties
             .iter()
-            .enumerate()
-            .map(|(index, property)| (property.id.clone(), index))
-            .collect::<HashMap<_, _>>();
-        let societies = Vec::new();
-        SearchEngine {
-            properties,
-            search_index: &search_index,
-            serving_bundle: None,
-            society_names: &society_names,
-            property_by_id: Some(&property_by_id),
-            societies: &societies,
-            graph: None,
-        }
-        .search(query)
+            .map(|property| {
+                let society_id = snapshot
+                    .search_index
+                    .society_entity_id_for_property(&property.id)
+                    .expect("fixture society identity")
+                    .to_string();
+                let observation = SourceObservation::new(
+                    "SearchEngineFixture",
+                    property.id.clone(),
+                    society_id.clone(),
+                    Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+                    Some(format!("https://example.test/{}", property.id)),
+                    vec!["asset:search-engine-fixture/v1".to_string()],
+                )
+                .unwrap();
+                let exact_price = (property.price > 0).then_some(property.price);
+                (
+                    property.id.clone(),
+                    InventoryOption {
+                        property_id: property.id.clone(),
+                        society_id,
+                        bhk: (property.bhk > 0).then_some(property.bhk),
+                        price_min: property.price_min.or(exact_price),
+                        price_max: property.price_max.or(exact_price),
+                        size_sqft: (property.super_builtup_sqft > 0)
+                            .then_some(property.super_builtup_sqft),
+                        evidence_reference: Some(EvidenceRef::for_observation(
+                            &snapshot.version_key.serving_bundle_version,
+                            &observation,
+                        )),
+                    },
+                )
+            })
+            .collect();
+        snapshot
     }
 
     #[test]
@@ -2088,14 +2505,40 @@ mod tests {
             .map(|index| test_property(&format!("eligible-{index:02}"), "Whitefield"))
             .collect::<Vec<_>>();
 
-        let output = run_search_for_test("3bhk in Whitefield under 2cr", &properties);
-
+        let output = run_search_for_test("3bhk homes under 2cr", &properties);
         assert_eq!(output.eligible_result_count, 48);
         assert_eq!(output.results.len(), 32);
         assert!(output
             .results
             .iter()
             .all(|result| result.card.bhk == 3 && result.card.price <= 20_000_000));
+    }
+
+    #[test]
+    fn deduped_results_retain_membership_in_every_matching_branch() {
+        let property = test_property("shared", "Whitefield");
+        let output = run_search_for_test("3bhk", std::slice::from_ref(&property));
+        let result = output.results[0].clone();
+        let result_sets = vec![
+            SearchResultSet {
+                branch_id: "branch-1".to_string(),
+                label: "First".to_string(),
+                results: vec![result.clone()],
+            },
+            SearchResultSet {
+                branch_id: "branch-2".to_string(),
+                label: "Second".to_string(),
+                results: vec![result],
+            },
+        ];
+
+        let (limited_sets, unique_results) = limit_result_sets(result_sets, 1);
+
+        assert_eq!(unique_results.len(), 1);
+        assert_eq!(limited_sets.len(), 2);
+        assert!(limited_sets
+            .iter()
+            .all(|set| set.results[0].card.id == "shared"));
     }
 
     #[test]
@@ -2669,8 +3112,8 @@ mod tests {
         let plan = query_plan::compile_query_plan(query);
         let intent = query_plan::project_search_intent(query, &plan);
         let resolved = resolve_serving_query_entities_from_records(query, &intent, &entities);
-        let entities = resolved_entity_constraints(query, &resolved);
-        let compiled = CompiledQuery::compile(query, &plan, intent, &entities);
+        let entities = resolved_entity_constraints(&resolved);
+        let compiled = IntentAst::compile(query, &plan, intent, &entities);
         let matches = |builder: &str, price: u64| {
             compiled.constraints.evaluate(&mut |term| match term {
                 crate::search::ast::ConstraintTerm::Builder { display_name, .. } => {
@@ -2692,7 +3135,6 @@ mod tests {
     #[test]
     fn serving_resolution_suppresses_area_only_mentioned_inside_place_name() {
         let intent = empty_intent();
-        let properties = vec![test_property("one", "Banashankari")];
         let bundle_entities = vec![
             serving_entity("area:banashankari", "area", "Banashankari"),
             serving_entity(
@@ -2701,18 +3143,11 @@ mod tests {
                 "Sri Banashankari Hospital",
             ),
         ];
-        let mut resolved = resolve_runtime_area_query_entities(
-            "homes near Sri Banashankari Hospital",
-            &intent,
-            &properties,
-        );
-        for entity in resolve_serving_query_entities_from_records(
+        let mut resolved = resolve_serving_query_entities_from_records(
             "homes near Sri Banashankari Hospital",
             &intent,
             &bundle_entities,
-        ) {
-            push_resolved(&mut resolved, entity);
-        }
+        );
 
         remove_entities_only_mentioned_inside_longer_match(
             "homes near Sri Banashankari Hospital",
@@ -2738,6 +3173,12 @@ mod tests {
                 match_source: "serving_entity".to_string(),
                 matched_text: "Whitefield".to_string(),
                 polarity: "positive".to_string(),
+                source_span: Some(SourceSpan {
+                    source_turn_id: String::new(),
+                    start: 8,
+                    end: 18,
+                    raw_text: "Whitefield".to_string(),
+                }),
             },
             ResolvedSearchEntity {
                 entity_id: "place:manipal-hospital-whitefield".to_string(),
@@ -2747,6 +3188,12 @@ mod tests {
                 match_source: "serving_entity".to_string(),
                 matched_text: "Manipal Hospital Whitefield".to_string(),
                 polarity: "positive".to_string(),
+                source_span: Some(SourceSpan {
+                    source_turn_id: String::new(),
+                    start: 24,
+                    end: 51,
+                    raw_text: "Manipal Hospital Whitefield".to_string(),
+                }),
             },
         ];
 
@@ -2806,6 +3253,12 @@ mod tests {
             match_source: "serving_entity".to_string(),
             matched_text: "Whitefield".to_string(),
             polarity: "positive".to_string(),
+            source_span: Some(SourceSpan {
+                source_turn_id: String::new(),
+                start: 8,
+                end: 18,
+                raw_text: "Whitefield".to_string(),
+            }),
         }];
 
         assert_eq!(
@@ -2824,6 +3277,12 @@ mod tests {
             match_source: "serving_entity".to_string(),
             matched_text: "Godrej Air".to_string(),
             polarity: "positive".to_string(),
+            source_span: Some(SourceSpan {
+                source_turn_id: String::new(),
+                start: 0,
+                end: 10,
+                raw_text: "Godrej Air".to_string(),
+            }),
         }];
 
         assert_eq!(
@@ -2863,22 +3322,31 @@ mod tests {
             ],
             Vec::new(),
         );
-        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &facts);
+        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &facts);
         let query =
             "3bhk near Whitefield close to kids school and near my wife office in Marathahalli";
-        let geo_query = geo_index
+        let geo_query = entity_index
             .query(query)
             .expect("Whitefield and school clauses should remain usable");
         let resolved = ["Whitefield", "Marathahalli"]
             .into_iter()
-            .map(|name| ResolvedSearchEntity {
-                entity_id: format!("area:{}", slug(name)),
-                entity_type: "area".to_string(),
-                name: name.to_string(),
-                match_kind: "serving_entity_name".to_string(),
-                match_source: "serving_entity".to_string(),
-                matched_text: name.to_string(),
-                polarity: "positive".to_string(),
+            .map(|name| {
+                let start = query.find(name).expect("resolved area occurs in query");
+                ResolvedSearchEntity {
+                    entity_id: format!("area:{}", slug(name)),
+                    entity_type: "area".to_string(),
+                    name: name.to_string(),
+                    match_kind: "serving_entity_name".to_string(),
+                    match_source: "serving_entity".to_string(),
+                    matched_text: name.to_string(),
+                    polarity: "positive".to_string(),
+                    source_span: Some(SourceSpan {
+                        source_turn_id: String::new(),
+                        start,
+                        end: start + name.len(),
+                        raw_text: name.to_string(),
+                    }),
+                }
             })
             .collect::<Vec<_>>();
 
@@ -2942,34 +3410,6 @@ mod tests {
         assert!(resolved.is_empty());
         assert_eq!(effective.area, None);
         assert!(effective.excluded_areas.is_empty());
-    }
-
-    #[test]
-    fn runtime_area_resolution_uses_serving_derived_property_areas() {
-        let intent = empty_intent();
-        let properties = vec![
-            test_property("one", "Whitefield"),
-            test_property("two", "Electronic City"),
-        ];
-
-        let positive = resolve_runtime_area_query_entities(
-            "Whitefield 2BHK under 1.5cr",
-            &intent,
-            &properties,
-        );
-        let effective = apply_resolved_constraints(intent.clone(), &positive);
-        assert_eq!(effective.area.as_deref(), Some("Whitefield"));
-        assert_eq!(positive[0].match_source, "serving_entity");
-
-        let negative =
-            resolve_runtime_area_query_entities("not Electronic City 3BHK", &intent, &properties);
-        let effective = apply_resolved_constraints(intent, &negative);
-        assert_eq!(effective.area, None);
-        assert_eq!(
-            effective.excluded_areas,
-            vec!["Electronic City".to_string()]
-        );
-        assert_eq!(negative[0].polarity, "exclusion");
     }
 
     fn test_unresolved_named_entity_clause(

@@ -2,14 +2,14 @@ use std::fmt;
 
 use crate::lake::{LakeError, LakeStore};
 
-use super::kg_view::{KgViewEdgeRecord, KgViewEntityRecord};
 use super::rera::{read_edges, read_entities, ReraAssetError};
+use super::society_gold::{SocietyGoldEdgeRecord, SocietyGoldEntityRecord};
 use super::MaterializationRecord;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CanonicalNodeRows {
-    pub entities: Vec<KgViewEntityRecord>,
-    pub edges: Vec<KgViewEdgeRecord>,
+    pub entities: Vec<SocietyGoldEntityRecord>,
+    pub edges: Vec<SocietyGoldEdgeRecord>,
 }
 
 pub async fn read_canonical_node_rows(

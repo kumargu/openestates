@@ -23,6 +23,7 @@
       "purpose": "Immutable source snapshots from crawls",
       "mutable": "append_only",
       "key_pattern": "raw/source={source}/{partition}/run_id={run_id}/{file}",
+      "runtime_event_pattern": "raw/source=search_events/dt={dt}/run_id=runtime/{timestamp}-{content_hash}.json",
       "example": "raw/source=rera/dt=2026-07/run_id=abc123/projects/part-00000.parquet",
       "tables": []
     },
@@ -45,13 +46,13 @@
     },
     {
       "id": "gold",
-      "purpose": "KG views — merged entities, edges, facts, annotations",
-      "mutable": "versioned",
-      "key_pattern": "gold/{asset_id}/version={version}/{table}/part-00000.parquet",
-      "example": "gold/kg_society_view/version=2026-07-17/entities/part-00000.parquet",
+      "purpose": "Society gold snapshots — merged entities, edges, facts, annotations",
+      "mutable": "immutable_snapshots",
+      "key_pattern": "gold/society_catalog/society={society}/snapshot={snapshot_id}/{table}/part-00000.parquet",
+      "example": "gold/society_catalog/society=prestige-waterford/snapshot=00000000-0000-0000-0000-000000000000/entities/part-00000.parquet",
       "assets": [
         {
-          "asset_id": "kg_society_view",
+          "asset_id": "society_gold_snapshot",
           "tables": [
             {
               "name": "entities",
@@ -83,20 +84,21 @@
     },
     {
       "id": "serving",
-      "purpose": "Promoted runtime input for Rust API — search, property page, brief",
+      "purpose": "Runtime input selected only by manifests/catalog/dev.json",
       "mutable": "versioned",
       "key_pattern": "serving/search_bundle/version={version}/{artifact}",
       "example": "serving/search_bundle/version=2026-07-17/entities/part-00000.parquet",
       "bundle": {
-        "asset_id": "search_serving_bundle",
         "artifacts": [
           "manifest.json",
           "schema.json",
-          "trust_policy.json",
           "entities/part-00000.parquet",
+          "entity_aliases/part-00000.parquet",
           "edges/part-00000.parquet",
           "facts/part-00000.parquet",
           "search_metadata/part-00000.parquet",
+          "rera_evidence/part-00000.parquet",
+          "quarantine/societies.json",
           "tantivy_index/"
         ],
         "tables": [
@@ -106,10 +108,9 @@
           },
           {
             "name": "edges",
-            "status": "planned_phase_4",
-            "source": "gold/kg_society_view/edges",
+            "source": "active society_gold_snapshot rows plus global topology",
             "columns": ["from_entity_id", "edge_type", "to_entity_id", "confidence", "source_type"],
-            "note": "Required for graph traversal UI (Phase 10). Not loaded by Rust API yet."
+            "note": "Loaded into the runtime GraphIndex from the compact serving bundle."
           },
           {
             "name": "facts",
@@ -128,7 +129,7 @@
     },
     {
       "id": "manifests",
-      "purpose": "Materialization records, current pointers, DAG run manifests",
+      "purpose": "Offline DAG materialization records and the one catalog pointer",
       "mutable": "pointer_updates",
       "format": "json",
       "key_patterns": [
@@ -139,7 +140,7 @@
         "manifests/runs/{partition}/{run_id}.json"
       ],
       "promotion": {
-        "serving_bundle_pointer": "manifests/assets/search_serving_bundle/partition=global/current.json",
+        "serving_bundle_pointer": "manifests/catalog/dev.json",
         "resolves_to": "serving/search_bundle/version={version}/"
       }
     }

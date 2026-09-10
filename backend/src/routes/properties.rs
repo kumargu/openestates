@@ -51,7 +51,7 @@ use crate::livability_brief::{
 
 use super::enrichment::{
     enrich_area, enrich_property_card, enrich_society, extract_area_intelligence,
-    extract_builder_trust, extract_data_freshness, extract_rera_info, kg_entity_refs_for_property,
+    extract_builder_trust, extract_rera_info, kg_entity_refs_for_property,
     overlay_project_scale_facts, rera_affidavit_only_visible, rera_decision_cards,
     rera_document_groups, society_node_id, AreaIntelligence, BuilderTrust, DataFreshness,
     ReraComplaintScopeSummary, ReraDocumentManifestItem, ReraInfo, ReraScheduleSection,
@@ -959,7 +959,12 @@ fn serving_entity_source_item(
         .facts
         .iter()
         .filter(|fact| fact.fact_key == fact_key)
-        .max_by_key(|fact| fact.learned_at)?;
+        .max_by(|left, right| {
+            left.confidence.total_cmp(&right.confidence).then_with(|| {
+                left.stable_selection_key()
+                    .cmp(&right.stable_selection_key())
+            })
+        })?;
     let display_template = rows
         .search_metadata_for_fact_key(fact_key)
         .next()
@@ -2359,9 +2364,8 @@ pub async fn get_property_evidence(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<PropertyEvidenceResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let serving_bundle = state.serving_bundle.read().await.clone();
-    let properties = state.properties.read().await;
-    let property = find_property_by_request_id(&properties, &id).ok_or_else(|| {
+    let runtime = state.search_runtime.load_full();
+    let property = find_property_by_request_id(&runtime.properties, &id).ok_or_else(|| {
         (
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
@@ -2374,7 +2378,7 @@ pub async fn get_property_evidence(
     Ok(Json(build_property_evidence_response(
         &graph,
         property,
-        serving_bundle.as_deref(),
+        Some(runtime.bundle.as_ref()),
     )))
 }
 
@@ -2401,21 +2405,21 @@ pub async fn get_property_evidence_batch(
         }
     }
 
-    let serving_bundle = state.serving_bundle.read().await.clone();
-    let properties = state.properties.read().await;
+    let runtime = state.search_runtime.load_full();
     let graph = state.knowledge.read().await;
     let mut results = Vec::new();
     let mut missing_property_ids = Vec::new();
 
     for property_id in requested {
-        if let Some(property) = properties
+        if let Some(property) = runtime
+            .properties
             .iter()
             .find(|property| property.id == property_id)
         {
             results.push(build_property_evidence_response(
                 &graph,
                 property,
-                serving_bundle.as_deref(),
+                Some(runtime.bundle.as_ref()),
             ));
         } else {
             missing_property_ids.push(property_id);
@@ -2423,9 +2427,7 @@ pub async fn get_property_evidence_batch(
     }
 
     Json(PropertyEvidenceBatchResponse {
-        serving_bundle_version: serving_bundle
-            .as_ref()
-            .map(|bundle| bundle.manifest.bundle_version.clone()),
+        serving_bundle_version: Some(runtime.bundle.manifest.bundle_version.clone()),
         results,
         missing_property_ids,
     })
@@ -2439,9 +2441,8 @@ pub async fn get_property_recommendations(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<RecommendationResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let serving_bundle = state.serving_bundle.read().await.clone();
-    let properties = state.properties.read().await;
-    let property = find_property_by_request_id(&properties, &id)
+    let runtime = state.search_runtime.load_full();
+    let property = find_property_by_request_id(&runtime.properties, &id)
         .cloned()
         .ok_or_else(|| {
             (
@@ -2460,9 +2461,7 @@ pub async fn get_property_recommendations(
         ));
     }
 
-    let bundle_version = serving_bundle
-        .as_ref()
-        .map(|bundle| bundle.manifest.bundle_version.clone());
+    let bundle_version = Some(runtime.bundle.manifest.bundle_version.clone());
     let cache_key = recommendation_cache_key(&property.id, bundle_version.as_deref());
     if let Some(cached) = state
         .recommendation_cache
@@ -2475,17 +2474,16 @@ pub async fn get_property_recommendations(
     }
 
     let graph = state.knowledge.read().await;
-    let areas = state.areas.read().await;
-    let societies = state.societies.read().await;
-    let evidence = build_property_evidence_response(&graph, &property, serving_bundle.as_deref());
-    let area_median_ppsf = area_median_ppsf_for(&property, &properties, &areas);
+    let evidence =
+        build_property_evidence_response(&graph, &property, Some(runtime.bundle.as_ref()));
+    let area_median_ppsf = area_median_ppsf_for(&property, &runtime.properties, &runtime.areas);
     let items = build_recommendation_branches(RecommendationBranchInputs {
         current: &property,
         current_evidence: &evidence,
         graph: &graph,
-        properties: &properties,
-        societies: &societies,
-        serving_bundle: serving_bundle.as_deref(),
+        properties: &runtime.properties,
+        societies: &runtime.societies,
+        serving_bundle: Some(runtime.bundle.as_ref()),
         area_median_ppsf,
     });
     let response = RecommendationResponse {
@@ -2797,8 +2795,7 @@ pub async fn get_property(
             .map(|bundle| bundle.manifest.bundle_version.clone()),
     );
 
-    // Extract data freshness from KG
-    let data_freshness = extract_data_freshness(&graph, &property.society_id);
+    let data_freshness: Option<DataFreshness> = None;
 
     // Compute confidence score for detail page (uses fact-quality instead of match_quality)
     let confidence_score = compute_confidence_for_detail(Some(&graph), &property.society_id);
@@ -3366,7 +3363,7 @@ fn rera_buyer_fact_sections_for_society(
         return Vec::new();
     }
 
-    let mut latest = BTreeMap::<(String, String), (&ServingFactRecord, String)>::new();
+    let mut selected = BTreeMap::<(String, String), (&ServingFactRecord, String)>::new();
     for fact in rows
         .iter()
         .flat_map(|row| row.facts.iter())
@@ -3375,12 +3372,12 @@ fn rera_buyer_fact_sections_for_society(
         let Some(value) = rera_buyer_fact_value(config, fact) else {
             continue;
         };
-        latest
+        selected
             .entry((fact.fact_key.clone(), value.clone()))
             .and_modify(|current| {
-                if fact.learned_at > current.0.learned_at
-                    || (fact.learned_at == current.0.learned_at
-                        && fact.confidence > current.0.confidence)
+                if fact.confidence > current.0.confidence
+                    || (fact.confidence == current.0.confidence
+                        && fact.stable_selection_key() < current.0.stable_selection_key())
                 {
                     *current = (fact, value.clone());
                 }
@@ -3389,7 +3386,7 @@ fn rera_buyer_fact_sections_for_society(
     }
 
     let mut grouped = BTreeMap::<String, (String, u32, Vec<ReraBuyerFact>)>::new();
-    for (fact, value) in latest.into_values() {
+    for (fact, value) in selected.into_values() {
         let Some((section_id, section_title, rank)) =
             rera_buyer_section_for_key(config, &fact.fact_key)
         else {
@@ -3808,9 +3805,8 @@ pub async fn get_property_rera(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<ReraEvidenceReportResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let serving_bundle = state.serving_bundle.read().await.clone();
-    let properties = state.properties.read().await;
-    let property = find_property_by_request_id(&properties, &id).ok_or_else(|| {
+    let runtime = state.search_runtime.load_full();
+    let property = find_property_by_request_id(&runtime.properties, &id).ok_or_else(|| {
         (
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
@@ -3831,22 +3827,20 @@ pub async fn get_property_rera(
     let project_record = rera_info_for(
         &property.society_id,
         &graph,
-        serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+        Some(&runtime.bundle.fact_index),
     );
-    let evidence_record = serving_bundle
-        .as_ref()
-        .and_then(|bundle| rera_evidence_for_property(bundle, property));
+    let evidence_record = rera_evidence_for_property(&runtime.bundle, property);
     let buyer_report = ReraBuyerReport {
         fact_sections: rera_buyer_fact_sections_for_society(
             &property.society_id,
-            serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+            Some(&runtime.bundle.fact_index),
             config,
         ),
         builder_portfolio: build_builder_portfolio(
             &graph,
-            &properties,
+            &runtime.properties,
             property,
-            serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+            Some(&runtime.bundle.fact_index),
         ),
         complaints: rera_buyer_complaints(project_record.as_ref(), evidence_record),
         schedules: project_record
@@ -3859,17 +3853,13 @@ pub async fn get_property_rera(
             .unwrap_or_default(),
         registry_url: project_record.and_then(|record| record.rera_portal_url),
     };
-    let mut response = if let Some(bundle) = serving_bundle.as_ref() {
-        rera_evidence_report_for_property(
-            &property.id,
-            &bundle.manifest.bundle_version,
-            bundle.manifest.created_at,
-            evidence_record,
-            surface,
-        )
-    } else {
-        rera_evidence_report_for_property(&property.id, "", chrono::Utc::now(), None, surface)
-    };
+    let mut response = rera_evidence_report_for_property(
+        &property.id,
+        &runtime.bundle.manifest.bundle_version,
+        runtime.bundle.manifest.created_at,
+        evidence_record,
+        surface,
+    );
     if response.availability == ReraEvidenceAvailability::Unavailable
         && !buyer_report.fact_sections.is_empty()
     {
@@ -4100,7 +4090,7 @@ fn rera_info_for(
         info.rera_portal_url = Some(fact.value);
     }
     info.last_verified = projection
-        .latest_learned_at_with_prefix("rera_")
+        .provenance_time_with_prefix("rera_")
         .map(|timestamp| timestamp.to_rfc3339())
         .or(info.last_verified);
     info.decision_cards = rera_decision_cards(&info);
@@ -4879,6 +4869,7 @@ mod serving_state_tests {
                 to_entity_id: "road_segment:sample-approach".to_string(),
                 confidence: 0.82,
                 source_type: "approach_road".to_string(),
+                derivation: None,
             }]);
 
         let panels = build_source_panels(&graph, &property, Some(&serving), Some(&graph_index));
@@ -4949,6 +4940,7 @@ mod serving_state_tests {
                 to_entity_id: "road_segment:sample-approach".to_string(),
                 confidence: 0.82,
                 source_type: "approach_road".to_string(),
+                derivation: None,
             }]);
 
         let panels = build_source_panels(&graph, &property, Some(&serving), Some(&graph_index));
@@ -5426,6 +5418,7 @@ mod serving_state_tests {
             model: None,
             skill_id: None,
             learned_at: Utc.timestamp_opt(learned_at, 0).unwrap(),
+            observation: None,
         }
     }
 

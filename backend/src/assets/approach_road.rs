@@ -7,16 +7,16 @@ use serde::{Deserialize, Serialize};
 use crate::knowledge::FactValue;
 use crate::lake::{LakeError, LakeStore};
 
-use super::kg_view::{KgViewEdgeRecord, KgViewEntityRecord};
 use super::rera::{read_edges, read_entities, write_edges, write_entities, ReraAssetError};
 use super::skill_facts::{
     read_skill_fact_artifact_rows, write_fact_annotations_parquet, write_facts_parquet,
     SkillFactAnnotationRecord, SkillFactArtifactRows, SkillFactMaterializeError, SkillFactRecord,
 };
+use super::society_gold::{SocietyGoldEdgeRecord, SocietyGoldEntityRecord};
 use super::{
     ArtifactRef, AssetId, AssetMaterializationStore, AssetPartition, AssetPathBuilder, AssetStage,
-    CanonicalNodeRows, CanonicalSocietyRows, CurrentProjectFactsError, MaterializationId,
-    MaterializationRecord, SourceWatermark, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    CanonicalNodeRows, CanonicalSocietyRows, MaterializationId, MaterializationRecord,
+    SocietyFactSnapshotError, SourceWatermark, CANONICAL_SOCIETY_NODES_ASSET_ID,
     GOOGLE_REVIEW_FACTS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
 };
 
@@ -287,8 +287,8 @@ fn rows_from_upstream(
         evidence.accept_fact(&fact)?;
     }
 
-    let mut entities = BTreeMap::<String, KgViewEntityRecord>::new();
-    let mut edges = BTreeMap::<(String, String, String), KgViewEdgeRecord>::new();
+    let mut entities = BTreeMap::<String, SocietyGoldEntityRecord>::new();
+    let mut edges = BTreeMap::<(String, String, String), SocietyGoldEdgeRecord>::new();
     let mut facts = Vec::new();
     let mut annotations = Vec::new();
 
@@ -303,7 +303,7 @@ fn rows_from_upstream(
         let road_fact_count = 1 + u32::from(media.is_some());
         entities.insert(
             road_entity_id.clone(),
-            KgViewEntityRecord {
+            SocietyGoldEntityRecord {
                 entity_id: road_entity_id.clone(),
                 entity_type: "road_segment".to_string(),
                 name: road_name,
@@ -319,7 +319,7 @@ fn rows_from_upstream(
                 road_entity_id.clone(),
                 "served_by_road".to_string(),
             ),
-            KgViewEdgeRecord {
+            SocietyGoldEdgeRecord {
                 from_entity_id: evidence.society_entity_id.clone(),
                 to_entity_id: road_entity_id.clone(),
                 relation: "served_by_road".to_string(),
@@ -350,6 +350,9 @@ fn rows_from_upstream(
             learned_at,
             run_id: run_id.to_string(),
             input_hash: quality.input_hash,
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         });
         annotations.push(SkillFactAnnotationRecord {
             entity_id: road_entity_id.clone(),
@@ -381,6 +384,9 @@ fn rows_from_upstream(
                 learned_at,
                 run_id: run_id.to_string(),
                 input_hash: media.input_hash,
+                observation_provider: None,
+                provider_observation_id: None,
+                asset_lineage: Vec::new(),
             });
             annotations.push(SkillFactAnnotationRecord {
                 entity_id: road_entity_id,
@@ -942,7 +948,7 @@ pub enum ApproachRoadGraphError {
     Rera(ReraAssetError),
     SkillFact(SkillFactMaterializeError),
     AssetId(super::types::AssetIdError),
-    Compaction(CurrentProjectFactsError),
+    Compaction(SocietyFactSnapshotError),
     MissingCanonicalSocieties,
     MissingArtifact { asset_id: String, path: String },
 }
@@ -993,8 +999,8 @@ impl From<SkillFactMaterializeError> for ApproachRoadGraphError {
     }
 }
 
-impl From<CurrentProjectFactsError> for ApproachRoadGraphError {
-    fn from(err: CurrentProjectFactsError) -> Self {
+impl From<SocietyFactSnapshotError> for ApproachRoadGraphError {
+    fn from(err: SocietyFactSnapshotError) -> Self {
         Self::Compaction(err)
     }
 }
@@ -1008,7 +1014,7 @@ mod tests {
     #[test]
     fn upstream_rows_include_sumadhura_road_edge_and_fact() {
         let canonical = CanonicalSocietyRows {
-            entities: vec![KgViewEntityRecord {
+            entities: vec![SocietyGoldEntityRecord {
                 entity_id: "society:sumadhura-capitol-residences".to_string(),
                 entity_type: "society".to_string(),
                 name: "SUMADHURA CAPITOL RESIDENCES".to_string(),
@@ -1079,7 +1085,7 @@ mod tests {
     #[test]
     fn alias_facts_materialize_one_canonical_road() {
         let canonical = CanonicalSocietyRows {
-            entities: vec![KgViewEntityRecord {
+            entities: vec![SocietyGoldEntityRecord {
                 entity_id: "society:rera-canonical".to_string(),
                 entity_type: "society".to_string(),
                 name: "CANONICAL SOCIETY".to_string(),
@@ -1131,7 +1137,7 @@ mod tests {
     #[test]
     fn upstream_rows_emit_query_backed_media_for_google_place_only_society() {
         let canonical = CanonicalSocietyRows {
-            entities: vec![KgViewEntityRecord {
+            entities: vec![SocietyGoldEntityRecord {
                 entity_id: "society:candeur-signature".to_string(),
                 entity_type: "society".to_string(),
                 name: "CANDEUR SIGNATURE".to_string(),
@@ -1182,7 +1188,7 @@ mod tests {
     #[test]
     fn upstream_rows_emit_road_first_media_query_from_google_address() {
         let canonical = CanonicalSocietyRows {
-            entities: vec![KgViewEntityRecord {
+            entities: vec![SocietyGoldEntityRecord {
                 entity_id: "society:prestige-waterford".to_string(),
                 entity_type: "society".to_string(),
                 name: "PRESTIGE WATERFORD".to_string(),
@@ -1241,7 +1247,7 @@ mod tests {
     #[test]
     fn upstream_rows_do_not_infer_frontage_road_from_review_text() {
         let canonical = CanonicalSocietyRows {
-            entities: vec![KgViewEntityRecord {
+            entities: vec![SocietyGoldEntityRecord {
                 entity_id: "society:prestige-waterford".to_string(),
                 entity_type: "society".to_string(),
                 name: "PRESTIGE WATERFORD".to_string(),
@@ -1298,7 +1304,7 @@ mod tests {
     #[test]
     fn upstream_rows_prefer_frontage_road_over_coordinates() {
         let canonical = CanonicalSocietyRows {
-            entities: vec![KgViewEntityRecord {
+            entities: vec![SocietyGoldEntityRecord {
                 entity_id: "society:frontage-test".to_string(),
                 entity_type: "society".to_string(),
                 name: "FRONTAGE TEST".to_string(),
@@ -1359,7 +1365,7 @@ mod tests {
     #[test]
     fn upstream_rows_ignore_rera_coordinates_for_approach_road_frames() {
         let canonical = CanonicalSocietyRows {
-            entities: vec![KgViewEntityRecord {
+            entities: vec![SocietyGoldEntityRecord {
                 entity_id: "society:rera-coordinate-test".to_string(),
                 entity_type: "society".to_string(),
                 name: "RERA COORDINATE TEST".to_string(),
@@ -1464,6 +1470,9 @@ mod tests {
             learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
             run_id: "test".to_string(),
             input_hash: "test".to_string(),
+            observation_provider: None,
+            provider_observation_id: None,
+            asset_lineage: Vec::new(),
         }
     }
 }

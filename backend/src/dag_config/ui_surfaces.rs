@@ -584,7 +584,7 @@ mod tests {
         );
         assert_eq!(
             arrival_scene.anchor.boundary_fact_key.as_deref(),
-            Some("society.boundary_geojson")
+            Some("geo.geometry_geojson")
         );
         let arrival_metro = arrival_scene
             .layers

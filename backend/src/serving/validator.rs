@@ -1,21 +1,23 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::path::Path;
 
 use futures_util::stream::{self, StreamExt};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::assets::{AssetPathBuilder, MaterializationRecord, MaterializationStatus};
+use crate::assets::AssetPathBuilder;
 use crate::dag_config::load_serving_eligibility;
 use crate::knowledge::FactValue;
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
+use super::builder::serving_bundle_schema_descriptor;
 use super::{
     read_edges_parquet, read_entities_parquet, read_entity_aliases_parquet, read_facts_parquet,
-    read_search_metadata_parquet, validate_society_aliases, BundleArtifactKind, ParquetReadError,
-    ServingBundleManifest, ServingFactIndex, ServingFactRecord, ServingQuarantineReport,
-    SEARCH_SERVING_BUNDLE_ASSET_ID,
+    read_rera_evidence_parquet, read_search_metadata_parquet,
+    validate_canonical_spatial_identities, validate_serving_edge_evidence,
+    validate_society_aliases, BundleArtifactKind, ParquetReadError, ServingBundleManifest,
+    ServingBundleSchema, ServingFactIndex, ServingFactRecord, ServingQuarantineReport,
+    SERVING_BUNDLE_FORMAT_VERSION,
 };
 
 const PUBLIC_MEDIA_PREFIX: &str = "/societies/";
@@ -32,7 +34,6 @@ pub struct ServingBundleValidationIssue {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ServingBundleValidationReport {
-    pub materialization_id: String,
     pub bundle_version: String,
     pub artifacts_checked: usize,
     pub entity_count: usize,
@@ -40,29 +41,15 @@ pub struct ServingBundleValidationReport {
     pub property_count: usize,
     pub fact_count: usize,
     pub search_metadata_count: usize,
+    pub rera_evidence_count: usize,
     pub edge_count: usize,
     pub media_references_checked: usize,
     pub passed: bool,
     pub issues: Vec<ServingBundleValidationIssue>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FrontendMediaAsset {
-    pub url: String,
-    pub content_sha256: String,
-    pub size_bytes: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FrontendMediaManifest {
-    pub version: u32,
-    pub bundle_version: String,
-    pub assets: Vec<FrontendMediaAsset>,
-}
-
 #[derive(Debug)]
 pub enum ServingBundleValidationError {
-    InvalidTarget(String),
     Lake(LakeError),
     Parquet(ParquetReadError),
     Key(crate::lake::keys::KeyError),
@@ -71,10 +58,9 @@ pub enum ServingBundleValidationError {
 impl fmt::Display for ServingBundleValidationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidTarget(message) => formatter.write_str(message),
-            Self::Lake(error) => write!(formatter, "serving release lake error: {error}"),
-            Self::Parquet(error) => write!(formatter, "serving release Parquet error: {error}"),
-            Self::Key(error) => write!(formatter, "serving release key error: {error}"),
+            Self::Lake(error) => write!(formatter, "serving bundle lake error: {error}"),
+            Self::Parquet(error) => write!(formatter, "serving bundle Parquet error: {error}"),
+            Self::Key(error) => write!(formatter, "serving bundle key error: {error}"),
         }
     }
 }
@@ -93,85 +79,36 @@ impl From<ParquetReadError> for ServingBundleValidationError {
     }
 }
 
-/// Validate the complete serving release before changing any current pointer.
+/// Validate the complete serving bundle before changing the catalog pointer.
 ///
 /// Lake artifacts are checked against the hashes in the bundle manifest. Local
 /// media URLs are then resolved against the configured local/S3 lake. The
 /// retired `/societies/*` frontend path fails promotion.
 pub async fn validate_search_serving_candidate(
     lake: &LakeStore,
-    record: &MaterializationRecord,
+    bundle_version: &str,
 ) -> Result<ServingBundleValidationReport, ServingBundleValidationError> {
-    if record.asset_id.as_str() != SEARCH_SERVING_BUNDLE_ASSET_ID {
-        return Err(ServingBundleValidationError::InvalidTarget(format!(
-            "serving validation requires {SEARCH_SERVING_BUNDLE_ASSET_ID}, got {}",
-            record.asset_id
-        )));
-    }
-
     let mut issues = Vec::new();
-    if record.status != MaterializationStatus::Succeeded {
-        issue(
-            &mut issues,
-            "materialization_not_succeeded",
-            format!("materialization status is {:?}", record.status),
-            None,
-        );
-    }
-    for artifact in &record.artifacts {
-        let key = match LakeKey::new(artifact.key.clone()) {
-            Ok(key) => key,
-            Err(error) => {
-                issue(
-                    &mut issues,
-                    "invalid_materialization_artifact_key",
-                    error.to_string(),
-                    Some(artifact.key.clone()),
-                );
-                continue;
-            }
-        };
-        if artifact.hash_algorithm != "sha256" {
-            issue(
-                &mut issues,
-                "unsupported_materialization_artifact_hash",
-                format!("expected sha256, got {}", artifact.hash_algorithm),
-                Some(artifact.key.clone()),
-            );
-            continue;
-        }
-        if let Err(error) = lake
-            .verify_artifact(&key, artifact.size_bytes, &artifact.content_hash)
-            .await
-        {
-            issue(
-                &mut issues,
-                "materialization_artifact_integrity_failure",
-                error.to_string(),
-                Some(artifact.key.clone()),
-            );
-        }
-    }
-    let manifest_key = manifest_key_for_record(record)?;
+    let manifest_key = AssetPathBuilder::serving_bundle_key(bundle_version, "manifest.json");
     let manifest: ServingBundleManifest = lake.get_json(&manifest_key).await?;
-    if manifest.format_version < 7 {
+    if manifest.format_version != SERVING_BUNDLE_FORMAT_VERSION {
         issue(
             &mut issues,
             "unsupported_serving_bundle_format",
             format!(
-                "format {} predates build-time eligibility quarantine; rebuild before promotion",
-                manifest.format_version
+                "format {} is not the required format {SERVING_BUNDLE_FORMAT_VERSION}",
+                manifest.format_version,
             ),
             Some(manifest_key.to_string()),
         );
     }
-    if manifest.bundle_version != record.version {
+    if manifest.bundle_version != bundle_version {
         issue(
             &mut issues,
             "bundle_version_mismatch",
             format!(
-                "materialization version {:?} does not match manifest version {:?}",
-                record.version, manifest.bundle_version
+                "requested bundle {:?} does not match manifest version {:?}",
+                bundle_version, manifest.bundle_version
             ),
             Some(manifest_key.to_string()),
         );
@@ -238,29 +175,17 @@ pub async fn validate_search_serving_candidate(
             );
         }
     }
-    let mut required_artifact_kinds = vec![
+    let required_artifact_kinds = [
         BundleArtifactKind::EntitiesParquet,
+        BundleArtifactKind::EntityAliasesParquet,
         BundleArtifactKind::FactsParquet,
         BundleArtifactKind::EdgesParquet,
         BundleArtifactKind::SearchMetadataParquet,
+        BundleArtifactKind::ReraEvidenceParquet,
         BundleArtifactKind::SchemaJson,
-        BundleArtifactKind::TrustPolicyJson,
+        BundleArtifactKind::QuarantineJson,
         BundleArtifactKind::TantivyIndexFile,
     ];
-    if manifest.format_version >= 7 {
-        required_artifact_kinds.push(BundleArtifactKind::QuarantineJson);
-    }
-    if manifest.format_version >= 8 {
-        required_artifact_kinds.push(BundleArtifactKind::EntityAliasesParquet);
-        if manifest.entity_alias_parquet_key.is_none() {
-            issue(
-                &mut issues,
-                "missing_entity_alias_table",
-                "format 8 serving bundle has no materialized entity alias table",
-                None,
-            );
-        }
-    }
     for required in required_artifact_kinds {
         if !artifact_kinds.contains(&format!("{required:?}")) {
             issue(
@@ -271,22 +196,16 @@ pub async fn validate_search_serving_candidate(
             );
         }
     }
-    let mut manifest_table_keys = vec![
+    let manifest_table_keys = [
         &manifest.entity_parquet_key,
+        &manifest.entity_alias_parquet_key,
         &manifest.fact_parquet_key,
         &manifest.search_metadata_parquet_key,
+        &manifest.rera_evidence_parquet_key,
+        &manifest.edge_parquet_key,
+        &manifest.quarantine_report_key,
         &manifest.schema_key,
-        &manifest.trust_policy_key,
     ];
-    if let Some(edge_key) = manifest.edge_parquet_key.as_ref() {
-        manifest_table_keys.push(edge_key);
-    }
-    if let Some(alias_key) = manifest.entity_alias_parquet_key.as_ref() {
-        manifest_table_keys.push(alias_key);
-    }
-    if let Some(quarantine_key) = manifest.quarantine_report_key.as_ref() {
-        manifest_table_keys.push(quarantine_key);
-    }
     for key in manifest_table_keys {
         if !artifact_keys.contains(key) {
             issue(
@@ -320,10 +239,11 @@ pub async fn validate_search_serving_candidate(
             .get_bytes(&validated_key(&manifest.entity_parquet_key)?)
             .await?,
     )?;
-    let entity_aliases = match manifest.entity_alias_parquet_key.as_deref() {
-        Some(key) => read_entity_aliases_parquet(&lake.get_bytes(&validated_key(key)?).await?)?,
-        None => Vec::new(),
-    };
+    let entity_aliases = read_entity_aliases_parquet(
+        &lake
+            .get_bytes(&validated_key(&manifest.entity_alias_parquet_key)?)
+            .await?,
+    )?;
     let facts = read_facts_parquet(
         &lake
             .get_bytes(&validated_key(&manifest.fact_parquet_key)?)
@@ -334,21 +254,27 @@ pub async fn validate_search_serving_candidate(
             .get_bytes(&validated_key(&manifest.search_metadata_parquet_key)?)
             .await?,
     )?;
-    let edges = match manifest.edge_parquet_key.as_deref() {
-        Some(key) => read_edges_parquet(&lake.get_bytes(&validated_key(key)?).await?)?,
-        None => Vec::new(),
-    };
-    if manifest.format_version >= 7 {
-        validate_quarantine_contract(lake, &manifest, &entities, &mut issues).await;
-        validate_clean_bundle_eligibility(
-            &manifest,
-            &entities,
-            &facts,
-            &metadata,
-            &edges,
+    let edges = read_edges_parquet(
+        &lake
+            .get_bytes(&validated_key(&manifest.edge_parquet_key)?)
+            .await?,
+    )?;
+    let rera_evidence = read_rera_evidence_parquet(
+        &lake
+            .get_bytes(&validated_key(&manifest.rera_evidence_parquet_key)?)
+            .await?,
+    )?;
+    let schema: ServingBundleSchema = lake.get_json(&validated_key(&manifest.schema_key)?).await?;
+    if schema != serving_bundle_schema_descriptor() {
+        issue(
             &mut issues,
+            "serving_schema_mismatch",
+            "schema.json does not match the exact format-12 serving schema",
+            Some(manifest.schema_key.clone()),
         );
     }
+    validate_quarantine_contract(lake, &manifest, &entities, &mut issues).await;
+    validate_clean_bundle_eligibility(&manifest, &entities, &facts, &metadata, &edges, &mut issues);
     check_count(
         &mut issues,
         "entity_count_mismatch",
@@ -379,14 +305,35 @@ pub async fn validate_search_serving_candidate(
         manifest.edge_count,
         edges.len(),
     );
+    check_count(
+        &mut issues,
+        "rera_evidence_count_mismatch",
+        manifest.rera_evidence_count,
+        rera_evidence.len(),
+    );
 
-    validate_record_relations(&entities, &facts, &metadata, &edges, &mut issues);
+    validate_record_relations(
+        &entities,
+        &facts,
+        &metadata,
+        &edges,
+        &manifest.bundle_version,
+        &mut issues,
+    );
+    if let Err(error) = validate_canonical_spatial_identities(&entities, &edges) {
+        issue(
+            &mut issues,
+            "invalid_canonical_spatial_identity",
+            error,
+            Some(manifest.edge_parquet_key.clone()),
+        );
+    }
     if let Err(error) = validate_society_aliases(&entity_aliases, &entities) {
         issue(
             &mut issues,
             "invalid_entity_aliases",
             error.to_string(),
-            manifest.entity_alias_parquet_key.clone(),
+            Some(manifest.entity_alias_parquet_key.clone()),
         );
     }
     let mut fact_index = ServingFactIndex::from_records(facts.clone(), metadata.clone());
@@ -417,7 +364,6 @@ pub async fn validate_search_serving_candidate(
     }
 
     Ok(ServingBundleValidationReport {
-        materialization_id: record.materialization_id.to_string(),
         bundle_version: manifest.bundle_version,
         artifacts_checked: manifest.artifacts.len(),
         entity_count: entities.len(),
@@ -425,6 +371,7 @@ pub async fn validate_search_serving_candidate(
         property_count: properties.len(),
         fact_count: facts.len(),
         search_metadata_count: metadata.len(),
+        rera_evidence_count: rera_evidence.len(),
         edge_count: edges.len(),
         media_references_checked,
         passed: issues.is_empty(),
@@ -446,15 +393,7 @@ async fn validate_quarantine_contract(
             None,
         );
     }
-    let Some(report_key) = manifest.quarantine_report_key.as_deref() else {
-        issue(
-            issues,
-            "missing_quarantine_report",
-            "format 7 serving bundle has no quarantine report key",
-            None,
-        );
-        return;
-    };
+    let report_key = manifest.quarantine_report_key.as_str();
     let report = match validated_key(report_key) {
         Ok(key) => match lake.get_json::<ServingQuarantineReport>(&key).await {
             Ok(report) => report,
@@ -612,6 +551,7 @@ fn validate_record_relations(
     facts: &[ServingFactRecord],
     metadata: &[super::ServingSearchMetadataRecord],
     edges: &[super::ServingEdgeRecord],
+    snapshot_identity: &str,
     issues: &mut Vec<ServingBundleValidationIssue>,
 ) {
     let mut entity_ids = BTreeSet::new();
@@ -717,6 +657,9 @@ fn validate_record_relations(
             }
         }
     }
+    if let Err(error) = validate_serving_edge_evidence(edges, facts, snapshot_identity) {
+        issue(issues, "invalid_edge_evidence", error, None);
+    }
     for property in entities
         .iter()
         .filter(|entity| entity.entity_type == "property")
@@ -782,14 +725,6 @@ fn validate_property_projection(
                 Some(property.id.clone()),
             );
         }
-        if property.hero_image.trim().is_empty() || property.images.is_empty() {
-            issue(
-                issues,
-                "incomplete_property_media",
-                "property card requires a hero image and gallery",
-                Some(property.id.clone()),
-            );
-        }
         if property.builder_name.trim().is_empty() {
             issue(
                 issues,
@@ -826,34 +761,15 @@ fn entity_slug(value: &str) -> String {
     output
 }
 
-pub fn write_frontend_media_manifest(
-    project_root: &Path,
-    report: &ServingBundleValidationReport,
-) -> Result<std::path::PathBuf, std::io::Error> {
-    let path = project_root.join("frontend/media-manifest.json");
-    let temporary = project_root.join("frontend/.media-manifest.json.tmp");
-    let manifest = FrontendMediaManifest {
-        version: 1,
-        bundle_version: report.bundle_version.clone(),
-        // This inventory is intentionally empty for a valid lake-backed release.
-        // Keeping it in the generated certificate makes the frontend build fail
-        // closed if packaged property media is ever reintroduced.
-        assets: Vec::new(),
-    };
-    let payload = serde_json::to_vec_pretty(&manifest)
-        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
-    std::fs::write(&temporary, payload)?;
-    std::fs::rename(&temporary, &path)?;
-    Ok(path)
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MediaReference {
     url: String,
     expected_sha256: Option<String>,
 }
 
-fn collect_media_references(facts: &[ServingFactRecord]) -> BTreeMap<String, MediaReference> {
+fn collect_media_references<'a>(
+    facts: impl IntoIterator<Item = &'a ServingFactRecord>,
+) -> BTreeMap<String, MediaReference> {
     let mut references = BTreeMap::new();
     for fact in facts {
         match &fact.value {
@@ -1021,22 +937,6 @@ fn is_media_url(value: &str) -> bool {
     value.starts_with(PUBLIC_MEDIA_PREFIX) || value.starts_with(LAKE_MEDIA_PREFIX)
 }
 
-fn manifest_key_for_record(
-    record: &MaterializationRecord,
-) -> Result<LakeKey, ServingBundleValidationError> {
-    let key = record
-        .artifacts
-        .iter()
-        .find(|artifact| {
-            artifact.content_type == "application/json" && artifact.key.ends_with("/manifest.json")
-        })
-        .map(|artifact| artifact.key.clone())
-        .unwrap_or_else(|| {
-            AssetPathBuilder::serving_bundle_key(&record.version, "manifest.json").to_string()
-        });
-    validated_key(&key)
-}
-
 fn validated_key(value: &str) -> Result<LakeKey, ServingBundleValidationError> {
     LakeKey::new(value.to_string()).map_err(ServingBundleValidationError::Key)
 }
@@ -1089,6 +989,7 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at: Utc::now(),
+            observation: None,
         }
     }
 
@@ -1118,12 +1019,13 @@ mod tests {
     }
 
     #[test]
-    fn repeatable_search_metadata_does_not_fail_release_validation() {
+    fn repeatable_search_metadata_does_not_fail_bundle_validation() {
         let entities = vec![super::super::ServingEntityRecord {
             entity_id: "society:test".to_string(),
             entity_type: "society".to_string(),
             name: "Test Society".to_string(),
             root_source: Some("rera".to_string()),
+            visibility: Default::default(),
             searchable_text: String::new(),
         }];
         let facts = vec![fact(FactValue::Text("School".to_string()))];
@@ -1143,6 +1045,7 @@ mod tests {
             &facts,
             &[metadata.clone(), metadata],
             &[],
+            "test-bundle",
             &mut issues,
         );
 

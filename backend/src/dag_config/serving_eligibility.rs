@@ -140,11 +140,8 @@ mod tests {
             return;
         }
         let config = load_serving_eligibility().expect("serving_eligibility.json should load");
-        assert_eq!(config.version, 4);
-        assert_eq!(config.property_requirements.len(), 3);
-        let media = &config.property_requirements[2];
-        assert_eq!(media.reason_code, "missing_property_media");
-        assert_eq!(media.predicate, EligibilityValuePredicate::AnyNonEmpty);
+        assert_eq!(config.version, 5);
+        assert_eq!(config.property_requirements.len(), 2);
         assert!(config.society_requirements.is_empty());
     }
 }

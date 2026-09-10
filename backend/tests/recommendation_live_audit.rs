@@ -53,14 +53,23 @@ async fn promoted_bundle_recommendations_preserve_trust_invariants() {
     let mut thin_anchors = 0usize;
     let mut latencies_ms = Vec::with_capacity(properties.len());
 
-    for (anchor_id, (anchor_bhk, anchor_society)) in &properties {
+    for (request_index, (anchor_id, (anchor_bhk, anchor_society))) in properties.iter().enumerate()
+    {
         let started = Instant::now();
         let response = app
             .clone()
             .oneshot(
                 Request::builder()
                     .uri(format!("/api/properties/{anchor_id}/recommendations"))
-                    .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41000))))
+                    .extension(ConnectInfo(SocketAddr::from((
+                        [
+                            192,
+                            0,
+                            (request_index / 250) as u8,
+                            (request_index % 250 + 1) as u8,
+                        ],
+                        41000,
+                    ))))
                     .body(Body::empty())
                     .expect("recommendation request is valid"),
             )
@@ -133,10 +142,8 @@ async fn promoted_bundle_recommendations_preserve_trust_invariants() {
         "recommendation p95 {p95_ms:.1}ms exceeded {MAX_P95_LATENCY_MS:.1}ms"
     );
 
-    let bundle = state.serving_bundle.read().await;
-    let bundle = bundle
-        .as_ref()
-        .expect("the promoted serving bundle should be loaded");
+    let runtime = state.search_runtime.load();
+    let bundle = &runtime.bundle;
     let aliases = unique_society_aliases(&bundle.entities)
         .into_iter()
         .collect::<BTreeMap<_, _>>();
