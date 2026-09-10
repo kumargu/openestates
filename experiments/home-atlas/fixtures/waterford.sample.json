@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "1.0",
+  "homeId": "prestige-waterford",
+  "generatedAt": "2026-09-08",
+  "features": [
+    {
+      "id": "prestige-waterford",
+      "categoryId": "home",
+      "name": "Prestige Waterford",
+      "position": { "lat": 12.9819914, "lng": 77.7421819 },
+      "elevationM": 921.2407,
+      "boundary": [
+        { "lat": 12.9824745, "lng": 77.7437612 },
+        { "lat": 12.9824213, "lng": 77.7405505 },
+        { "lat": 12.9803659, "lng": 77.7406114 },
+        { "lat": 12.9805031, "lng": 77.7393516 },
+        { "lat": 12.9819929, "lng": 77.7436802 },
+        { "lat": 12.9824745, "lng": 77.7437612 }
+      ],
+      "evidence": {
+        "location": { "providerId": "google-places" },
+        "geometry": { "providerId": "openstreetmap", "sourceId": "133630420", "sourceUrl": "https://www.openstreetmap.org/way/133630420" },
+        "distance": { "metres": 0, "method": "straight_line", "target": "place_point" }
+      }
+    },
+    {
+      "id": "metro-kadugodi-tree-park",
+      "categoryId": "metro",
+      "name": "Kadugodi Tree Park",
+      "position": { "lat": 12.985711, "lng": 77.746842 },
+      "evidence": {
+        "location": { "providerId": "google-places", "sourceId": "ChIJS_ojywIOrjsRVtyLn4BoNnw" },
+        "distance": { "metres": 653, "method": "straight_line", "target": "place_point" },
+        "caveat": "Station distance is not a walking route."
+      }
+    },
+    {
+      "id": "metro-pattandur-agrahara",
+      "categoryId": "metro",
+      "name": "Pattandur Agrahara",
+      "position": { "lat": 12.987622, "lng": 77.737737 },
+      "evidence": {
+        "location": { "providerId": "google-places", "sourceId": "ChIJ1-At8uQRrjsRU3foUV135ok" },
+        "distance": { "metres": 790, "method": "straight_line", "target": "place_point" },
+        "caveat": "Station distance is not a walking route."
+      }
+    },
+    {
+      "id": "school-prajval",
+      "categoryId": "school",
+      "name": "Prajval Vidyanikethan School",
+      "position": { "lat": 12.9806032, "lng": 77.733374 },
+      "evidence": {
+        "location": { "providerId": "google-places", "sourceId": "ChIJLUe2uf4NrjsRFwPzTBkzT1g" },
+        "distance": { "metres": 967, "method": "straight_line", "target": "place_point" },
+        "caveat": "Admissions and catchment are not assessed."
+      }
+    },
+    {
+      "id": "school-ichthus-primary",
+      "categoryId": "school",
+      "name": "Ichthus Nursery and Primary School",
+      "position": { "lat": 12.9861278, "lng": 77.7505735 },
+      "evidence": {
+        "location": { "providerId": "google-places", "sourceId": "ChIJ_4OWrBwOrjsR5_E8jSd-J-U" },
+        "distance": { "metres": 1019, "method": "straight_line", "target": "place_point" }
+      }
+    },
+    {
+      "id": "road-ecc",
+      "categoryId": "road",
+      "name": "ECC Road",
+      "position": { "lat": 12.9813228, "lng": 77.743379 },
+      "segments": [{
+        "id": "23213668",
+        "path": [
+          { "lat": 12.9863637, "lng": 77.7448394 },
+          { "lat": 12.9838059, "lng": 77.7437913 },
+          { "lat": 12.9819217, "lng": 77.7436776 },
+          { "lat": 12.9813228, "lng": 77.743379 },
+          { "lat": 12.9798261, "lng": 77.7426373 },
+          { "lat": 12.9760344, "lng": 77.7413357 }
+        ]
+      }],
+      "evidence": {
+        "location": { "providerId": "openstreetmap", "sourceId": "23213668" },
+        "geometry": { "providerId": "openstreetmap", "sourceId": "23213668", "sourceUrl": "https://www.openstreetmap.org/way/23213668" },
+        "distance": { "metres": 150, "method": "straight_line", "target": "representative_segment_point" },
+        "caveat": "The line describes mapped alignment, not measured width, traffic, or a suggested route."
+      }
+    }
+  ]
+}
+

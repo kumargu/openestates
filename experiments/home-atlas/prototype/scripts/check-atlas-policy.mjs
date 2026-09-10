@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {atlasMetrics,classifyAtlasScale,resolveAtlasPolicy} from '../web/atlas-policy.js';
+const waterford=resolveAtlasPolicy({config:{id:'waterford',rules:{profile:'society'}},site:{areaAcres:8,bounds:{widthM:420,heightM:480}},features:[{category:'building'},{category:'road',name:'ECC Road'}]});
+assert.equal(waterford.profile,'society');assert.equal(waterford.backdrop.layout,'single');assert.equal(waterford.route.enabled,false);
+const brigadeFeatures=[...Array(10)].map((_,i)=>({category:'precinct',name:'Block '+i}),);
+brigadeFeatures.push(...[...Array(117)].map(()=>({category:'building'})),{category:'road',name:'Spinal Road'});
+const brigade=resolveAtlasPolicy({config:{id:'brigade',rules:{routeName:'Spinal Road'}},site:{areaAcres:147.8,bounds:{widthM:841,heightM:1741},boundary:[{}, {}, {}]},features:brigadeFeatures});
+assert.equal(brigade.profile,'township');assert.equal(brigade.backdrop.context,'locator-route');assert.equal(brigade.route.enabled,true);assert.equal(brigade.labels.building,'texture');
+assert.equal(classifyAtlasScale(atlasMetrics({site:{areaAcres:35,bounds:{heightM:800}},features:[]})),'estate');
+console.log('Atlas policy: Waterford and Brigade resolve to the intended scale, backdrop, route and label rules.');
