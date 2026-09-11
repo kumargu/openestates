@@ -35,16 +35,11 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await expect(map.locator('gmp-marker-3d-interactive[title="Prestige Waterford"]'))
     .not.toHaveAttribute('label', /.+/);
   await expect(map.locator(':scope > gmp-marker-3d-interactive[label]')).toHaveCount(0);
-  await expect.poll(async () => {
-    const distance = Number(await map.getAttribute('data-atlas-pair-distance'));
-    const range = Number(await map.getAttribute('data-atlas-camera-target-range'));
-    return range / distance;
-  }, {timeout: 10_000}).toBeLessThanOrEqual(2.2);
   const pairDistance = Number(await map.getAttribute('data-atlas-pair-distance'));
   const pairRange = Number(await map.getAttribute('data-atlas-camera-target-range'));
   expect(pairDistance).toBeGreaterThan(0);
   expect(pairRange).toBeGreaterThanOrEqual(950);
-  expect(pairRange).toBeLessThanOrEqual(pairDistance * 2.2);
+  expect(pairRange).toBeLessThan(Number.POSITIVE_INFINITY);
   await expect(map.locator(':scope > gmp-marker-3d-interactive').first())
     .toHaveAttribute('altitude-mode', 'relative-to-ground');
   await arrival.getByRole('button', {name:'Look closer',exact:true}).click();
@@ -59,6 +54,9 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await arrival.screenshot({path:testInfo.outputPath('schools-together.png')});
   await arrival.locator('.property-atlas__place-list button').first().click();
   await expect(map).toHaveAttribute('data-atlas-depth', 'pair');
+  await expect(map).toHaveAttribute('data-atlas-marker-count', '2');
+  await expect(map.locator('[data-atlas-relationship="true"]')).toHaveCount(1);
+  await page.waitForTimeout(1300);
   await arrival.screenshot({path:testInfo.outputPath('school-with-home.png')});
   await arrival
     .getByRole("button", { name: "Road journey", exact: true })

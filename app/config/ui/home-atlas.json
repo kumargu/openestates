@@ -39,7 +39,22 @@
   "boundary": { "fill": "#f8f1df12", "stroke": "#fff7e3e6" },
   "quiet": { "fill": "#061b28b0", "radiusDegrees": 0.08 },
   "focus": { "rangeM": 700, "tilt": 55, "durationMs": 1200, "movementFraction": 0.7 },
-  "cameraFit": { "safeMarginPx": 32, "fieldOfViewDegrees": 38 },
+  "cameraFit": {
+    "safeMarginPx": 32,
+    "opticalPaddingPx": 52,
+    "fieldOfViewDegrees": 38,
+    "centerAltitudeOffsetM": 20,
+    "overviewHeadingOffsetDegrees": 90,
+    "pairHeadingOffsetDegrees": 90,
+    "inspectHeadingOffsetDegrees": 35,
+    "homeHeadingDegrees": 210,
+    "overviewTilt": 25,
+    "pairTilt": 30,
+    "inspectTilt": 44,
+    "homeTilt": 55,
+    "overviewMinimumRangeM": 1000,
+    "inspectMinimumRangeM": 420
+  },
   "above": { "tilt": 12 },
   "nearby": {
     "overviewMs": 4500,

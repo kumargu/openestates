@@ -454,10 +454,13 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       const categories = rect('.property-atlas__categories');
       const drawer = drawerOpen ? rect('.property-atlas__drawer') : undefined;
       const dock = rect('.property-atlas__dock');
+      const sidebar = document.querySelector('.workspace-sidebar')?.getBoundingClientRect();
       // The identity occupies only the upper-left corner. Treating it as a
       // full-height exclusion leaves a sliver of map and forces a huge zoom
       // out. Pair focus can safely use the canvas below it.
-      const left = margin;
+      const left = sidebar && sidebar.right > mapRect.left && sidebar.left < mapRect.right
+        ? Math.max(margin, sidebar.right - mapRect.left + margin)
+        : margin;
       const right = drawer && drawer.left < mapRect.right
         ? Math.max(0, mapRect.right - drawer.left + margin)
         : margin;
@@ -484,6 +487,8 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     const observer = new ResizeObserver(measure);
     observer.observe(container);
     observer.observe(shell);
+    const sidebar = document.querySelector('.workspace-sidebar');
+    if (sidebar) observer.observe(sidebar);
     return () => observer.disconnect();
   }, [drawerOpen]);
   const [loadError, setLoadError] = useState<Error | null>(null);
