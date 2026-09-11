@@ -51,6 +51,9 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await expect(arrival.locator(".property-atlas__place-list button")).toHaveCount(2);
   await expect(map).toHaveAttribute('data-atlas-depth', 'overview');
   await expect(map.locator('[data-atlas-relationship="true"]')).toHaveCount(0);
+  for (const name of await arrival.locator('.property-atlas__place-list strong').allTextContents()) {
+    await expect(map.getByLabel(name, {exact: true})).toHaveCount(0);
+  }
   await arrival.screenshot({path:testInfo.outputPath('schools-together.png')});
   await arrival.locator('.property-atlas__place-list button').first().click();
   await expect(map).toHaveAttribute('data-atlas-depth', 'pair');
@@ -77,6 +80,11 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   }))).toBe(pausedNearbyCamera);
   await arrival.getByRole('button', {name: 'Resume tour', exact: true}).click();
   await expect(map).toHaveAttribute('data-atlas-depth', 'inspect', {timeout: 10_000});
+  await arrival.locator('.property-atlas__place-list button.is-active').click();
+  await page.setViewportSize({width: 390, height: 844});
+  await page.waitForTimeout(1300);
+  await arrival.screenshot({path: testInfo.outputPath('mobile-nearby.png')});
+  await page.setViewportSize({width: 1440, height: 1000});
   await arrival
     .getByRole("button", { name: "Road journey", exact: true })
     .click();

@@ -12,13 +12,15 @@
 
 ## Reused learning and code
 
-The accepted Site's `experiments/home-atlas/src/camera.ts` remains the shared camera implementation. The production adapter `frontend/src/lib/atlasNearbyScene.ts` now consumes it directly, with an unlimited context distance so backend-scoped evidence is not silently discarded. Category tour timing comes from the preserved Atlas scene module.
+The local tangent-plane solver in `experiments/home-atlas/src/screenFit.ts` fits sourced home/feature geometry, lifted anchors, and the relationship arc into the measured unobstructed screen rectangle. It accounts for the persistent workspace edge, desktop drawer, mobile bottom sheet, category rail, and journey dock. Heading follows the home/feature bearing plus configured offsets; no category or feature identity changes the camera math. Category timing and camera tuning come from `app/config/ui/home-atlas.json`.
 
-Reviewed Human Atlas `app/scene.tsx`: selected-geometry bounds, distinct selection/isolation states, restrained background emphasis, and user-gesture cancellation. Borrowed these interaction principles, not anatomical meshes or explosion/lift. Its screen-space inspector fitting is a useful follow-up but is not claimed as implemented here. The prior ThreeUI research found no separately established map implementation; no unverified ThreeUI source is claimed.
+Reviewed Human Atlas `app/scene.tsx`: selected-geometry bounds, distinct selection/isolation states, restrained background emphasis, and user-gesture cancellation. Borrowed those interaction principles and clear-frame fitting, not anatomical meshes, explosion controls, or Three.js architecture. The prior ThreeUI research found no separately established map implementation; no unverified ThreeUI source is claimed.
 
-Rest: category overview. Hover: existing popover. Focus/touch: numbered place and accessible With home / Look closer actions. Reduced motion: zero-duration camera moves. No new floating captions, comparison panels, or autoplay Street View.
+Rest: category overview shows home plus every API-scoped item. Nearby map pins contain only `H` and numbers; place names stay in the drawer. Hover adds no duplicate place label. Keyboard focus and touch use the same numbered place, `With home`, and `Look closer` actions. Reduced motion applies scene cameras without animated travel. Direct manipulation, hidden-document cancellation, pause/resume position, and Street View return remain intact.
 
-Pair focus borrows Human Atlas's screen-space selection principle: home and the selected place are framed from only their two anchors, translated into the clear canvas beside the drawer, and kept at PR 126's close distance-based range. PR 126's focus composition is preserved too: selected geometry and the home remain in the same camera bounds, while their markers lift 45 m above ground so both anchors stay readable in perspective. The property identity is a corner overlay rather than a full-height exclusion. The map's anatomical content, mesh effects, and explosion controls were intentionally not borrowed. Home uses one prominent `H` anchor without a second visible label; its accessible name remains `This home`.
+Pair focus borrows Human Atlas's screen-space selection principle: home, the selected place, their sourced extents, lifted markers, and relationship arc are contained in the clear canvas. Inspect uses a closer configured range so selected geometry gains screen presence while home remains a meaningful second anchor. PR 126's overview → pair → inspect → home pacing and 70% move / 30% dwell rhythm are preserved through `AtlasScene`; a camera arbiter makes society, road, and nearby ownership mutually exclusive. The property identity remains a corner overlay rather than a full-height exclusion.
+
+The UI-critic pass removed the stacked `Nearby` heading, redundant place count, arc tutorial caption, source-specific control copy, map popovers, and duplicate accessible place names. Buyer controls are now `Aerial`, `Site outline`, and `Focus`. The mobile evidence drawer is a bounded bottom sheet so a usable map rectangle remains above it.
 
 ## Data contract
 
@@ -28,16 +30,16 @@ The Waterford API fixture now preserves archived road segments and explicit poly
 
 ## Regression coverage
 
-`frontend/tests/home-atlas-integration.test.ts` verifies lake identity, road segment preservation, polygon-only discovery, mobile scaling, distant evidence retention, and relation-arc endpoints/height. Existing playback tests cover cancellation, pause and resume.
+`frontend/tests/home-atlas-integration.test.ts` verifies lake identity, road segment preservation, polygon-only discovery, distant evidence retention, relation-arc endpoints/height, camera ownership, and point/polygon/line containment at near, medium, and distant ranges under translated and rotated coordinates. It also verifies inspect geometry occupies more screen space while the home stays inside the clear frame. Existing playback tests cover cancellation, pause, and resume.
 
 `frontend/e2e/atlas/property.spec.ts` now checks overview/pair/inspect states and relation arc creation/removal, and captures schools-together and school-with-home screenshots when run against real Google 3D.
 
 ## Verification gate
 
-The frontend unit suite passed (267 tests), TypeScript and lint passed, and `vite build --mode atlas` passed (with the existing large-chunk warning). Browser verification was attempted but stopped at launch because the configured Playwright Chromium executable is absent. No new rendered screenshot or visual-parity claim is made at this checkpoint.
+Focused real-Chrome verification covers desktop category overview, pair, inspect, tour pause/resume, road direction, Street View return, and the `390×844` bottom-sheet composition with no page errors. The latest raw frames, trace, and video are under ignored test storage at `frontend/test-results/atlas-parity/ui-polish-check/`; its three-frame contact sheet compares desktop overview, desktop pair, and mobile pair without loading the full capture sequence into review context.
 
 The default production build requires `VITE_API_BASE` and `VITE_SITE_URL`; configure the actual deployment origins rather than baking placeholder addresses into the application. Local review uses the Atlas build mode and backend fixture API. A configured Google Maps key and WebGL-capable browser are still required for the real map.
 
-Before merge: run `npm run test:atlas-browser` with Chromium and the authorized Maps key, inspect desktop/mobile schools, lakes and road scenes, verify home/selected geometry are unobscured by the drawer, and exercise tour pause/resume plus gesture cancellation. Browser DOM assertions do not by themselves prove photographic composition.
+Before merge, rerun the complete parity journey twice in real Chrome and attach the representative resting and focus screenshots to the PR. Browser DOM assertions do not by themselves prove photographic composition.
 
 Not added: idle orbit, saved exact viewpoints, township split-layout, or synthetic building extrusion. These are optional enhancements, not prerequisites for nearby parity. Do not reintroduce Lift or map comparison.

@@ -463,7 +463,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const cameraArbiterRef = useRef(new AtlasCameraArbiter());
   const executedTourRequestRef = useRef<number | null>(null);
   const onNearbyTourSceneRef = useRef(onNearbyTourScene);
-  onNearbyTourSceneRef.current = onNearbyTourScene;
+  useEffect(() => {
+    onNearbyTourSceneRef.current = onNearbyTourScene;
+  }, [onNearbyTourScene]);
   const terrainElevationRef = useRef<number | null>(null);
   const initialSocietyAutoPlayRef = useRef(autoPlaySociety);
   const previousSocietyAutoPlayRef = useRef(autoPlaySociety);
@@ -491,21 +493,26 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       const drawer = drawerOpen ? rect('.property-atlas__drawer') : undefined;
       const dock = rect('.property-atlas__dock');
       const sidebar = document.querySelector('.workspace-sidebar')?.getBoundingClientRect();
+      const drawerIsBottomSheet = Boolean(drawer && drawer.width >= mapRect.width * 0.7);
       // The identity occupies only the upper-left corner. Treating it as a
       // full-height exclusion leaves a sliver of map and forces a huge zoom
       // out. Pair focus can safely use the canvas below it.
       const left = sidebar && sidebar.right > mapRect.left && sidebar.left < mapRect.right
         ? Math.max(margin, sidebar.right - mapRect.left + margin)
         : margin;
-      const right = drawer && drawer.left < mapRect.right
+      const right = drawer && !drawerIsBottomSheet && drawer.left < mapRect.right
         ? Math.max(0, mapRect.right - drawer.left + margin)
         : margin;
       const top = categories && categories.bottom > mapRect.top
         ? Math.max(0, categories.bottom - mapRect.top + margin)
         : margin;
-      const bottom = dock && dock.top < mapRect.bottom
+      const dockBottom = dock && dock.top < mapRect.bottom
         ? Math.max(0, mapRect.bottom - dock.top + margin)
         : margin;
+      const drawerBottom = drawer && drawerIsBottomSheet && drawer.top < mapRect.bottom
+        ? Math.max(0, mapRect.bottom - drawer.top + margin)
+        : margin;
+      const bottom = Math.max(dockBottom, drawerBottom);
       const next = {
         width: mapRect.width,
         height: mapRect.height,
@@ -536,11 +543,13 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     ? layerExperience
     : null;
   const roadTourActive = terrainCorridor && cameraMode === "evidence";
-  cameraArbiterRef.current.activate(roadTourActive
-    ? "road"
-    : cameraMode === "evidence"
-    ? "nearby"
-    : "society");
+  useLayoutEffect(() => {
+    cameraArbiterRef.current.activate(roadTourActive
+      ? "road"
+      : cameraMode === "evidence"
+      ? "nearby"
+      : "society");
+  }, [cameraMode, roadTourActive]);
   const atlasRoute = useMemo(
     () => arrivalAtlasRoute(accessLines, roadExperience?.routeDirection ?? "as-mapped"),
     [accessLines, roadExperience?.routeDirection],
@@ -1162,19 +1171,20 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       ? []
       : isolatesSelection && selected ? [selected] : places;
     for (const place of markerPlaces) {
-      const popover = createPlacePopover(library, place);
+      const popover = cameraMode === 'evidence' ? null : createPlacePopover(library, place);
+      const pinLabel = cameraMode === 'evidence' ? `Map pin ${place.number}` : place.name;
       const marker = new library.Marker3DInteractiveElement({
         altitudeMode: cameraMode === "evidence" ? "RELATIVE_TO_GROUND" : "CLAMP_TO_GROUND",
         collisionBehavior: (place.feature_id ?? place.name) === selectedPlaceId || !selectedPlaceId ? "REQUIRED" : "OPTIONAL_AND_HIDES_LOWER_PRIORITY",
         drawsWhenOccluded: true,
         extruded: cameraMode === "evidence",
-        gmpPopoverTargetElement: popover,
+        gmpPopoverTargetElement: popover ?? undefined,
         position: {
           lat: place.latitude,
           lng: place.longitude,
           ...(cameraMode === "evidence" ? {altitude: policy.nearby.markerLiftM} : {}),
         },
-        title: place.name,
+        title: pinLabel,
       });
       marker.append(new markerLibrary.PinElement({ ...mapMarkerPinOptions(
         place.icon,
@@ -1183,17 +1193,21 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         ...(cameraMode === 'evidence' ? {glyphSrc: undefined, glyphText: String(place.number)} : {}),
       }));
       marker.tabIndex = 0;
-      marker.setAttribute("aria-label", place.name);
+      marker.setAttribute("aria-label", pinLabel);
       marker.addEventListener('gmp-click', () => onSelectPlace?.(place.feature_id ?? place.name));
-      marker.addEventListener("pointerenter", () => {
-        if (activePopover && activePopover !== popover) activePopover.open = false;
-        popover.open = true;
-        activePopover = popover;
-      });
+      if (popover) {
+        marker.addEventListener("pointerenter", () => {
+          if (activePopover && activePopover !== popover) activePopover.open = false;
+          popover.open = true;
+          activePopover = popover;
+        });
+      }
       map.append(marker);
-      map.append(popover);
       nextChildren.push(marker);
-      nextChildren.push(popover);
+      if (popover) {
+        map.append(popover);
+        nextChildren.push(popover);
+      }
     }
     map.dataset.atlasDepth = nearbyDepth;
     map.dataset.atlasVisibility = roadTourActive

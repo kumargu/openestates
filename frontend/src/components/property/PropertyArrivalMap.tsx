@@ -490,7 +490,7 @@ export function PropertyArrivalMap({
               setAbove((current) => !current);
             }}
           >
-            Above
+            Aerial
           </button>
           <button
             type="button"
@@ -498,7 +498,7 @@ export function PropertyArrivalMap({
             disabled={!context.home.boundary}
             onClick={() => setShowBoundary((current) => !current)}
           >
-            OSM boundary
+            Site outline
           </button>
           <button
             type="button"
@@ -506,7 +506,7 @@ export function PropertyArrivalMap({
             disabled={!context.home.boundary}
             onClick={() => setQuiet((current) => !current)}
           >
-            Quiet surroundings
+            Focus
           </button>
         </div>
 
@@ -519,14 +519,10 @@ export function PropertyArrivalMap({
         {atlasDrawerOpen && (activeView === "metro" || activeView === "nearby") ? (
           <aside className="property-atlas__drawer" aria-label={activeAtlasCategoryLabel}>
             <header>
-              <div>
-                <span>Nearby</span>
-                <h2>{activeAtlasCategoryLabel}</h2>
-              </div>
+              <h2>{activeAtlasCategoryLabel}</h2>
               <button type="button" aria-label="Close nearby places" onClick={() => setAtlasDrawerOpen(false)}>×</button>
             </header>
             <div className="property-atlas__drawer-summary">
-              <span>{visiblePlaces.length} {visiblePlaces.length === 1 ? "place" : "places"}</span>
               <button type="button" aria-pressed={!selectedPlaceId && nearbyDepth === 'overview'} onClick={() => selectPlace(null)}>
                 Show together
               </button>
@@ -558,7 +554,6 @@ export function PropertyArrivalMap({
                     playbackController.cancel('settled'); setNearbyDepth('inspect');
                   }}>Look closer</button>
                 </div>
-                <p>Arc: straight-line connection, not a travel route.</p>
                 {selectedPlace.source_url ? (
                   <a href={selectedPlace.source_url} target="_blank" rel="noreferrer">Source ↗</a>
                 ) : null}
@@ -570,8 +565,8 @@ export function PropertyArrivalMap({
             <select className="property-atlas__tour-scope" aria-label="Tour scope" value={tourScope}
               disabled={playbackState === 'playing' || playbackState === 'paused'}
               onChange={event => setTourScope(event.target.value as 'category' | 'neighborhood')}>
-              <option value="category">This category</option>
-              <option value="neighborhood">Whole neighborhood</option>
+              <option value="category">Category</option>
+              <option value="neighborhood">Neighborhood</option>
             </select>
           </aside>
         ) : null}
@@ -646,10 +641,10 @@ export function PropertyArrivalMap({
           <summary>View</summary>
           <div>
             <label><input type="checkbox" checked={above} disabled={activeView === 'approach'}
-              onChange={e => { playbackController.cancel('settled'); setSocietyAutoPlay(false); setAbove(e.target.checked); }} />From above</label>
-            <label><input type="checkbox" checked={showBoundary} onChange={e => setShowBoundary(e.target.checked)} />Society boundary</label>
+              onChange={e => { playbackController.cancel('settled'); setSocietyAutoPlay(false); setAbove(e.target.checked); }} />Aerial</label>
+            <label><input type="checkbox" checked={showBoundary} onChange={e => setShowBoundary(e.target.checked)} />Site outline</label>
             <label><input type="checkbox" checked={quiet} disabled={activeView !== 'society' || !context.home.boundary}
-              onChange={e => setQuiet(e.target.checked)} />Quiet surroundings</label>
+              onChange={e => setQuiet(e.target.checked)} />Focus</label>
           </div>
         </details>
         {navigationAction && navigationActionText ? (
