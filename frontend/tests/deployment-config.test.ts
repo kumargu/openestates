@@ -39,6 +39,9 @@ test("static responses carry the launch security policy", () => {
   assert.match(globalHeaders?.["Content-Security-Policy"] ?? "", /frame-ancestors 'none'/);
   assert.match(globalHeaders?.["Content-Security-Policy"] ?? "", /https:\/\/api\.80feet\.app/);
   assert.match(globalHeaders?.["Content-Security-Policy"] ?? "", /https:\/\/tiles\.openfreemap\.org/);
+  assert.match(globalHeaders?.["Content-Security-Policy"] ?? "", /https:\/\/maps\.googleapis\.com/);
+  assert.match(globalHeaders?.["Content-Security-Policy"] ?? "", /https:\/\/maps\.gstatic\.com/);
+  assert.match(globalHeaders?.["Content-Security-Policy"] ?? "", /https:\/\/streetviewpixels-pa\.googleapis\.com/);
 });
 
 test("Node major matches CI and Vercel", () => {

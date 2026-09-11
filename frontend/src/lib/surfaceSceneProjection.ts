@@ -19,6 +19,9 @@ export function propertyMapContextFromSurfaceScene(
   const anchorCoordinates = pointCoordinates(scene.anchor.geometry);
   const receiptsById = new Map(scene.receipts.map((receipt) => [receipt.id, receipt]));
   const scenePlaces = scene.features
+    .filter(feature => feature.geometry.type === 'Point' ||
+      ((feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') && !scene.features.some(point =>
+        point.geometry.type === 'Point' && point.layerId === feature.layerId && feature.entityId && point.entityId === feature.entityId)))
     .map((feature) => mapPlacePinFromFeature(feature, receiptsById))
     .filter((place): place is MapPlacePin => Boolean(place));
   const places = [
@@ -35,6 +38,18 @@ export function propertyMapContextFromSurfaceScene(
     .map((feature) => mapLineFromFeature(feature, receiptsById))
     .filter((line): line is MapOverlayLine => Boolean(line));
   const layerLines = mapLinesByLayer(scene, receiptsById);
+  const layerPolygons = { ...fallback?.layer_polygons };
+  for (const feature of scene.features) {
+    const polygons = feature.geometry.type === 'Polygon' ? [feature.geometry.coordinates]
+      : feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : [];
+    if (!polygons.length) continue;
+    const existing = layerPolygons[feature.layerId] ?? [];
+    layerPolygons[feature.layerId] = [...existing.filter(p => !p.id.startsWith(`${feature.id}:`)),
+      ...polygons.filter(rings => rings[0]?.length >= 4).map((rings, index) => ({
+        id: `${feature.id}:${index}`, entity_id: feature.entityId, name: feature.label, kind: feature.kind, coordinates: rings[0], holes: rings.slice(1),
+        source_type: feature.receiptIds.map(id => receiptsById.get(id)?.sourceType).find(Boolean) ?? '',
+      }))];
+  }
 
   const mergedAccessLines = mergeLines(accessLines, fallback?.access_lines ?? []);
   const mergedRedFlagLines = [
@@ -60,10 +75,11 @@ export function propertyMapContextFromSurfaceScene(
     places,
     proof_focus: scene.proofFocus,
     water: fallback?.water,
-    metro_lines: fallback?.metro_lines,
+    metro_lines: mergeLines(accessLines, fallback?.metro_lines ?? []),
     access_lines: mergedAccessLines,
     red_flag_lines: mergedRedFlagLines,
     layer_lines: layerLines,
+    layer_polygons: layerPolygons,
     green_patches: fallback?.green_patches,
     lakes: fallback?.lakes,
   };
@@ -173,7 +189,7 @@ function mapPlacePinFromFeature(
   feature: SceneFeature,
   receiptsById: Map<string, SceneReceipt>,
 ): MapPlacePin | null {
-  const coordinates = pointCoordinates(feature.geometry);
+  const coordinates = pointCoordinates(feature.geometry) ?? extentCenter(feature.geometry);
   if (!coordinates) return null;
   const receipt = feature.receiptIds
     .map((id) => receiptsById.get(id))
@@ -210,6 +226,7 @@ function mapLineFromFeature(
 
   return {
     id: feature.id,
+    entity_id: feature.entityId,
     name: feature.label,
     label: feature.shortLabel,
     distance_km: typeof feature.metrics?.distanceM === "number"
@@ -241,4 +258,14 @@ function lineCoordinates(geometry?: SceneGeometry): [number, number][] | null {
     Number.isFinite(latitude) && Number.isFinite(longitude))
     ? geometry.coordinates
     : null;
+}
+
+/** Display anchor for a mapped extent; never interpreted as a gate or entrance. */
+function extentCenter(geometry: SceneGeometry): {latitude:number; longitude:number} | null {
+  const coordinates = geometry.type === 'Polygon' ? geometry.coordinates[0]
+    : geometry.type === 'MultiPolygon' ? geometry.coordinates.flatMap(p => p[0])
+    : geometry.type === 'LineString' ? geometry.coordinates : [];
+  if (!coordinates?.length || coordinates.some(([lng,lat]) => !Number.isFinite(lng) || !Number.isFinite(lat))) return null;
+  return {latitude:(Math.min(...coordinates.map(p=>p[1]))+Math.max(...coordinates.map(p=>p[1])))/2,
+    longitude:(Math.min(...coordinates.map(p=>p[0]))+Math.max(...coordinates.map(p=>p[0])))/2};
 }

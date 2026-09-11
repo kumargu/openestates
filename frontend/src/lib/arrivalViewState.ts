@@ -3,7 +3,7 @@ import type { ArrivalSearchSociety } from "./types.ts";
 
 const EMPTY_SEARCH_SOCIETIES: ArrivalSearchSociety[] = [];
 
-export type ArrivalView = "society" | "metro" | "approach";
+export type ArrivalView = "society" | "metro" | "approach" | "nearby";
 
 export type ArrivalViewOption = {
   id: ArrivalView;

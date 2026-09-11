@@ -412,6 +412,7 @@ export type MapWaterContext = {
 };
 
 export type MapOverlayLine = {
+  entity_id?: string;
   id: string;
   name: string;
   label?: string;
@@ -425,10 +426,12 @@ export type MapOverlayLine = {
 };
 
 export type MapOverlayPolygon = {
+  entity_id?: string;
   id: string;
   name: string;
   kind: string;
   coordinates: [number, number][];
+  holes?: [number, number][][];
   distance_km?: number;
   source_type: string;
 };
@@ -472,6 +475,7 @@ export type PropertyMapContext = {
   access_lines?: MapOverlayLine[];
   red_flag_lines?: MapOverlayLine[];
   layer_lines?: Record<string, MapOverlayLine[]>;
+  layer_polygons?: Record<string, MapOverlayPolygon[]>;
   green_patches?: MapOverlayPolygon[];
   lakes?: MapOverlayPolygon[];
 };
