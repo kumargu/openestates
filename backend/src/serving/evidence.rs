@@ -1,8 +1,11 @@
+use std::collections::HashMap;
 use std::fmt;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+
+use super::{ServingEdgeRecord, ServingFactRecord};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -29,6 +32,124 @@ impl DerivationId {
 pub enum EvidenceId {
     Observation(ObservationId),
     Derivation(DerivationId),
+}
+
+/// Immutable, request-path lookup for the evidence identities hydrated with a
+/// serving snapshot. Observation values stay qualified by fact key; a single
+/// provider observation may legitimately support more than one canonical
+/// fact. Derivations are content-addressed and therefore keyed only by ID.
+#[derive(Debug, Clone, Default)]
+pub struct ServingEvidenceIndex {
+    facts: Vec<IndexedEvidenceFact>,
+    facts_by_observation_and_key: HashMap<(ObservationId, String), usize>,
+    observations: HashMap<ObservationId, SourceObservation>,
+    derivations: HashMap<DerivationId, DerivedEvidence>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct IndexedEvidenceFact {
+    pub entity_id: String,
+    pub fact_key: String,
+    pub value: crate::knowledge::FactValue,
+    row_identity: [u8; 32],
+}
+
+impl ServingEvidenceIndex {
+    pub fn from_records<'a>(
+        facts: impl IntoIterator<Item = &'a ServingFactRecord>,
+        edges: &'a [ServingEdgeRecord],
+    ) -> Result<Self, String> {
+        let mut index = Self::default();
+        for fact in facts {
+            let Some(observation) = fact.observation.as_ref() else {
+                continue;
+            };
+            observation
+                .validate()
+                .map_err(|error| format!("invalid serving observation: {error}"))?;
+            if observation.subject_entity_id != fact.entity_id {
+                return Err(format!(
+                    "observation {} belongs to {}, not fact subject {}",
+                    observation.observation_id.as_str(),
+                    observation.subject_entity_id,
+                    fact.entity_id
+                ));
+            }
+            if let Some(existing) = index
+                .observations
+                .insert(observation.observation_id.clone(), observation.clone())
+            {
+                if existing != *observation {
+                    return Err(format!(
+                        "observation {} has conflicting identities",
+                        observation.observation_id.as_str()
+                    ));
+                }
+            }
+            let key = (
+                observation.observation_id.clone(),
+                fact.fact_key.to_ascii_lowercase(),
+            );
+            let row_identity = Sha256::digest(
+                serde_json::to_vec(fact)
+                    .map_err(|error| format!("serving fact identity failed: {error}"))?,
+            )
+            .into();
+            if let Some(existing) = index.facts_by_observation_and_key.get(&key).copied() {
+                if index.facts[existing].row_identity != row_identity {
+                    return Err(format!(
+                        "observation {} and fact key {} have conflicting rows",
+                        observation.observation_id.as_str(),
+                        fact.fact_key
+                    ));
+                }
+                continue;
+            }
+            let fact_index = index.facts.len();
+            index.facts.push(IndexedEvidenceFact {
+                entity_id: fact.entity_id.clone(),
+                fact_key: fact.fact_key.clone(),
+                value: fact.value.clone(),
+                row_identity,
+            });
+            index.facts_by_observation_and_key.insert(key, fact_index);
+        }
+        for derivation in edges.iter().filter_map(|edge| edge.derivation.as_ref()) {
+            derivation
+                .validate()
+                .map_err(|error| format!("invalid serving derivation: {error}"))?;
+            if let Some(existing) = index
+                .derivations
+                .insert(derivation.derivation_id.clone(), derivation.clone())
+            {
+                if existing != *derivation {
+                    return Err(format!(
+                        "derivation {} has conflicting identities",
+                        derivation.derivation_id.as_str()
+                    ));
+                }
+            }
+        }
+        Ok(index)
+    }
+
+    pub(crate) fn fact(
+        &self,
+        observation_id: &ObservationId,
+        fact_key: &str,
+    ) -> Option<&IndexedEvidenceFact> {
+        self.facts_by_observation_and_key
+            .get(&(observation_id.clone(), fact_key.to_ascii_lowercase()))
+            .and_then(|index| self.facts.get(*index))
+    }
+
+    pub fn observation(&self, observation_id: &ObservationId) -> Option<&SourceObservation> {
+        self.observations.get(observation_id)
+    }
+
+    pub fn derivation(&self, derivation_id: &DerivationId) -> Option<&DerivedEvidence> {
+        self.derivations.get(derivation_id)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

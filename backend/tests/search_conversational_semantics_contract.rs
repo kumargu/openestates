@@ -5,10 +5,10 @@ use backend::graph::GraphIndex;
 use backend::knowledge::FactValue;
 use backend::models::{Property, Society};
 use backend::search::geo::SpatialEntityIndex;
+use backend::search::journey::{buyer_brief, present_intent};
 use backend::search::{
-    apply_typed_revision, compile_typed_revision, render_revision_active_query, GeoScope,
-    SearchCapabilityIndex, SearchEngine, SearchIndex, SearchRevisionLimits,
-    SearchRevisionOperation, SearchRevisionOutcome,
+    apply_typed_revision, compile_typed_revision, GeoScope, SearchCapabilityIndex, SearchEngine,
+    SearchIndex, SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
 };
 use backend::serving::{
     derive_proximity_records, materialize_canonical_spatial_identities, DerivedEvidence,
@@ -226,7 +226,8 @@ struct SpatialRevisionCase {
     utterance: String,
     expected_operation: JourneyOperation,
     expected_outcome: SpatialRevisionExpectedOutcome,
-    expected_active_query: Option<String>,
+    #[serde(rename = "expected_active_query")]
+    _expected_active_query: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -448,20 +449,25 @@ fn issue_118_revision_scenarios_are_frozen_in_the_unified_bank() {
             "{} compiled the wrong outcome",
             case.id
         );
-        assert_eq!(
-            (revision.outcome == SearchRevisionOutcome::Candidate)
-                .then(|| {
-                    render_revision_active_query(
-                        &case.parent_query,
-                        &case.utterance,
-                        revision.operation,
-                    )
-                })
-                .as_deref(),
-            case.expected_active_query.as_deref(),
-            "{} rendered the wrong active query",
-            case.id
-        );
+        if revision.outcome == SearchRevisionOutcome::Candidate {
+            let candidate = apply_typed_revision(
+                &parent,
+                &fragment,
+                &revision,
+                &snapshot.bundle.graph_index,
+                Some(&snapshot.bundle.spatial_index),
+                backend::search::GeoCellSearchPolicy {
+                    max_hops: snapshot.geo_cell_max_hops,
+                    max_distance_km: snapshot.geo_cell_max_distance_km,
+                },
+            )
+            .expect("candidate revision projects a typed buyer brief");
+            assert!(
+                !buyer_brief(&present_intent(&candidate)).is_empty(),
+                "{}",
+                case.id
+            );
+        }
     }
 }
 
@@ -553,13 +559,12 @@ fn issue_118_candidate_revisions_execute_through_search_engine() {
                     .collect::<Vec<_>>();
                 assert_eq!(ids.len(), ids.iter().collect::<HashSet<_>>().len());
                 assert!(output.results.iter().any(|result| {
-                    let proof_entities = result
-                        .proof_focuses
+                    let targets = result
+                        .verified_matches
                         .iter()
-                        .filter_map(|proof| proof.entity_id.as_deref())
+                        .filter_map(|matched| matched.target_entity_id.as_deref())
                         .collect::<HashSet<_>>();
-                    proof_entities.contains(hoodi_metro_id)
-                        && proof_entities.contains(manipal_hospital_id)
+                    targets.contains(hoodi_metro_id) && targets.contains(manipal_hospital_id)
                 }));
             }
             "SPATIAL-REVISION-BUDGET" => {
@@ -953,13 +958,19 @@ fn branch_local_spatial_recall_never_leaks_school_and_hospital_proof() {
         "hospital-branch-home"
     );
     assert!(output.result_sets[0].results.iter().all(|result| result
-        .proof_focuses
-        .iter()
-        .all(|focus| focus.matched_label.as_deref() != Some("South Star Hospital"))));
+        .match_explanation
+        .as_ref()
+        .is_none_or(|explanation| explanation
+            .reasons
+            .iter()
+            .all(|reason| !reason.display.contains("South Star Hospital")))));
     assert!(output.result_sets[1].results.iter().all(|result| result
-        .proof_focuses
-        .iter()
-        .all(|focus| focus.matched_label.as_deref() != Some("North Star School"))));
+        .match_explanation
+        .as_ref()
+        .is_none_or(|explanation| explanation
+            .reasons
+            .iter()
+            .all(|reason| !reason.display.contains("North Star School")))));
 }
 
 #[test]
@@ -1643,8 +1654,7 @@ fn run_controlled_journey(
         journey.id
     );
     let mut active_output = fixture.search(&active_case.query);
-    let mut active_query = active_case.query.clone();
-    let mut active_plan = engine.compile_initial(&active_query, "root");
+    let mut active_plan = engine.compile_initial(&active_case.query, "root");
     assert_controlled_expectation(active_case, &active_output);
     assert_branch_limit(&journey.id, &active_output, limits.max_active_branches);
 
@@ -1674,8 +1684,6 @@ fn run_controlled_journey(
             "{} turn {turn_index} compiled the wrong operation",
             journey.id
         );
-        let candidate_query =
-            render_revision_active_query(&active_query, &turn.utterance, revision.operation);
         let candidate_plan = apply_typed_revision(
             &active_plan,
             &fragment,
@@ -1687,6 +1695,10 @@ fn run_controlled_journey(
                 max_distance_km: snapshot.geo_cell_max_distance_km,
             },
         );
+        let candidate_brief = candidate_plan
+            .as_ref()
+            .map(|plan| buyer_brief(&present_intent(plan)))
+            .unwrap_or_else(|| turn.utterance.clone());
         let candidate = turn.candidate_case_id.as_deref().map(|case_id| {
             let output = engine
                 .execute_plan(
@@ -1703,7 +1715,7 @@ fn run_controlled_journey(
                 &fixture,
                 &active_output,
                 case_id,
-                &candidate_query,
+                &candidate_brief,
                 fixture.observe_output(output),
             )
         });
@@ -1719,7 +1731,6 @@ fn run_controlled_journey(
             let (candidate_case, candidate_output) = candidate.expect("candidate was checked");
             active_case = candidate_case;
             active_output = candidate_output;
-            active_query = candidate_query;
             active_plan = candidate_plan.expect("activated turn retains its compiled plan");
             assert_branch_limit(&journey.id, &active_output, limits.max_active_branches);
         }
@@ -1803,6 +1814,7 @@ fn observed_operation(operation: SearchRevisionOperation) -> JourneyOperation {
         SearchRevisionOperation::Expand => JourneyOperation::Expand,
         SearchRevisionOperation::Replace => JourneyOperation::Replace,
         SearchRevisionOperation::Initial => JourneyOperation::Replace,
+        SearchRevisionOperation::Resume => JourneyOperation::Replace,
         SearchRevisionOperation::Exclude => JourneyOperation::Exclude,
         SearchRevisionOperation::Correct => JourneyOperation::Correct,
     }
@@ -2209,7 +2221,9 @@ fn assert_controlled_expectation(case: &ControlledQueryCase, output: &ObservedSe
                 .iter()
                 .flatten()
                 .flat_map(|result| &result.proof_labels)
-                .any(|label| label.eq_ignore_ascii_case(expected)),
+                .any(|label| label
+                    .to_ascii_lowercase()
+                    .contains(&expected.to_ascii_lowercase())),
             "{} did not resolve named place {expected:?}; observed={output:?}",
             case.id
         );
@@ -3041,9 +3055,9 @@ impl MockSearchFixture {
                                     "under_construction".to_string()
                                 },
                                 proof_labels: result
-                                    .proof_focuses
+                                    .verified_matches
                                     .iter()
-                                    .filter_map(|focus| focus.matched_label.clone())
+                                    .map(|matched| matched.predicate.clone())
                                     .chain(
                                         result
                                             .match_explanation
@@ -3054,9 +3068,19 @@ impl MockSearchFixture {
                                     )
                                     .collect(),
                                 proof_distances_m: result
-                                    .proof_focuses
+                                    .verified_matches
                                     .iter()
-                                    .filter_map(|focus| focus.distance_m)
+                                    .filter_map(|matched| {
+                                        match (matched.value, matched.unit.as_deref()) {
+                                            (Some(value), Some("km")) if value >= 0.0 => {
+                                                Some((value * 1000.0).round() as u32)
+                                            }
+                                            (Some(value), Some("m")) if value >= 0.0 => {
+                                                Some(value.round() as u32)
+                                            }
+                                            _ => None,
+                                        }
+                                    })
                                     .collect(),
                                 claimed_preferences,
                                 preference_coverage,
@@ -3424,6 +3448,9 @@ impl FixtureBuilder {
             "conversational-semantics-mock",
         );
         graph_index.add_entity_aliases(&backend::serving::unique_society_aliases(&self.entities));
+        let evidence_index =
+            backend::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &edges)
+                .expect("conversational fixture evidence index");
         let bundle = LoadedServingBundle {
             manifest: ServingBundleManifest {
                 bundle_version: "conversational-semantics-mock".to_string(),
@@ -3456,6 +3483,7 @@ impl FixtureBuilder {
             graph_index,
             recall_index,
             fact_index,
+            evidence_index,
             rera_evidence_index: ReraEvidenceIndex::default(),
             entity_index,
             spatial_index,

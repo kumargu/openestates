@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -9,11 +9,42 @@ use super::loader::{dag_root, load_json, DagConfigError};
 #[derive(Debug, Clone, Deserialize)]
 pub struct SearchIntentFile {
     pub version: u32,
+    pub intent_presentation: IntentPresentationConfig,
     #[serde(default)]
     pub area_aliases: AreaAliasConfig,
     #[serde(default)]
     pub resolution: SearchResolutionConfig,
     pub parser: SearchParserConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct IntentPresentationConfig {
+    pub dimension_labels: HashMap<String, String>,
+    pub budget_unit: String,
+    pub brief: IntentBriefConfig,
+    pub journey_messages: SearchJourneyMessageConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SearchJourneyMessageConfig {
+    pub catalog_movement: String,
+    pub intent_movement: String,
+    pub selected_retained: String,
+    pub selected_excluded_catalog: String,
+    pub selected_excluded_intent: String,
+    pub failed_conditions_prefix: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct IntentBriefConfig {
+    pub positive_preference_prefix: String,
+    pub negative_preference_prefix: String,
+    pub all_separator: String,
+    pub any_separator: String,
+    pub not_prefix: String,
+    pub branch_separator: String,
+    pub constraint_preference_separator: String,
+    pub fallback: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -216,7 +247,18 @@ pub fn search_parser_config() -> &'static SearchParserConfig {
     })
 }
 
+pub fn intent_presentation_config() -> &'static IntentPresentationConfig {
+    static CONFIG: OnceLock<IntentPresentationConfig> = OnceLock::new();
+    CONFIG.get_or_init(|| {
+        load_search_intent()
+            .map(|file| file.intent_presentation)
+            .expect("search_intent.json intent presentation must load and validate")
+    })
+}
+
 fn validate_search_intent_file(file: &SearchIntentFile) -> Result<(), DagConfigError> {
+    validate_intent_presentation(&file.intent_presentation)
+        .map_err(DagConfigError::InvalidConfig)?;
     validate_aliases(
         "resolution.named_entity_scope_prefixes",
         file.resolution
@@ -226,6 +268,78 @@ fn validate_search_intent_file(file: &SearchIntentFile) -> Result<(), DagConfigE
     )
     .map_err(DagConfigError::InvalidConfig)?;
     validate_parser_config(&file.parser).map_err(DagConfigError::InvalidConfig)
+}
+
+fn validate_intent_presentation(config: &IntentPresentationConfig) -> Result<(), String> {
+    for dimension in ["bhk", "area", "society", "builder", "price", "geography"] {
+        if config
+            .dimension_labels
+            .get(dimension)
+            .is_none_or(|label| label.trim().is_empty())
+        {
+            return Err(format!(
+                "intent_presentation.dimension_labels.{dimension} must not be empty"
+            ));
+        }
+    }
+    if config.budget_unit.trim().is_empty() {
+        return Err("intent_presentation.budget_unit must not be empty".to_string());
+    }
+    for (name, value) in [
+        (
+            "positive_preference_prefix",
+            &config.brief.positive_preference_prefix,
+        ),
+        (
+            "negative_preference_prefix",
+            &config.brief.negative_preference_prefix,
+        ),
+        ("all_separator", &config.brief.all_separator),
+        ("any_separator", &config.brief.any_separator),
+        ("not_prefix", &config.brief.not_prefix),
+        ("branch_separator", &config.brief.branch_separator),
+        (
+            "constraint_preference_separator",
+            &config.brief.constraint_preference_separator,
+        ),
+        ("fallback", &config.brief.fallback),
+    ] {
+        if value.is_empty() {
+            return Err(format!(
+                "intent_presentation.brief.{name} must not be empty"
+            ));
+        }
+    }
+    for (name, value) in [
+        (
+            "catalog_movement",
+            &config.journey_messages.catalog_movement,
+        ),
+        ("intent_movement", &config.journey_messages.intent_movement),
+        (
+            "selected_retained",
+            &config.journey_messages.selected_retained,
+        ),
+        (
+            "selected_excluded_catalog",
+            &config.journey_messages.selected_excluded_catalog,
+        ),
+        (
+            "selected_excluded_intent",
+            &config.journey_messages.selected_excluded_intent,
+        ),
+        (
+            "failed_conditions_prefix",
+            &config.journey_messages.failed_conditions_prefix,
+        ),
+    ] {
+        if value.is_empty() {
+            return Err(format!(
+                "intent_presentation.journey_messages.{name} must not be empty"
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {

@@ -10,6 +10,9 @@ const SECURITY_CONFIG_ENV: &str = "OPENESTATES_SECURITY_CONFIG";
 pub struct SecurityTuning {
     pub runtime: RuntimeTuning,
     pub search_cache: SearchCacheTuning,
+    pub revision_cache: RevisionCacheTuning,
+    pub search_journey: SearchJourneyTuning,
+    pub surface_requests: SurfaceRequestTuning,
     pub requests: RequestTuning,
     pub rate_limits: RateLimitTuning,
     pub media: MediaTuning,
@@ -38,6 +41,37 @@ pub struct SearchCacheTuning {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct RevisionCacheTuning {
+    pub idempotency_capacity: usize,
+    pub idempotency_max_bytes: usize,
+    pub semantic_capacity: usize,
+    pub semantic_max_bytes: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SearchJourneyTuning {
+    pub revision_token_max_bytes: usize,
+    pub proof_token_max_bytes: usize,
+    pub max_signing_keys: usize,
+    pub max_signing_key_id_bytes: usize,
+    pub max_client_mutation_id_bytes: usize,
+    pub max_result_id_bytes: usize,
+    pub max_target_id_bytes: usize,
+    pub max_intent_predicates: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SurfaceRequestTuning {
+    pub batch_property_limit: usize,
+    pub surface_id_limit: usize,
+    pub max_property_id_bytes: usize,
+    pub max_surface_id_bytes: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RequestTuning {
     pub public_timeout_ms: u64,
     pub global_concurrency: usize,
@@ -46,6 +80,7 @@ pub struct RequestTuning {
     pub catalog_concurrency: usize,
     pub max_request_target_bytes: usize,
     pub max_search_query_bytes: usize,
+    pub search_body_bytes: usize,
     pub batch_body_bytes: usize,
     pub interest_body_bytes: usize,
     pub admin_body_bytes: usize,
@@ -156,6 +191,86 @@ impl SecurityTuning {
             10_000,
         )?;
         bounded(
+            "revision_cache.idempotency_capacity",
+            self.revision_cache.idempotency_capacity,
+            16_384,
+        )?;
+        bounded(
+            "revision_cache.idempotency_max_bytes",
+            self.revision_cache.idempotency_max_bytes,
+            512 * 1024 * 1024,
+        )?;
+        bounded(
+            "revision_cache.semantic_capacity",
+            self.revision_cache.semantic_capacity,
+            16_384,
+        )?;
+        bounded(
+            "revision_cache.semantic_max_bytes",
+            self.revision_cache.semantic_max_bytes,
+            512 * 1024 * 1024,
+        )?;
+        bounded(
+            "search_journey.revision_token_max_bytes",
+            self.search_journey.revision_token_max_bytes,
+            1024 * 1024,
+        )?;
+        bounded(
+            "search_journey.proof_token_max_bytes",
+            self.search_journey.proof_token_max_bytes,
+            1024 * 1024,
+        )?;
+        bounded(
+            "search_journey.max_signing_keys",
+            self.search_journey.max_signing_keys,
+            16,
+        )?;
+        bounded(
+            "search_journey.max_signing_key_id_bytes",
+            self.search_journey.max_signing_key_id_bytes,
+            256,
+        )?;
+        bounded(
+            "search_journey.max_client_mutation_id_bytes",
+            self.search_journey.max_client_mutation_id_bytes,
+            8 * 1024,
+        )?;
+        bounded(
+            "search_journey.max_result_id_bytes",
+            self.search_journey.max_result_id_bytes,
+            8 * 1024,
+        )?;
+        bounded(
+            "search_journey.max_target_id_bytes",
+            self.search_journey.max_target_id_bytes,
+            8 * 1024,
+        )?;
+        bounded(
+            "search_journey.max_intent_predicates",
+            self.search_journey.max_intent_predicates,
+            1024,
+        )?;
+        bounded(
+            "surface_requests.batch_property_limit",
+            self.surface_requests.batch_property_limit,
+            1024,
+        )?;
+        bounded(
+            "surface_requests.surface_id_limit",
+            self.surface_requests.surface_id_limit,
+            128,
+        )?;
+        bounded(
+            "surface_requests.max_property_id_bytes",
+            self.surface_requests.max_property_id_bytes,
+            8 * 1024,
+        )?;
+        bounded(
+            "surface_requests.max_surface_id_bytes",
+            self.surface_requests.max_surface_id_bytes,
+            8 * 1024,
+        )?;
+        bounded(
             "requests.global_concurrency",
             self.requests.global_concurrency,
             4_096,
@@ -195,6 +310,34 @@ impl SecurityTuning {
             self.requests.max_search_query_bytes,
             self.requests.max_request_target_bytes,
         )?;
+        bounded(
+            "requests.search_body_bytes",
+            self.requests.search_body_bytes,
+            2 * 1024 * 1024,
+        )?;
+        if self.requests.search_body_bytes < self.search_journey.revision_token_max_bytes
+            || self.requests.search_body_bytes < self.search_journey.proof_token_max_bytes
+        {
+            return Err(
+                "requests.search_body_bytes must fit every configured search token".to_string(),
+            );
+        }
+        let maximum_single_surface_proof_target = self
+            .search_journey
+            .proof_token_max_bytes
+            .saturating_add(
+                self.surface_requests
+                    .max_property_id_bytes
+                    .saturating_mul(3),
+            )
+            .saturating_add(self.surface_requests.max_surface_id_bytes.saturating_mul(3))
+            .saturating_add(256);
+        if maximum_single_surface_proof_target > self.requests.max_request_target_bytes {
+            return Err(
+                "proof token and surface identities must fit requests.max_request_target_bytes"
+                    .to_string(),
+            );
+        }
         non_zero(
             "requests.public_timeout_ms",
             self.requests.public_timeout_ms,
@@ -280,5 +423,9 @@ mod tests {
         let tuning = security_tuning();
         assert!(tuning.requests.search_concurrency <= tuning.requests.global_concurrency);
         assert!(tuning.search_cache.max_bytes >= 1024 * 1024);
+        assert!(
+            tuning.revision_cache.idempotency_max_bytes
+                >= tuning.search_journey.revision_token_max_bytes
+        );
     }
 }

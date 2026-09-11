@@ -8,12 +8,15 @@ pub mod geo;
 pub mod guard;
 pub mod index;
 pub mod intent;
+pub mod journey;
 pub(crate) mod parser;
+pub mod proof;
 pub(crate) mod query_plan;
 pub mod resolver;
 pub mod revision;
 pub mod schema;
 pub mod text;
+mod tokens;
 
 pub use ast::{ConstraintExpr, ConstraintTerm, IntentAst, PredicateFamily, PredicatePolarity};
 pub use capabilities::SearchCapabilityIndex;
@@ -35,18 +38,26 @@ pub use guard::{
 pub use index::SearchIndex;
 pub use intent::{SearchIntent, SourceSpan};
 pub use revision::{
-    apply_typed_revision, compile_typed_revision, decode_signed_search_context, intent_breakdown,
-    issue_signed_search_context, render_revision_active_query, result_membership_fingerprint,
-    BuyerIntentBranchProjection, PortableIntentAst, PortableIntentAstBranch,
-    SearchRevisionDescriptor, SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
-    SignedSearchContext, TypedSearchRevision, TypedSearchRevisionPatch,
+    apply_typed_revision, compile_typed_revision, decode_signed_search_context,
+    issue_signed_search_context, reissue_signed_search_context, result_membership_fingerprint,
+    IssuedSearchContext, SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
+    SignedSearchContext, TypedIntentAst, TypedIntentAstBranch, TypedSearchRevision,
+    TypedSearchRevisionPatch,
 };
 pub use text::{CandidateEvaluationRequest, CandidateEvaluator, SearchEvaluationContext};
 
 use serde::{Deserialize, Serialize};
 
 use crate::models::{AreaProfile, PropertyCard};
-use crate::proof_focus::ProofFocus;
+use crate::serving::EvidenceId;
+
+/// Exact serving identity selected by ranking before a snapshot-qualified
+/// proof reference is projected. This stays internal to search execution.
+#[derive(Debug, Clone)]
+pub struct MatchEvidenceIdentity {
+    pub subject_entity_id: String,
+    pub evidence_id: EvidenceId,
+}
 
 /// One structured reason why a result matched a user preference.
 #[derive(Debug, Clone, Serialize)]
@@ -65,6 +76,10 @@ pub struct MatchReason {
     pub source_type: String,
     /// "graph" or "local"
     pub scoring_method: String,
+    /// Exact observation chosen by evaluation. Public journey reasons replace
+    /// this with a signed, snapshot-qualified proof token.
+    #[serde(skip)]
+    pub evidence_identity: Option<MatchEvidenceIdentity>,
 }
 
 /// How a user preference was handled during scoring.
@@ -155,9 +170,6 @@ pub struct SearchResultCard {
     /// Structured match explanation — present when query has preferences.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub match_explanation: Option<MatchExplanation>,
-    /// Generic detail-surface focus handles backed by the same proof reasons.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub proof_focuses: Vec<ProofFocus>,
     /// Exact predicate observations used for hard eligibility. These are the
     /// machine-readable receipts behind ranking and proof projections.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -195,8 +207,6 @@ pub struct KnowledgeContext {
     pub learning_gaps: Vec<String>,
 }
 
-/// Buyer-safe search response. Internal parsing, diagnostics and enrichment
-/// gaps stay in logs/admin surfaces rather than leaking into product copy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchRuntimeVersion {
@@ -206,27 +216,17 @@ pub struct SearchRuntimeVersion {
     pub semantic_contract_digest: String,
 }
 
+/// Internal result of executing one snapshot-bound plan. Public search routes
+/// project this through `SearchJourneyEnvelope`; this shape is never a wire
+/// contract of its own.
 #[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchResponse {
+pub struct SearchExecution {
     pub query: String,
-    /// Stateless server-issued correlation ID for the active search intent.
-    pub revision_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub revision: Option<SearchRevisionDescriptor>,
-    /// Fingerprint of the semantic AST actually executed by SearchEngine.
     pub ast_fingerprint: String,
     pub result_sets: Vec<SearchResultSet>,
-    /// Canonical traversal order after cross-branch result limiting.
     pub ordered_result_ids: Vec<String>,
     pub total_matches: usize,
-    /// Pins the exact serving/search semantics that produced this result set.
-    pub runtime_version: SearchRuntimeVersion,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub area_context: Option<AreaProfile>,
     pub state: String,
-    /// Buyer-facing next step for guarded or empty searches. Parser and
-    /// diagnostic state remain private.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub search_guidance: Option<SearchGuidance>,
 }

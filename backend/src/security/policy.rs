@@ -110,6 +110,9 @@ impl SecurityPolicy {
         S: Clone + Send + Sync + 'static,
     {
         route
+            .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(
+                security_tuning().requests.search_body_bytes,
+            ))
             .layer::<_, std::convert::Infallible>(middleware::from_fn_with_state(
                 self.search_admission.clone(),
                 shed_overloaded_requests,

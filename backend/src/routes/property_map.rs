@@ -1439,6 +1439,8 @@ mod tests {
                 radius_m: None,
             },
             proof_focus: None,
+            proof_focus_status: crate::surfaces::ProofFocusStatus::NotRequested,
+            proof_focus_message: None,
             layers: vec![SceneLayer {
                 id: "schools".to_string(),
                 label: "Schools".to_string(),
@@ -1554,6 +1556,8 @@ mod tests {
                 radius_m: None,
             },
             proof_focus: None,
+            proof_focus_status: crate::surfaces::ProofFocusStatus::NotRequested,
+            proof_focus_message: None,
             layers: vec![SceneLayer {
                 id: "red_flags".to_string(),
                 label: "Red flags".to_string(),

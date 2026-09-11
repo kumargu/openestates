@@ -19,7 +19,7 @@ use super::index::SearchIndex;
 use super::intent::{SearchIntent, SourceSpan};
 use super::query_plan::{self, QueryPlan};
 use super::resolver::{is_resolvable_entity_name, slug};
-use super::revision::PortableIntentAst;
+use super::revision::TypedIntentAst;
 use super::schema;
 use super::text::SearchEvaluationContext;
 use super::{
@@ -27,7 +27,6 @@ use super::{
     SearchResultCard, SearchResultSet,
 };
 
-const TANTIVY_RECALL_LIMIT: usize = 128;
 const DIAGNOSTIC_ID_LIMIT: usize = 20;
 const DIAGNOSTIC_SCORE_LIMIT: usize = 8;
 
@@ -44,6 +43,18 @@ pub struct SearchEngineOutput {
     pub eligible_result_count: usize,
     pub diagnostics: SearchDiagnostics,
     pub evidence_gaps: Vec<SearchEvidenceGap>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PropertyIntentDiagnostic {
+    pub matching_branch_ids: Vec<String>,
+    pub failed_branches: Vec<PropertyBranchDiagnostic>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PropertyBranchDiagnostic {
+    pub branch_id: String,
+    pub failed_predicate_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -193,10 +204,7 @@ impl<'a> SearchEngine<'a> {
 
     /// Bind a portable intent tree to the active serving snapshot. This path
     /// deliberately never reparses the buyer-facing presentation string.
-    pub fn compile_intent_ast(
-        &self,
-        ast: &PortableIntentAst,
-    ) -> Result<CompiledSearchPlan, String> {
+    pub fn compile_intent_ast(&self, ast: &TypedIntentAst) -> Result<CompiledSearchPlan, String> {
         if ast.version != 1 || ast.branches.is_empty() {
             return Err("unsupported or empty intent AST".to_string());
         }
@@ -246,6 +254,7 @@ impl<'a> SearchEngine<'a> {
             branch
                 .resolved_entities
                 .clone_from(&portable.resolved_entities);
+            branch.restore_portable_ranking_intent(portable.ranking_intent.clone());
             for binding in &mut branch.predicate_bindings {
                 if let Some(stable) = portable.predicate_bindings.iter().find(|stable| {
                     stable.family == binding.family
@@ -257,12 +266,15 @@ impl<'a> SearchEngine<'a> {
                 }
             }
         }
-        plan.root = super::compiled_plan::BoolExpr::Any(
-            plan.branches
-                .iter()
-                .map(|branch| super::compiled_plan::BoolExpr::Leaf(branch.branch_id.clone()))
-                .collect(),
-        );
+        let branch_ids = plan
+            .branches
+            .iter()
+            .map(|branch| branch.branch_id.as_str())
+            .collect::<HashSet<_>>();
+        if !portable_root_is_valid(&ast.root, &branch_ids) {
+            return Err("intent AST root references an unknown branch".to_string());
+        }
+        plan.root = ast.root.clone();
         plan.refresh_semantic_fingerprint();
         Ok(plan)
     }
@@ -346,6 +358,154 @@ impl<'a> SearchEngine<'a> {
         }
         plan.shift_source_spans(offset);
         plan
+    }
+
+    pub(crate) fn diagnose_property_against_plan(
+        &self,
+        plan: &CompiledSearchPlan,
+        property_id: &str,
+    ) -> PropertyIntentDiagnostic {
+        let Some(property) = self
+            .snapshot
+            .property_by_id
+            .get(property_id)
+            .and_then(|index| self.snapshot.properties.get(*index))
+        else {
+            return PropertyIntentDiagnostic {
+                matching_branch_ids: Vec::new(),
+                failed_branches: plan
+                    .branches
+                    .iter()
+                    .map(|branch| PropertyBranchDiagnostic {
+                        branch_id: branch.branch_id.clone(),
+                        failed_predicate_ids: Vec::new(),
+                    })
+                    .collect(),
+            };
+        };
+        let snapshot_identity = self.snapshot.version_key.serving_bundle_version.as_str();
+        let society_entity_id = self
+            .snapshot
+            .search_index
+            .society_entity_id_for_property(property_id)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("society:{}", property.society_id));
+        let mut matching_branch_ids = Vec::new();
+        let mut failed_branches = Vec::new();
+        for branch in &plan.branches {
+            let geo_query = self
+                .snapshot
+                .bundle
+                .entity_index
+                .bind_compiled_spatial_predicates(&branch.spatial_predicates);
+            let spatial_matches = geo_query
+                .as_ref()
+                .map(|query| {
+                    query.verified_matches_for_property(
+                        property,
+                        &self.snapshot.search_index,
+                        &self.snapshot.bundle.spatial_index,
+                        &self.snapshot.bundle.fact_index,
+                        snapshot_identity,
+                    )
+                })
+                .unwrap_or_default();
+            let spatial_by_property = if spatial_matches.is_empty() {
+                HashMap::new()
+            } else {
+                HashMap::from([(property_id.to_string(), spatial_matches)])
+            };
+            let evaluation = SearchEvaluationContext {
+                options: &self.snapshot.inventory_options,
+                spatial_matches: &spatial_by_property,
+                snapshot_identity,
+            };
+            let constraints = super::text::property_constraint_evaluation(
+                property,
+                &branch.eligibility_predicates,
+                Some(&self.snapshot.search_index),
+                Some(&self.snapshot.bundle.fact_index),
+                &society_entity_id,
+                evaluation,
+            );
+            let geography_matches = branch.geo_scope.is_bundle_wide()
+                || geography_match_for_property(
+                    &branch.geo_scope,
+                    &society_entity_id,
+                    &self.snapshot.bundle.graph_index,
+                    &self.snapshot.bundle.spatial_index,
+                    snapshot_identity,
+                )
+                .is_some();
+            let mut failed_predicate_ids = branch
+                .predicate_bindings
+                .iter()
+                .filter_map(|binding| {
+                    let term = branch.predicates.term_at_path(&binding.path)?;
+                    if matches!(
+                        term,
+                        ConstraintTerm::Spatial {
+                            required: false,
+                            ..
+                        }
+                    ) {
+                        return None;
+                    }
+                    let mut term_evaluation = super::text::constraint_term_evaluation_for_society(
+                        property,
+                        term,
+                        Some(&self.snapshot.search_index),
+                        Some(&self.snapshot.bundle.fact_index),
+                        &society_entity_id,
+                        evaluation,
+                    );
+                    if binding.polarity == super::ast::PredicatePolarity::Negated {
+                        term_evaluation = term_evaluation.negated();
+                    }
+                    (!term_evaluation.is_satisfied()).then(|| binding.predicate_id.clone())
+                })
+                .collect::<Vec<_>>();
+            let mut failed_required_preferences = Vec::new();
+            for preference in branch
+                .ranking_intent
+                .positive_preferences
+                .iter()
+                .chain(branch.ranking_intent.negative_preferences.iter())
+                .filter(|preference| preference.required)
+            {
+                if !super::text::required_preference_has_evidence(
+                    property,
+                    preference,
+                    Some(&self.snapshot.search_index),
+                    Some(&self.snapshot.bundle.fact_index),
+                    &society_entity_id,
+                    &branch.scoring_query.to_lowercase(),
+                ) {
+                    failed_required_preferences.push(super::revision::ranking_preference_id(
+                        &branch.branch_id,
+                        preference,
+                    ));
+                }
+            }
+            let branch_matches = constraints.is_satisfied()
+                && geography_matches
+                && failed_required_preferences.is_empty();
+            failed_predicate_ids.extend(failed_required_preferences);
+            failed_predicate_ids.sort();
+            failed_predicate_ids.dedup();
+            if branch_matches {
+                matching_branch_ids.push(branch.branch_id.clone());
+            } else {
+                failed_branches.push(PropertyBranchDiagnostic {
+                    branch_id: branch.branch_id.clone(),
+                    failed_predicate_ids,
+                });
+            }
+        }
+        PropertyIntentDiagnostic {
+            matching_branch_ids,
+            failed_branches,
+        }
     }
 
     /// Execute an already compiled, snapshot-pinned plan. No source query is
@@ -867,6 +1027,23 @@ impl<'a> SearchEngine<'a> {
             diagnostics,
             evidence_gaps,
         }
+    }
+}
+
+fn portable_root_is_valid(
+    root: &super::compiled_plan::BoolExpr<String>,
+    branch_ids: &HashSet<&str>,
+) -> bool {
+    match root {
+        super::compiled_plan::BoolExpr::All(clauses)
+        | super::compiled_plan::BoolExpr::Any(clauses) => {
+            !clauses.is_empty()
+                && clauses
+                    .iter()
+                    .all(|clause| portable_root_is_valid(clause, branch_ids))
+        }
+        super::compiled_plan::BoolExpr::Not(clause) => portable_root_is_valid(clause, branch_ids),
+        super::compiled_plan::BoolExpr::Leaf(branch_id) => branch_ids.contains(branch_id.as_str()),
     }
 }
 
@@ -2026,10 +2203,10 @@ fn tantivy_candidate_ids(
             warning: None,
         };
     }
-    let hits = match serving_bundle
-        .recall_index
-        .search(&recall_query, TANTIVY_RECALL_LIMIT)
-    {
+    let hits = match serving_bundle.recall_index.search(
+        &recall_query,
+        super::schema::ranking_policy().lexical_recall_candidate_limit,
+    ) {
         Ok(hits) => hits,
         Err(err) => {
             let warning = format!("Serving bundle Tantivy recall failed: {err}");
@@ -2351,6 +2528,7 @@ mod tests {
             price_max: Some(10_000_000),
             size_sqft: Some(1_000),
             evidence_reference: Some(evidence.clone()),
+            evidence_fact_key: None,
         };
 
         let bhk_evaluation = option.evaluate_bhk("property:one", subject, 3, snapshot);
@@ -2388,6 +2566,9 @@ mod tests {
             .collect::<Vec<_>>();
         let facts = Vec::new();
         let fact_index = ServingFactIndex::from_records(facts.clone(), Vec::new());
+        let evidence_index =
+            crate::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &[])
+                .expect("engine test evidence index");
         let cache_dir = tempdir().expect("temporary engine test bundle").keep();
         let recall_index = TantivyRecallIndex::build_in_dir(&cache_dir, &entities, &facts, &[])
             .expect("engine test recall index");
@@ -2426,6 +2607,7 @@ mod tests {
             graph_index: GraphIndex::default(),
             recall_index,
             fact_index,
+            evidence_index,
             rera_evidence_index: ReraEvidenceIndex::default(),
             entity_index,
             spatial_index,
@@ -2492,6 +2674,7 @@ mod tests {
                             &snapshot.version_key.serving_bundle_version,
                             &observation,
                         )),
+                        evidence_fact_key: None,
                     },
                 )
             })

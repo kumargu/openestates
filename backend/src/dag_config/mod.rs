@@ -94,10 +94,12 @@ pub use search_guardrails::{
     TooShortGuardrailConfig, WeightedTermGroup,
 };
 pub use search_intent::{
-    area_alias_entries, load_search_intent, load_search_intent_from_path, search_intent_path,
-    search_parser_config, search_resolution_config, AreaAliasEntry, BhkParserConfig, NumberWord,
-    RelationAliasConfig, RelationParserConfig, SearchIntentFile, SearchParserConfig,
-    SearchPlaceFamilyAlias, SearchResolutionConfig, UnitAliasConfig, UnitValueParserConfig,
+    area_alias_entries, intent_presentation_config, load_search_intent,
+    load_search_intent_from_path, search_intent_path, search_parser_config,
+    search_resolution_config, AreaAliasEntry, BhkParserConfig, IntentBriefConfig,
+    IntentPresentationConfig, NumberWord, RelationAliasConfig, RelationParserConfig,
+    SearchIntentFile, SearchJourneyMessageConfig, SearchParserConfig, SearchPlaceFamilyAlias,
+    SearchResolutionConfig, UnitAliasConfig, UnitValueParserConfig,
 };
 pub use serving_eligibility::{
     load_serving_eligibility, load_serving_eligibility_from_path, serving_eligibility_path,

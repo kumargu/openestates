@@ -20,7 +20,7 @@ use crate::models::{AreaProfile, Property, Society};
 use crate::recommendations::RecommendationResponse;
 use crate::routes::enrichment::society_node_id;
 use crate::scoring::scoring_policy;
-use crate::search::{InventoryOption, SearchIndex, SearchResponse};
+use crate::search::{InventoryOption, SearchExecution, SearchIndex};
 use crate::security::security_tuning;
 use crate::security::ExecutionLanes;
 use crate::serving::LoadedServingBundle;
@@ -31,6 +31,7 @@ pub struct SearchRuntimeSnapshot {
     pub bundle: Arc<LoadedServingBundle>,
     pub properties: Arc<[Property]>,
     pub property_by_id: HashMap<String, usize>,
+    pub entity_by_id: HashMap<String, usize>,
     pub inventory_options: HashMap<String, InventoryOption>,
     pub search_index: SearchIndex,
     pub societies: Arc<[Society]>,
@@ -53,6 +54,12 @@ impl SearchRuntimeSnapshot {
             .iter()
             .enumerate()
             .map(|(index, property)| (property.id.clone(), index))
+            .collect();
+        let entity_by_id = bundle
+            .entities
+            .iter()
+            .enumerate()
+            .map(|(index, entity)| (entity.entity_id.clone(), index))
             .collect();
         let society_names = societies
             .iter()
@@ -93,6 +100,7 @@ impl SearchRuntimeSnapshot {
             bundle,
             properties: Arc::from(properties),
             property_by_id,
+            entity_by_id,
             inventory_options,
             search_index,
             societies: Arc::from(societies),
@@ -157,21 +165,29 @@ impl SearchCacheKey {
 
 #[derive(Clone)]
 pub struct CachedSearchOutput {
-    pub response: Arc<SearchResponse>,
+    pub response: Arc<SearchExecution>,
     pub compiled_plan: Arc<crate::search::CompiledSearchPlan>,
     pub log_messages: Vec<SearchLogMessage>,
 }
 
 pub struct SearchRevisionCaches {
     idempotency: Arc<std::sync::Mutex<RevisionIdempotencyState>>,
-    semantic: std::sync::Mutex<LruCache<String, CachedSearchOutput>>,
+    semantic: std::sync::Mutex<SemanticRevisionCacheState>,
 }
 
 struct RevisionIdempotencyState {
     entries: HashMap<String, RevisionIdempotencyEntry>,
     completed_order: VecDeque<String>,
     completed_capacity: usize,
+    completed_resident_bytes: usize,
+    completed_max_bytes: usize,
     next_reservation_id: u64,
+}
+
+struct SemanticRevisionCacheState {
+    entries: LruCache<String, WeightedSearchOutput>,
+    resident_bytes: usize,
+    max_bytes: usize,
 }
 
 enum RevisionIdempotencyEntry {
@@ -182,19 +198,20 @@ enum RevisionIdempotencyEntry {
     },
     Complete {
         request_fingerprint: String,
-        response: Box<crate::routes::search_revisions::SearchRevisionResponse>,
+        response: Arc<crate::search::journey::SearchJourneyEnvelope>,
+        weight_bytes: usize,
     },
 }
 
 #[derive(Clone)]
 pub enum RevisionReservationUpdate {
     Pending,
-    Complete(Box<crate::routes::search_revisions::SearchRevisionResponse>),
+    Complete(Arc<crate::search::journey::SearchJourneyEnvelope>),
     Abandoned,
 }
 
 pub enum RevisionIdempotencyLookup {
-    Hit(Box<crate::routes::search_revisions::SearchRevisionResponse>),
+    Hit(Arc<crate::search::journey::SearchJourneyEnvelope>),
     Leader(RevisionIdempotencyReservation),
     Waiter(tokio::sync::watch::Receiver<RevisionReservationUpdate>),
     Conflict,
@@ -209,14 +226,21 @@ pub struct RevisionIdempotencyReservation {
 
 impl SearchRevisionCaches {
     pub fn from_config() -> Self {
-        let revisions = &crate::dag_config::search_guardrail_config().revisions;
+        let tuning = &security_tuning().revision_cache;
         Self::new(
-            revisions.idempotency_cache_capacity,
-            revisions.semantic_cache_capacity,
+            tuning.idempotency_capacity,
+            tuning.idempotency_max_bytes,
+            tuning.semantic_capacity,
+            tuning.semantic_max_bytes,
         )
     }
 
-    pub fn new(idempotency_capacity: usize, semantic_capacity: usize) -> Self {
+    pub fn new(
+        idempotency_capacity: usize,
+        idempotency_max_bytes: usize,
+        semantic_capacity: usize,
+        semantic_max_bytes: usize,
+    ) -> Self {
         let semantic_capacity =
             NonZeroUsize::new(semantic_capacity.max(1)).expect("capacity is non-zero");
         Self {
@@ -224,9 +248,15 @@ impl SearchRevisionCaches {
                 entries: HashMap::new(),
                 completed_order: VecDeque::new(),
                 completed_capacity: idempotency_capacity.max(1),
+                completed_resident_bytes: 0,
+                completed_max_bytes: idempotency_max_bytes.max(1),
                 next_reservation_id: 0,
             })),
-            semantic: std::sync::Mutex::new(LruCache::new(semantic_capacity)),
+            semantic: std::sync::Mutex::new(SemanticRevisionCacheState {
+                entries: LruCache::new(semantic_capacity),
+                resident_bytes: 0,
+                max_bytes: semantic_max_bytes.max(1),
+            }),
         }
     }
 
@@ -246,6 +276,7 @@ impl SearchRevisionCaches {
                 RevisionIdempotencyEntry::Complete {
                     request_fingerprint: existing,
                     response,
+                    ..
                 } if existing == request_fingerprint => {
                     RevisionIdempotencyLookup::Hit(response.clone())
                 }
@@ -283,20 +314,25 @@ impl SearchRevisionCaches {
         self.semantic
             .lock()
             .expect("semantic revision cache lock poisoned")
+            .entries
             .get(key)
-            .cloned()
+            .map(|entry| entry.output.clone())
     }
 
     pub fn semantic_insert(&self, key: String, output: CachedSearchOutput) {
-        self.semantic
+        let weight_bytes = cached_search_weight_bytes(&output);
+        let mut state = self
+            .semantic
             .lock()
-            .expect("semantic revision cache lock poisoned")
-            .put(key, output);
+            .expect("semantic revision cache lock poisoned");
+        insert_semantic_cache_entry(&mut state, key, output, weight_bytes);
     }
 }
 
 impl RevisionIdempotencyReservation {
-    pub fn complete(mut self, response: crate::routes::search_revisions::SearchRevisionResponse) {
+    pub fn complete(mut self, response: crate::search::journey::SearchJourneyEnvelope) {
+        let weight_bytes = journey_envelope_weight_bytes(&response);
+        let response = Arc::new(response);
         let mut state = self
             .inner
             .lock()
@@ -323,23 +359,29 @@ impl RevisionIdempotencyReservation {
             return;
         }
 
-        let response = Box::new(response);
-        state.entries.insert(
-            self.key.clone(),
-            RevisionIdempotencyEntry::Complete {
-                request_fingerprint,
-                response: response.clone(),
-            },
-        );
-        state.completed_order.push_back(self.key.clone());
-        let _ = sender.send(RevisionReservationUpdate::Complete(response));
-        while state.completed_order.len() > state.completed_capacity {
+        let _ = sender.send(RevisionReservationUpdate::Complete(response.clone()));
+        if weight_bytes <= state.completed_max_bytes {
+            state.entries.insert(
+                self.key.clone(),
+                RevisionIdempotencyEntry::Complete {
+                    request_fingerprint,
+                    response,
+                    weight_bytes,
+                },
+            );
+            state.completed_order.push_back(self.key.clone());
+            state.completed_resident_bytes =
+                state.completed_resident_bytes.saturating_add(weight_bytes);
+        }
+        while state.completed_order.len() > state.completed_capacity
+            || state.completed_resident_bytes > state.completed_max_bytes
+        {
             if let Some(oldest) = state.completed_order.pop_front() {
-                if matches!(
-                    state.entries.get(&oldest),
-                    Some(RevisionIdempotencyEntry::Complete { .. })
-                ) {
-                    state.entries.remove(&oldest);
+                if let Some(RevisionIdempotencyEntry::Complete { weight_bytes, .. }) =
+                    state.entries.remove(&oldest)
+                {
+                    state.completed_resident_bytes =
+                        state.completed_resident_bytes.saturating_sub(weight_bytes);
                 }
             }
         }
@@ -392,6 +434,34 @@ struct InFlightSearch {
 struct WeightedSearchOutput {
     output: CachedSearchOutput,
     weight_bytes: usize,
+}
+
+fn insert_semantic_cache_entry(
+    state: &mut SemanticRevisionCacheState,
+    key: String,
+    output: CachedSearchOutput,
+    weight_bytes: usize,
+) {
+    if weight_bytes > state.max_bytes {
+        return;
+    }
+    if let Some(replaced) = state.entries.pop(&key) {
+        state.resident_bytes = state.resident_bytes.saturating_sub(replaced.weight_bytes);
+    }
+    while state.resident_bytes.saturating_add(weight_bytes) > state.max_bytes {
+        let Some((_key, evicted)) = state.entries.pop_lru() else {
+            break;
+        };
+        state.resident_bytes = state.resident_bytes.saturating_sub(evicted.weight_bytes);
+    }
+    let entry = WeightedSearchOutput {
+        output,
+        weight_bytes,
+    };
+    if let Some((_key, evicted)) = state.entries.push(key, entry) {
+        state.resident_bytes = state.resident_bytes.saturating_sub(evicted.weight_bytes);
+    }
+    state.resident_bytes = state.resident_bytes.saturating_add(weight_bytes);
 }
 
 pub enum SearchCacheLookup {
@@ -564,7 +634,24 @@ fn insert_search_cache_entry(
 /// Serialized response bytes dominate these entries. Doubling that exact size
 /// conservatively covers the live Rust object graph and small logging metadata.
 fn cached_search_weight_bytes(output: &CachedSearchOutput) -> usize {
-    serde_json::to_vec(output.response.as_ref())
+    let response_bytes = serde_json::to_vec(output.response.as_ref());
+    let plan_bytes = serde_json::to_vec(output.compiled_plan.as_ref());
+    let log_bytes = serde_json::to_vec(&output.log_messages);
+    match (response_bytes, plan_bytes, log_bytes) {
+        (Ok(response), Ok(plan), Ok(logs)) => response
+            .len()
+            .saturating_add(plan.len())
+            .saturating_add(logs.len())
+            .saturating_mul(2)
+            .saturating_add(1024),
+        _ => usize::MAX,
+    }
+}
+
+fn journey_envelope_weight_bytes(
+    response: &crate::search::journey::SearchJourneyEnvelope,
+) -> usize {
+    serde_json::to_vec(response)
         .map(|bytes| bytes.len().saturating_mul(2).saturating_add(1024))
         .unwrap_or(usize::MAX)
 }
@@ -577,7 +664,7 @@ fn normalize_search_query(query: &str) -> String {
         .to_ascii_lowercase()
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub enum SearchLogMessage {
     SearchEvent(SearchEvent),
 }
@@ -690,22 +777,13 @@ mod tests {
     }
 
     fn zero_result_output(query: &str) -> CachedSearchOutput {
-        let version = version_key("test-bundle");
         CachedSearchOutput {
-            response: Arc::new(SearchResponse {
+            response: Arc::new(SearchExecution {
                 query: query.to_string(),
-                revision_id: "rev-001-test".to_string(),
-                revision: None,
                 ast_fingerprint: "sha256:test".to_string(),
                 result_sets: Vec::new(),
                 ordered_result_ids: Vec::new(),
                 total_matches: 0,
-                runtime_version: crate::search::SearchRuntimeVersion {
-                    serving_bundle_version: version.serving_bundle_version,
-                    scoring_policy_version: version.scoring_policy_version,
-                    search_engine_version: version.search_engine_version,
-                    semantic_contract_digest: version.semantic_contract_digest,
-                },
                 area_context: None,
                 state: "no_matches".to_string(),
                 search_guidance: None,
@@ -725,9 +803,62 @@ mod tests {
         }
     }
 
+    fn retained_journey(buyer_brief: String) -> crate::search::journey::SearchJourneyEnvelope {
+        let plan = crate::search::CompiledSearchPlan::compile_for_snapshot(
+            crate::search::IntentAst::from_text("3bhk in Hoodi"),
+            "test-bundle",
+            &[],
+            &crate::graph::GraphIndex::default(),
+            None,
+            crate::search::GeoCellSearchPolicy {
+                max_hops: 2,
+                max_distance_km: 4.0,
+            },
+        );
+        let runtime_version = crate::search::SearchRuntimeVersion {
+            serving_bundle_version: "test-bundle".to_string(),
+            scoring_policy_version: 1,
+            search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
+            semantic_contract_digest: semantic_contract_digest().to_string(),
+        };
+        crate::search::journey::SearchJourneyEnvelope {
+            contract_version: crate::search::journey::SEARCH_JOURNEY_CONTRACT_VERSION,
+            runtime_version,
+            active: crate::search::journey::SearchJourneyActive {
+                revision: crate::search::journey::SearchJourneyRevision {
+                    id: "revision:test".to_string(),
+                    parent_id: None,
+                    operation: crate::search::SearchRevisionOperation::Initial,
+                    depth: 1,
+                    semantic_fingerprint: plan.semantic_fingerprint.clone(),
+                    result_fingerprint: "sha256:results".to_string(),
+                    state_token: "token".to_string(),
+                },
+                buyer_brief,
+                latest_utterance: "3bhk in Hoodi".to_string(),
+                intent: crate::search::journey::present_intent(&plan),
+                results: crate::search::journey::SearchJourneyResults::Retained {
+                    ordered_result_ids: vec!["home:test".to_string()],
+                    result_fingerprint: "sha256:results".to_string(),
+                },
+            },
+            attempt: crate::search::journey::SearchJourneyAttempt {
+                kind: crate::search::journey::SearchJourneyAttemptKind::Initial,
+                operation: crate::search::SearchRevisionOperation::Initial,
+                outcome: crate::search::journey::SearchJourneyOutcome::Activated,
+                catalog_rebased: false,
+                catalog_delta: None,
+                intent_delta: None,
+                attempted_intent: None,
+                clarification: None,
+                selected_property_consequence: None,
+            },
+        }
+    }
+
     #[tokio::test]
     async fn abandoned_revision_reservation_wakes_waiters_and_can_be_reacquired() {
-        let caches = SearchRevisionCaches::new(2, 2);
+        let caches = SearchRevisionCaches::new(2, 1024 * 1024, 2, 1024 * 1024);
         let RevisionIdempotencyLookup::Leader(leader) =
             caches.lookup_or_reserve("parent", "client", "fingerprint")
         else {
@@ -753,6 +884,68 @@ mod tests {
             caches.lookup_or_reserve("parent", "client", "fingerprint"),
             RevisionIdempotencyLookup::Leader(_)
         ));
+    }
+
+    #[test]
+    fn revision_idempotency_cache_evicts_by_bytes_and_skips_oversized_envelopes() {
+        let first = retained_journey("a".repeat(256));
+        let second = retained_journey("b".repeat(256));
+        let budget =
+            journey_envelope_weight_bytes(&first).max(journey_envelope_weight_bytes(&second));
+        let caches = SearchRevisionCaches::new(8, budget, 8, 1024 * 1024);
+
+        let RevisionIdempotencyLookup::Leader(first_reservation) =
+            caches.lookup_or_reserve("parent", "first", "first-request")
+        else {
+            panic!("first idempotency entry reserves");
+        };
+        first_reservation.complete(first);
+        let RevisionIdempotencyLookup::Leader(second_reservation) =
+            caches.lookup_or_reserve("parent", "second", "second-request")
+        else {
+            panic!("second idempotency entry reserves");
+        };
+        second_reservation.complete(second);
+
+        assert!(matches!(
+            caches.lookup_or_reserve("parent", "first", "first-request"),
+            RevisionIdempotencyLookup::Leader(_)
+        ));
+        assert!(matches!(
+            caches.lookup_or_reserve("parent", "second", "second-request"),
+            RevisionIdempotencyLookup::Hit(_)
+        ));
+
+        let oversized = retained_journey("x".repeat(budget));
+        assert!(journey_envelope_weight_bytes(&oversized) > budget);
+        let RevisionIdempotencyLookup::Leader(reservation) =
+            caches.lookup_or_reserve("parent", "oversized", "oversized-request")
+        else {
+            panic!("oversized entry reserves");
+        };
+        reservation.complete(oversized);
+        assert!(matches!(
+            caches.lookup_or_reserve("parent", "oversized", "oversized-request"),
+            RevisionIdempotencyLookup::Leader(_)
+        ));
+    }
+
+    #[test]
+    fn semantic_revision_cache_evicts_by_bytes_and_skips_oversized_outputs() {
+        let first = zero_result_output(&"a".repeat(256));
+        let second = zero_result_output(&"b".repeat(256));
+        let budget = cached_search_weight_bytes(&first).max(cached_search_weight_bytes(&second));
+        let caches = SearchRevisionCaches::new(8, 1024 * 1024, 8, budget);
+        caches.semantic_insert("first".to_string(), first);
+        caches.semantic_insert("second".to_string(), second);
+
+        assert!(caches.semantic_get("first").is_none());
+        assert!(caches.semantic_get("second").is_some());
+
+        let oversized = zero_result_output(&"x".repeat(budget));
+        assert!(cached_search_weight_bytes(&oversized) > budget);
+        caches.semantic_insert("oversized".to_string(), oversized);
+        assert!(caches.semantic_get("oversized").is_none());
     }
 
     #[tokio::test]
@@ -815,29 +1008,33 @@ mod tests {
 
     #[tokio::test]
     async fn search_cache_evicts_to_its_byte_budget_and_rejects_oversized_entries() {
-        let cache = SearchResponseCache::new_with_budget(8, 3_000);
+        let first_output = zero_result_output(&"a".repeat(500));
+        let second_output = zero_result_output(&"b".repeat(500));
+        let budget = cached_search_weight_bytes(&first_output)
+            .max(cached_search_weight_bytes(&second_output));
+        let cache = SearchResponseCache::new_with_budget(8, budget);
         let first_key = SearchCacheKey::new("first", &version_key("bundle"));
         let second_key = SearchCacheKey::new("second", &version_key("bundle"));
-        cache
-            .put(first_key.clone(), zero_result_output(&"a".repeat(500)))
-            .await;
-        cache
-            .put(second_key.clone(), zero_result_output(&"b".repeat(500)))
-            .await;
+        cache.put(first_key.clone(), first_output).await;
+        cache.put(second_key.clone(), second_output).await;
 
-        assert!(cache.resident_bytes().await <= 3_000);
+        assert!(cache.resident_bytes().await <= budget);
         assert!(cache.get(&first_key).await.is_none());
         assert!(cache.get(&second_key).await.is_some());
 
         let oversized_key = SearchCacheKey::new("oversized", &version_key("bundle"));
-        cache
-            .put(
-                oversized_key.clone(),
-                zero_result_output(&"x".repeat(2_000)),
-            )
-            .await;
+        let mut oversized_output = zero_result_output("oversized");
+        Arc::make_mut(&mut oversized_output.response)
+            .result_sets
+            .push(crate::search::SearchResultSet {
+                branch_id: "branch-oversized".to_string(),
+                label: "x".repeat(budget),
+                results: Vec::new(),
+            });
+        assert!(cached_search_weight_bytes(&oversized_output) > budget);
+        cache.put(oversized_key.clone(), oversized_output).await;
         assert!(cache.get(&oversized_key).await.is_none());
-        assert!(cache.resident_bytes().await <= 3_000);
+        assert!(cache.resident_bytes().await <= budget);
     }
 
     #[tokio::test]
