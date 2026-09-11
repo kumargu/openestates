@@ -3,6 +3,7 @@ import { useAtlasRoadFlight } from "../../hooks/useAtlasRoadFlight.ts";
 import { arrivalAtlasRoute, arrivalAtlasContextLines } from "../../lib/homeAtlasProjection.ts";
 import { pointAlongRoute, projectStreetHandoff, type AtlasCameraPose } from "../../../../experiments/home-atlas/src/journey.ts";
 import policy from "../../../../app/config/ui/home-atlas.json";
+import { nearbySceneCamera, nearbyRelationArc, geometryForPlace, type NearbyDepth } from '../../lib/atlasNearbyScene.ts';
 import {
   loadGoogleMaps3dLibrary,
   loadGoogleMarkerLibrary,
@@ -57,11 +58,13 @@ export type ArrivalGoogle3DMapProps = {
   onPlaybackCancelled?: () => void;
   onToggleExpanded: () => void;
   selectedPlaceId?: string | null;
+  nearbyDepth?: NearbyDepth;
   onSelectPlace?: (id: string | null) => void;
   above?: boolean;
   quiet?: boolean;
   showBoundary?: boolean;
   polygons?: MapOverlayPolygon[];
+  contextLines?: MapOverlayLine[];
   showExpandAction?: boolean;
 };
 
@@ -154,19 +157,10 @@ type MarkerLibrary = {
 
 const HOME_PORTRAIT_RANGE_M = 700;
 const HOME_PORTRAIT_TILT = 48;
-const EVIDENCE_MINIMUM_RANGE_M = 1_100;
 const EVIDENCE_CAMERA_DURATION_MS = 600;
 const HOME_CAMERA_DURATION_MS = 350;
 const DEFAULT_HEADING = 210;
-
-function evidenceCameraRange(radiusKm: number): number {
-  return Math.max(EVIDENCE_MINIMUM_RANGE_M, radiusKm * 900);
-}
-
-function evidenceCameraTilt(radiusKm: number): number {
-  if (radiusKm > 3) return 45;
-  return 55;
-}
+const EMPTY_CONTEXT_LINES: MapOverlayLine[] = [];
 
 function targetCamera(
   latitude: number,
@@ -328,11 +322,13 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     onPlaybackCancelled,
     onToggleExpanded,
     selectedPlaceId = null,
+    nearbyDepth = 'overview',
     onSelectPlace,
     above = false,
     quiet = false,
     showBoundary = true,
     polygons,
+    contextLines = EMPTY_CONTEXT_LINES,
     showExpandAction = true,
   } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -632,22 +628,15 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       };
     }
     // The Atlas road driver owns this camera until the road view is left.
-    if (roadTourActive || selectedPlaceId) return;
-    const evidenceFocused = cameraMode === "evidence";
-    const range = evidenceFocused
-      ? evidenceCameraRange(viewport.radiusKm)
-      : HOME_PORTRAIT_RANGE_M;
-    const tilt = above ? policy.above.tilt : evidenceFocused
-      ? evidenceCameraTilt(viewport.radiusKm)
-      : HOME_PORTRAIT_TILT;
+    if (roadTourActive || cameraMode === 'evidence') return;
+    const range = HOME_PORTRAIT_RANGE_M;
+    const tilt = above ? policy.above.tilt : HOME_PORTRAIT_TILT;
     const heading = roadLandingFocus?.heading ?? DEFAULT_HEADING;
     const moveId = cameraMoveRef.current + 1;
     cameraMoveRef.current = moveId;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const durationMillis = reducedMotion
       ? 0
-      : evidenceFocused
-      ? EVIDENCE_CAMERA_DURATION_MS
       : HOME_CAMERA_DURATION_MS;
     void loadGoogleTerrainElevation(cameraLatitude, cameraLongitude)
       .then((terrainElevation) => {
@@ -758,7 +747,17 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         nextChildren,
       );
     }
-    for (const polygon of polygons ?? []) addPolygon(map, library, polygon, policy.boundary, nextChildren);
+    const selected = places.find(place => (place.feature_id ?? place.name) === selectedPlaceId);
+    const activePolygons = selected ? geometryForPlace(selected, polygons ?? [], contextLines).polygons : polygons ?? [];
+    for (const line of contextLines) {
+      const style = (policy.geometryStyles as Record<string, typeof policy.boundary>)[line.kind] ?? policy.boundary;
+      addLine(map, library, line, {color:style.stroke,width:4,outerColor:'#ffffff66',outerWidth:0.3,drawsOccludedSegments:false}, null, nextChildren);
+    }
+    for (const polygon of polygons ?? []) {
+      const style = (policy.geometryStyles as Record<string, typeof policy.boundary>)[polygon.kind] ?? policy.boundary;
+      addPolygon(map, library, polygon,
+        {...style, fill: activePolygons.includes(polygon) ? style.fill : '#ffffff06'}, nextChildren);
+    }
     if (quiet && home.boundary) {
       const mask = new library.Polygon3DElement({ altitudeMode: 'CLAMP_TO_GROUND',
         fillColor: policy.quiet.fill, strokeColor: '#00000000', strokeWidth: 0 });
@@ -773,7 +772,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         : places;
       mask.innerPaths = [
         pathFromPolygon(home.boundary).reverse(),
-        ...(polygons ?? []).map((polygon) => pathFromPolygon(polygon).reverse()),
+        ...activePolygons.map((polygon) => pathFromPolygon(polygon).reverse()),
         ...quietPlaces.map((place) => circlePath(place.latitude, place.longitude).reverse()),
       ];
       map.append(mask); nextChildren.push(mask);
@@ -866,10 +865,10 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       const homeIsContext = cameraMode === "evidence";
       const homeMarker = new library.Marker3DInteractiveElement({
         altitudeMode: "CLAMP_TO_GROUND",
-        collisionBehavior: homeIsContext ? "OPTIONAL_AND_HIDES_LOWER_PRIORITY" : "REQUIRED",
+        collisionBehavior: "REQUIRED",
         drawsWhenOccluded: true,
-        extruded: !homeIsContext,
-        label: homeIsContext ? undefined : "This home",
+        extruded: true,
+        label: "This home",
         position: { lat: home.latitude, lng: home.longitude },
         title: home.name,
       });
@@ -881,12 +880,21 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     }
 
     let activePopover: Popover3DElement | null = null;
+    if (selected && cameraMode === 'evidence') {
+      const arc = new library.Polyline3DInteractiveElement({
+        altitudeMode: 'RELATIVE_TO_GROUND', path: nearbyRelationArc(home, selected),
+        strokeColor: '#d6edbcc4', strokeWidth: 3, drawsOccludedSegments: false,
+      });
+      arc.setAttribute('aria-label', 'Straight-line relationship to home, not a travel route');
+      arc.dataset.atlasRelationship = 'true';
+      map.append(arc); nextChildren.push(arc);
+    }
     for (const place of places) {
       const popover = createPlacePopover(library, place);
       const marker = new library.Marker3DInteractiveElement({
         altitudeMode: "CLAMP_TO_GROUND",
-        collisionBehavior: "OPTIONAL_AND_HIDES_LOWER_PRIORITY",
-        drawsWhenOccluded: false,
+        collisionBehavior: (place.feature_id ?? place.name) === selectedPlaceId || !selectedPlaceId ? "REQUIRED" : "OPTIONAL_AND_HIDES_LOWER_PRIORITY",
+        drawsWhenOccluded: true,
         gmpPopoverTargetElement: popover,
         position: { lat: place.latitude, lng: place.longitude },
         title: place.name,
@@ -928,27 +936,32 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     showBoundary,
     onSelectPlace,
     polygons,
+    contextLines,
     selectedPlaceId,
+    home,
   ]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready || roadTourActive || streetRequested) return;
-    const place = places.find(p => (p.feature_id ?? p.name) === selectedPlaceId);
-    if (place) {
-      let cancelled = false;
-      void loadGoogleTerrainElevation(place.latitude, place.longitude).then(elevation => {
-        if (cancelled) return;
-        map.flyCameraTo({ durationMillis: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : policy.focus.durationMs,
-          endCamera: targetCamera(place.latitude, place.longitude, elevation,
-            policy.focus.rangeM, above ? policy.above.tilt : policy.focus.tilt, map.heading) });
-      }).catch(() => undefined);
-      return () => { cancelled = true; };
-    } else if (above) {
-      map.stopCameraAnimation();
-      map.tilt = policy.above.tilt;
-    }
-  }, [above, selectedPlaceId, places, playbackController, ready, roadTourActive, streetRequested]);
+    if (!map || !ready || terrainCorridor || roadTourActive || streetRequested || cameraMode !== 'evidence') return;
+    const moveId = ++cameraMoveRef.current;
+    let cancelled = false;
+    let camera: CameraOptions | undefined;
+    const move = () => {
+      if (!camera || cancelled || cameraMoveRef.current !== moveId || playbackController.snapshot() === 'paused') return;
+      map.dataset.atlasDepth = nearbyDepth;
+      map.flyCameraTo({durationMillis: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : policy.focus.durationMs,
+        endCamera: camera});
+    };
+    const unregister = playbackController.registerResumer(move);
+    void loadGoogleTerrainElevation(home.latitude, home.longitude).then(elevation => {
+      const pose = nearbySceneCamera(home, places, polygons ?? [], [...metroLines, ...contextLines], selectedPlaceId,
+        nearbyDepth, elevation, containerRef.current?.clientWidth ?? window.innerWidth);
+      camera = {...pose, tilt: above ? policy.above.tilt : pose.tilt};
+      move();
+    }).catch(() => undefined);
+    return () => {cancelled = true; unregister();};
+  }, [above, selectedPlaceId, nearbyDepth, places, home, polygons, metroLines, contextLines, cameraMode, terrainCorridor, playbackController, ready, roadTourActive, streetRequested]);
 
   if (loadError) throw loadError;
 

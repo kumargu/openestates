@@ -19,6 +19,9 @@ export function propertyMapContextFromSurfaceScene(
   const anchorCoordinates = pointCoordinates(scene.anchor.geometry);
   const receiptsById = new Map(scene.receipts.map((receipt) => [receipt.id, receipt]));
   const scenePlaces = scene.features
+    .filter(feature => feature.geometry.type === 'Point' ||
+      ((feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') && !scene.features.some(point =>
+        point.geometry.type === 'Point' && point.layerId === feature.layerId && feature.entityId && point.entityId === feature.entityId)))
     .map((feature) => mapPlacePinFromFeature(feature, receiptsById))
     .filter((place): place is MapPlacePin => Boolean(place));
   const places = [
@@ -43,7 +46,7 @@ export function propertyMapContextFromSurfaceScene(
     const existing = layerPolygons[feature.layerId] ?? [];
     layerPolygons[feature.layerId] = [...existing.filter(p => !p.id.startsWith(`${feature.id}:`)),
       ...polygons.filter(rings => rings[0]?.length >= 4).map((rings, index) => ({
-        id: `${feature.id}:${index}`, name: feature.label, kind: feature.kind, coordinates: rings[0], holes: rings.slice(1),
+        id: `${feature.id}:${index}`, entity_id: feature.entityId, name: feature.label, kind: feature.kind, coordinates: rings[0], holes: rings.slice(1),
         source_type: feature.receiptIds.map(id => receiptsById.get(id)?.sourceType).find(Boolean) ?? '',
       }))];
   }
@@ -186,7 +189,7 @@ function mapPlacePinFromFeature(
   feature: SceneFeature,
   receiptsById: Map<string, SceneReceipt>,
 ): MapPlacePin | null {
-  const coordinates = pointCoordinates(feature.geometry);
+  const coordinates = pointCoordinates(feature.geometry) ?? extentCenter(feature.geometry);
   if (!coordinates) return null;
   const receipt = feature.receiptIds
     .map((id) => receiptsById.get(id))
@@ -223,6 +226,7 @@ function mapLineFromFeature(
 
   return {
     id: feature.id,
+    entity_id: feature.entityId,
     name: feature.label,
     label: feature.shortLabel,
     distance_km: typeof feature.metrics?.distanceM === "number"
@@ -254,4 +258,14 @@ function lineCoordinates(geometry?: SceneGeometry): [number, number][] | null {
     Number.isFinite(latitude) && Number.isFinite(longitude))
     ? geometry.coordinates
     : null;
+}
+
+/** Display anchor for a mapped extent; never interpreted as a gate or entrance. */
+function extentCenter(geometry: SceneGeometry): {latitude:number; longitude:number} | null {
+  const coordinates = geometry.type === 'Polygon' ? geometry.coordinates[0]
+    : geometry.type === 'MultiPolygon' ? geometry.coordinates.flatMap(p => p[0])
+    : geometry.type === 'LineString' ? geometry.coordinates : [];
+  if (!coordinates?.length || coordinates.some(([lng,lat]) => !Number.isFinite(lng) || !Number.isFinite(lat))) return null;
+  return {latitude:(Math.min(...coordinates.map(p=>p[1]))+Math.max(...coordinates.map(p=>p[1])))/2,
+    longitude:(Math.min(...coordinates.map(p=>p[0]))+Math.max(...coordinates.map(p=>p[0])))/2};
 }

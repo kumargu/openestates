@@ -10,6 +10,8 @@ import {
   advanceRoadDistance,
   projectStreetHandoff,
 } from "../../experiments/home-atlas/src/journey.ts";
+import { geometryForPlace, nearbySceneCamera, nearbyRelationArc } from '../src/lib/atlasNearbyScene.ts';
+import { buildNumberedPlaces, resolveHomeAnchor } from '../src/lib/nearbyPlateProjection.ts';
 
 test("Waterford API scene reaches production metro, boundary, nearby and road projections", () => {
   const scene = atlasFixtureScene("arrival_story");
@@ -30,6 +32,45 @@ test("Waterford API scene reaches production metro, boundary, nearby and road pr
     projectStreetHandoff(route, { longitude, latitude }, 40).distanceAlongM,
     0,
   );
+});
+
+test('nearby relationship keeps home, uses real extents and never drops distant API evidence', () => {
+  const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
+  const home = resolveHomeAnchor(context)!;
+  const places = buildNumberedPlaces(context.places.filter(p => p.layer === 'lake'));
+  const polygons = context.layer_polygons!.lake;
+  assert.ok(places.length > 1);
+  const selected = places[0];
+  assert.ok(geometryForPlace(selected, polygons, []).polygons.length > 0);
+  const overview = nearbySceneCamera(home, places, polygons, [], null, 'overview', 900, 1400);
+  assert.equal(overview.tilt, 25);
+  const pair = nearbySceneCamera(home, places, polygons, [], selected.feature_id!, 'pair', 900, 1400);
+  assert.ok(pair.range >= 1000);
+  const close = nearbySceneCamera(home, places, polygons, [], selected.feature_id!, 'inspect', 900, 1400);
+  assert.equal(close.tilt, 30);
+  const distant = {...selected, latitude:home.latitude+0.15, longitude:home.longitude, feature_id:'distant', place_entity_id:'distant'};
+  const broad = nearbySceneCamera(home, [distant], [], [], null, 'overview', 900, 1400);
+  assert.ok(broad.range > 20000, 'backend-scoped evidence must not be silently radius-filtered');
+  const arc = nearbyRelationArc(home, selected);
+  assert.equal(arc.length, 41);
+  assert.equal(arc[0].lat, home.latitude);
+  assert.equal(arc.at(-1)!.lng, selected.longitude);
+  assert.ok(arc[20].altitude > arc[0].altitude);
+  assert.ok(nearbySceneCamera(home, places, polygons, [], null, 'overview', 900, 390).range > overview.range);
+});
+
+test('mapped shape ownership survives the API projection without guessing names', () => {
+  const scene = atlasFixtureScene('arrival_story');
+  const context = propertyMapContextFromSurfaceScene(scene)!;
+  const roads = buildNumberedPlaces(context.places.filter(p => p.layer === 'road'));
+  assert.ok(geometryForPlace(roads[0], [], context.layer_lines!.road).lines.length > 0);
+  const lake = scene.features.find(f => f.kind === 'lake' && f.geometry.type === 'Polygon')!;
+  const shapeOnly = propertyMapContextFromSurfaceScene({...scene,features:[lake]})!;
+  assert.equal(shapeOnly.places.length, 1, 'polygon-only places remain discoverable');
+  const place = buildNumberedPlaces(shapeOnly.places)[0];
+  assert.equal(geometryForPlace(place, shapeOnly.layer_polygons!.lake, []).polygons.length, 1);
+  const unrelated = {...shapeOnly.layer_polygons!.lake[0],id:'unrelated',entity_id:'unrelated'};
+  assert.equal(geometryForPlace(place, [unrelated], []).polygons.length, 0);
 });
 
 test("metro adapter preserves separate segments and backend scope including distant proof", () => {

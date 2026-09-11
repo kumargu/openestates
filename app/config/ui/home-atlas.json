@@ -23,5 +23,10 @@
   "quiet": { "fill": "#12232b88", "radiusDegrees": 0.08 },
   "focus": { "rangeM": 700, "tilt": 55, "durationMs": 1200 },
   "above": { "tilt": 12 },
-  "nearby": { "dwellMs": 4200 }
+  "nearby": { "dwellMs": 4200 },
+  "geometryStyles": {
+    "lake": { "fill": "#7dd8f426", "stroke": "#7dd8f4cc" },
+    "road": { "fill": "#f4c17618", "stroke": "#f4c176dd" },
+    "metro": { "fill": "#d5a7ff18", "stroke": "#d5a7ffdd" }
+  }
 }

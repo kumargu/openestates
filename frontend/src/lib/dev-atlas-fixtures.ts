@@ -54,9 +54,18 @@ export function atlasFixtureScene(surfaceId: string): SurfaceSceneResponse {
     receiptIds: ["osm"],
   });
   for (const place of data.places) {
+    for (const segment of place.segments ?? []) {
+      features.push({
+        id: `${place.id}:${segment.id}`, entityId: place.id, layerId: place.kind,
+        kind: place.kind, label: place.name,
+        geometry: {type:'LineString', coordinates:segment.path.map(p => [p.lng,p.lat])},
+        coordinateQuality:'exact', display:{tone:'neutral',priority:1}, confidence:1, receiptIds:['osm'],
+      });
+    }
     if (place.id === "home" || !place.boundary?.length) continue;
     features.push({
       id: `${place.id}-boundary`,
+      entityId: place.id,
       layerId: place.kind,
       kind: place.kind,
       label: place.name,

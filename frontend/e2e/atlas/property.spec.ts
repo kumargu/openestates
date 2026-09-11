@@ -28,9 +28,21 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await expect(
     arrival.locator(".property-atlas__place-list button").nth(1),
   ).toHaveAttribute("aria-pressed", "true");
+  await expect(map).toHaveAttribute('data-atlas-depth', 'pair');
+  await expect(map.locator('[data-atlas-relationship="true"]')).toHaveCount(1);
+  await arrival.getByRole('button', {name:'Look closer',exact:true}).click();
+  await expect(map).toHaveAttribute('data-atlas-depth', 'inspect');
+  await arrival.getByRole('button', {name:'With home',exact:true}).click();
+  await expect(map).toHaveAttribute('data-atlas-depth', 'pair');
   await arrival.screenshot({ path: testInfo.outputPath("metro-focus.png") });
   await arrival.getByRole("button", { name: "Schools", exact: true }).click();
   await expect(arrival.locator(".property-atlas__place-list button")).toHaveCount(2);
+  await expect(map).toHaveAttribute('data-atlas-depth', 'overview');
+  await expect(map.locator('[data-atlas-relationship="true"]')).toHaveCount(0);
+  await arrival.screenshot({path:testInfo.outputPath('schools-together.png')});
+  await arrival.locator('.property-atlas__place-list button').first().click();
+  await expect(map).toHaveAttribute('data-atlas-depth', 'pair');
+  await arrival.screenshot({path:testInfo.outputPath('school-with-home.png')});
   await arrival
     .getByRole("button", { name: "Road journey", exact: true })
     .click();

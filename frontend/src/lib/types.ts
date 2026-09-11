@@ -412,6 +412,7 @@ export type MapWaterContext = {
 };
 
 export type MapOverlayLine = {
+  entity_id?: string;
   id: string;
   name: string;
   label?: string;
@@ -425,6 +426,7 @@ export type MapOverlayLine = {
 };
 
 export type MapOverlayPolygon = {
+  entity_id?: string;
   id: string;
   name: string;
   kind: string;
