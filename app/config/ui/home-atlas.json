@@ -10,8 +10,25 @@
     "desktopRangeM": 270,
     "mobileRangeM": 350,
     "mobileBreakpointPx": 700,
-    "descentMs": 2400,
-    "orientationDwellMs": 1800
+    "contextRangeM": 720,
+    "contextTilt": 48,
+    "contextMoveMs": 3200,
+    "orientationDwellMs": 2400,
+    "descentMs": 3200,
+    "headingDamping": 3,
+    "veilCorridorRadiusM": 105
+  },
+  "society": {
+    "settleMs": 1200,
+    "durationMs": 46000,
+    "mobileRangeScale": 1.25,
+    "manualStageId": "society",
+    "stages": [
+      { "id": "arrival", "progress": 0, "altitudeOffsetM": 22, "heading": 210, "tilt": 67, "rangeM": 1050 },
+      { "id": "society", "progress": 0.333333, "altitudeOffsetM": 28, "heading": 280, "tilt": 62, "rangeM": 440 },
+      { "id": "above", "progress": 0.666667, "altitudeOffsetM": 10, "heading": 335, "tilt": 8, "rangeM": 760 },
+      { "id": "neighborhood", "progress": 1, "altitudeOffsetM": 15, "heading": 5, "tilt": 58, "rangeM": 2400 }
+    ]
   },
   "metro": {
     "strokeColor": "#d5a7ff",
@@ -20,10 +37,20 @@
     "drawsOccludedSegments": false
   },
   "boundary": { "fill": "#f8f1df12", "stroke": "#fff7e3e6" },
-  "quiet": { "fill": "#12232b88", "radiusDegrees": 0.08 },
-  "focus": { "rangeM": 700, "tilt": 55, "durationMs": 1200 },
+  "quiet": { "fill": "#061b28b0", "radiusDegrees": 0.08 },
+  "focus": { "rangeM": 700, "tilt": 55, "durationMs": 1200, "movementFraction": 0.7 },
+  "cameraFit": { "safeMarginPx": 32, "fieldOfViewDegrees": 38 },
   "above": { "tilt": 12 },
-  "nearby": { "dwellMs": 4200 },
+  "nearby": {
+    "overviewMs": 4500,
+    "pairMs": 5500,
+    "focusMs": 6500,
+    "segmentMs": 8000,
+    "returnHomeMs": 5500,
+    "pairMinimumRangeM": 950,
+    "pairRangeMultiplier": 2.15,
+    "markerLiftM": 45
+  },
   "geometryStyles": {
     "lake": { "fill": "#7dd8f426", "stroke": "#7dd8f4cc" },
     "road": { "fill": "#f4c17618", "stroke": "#f4c176dd" },

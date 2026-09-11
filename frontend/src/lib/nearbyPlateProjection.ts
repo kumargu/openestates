@@ -25,7 +25,7 @@ const VIEWPORT_PADDING = 1.45;
 export function hasAroundThisHomePlate(context?: PropertyMapContext | null): boolean {
   return Boolean(
     context && (
-      context.places.length > 0
+      (context.places?.length ?? 0) > 0
       || context.water
       || (context.metro_lines?.length ?? 0) > 0
       || (context.red_flag_lines?.length ?? 0) > 0
@@ -111,7 +111,7 @@ export function resolveHomeAnchor(context: PropertyMapContext): {
     };
   }
 
-  const coords = context.places.filter(
+  const coords = (context.places ?? []).filter(
     (place): place is MapPlacePin & { latitude: number; longitude: number } =>
       typeof place.latitude === "number" && typeof place.longitude === "number",
   );
@@ -150,7 +150,7 @@ export function placesForStory(
     return [];
   }
 
-  return context.places.filter((place) => place.layer === story.layer);
+  return (context.places ?? []).filter((place) => place.layer === story.layer);
 }
 
 export function filterPlacesByScale(
@@ -437,7 +437,7 @@ export function buildPlateViewport(
 
 export function availableLayers(context: PropertyMapContext): string[] {
   if (context.layers && context.layers.length > 0) {
-    const present = new Set(context.places.map((place) => place.layer));
+    const present = new Set((context.places ?? []).map((place) => place.layer));
     if ((context.red_flag_lines?.length ?? 0) > 0) {
       present.add("red_flags");
     }
@@ -446,7 +446,7 @@ export function availableLayers(context: PropertyMapContext): string[] {
       .map((layer) => layer.id);
   }
   const layers: string[] = [];
-  for (const place of context.places) {
+  for (const place of context.places ?? []) {
     if (!layers.includes(place.layer)) layers.push(place.layer);
   }
   if ((context.red_flag_lines?.length ?? 0) > 0 && !layers.includes("red_flags")) {

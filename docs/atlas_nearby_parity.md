@@ -18,6 +18,8 @@ Reviewed Human Atlas `app/scene.tsx`: selected-geometry bounds, distinct selecti
 
 Rest: category overview. Hover: existing popover. Focus/touch: numbered place and accessible With home / Look closer actions. Reduced motion: zero-duration camera moves. No new floating captions, comparison panels, or autoplay Street View.
 
+Pair focus borrows Human Atlas's screen-space selection principle: home and the selected place are framed from only their two anchors, translated into the clear canvas beside the drawer, and kept at PR 126's close distance-based range. PR 126's focus composition is preserved too: selected geometry and the home remain in the same camera bounds, while their markers lift 45 m above ground so both anchors stay readable in perspective. The property identity is a corner overlay rather than a full-height exclusion. The map's anatomical content, mesh effects, and explosion controls were intentionally not borrowed. Home uses one prominent `H` anchor without a second visible label; its accessible name remains `This home`.
+
 ## Data contract
 
 Overlay lines/polygons retain `entity_id` from `SceneFeature.entityId`. Selection joins shapes using explicit entity identity or exact feature identity, never label or nearest-coordinate guesses. Polygon-only features receive a deterministic extent-center display anchor, not an inferred entrance. Unlinked geometry remains visible in category overview but is not attributed to an unrelated selected pin.

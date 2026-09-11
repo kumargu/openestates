@@ -8,9 +8,16 @@ import {
 } from "../src/lib/homeAtlasProjection.ts";
 import {
   advanceRoadDistance,
+  dampHeading,
   projectStreetHandoff,
 } from "../../experiments/home-atlas/src/journey.ts";
-import { geometryForPlace, nearbySceneCamera, nearbyRelationArc } from '../src/lib/atlasNearbyScene.ts';
+import { distanceMetres } from "../../experiments/home-atlas/src/geometry.ts";
+import {
+  fitCameraToSafeFrame,
+  geometryForPlace,
+  nearbySceneCamera,
+  nearbyRelationArc,
+} from '../src/lib/atlasNearbyScene.ts';
 import { buildNumberedPlaces, resolveHomeAnchor } from '../src/lib/nearbyPlateProjection.ts';
 
 test("Waterford API scene reaches production metro, boundary, nearby and road projections", () => {
@@ -24,6 +31,12 @@ test("Waterford API scene reaches production metro, boundary, nearby and road pr
   const route = arrivalAtlasRoute(roads)!;
   assert.ok(route.lengthM > 500);
   assert.deepEqual(route.coordinates, roads[0].coordinates);
+  const reversed = arrivalAtlasRoute(roads, "reverse")!;
+  assert.deepEqual(reversed.coordinates, [...roads[0].coordinates].reverse());
+  assert.equal(
+    context.layers?.find((layer) => layer.id === "approach")?.experience?.routeDirection,
+    "reverse",
+  );
   const halfway = advanceRoadDistance(route, 0, 1000, 1);
   assert.equal(halfway, 12);
   assert.equal(advanceRoadDistance(route, 0, 1000, 2), 24);
@@ -45,9 +58,21 @@ test('nearby relationship keeps home, uses real extents and never drops distant 
   const overview = nearbySceneCamera(home, places, polygons, [], null, 'overview', 900, 1400);
   assert.equal(overview.tilt, 25);
   const pair = nearbySceneCamera(home, places, polygons, [], selected.feature_id!, 'pair', 900, 1400);
-  assert.ok(pair.range >= 1000);
+  const pairDistance = distanceMetres(
+    {lat: home.latitude, lng: home.longitude},
+    {lat: selected.latitude, lng: selected.longitude},
+  );
+  assert.ok(pair.range >= 950);
+  assert.ok(pair.range <= pairDistance * 2.2, 'pair stays prominent instead of framing excess geography');
   const close = nearbySceneCamera(home, places, polygons, [], selected.feature_id!, 'inspect', 900, 1400);
   assert.equal(close.tilt, 30);
+  assert.equal(close.heading, 210);
+  assert.ok(distanceMetres({lat: home.latitude, lng: home.longitude}, close.center)
+      < distanceMetres({lat: home.latitude, lng: home.longitude}, {
+        lat: selected.latitude,
+        lng: selected.longitude,
+      }),
+    'inspection keeps the home in the selected extent composition');
   const distant = {...selected, latitude:home.latitude+0.15, longitude:home.longitude, feature_id:'distant', place_entity_id:'distant'};
   const broad = nearbySceneCamera(home, [distant], [], [], null, 'overview', 900, 1400);
   assert.ok(broad.range > 20000, 'backend-scoped evidence must not be silently radius-filtered');
@@ -57,6 +82,50 @@ test('nearby relationship keeps home, uses real extents and never drops distant 
   assert.equal(arc.at(-1)!.lng, selected.longitude);
   assert.ok(arc[20].altitude > arc[0].altitude);
   assert.ok(nearbySceneCamera(home, places, polygons, [], null, 'overview', 900, 390).range > overview.range);
+  const returnedHome = nearbySceneCamera(home, places, polygons, [], null, 'home', 900, 1400);
+  assert.equal(returnedHome.tilt, 55);
+});
+
+test('safe-frame fitting leaves room for the property identity and evidence drawer', () => {
+  const camera = {
+    center: {lat: 12.98, lng: 77.74, altitude: 920},
+    heading: 0,
+    range: 1000,
+    tilt: 25,
+  };
+  const fitted = fitCameraToSafeFrame(camera, {
+    width: 1440,
+    height: 1000,
+    left: 300,
+    right: 420,
+    top: 80,
+    bottom: 120,
+  });
+  assert.ok(fitted.range > camera.range);
+  assert.notEqual(fitted.center.lat, camera.center.lat);
+  assert.notEqual(fitted.center.lng, camera.center.lng);
+
+  const focused = fitCameraToSafeFrame(camera, {
+    width: 1440,
+    height: 1000,
+    left: 32,
+    right: 420,
+    top: 80,
+    bottom: 120,
+  }, 'focus');
+  assert.equal(focused.range, camera.range, 'drawer fitting translates a focus shot without zooming it out');
+  assert.notEqual(focused.center.lng, camera.center.lng);
+});
+
+test('missing place collections stay a calm sparse scene', () => {
+  const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
+  const sparse = {...context, places: undefined} as unknown as typeof context;
+  assert.doesNotThrow(() => resolveHomeAnchor(sparse));
+});
+
+test('road heading damping crosses north through the shortest arc', () => {
+  const damped = dampHeading(359, 1, 3, 0.25);
+  assert.ok(damped > 359 || damped < 1);
 });
 
 test('mapped shape ownership survives the API projection without guessing names', () => {

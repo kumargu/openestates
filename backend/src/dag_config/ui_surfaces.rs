@@ -157,6 +157,8 @@ pub struct UiSurfaceLayerRule {
 #[serde(rename_all = "camelCase")]
 pub struct UiSurfaceLayerExperienceConfig {
     pub kind: String,
+    #[serde(default)]
+    pub route_direction: Option<String>,
     pub waypoint_spacing_m: u32,
     #[serde(default)]
     pub overview_dwell_ms: Option<u32>,
@@ -416,6 +418,10 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                         if interior.saturating_add(transition) >= entrance
                 );
                 if experience.kind.trim().is_empty()
+                    || experience
+                        .route_direction
+                        .as_deref()
+                        .is_some_and(|direction| !matches!(direction, "as-mapped" | "reverse"))
                     || experience.waypoint_spacing_m == 0
                     || experience.overview_dwell_ms == Some(0)
                     || experience.dwell_ms == 0

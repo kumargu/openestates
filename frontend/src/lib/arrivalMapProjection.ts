@@ -56,7 +56,7 @@ export function arrivalMarkerPlaces(
 ): NumberedPlace[] {
   if (!layer) return [];
   return buildNumberedPlaces(
-    context.places
+    (context.places ?? [])
       .filter((place) => place.layer === layer.id)
       .flatMap((place) => {
         const status = place.properties?.status;
@@ -75,7 +75,7 @@ export function mappedArrivalEntranceStatus(
 ): "verified" | "inferred" | null {
   if (!context) return null;
   const entranceLayer = context.layers?.find((layer) => layer.renderKind === "arrival_marker");
-  const statuses = context.places
+  const statuses = (context.places ?? [])
     .filter((place) => place.layer === entranceLayer?.id)
     .map((place) => place.properties?.status);
   if (statuses.includes("verified")) return "verified";
@@ -125,7 +125,7 @@ export function hasArrivalMap(context?: PropertyMapContext | null): boolean {
   const hasBoundary = Boolean(context.home.boundary?.coordinates.length);
   const hasEntrance = context.layers?.some((layer) =>
     layer.renderKind === "arrival_marker"
-      && context.places.some((place) => place.layer === layer.id)) ?? false;
+      && (context.places ?? []).some((place) => place.layer === layer.id)) ?? false;
   const hasApproach = context.layers?.some((layer) =>
     layer.renderKind === "terrain_corridor"
       && (context.layer_lines?.[layer.id] ?? context.access_lines ?? [])

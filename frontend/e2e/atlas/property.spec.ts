@@ -15,7 +15,7 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   ).toHaveAttribute("aria-busy", "false", { timeout: 30000 });
   const map = arrival.locator("gmp-map-3d");
   await expect(map).toBeVisible();
-  await expect(map).toHaveAttribute("data-google-steady", "true", {
+  await expect(map).toHaveAttribute("data-google-initialized", "true", {
     timeout: 30000,
   });
   await arrival.screenshot({ path: testInfo.outputPath("society.png") });
@@ -29,7 +29,24 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
     arrival.locator(".property-atlas__place-list button").nth(1),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(map).toHaveAttribute('data-atlas-depth', 'pair');
+  await expect(map).toHaveAttribute('data-atlas-marker-count', '2');
   await expect(map.locator('[data-atlas-relationship="true"]')).toHaveCount(1);
+  await expect(map.locator(':scope > gmp-marker-3d-interactive')).toHaveCount(2);
+  await expect(map.locator('gmp-marker-3d-interactive[title="Prestige Waterford"]'))
+    .not.toHaveAttribute('label', /.+/);
+  await expect(map.locator(':scope > gmp-marker-3d-interactive[label]')).toHaveCount(0);
+  await expect.poll(async () => {
+    const distance = Number(await map.getAttribute('data-atlas-pair-distance'));
+    const range = Number(await map.getAttribute('data-atlas-camera-target-range'));
+    return range / distance;
+  }, {timeout: 10_000}).toBeLessThanOrEqual(2.2);
+  const pairDistance = Number(await map.getAttribute('data-atlas-pair-distance'));
+  const pairRange = Number(await map.getAttribute('data-atlas-camera-target-range'));
+  expect(pairDistance).toBeGreaterThan(0);
+  expect(pairRange).toBeGreaterThanOrEqual(950);
+  expect(pairRange).toBeLessThanOrEqual(pairDistance * 2.2);
+  await expect(map.locator(':scope > gmp-marker-3d-interactive').first())
+    .toHaveAttribute('altitude-mode', 'relative-to-ground');
   await arrival.getByRole('button', {name:'Look closer',exact:true}).click();
   await expect(map).toHaveAttribute('data-atlas-depth', 'inspect');
   await arrival.getByRole('button', {name:'With home',exact:true}).click();
