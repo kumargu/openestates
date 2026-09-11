@@ -53,6 +53,8 @@ pub struct RevisionCacheTuning {
 pub struct SearchJourneyTuning {
     pub revision_token_max_bytes: usize,
     pub proof_token_max_bytes: usize,
+    pub max_signing_keys: usize,
+    pub max_signing_key_id_bytes: usize,
     pub max_client_mutation_id_bytes: usize,
     pub max_result_id_bytes: usize,
     pub max_target_id_bytes: usize,
@@ -217,6 +219,16 @@ impl SecurityTuning {
             "search_journey.proof_token_max_bytes",
             self.search_journey.proof_token_max_bytes,
             1024 * 1024,
+        )?;
+        bounded(
+            "search_journey.max_signing_keys",
+            self.search_journey.max_signing_keys,
+            16,
+        )?;
+        bounded(
+            "search_journey.max_signing_key_id_bytes",
+            self.search_journey.max_signing_key_id_bytes,
+            256,
         )?;
         bounded(
             "search_journey.max_client_mutation_id_bytes",

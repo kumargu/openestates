@@ -21,6 +21,14 @@
       "branch_separator": " | ",
       "constraint_preference_separator": "; ",
       "fallback": "Any available home"
+    },
+    "journey_messages": {
+      "catalog_movement": "Rank changed after the catalog refreshed.",
+      "intent_movement": "Rank changed under your latest refinement.",
+      "selected_retained": "This home remains in your active search.",
+      "selected_excluded_catalog": "This home is no longer available in the refreshed catalog.",
+      "selected_excluded_intent": "This home is no longer in your refined results.",
+      "failed_conditions_prefix": "Conditions not met: "
     }
   },
   "buyer_archetypes": [

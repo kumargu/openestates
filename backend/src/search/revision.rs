@@ -83,6 +83,7 @@ pub struct SignedSearchContext {
     pub operation: SearchRevisionOperation,
     pub depth: usize,
     pub buyer_brief: String,
+    pub latest_utterance: String,
     pub semantic_fingerprint: String,
     pub runtime_lineage: SearchRuntimeVersion,
     pub intent_ast: TypedIntentAst,
@@ -903,6 +904,7 @@ pub fn issue_signed_search_context(
     operation: SearchRevisionOperation,
     depth: usize,
     buyer_brief: String,
+    latest_utterance: String,
     plan: CompiledSearchPlan,
     runtime_version: SearchRuntimeVersion,
     ordered_result_ids: Vec<String>,
@@ -918,17 +920,32 @@ pub fn issue_signed_search_context(
     );
     let intent_ast = TypedIntentAst::from_plan(&plan);
     let context = SignedSearchContext {
-        version: 1,
+        version: 2,
         revision_id: revision_id.clone(),
         parent_revision_id: parent_revision_id.clone(),
         operation,
         depth,
         buyer_brief: buyer_brief.clone(),
+        latest_utterance,
         semantic_fingerprint: plan.semantic_fingerprint.clone(),
         runtime_lineage: runtime_version,
         intent_ast,
         result_fingerprint,
     };
+    validate_signed_search_context(&context)?;
+    let state_token = encode_signed_context(&context)?;
+    Ok(IssuedSearchContext {
+        context,
+        state_token,
+    })
+}
+
+pub fn reissue_signed_search_context(
+    parent: &SignedSearchContext,
+    latest_utterance: String,
+) -> Result<IssuedSearchContext, String> {
+    let mut context = parent.clone();
+    context.latest_utterance = latest_utterance;
     validate_signed_search_context(&context)?;
     let state_token = encode_signed_context(&context)?;
     Ok(IssuedSearchContext {
@@ -961,8 +978,15 @@ fn encode_signed_context(context: &SignedSearchContext) -> Result<String, String
 }
 
 fn validate_signed_search_context(context: &SignedSearchContext) -> Result<(), String> {
-    if context.version != 1 || context.intent_ast.version != 1 {
+    if context.version != 2 || context.intent_ast.version != 1 {
         return Err("unsupported revision token payload version".to_string());
+    }
+    if context.latest_utterance.len()
+        > crate::security::security_tuning()
+            .requests
+            .max_search_query_bytes
+    {
+        return Err("revision latest utterance exceeds the query size limit".to_string());
     }
     if context.intent_ast.branches.is_empty()
         || context.intent_ast.branches.len()

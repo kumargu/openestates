@@ -12,18 +12,19 @@ use crate::dag_config::search_guardrail_config;
 use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::SearchEvent;
 use crate::search::journey::{
-    buyer_brief, present_intent, project_current_results, result_delta, JourneyClarification,
-    ResultDelta, SearchJourneyActive, SearchJourneyAttempt, SearchJourneyAttemptKind,
-    SearchJourneyEnvelope, SearchJourneyOutcome, SearchJourneyResults, SearchJourneyRevision,
-    SearchRevisionTarget, SelectedPropertyConsequence, SEARCH_JOURNEY_CONTRACT_VERSION,
+    buyer_brief, describe_predicates, present_intent, project_current_results, result_delta,
+    JourneyClarification, ResultDelta, ResultMovementCause, SearchJourneyActive,
+    SearchJourneyAttempt, SearchJourneyAttemptKind, SearchJourneyEnvelope, SearchJourneyOutcome,
+    SearchJourneyResults, SearchJourneyRevision, SearchRevisionTarget, SelectedPropertyCause,
+    SelectedPropertyConsequence, SelectedPropertyOutcome, SEARCH_JOURNEY_CONTRACT_VERSION,
 };
 use crate::search::proof::{resolve_proof_token, ProofResolution, ProofResolutionError};
 use crate::search::{
     apply_typed_revision, compile_typed_revision, decode_signed_search_context, guard_search_query,
-    issue_signed_search_context, result_membership_fingerprint, CompiledSearchPlan,
-    GeoCellSearchPolicy, GeoScope, SearchRevisionLimits, SearchRevisionOperation,
-    SearchRevisionOutcome, SearchRuntimeVersion, SignedSearchContext, TypedSearchRevision,
-    TypedSearchRevisionPatch,
+    issue_signed_search_context, reissue_signed_search_context, result_membership_fingerprint,
+    CompiledSearchPlan, GeoCellSearchPolicy, GeoScope, SearchRevisionLimits,
+    SearchRevisionOperation, SearchRevisionOutcome, SearchRuntimeVersion, SignedSearchContext,
+    TypedSearchRevision, TypedSearchRevisionPatch,
 };
 use crate::state::{
     AppState, CachedSearchOutput, RevisionIdempotencyLookup, RevisionReservationUpdate,
@@ -129,6 +130,7 @@ impl SearchJourneyService {
             "initial",
             SearchRevisionOperation::Initial,
             1,
+            query,
             output.compiled_plan.as_ref().clone(),
             output.response.as_ref(),
         )?;
@@ -158,6 +160,17 @@ impl SearchJourneyService {
         let parent = self.decode_parent(&request.parent_token)?;
         self.validate_result_ids(&request.parent_result_ids, "invalid_revision_request")?;
         self.validate_result_fingerprint(&request.parent_result_ids, &parent)?;
+        if request
+            .selected_property_id
+            .as_ref()
+            .is_some_and(|selected| !request.parent_result_ids.contains(selected))
+        {
+            return Err(self.error(
+                StatusCode::BAD_REQUEST,
+                "selected_property_not_in_parent",
+                "The selected property does not belong to the supplied parent results.",
+            ));
+        }
         let request_fingerprint = revision_request_fingerprint(&request);
         let reservation = loop {
             match self.state.search_revision_caches.lookup_or_reserve(
@@ -211,15 +224,16 @@ impl SearchJourneyService {
         self.validate_result_fingerprint(&request.known_result_ids, &parent)?;
         let catalog_rebased = parent.runtime_lineage != self.runtime_version;
         let Some(parent_plan) = self.rebind_parent(&parent).await? else {
-            return Ok(self.retained_envelope(
+            return self.retained_envelope(
                 &parent,
-                request.parent_token,
                 request.known_result_ids,
                 SearchJourneyAttemptKind::Resume,
                 SearchRevisionOperation::Resume,
                 catalog_rebased,
                 "catalogRebaseUnresolved",
-            ));
+                parent.latest_utterance.clone(),
+                None,
+            );
         };
         let output = self
             .execute_plan(parent_plan.clone(), parent.buyer_brief.clone())
@@ -229,12 +243,14 @@ impl SearchJourneyService {
             "resume",
             SearchRevisionOperation::Resume,
             parent.depth,
+            parent.latest_utterance.clone(),
             parent_plan,
             output.response.as_ref(),
         )?;
         let catalog_delta = result_delta(
             &request.known_result_ids,
             active.results.ordered_result_ids(),
+            ResultMovementCause::CatalogRefresh,
         );
         Ok(SearchJourneyEnvelope {
             contract_version: SEARCH_JOURNEY_CONTRACT_VERSION,
@@ -280,15 +296,16 @@ impl SearchJourneyService {
     ) -> Result<SearchJourneyEnvelope, SearchJourneyHttpError> {
         let catalog_rebased = parent.runtime_lineage != self.runtime_version;
         let Some(parent_plan) = self.rebind_parent(parent).await? else {
-            return Ok(self.retained_envelope(
+            return self.retained_envelope(
                 parent,
-                request.parent_token.clone(),
                 request.parent_result_ids.clone(),
                 SearchJourneyAttemptKind::Revision,
                 SearchRevisionOperation::Refine,
                 catalog_rebased,
                 "catalogRebaseUnresolved",
-            ));
+                request.utterance.clone(),
+                request.selected_property_id.as_deref(),
+            );
         };
         let refreshed_parent = self
             .execute_plan(parent_plan.clone(), parent.buyer_brief.clone())
@@ -298,15 +315,29 @@ impl SearchJourneyService {
             "catalog-refresh",
             parent.operation,
             parent.depth,
+            request.utterance.clone(),
             parent_plan.clone(),
             refreshed_parent.response.as_ref(),
         )?;
         let catalog_delta = result_delta(
             &request.parent_result_ids,
             refreshed_active.results.ordered_result_ids(),
+            ResultMovementCause::CatalogRefresh,
         );
 
         if parent.depth >= search_guardrail_config().revisions.max_revision_depth {
+            let cause = selected_cause_for_active(
+                request.selected_property_id.as_deref(),
+                &refreshed_active,
+            );
+            let consequence = self
+                .selected_property_consequence(
+                    request.selected_property_id.as_deref(),
+                    &refreshed_active,
+                    cause,
+                    &parent_plan,
+                )
+                .await?;
             return Ok(self.inactive_envelope(
                 refreshed_active,
                 SearchRevisionOperation::Refine,
@@ -316,7 +347,7 @@ impl SearchJourneyService {
                 None,
                 "limitReached",
                 "This search has reached its revision limit.",
-                None,
+                consequence,
             ));
         }
 
@@ -348,6 +379,18 @@ impl SearchJourneyService {
                 ),
                 SearchRevisionOutcome::Candidate => unreachable!(),
             };
+            let cause = selected_cause_for_active(
+                request.selected_property_id.as_deref(),
+                &refreshed_active,
+            );
+            let consequence = self
+                .selected_property_consequence(
+                    request.selected_property_id.as_deref(),
+                    &refreshed_active,
+                    cause,
+                    &parent_plan,
+                )
+                .await?;
             return Ok(self.inactive_envelope(
                 refreshed_active,
                 revision.operation,
@@ -357,7 +400,7 @@ impl SearchJourneyService {
                 None,
                 code,
                 message,
-                None,
+                consequence,
             ));
         }
         let candidate_plan = apply_typed_revision(
@@ -386,6 +429,23 @@ impl SearchJourneyService {
                 .is_empty()
             || has_unsupported_required_preference(&self.snapshot, &candidate_plan)
         {
+            let cause = selected_cause_for_active(
+                request.selected_property_id.as_deref(),
+                &refreshed_active,
+            );
+            let diagnostic_plan = if cause == SelectedPropertyCause::CatalogRefresh {
+                &parent_plan
+            } else {
+                &candidate_plan
+            };
+            let consequence = self
+                .selected_property_consequence(
+                    request.selected_property_id.as_deref(),
+                    &refreshed_active,
+                    cause,
+                    diagnostic_plan,
+                )
+                .await?;
             return Ok(self.inactive_envelope(
                 refreshed_active,
                 revision.operation,
@@ -395,7 +455,7 @@ impl SearchJourneyService {
                 Some(attempted_intent),
                 "requiredCapabilityUnavailable",
                 "That required condition is unavailable in the current catalog.",
-                None,
+                consequence,
             ));
         }
 
@@ -407,15 +467,37 @@ impl SearchJourneyService {
         let intent_delta = result_delta(
             refreshed_active.results.ordered_result_ids(),
             &candidate_ids,
+            ResultMovementCause::IntentRefinement,
         );
-        let selected_property_consequence = request.selected_property_id.as_ref().map(|selected| {
-            if candidate_ids.contains(selected) {
-                SelectedPropertyConsequence::Retained
-            } else {
-                SelectedPropertyConsequence::Excluded
-            }
-        });
         if candidate_ids.is_empty() {
+            let consequence_cause =
+                if request
+                    .selected_property_id
+                    .as_ref()
+                    .is_some_and(|selected| {
+                        !refreshed_active
+                            .results
+                            .ordered_result_ids()
+                            .contains(selected)
+                    })
+                {
+                    SelectedPropertyCause::CatalogRefresh
+                } else {
+                    SelectedPropertyCause::IntentRefinement
+                };
+            let diagnostic_plan = if consequence_cause == SelectedPropertyCause::CatalogRefresh {
+                &parent_plan
+            } else {
+                &candidate_plan
+            };
+            let selected_property_consequence = self
+                .selected_property_consequence(
+                    request.selected_property_id.as_deref(),
+                    &refreshed_active,
+                    consequence_cause,
+                    diagnostic_plan,
+                )
+                .await?;
             return Ok(self
                 .inactive_envelope(
                     refreshed_active,
@@ -436,9 +518,32 @@ impl SearchJourneyService {
             &request.client_mutation_id,
             revision.operation,
             parent.depth + 1,
-            candidate_plan,
+            request.utterance.clone(),
+            candidate_plan.clone(),
             candidate.response.as_ref(),
         )?;
+        let consequence_cause = if request
+            .selected_property_id
+            .as_ref()
+            .is_some_and(|selected| {
+                !active.results.ordered_result_ids().contains(selected)
+                    && !refreshed_active
+                        .results
+                        .ordered_result_ids()
+                        .contains(selected)
+            }) {
+            SelectedPropertyCause::CatalogRefresh
+        } else {
+            SelectedPropertyCause::IntentRefinement
+        };
+        let selected_property_consequence = self
+            .selected_property_consequence(
+                request.selected_property_id.as_deref(),
+                &active,
+                consequence_cause,
+                &candidate_plan,
+            )
+            .await?;
         Ok(SearchJourneyEnvelope {
             contract_version: SEARCH_JOURNEY_CONTRACT_VERSION,
             runtime_version: self.runtime_version.clone(),
@@ -592,12 +697,14 @@ impl SearchJourneyService {
         Ok(output)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn issue_active(
         &self,
         parent_revision_id: Option<String>,
         mutation_id: &str,
         operation: SearchRevisionOperation,
         depth: usize,
+        latest_utterance: String,
         plan: CompiledSearchPlan,
         execution: &crate::search::SearchExecution,
     ) -> Result<SearchJourneyActive, SearchJourneyHttpError> {
@@ -609,6 +716,7 @@ impl SearchJourneyService {
             operation,
             depth,
             brief.clone(),
+            latest_utterance.clone(),
             plan.clone(),
             self.runtime_version.clone(),
             execution.ordered_result_ids.clone(),
@@ -631,9 +739,112 @@ impl SearchJourneyService {
                 state_token: issued.state_token,
             },
             buyer_brief: brief,
+            latest_utterance,
             intent,
             results: project_current_results(&self.snapshot, execution, &plan),
         })
+    }
+
+    async fn selected_property_consequence(
+        &self,
+        selected_property_id: Option<&str>,
+        active: &SearchJourneyActive,
+        cause: SelectedPropertyCause,
+        diagnostic_plan: &CompiledSearchPlan,
+    ) -> Result<Option<SelectedPropertyConsequence>, SearchJourneyHttpError> {
+        let Some(property_id) = selected_property_id else {
+            return Ok(None);
+        };
+        let retained = active
+            .results
+            .ordered_result_ids()
+            .iter()
+            .any(|candidate| candidate == property_id);
+        let mut branch_ids = Vec::new();
+        let mut proof_references = Vec::new();
+        if let SearchJourneyResults::Current { result_sets, .. } = &active.results {
+            for result_set in result_sets {
+                for result in &result_set.results {
+                    if result.card.id != property_id {
+                        continue;
+                    }
+                    if !branch_ids.contains(&result_set.branch_id) {
+                        branch_ids.push(result_set.branch_id.clone());
+                    }
+                    for reason in &result.reasons {
+                        if !proof_references.iter().any(
+                            |existing: &crate::search::journey::SearchMatchReason| {
+                                existing.proof_token == reason.proof_token
+                            },
+                        ) {
+                            proof_references.push(reason.clone());
+                        }
+                    }
+                }
+            }
+        }
+        let mut failed_predicate_ids = Vec::new();
+        if !retained {
+            let snapshot = self.snapshot.clone();
+            let plan = diagnostic_plan.clone();
+            let property_id = property_id.to_string();
+            let diagnostic = self
+                .state
+                .execution
+                .run_customer_compute(move || {
+                    crate::search::SearchEngine::new(&snapshot)
+                        .diagnose_property_against_plan(&plan, &property_id)
+                })
+                .await
+                .map_err(|_| self.unavailable())?;
+            if diagnostic.matching_branch_ids.is_empty() {
+                branch_ids = diagnostic
+                    .failed_branches
+                    .iter()
+                    .map(|branch| branch.branch_id.clone())
+                    .collect();
+                failed_predicate_ids = diagnostic
+                    .failed_branches
+                    .into_iter()
+                    .flat_map(|branch| branch.failed_predicate_ids)
+                    .collect();
+            } else {
+                branch_ids = diagnostic.matching_branch_ids;
+            }
+            failed_predicate_ids.sort();
+            failed_predicate_ids.dedup();
+        }
+        let messages = &crate::dag_config::intent_presentation_config().journey_messages;
+        let mut explanation = if retained {
+            messages.selected_retained.clone()
+        } else {
+            match cause {
+                SelectedPropertyCause::CatalogRefresh => messages.selected_excluded_catalog.clone(),
+                SelectedPropertyCause::IntentRefinement => {
+                    messages.selected_excluded_intent.clone()
+                }
+            }
+        };
+        let failed_descriptions =
+            describe_predicates(&present_intent(diagnostic_plan), &failed_predicate_ids);
+        if !failed_descriptions.is_empty() {
+            explanation.push(' ');
+            explanation.push_str(&messages.failed_conditions_prefix);
+            explanation.push_str(&failed_descriptions.join(", "));
+        }
+        Ok(Some(SelectedPropertyConsequence {
+            property_id: property_id.to_string(),
+            outcome: if retained {
+                SelectedPropertyOutcome::Retained
+            } else {
+                SelectedPropertyOutcome::Excluded
+            },
+            cause,
+            branch_ids,
+            failed_predicate_ids,
+            explanation,
+            proof_references,
+        }))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -674,15 +885,50 @@ impl SearchJourneyService {
     fn retained_envelope(
         &self,
         parent: &SignedSearchContext,
-        state_token: String,
         result_ids: Vec<String>,
         kind: SearchJourneyAttemptKind,
         operation: SearchRevisionOperation,
         catalog_rebased: bool,
         code: &str,
-    ) -> SearchJourneyEnvelope {
+        latest_utterance: String,
+        selected_property_id: Option<&str>,
+    ) -> Result<SearchJourneyEnvelope, SearchJourneyHttpError> {
         let intent = portable_intent_presentation(parent);
-        SearchJourneyEnvelope {
+        let issued =
+            reissue_signed_search_context(parent, latest_utterance.clone()).map_err(|_| {
+                self.error(
+                    StatusCode::CONFLICT,
+                    "journey_limit_reached",
+                    "This search cannot fit in a portable journey token.",
+                )
+            })?;
+        let selected_property_consequence = selected_property_id.map(|property_id| {
+            let retained = result_ids.iter().any(|candidate| candidate == property_id);
+            SelectedPropertyConsequence {
+                property_id: property_id.to_string(),
+                outcome: if retained {
+                    SelectedPropertyOutcome::Retained
+                } else {
+                    SelectedPropertyOutcome::Excluded
+                },
+                cause: SelectedPropertyCause::CatalogRefresh,
+                branch_ids: Vec::new(),
+                failed_predicate_ids: Vec::new(),
+                explanation: if retained {
+                    crate::dag_config::intent_presentation_config()
+                        .journey_messages
+                        .selected_retained
+                        .clone()
+                } else {
+                    crate::dag_config::intent_presentation_config()
+                        .journey_messages
+                        .selected_excluded_catalog
+                        .clone()
+                },
+                proof_references: Vec::new(),
+            }
+        });
+        Ok(SearchJourneyEnvelope {
             contract_version: SEARCH_JOURNEY_CONTRACT_VERSION,
             runtime_version: self.runtime_version.clone(),
             active: SearchJourneyActive {
@@ -693,9 +939,10 @@ impl SearchJourneyService {
                     depth: parent.depth,
                     semantic_fingerprint: parent.semantic_fingerprint.clone(),
                     result_fingerprint: parent.result_fingerprint.clone(),
-                    state_token,
+                    state_token: issued.state_token,
                 },
                 buyer_brief: parent.buyer_brief.clone(),
+                latest_utterance,
                 intent,
                 results: SearchJourneyResults::Retained {
                     ordered_result_ids: result_ids,
@@ -715,9 +962,9 @@ impl SearchJourneyService {
                     message: "The current catalog cannot rebind every required condition."
                         .to_string(),
                 }),
-                selected_property_consequence: None,
+                selected_property_consequence,
             },
-        }
+        })
     }
 
     fn decode_parent(&self, token: &str) -> Result<SignedSearchContext, SearchJourneyHttpError> {
@@ -803,6 +1050,23 @@ impl SearchJourneyService {
                 runtime_version: Box::new(self.runtime_version.clone()),
             },
         }
+    }
+}
+
+fn selected_cause_for_active(
+    selected_property_id: Option<&str>,
+    active: &SearchJourneyActive,
+) -> SelectedPropertyCause {
+    if selected_property_id.is_some_and(|selected| {
+        !active
+            .results
+            .ordered_result_ids()
+            .iter()
+            .any(|candidate| candidate == selected)
+    }) {
+        SelectedPropertyCause::CatalogRefresh
+    } else {
+        SelectedPropertyCause::IntentRefinement
     }
 }
 

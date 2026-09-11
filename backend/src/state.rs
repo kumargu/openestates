@@ -835,6 +835,7 @@ mod tests {
                     state_token: "token".to_string(),
                 },
                 buyer_brief,
+                latest_utterance: "3bhk in Hoodi".to_string(),
                 intent: crate::search::journey::present_intent(&plan),
                 results: crate::search::journey::SearchJourneyResults::Retained {
                     ordered_result_ids: vec!["home:test".to_string()],

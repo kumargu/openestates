@@ -26,6 +26,11 @@ semantic_max_bytes = 67108864
 [search_journey]
 revision_token_max_bytes = 65536
 proof_token_max_bytes = 4096
+# Signing secrets stay environment-owned. Set the current key id with
+# OPENESTATES_SEARCH_SIGNING_CURRENT_KID and the current/previous key map with
+# OPENESTATES_SEARCH_SIGNING_KEYS.
+max_signing_keys = 3
+max_signing_key_id_bytes = 64
 max_client_mutation_id_bytes = 256
 max_result_id_bytes = 512
 max_target_id_bytes = 512

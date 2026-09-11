@@ -22,6 +22,17 @@ pub struct IntentPresentationConfig {
     pub dimension_labels: HashMap<String, String>,
     pub budget_unit: String,
     pub brief: IntentBriefConfig,
+    pub journey_messages: SearchJourneyMessageConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SearchJourneyMessageConfig {
+    pub catalog_movement: String,
+    pub intent_movement: String,
+    pub selected_retained: String,
+    pub selected_excluded_catalog: String,
+    pub selected_excluded_intent: String,
+    pub failed_conditions_prefix: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -296,6 +307,35 @@ fn validate_intent_presentation(config: &IntentPresentationConfig) -> Result<(),
         if value.is_empty() {
             return Err(format!(
                 "intent_presentation.brief.{name} must not be empty"
+            ));
+        }
+    }
+    for (name, value) in [
+        (
+            "catalog_movement",
+            &config.journey_messages.catalog_movement,
+        ),
+        ("intent_movement", &config.journey_messages.intent_movement),
+        (
+            "selected_retained",
+            &config.journey_messages.selected_retained,
+        ),
+        (
+            "selected_excluded_catalog",
+            &config.journey_messages.selected_excluded_catalog,
+        ),
+        (
+            "selected_excluded_intent",
+            &config.journey_messages.selected_excluded_intent,
+        ),
+        (
+            "failed_conditions_prefix",
+            &config.journey_messages.failed_conditions_prefix,
+        ),
+    ] {
+        if value.is_empty() {
+            return Err(format!(
+                "intent_presentation.journey_messages.{name} must not be empty"
             ));
         }
     }

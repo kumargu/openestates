@@ -34,6 +34,9 @@ pub struct SurfaceSceneResponse {
     pub viewport: SceneViewport,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proof_focus: Option<ResolvedProofFocus>,
+    pub proof_focus_status: ProofFocusStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proof_focus_message: Option<String>,
     pub layers: Vec<SceneLayer>,
     pub features: Vec<SceneFeature>,
     pub relations: Vec<SceneRelation>,
@@ -41,6 +44,17 @@ pub struct SurfaceSceneResponse {
     pub receipts: Vec<SceneReceipt>,
     pub fill_rate: SceneFillRate,
     pub gaps: Vec<SceneGap>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProofFocusStatus {
+    NotRequested,
+    Applied,
+    Stale,
+    Retired,
+    Mismatch,
+    Unavailable,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -482,6 +496,8 @@ pub fn build_surface_scene_with_focus(
         experience: scene_config.experience.clone(),
         viewport,
         proof_focus: applied_focus,
+        proof_focus_status: ProofFocusStatus::NotRequested,
+        proof_focus_message: None,
         layers,
         features,
         relations,

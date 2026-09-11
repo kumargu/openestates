@@ -39,9 +39,10 @@ pub use index::SearchIndex;
 pub use intent::{SearchIntent, SourceSpan};
 pub use revision::{
     apply_typed_revision, compile_typed_revision, decode_signed_search_context,
-    issue_signed_search_context, result_membership_fingerprint, IssuedSearchContext,
-    SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome, SignedSearchContext,
-    TypedIntentAst, TypedIntentAstBranch, TypedSearchRevision, TypedSearchRevisionPatch,
+    issue_signed_search_context, reissue_signed_search_context, result_membership_fingerprint,
+    IssuedSearchContext, SearchRevisionLimits, SearchRevisionOperation, SearchRevisionOutcome,
+    SignedSearchContext, TypedIntentAst, TypedIntentAstBranch, TypedSearchRevision,
+    TypedSearchRevisionPatch,
 };
 pub use text::{CandidateEvaluationRequest, CandidateEvaluator, SearchEvaluationContext};
 

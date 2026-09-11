@@ -45,6 +45,18 @@ pub struct SearchEngineOutput {
     pub evidence_gaps: Vec<SearchEvidenceGap>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct PropertyIntentDiagnostic {
+    pub matching_branch_ids: Vec<String>,
+    pub failed_branches: Vec<PropertyBranchDiagnostic>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PropertyBranchDiagnostic {
+    pub branch_id: String,
+    pub failed_predicate_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchDiagnostics {
@@ -346,6 +358,154 @@ impl<'a> SearchEngine<'a> {
         }
         plan.shift_source_spans(offset);
         plan
+    }
+
+    pub(crate) fn diagnose_property_against_plan(
+        &self,
+        plan: &CompiledSearchPlan,
+        property_id: &str,
+    ) -> PropertyIntentDiagnostic {
+        let Some(property) = self
+            .snapshot
+            .property_by_id
+            .get(property_id)
+            .and_then(|index| self.snapshot.properties.get(*index))
+        else {
+            return PropertyIntentDiagnostic {
+                matching_branch_ids: Vec::new(),
+                failed_branches: plan
+                    .branches
+                    .iter()
+                    .map(|branch| PropertyBranchDiagnostic {
+                        branch_id: branch.branch_id.clone(),
+                        failed_predicate_ids: Vec::new(),
+                    })
+                    .collect(),
+            };
+        };
+        let snapshot_identity = self.snapshot.version_key.serving_bundle_version.as_str();
+        let society_entity_id = self
+            .snapshot
+            .search_index
+            .society_entity_id_for_property(property_id)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("society:{}", property.society_id));
+        let mut matching_branch_ids = Vec::new();
+        let mut failed_branches = Vec::new();
+        for branch in &plan.branches {
+            let geo_query = self
+                .snapshot
+                .bundle
+                .entity_index
+                .bind_compiled_spatial_predicates(&branch.spatial_predicates);
+            let spatial_matches = geo_query
+                .as_ref()
+                .map(|query| {
+                    query.verified_matches_for_property(
+                        property,
+                        &self.snapshot.search_index,
+                        &self.snapshot.bundle.spatial_index,
+                        &self.snapshot.bundle.fact_index,
+                        snapshot_identity,
+                    )
+                })
+                .unwrap_or_default();
+            let spatial_by_property = if spatial_matches.is_empty() {
+                HashMap::new()
+            } else {
+                HashMap::from([(property_id.to_string(), spatial_matches)])
+            };
+            let evaluation = SearchEvaluationContext {
+                options: &self.snapshot.inventory_options,
+                spatial_matches: &spatial_by_property,
+                snapshot_identity,
+            };
+            let constraints = super::text::property_constraint_evaluation(
+                property,
+                &branch.eligibility_predicates,
+                Some(&self.snapshot.search_index),
+                Some(&self.snapshot.bundle.fact_index),
+                &society_entity_id,
+                evaluation,
+            );
+            let geography_matches = branch.geo_scope.is_bundle_wide()
+                || geography_match_for_property(
+                    &branch.geo_scope,
+                    &society_entity_id,
+                    &self.snapshot.bundle.graph_index,
+                    &self.snapshot.bundle.spatial_index,
+                    snapshot_identity,
+                )
+                .is_some();
+            let mut failed_predicate_ids = branch
+                .predicate_bindings
+                .iter()
+                .filter_map(|binding| {
+                    let term = branch.predicates.term_at_path(&binding.path)?;
+                    if matches!(
+                        term,
+                        ConstraintTerm::Spatial {
+                            required: false,
+                            ..
+                        }
+                    ) {
+                        return None;
+                    }
+                    let mut term_evaluation = super::text::constraint_term_evaluation_for_society(
+                        property,
+                        term,
+                        Some(&self.snapshot.search_index),
+                        Some(&self.snapshot.bundle.fact_index),
+                        &society_entity_id,
+                        evaluation,
+                    );
+                    if binding.polarity == super::ast::PredicatePolarity::Negated {
+                        term_evaluation = term_evaluation.negated();
+                    }
+                    (!term_evaluation.is_satisfied()).then(|| binding.predicate_id.clone())
+                })
+                .collect::<Vec<_>>();
+            let mut failed_required_preferences = Vec::new();
+            for preference in branch
+                .ranking_intent
+                .positive_preferences
+                .iter()
+                .chain(branch.ranking_intent.negative_preferences.iter())
+                .filter(|preference| preference.required)
+            {
+                if !super::text::required_preference_has_evidence(
+                    property,
+                    preference,
+                    Some(&self.snapshot.search_index),
+                    Some(&self.snapshot.bundle.fact_index),
+                    &society_entity_id,
+                    &branch.scoring_query.to_lowercase(),
+                ) {
+                    failed_required_preferences.push(super::revision::ranking_preference_id(
+                        &branch.branch_id,
+                        preference,
+                    ));
+                }
+            }
+            let branch_matches = constraints.is_satisfied()
+                && geography_matches
+                && failed_required_preferences.is_empty();
+            failed_predicate_ids.extend(failed_required_preferences);
+            failed_predicate_ids.sort();
+            failed_predicate_ids.dedup();
+            if branch_matches {
+                matching_branch_ids.push(branch.branch_id.clone());
+            } else {
+                failed_branches.push(PropertyBranchDiagnostic {
+                    branch_id: branch.branch_id.clone(),
+                    failed_predicate_ids,
+                });
+            }
+        }
+        PropertyIntentDiagnostic {
+            matching_branch_ids,
+            failed_branches,
+        }
     }
 
     /// Execute an already compiled, snapshot-pinned plan. No source query is

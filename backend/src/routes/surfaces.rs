@@ -13,7 +13,7 @@ use crate::search::proof::{
 };
 use crate::security::security_tuning;
 use crate::state::AppState;
-use crate::surfaces::{build_surface_scene_with_focus, SurfaceSceneResponse};
+use crate::surfaces::{build_surface_scene_with_focus, ProofFocusStatus, SurfaceSceneResponse};
 
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
@@ -75,7 +75,7 @@ pub async fn get_property_surface(
         runtime,
         &property_id,
         std::slice::from_ref(&surface_id),
-        focus.as_ref(),
+        &focus,
     )
     .await
     .map_err(route_error)?;
@@ -100,7 +100,7 @@ pub async fn list_property_surfaces(
     let runtime = state.search_runtime.load_full();
     let focus = resolve_surface_focus(&runtime, &property_id, query.proof_token.as_deref())
         .map_err(route_error)?;
-    build_property_surfaces_response(&state, runtime, &property_id, &surface_ids, focus.as_ref())
+    build_property_surfaces_response(&state, runtime, &property_id, &surface_ids, &focus)
         .await
         .map(Json)
         .map_err(route_error)
@@ -130,7 +130,7 @@ pub async fn get_property_surfaces_batch(
                 runtime.clone(),
                 &property_id,
                 &surface_ids,
-                None,
+                &SurfaceFocusOutcome::default(),
             )
             .await
             .map_err(route_error)?,
@@ -147,7 +147,7 @@ async fn build_property_surfaces_response(
     runtime: Arc<crate::state::SearchRuntimeSnapshot>,
     property_id: &str,
     surface_ids: &[String],
-    proof_focus: Option<&ResolvedProofFocus>,
+    proof_focus: &SurfaceFocusOutcome,
 ) -> Result<PropertySurfacesResponse, SurfaceRouteError> {
     if property_id.trim().is_empty()
         || property_id.len() > security_tuning().surface_requests.max_property_id_bytes
@@ -193,7 +193,10 @@ async fn build_property_surfaces_response(
             });
             continue;
         }
-        let surface_focus = proof_focus.filter(|focus| focus.surface_id == surface.id);
+        let surface_focus = proof_focus
+            .focus
+            .as_ref()
+            .filter(|focus| focus.surface_id == surface.id);
         match build_surface_scene_with_focus(
             &property,
             society_name,
@@ -202,7 +205,19 @@ async fn build_property_surfaces_response(
             surface,
             surface_focus,
         ) {
-            Some(scene) => scenes.push(scene),
+            Some(mut scene) => {
+                if proof_focus.status != ProofFocusStatus::Applied {
+                    scene.proof_focus_status = proof_focus.status;
+                    scene.proof_focus_message.clone_from(&proof_focus.message);
+                } else if surface_focus.is_some() && scene.proof_focus.is_some() {
+                    scene.proof_focus_status = ProofFocusStatus::Applied;
+                } else if surface_focus.is_some() || proof_focus.focus.is_none() {
+                    scene.proof_focus_status = ProofFocusStatus::Unavailable;
+                    scene.proof_focus_message =
+                        Some(config.proof_focus_messages.unavailable.clone());
+                }
+                scenes.push(scene);
+            }
             None => missing.push(SurfaceSceneMissing {
                 surface_id: surface_id.clone(),
                 reason: "surface_scene_empty".to_string(),
@@ -233,25 +248,63 @@ fn resolve_surface_focus(
     runtime: &crate::state::SearchRuntimeSnapshot,
     property_id: &str,
     proof_token: Option<&str>,
-) -> Result<Option<ResolvedProofFocus>, SurfaceRouteError> {
+) -> Result<SurfaceFocusOutcome, SurfaceRouteError> {
     let Some(proof_token) = proof_token.filter(|value| !value.trim().is_empty()) else {
-        return Ok(None);
+        return Ok(SurfaceFocusOutcome::default());
     };
-    let resolution = resolve_proof_token(runtime, proof_token, Some(property_id))
-        .map_err(surface_proof_error)?;
-    Ok(resolved_proof_focus(&resolution))
+    match resolve_proof_token(runtime, proof_token, Some(property_id)) {
+        Ok(resolution) => Ok(SurfaceFocusOutcome {
+            focus: resolved_proof_focus(&resolution),
+            status: ProofFocusStatus::Applied,
+            message: None,
+        }),
+        Err(ProofResolutionError::InvalidToken) => Err(SurfaceRouteError::bad_request(
+            ProofResolutionError::InvalidToken.code(),
+        )),
+        Err(error) => {
+            let messages = &ui_surfaces_config()
+                .map_err(|err| {
+                    SurfaceRouteError::internal(format!("surface_config_invalid: {err}"))
+                })?
+                .proof_focus_messages;
+            let (status, message) = match error {
+                ProofResolutionError::StaleSnapshot => {
+                    (ProofFocusStatus::Stale, messages.stale.clone())
+                }
+                ProofResolutionError::MissingEvidence => {
+                    (ProofFocusStatus::Retired, messages.retired.clone())
+                }
+                ProofResolutionError::WrongProperty
+                | ProofResolutionError::WrongSubject
+                | ProofResolutionError::DestinationMismatch => {
+                    (ProofFocusStatus::Mismatch, messages.mismatch.clone())
+                }
+                ProofResolutionError::InvalidToken => unreachable!(),
+            };
+            Ok(SurfaceFocusOutcome {
+                focus: None,
+                status,
+                message: Some(message),
+            })
+        }
+    }
 }
 
-fn surface_proof_error(error: ProofResolutionError) -> SurfaceRouteError {
-    let status = match error {
-        ProofResolutionError::InvalidToken => StatusCode::BAD_REQUEST,
-        ProofResolutionError::MissingEvidence => StatusCode::NOT_FOUND,
-        ProofResolutionError::StaleSnapshot
-        | ProofResolutionError::WrongProperty
-        | ProofResolutionError::WrongSubject
-        | ProofResolutionError::DestinationMismatch => StatusCode::CONFLICT,
-    };
-    SurfaceRouteError::status(status, error.code())
+#[derive(Debug)]
+struct SurfaceFocusOutcome {
+    focus: Option<ResolvedProofFocus>,
+    status: ProofFocusStatus,
+    message: Option<String>,
+}
+
+impl Default for SurfaceFocusOutcome {
+    fn default() -> Self {
+        Self {
+            focus: None,
+            status: ProofFocusStatus::NotRequested,
+            message: None,
+        }
+    }
 }
 
 fn validate_surface_ids(surface_ids: Vec<String>) -> Result<Vec<String>, SurfaceRouteError> {

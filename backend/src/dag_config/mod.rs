@@ -98,8 +98,8 @@ pub use search_intent::{
     load_search_intent_from_path, search_intent_path, search_parser_config,
     search_resolution_config, AreaAliasEntry, BhkParserConfig, IntentBriefConfig,
     IntentPresentationConfig, NumberWord, RelationAliasConfig, RelationParserConfig,
-    SearchIntentFile, SearchParserConfig, SearchPlaceFamilyAlias, SearchResolutionConfig,
-    UnitAliasConfig, UnitValueParserConfig,
+    SearchIntentFile, SearchJourneyMessageConfig, SearchParserConfig, SearchPlaceFamilyAlias,
+    SearchResolutionConfig, UnitAliasConfig, UnitValueParserConfig,
 };
 pub use serving_eligibility::{
     load_serving_eligibility, load_serving_eligibility_from_path, serving_eligibility_path,

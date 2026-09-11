@@ -11,9 +11,19 @@ pub struct UiSurfacesFile {
     pub version: u32,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(rename = "proofFocusMessages")]
+    pub proof_focus_messages: UiProofFocusMessages,
     pub surfaces: Vec<UiSurfaceConfig>,
     #[serde(default)]
     pub surface_count: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiProofFocusMessages {
+    pub stale: String,
+    pub retired: String,
+    pub mismatch: String,
+    pub unavailable: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -233,6 +243,19 @@ pub fn ui_surfaces_config() -> Result<&'static UiSurfacesFile, DagConfigError> {
 }
 
 fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
+    if [
+        &config.proof_focus_messages.stale,
+        &config.proof_focus_messages.retired,
+        &config.proof_focus_messages.mismatch,
+        &config.proof_focus_messages.unavailable,
+    ]
+    .into_iter()
+    .any(|message| message.trim().is_empty())
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "ui_surfaces proofFocusMessages must not be empty".to_string(),
+        ));
+    }
     if let Some(surface_count) = config.surface_count {
         if surface_count != config.surfaces.len() {
             return Err(DagConfigError::InvalidConfig(format!(

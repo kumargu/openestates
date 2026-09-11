@@ -1643,47 +1643,57 @@ fn required_preferences_have_evidence(
     society_entity_id: &str,
     query_lower: &str,
 ) -> bool {
+    intent
+        .positive_preferences
+        .iter()
+        .chain(intent.negative_preferences.iter())
+        .filter(|preference| preference.required)
+        .all(|preference| {
+            required_preference_has_evidence(
+                property,
+                preference,
+                search_index,
+                serving_facts,
+                society_entity_id,
+                query_lower,
+            )
+        })
+}
+
+pub(super) fn required_preference_has_evidence(
+    property: &Property,
+    preference: &crate::search::intent::PreferenceSignal,
+    search_index: Option<&SearchIndex>,
+    serving_facts: Option<&ServingFactIndex>,
+    society_entity_id: &str,
+    query_lower: &str,
+) -> bool {
     let Some(serving_facts) = serving_facts else {
-        return !intent
-            .positive_preferences
-            .iter()
-            .any(|preference| preference.required);
+        return preference.polarity == crate::search::intent::Polarity::Negative;
     };
     let builder_entity_id =
         search_index.and_then(|index| index.builder_entity_id_for_property(&property.id));
     let area_entity_id =
         search_index.and_then(|index| index.area_entity_id_for_property(&property.id));
-
-    let required_positive_preferences_match = intent
-        .positive_preferences
-        .iter()
-        .filter(|preference| preference.required)
-        .all(|preference| {
-            serving_preference_evidence(
-                serving_facts,
-                society_entity_id,
-                builder_entity_id,
-                area_entity_id,
-                &preference.raw_text,
-                &preference.expanded_keys,
-                query_lower,
-            )
-            .is_some()
-        });
-    required_positive_preferences_match
-        && intent
-            .negative_preferences
-            .iter()
-            .filter(|preference| preference.required)
-            .all(|preference| {
-                required_negative_preference_is_satisfied(
-                    serving_facts,
-                    society_entity_id,
-                    builder_entity_id,
-                    area_entity_id,
-                    preference,
-                )
-            })
+    match preference.polarity {
+        crate::search::intent::Polarity::Positive => serving_preference_evidence(
+            serving_facts,
+            society_entity_id,
+            builder_entity_id,
+            area_entity_id,
+            &preference.raw_text,
+            &preference.expanded_keys,
+            query_lower,
+        )
+        .is_some(),
+        crate::search::intent::Polarity::Negative => required_negative_preference_is_satisfied(
+            serving_facts,
+            society_entity_id,
+            builder_entity_id,
+            area_entity_id,
+            preference,
+        ),
+    }
 }
 
 fn required_negative_preference_is_satisfied(
@@ -2921,7 +2931,7 @@ fn canonical_society_entity_id<'a>(
         .unwrap_or_else(|| Cow::Owned(society_node_id(&property.society_id)))
 }
 
-fn property_constraint_evaluation(
+pub(super) fn property_constraint_evaluation(
     property: &Property,
     constraints: &super::ast::ConstraintExpr,
     search_index: Option<&SearchIndex>,
@@ -2941,7 +2951,7 @@ fn property_constraint_evaluation(
     })
 }
 
-fn constraint_term_evaluation_for_society(
+pub(super) fn constraint_term_evaluation_for_society(
     property: &Property,
     term: &ConstraintTerm,
     search_index: Option<&SearchIndex>,

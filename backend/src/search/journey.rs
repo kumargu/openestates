@@ -33,6 +33,7 @@ pub struct SearchJourneyEnvelope {
 pub struct SearchJourneyActive {
     pub revision: SearchJourneyRevision,
     pub buyer_brief: String,
+    pub latest_utterance: String,
     pub intent: IntentPresentation,
     pub results: SearchJourneyResults,
 }
@@ -164,11 +165,33 @@ pub struct JourneyClarification {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectedPropertyConsequence {
+    pub property_id: String,
+    pub outcome: SelectedPropertyOutcome,
+    pub cause: SelectedPropertyCause,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub branch_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failed_predicate_ids: Vec<String>,
+    pub explanation: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub proof_references: Vec<SearchMatchReason>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub enum SelectedPropertyConsequence {
+pub enum SelectedPropertyOutcome {
     Retained,
     Excluded,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SelectedPropertyCause {
+    CatalogRefresh,
+    IntentRefinement,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -177,7 +200,24 @@ pub struct ResultDelta {
     pub added: Vec<String>,
     pub removed: Vec<String>,
     pub retained: Vec<String>,
-    pub reordered: Vec<String>,
+    pub moved: Vec<ResultMovement>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResultMovement {
+    pub property_id: String,
+    pub from: usize,
+    pub to: usize,
+    pub cause: ResultMovementCause,
+    pub explanation: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ResultMovementCause {
+    CatalogRefresh,
+    IntentRefinement,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -363,7 +403,11 @@ pub fn project_current_results(
     }
 }
 
-pub fn result_delta(parent: &[String], candidate: &[String]) -> ResultDelta {
+pub fn result_delta(
+    parent: &[String],
+    candidate: &[String],
+    cause: ResultMovementCause,
+) -> ResultDelta {
     let parent_positions = parent
         .iter()
         .enumerate()
@@ -374,6 +418,34 @@ pub fn result_delta(parent: &[String], candidate: &[String]) -> ResultDelta {
         .enumerate()
         .map(|(index, id)| (id.as_str(), index))
         .collect::<HashMap<_, _>>();
+    let retained_ids = parent
+        .iter()
+        .filter(|id| candidate_positions.contains_key(id.as_str()))
+        .collect::<HashSet<_>>();
+    let parent_retained_positions = parent
+        .iter()
+        .filter(|id| retained_ids.contains(id))
+        .enumerate()
+        .map(|(index, id)| (id.as_str(), index))
+        .collect::<HashMap<_, _>>();
+    let candidate_retained_positions = candidate
+        .iter()
+        .filter(|id| retained_ids.contains(id))
+        .enumerate()
+        .map(|(index, id)| (id.as_str(), index))
+        .collect::<HashMap<_, _>>();
+    let movement_explanation = match cause {
+        ResultMovementCause::CatalogRefresh => {
+            &crate::dag_config::intent_presentation_config()
+                .journey_messages
+                .catalog_movement
+        }
+        ResultMovementCause::IntentRefinement => {
+            &crate::dag_config::intent_presentation_config()
+                .journey_messages
+                .intent_movement
+        }
+    };
     ResultDelta {
         added: candidate
             .iter()
@@ -390,16 +462,65 @@ pub fn result_delta(parent: &[String], candidate: &[String]) -> ResultDelta {
             .filter(|id| parent_positions.contains_key(id.as_str()))
             .cloned()
             .collect(),
-        reordered: candidate
+        moved: candidate
             .iter()
-            .enumerate()
-            .filter(|(index, id)| {
-                parent_positions
+            .filter(|id| {
+                parent_retained_positions
                     .get(id.as_str())
-                    .is_some_and(|old| old != index)
+                    .zip(candidate_retained_positions.get(id.as_str()))
+                    .is_some_and(|(old, new)| old != new)
             })
-            .map(|(_, id)| id.clone())
+            .map(|id| ResultMovement {
+                property_id: id.clone(),
+                from: parent_positions[id.as_str()] + 1,
+                to: candidate_positions[id.as_str()] + 1,
+                cause,
+                explanation: movement_explanation.clone(),
+            })
             .collect(),
+    }
+}
+
+pub fn describe_predicates(
+    presentation: &IntentPresentation,
+    predicate_ids: &[String],
+) -> Vec<String> {
+    let wanted = predicate_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+    let mut descriptions = Vec::new();
+    for branch in &presentation.branches {
+        collect_predicate_descriptions(&branch.constraints, &wanted, &mut descriptions);
+        descriptions.extend(
+            branch
+                .preferences
+                .iter()
+                .filter(|preference| wanted.contains(preference.id.as_str()))
+                .map(|preference| preference.label.clone()),
+        );
+    }
+    descriptions
+}
+
+fn collect_predicate_descriptions(
+    expression: &IntentExpression,
+    wanted: &HashSet<&str>,
+    descriptions: &mut Vec<String>,
+) {
+    match expression {
+        IntentExpression::All { clauses } | IntentExpression::Any { clauses } => {
+            for clause in clauses {
+                collect_predicate_descriptions(clause, wanted, descriptions);
+            }
+        }
+        IntentExpression::Not { clause } => {
+            collect_predicate_descriptions(clause, wanted, descriptions);
+        }
+        IntentExpression::Predicate { predicate } if wanted.contains(predicate.id.as_str()) => {
+            descriptions.push(predicate_brief(predicate));
+        }
+        IntentExpression::Predicate { .. } => {}
     }
 }
 
@@ -968,5 +1089,28 @@ mod tests {
         assert_eq!(first, second);
         assert!(first.contains("\"kind\":\"any\"") || first.contains("\"kind\":\"all\""));
         assert!(first.contains("predicateId") || first.contains("\"id\":\"predicate:"));
+    }
+
+    #[test]
+    fn result_movement_ignores_index_shifts_from_additions_and_removals() {
+        let parent = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let shifted = vec!["new".to_string(), "b".to_string(), "c".to_string()];
+        assert!(
+            result_delta(&parent, &shifted, ResultMovementCause::CatalogRefresh)
+                .moved
+                .is_empty()
+        );
+
+        let reranked = vec!["c".to_string(), "b".to_string()];
+        let delta = result_delta(&parent, &reranked, ResultMovementCause::IntentRefinement);
+        assert_eq!(
+            delta
+                .moved
+                .iter()
+                .map(|movement| movement.property_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["c", "b"]
+        );
+        assert_eq!((delta.moved[0].from, delta.moved[0].to), (3, 1));
     }
 }

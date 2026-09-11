@@ -38,6 +38,14 @@ async fn one_envelope_contract_covers_start_revision_and_resume() {
     let parent = get_search(&app, "3BHK in Hoodi under 2.4 Cr", 21).await;
     assert_eq!(parent.0, StatusCode::OK, "response={}", parent.1);
     assert_journey_envelope(&parent.1, "initial", "activated");
+    assert_eq!(
+        parent.1["active"]["latestUtterance"],
+        "3BHK in Hoodi under 2.4 Cr"
+    );
+    assert!(parent.1["active"]["revision"]["stateToken"]
+        .as_str()
+        .unwrap()
+        .starts_with("v2."));
     let _ = events.recv().await.expect("initial search event");
 
     let revised = post_revision(
@@ -48,6 +56,10 @@ async fn one_envelope_contract_covers_start_revision_and_resume() {
     .await;
     assert_eq!(revised.0, StatusCode::OK, "response={}", revised.1);
     assert_journey_envelope(&revised.1, "revision", "activated");
+    assert_eq!(
+        revised.1["active"]["latestUtterance"],
+        "Make it under 2.5Cr"
+    );
     let expected_brief = revised.1["active"]["buyerBrief"].as_str().unwrap();
     let mut observed_candidate_event = false;
     for _ in 0..2 {
@@ -56,10 +68,35 @@ async fn one_envelope_contract_covers_start_revision_and_resume() {
     }
     assert!(observed_candidate_event);
 
-    let resumed = post_resume(&app, resume_request(&revised.1), 23).await;
+    let chained = post_revision(
+        &app,
+        revision_request(
+            &revised.1,
+            "Actually, keep it under 2.35Cr",
+            "chained-budget-refine",
+        ),
+        23,
+    )
+    .await;
+    assert_eq!(chained.0, StatusCode::OK, "response={}", chained.1);
+    assert_journey_envelope(&chained.1, "revision", "activated");
+    assert_eq!(
+        chained.1["active"]["latestUtterance"],
+        "Actually, keep it under 2.35Cr"
+    );
+    assert_ne!(
+        chained.1["active"]["buyerBrief"],
+        revised.1["active"]["buyerBrief"]
+    );
+
+    let resumed = post_resume(&app, resume_request(&chained.1), 24).await;
     assert_eq!(resumed.0, StatusCode::OK, "response={}", resumed.1);
     assert_journey_envelope(&resumed.1, "resume", "resumed");
-    assert_eq!(result_ids(&resumed.1), result_ids(&revised.1));
+    assert_eq!(result_ids(&resumed.1), result_ids(&chained.1));
+    assert_eq!(
+        resumed.1["active"]["latestUtterance"],
+        chained.1["active"]["latestUtterance"]
+    );
 }
 
 #[tokio::test]
@@ -136,8 +173,41 @@ async fn semantic_failures_preserve_the_refreshed_parent() {
     let zero = post_revision(&app, zero_request, 42).await;
     assert_eq!(zero.1["attempt"]["outcome"], "preservedParent");
     assert_eq!(zero.1["attempt"]["clarification"]["code"], "zeroResults");
-    assert_eq!(zero.1["attempt"]["selectedPropertyConsequence"], "excluded");
+    assert_eq!(
+        zero.1["attempt"]["selectedPropertyConsequence"]["outcome"],
+        "retained"
+    );
+    assert_eq!(
+        zero.1["attempt"]["selectedPropertyConsequence"]["cause"],
+        "intentRefinement"
+    );
+    assert_eq!(zero.1["active"]["latestUtterance"], "Only 4BHK");
+    assert_eq!(
+        decode_signed_search_context(zero.1["active"]["revision"]["stateToken"].as_str().unwrap())
+            .unwrap()
+            .latest_utterance,
+        "Only 4BHK"
+    );
     assert_eq!(result_ids(&zero.1), result_ids(&parent.1));
+
+    let second = result_ids(&parent.1)[1].clone();
+    let mut exclusion_request =
+        revision_request(&parent.1, "Make it under 2.35Cr", "selected-excluded");
+    exclusion_request["selectedPropertyId"] = json!(second);
+    let excluded = post_revision(&app, exclusion_request, 142).await;
+    assert_eq!(excluded.1["attempt"]["outcome"], "activated");
+    let consequence = &excluded.1["attempt"]["selectedPropertyConsequence"];
+    assert_eq!(consequence["outcome"], "excluded");
+    assert_eq!(consequence["cause"], "intentRefinement");
+    assert!(!consequence["branchIds"].as_array().unwrap().is_empty());
+    assert!(!consequence["failedPredicateIds"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert!(consequence["explanation"]
+        .as_str()
+        .unwrap()
+        .contains("Conditions not met"));
 
     let unsupported = post_revision(
         &app,
@@ -247,10 +317,41 @@ async fn catalog_and_intent_deltas_are_computed_from_distinct_baselines() {
         .as_array()
         .unwrap()
         .contains(&json!("second-home-3bhk")));
+    assert!(revised.1["attempt"]["catalogDelta"]
+        .get("reordered")
+        .is_none());
+    assert!(revised.1["attempt"]["catalogDelta"]["moved"].is_array());
+    assert!(revised.1["attempt"]["intentDelta"]
+        .get("reordered")
+        .is_none());
     assert_eq!(
         revised.1["runtimeVersion"]["servingBundleVersion"],
         "journey-fixture-v2"
     );
+}
+
+#[tokio::test]
+async fn selected_property_catalog_exclusion_is_structured() {
+    let (app, state) = test_app_with_state().await;
+    let parent = get_search(&app, "3BHK under 2.4 Cr", 63).await;
+    let selected = result_ids(&parent.1)[1].clone();
+    install_runtime_without_second_home(&state, "journey-fixture-v2");
+    let mut request = revision_request(
+        &parent.1,
+        "Make it under 2.5Cr",
+        "selected-catalog-exclusion",
+    );
+    request["selectedPropertyId"] = json!(selected);
+    let revised = post_revision(&app, request, 64).await;
+    assert_eq!(revised.0, StatusCode::OK, "response={}", revised.1);
+    let consequence = &revised.1["attempt"]["selectedPropertyConsequence"];
+    assert_eq!(consequence["outcome"], "excluded");
+    assert_eq!(consequence["cause"], "catalogRefresh");
+    assert!(consequence["propertyId"].is_string());
+    assert!(consequence["explanation"]
+        .as_str()
+        .unwrap()
+        .contains("refreshed catalog"));
 }
 
 #[tokio::test]
@@ -267,6 +368,7 @@ async fn resume_executes_the_signed_ast_even_when_the_brief_is_not_parseable() {
         SearchRevisionOperation::Initial,
         1,
         "⚑ [presentation only] :: never parse this".to_string(),
+        "Keep the saved search".to_string(),
         plan,
         runtime_version,
         ids.clone(),
@@ -287,6 +389,10 @@ async fn resume_executes_the_signed_ast_even_when_the_brief_is_not_parseable() {
     .await;
     assert_eq!(resumed.0, StatusCode::OK, "response={}", resumed.1);
     assert_eq!(result_ids(&resumed.1), result_ids(&parent.1));
+    assert_eq!(
+        resumed.1["active"]["latestUtterance"],
+        "Keep the saved search"
+    );
 }
 
 #[tokio::test]
@@ -368,6 +474,9 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
     let invalid = post_proof(&app, json!({"proofToken": tampered}), 93).await;
     assert_eq!(invalid.0, StatusCode::BAD_REQUEST);
     assert_eq!(invalid.1["code"], "invalid_proof_token");
+    let invalid_surface = get_surface(&app, "fixture-home-3bhk", Some(&tampered), 193).await;
+    assert_eq!(invalid_surface.0, StatusCode::BAD_REQUEST);
+    assert_eq!(invalid_surface.1["error"], "invalid_proof_token");
 
     let wrong_property = post_proof(
         &app,
@@ -378,8 +487,10 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
     assert_eq!(wrong_property.0, StatusCode::CONFLICT);
     assert_eq!(wrong_property.1["code"], "proof_property_mismatch");
     let wrong_surface = get_surface(&app, "second-home-3bhk", Some(&token), 95).await;
-    assert_eq!(wrong_surface.0, StatusCode::CONFLICT);
-    assert_eq!(wrong_surface.1["error"], "proof_property_mismatch");
+    assert_eq!(wrong_surface.0, StatusCode::OK);
+    assert_eq!(wrong_surface.1["proofFocus"], Value::Null);
+    assert_eq!(wrong_surface.1["proofFocusStatus"], "mismatch");
+    assert!(wrong_surface.1["proofFocusMessage"].is_string());
 
     let fake_observation = SourceObservation::new(
         "Google",
@@ -404,9 +515,13 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
         evidence_refs: &[fake_reference],
     })
     .unwrap();
-    let missing = post_proof(&app, json!({"proofToken": missing_token}), 96).await;
+    let missing = post_proof(&app, json!({"proofToken": missing_token.clone()}), 96).await;
     assert_eq!(missing.0, StatusCode::NOT_FOUND);
     assert_eq!(missing.1["code"], "proof_evidence_missing");
+    let retired_surface = get_surface(&app, "fixture-home-3bhk", Some(&missing_token), 196).await;
+    assert_eq!(retired_surface.0, StatusCode::OK);
+    assert_eq!(retired_surface.1["proofFocus"], Value::Null);
+    assert_eq!(retired_surface.1["proofFocusStatus"], "retired");
 
     let current = state.search_runtime.load_full();
     let mut remapped_properties = test_properties(false);
@@ -429,6 +544,22 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
     let stale = post_proof(&app, json!({"proofToken": token}), 98).await;
     assert_eq!(stale.0, StatusCode::CONFLICT);
     assert_eq!(stale.1["code"], "stale_proof_snapshot");
+    let stale_surface = get_surface(&app, "fixture-home-3bhk", Some(&token), 99).await;
+    assert_eq!(
+        stale_surface.0,
+        StatusCode::OK,
+        "response={}",
+        stale_surface.1
+    );
+    assert_eq!(stale_surface.1["proofFocus"], Value::Null);
+    assert_eq!(stale_surface.1["proofFocusStatus"], "stale");
+    assert_eq!(
+        stale_surface.1["proofFocusMessage"],
+        "This evidence changed since your search."
+    );
+    let stale_list = get_surface_list(&app, "fixture-home-3bhk", &token, 199).await;
+    assert_eq!(stale_list.0, StatusCode::OK);
+    assert_eq!(stale_list.1["scenes"][0]["proofFocusStatus"], "stale");
 }
 
 #[tokio::test]
@@ -581,6 +712,30 @@ fn install_runtime(
         include_schools,
     ));
     let properties = test_properties(include_fresh_home);
+    let search_index =
+        SearchIndex::build_with_serving_graph(&properties, &bundle.entities, &bundle.edges);
+    state
+        .search_runtime
+        .store(Arc::new(SearchRuntimeSnapshot::new(
+            bundle,
+            properties,
+            Vec::new(),
+            Vec::new(),
+            search_index,
+        )));
+}
+
+fn install_runtime_without_second_home(state: &Arc<AppState>, bundle_version: &str) {
+    let root = tempdir().expect("replacement runtime fixture").keep();
+    let bundle = Arc::new(test_bundle_with_options(
+        &root,
+        true,
+        bundle_version,
+        true,
+        true,
+    ));
+    let mut properties = test_properties(true);
+    properties.retain(|property| property.id != "second-home-3bhk");
     let search_index =
         SearchIndex::build_with_serving_graph(&properties, &bundle.entities, &bundle.edges);
     state
@@ -1210,6 +1365,7 @@ fn assert_journey_envelope(envelope: &Value, attempt_kind: &str, outcome: &str) 
     assert!(envelope["runtimeVersion"]["servingBundleVersion"].is_string());
     assert!(envelope["active"]["revision"]["stateToken"].is_string());
     assert!(envelope["active"]["buyerBrief"].is_string());
+    assert!(envelope["active"]["latestUtterance"].is_string());
     assert!(envelope["active"]["intent"]["branches"].is_array());
     assert_eq!(envelope["active"]["results"]["kind"], "current");
     assert_eq!(envelope["attempt"]["kind"], attempt_kind);
@@ -1357,6 +1513,24 @@ async fn get_surface(
         app,
         Method::GET,
         &format!("/api/properties/{property_id}/surfaces/around_this_home{suffix}"),
+        Body::empty(),
+        peer,
+    )
+    .await
+}
+
+async fn get_surface_list(
+    app: &Router,
+    property_id: &str,
+    proof_token: &str,
+    peer: u8,
+) -> (StatusCode, Value) {
+    send(
+        app,
+        Method::GET,
+        &format!(
+            "/api/properties/{property_id}/surfaces?ids=around_this_home&proofToken={proof_token}"
+        ),
         Body::empty(),
         peer,
     )
