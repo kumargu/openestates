@@ -62,6 +62,7 @@ export type ArrivalGoogle3DMapProps = {
   quiet?: boolean;
   showBoundary?: boolean;
   polygons?: MapOverlayPolygon[];
+  showExpandAction?: boolean;
 };
 
 type LatLngAltitude = { lat: number; lng: number; altitude?: number };
@@ -196,6 +197,20 @@ function pathFromPolygon(polygon: MapOverlayPolygon): LatLngAltitude[] {
   return polygon.coordinates.map(([lng, lat]) => ({ lat, lng }));
 }
 
+function circlePath(latitude: number, longitude: number, radiusM = 115): LatLngAltitude[] {
+  const latitudeDegrees = radiusM / 111_320;
+  const longitudeDegrees = radiusM / (
+    111_320 * Math.max(0.2, Math.cos(latitude * Math.PI / 180))
+  );
+  return Array.from({ length: 25 }, (_, index) => {
+    const angle = index / 24 * Math.PI * 2;
+    return {
+      lat: latitude + Math.sin(angle) * latitudeDegrees,
+      lng: longitude + Math.cos(angle) * longitudeDegrees,
+    };
+  });
+}
+
 function lineCoordinates(line: MapOverlayLine): LatLngAltitude[] {
   return line.coordinates.map(([lng, lat]) => ({ lat, lng }));
 }
@@ -318,6 +333,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     quiet = false,
     showBoundary = true,
     polygons,
+    showExpandAction = true,
   } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const streetViewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -743,15 +759,23 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       );
     }
     for (const polygon of polygons ?? []) addPolygon(map, library, polygon, policy.boundary, nextChildren);
-    if (quiet && home.boundary && cameraMode === 'home') {
+    if (quiet && home.boundary) {
       const mask = new library.Polygon3DElement({ altitudeMode: 'CLAMP_TO_GROUND',
         fillColor: policy.quiet.fill, strokeColor: '#00000000', strokeWidth: 0 });
       const r = policy.quiet.radiusDegrees;
       mask.path = [
         {lat: home.latitude-r, lng: home.longitude-r}, {lat: home.latitude-r, lng: home.longitude+r},
         {lat: home.latitude+r, lng: home.longitude+r}, {lat: home.latitude+r, lng: home.longitude-r},
+        {lat: home.latitude-r, lng: home.longitude-r},
       ];
-      mask.innerPaths = [pathFromPolygon(home.boundary).reverse()];
+      const quietPlaces = selectedPlaceId
+        ? places.filter((place) => (place.feature_id ?? place.name) === selectedPlaceId)
+        : places;
+      mask.innerPaths = [
+        pathFromPolygon(home.boundary).reverse(),
+        ...(polygons ?? []).map((polygon) => pathFromPolygon(polygon).reverse()),
+        ...quietPlaces.map((place) => circlePath(place.latitude, place.longitude).reverse()),
+      ];
       map.append(mask); nextChildren.push(mask);
     }
     for (const society of secondarySocieties) {
@@ -1010,11 +1034,13 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           }}>{streetRequested ? 'Back to aerial' : 'Street View'}</button>}
         </div>
       ) : null}
-      <div className="nearby-map__actions">
-        <button type="button" onClick={toggleExpanded}>
-          {expanded ? "Close map" : "Expand map"}
-        </button>
-      </div>
+      {showExpandAction ? (
+        <div className="nearby-map__actions">
+          <button type="button" onClick={toggleExpanded}>
+            {expanded ? "Close map" : "Expand map"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

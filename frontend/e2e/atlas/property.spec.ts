@@ -8,8 +8,8 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/property/fixture-prestige-waterford-3bhk");
-  const arrival = page.locator("#remote-arrival");
-  await arrival.scrollIntoViewIfNeeded();
+  const arrival = page.locator(".property-arrival-map--atlas");
+  await expect(arrival).toBeVisible();
   await expect(
     arrival.locator('[data-map-renderer="google-3d"]'),
   ).toHaveAttribute("aria-busy", "false", { timeout: 30000 });
@@ -21,19 +21,18 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await arrival.screenshot({ path: testInfo.outputPath("society.png") });
   await arrival.getByRole("button", { name: "Metro", exact: true }).click();
   await expect(
-    arrival.getByRole("button", { name: "Show all", exact: true }),
+    arrival.getByRole("button", { name: "Show together", exact: true }),
   ).toBeVisible();
   await expect(arrival.locator("gmp-polyline-3d-interactive")).toHaveCount(16);
-  await arrival.locator(".atlas-place-list button").nth(2).click();
+  await arrival.locator(".property-atlas__place-list button").nth(1).click();
   await expect(
-    arrival.locator(".atlas-place-list button").nth(2),
+    arrival.locator(".property-atlas__place-list button").nth(1),
   ).toHaveAttribute("aria-pressed", "true");
   await arrival.screenshot({ path: testInfo.outputPath("metro-focus.png") });
-  await arrival.getByRole("button", { name: "Nearby", exact: true }).click();
-  await arrival.getByLabel("Nearby category").selectOption("school");
-  await expect(arrival.locator(".atlas-place-list button")).toHaveCount(4);
+  await arrival.getByRole("button", { name: "Schools", exact: true }).click();
+  await expect(arrival.locator(".property-atlas__place-list button")).toHaveCount(2);
   await arrival
-    .getByRole("button", { name: "Approach road", exact: true })
+    .getByRole("button", { name: "Road journey", exact: true })
     .click();
   await expect(arrival.getByLabel("Road tour speed")).toBeVisible({
     timeout: 15000,

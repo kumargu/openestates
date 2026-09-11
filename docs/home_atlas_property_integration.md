@@ -5,8 +5,11 @@
 Branch: `feat/home-atlas-property-integration`. Prepared from `origin/main` at
 `b4c2ccc` (PR #128), with PR #126 (`b36ccae`) merged at `7797111`.
 The archived experiment remains intact. This integration changes the real
-property page, not the Sites prototype. It does not alter the workspace sidebar,
-listing header, carried search, theme tokens, or the Rust serving contract.
+property page, not the Sites prototype. When an `arrival_story` scene carries a
+valid anchor and experience policy, the map owns the property canvas and the
+existing workspace sidebar remains the sole navigation shell. The older stacked
+hero/map/reviews composition remains the fail-closed path for properties without
+that immersive scene. The Rust serving contract is unchanged.
 
 ## Run locally
 
@@ -60,6 +63,7 @@ existing self-only defaults for unrelated resources.
 | UI switches and selected place | Existing `PropertyArrivalMap` |
 | Google elements, overlays, focus camera | Existing `PropertyArrivalGoogle3DMap` |
 | Road speed/camera tuning and overlay styling | `app/config/ui/home-atlas.json` |
+| Property identity and save/note actions | Existing property detail projection and controls |
 
 The renderer consumes scene-provided coordinates. It has no Waterford-name branch.
 Society camera framing continues to fit the mapped footprint through
@@ -70,11 +74,19 @@ by this change. Do not describe that separate layout as integrated.
 
 ## Buyer experience
 
-- Society reveal, an optional top perspective, sourced boundary, and quiet
-  surroundings, with settings collected under **View**.
+- One uninterrupted, viewport-height 3D world beside the existing sidebar. The
+  property name and essential facts sit directly on the scene; the duplicate
+  listing hero, old map, and arrival tile are not stacked above it.
+- Direct, scene-derived Society, Schools, Hospitals, Roads, Metro, Lakes, and
+  other nearby categories. Categories disappear when the backend returns no
+  evidence rather than rendering empty controls.
+- Society reveal, an optional top perspective, sourced OSM boundary, and quiet
+  surroundings. Quiet mode retains holes for the home and the places currently
+  being inspected, so focus remains readable instead of dimming the evidence.
 - Metro points and the actual API-provided track segments. Segments stay separate;
   no straight line is invented between stations. Numbered nearby list, individual
-  focus, Show all, and a guided sequence through available places.
+  focus, Show together, source-backed detail card, and a guided sequence through
+  available places live in one right-side drawer.
 - Nearby categories are derived from the existing payload. Existing 2D evidence
   remains available. Polygon overlays preserve supplied holes and multipolygon
   parts; missing polygons are not manufactured.
@@ -109,17 +121,20 @@ by this change. Do not describe that separate layout as integrated.
 
 Inspected the preserved Human Atlas `app/page.tsx` selection/visibility/view
 state and its focus scene, plus its slider component. Borrowed separate camera
-and selection state, one settings disclosure, and a small continuous lever.
+and selection state, cancellable cinematic movement, and a small continuous road
+speed lever. The accepted Atlas Site supplied the full-stage composition, direct
+nearby categories, numbered evidence drawer, OSM/quiet analysis controls, and
+calm bottom journey dock.
 Searched for a directly applicable ThreeUI map interaction; no specific additional
 map implementation was established. No unverified ThreeUI source is claimed.
-Did not borrow anatomical geometry, explosion/lift, a full-screen demo shell,
-or side-by-side map comparisons.
+Did not borrow anatomical geometry, explosion/lift, or side-by-side map
+comparisons.
 
-Rest: property content and map remain the primary surface. Hover/focus: existing
-button treatment and visible focus rings. Touch: native range/select controls,
-wrapping road controls, horizontal nearby list. Reduced motion: settle the camera
-instead of automatically flying. The repository UI Critic and React review
-informed these choices; visual sign-off is still pending below.
+Rest: the 3D property canvas is the primary surface. Hover/focus: restrained
+glass controls and visible focus rings. Touch: a horizontally scrollable category
+rail, full-width bottom dock, and a bounded drawer. Reduced motion: settle the
+camera instead of automatically flying. Property identity is projected once;
+save/note reuse the existing controls and do not create a second state store.
 
 ## Verification and remaining gate
 
@@ -129,7 +144,7 @@ Commands:
 cd frontend
 npm run lint
 npm test
-npm run build -- --mode development
+VITE_API_BASE=https://api.example.com VITE_SITE_URL=https://example.com npm run build
 npx playwright install chromium
 npm run test:atlas-browser
 ```
@@ -139,15 +154,16 @@ captures society, metro focus, road, and mobile road screenshots in
 `frontend/test-results/atlas/`. It requires the Google key and working real 3D;
 it does not silently pass using a mocked renderer.
 
-Observed in this environment: the frontend unit suite passed, the new scene
-integration contracts passed, and all 16 preserved Atlas tests passed. Build and
-lint were also exercised. The host runs Node 24, while the repository targets
-Node 22; CI/local Node 22 is an additional parity gate.
+Observed in this environment: lint, TypeScript, the production bundle, and all
+265 frontend tests pass. The Atlas browser specification now asserts the
+full-stage shell, direct category drawer, focused nearby item, aerial road speed,
+pause/resume, Street View exit, and mobile state. The host runs Node 24, while the
+repository targets Node 22; CI/local Node 22 is an additional parity gate.
 
-**Browser/visual validation is blocked here.** The browser automation daemon
-could not start. Its Chrome installer failed certificate validation, and the
-standard Playwright browser download timed out. No certificate checks were
-disabled. No real screenshots or photographic smoothness approval are claimed.
+**Local real-3D browser validation is blocked here.** Playwright is installed but
+its Chromium binary is absent, and the managed cloud browser cannot reach the
+localhost server. No certificate checks or browser safeguards were disabled. No
+photographic smoothness approval is claimed from this environment.
 Before merging, run the browser gate above on a machine with Google access and
 review the road descent, pause/resume, station focus, quiet boundary, mobile
 controls, and Street View exit.
