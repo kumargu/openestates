@@ -63,7 +63,7 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await arrival.screenshot({path:testInfo.outputPath('school-with-home.png')});
   await arrival.getByRole('button', {name: 'Tour schools', exact: true}).click();
   await expect(map).toHaveAttribute('data-atlas-camera-owner', 'nearby');
-  await expect(map).toHaveAttribute('data-atlas-scene', 'nearby:school:overview');
+  await expect(map).toHaveAttribute('data-atlas-scene', 'tour:nearby:school:overview');
   await expect(map).toHaveAttribute('data-atlas-depth', 'pair', {timeout: 10_000});
   await expect(map).toHaveAttribute('data-atlas-scene', /:pair$/);
   await arrival.getByRole('button', {name: 'Pause tour', exact: true}).click();

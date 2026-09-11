@@ -1372,7 +1372,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       });
       cameraArbiterRef.current.submit('nearby', () => {
         map.dataset.atlasCameraOwner = 'nearby';
-        map.dataset.atlasScene = item.scene.id;
+        map.dataset.atlasScene = `tour:${item.scene.id}`;
         map.dataset.atlasDepth = depth;
         map.dataset.atlasCameraTargetRange = String(item.scene.camera.range);
         map.flyCameraTo({

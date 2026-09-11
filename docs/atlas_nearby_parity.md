@@ -36,10 +36,12 @@ The Waterford API fixture now preserves archived road segments and explicit poly
 
 ## Verification gate
 
-Focused real-Chrome verification covers desktop category overview, pair, inspect, tour pause/resume, road direction, Street View return, and the `390×844` bottom-sheet composition with no page errors. The latest raw frames, trace, and video are under ignored test storage at `frontend/test-results/atlas-parity/ui-polish-check/`; its three-frame contact sheet compares desktop overview, desktop pair, and mobile pair without loading the full capture sequence into review context.
+Focused real-Chrome verification covers desktop category overview, pair, inspect, tour pause/resume, road direction, Street View return, and the `390×844` bottom-sheet composition with no page errors. The raw UI-polish frames, trace, video, and three-frame contact sheet are under ignored test storage at `frontend/test-results/atlas-parity/ui-polish-check/`.
 
 The default production build requires `VITE_API_BASE` and `VITE_SITE_URL`; configure the actual deployment origins rather than baking placeholder addresses into the application. Local review uses the Atlas build mode and backend fixture API. A configured Google Maps key and WebGL-capable browser are still required for the real map.
 
-Before merge, rerun the complete parity journey twice in real Chrome and attach the representative resting and focus screenshots to the PR. Browser DOM assertions do not by themselves prove photographic composition.
+Two consecutive timing-enforced full journeys passed under `frontend/test-results/atlas-parity/final-parity-timing-1/` and `final-parity-timing-2/`. The trace contract keeps overview, pair, inspect, and home dwell within 5% of configured reference timing while also checking monotonic road distance, persistent map identity, exact pair marker/arc counts, and zero page errors. The local API loaded promoted catalog `catalog-71-ffb4dc50-117e-453c-b26f-41822430324e` (159 properties); the promoted Prestige Waterford response served the exact OSM home boundary and four scoped arrival features. The public API returned HTTP 503 during final verification, so local promoted-bundle verification is the recorded production-boundary check.
+
+Attach the representative resting and focus screenshots from the recorded artifacts when the branch PR is opened. Browser DOM assertions do not by themselves prove photographic composition.
 
 Not added: idle orbit, saved exact viewpoints, township split-layout, or synthetic building extrusion. These are optional enhancements, not prerequisites for nearby parity. Do not reintroduce Lift or map comparison.

@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import policy from "../../../app/config/ui/home-atlas.json" with {type: "json"};
 
 type CameraSample = {
   atMs: number;
@@ -123,6 +124,8 @@ test("records the complete PR 126 spatial story in the PR 132 shell", async ({pa
     await expect(map).toHaveAttribute("data-atlas-depth", "inspect", {timeout: 15_000});
     await atlas.screenshot({path: testInfo.outputPath(`${category.toLowerCase()}-inspect.png`)});
     await expect(map).toHaveAttribute("data-atlas-depth", "home", {timeout: 90_000});
+    await expect(drawer.getByRole("button", {name: new RegExp(`^Tour ${category.toLowerCase()}`)}))
+      .toBeVisible({timeout: policy.nearby.returnHomeMs + 2_000});
   }
 
   const trace = await finishCameraTrace(page, testInfo);
@@ -132,6 +135,23 @@ test("records the complete PR 126 spatial story in the PR 132 shell", async ({pa
     expect(roadSamples[index].roadDistanceM!).toBeGreaterThanOrEqual(
       roadSamples[index - 1].roadDistanceM! - 0.5,
     );
+  }
+  const transitions = trace.filter((sample, index) =>
+    sample.scene !== trace[index - 1]?.scene);
+  const expectedDuration = (scene: string): number | undefined => {
+    if (scene.endsWith(":overview")) return policy.nearby.overviewMs;
+    if (scene.endsWith(":pair")) return policy.nearby.pairMs;
+    if (scene.endsWith(":focus")) return policy.nearby.focusMs;
+    if (scene.endsWith(":home")) return policy.nearby.returnHomeMs;
+    return undefined;
+  };
+  for (let index = 0; index < transitions.length; index += 1) {
+    const transition = transitions[index];
+    if (!transition.scene?.startsWith("tour:")) continue;
+    const expectedMs = expectedDuration(transition.scene);
+    if (!expectedMs) continue;
+    const endMs = transitions[index + 1]?.atMs ?? trace.at(-1)!.atMs;
+    expect(Math.abs(endMs - transition.atMs - expectedMs) / expectedMs).toBeLessThanOrEqual(0.05);
   }
   expect(errors).toEqual([]);
 });
