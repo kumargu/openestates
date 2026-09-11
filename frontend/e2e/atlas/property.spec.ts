@@ -58,6 +58,25 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await expect(map.locator('[data-atlas-relationship="true"]')).toHaveCount(1);
   await page.waitForTimeout(1300);
   await arrival.screenshot({path:testInfo.outputPath('school-with-home.png')});
+  await arrival.getByRole('button', {name: 'Tour schools', exact: true}).click();
+  await expect(map).toHaveAttribute('data-atlas-camera-owner', 'nearby');
+  await expect(map).toHaveAttribute('data-atlas-scene', 'nearby:school:overview');
+  await expect(map).toHaveAttribute('data-atlas-depth', 'pair', {timeout: 10_000});
+  await expect(map).toHaveAttribute('data-atlas-scene', /:pair$/);
+  await arrival.getByRole('button', {name: 'Pause tour', exact: true}).click();
+  const pausedNearbyCamera = await map.evaluate((element) => JSON.stringify({
+    center: (element as HTMLElement & {center: unknown}).center,
+    heading: (element as HTMLElement & {heading: number}).heading,
+    range: (element as HTMLElement & {range: number}).range,
+  }));
+  await page.waitForTimeout(400);
+  expect(await map.evaluate((element) => JSON.stringify({
+    center: (element as HTMLElement & {center: unknown}).center,
+    heading: (element as HTMLElement & {heading: number}).heading,
+    range: (element as HTMLElement & {range: number}).range,
+  }))).toBe(pausedNearbyCamera);
+  await arrival.getByRole('button', {name: 'Resume tour', exact: true}).click();
+  await expect(map).toHaveAttribute('data-atlas-depth', 'inspect', {timeout: 10_000});
   await arrival
     .getByRole("button", { name: "Road journey", exact: true })
     .click();

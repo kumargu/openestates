@@ -20,6 +20,7 @@ import {
   type AtlasScreenFrame,
 } from "../../experiments/home-atlas/src/screenFit.ts";
 import atlasPolicy from "../../app/config/ui/home-atlas.json" with { type: "json" };
+import { AtlasCameraArbiter } from "../src/lib/atlasCameraArbiter.ts";
 import {
   geometryForPlace,
   nearbySceneCamera,
@@ -199,6 +200,20 @@ test('missing place collections stay a calm sparse scene', () => {
 test('road heading damping crosses north through the shortest arc', () => {
   const damped = dampHeading(359, 1, 3, 0.25);
   assert.ok(damped > 359 || damped < 1);
+});
+
+test('camera ownership prevents inactive scene families from moving the persistent map', () => {
+  const arbiter = new AtlasCameraArbiter();
+  const applied: string[] = [];
+  assert.equal(arbiter.submit('nearby', () => applied.push('nearby')), false);
+  assert.equal(arbiter.submit('society', () => applied.push('society')), true);
+  arbiter.activate('road');
+  assert.equal(arbiter.submit('society', () => applied.push('stale society')), false);
+  assert.equal(arbiter.submit('road', () => applied.push('road')), true);
+  arbiter.activate('nearby');
+  assert.equal(arbiter.submit('road', () => applied.push('stale road')), false);
+  assert.equal(arbiter.submit('nearby', () => applied.push('nearby')), true);
+  assert.deepEqual(applied, ['society', 'road', 'nearby']);
 });
 
 test('mapped shape ownership survives the API projection without guessing names', () => {

@@ -39,6 +39,7 @@ test("scene visibility distinguishes group, pair, and home", () => {
   const metroOverview = {
     id: "metro:overview", targetFeatureId: home.id,
     camera: placeCamera({ home, defaultElevationM: home.elevationM ?? 0, viewportWidthPx: 1280 }, home),
+    phase: "overview" as const,
     visibility: { mode: "category" as const, categoryId: "metro" }, caption: "Metro", durationMs: 1000,
   };
   assert.deepEqual(visibleFeaturesForScene(document, metroOverview).map((feature) => feature.id), [
@@ -82,4 +83,3 @@ test("category tours declare visible context and return home", () => {
   assert.equal(scenes.at(-1)?.visibility.mode, "home");
   scenes.forEach((scene) => assertCamera(scene.camera));
 });
-

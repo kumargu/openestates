@@ -16,6 +16,8 @@ import {
   type AtlasCameraPose,
 } from "../../../../experiments/home-atlas/src/journey.ts";
 import { distanceMetres } from "../../../../experiments/home-atlas/src/geometry.ts";
+import { buildCategoryTour } from "../../../../experiments/home-atlas/src/scenes.ts";
+import type { AtlasFeature, AtlasScene } from "../../../../experiments/home-atlas/src/types.ts";
 import policy from "../../../../app/config/ui/home-atlas.json" with { type: "json" };
 import {
   geometryForPlace,
@@ -32,6 +34,7 @@ import {
 import { mapMarkerPinOptions } from "../../lib/mapMarkerVisual.ts";
 import { useGuidedStreetViewTour } from "../../hooks/useGuidedStreetViewTour.ts";
 import type { ArrivalPlaybackController } from "../../lib/arrivalPlayback.ts";
+import { AtlasCameraArbiter } from "../../lib/atlasCameraArbiter.ts";
 import type {
   ArrivalSceneExperience,
   ArrivalSearchSociety,
@@ -50,6 +53,27 @@ import {
   societyCameraComposition,
   type ArrivalCameraMode,
 } from "../../lib/arrivalMapProjection.ts";
+
+export type NearbyTourChapter = Readonly<{
+  categoryId: string;
+  view: "nearby" | "metro";
+  layerId?: string;
+  places: NumberedPlace[];
+  polygons: MapOverlayPolygon[];
+  lines: MapOverlayLine[];
+}>;
+
+export type NearbyTourRequest = Readonly<{
+  id: number;
+  chapters: readonly NearbyTourChapter[];
+}>;
+
+export type NearbyTourSceneState = Readonly<{
+  view: "nearby" | "metro";
+  layerId?: string;
+  selectedPlaceId: string | null;
+  depth: NearbyDepth;
+}>;
 
 export type ArrivalGoogle3DMapProps = {
   home: {
@@ -88,6 +112,8 @@ export type ArrivalGoogle3DMapProps = {
   showExpandAction?: boolean;
   drawerOpen?: boolean;
   nearbyTransitionMs?: number;
+  nearbyTourRequest?: NearbyTourRequest | null;
+  onNearbyTourScene?: (state: NearbyTourSceneState) => void;
 };
 
 type LatLngAltitude = { lat: number; lng: number; altitude?: number };
@@ -250,6 +276,10 @@ function settleCameraFraming(map: Map3DElement, camera: CameraOptions) {
 
 function pathFromPolygon(polygon: MapOverlayPolygon): LatLngAltitude[] {
   return polygon.coordinates.map(([lng, lat]) => ({ lat, lng }));
+}
+
+function pointsFromCoordinates(coordinates: [number, number][]) {
+  return coordinates.map(([lng, lat]) => ({lat, lng}));
 }
 
 function circlePath(latitude: number, longitude: number, radiusM = 115): LatLngAltitude[] {
@@ -420,6 +450,8 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     showExpandAction = true,
     drawerOpen = false,
     nearbyTransitionMs = policy.focus.durationMs,
+    nearbyTourRequest = null,
+    onNearbyTourScene,
   } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const streetViewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -428,6 +460,10 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const markerLibraryRef = useRef<MarkerLibrary | null>(null);
   const childrenRef = useRef<Map3DChild[]>([]);
   const cameraMoveRef = useRef(0);
+  const cameraArbiterRef = useRef(new AtlasCameraArbiter());
+  const executedTourRequestRef = useRef<number | null>(null);
+  const onNearbyTourSceneRef = useRef(onNearbyTourScene);
+  onNearbyTourSceneRef.current = onNearbyTourScene;
   const terrainElevationRef = useRef<number | null>(null);
   const initialSocietyAutoPlayRef = useRef(autoPlaySociety);
   const previousSocietyAutoPlayRef = useRef(autoPlaySociety);
@@ -500,6 +536,11 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     ? layerExperience
     : null;
   const roadTourActive = terrainCorridor && cameraMode === "evidence";
+  cameraArbiterRef.current.activate(roadTourActive
+    ? "road"
+    : cameraMode === "evidence"
+    ? "nearby"
+    : "society");
   const atlasRoute = useMemo(
     () => arrivalAtlasRoute(accessLines, roadExperience?.routeDirection ?? "as-mapped"),
     [accessLines, roadExperience?.routeDirection],
@@ -571,19 +612,21 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const streetViewReady = roadTour.active;
   const renderRoad = useCallback((pose: AtlasCameraPose) => {
     const map = mapRef.current;
-    if (map) {
+    if (map) cameraArbiterRef.current.submit('road', () => {
       settleCameraFraming(map, targetCamera(pose.center.latitude, pose.center.longitude,
         pose.center.altitude, pose.range, pose.tilt, pose.heading));
       map.dataset.atlasCameraOwner = 'road';
-    }
+    });
   }, []);
   const flyRoad = useCallback((pose: AtlasCameraPose, durationMs: number) => {
     const map = mapRef.current;
     if (!map) return;
-    map.dataset.atlasCameraOwner = 'road';
-    map.flyCameraTo({ durationMillis: durationMs, endCamera: targetCamera(
-      pose.center.latitude, pose.center.longitude, pose.center.altitude, pose.range, pose.tilt, pose.heading,
-    ) });
+    cameraArbiterRef.current.submit('road', () => {
+      map.dataset.atlasCameraOwner = 'road';
+      map.flyCameraTo({ durationMillis: durationMs, endCamera: targetCamera(
+        pose.center.latitude, pose.center.longitude, pose.center.altitude, pose.range, pose.tilt, pose.heading,
+      ) });
+    });
   }, []);
   const traceRoadProgress = useCallback((distanceM: number, routeLengthM: number, heading: number) => {
     const map = mapRef.current;
@@ -731,7 +774,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         HOME_PORTRAIT_TILT,
         DEFAULT_HEADING,
       );
-      void map.flyCameraTo({ endCamera: camera, durationMillis: EVIDENCE_CAMERA_DURATION_MS });
+      cameraArbiterRef.current.submit('society', () => {
+        map.flyCameraTo({ endCamera: camera, durationMillis: EVIDENCE_CAMERA_DURATION_MS });
+      });
       return;
     }
     if (!hadSecondarySelectionRef.current) return;
@@ -746,7 +791,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       primary.tilt,
       primary.heading,
     );
-    void map.flyCameraTo({ endCamera: camera, durationMillis: EVIDENCE_CAMERA_DURATION_MS });
+    cameraArbiterRef.current.submit('society', () => {
+      map.flyCameraTo({ endCamera: camera, durationMillis: EVIDENCE_CAMERA_DURATION_MS });
+    });
   }, [ready, selectedSecondarySociety, societyComposition]);
 
   useEffect(() => {
@@ -778,18 +825,20 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           width,
           progress,
         );
-        settleCameraFraming(map, targetCamera(
-          pose.center.latitude,
-          pose.center.longitude,
-          pose.center.altitude,
-          pose.range,
-          pose.tilt,
-          pose.heading,
-        ));
-        const stage = policy.society.stages[societyStageIndex(progress)];
-        map.dataset.atlasCameraOwner = 'society';
-        map.dataset.atlasScene = `society:${stage.id}`;
-        map.dataset.atlasProgress = progress.toFixed(4);
+        cameraArbiterRef.current.submit('society', () => {
+          settleCameraFraming(map, targetCamera(
+            pose.center.latitude,
+            pose.center.longitude,
+            pose.center.altitude,
+            pose.range,
+            pose.tilt,
+            pose.heading,
+          ));
+          const stage = policy.society.stages[societyStageIndex(progress)];
+          map.dataset.atlasCameraOwner = 'society';
+          map.dataset.atlasScene = `society:${stage.id}`;
+          map.dataset.atlasProgress = progress.toFixed(4);
+        });
       };
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       if (!autoPlaySociety || reducedMotion) {
@@ -833,16 +882,18 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         width,
         0,
       );
-      map.flyCameraTo({
-        endCamera: targetCamera(
-          startPose.center.latitude,
-          startPose.center.longitude,
-          startPose.center.altitude,
-          startPose.range,
-          startPose.tilt,
-          startPose.heading,
-        ),
-        durationMillis: policy.society.settleMs,
+      cameraArbiterRef.current.submit('society', () => {
+        map.flyCameraTo({
+          endCamera: targetCamera(
+            startPose.center.latitude,
+            startPose.center.longitude,
+            startPose.center.altitude,
+            startPose.range,
+            startPose.tilt,
+            startPose.heading,
+          ),
+          durationMillis: policy.society.settleMs,
+        });
       });
       void (async () => {
         if (!(await run.wait(policy.society.settleMs)) || !run.isCurrent()) return;
@@ -879,7 +930,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
             tilt,
             heading,
           );
-        map.flyCameraTo({ endCamera: camera, durationMillis });
+        cameraArbiterRef.current.submit('society', () => {
+          map.flyCameraTo({ endCamera: camera, durationMillis });
+        });
       })
       .catch((error: unknown) => {
         if (import.meta.env.DEV) {
@@ -1187,21 +1240,182 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready || terrainCorridor || roadTourActive || streetRequested || cameraMode !== 'evidence') return;
+    const request = nearbyTourRequest;
+    if (
+      !map
+      || !ready
+      || !safeFrame
+      || !request
+      || request.chapters.length === 0
+      || executedTourRequestRef.current === request.id
+    ) return undefined;
+    executedTourRequestRef.current = request.id;
+
+    type PlannedScene = { scene: AtlasScene; chapter: NearbyTourChapter };
+    const homeFeature: AtlasFeature = {
+      id: 'home',
+      name: home.name,
+      categoryId: 'home',
+      position: {lat: home.latitude, lng: home.longitude},
+      boundary: home.boundary ? pointsFromCoordinates(home.boundary.coordinates) : undefined,
+      evidence: {
+        location: {providerId: 'scene'},
+        distance: {metres: 0, method: 'straight_line', target: 'place_point'},
+      },
+    };
+    const planned: PlannedScene[] = [];
+    let finalHome: PlannedScene | undefined;
+    for (const chapter of request.chapters) {
+      const features: AtlasFeature[] = chapter.places.map((place) => {
+        const geometry = geometryForPlace(place, chapter.polygons, chapter.lines);
+        return {
+          id: place.feature_id ?? place.name,
+          name: place.name,
+          categoryId: chapter.categoryId,
+          position: {lat: place.latitude, lng: place.longitude},
+          boundary: geometry.polygons[0]
+            ? pointsFromCoordinates(geometry.polygons[0].coordinates)
+            : undefined,
+          segments: geometry.lines.length ? geometry.lines.map((line) => ({
+            id: line.id,
+            path: pointsFromCoordinates(line.coordinates),
+          })) : undefined,
+          evidence: {
+            location: {providerId: 'scene'},
+            distance: {
+              metres: distanceMetres(
+                homeFeature.position,
+                {lat: place.latitude, lng: place.longitude},
+              ),
+              method: 'straight_line',
+              target: geometry.polygons.length
+                ? 'mapped_extent_centre'
+                : geometry.lines.length
+                ? 'representative_segment_point'
+                : 'place_point',
+            },
+          },
+        };
+      });
+      const camera = (feature: AtlasFeature | null, depth: NearbyDepth) => nearbySceneCamera(
+        home,
+        chapter.places,
+        chapter.polygons,
+        chapter.lines,
+        feature?.id ?? null,
+        depth,
+        groundElevation,
+        mapWidth,
+        safeFrame,
+      );
+      const scenes = buildCategoryTour({
+        categoryId: chapter.categoryId,
+        home: homeFeature,
+        features,
+        cameras: {
+          group: () => camera(null, 'overview'),
+          pair: (feature) => camera(feature, 'pair'),
+          focus: (feature) => camera(feature, 'inspect'),
+          home: () => camera(null, 'home'),
+        },
+        copy: {
+          overview: () => '',
+          pair: () => '',
+          focus: () => '',
+          returnHome: () => '',
+        },
+        timing: policy.nearby,
+      });
+      for (const scene of scenes) {
+        const item = {scene, chapter};
+        if (scene.phase === 'home') finalHome = item;
+        else planned.push(item);
+      }
+    }
+    if (finalHome) planned.push(finalHome);
+
+    const run = playbackController.begin('playing');
+    if (!run.activate()) return undefined;
+    let current: PlannedScene | undefined;
+    const apply = (item: PlannedScene, durationMs: number) => {
+      current = item;
+      const selectedPlaceId = item.scene.visibility.mode === 'pair'
+        || item.scene.visibility.mode === 'feature'
+        ? item.scene.visibility.featureId
+        : null;
+      const depth: NearbyDepth = item.scene.phase === 'overview'
+        ? 'overview'
+        : item.scene.phase === 'pair'
+        ? 'pair'
+        : item.scene.phase === 'home'
+        ? 'home'
+        : 'inspect';
+      onNearbyTourSceneRef.current?.({
+        view: item.chapter.view,
+        layerId: item.chapter.layerId,
+        selectedPlaceId,
+        depth,
+      });
+      cameraArbiterRef.current.submit('nearby', () => {
+        map.dataset.atlasCameraOwner = 'nearby';
+        map.dataset.atlasScene = item.scene.id;
+        map.dataset.atlasDepth = depth;
+        map.dataset.atlasCameraTargetRange = String(item.scene.camera.range);
+        map.flyCameraTo({
+          durationMillis: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            ? 0
+            : durationMs,
+          endCamera: item.scene.camera,
+        });
+      });
+    };
+    const unregisterResume = playbackController.registerResumer(() => {
+      if (!current || !run.isCurrent()) return;
+      apply(current, Math.min(
+        Math.round(current.scene.durationMs * policy.focus.movementFraction),
+        playbackController.remainingWaitMs(),
+      ));
+    });
+    void (async () => {
+      for (const item of planned) {
+        if (!run.isCurrent()) return;
+        apply(item, Math.round(item.scene.durationMs * policy.focus.movementFraction));
+        if (!(await run.wait(item.scene.durationMs))) return;
+      }
+      run.settle();
+    })();
+    return () => unregisterResume();
+  }, [
+    groundElevation,
+    home,
+    mapWidth,
+    nearbyTourRequest,
+    playbackController,
+    ready,
+    safeFrame,
+  ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || terrainCorridor || roadTourActive || streetRequested || cameraMode !== 'evidence'
+      || playbackState === 'playing' || playbackState === 'paused' || playbackState === 'preparing') return;
     const moveId = ++cameraMoveRef.current;
     let cancelled = false;
     let camera: CameraOptions | undefined;
     const move = () => {
       if (!camera || cancelled || cameraMoveRef.current !== moveId || playbackController.snapshot() === 'paused') return;
-      map.dataset.atlasDepth = nearbyDepth;
-      map.dataset.atlasCameraOwner = 'nearby';
-      map.dataset.atlasScene = `nearby:${nearbyDepth}`;
-      const remainingMs = playbackController.remainingWaitMs();
-      const durationMs = remainingMs > 0
-        ? Math.min(nearbyTransitionMs, remainingMs)
-        : nearbyTransitionMs;
-      map.flyCameraTo({durationMillis: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : durationMs,
-        endCamera: camera});
+      const nextCamera = camera;
+      cameraArbiterRef.current.submit('nearby', () => {
+        map.dataset.atlasDepth = nearbyDepth;
+        map.dataset.atlasCameraOwner = 'nearby';
+        map.dataset.atlasScene = `nearby:${nearbyDepth}`;
+        const remainingMs = playbackController.remainingWaitMs();
+        const durationMs = remainingMs > 0
+          ? Math.min(nearbyTransitionMs, remainingMs)
+          : nearbyTransitionMs;
+        map.flyCameraTo({durationMillis: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : durationMs,
+          endCamera: nextCamera});
+      });
     };
     const unregister = playbackController.registerResumer(move);
     void loadGoogleTerrainElevation(home.latitude, home.longitude).then(elevation => {
@@ -1212,7 +1426,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       move();
     }).catch(() => undefined);
     return () => {cancelled = true; unregister();};
-  }, [above, selectedPlaceId, nearbyDepth, nearbyTransitionMs, places, home, polygons, metroLines, contextLines, cameraMode, terrainCorridor, playbackController, ready, roadTourActive, safeFrame, streetRequested]);
+  }, [above, selectedPlaceId, nearbyDepth, nearbyTransitionMs, places, home, polygons, metroLines, contextLines, cameraMode, terrainCorridor, playbackController, playbackState, ready, roadTourActive, safeFrame, streetRequested]);
 
   if (loadError) throw loadError;
 
