@@ -24,6 +24,10 @@ const META_ENV = (import.meta as ImportMeta & {
   env?: Record<string, string | boolean | undefined>;
 }).env ?? {};
 const ENABLE_DEV_FIXTURES = META_ENV.DEV === true && META_ENV.VITE_USE_FIXTURE_API === "true";
+const ENABLE_PREVIEW_FIXTURES = META_ENV.VITE_VERCEL_ENV === "preview"
+  && typeof globalThis.location !== "undefined"
+  && new URLSearchParams(globalThis.location.search).get("fixture") === "atlas";
+const ENABLE_FIXTURES = ENABLE_DEV_FIXTURES || ENABLE_PREVIEW_FIXTURES;
 const inFlightSearches = new Map<string, Promise<SearchResponse>>();
 const PROPERTY_CATALOG_CACHE_MS = 60_000;
 let cachedPropertyCatalog: { loadedAt: number; value: PropertyCard[] } | null = null;
@@ -43,7 +47,7 @@ type PropertyCatalogFetchOptions = ApiFetchOptions & {
 };
 
 async function getDevFixture<T>(path: string): Promise<T | null> {
-  if (!ENABLE_DEV_FIXTURES) return null;
+  if (!ENABLE_FIXTURES) return null;
   const { getFixtureResponse } = await import('./dev-fixtures.ts');
   const fixture = getFixtureResponse(path);
   return fixture === null ? null : fixture as T;

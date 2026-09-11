@@ -32,14 +32,19 @@ does not invent an entrance. No fixture is promoted to the DAG or Parquet.
 
 For the real backend, run `npm run dev` without fixture mode, use the normal API
 configuration, and open a real property ID. No component changes are necessary.
-Fixture responses are disabled in production builds, even if the fixture flag
-was accidentally configured. Production builds retain the repository's existing
-`VITE_API_BASE` and `VITE_SITE_URL` requirements.
+Fixture responses are disabled in production deployments. Vercel preview
+deployments can opt into the review fixture only by opening the fixture property
+URL with `?fixture=atlas`; ordinary preview URLs continue to use the configured
+API. Production builds retain the repository's existing `VITE_API_BASE` and
+`VITE_SITE_URL` requirements.
 
 Google rendering still requires an enabled/billed Google project, the relevant
 Maps/3D/Street View/elevation access, an authorized browser referrer, internet
 access, and a supported WebGL browser. The supplied key is not committed.
 Missing Google rendering produces the existing fallback, not invented imagery.
+The deployment CSP explicitly permits the Google Maps loader, Google-hosted map
+imagery, 3D/Street View data requests, and Google fonts while retaining the
+existing self-only defaults for unrelated resources.
 
 ## Runtime ownership
 

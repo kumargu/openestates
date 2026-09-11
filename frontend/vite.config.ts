@@ -97,6 +97,12 @@ export default defineConfig(({ command, mode }) => {
   if (command === 'build') validatePromotedMedia()
 
   return {
+    // Vercel's environment is server-side by default. Expose only the
+    // non-secret environment name so preview URLs can opt into review fixtures
+    // without making fixtures reachable from the production deployment.
+    define: {
+      'import.meta.env.VITE_VERCEL_ENV': JSON.stringify(process.env.VERCEL_ENV ?? ''),
+    },
     publicDir: command === 'build' ? false : 'public',
     plugins: [
       react(),
