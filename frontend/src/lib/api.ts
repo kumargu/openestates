@@ -14,7 +14,6 @@ import type {
   SurfaceBatchResponse,
   SurfaceSceneResponse,
 } from "./types.ts";
-import { getFixtureResponse } from "./dev-fixtures.ts";
 import {
   filterListableProperties,
   isListableProperty,
@@ -24,7 +23,7 @@ import { API_ORIGIN } from "./runtimeConfig.ts";
 const META_ENV = (import.meta as ImportMeta & {
   env?: Record<string, string | boolean | undefined>;
 }).env ?? {};
-const ENABLE_DEV_FIXTURES = META_ENV.VITE_USE_FIXTURE_API === "true";
+const ENABLE_DEV_FIXTURES = META_ENV.DEV === true && META_ENV.VITE_USE_FIXTURE_API === "true";
 const inFlightSearches = new Map<string, Promise<SearchResponse>>();
 const PROPERTY_CATALOG_CACHE_MS = 60_000;
 let cachedPropertyCatalog: { loadedAt: number; value: PropertyCard[] } | null = null;
@@ -43,8 +42,9 @@ type PropertyCatalogFetchOptions = ApiFetchOptions & {
   refresh?: boolean;
 };
 
-function getDevFixture<T>(path: string): T | null {
+async function getDevFixture<T>(path: string): Promise<T | null> {
   if (!ENABLE_DEV_FIXTURES) return null;
+  const { getFixtureResponse } = await import('./dev-fixtures.ts');
   const fixture = getFixtureResponse(path);
   return fixture === null ? null : fixture as T;
 }
@@ -85,6 +85,9 @@ function withCallerAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<
 }
 
 async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  const localFixture = await getDevFixture<T>(path);
+  if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  if (localFixture !== null) return localFixture;
   for (let attempt = 0; attempt < GET_ATTEMPT_COUNT; attempt += 1) {
     try {
       const res = await fetch(`${API_ORIGIN}${path}`, {
@@ -92,7 +95,7 @@ async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promis
       });
       if (res.ok) return res.json();
 
-      const fixture = getDevFixture<T>(path);
+      const fixture = await getDevFixture<T>(path);
       if (fixture !== null) return fixture;
 
       const text = await res.text().catch(() => "");
@@ -101,7 +104,7 @@ async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promis
       );
     } catch (error) {
       if (isAbortError(error) || options.signal?.aborted) throw error;
-      const fixture = getDevFixture<T>(path);
+      const fixture = await getDevFixture<T>(path);
       if (fixture !== null) return fixture;
       const canRetry = attempt + 1 < GET_ATTEMPT_COUNT && isRetryable(error);
       if (!canRetry) throw error;
@@ -119,7 +122,7 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     signal: requestSignal({}),
   });
   if (!res.ok) {
-    const fixture = getDevFixture<T>(path);
+    const fixture = await getDevFixture<T>(path);
     if (fixture !== null) return fixture;
 
     const text = await res.text().catch(() => "");

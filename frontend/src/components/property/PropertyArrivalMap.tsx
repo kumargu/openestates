@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { Link } from "react-router-dom";
+import atlasPolicy from '../../../../app/config/ui/home-atlas.json';
 import type {
   ArrivalSearchSociety,
   MapOverlayLine,
@@ -111,6 +112,13 @@ export function PropertyArrivalMap({
   const home = useMemo(() => resolveHomeAnchor(context), [context]);
   const roadLayer = context.layers?.find((layer) => layer.renderKind === "terrain_corridor");
   const entranceLayer = context.layers?.find((layer) => layer.renderKind === "arrival_marker");
+  const nearbyLayers = useMemo(() => (context.layers ?? []).filter(layer => layer.id !== 'metro'
+    && layer.renderKind !== 'arrival_marker' && layer.renderKind !== 'terrain_corridor'
+    && context.places.some(place => place.layer === layer.id)), [context.layers, context.places]);
+  const [nearbyLayerId, setNearbyLayerId] = useState<string | null>(null);
+  const currentNearbyLayer = nearbyLayers.find(layer => layer.id === nearbyLayerId) ?? nearbyLayers[0];
+  const nearbyPlaces = useMemo(() => buildNumberedPlaces(context.places.filter(place =>
+    place.layer === currentNearbyLayer?.id)), [context.places, currentNearbyLayer]);
   const metroLayer = context.layers?.find((layer) => layer.id === "metro");
   const roadLines = useMemo(
     () => roadLayer
@@ -138,29 +146,35 @@ export function PropertyArrivalMap({
   }, [context.metro_lines, context.places, home, metroLayer?.id]);
   const metroLines = useMemo(
     () => home
-      ? metroLinesNearArrival(home, metroPlaces, context.metro_lines ?? [])
+      ? context.layer_lines?.[metroLayer?.id ?? 'metro'] ?? metroLinesNearArrival(home, metroPlaces, context.metro_lines ?? [])
       : [],
-    [context.metro_lines, home, metroPlaces],
+    [context.layer_lines, context.metro_lines, home, metroPlaces, metroLayer?.id],
   );
   const entrancePlaces = useMemo(
     () => arrivalMarkerPlaces(context, entranceLayer),
     [context, entranceLayer],
   );
-  const views = useMemo(() => arrivalViewOptions({
+  const views = useMemo(() => [...arrivalViewOptions({
     approachLabel,
     hasApproachLayer,
-    hasMetroEvidence: metroLines.length > 0,
+    hasMetroEvidence: metroLines.length > 0 || metroPlaces.length > 0,
     metroLabel,
-  }), [
+  }), ...(nearbyLayers.length ? [{id: 'nearby' as const, label: 'Nearby'}] : [])], [
     approachLabel,
     hasApproachLayer,
     metroLabel,
     metroLines.length,
+    metroPlaces.length,
+    nearbyLayers.length,
   ]);
   const [view, setView] = useState<ArrivalView>(() => views[0]?.id ?? "society");
   const [cameraMode, setCameraMode] = useState<ArrivalCameraMode>(() =>
     views[0]?.id === "metro" ? "evidence" : "home");
   const [expanded, setExpanded] = useState(false);
+  const [above, setAbove] = useState(false);
+  const [quiet, setQuiet] = useState(false);
+  const [showBoundary, setShowBoundary] = useState(true);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const activeView = views.some((candidate) => candidate.id === view)
     ? view
     : views[0]?.id ?? "society";
@@ -265,9 +279,12 @@ export function PropertyArrivalMap({
     if (activeView === "society") setSocietyAutoPlay(false);
     if (activeView === "approach") setApproachAutoPlay(false);
     setView(next);
+    setSelectedPlaceId(null);
+    setAbove(false);
+    if (next === 'approach') setApproachAutoPlay(true);
     const reducedApproach = next === "approach"
       && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    setCameraMode(next === "metro" || reducedApproach ? "evidence" : "home");
+    setCameraMode(next === "metro" || next === 'nearby' || reducedApproach ? "evidence" : "home");
   }, [activeView, playbackController]);
 
   const selectSearchSociety = useCallback((societyId: string) => {
@@ -281,10 +298,23 @@ export function PropertyArrivalMap({
 
   if (!home || views.length === 0) return null;
 
-  const visiblePlaces = activeView === "metro" ? metroPlaces : entrancePlaces;
+  const visiblePlaces = activeView === "metro" ? metroPlaces : activeView === 'nearby' ? nearbyPlaces : entrancePlaces;
+  const selectPlace = (id: string | null) => { playbackController.cancel('settled'); setSelectedPlaceId(id); };
+  const tourPlaces = async () => {
+    if (playbackState === 'playing') { playbackController.pause(); return; }
+    if (playbackState === 'paused') { playbackController.resume(); return; }
+    const run = playbackController.begin('playing');
+    run.activate();
+    for (const place of visiblePlaces) {
+      if (!run.isCurrent()) return;
+      setSelectedPlaceId(place.feature_id ?? place.name);
+      if (!await run.wait(atlasPolicy.nearby.dwellMs)) return;
+    }
+    if (run.isCurrent()) { setSelectedPlaceId(null); run.settle(); }
+  };
   const visibleMetroLines = activeView === "metro" ? metroLines : EMPTY_ARRIVAL_LINES;
   const visibleRoadLines = activeView === "approach" ? roadLines : EMPTY_ARRIVAL_LINES;
-  const viewport = activeView === "metro"
+  const viewport = activeView === "metro" || activeView === 'nearby'
     ? arrivalEvidenceViewport(home, visiblePlaces, visibleMetroLines)
     : {
       center: home,
@@ -309,6 +339,16 @@ export function PropertyArrivalMap({
             </button>
           ))}
         </div>
+        <details className="atlas-view-settings">
+          <summary>View</summary>
+          <div>
+            <label><input type="checkbox" checked={above} disabled={activeView === 'approach'}
+              onChange={e => { playbackController.cancel('settled'); setSocietyAutoPlay(false); setAbove(e.target.checked); }} />From above</label>
+            <label><input type="checkbox" checked={showBoundary} onChange={e => setShowBoundary(e.target.checked)} />Society boundary</label>
+            <label><input type="checkbox" checked={quiet} disabled={activeView !== 'society' || !context.home.boundary}
+              onChange={e => setQuiet(e.target.checked)} />Quiet surroundings</label>
+          </div>
+        </details>
         {navigationAction && navigationActionText ? (
           <button
             type="button"
@@ -329,6 +369,12 @@ export function PropertyArrivalMap({
           </button>
         ) : null}
       </div>
+      {activeView === 'nearby' && <label className="atlas-nearby-category">
+        <span className="sr-only">Nearby category</span>
+        <select aria-label="Nearby category" value={currentNearbyLayer?.id ?? ''} onChange={e => {
+          playbackController.cancel('settled'); setSelectedPlaceId(null); setNearbyLayerId(e.target.value);
+        }}>{nearbyLayers.map(layer => <option key={layer.id} value={layer.id}>{layer.label}</option>)}</select>
+      </label>}
       {missingArrivalState && (
         <p className="property-arrival-map__status" role="status" aria-live="polite">
           {missingArrivalState}
@@ -361,6 +407,12 @@ export function PropertyArrivalMap({
             accessLines={visibleRoadLines}
             showMetroLines={activeView === "metro"}
             expanded={expanded}
+            above={above}
+            quiet={quiet}
+            showBoundary={showBoundary}
+            polygons={activeView === 'nearby' ? context.layer_polygons?.[currentNearbyLayer?.id ?? ''] : undefined}
+            selectedPlaceId={selectedPlaceId}
+            onSelectPlace={selectPlace}
             cameraMode={activeCameraMode}
             terrainCorridor={activeView === "approach"}
             layerExperience={activeView === "approach" ? roadExperience : undefined}
@@ -379,6 +431,15 @@ export function PropertyArrivalMap({
           />
         </Suspense>
       </ArrivalMapBoundary>
+      {(activeView === 'metro' || activeView === 'nearby') && visiblePlaces.length > 0 && <div className="atlas-place-list" aria-label="Nearby places">
+        <button type="button" onClick={() => void tourPlaces()}>{playbackState === 'playing' ? 'Pause' : playbackState === 'paused' ? 'Resume' : 'Tour places'}</button>
+        <button type="button" aria-pressed={!selectedPlaceId} onClick={() => selectPlace(null)}>Show all</button>
+        {visiblePlaces.map((place, index) => <button type="button" key={place.feature_id ?? place.name}
+          aria-pressed={selectedPlaceId === (place.feature_id ?? place.name)} onClick={() => selectPlace(place.feature_id ?? place.name)}>
+          <span>{index + 1}</span>{place.name}
+          {typeof place.distance_km === 'number' && <small>{place.distance_km.toFixed(1)} km straight-line</small>}
+        </button>)}
+      </div>}
       {activeView === "society"
         && searchContextSocieties.length > 0
         && arrivalExperience?.searchContextLabel ? (

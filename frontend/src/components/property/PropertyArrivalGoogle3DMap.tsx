@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useAtlasRoadFlight } from "../../hooks/useAtlasRoadFlight.ts";
+import { arrivalAtlasRoute, arrivalAtlasContextLines } from "../../lib/homeAtlasProjection.ts";
+import { pointAlongRoute, projectStreetHandoff, type AtlasCameraPose } from "../../../../experiments/home-atlas/src/journey.ts";
+import policy from "../../../../app/config/ui/home-atlas.json";
 import {
   loadGoogleMaps3dLibrary,
   loadGoogleMarkerLibrary,
@@ -52,6 +56,12 @@ export type ArrivalGoogle3DMapProps = {
   onSelectSecondarySociety?: (societyId: string) => void;
   onPlaybackCancelled?: () => void;
   onToggleExpanded: () => void;
+  selectedPlaceId?: string | null;
+  onSelectPlace?: (id: string | null) => void;
+  above?: boolean;
+  quiet?: boolean;
+  showBoundary?: boolean;
+  polygons?: MapOverlayPolygon[];
 };
 
 type LatLngAltitude = { lat: number; lng: number; altitude?: number };
@@ -72,7 +82,7 @@ type Map3DElement = HTMLElement & {
   flyCameraTo: (options: {
     durationMillis: number;
     endCamera: CameraOptions;
-  }) => Promise<void>;
+  }) => void;
   stopCameraAnimation: () => void;
   gestureHandling: "COOPERATIVE" | "GREEDY";
   heading: number;
@@ -119,7 +129,7 @@ type Maps3DLibrary = {
     fillColor: string;
     strokeColor: string;
     strokeWidth: number;
-  }) => Map3DChild & { path: LatLngAltitude[] };
+  }) => Map3DChild & { path: LatLngAltitude[]; innerPaths: LatLngAltitude[][] };
   Polyline3DInteractiveElement: new (options: {
     altitudeMode?: "CLAMP_TO_GROUND" | "RELATIVE_TO_GROUND";
     drawsOccludedSegments?: boolean;
@@ -173,24 +183,6 @@ function targetCamera(
   };
 }
 
-function roadCamera(
-  focus: { latitude: number; longitude: number; heading: number },
-  terrainElevation: number,
-  experience: MapLayerExperience,
-): CameraOptions {
-  return {
-    cameraPosition: {
-      lat: focus.latitude,
-      lng: focus.longitude,
-      altitude: terrainElevation + experience.cameraAltitudeM,
-    },
-    fov: experience.cameraFov,
-    heading: focus.heading,
-    range: experience.cameraRangeM,
-    tilt: experience.cameraTilt,
-  };
-}
-
 function settleCameraFraming(map: Map3DElement, camera: CameraOptions) {
   if (camera.center) map.center = camera.center;
   if (camera.cameraPosition) map.cameraPosition = camera.cameraPosition;
@@ -230,6 +222,7 @@ function addPolygon(
     strokeWidth: 2,
   });
   element.path = pathFromPolygon(polygon);
+  if (polygon.holes?.length) element.innerPaths = polygon.holes.map(ring => ring.map(([lng, lat]) => ({lat,lng})));
   map.append(element);
   children.push(element);
 }
@@ -249,7 +242,7 @@ function addLine(
   children: Map3DChild[],
 ) {
   const element = new library.Polyline3DInteractiveElement({
-    altitudeMode: "RELATIVE_TO_GROUND",
+    altitudeMode: "CLAMP_TO_GROUND",
     drawsOccludedSegments: style.drawsOccludedSegments,
     outerColor: style.outerColor,
     outerWidth: style.outerWidth,
@@ -319,6 +312,12 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     onSelectSecondarySociety,
     onPlaybackCancelled,
     onToggleExpanded,
+    selectedPlaceId = null,
+    onSelectPlace,
+    above = false,
+    quiet = false,
+    showBoundary = true,
+    polygons,
   } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const streetViewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -330,14 +329,27 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const terrainElevationRef = useRef<number | null>(null);
   const initialSocietyAutoPlayRef = useRef(autoPlaySociety);
   const previousSocietyAutoPlayRef = useRef(autoPlaySociety);
-  const [ready, setReady] = useState(false);
+  // An epoch ensures overlays/cameras also attach after a scene-driven map rebuild.
+  const [ready, setReady] = useState(0);
+  const [groundElevation, setGroundElevation] = useState(0);
+  const [mapWidth, setMapWidth] = useState(1000);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(entries => setMapWidth(entries[0].contentRect.width));
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
   const [loadError, setLoadError] = useState<Error | null>(null);
+  const [streetRequested, setStreetRequested] = useState(false);
+  const [streetStart, setStreetStart] = useState(0);
   const homeLatitude = home.latitude;
   const homeLongitude = home.longitude;
   const roadExperience = layerExperience?.kind === "street_view_tour"
     ? layerExperience
     : null;
   const roadTourActive = terrainCorridor && cameraMode === "evidence";
+  const atlasRoute = useMemo(() => arrivalAtlasRoute(accessLines), [accessLines]);
   const roadFocus = useMemo(
     () => roadTourActive
       ? corridorCameraFocus(accessLines, {
@@ -387,7 +399,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const cameraLatitude = cameraCenter.latitude;
   const cameraLongitude = cameraCenter.longitude;
   const roadTour = useGuidedStreetViewTour({
-    active: Boolean(roadLandingFocus),
+    active: Boolean(roadLandingFocus) && streetRequested,
     anchor: entranceAnchor,
     autoPlay: autoPlayApproach,
     containerRef: streetViewContainerRef,
@@ -395,7 +407,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     interiorAnchor: societyInteriorAnchor,
     onPlaybackCancelled,
     playbackController,
-    waypoints: roadWaypoints,
+    waypoints: useMemo(() => roadWaypoints.slice(streetStart), [roadWaypoints, streetStart]),
   });
   const playbackState = useSyncExternalStore(
     playbackController.subscribe,
@@ -403,11 +415,42 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     playbackController.snapshot,
   );
   const streetViewReady = roadTour.active;
+  const renderRoad = useCallback((pose: AtlasCameraPose) => {
+    const map = mapRef.current;
+    if (map) settleCameraFraming(map, targetCamera(pose.center.latitude, pose.center.longitude,
+      pose.center.altitude, pose.range, pose.tilt, pose.heading));
+  }, []);
+  const flyRoad = useCallback((pose: AtlasCameraPose, durationMs: number) => {
+    mapRef.current?.flyCameraTo({ durationMillis: durationMs, endCamera: targetCamera(
+      pose.center.latitude, pose.center.longitude, pose.center.altitude, pose.range, pose.tilt, pose.heading,
+    ) });
+  }, []);
+  const roadFlight = useAtlasRoadFlight({
+    active: Boolean(ready) && roadTourActive && !streetRequested,
+    route: atlasRoute, controller: playbackController,
+    elevation: groundElevation,
+    width: mapWidth,
+    render: renderRoad, fly: flyRoad, autoPlay: autoPlayApproach,
+  });
+  const exitStreet = useCallback(() => {
+    if (atlasRoute) {
+      const position = roadTour.position();
+      if (position) roadFlight.seek(projectStreetHandoff(atlasRoute, position, position.heading).distanceAlongM, position.heading);
+      else roadFlight.seek(roadFlight.position(), mapRef.current?.heading ?? 0);
+    }
+    playbackController.cancel('settled');
+    setStreetRequested(false);
+  }, [atlasRoute, playbackController, roadFlight, roadTour]);
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && streetRequested) exitStreet();
+    };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, [exitStreet, streetRequested]);
   const roadPlaybackCanPause = playbackState === "preparing" || playbackState === "playing";
   const roadPlaybackCanResume = playbackState === "paused";
-  const showRoadPlaybackControls = terrainCorridor
-    && Boolean(roadExperience)
-    && (roadPlaybackCanPause || roadPlaybackCanResume || (roadTourActive && streetViewReady));
+  const showRoadPlaybackControls = roadTourActive && Boolean(atlasRoute);
   const selectedSecondarySociety = secondarySocieties.find((candidate) =>
     candidate.societyId === selectedSecondarySocietyId) ?? null;
   const hadSecondarySelectionRef = useRef(false);
@@ -426,6 +469,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         const library = loaded as Maps3DLibrary;
         const markerLibrary = loadedMarkerLibrary as MarkerLibrary;
         terrainElevationRef.current = terrainElevation;
+        setGroundElevation(terrainElevation);
         const initialCamera = initialSocietyAutoPlayRef.current
           ? societyComposition?.start
           : societyComposition?.final;
@@ -445,11 +489,17 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         libraryRef.current = library;
         markerLibraryRef.current = markerLibrary;
         mapRef.current = map;
+        map.addEventListener('gmp-steadychange', event => {
+          map.dataset.googleSteady = String((event as Event & {isSteady:boolean}).isSteady);
+        });
+        map.addEventListener('gmp-error', () => {
+          if (!cancelled) setLoadError(new Error('google_maps_3d_unavailable'));
+        });
         unregisterStopper = playbackController.registerStopper(() => {
           map.stopCameraAnimation();
         });
         containerRef.current.replaceChildren(map);
-        setReady(true);
+        setReady(epoch => epoch + 1);
       })
       .catch((error: unknown) => {
         if (import.meta.env.DEV) {
@@ -555,7 +605,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       void map.flyCameraTo({
         endCamera: finalCamera,
         durationMillis: arrivalExperience.revealDurationMs,
-      }).catch(() => undefined);
+      });
       void run.wait(arrivalExperience.revealDurationMs).then((timerCompleted) => {
         if (!timerCompleted || !run.isCurrent()) return;
         settleCameraFraming(map, finalCamera);
@@ -565,15 +615,13 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         if (run.isCurrent()) playbackController.cancel("settled");
       };
     }
+    // The Atlas road driver owns this camera until the road view is left.
+    if (roadTourActive || selectedPlaceId) return;
     const evidenceFocused = cameraMode === "evidence";
-    const range = roadLandingFocus && roadExperience
-      ? roadExperience.cameraRangeM
-      : evidenceFocused
+    const range = evidenceFocused
       ? evidenceCameraRange(viewport.radiusKm)
       : HOME_PORTRAIT_RANGE_M;
-    const tilt = roadLandingFocus && roadExperience
-      ? roadExperience.cameraTilt
-      : evidenceFocused
+    const tilt = above ? policy.above.tilt : evidenceFocused
       ? evidenceCameraTilt(viewport.radiusKm)
       : HOME_PORTRAIT_TILT;
     const heading = roadLandingFocus?.heading ?? DEFAULT_HEADING;
@@ -582,17 +630,13 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const durationMillis = reducedMotion
       ? 0
-      : roadLandingFocus && roadExperience
-      ? roadExperience.transitionMs
       : evidenceFocused
       ? EVIDENCE_CAMERA_DURATION_MS
       : HOME_CAMERA_DURATION_MS;
     void loadGoogleTerrainElevation(cameraLatitude, cameraLongitude)
       .then((terrainElevation) => {
         if (cameraMoveRef.current !== moveId || mapRef.current !== map) return;
-        const camera = roadLandingFocus && roadExperience
-          ? roadCamera(roadLandingFocus, terrainElevation, roadExperience)
-          : targetCamera(
+        const camera = targetCamera(
             cameraLatitude,
             cameraLongitude,
             terrainElevation,
@@ -600,12 +644,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
             tilt,
             heading,
           );
-        return map.flyCameraTo({ endCamera: camera, durationMillis })
-          .then(() => {
-            if (cameraMoveRef.current === moveId && !roadLandingFocus) {
-              settleCameraFraming(map, camera);
-            }
-          });
+        map.flyCameraTo({ endCamera: camera, durationMillis });
       })
       .catch((error: unknown) => {
         if (import.meta.env.DEV) {
@@ -614,6 +653,8 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       });
   }, [
     cameraMode,
+    selectedPlaceId,
+    above,
     cameraLatitude,
     cameraLongitude,
     accessLines,
@@ -652,35 +693,13 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       void map.flyCameraTo({
         endCamera: finalCamera,
         durationMillis: remainingMs,
-      }).catch(() => undefined);
+      });
       return;
     }
-    if (
-      playbackState !== "playing"
-      || !terrainCorridor
-      || !roadLandingFocus
-      || !roadExperience
-      || streetViewReady
-    ) return;
-    const moveId = cameraMoveRef.current + 1;
-    cameraMoveRef.current = moveId;
-    void loadGoogleTerrainElevation(roadLandingFocus.latitude, roadLandingFocus.longitude)
-      .then((terrainElevation) => {
-        if (cameraMoveRef.current !== moveId || mapRef.current !== map) return;
-        return map.flyCameraTo({
-          endCamera: roadCamera(roadLandingFocus, terrainElevation, roadExperience),
-          durationMillis: remainingMs,
-        });
-      })
-      .catch(() => undefined);
   }, [
     playbackController,
     playbackState,
-    roadExperience,
-    roadLandingFocus,
     societyComposition,
-    streetViewReady,
-    terrainCorridor,
   ]);
 
   useEffect(() => {
@@ -714,14 +733,26 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     for (const child of childrenRef.current) child.remove();
     const nextChildren: Map3DChild[] = [];
 
-    if (cameraMode === "home" && home.boundary) {
+    if (showBoundary && home.boundary) {
       addPolygon(
         map,
         library,
         home.boundary,
-        { fill: "#f8f1df1f", stroke: "#fff7e3e6" },
+        policy.boundary,
         nextChildren,
       );
+    }
+    for (const polygon of polygons ?? []) addPolygon(map, library, polygon, policy.boundary, nextChildren);
+    if (quiet && home.boundary && cameraMode === 'home') {
+      const mask = new library.Polygon3DElement({ altitudeMode: 'CLAMP_TO_GROUND',
+        fillColor: policy.quiet.fill, strokeColor: '#00000000', strokeWidth: 0 });
+      const r = policy.quiet.radiusDegrees;
+      mask.path = [
+        {lat: home.latitude-r, lng: home.longitude-r}, {lat: home.latitude-r, lng: home.longitude+r},
+        {lat: home.latitude+r, lng: home.longitude+r}, {lat: home.latitude+r, lng: home.longitude-r},
+      ];
+      mask.innerPaths = [pathFromPolygon(home.boundary).reverse()];
+      map.append(mask); nextChildren.push(mask);
     }
     for (const society of secondarySocieties) {
       if (society.home.boundary) {
@@ -757,7 +788,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       nextChildren.push(marker);
     }
     for (const line of accessLines) {
-      if (!roadTourActive) {
+      {
         addLine(
           map,
           library,
@@ -773,7 +804,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           nextChildren,
         );
         const labelPosition = lineLabelPosition(line);
-        if (labelPosition) {
+        if (labelPosition && !roadTourActive) {
           const routeLabel = new library.Marker3DInteractiveElement({
             altitudeMode: "CLAMP_TO_GROUND",
             collisionBehavior: "REQUIRED",
@@ -788,14 +819,16 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       }
     }
     if (showMetroLines) {
-      for (const line of metroLines) {
+      for (const contextLine of arrivalAtlasContextLines(metroLines, { ...policy.metro, altitudeMode: 'clamp_to_ground' })) {
+        const line = { id: contextLine.id, name: '', kind: 'line', source_type: 'OSM',
+          coordinates: contextLine.path.map(p => [p.lng, p.lat] as [number, number]) };
         addLine(
           map,
           library,
           line,
           {
-            color: "#7651a8",
-            width: 7,
+            color: contextLine.style.strokeColor,
+            width: contextLine.style.strokeWidth,
             outerColor: "#ffffffcc",
             outerWidth: 0.35,
             drawsOccludedSegments: false,
@@ -833,10 +866,14 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         gmpPopoverTargetElement: popover,
         position: { lat: place.latitude, lng: place.longitude },
         title: place.name,
+        label: (place.feature_id ?? place.name) === selectedPlaceId ? place.name : undefined,
       });
-      marker.append(new markerLibrary.PinElement(mapMarkerPinOptions(place.icon, "active")));
+      marker.append(new markerLibrary.PinElement({ ...mapMarkerPinOptions(place.icon, "active"),
+        ...(cameraMode === 'evidence' ? {glyphSrc: undefined, glyphText: String(place.number)} : {}),
+      }));
       marker.tabIndex = 0;
       marker.setAttribute("aria-label", place.name);
+      marker.addEventListener('gmp-click', () => onSelectPlace?.(place.feature_id ?? place.name));
       marker.addEventListener("pointerenter", () => {
         if (activePopover && activePopover !== popover) activePopover.open = false;
         popover.open = true;
@@ -863,7 +900,31 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     onSelectSecondarySociety,
     showMetroLines,
     roadTourActive,
+    quiet,
+    showBoundary,
+    onSelectPlace,
+    polygons,
+    selectedPlaceId,
   ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || roadTourActive || streetRequested) return;
+    const place = places.find(p => (p.feature_id ?? p.name) === selectedPlaceId);
+    if (place) {
+      let cancelled = false;
+      void loadGoogleTerrainElevation(place.latitude, place.longitude).then(elevation => {
+        if (cancelled) return;
+        map.flyCameraTo({ durationMillis: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : policy.focus.durationMs,
+          endCamera: targetCamera(place.latitude, place.longitude, elevation,
+            policy.focus.rangeM, above ? policy.above.tilt : policy.focus.tilt, map.heading) });
+      }).catch(() => undefined);
+      return () => { cancelled = true; };
+    } else if (above) {
+      map.stopCameraAnimation();
+      map.tilt = policy.above.tilt;
+    }
+  }, [above, selectedPlaceId, places, playbackController, ready, roadTourActive, streetRequested]);
 
   if (loadError) throw loadError;
 
@@ -883,11 +944,13 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         ref={containerRef}
         className={`nearby-map__canvas nearby-map__canvas--google-3d${streetViewReady ? " is-behind-street-view" : ""}`}
         aria-hidden={streetViewReady}
+        inert={streetViewReady}
       />
       <div
         ref={streetViewContainerRef}
         className={`nearby-map__canvas nearby-map__canvas--street-view${streetViewReady ? " is-active" : ""}`}
         aria-hidden={!streetViewReady}
+        inert={!streetViewReady}
       />
       {roadTourActive && accessLines[0]?.name && (
         <div className="nearby-map__road-title">
@@ -896,17 +959,17 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           {roadTour.status && <span aria-live="polite"> · {roadTour.status}</span>}
         </div>
       )}
-      {showRoadPlaybackControls && roadExperience ? (
+      {showRoadPlaybackControls ? (
         <div className="nearby-map__playback-controls" role="group" aria-label="Approach road playback">
           {roadPlaybackCanPause || roadPlaybackCanResume ? (
             <button
               type="button"
               aria-label={roadPlaybackCanResume
-                ? roadExperience.resumeLabel
-                : roadExperience.pauseLabel}
+                ? 'Resume road tour'
+                : 'Pause road tour'}
               title={roadPlaybackCanResume
-                ? roadExperience.resumeLabel
-                : roadExperience.pauseLabel}
+                ? 'Resume road tour'
+                : 'Pause road tour'}
               onClick={() => roadPlaybackCanResume
                 ? playbackController.resume()
                 : playbackController.pause()}
@@ -915,17 +978,36 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
               <span>{roadPlaybackCanResume ? "Resume" : "Pause"}</span>
             </button>
           ) : null}
-          {roadTourActive && streetViewReady ? (
+          {!roadPlaybackCanPause && !roadPlaybackCanResume ? (
             <button
               type="button"
-              aria-label={roadExperience.replayLabel}
-              title={roadExperience.replayLabel}
-              onClick={roadTour.replay}
+              aria-label="Replay road tour"
+              onClick={streetRequested ? roadTour.replay : roadFlight.replay}
             >
               <span aria-hidden="true">↻</span>
               <span>Replay</span>
             </button>
           ) : null}
+          {!streetRequested && <label className="atlas-road-speed">Speed
+            <input aria-label="Road tour speed" type="range" min={policy.road.minimumRate} max={policy.road.maximumRate}
+              step="0.25" value={roadFlight.rate} onChange={e => roadFlight.setRate(Number(e.target.value))} />
+            <output>{roadFlight.rate}×</output>
+          </label>}
+          {roadExperience && <button type="button" onClick={() => {
+            if (streetRequested) exitStreet();
+            else {
+              if (atlasRoute) {
+                const point = pointAlongRoute(atlasRoute, roadFlight.position());
+                let best = 0;
+                roadWaypoints.forEach((candidate, i) => {
+                  const distance = (p: typeof candidate) => Math.hypot(p.latitude-point.latitude, p.longitude-point.longitude);
+                  if (distance(candidate) < distance(roadWaypoints[best])) best = i;
+                });
+                setStreetStart(best);
+              }
+              playbackController.cancel('settled'); setStreetRequested(true);
+            }
+          }}>{streetRequested ? 'Back to aerial' : 'Street View'}</button>}
         </div>
       ) : null}
       <div className="nearby-map__actions">

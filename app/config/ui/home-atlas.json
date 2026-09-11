@@ -1,0 +1,27 @@
+{
+  "road": {
+    "baseSpeedMps": 12,
+    "minimumRate": 0.5,
+    "maximumRate": 2,
+    "lookBehindM": 25,
+    "lookAheadM": 65,
+    "altitudeOffsetM": 8,
+    "tilt": 67,
+    "desktopRangeM": 270,
+    "mobileRangeM": 350,
+    "mobileBreakpointPx": 700,
+    "descentMs": 2400,
+    "orientationDwellMs": 1800
+  },
+  "metro": {
+    "strokeColor": "#d5a7ff",
+    "strokeWidth": 5,
+    "altitudeMode": "clamp_to_ground",
+    "drawsOccludedSegments": false
+  },
+  "boundary": { "fill": "#f8f1df12", "stroke": "#fff7e3e6" },
+  "quiet": { "fill": "#12232b88", "radiusDegrees": 0.08 },
+  "focus": { "rangeM": 700, "tilt": 55, "durationMs": 1200 },
+  "above": { "tilt": 12 },
+  "nearby": { "dwellMs": 4200 }
+}

@@ -429,6 +429,7 @@ export type MapOverlayPolygon = {
   name: string;
   kind: string;
   coordinates: [number, number][];
+  holes?: [number, number][][];
   distance_km?: number;
   source_type: string;
 };
@@ -472,6 +473,7 @@ export type PropertyMapContext = {
   access_lines?: MapOverlayLine[];
   red_flag_lines?: MapOverlayLine[];
   layer_lines?: Record<string, MapOverlayLine[]>;
+  layer_polygons?: Record<string, MapOverlayPolygon[]>;
   green_patches?: MapOverlayPolygon[];
   lakes?: MapOverlayPolygon[];
 };

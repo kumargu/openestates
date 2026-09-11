@@ -439,7 +439,7 @@ function PropertyPageBody({
   );
   const arrivalContext = propertyMapContextFromSurfaceScene(
     arrivalScene,
-    data.map_context,
+    aroundThisHomeContext,
   );
   const showNearbyPlate = hasAroundThisHomePlate(aroundThisHomeContext);
   const displayTitle = p.title.trim();

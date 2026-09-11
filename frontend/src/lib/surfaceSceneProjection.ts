@@ -35,6 +35,18 @@ export function propertyMapContextFromSurfaceScene(
     .map((feature) => mapLineFromFeature(feature, receiptsById))
     .filter((line): line is MapOverlayLine => Boolean(line));
   const layerLines = mapLinesByLayer(scene, receiptsById);
+  const layerPolygons = { ...fallback?.layer_polygons };
+  for (const feature of scene.features) {
+    const polygons = feature.geometry.type === 'Polygon' ? [feature.geometry.coordinates]
+      : feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : [];
+    if (!polygons.length) continue;
+    const existing = layerPolygons[feature.layerId] ?? [];
+    layerPolygons[feature.layerId] = [...existing.filter(p => !p.id.startsWith(`${feature.id}:`)),
+      ...polygons.filter(rings => rings[0]?.length >= 4).map((rings, index) => ({
+        id: `${feature.id}:${index}`, name: feature.label, kind: feature.kind, coordinates: rings[0], holes: rings.slice(1),
+        source_type: feature.receiptIds.map(id => receiptsById.get(id)?.sourceType).find(Boolean) ?? '',
+      }))];
+  }
 
   const mergedAccessLines = mergeLines(accessLines, fallback?.access_lines ?? []);
   const mergedRedFlagLines = [
@@ -60,10 +72,11 @@ export function propertyMapContextFromSurfaceScene(
     places,
     proof_focus: scene.proofFocus,
     water: fallback?.water,
-    metro_lines: fallback?.metro_lines,
+    metro_lines: mergeLines(accessLines, fallback?.metro_lines ?? []),
     access_lines: mergedAccessLines,
     red_flag_lines: mergedRedFlagLines,
     layer_lines: layerLines,
+    layer_polygons: layerPolygons,
     green_patches: fallback?.green_patches,
     lakes: fallback?.lakes,
   };

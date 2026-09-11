@@ -8,10 +8,12 @@
   },
   "scripts": {
     "dev": "node ./node_modules/vite/bin/vite.js",
+    "dev:atlas": "node ./node_modules/vite/bin/vite.js --mode atlas",
     "build": "tsc -b && node ./node_modules/vite/bin/vite.js build",
     "lint": "eslint . --max-warnings=0",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:smoke": "node --experimental-strip-types --test tests/*.smoke.test.ts",
+    "test:atlas-browser": "playwright test --config playwright.atlas.config.ts",
     "verify:dist": "node scripts/verify-dist.mjs",
     "smoke": "npm run build && npm run verify:dist && npm run test:smoke",
     "preview": "node ./node_modules/vite/bin/vite.js preview"
@@ -25,6 +27,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",

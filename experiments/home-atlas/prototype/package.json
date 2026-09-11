@@ -1,0 +1,12 @@
+{
+  "name": "openestates-home-atlas-prototype",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check-atlas.mjs && node scripts/check-interactions.mjs && node scripts/check-brigade.mjs && node scripts/check-atlas-policy.mjs && node scripts/check-road-journey.mjs",
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "vite": "^7.1.0"
+  }
+}

@@ -18,6 +18,27 @@
   gap: 0.75rem;
 }
 
+.atlas-view-settings { position: relative; margin-left: auto; font-size: .86rem; }
+.atlas-view-settings summary { cursor: pointer; padding: .65rem; }
+.atlas-view-settings > div { position: absolute; right: 0; top: 100%; z-index: 6; display: grid; gap: .75rem;
+  width: 210px; padding: 1rem; border-radius: 12px; background: var(--color-surface, #fff); box-shadow: 0 8px 24px #0002; }
+.atlas-view-settings label { display: flex; gap: .5rem; align-items: center; }
+.atlas-road-speed { display: flex; align-items: center; gap: .35rem; color: white; font-size: .75rem; }
+.atlas-road-speed input { width: 70px; min-height: 32px; accent-color: #d5dfbc; }
+.atlas-road-speed output { min-width: 2.6em; font-variant-numeric: tabular-nums; }
+.atlas-place-list { display: flex; gap: .4rem; overflow-x: auto; padding-block: .25rem; }
+.atlas-place-list button { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; padding: .65rem;
+  border: 1px solid transparent; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: .82rem; cursor: pointer; }
+.atlas-place-list button[aria-pressed="true"] { border-color: #80766555; background: #8076650c; }
+.atlas-place-list small { color: var(--color-text-secondary); }
+.atlas-nearby-category select { font: inherit; font-size: .84rem; color: inherit; border: 1px solid #80766544;
+  padding: .55rem .75rem; border-radius: 8px; background: var(--color-surface, white); }
+.atlas-place-list button:focus-visible, .atlas-view-settings summary:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+@media (max-width: 760px) {
+  .nearby-map__playback-controls { max-width: calc(100% - 2rem); flex-wrap: wrap; border-radius: 16px; }
+  .atlas-place-list { padding-inline: 1rem; }
+}
+
 .property-arrival-map__switcher {
   display: inline-flex;
   align-items: center;
