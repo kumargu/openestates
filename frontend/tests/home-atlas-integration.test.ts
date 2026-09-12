@@ -159,6 +159,41 @@ test('screen-space fitting contains point, polygon, line, and lifted anchors at 
   }
 });
 
+test('nearby comparisons preserve orientation when selecting opposite-side alternatives', () => {
+  const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
+  const home = {...resolveHomeAnchor(context)!, boundary: context.home.boundary};
+  const template = buildNumberedPlaces(context.places)[0];
+  const places = [
+    {...template, feature_id: 'east', latitude: home.latitude, longitude: home.longitude + 0.012},
+    {...template, feature_id: 'west', latitude: home.latitude + 0.003, longitude: home.longitude - 0.008},
+    {...template, feature_id: 'north', latitude: home.latitude + 0.01, longitude: home.longitude},
+  ];
+  for (const frame of [
+    {width: 1440, height: 1000, left: 32, right: 420, top: 96, bottom: 120},
+    {width: 390, height: 844, left: 16, right: 16, top: 160, bottom: 420},
+  ]) {
+    const overview = nearbySceneCamera(home, places, [], [], null, 'overview', 900, frame.width, frame);
+    for (const selected of places) {
+      const pair = nearbySceneCamera(home, places, [], [], selected.feature_id, 'pair', 900, frame.width, frame);
+      assert.equal(pair.heading, overview.heading, 'selection must not rotate the comparison world');
+      assert.equal(pair.tilt, atlasPolicy.cameraFit.pairTilt);
+      const reversed = nearbySceneCamera(home, [...places].reverse(), [], [], selected.feature_id,
+        'pair', 900, frame.width, frame);
+      assert.ok(Math.abs(pair.heading - reversed.heading) < 1e-6, 'list order must not change orientation');
+      const anchors = [
+        {lat: home.latitude, lng: home.longitude, heightM: atlasPolicy.nearby.markerLiftM},
+        {lat: selected.latitude, lng: selected.longitude, heightM: atlasPolicy.nearby.markerLiftM},
+        ...nearbyRelationArc(home, selected).map(p => ({lat: p.lat, lng: p.lng, heightM: p.altitude})),
+      ];
+      for (const anchor of anchors) {
+        const screen = projectCameraPointToScreen(pair, anchor, frame, atlasPolicy.cameraFit.fieldOfViewDegrees);
+        assert.ok(screen.x >= frame.left && screen.x <= frame.width - frame.right);
+        assert.ok(screen.y >= frame.top && screen.y <= frame.height - frame.bottom);
+      }
+    }
+  }
+});
+
 test('inspect framing gives selected geometry more screen presence while retaining home', () => {
   const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
   const home = resolveHomeAnchor(context)!;

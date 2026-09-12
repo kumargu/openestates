@@ -37,7 +37,7 @@
     "drawsOccludedSegments": false
   },
   "boundary": { "fill": "#f8f1df12", "stroke": "#fff7e3e6" },
-  "quiet": { "fill": "#061b28b0", "radiusDegrees": 0.08 },
+  "quiet": { "fill": "#061b2870", "radiusDegrees": 0.08 },
   "focus": { "rangeM": 700, "tilt": 55, "durationMs": 1200, "movementFraction": 0.7 },
   "cameraFit": {
     "safeMarginPx": 32,

@@ -105,8 +105,37 @@ capture pair, Look closer and Aerial for schools and lakes before merging.
 Specifically verify distant selections, terrain/building occlusion, rapid
 selection changes, gesture cancellation and Street View return.
 
-Further camera/shade tuning is intentionally pending that gate: lighter context
-shading that keeps intervening roads readable, comparison-stable orientation
-between nearby selections, and road-vantage adjustments should be evaluated on
-the live scene rather than added as unverified motion. A straight relationship
-arc must never be presented as a walking or driving route.
+At that checkpoint, further camera/shade tuning was pending. The next follow-up
+below implements comparison orientation and a provisional lighter shade;
+road-vantage adjustments and live visual evaluation remain pending. A straight
+relationship arc must never be presented as a walking or driving route.
+
+## Comparison tuning follow-up
+
+With home now derives its heading from the entire category, as Show together
+does. Switching between alternatives no longer rotates the map toward each new
+place. Its tilt remains fixed; centre and range still fit each relationship.
+This preserves orientation, not a shared zoom scale. Look closer intentionally
+retains the subject-facing angle: applying the category heading there failed the
+existing selected-geometry prominence test. The two actions therefore have
+distinct jobs without adding controls. Selecting the next place returns to pair
+framing through the existing selection handler.
+
+Reduced the Focus veil alpha from 176/255 to 112/255 (about 69% to 44%) so more
+intervening geography remains visible. Existing home/selection cutouts, source
+geometry and layer colours are unchanged. This is a provisional visual tuning
+value, not a claim of photographic validation.
+
+Regression coverage exercises alternatives on opposite sides of home, list
+reordering, desktop/mobile frames and home/arc containment. The existing inspect
+prominence and Aerial containment contracts still apply. Hover, touch, keyboard
+selection and reduced-motion dispatch are unchanged; no new copy or chrome.
+Validation: 275 frontend tests, 16 Atlas tests, ESLint, TypeScript, Atlas build,
+and `git diff --check` passed. Existing large-bundle warning remains.
+
+Live-render verification remains blocked by the missing configured Maps key.
+No new screenshots are claimed. Road pauses remain unimplemented: the current
+continuous route contract has no explicit junction-stop collection. Do not turn
+polyline bends, regular waypoints or guessed entrances into buyer stops. A
+follow-up needs sourced stop identities and route associations, then verification
+of pause/resume, speed changes and Street View handoff on the real map.

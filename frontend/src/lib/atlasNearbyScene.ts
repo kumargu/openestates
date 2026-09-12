@@ -73,12 +73,14 @@ export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons:
       ...places.map((place) => marker({lat: place.latitude, lng: place.longitude})),
     ];
   }
-  const target = selectedAnchor ?? (places.length
+  // Comparisons retain the category overview's orientation. Only the explicit
+  // Look closer action turns toward the selected subject for an oblique view.
+  const target = depth === 'inspect' && selectedAnchor ? selectedAnchor : places.length
     ? {
       lat: places.reduce((total, place) => total + place.latitude, 0) / places.length,
       lng: places.reduce((total, place) => total + place.longitude, 0) / places.length,
     }
-    : origin);
+    : origin;
   const relationshipHeading = bearingDegrees(origin, target);
   const heading = depth === 'home'
     ? policy.cameraFit.homeHeadingDegrees
