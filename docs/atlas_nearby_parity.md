@@ -49,3 +49,64 @@ Two consecutive timing-enforced full journeys passed under `frontend/test-result
 Attach the representative resting and focus screenshots from the recorded artifacts when the branch PR is opened. Browser DOM assertions do not by themselves prove photographic composition.
 
 Not added: idle orbit, saved exact viewpoints, township split-layout, or synthetic building extrusion. These are optional enhancements, not prerequisites for nearby parity. Do not reintroduce Lift or map comparison.
+
+## Follow-up: selection composition and Aerial fitting
+
+Reviewed PRs 132 and 133 together, the committed schools-pair screenshot, and
+[Human Atlas's actual scene implementation](https://github.com/ashemag/human-atlas/blob/553f1db7e23b872cdffcec01fba8e59b88053551/app/scene.tsx).
+Human Atlas centres isolated selection bounds in the space remaining beside its
+inspector. Here, home must remain visible too: inspection now uses spare framing
+space to move the selected anchor toward the clear-frame centre, constrained by
+home, selected geometry and relationship-arc bounds. Range is unchanged by this
+composition adjustment; geographic distances and geometry are never altered.
+
+Fixed an independent bug: the Aerial control previously replaced tilt *after*
+fitting, invalidating containment. It now supplies its tilt to the same solver
+before centre and range are calculated. Both changes use the existing camera
+owner and persistent map; no new camera loop or control is introduced.
+
+Interaction note:
+- Rest / Show together / With home: retain balanced context framing.
+- Look closer: prefer the selected subject within the available containment slack.
+- Hover: unchanged; no automatic camera movement or duplicate labels.
+- Keyboard / touch: existing selection controls use the same fitting path.
+- Reduced motion: existing zero-duration camera application is unchanged.
+- Not borrowed: anatomical explosion, mesh lifting, artificial lighting of real
+  geography, auto-orbit, or isolated views that discard the home's relationship.
+- ThreeUI search did not establish a directly relevant primary-source map pattern;
+  no ThreeUI implementation is claimed or introduced.
+
+### UI critic — immersive property detail
+
+Should-fix: inspection previously balanced the entire relationship rather than
+prioritising its selected subject; addressed within the existing controls.
+Aerial containment was a correctness issue; refitting addresses it.
+The existing screenshot's strong dark veil merits live tuning, but no shade
+change is justified without checking real photographic rendering.
+Passes: no added headings, facts, floating cards, tutorials or decorative motion.
+
+### Verification scope and remaining visual gate
+
+Added regression coverage for final-tilt Aerial containment on desktop/mobile,
+and selection-centred composition with unchanged scale and retained home across
+desktop, portrait and landscape frames. Existing geometry-presence tests remain.
+These test the local tangent-plane approximation, **not Google's actual
+perspective, terrain occlusion, or photographic composition**.
+Validation passed: 274 frontend tests, 16 Atlas experiment tests, TypeScript,
+ESLint, Atlas build and `git diff --check`. The build retains the existing large
+chunk warning. This workspace ran Node 24 rather than the repository's Node 22
+engine; CI on the pinned engine remains required.
+
+This follow-up workspace has no configured Google Maps key. The earlier images
+and browser results above predate this follow-up and are not after screenshots.
+Real-Google desktop/mobile screenshot and interaction verification remains a
+merge gate. Run the existing Atlas browser suite with an authorised key and
+capture pair, Look closer and Aerial for schools and lakes before merging.
+Specifically verify distant selections, terrain/building occlusion, rapid
+selection changes, gesture cancellation and Street View return.
+
+Further camera/shade tuning is intentionally pending that gate: lighter context
+shading that keeps intervening roads readable, comparison-stable orientation
+between nearby selections, and road-vantage adjustments should be evaluated on
+the live scene rather than added as unverified motion. A straight relationship
+arc must never be presented as a walking or driving route.

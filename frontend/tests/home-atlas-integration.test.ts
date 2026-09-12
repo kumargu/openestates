@@ -197,6 +197,67 @@ test('missing place collections stay a calm sparse scene', () => {
   assert.doesNotThrow(() => resolveHomeAnchor(sparse));
 });
 
+test('inspect spends spare frame space on selection without sacrificing home or scale', () => {
+  const home = {lat: 12.98, lng: 77.74, heightM: 45};
+  const selected = {...home, lng: home.lng + 0.0015};
+  for (const frame of [
+    {width: 1440, height: 1000, left: 32, right: 420, top: 96, bottom: 120},
+    {width: 390, height: 844, left: 16, right: 16, top: 160, bottom: 420},
+    {width: 844, height: 390, left: 16, right: 300, top: 70, bottom: 100},
+  ]) {
+    const input = {points: [home, selected], frame, heading: 35, tilt: 44,
+      fieldOfViewDegrees: 38, minimumRangeM: 1200, opticalPaddingPx: 16, altitudeM: 920};
+    const balanced = fitCameraToScreen(input);
+    const focused = fitCameraToScreen({...input, focusPoint: selected});
+    assert.equal(focused.range, balanced.range, 'focus must not distort comparison scale');
+    const project = (camera: typeof focused, point: typeof home) =>
+      projectCameraPointToScreen(camera, point, frame, input.fieldOfViewDegrees);
+    const centre = {x: (frame.left + frame.width - frame.right) / 2,
+      y: (frame.top + frame.height - frame.bottom) / 2};
+    const error = (camera: typeof focused) => {
+      const p = project(camera, selected);
+      return Math.hypot(p.x - centre.x, p.y - centre.y);
+    };
+    assert.ok(error(focused) < error(balanced), 'selection moves toward the usable centre');
+    for (const point of [home, selected]) {
+      const p = project(focused, point);
+      assert.ok(p.x >= frame.left + 15.5 && p.x <= frame.width - frame.right - 15.5);
+      assert.ok(p.y >= frame.top + 15.5 && p.y <= frame.height - frame.bottom - 15.5);
+    }
+  }
+});
+
+test('Aerial refits the selected relationship at its final tilt, including mobile', () => {
+  const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
+  const home = {...resolveHomeAnchor(context)!, boundary: context.home.boundary};
+  const places = buildNumberedPlaces(context.places.filter(place => place.layer === 'lake'));
+  const selected = places[0];
+  const polygons = geometryForPlace(selected, context.layer_polygons!.lake, []).polygons;
+  const points = [
+    ...home.boundary!.coordinates.map(([lng, lat]) => ({lat, lng, heightM: 0})),
+    ...polygons.flatMap(p => p.coordinates.map(([lng, lat]) => ({lat, lng, heightM: 0}))),
+    {lat: home.latitude, lng: home.longitude, heightM: atlasPolicy.nearby.markerLiftM},
+    {lat: selected.latitude, lng: selected.longitude, heightM: atlasPolicy.nearby.markerLiftM},
+    ...nearbyRelationArc(home, selected).map(p => ({lat: p.lat, lng: p.lng, heightM: p.altitude})),
+  ];
+  for (const frame of [
+    {width: 1440, height: 1000, left: 32, right: 420, top: 96, bottom: 120},
+    {width: 390, height: 844, left: 16, right: 16, top: 160, bottom: 420},
+  ]) {
+    for (const depth of ['pair', 'inspect'] as const) {
+      const camera = nearbySceneCamera(home, places, polygons, [], selected.feature_id!, depth,
+        900, frame.width, frame, atlasPolicy.above.tilt);
+      assert.equal(camera.tilt, atlasPolicy.above.tilt);
+      for (const point of points) {
+        const p = projectCameraPointToScreen(camera, point, frame, atlasPolicy.cameraFit.fieldOfViewDegrees);
+        const padding = atlasPolicy.cameraFit.opticalPaddingPx - 0.5;
+        assert.ok(p.x >= frame.left + padding && p.x <= frame.width - frame.right - padding);
+        assert.ok(p.y >= frame.top + padding && p.y <= frame.height - frame.bottom - padding);
+      }
+    }
+  }
+});
+
 test('road heading damping crosses north through the shortest arc', () => {
   const damped = dampHeading(359, 1, 3, 0.25);
   assert.ok(damped > 359 || damped < 1);

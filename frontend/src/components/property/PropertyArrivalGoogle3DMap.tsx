@@ -1434,8 +1434,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     const unregister = playbackController.registerResumer(move);
     void loadGoogleTerrainElevation(home.latitude, home.longitude).then(elevation => {
       const pose = nearbySceneCamera(home, places, polygons ?? [], [...metroLines, ...contextLines], selectedPlaceId,
-        nearbyDepth, elevation, containerRef.current?.clientWidth ?? window.innerWidth, safeFrame);
-      camera = {...pose, tilt: above ? policy.above.tilt : pose.tilt};
+        nearbyDepth, elevation, containerRef.current?.clientWidth ?? window.innerWidth, safeFrame,
+        above ? policy.above.tilt : undefined);
+      camera = pose;
       map.dataset.atlasCameraTargetRange = String(camera.range);
       move();
     }).catch(() => undefined);

@@ -63,6 +63,8 @@ export function fitCameraToScreen(input: Readonly<{
   minimumRangeM: number;
   opticalPaddingPx: number;
   altitudeM: number;
+  /** Prefer this subject at the clear-frame centre, without cropping context. */
+  focusPoint?: AtlasFitPoint;
 }>): AtlasCamera {
   const points = input.points.filter((point) =>
     Number.isFinite(point.lat)
@@ -103,10 +105,21 @@ export function fitCameraToScreen(input: Readonly<{
 
   const safeCenterX = (safeLeft + safeRight) / 2;
   const safeCenterY = (safeTop + safeBottom) / 2;
-  const targetRightM = (minRight + maxRight) / 2
-    - (safeCenterX - input.frame.width / 2) * scale;
-  const targetVerticalM = (minVertical + maxVertical) / 2
-    - (safeCenterY - input.frame.height / 2) * scale;
+  const focus = input.focusPoint
+    ? localPoint(input.focusPoint, origin, heading, tilt)
+    : {rightM: (minRight + maxRight) / 2, verticalM: (minVertical + maxVertical) / 2};
+  // Only spend unused framing space on the selected subject. Home, sourced
+  // extents and relationship arcs remain hard containment constraints.
+  const constrainedTarget = (preferred: number, min: number, max: number,
+    screenStart: number, screenEnd: number, screenSize: number, screenCenter: number) => {
+    const lower = max - (screenEnd - screenSize / 2) * scale;
+    const upper = min - (screenStart - screenSize / 2) * scale;
+    return Math.max(lower, Math.min(upper, preferred - (screenCenter - screenSize / 2) * scale));
+  };
+  const targetRightM = constrainedTarget(focus.rightM, minRight, maxRight,
+    safeLeft, safeRight, input.frame.width, safeCenterX);
+  const targetVerticalM = constrainedTarget(focus.verticalM, minVertical, maxVertical,
+    safeTop, safeBottom, input.frame.height, safeCenterY);
   const headingRadians = heading * Math.PI / 180;
   const tiltRadians = tilt * Math.PI / 180;
   const targetForwardM = -targetVerticalM / Math.max(0.17, Math.cos(tiltRadians));

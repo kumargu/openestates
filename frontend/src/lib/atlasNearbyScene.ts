@@ -24,7 +24,7 @@ export function geometryForPlace(place: NumberedPlace, polygons: MapOverlayPolyg
 
 export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons: MapOverlayPolygon[],
   lines: MapOverlayLine[], selectedId: string | null, depth: NearbyDepth, elevation: number, width: number,
-  safeFrame?: AtlasSafeFrame) {
+  safeFrame?: AtlasSafeFrame, tiltOverride?: number) {
   const origin = { lat: home.latitude, lng: home.longitude };
   const selected = places.find(p => (p.feature_id ?? p.name) === selectedId);
   const geometry = selected && depth !== 'overview' ? geometryForPlace(selected, polygons, lines) : {polygons, lines};
@@ -105,7 +105,8 @@ export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons:
     points: fitPoints,
     frame,
     heading,
-    tilt,
+    tilt: tiltOverride ?? tilt,
+    focusPoint: depth === 'inspect' && selectedAnchor ? marker(selectedAnchor) : undefined,
     fieldOfViewDegrees: policy.cameraFit.fieldOfViewDegrees,
     minimumRangeM: width < policy.road.mobileBreakpointPx
       ? minimumRangeM * policy.society.mobileRangeScale
