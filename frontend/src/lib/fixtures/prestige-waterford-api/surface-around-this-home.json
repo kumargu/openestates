@@ -1,0 +1,5076 @@
+{
+  "contractVersion": 1,
+  "surfaceId": "around_this_home",
+  "propertyId": "discovered-prestige-waterford-3bhk",
+  "servingBundleVersion": "catalog-71-ffb4dc50-117e-453c-b26f-41822430324e",
+  "entityRefs": {
+    "property_entity_id": "property:discovered-prestige-waterford-3bhk",
+    "society_entity_id": "society:prestige-waterford",
+    "area_entity_id": "area:itpl,-whitefield"
+  },
+  "anchor": {
+    "entityId": "society:prestige-waterford",
+    "label": "PRESTIGE WATERFORD",
+    "area": "Itpl, Whitefield",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [
+        77.74218189999999,
+        12.9819914
+      ]
+    },
+    "coordinateQuality": "exact"
+  },
+  "viewport": {
+    "center": [
+      77.74155640000001,
+      12.9814202
+    ],
+    "bounds": {
+      "west": 77.7363516,
+      "south": 12.9773659,
+      "east": 77.7467612,
+      "north": 12.9854745
+    },
+    "radiusM": 3000
+  },
+  "layers": [
+    {
+      "id": "metro",
+      "label": "Metro",
+      "family": "access",
+      "renderKind": "pin",
+      "relationClass": "access",
+      "enabledByDefault": true,
+      "rank": 1,
+      "availableCount": 16,
+      "shownCount": 2,
+      "fillState": "partial"
+    },
+    {
+      "id": "schools",
+      "label": "Schools",
+      "family": "access",
+      "renderKind": "pin",
+      "relationClass": "access",
+      "enabledByDefault": true,
+      "rank": 2,
+      "availableCount": 20,
+      "shownCount": 5,
+      "fillState": "partial"
+    },
+    {
+      "id": "hospitals",
+      "label": "Hospitals",
+      "family": "access",
+      "renderKind": "pin",
+      "relationClass": "access",
+      "enabledByDefault": true,
+      "rank": 3,
+      "availableCount": 17,
+      "shownCount": 7,
+      "fillState": "partial"
+    },
+    {
+      "id": "tech",
+      "label": "Tech parks",
+      "family": "access",
+      "renderKind": "pin",
+      "relationClass": "access",
+      "enabledByDefault": true,
+      "rank": 4,
+      "availableCount": 17,
+      "shownCount": 17,
+      "fillState": "filled"
+    },
+    {
+      "id": "fitness",
+      "label": "Fitness",
+      "family": "access",
+      "renderKind": "pin",
+      "relationClass": "access",
+      "enabledByDefault": false,
+      "rank": 5,
+      "availableCount": 0,
+      "shownCount": 0,
+      "fillState": "empty"
+    },
+    {
+      "id": "parks",
+      "label": "Parks",
+      "family": "environment",
+      "renderKind": "pin",
+      "relationClass": "context",
+      "enabledByDefault": false,
+      "rank": 6,
+      "availableCount": 6,
+      "shownCount": 5,
+      "fillState": "partial"
+    },
+    {
+      "id": "lakes",
+      "label": "Lakes",
+      "family": "environment",
+      "renderKind": "pin",
+      "relationClass": "context",
+      "enabledByDefault": false,
+      "rank": 7,
+      "availableCount": 0,
+      "shownCount": 0,
+      "fillState": "empty"
+    },
+    {
+      "id": "breweries",
+      "label": "Breweries",
+      "family": "access",
+      "renderKind": "pin",
+      "relationClass": "access",
+      "enabledByDefault": false,
+      "rank": 8,
+      "availableCount": 1,
+      "shownCount": 1,
+      "fillState": "filled"
+    },
+    {
+      "id": "red_flags",
+      "label": "Red flags",
+      "family": "risk",
+      "renderKind": "pin",
+      "relationClass": "risk_externality",
+      "enabledByDefault": true,
+      "rank": 9,
+      "availableCount": 0,
+      "shownCount": 0,
+      "fillState": "empty"
+    }
+  ],
+  "features": [
+    {
+      "id": "around_this_home:metro:place-google-chijs-ojywiorjsrvtyln4bonnw",
+      "entityId": "place:google:chijs-ojywiorjsrvtyln4bonnw",
+      "layerId": "metro",
+      "kind": "place",
+      "label": "Kadugodi Tree Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 500,
+        "rating": 4.5,
+        "reviewCount": 1536
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "train",
+        "priority": 1
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_metro_stations:1785601325:171"
+      ]
+    },
+    {
+      "id": "around_this_home:metro:place-google-chij1-at8uqrrjsru3fouv135ok",
+      "entityId": "place:google:chij1-at8uqrrjsru3fouv135ok",
+      "layerId": "metro",
+      "kind": "place",
+      "label": "Pattandur Agrahara",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 600,
+        "rating": 4.4,
+        "reviewCount": 538
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "train",
+        "priority": 1
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_metro_stations:1785601325:172"
+      ]
+    },
+    {
+      "id": "around_this_home:schools:place-google-chijcfj2rqitrjsrdyju7xvxbhy",
+      "entityId": "place:google:chijcfj2rqitrjsrdyju7xvxbhy",
+      "layerId": "schools",
+      "kind": "place",
+      "label": "Narayana eTechno (CBSE) School - Whitefield",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 1300,
+        "rating": 4.0,
+        "reviewCount": 310
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "graduation-cap",
+        "priority": 2
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:190"
+      ]
+    },
+    {
+      "id": "around_this_home:schools:place-google-chijq6qqqnmrrjsrqfqfsnuvjjc",
+      "entityId": "place:google:chijq6qqqnmrrjsrqfqfsnuvjjc",
+      "layerId": "schools",
+      "kind": "place",
+      "label": "Gopalan National School",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 3500,
+        "rating": 4.8,
+        "reviewCount": 307
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "graduation-cap",
+        "priority": 2
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:204"
+      ]
+    },
+    {
+      "id": "around_this_home:schools:place-google-chijkznd-64nrjsrd2yvdtanwl8",
+      "entityId": "place:google:chijkznd-64nrjsrd2yvdtanwl8",
+      "layerId": "schools",
+      "kind": "place",
+      "label": "VedaVihaan The Global School - Best Pre School & Day Care Whitefield - Campus - 2, ವೇದ ವಿಹಾನ್ ಗ್ಲೋಬಲ್ ಸ್ಕೂಲ್ - ವೈಟ್ ಫೀಲ್ಡ್",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 2500,
+        "rating": 4.9,
+        "reviewCount": 253
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "graduation-cap",
+        "priority": 2
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:197"
+      ]
+    },
+    {
+      "id": "around_this_home:schools:place-google-chijd9lkuteprjsr0nznbahcnfs",
+      "entityId": "place:google:chijd9lkuteprjsr0nznbahcnfs",
+      "layerId": "schools",
+      "kind": "place",
+      "label": "Pragathi ORCHIDS The International School - CBSE School in Whitefield- Affiliation No.830467",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 2700,
+        "rating": 4.5,
+        "reviewCount": 221
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "graduation-cap",
+        "priority": 2
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:198"
+      ]
+    },
+    {
+      "id": "around_this_home:schools:place-google-chijheodc3wnrjsree7cay9b2bk",
+      "entityId": "place:google:chijheodc3wnrjsree7cay9b2bk",
+      "layerId": "schools",
+      "kind": "place",
+      "label": "The Sommer School",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 2300,
+        "rating": 4.8,
+        "reviewCount": 190
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "graduation-cap",
+        "priority": 2
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:195"
+      ]
+    },
+    {
+      "id": "around_this_home:hospitals:place-google-chijocj7bfwrrjsrzhab8omuynq",
+      "entityId": "place:google:chijocj7bfwrrjsrzhab8omuynq",
+      "layerId": "hospitals",
+      "kind": "place",
+      "label": "Manipal Hospital Whitefield",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 1600,
+        "rating": 4.7,
+        "reviewCount": 36146
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "hospital",
+        "priority": 3
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785605126:71"
+      ]
+    },
+    {
+      "id": "around_this_home:hospitals:place-google-chijsxo6hfynrjsru4rk-jxt-cq",
+      "entityId": "place:google:chijsxo6hfynrjsru4rk-jxt-cq",
+      "layerId": "hospitals",
+      "kind": "place",
+      "label": "Manipal Hospital Varthur Road",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 2500,
+        "rating": 4.7,
+        "reviewCount": 25191
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "hospital",
+        "priority": 3
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:225"
+      ]
+    },
+    {
+      "id": "around_this_home:hospitals:place-google-chijkbnmtagrrjsrdx0itevftle",
+      "entityId": "place:google:chijkbnmtagrrjsrdx0itevftle",
+      "layerId": "hospitals",
+      "kind": "place",
+      "label": "Aster Hospital Whitefield Bangalore",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 1200,
+        "rating": 4.7,
+        "reviewCount": 10896
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "hospital",
+        "priority": 3
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785605126:70"
+      ]
+    },
+    {
+      "id": "around_this_home:hospitals:place-google-chijqz1rsegrrjsr3hotteuk9kk",
+      "entityId": "place:google:chijqz1rsegrrjsr3hotteuk9kk",
+      "layerId": "hospitals",
+      "kind": "place",
+      "label": "Medicover Hospitals",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 2100,
+        "rating": 4.6,
+        "reviewCount": 5342
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "hospital",
+        "priority": 3
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:223"
+      ]
+    },
+    {
+      "id": "around_this_home:hospitals:place-google-chijcsjmg3urrjsrhjjb0w-dz9u",
+      "entityId": "place:google:chijcsjmg3urrjsrhjjb0w-dz9u",
+      "layerId": "hospitals",
+      "kind": "place",
+      "label": "RxDx Clinics, Whitefield",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 3200,
+        "rating": 4.4,
+        "reviewCount": 2993
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "hospital",
+        "priority": 3
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:229"
+      ]
+    },
+    {
+      "id": "around_this_home:hospitals:place-google-chijq5utjburrjsrhxo0v3blevo",
+      "entityId": "place:google:chijq5utjburrjsrhxo0v3blevo",
+      "layerId": "hospitals",
+      "kind": "place",
+      "label": "Geetha Hospital - Multispeciality Hospital in Virgonagar, Aavalahalli",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 5900,
+        "rating": 4.7,
+        "reviewCount": 1178
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "hospital",
+        "priority": 3
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:231"
+      ]
+    },
+    {
+      "id": "around_this_home:hospitals:place-google-chijlwutzgatrjsrraygxaldt7y",
+      "entityId": "place:google:chijlwutzgatrjsrraygxaldt7y",
+      "layerId": "hospitals",
+      "kind": "place",
+      "label": "Abhayahasta Multispeciality Hospital (Balagere Road)",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 4600,
+        "rating": 4.6,
+        "reviewCount": 150
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "hospital",
+        "priority": 3
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:230"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chij-xjj3mgrrjsrqhdd-j7mbgk",
+      "entityId": "place:google:chij-xjj3mgrrjsrqhdd-j7mbgk",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "SCB Brigade Tech Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 500,
+        "rating": 4.4,
+        "reviewCount": 73
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785605126:78"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chijjemkiharrjsrf3fnufj11ec",
+      "entityId": "place:google:chijjemkiharrjsrf3fnufj11ec",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "Sattva Tech Park Zeta",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 500,
+        "rating": 4.3,
+        "reviewCount": 7
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785605126:79"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chijbr0arpsrrjsrfy3bmjy-dma",
+      "entityId": "place:google:chijbr0arpsrrjsrfy3bmjy-dma",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "International Tech Park Bengaluru (ITPB)",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 600,
+        "rating": 4.4,
+        "reviewCount": 26560
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:205"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chijkyqs6perrjsrn6fbk1b0uve",
+      "entityId": "place:google:chijkyqs6perrjsrn6fbk1b0uve",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "First Technology Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 1100,
+        "rating": 4.2,
+        "reviewCount": 141
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:206"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chijgvmbigqorjsrk8ps2db2xou",
+      "entityId": "place:google:chijgvmbigqorjsrk8ps2db2xou",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "H M Tech Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 1100,
+        "rating": 4.0,
+        "reviewCount": 267
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785605126:77"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chijhyzfoosrrjsrye6gw1dkznw",
+      "entityId": "place:google:chijhyzfoosrrjsrye6gw1dkznw",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "Prasad Tech Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 1500,
+        "rating": 3.9,
+        "reviewCount": 221
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:207"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chijbat3jy0rrjsrs-refxxxqgm",
+      "entityId": "place:google:chijbat3jy0rrjsrs-refxxxqgm",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "Mind Comp Tech Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 2100,
+        "rating": 4.3,
+        "reviewCount": 1477
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:208"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chijny9h5qksrjsrtvrqth5o0j8",
+      "entityId": "place:google:chijny9h5qksrjsrtvrqth5o0j8",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "Sigma Soft Tech Park Gamma Block",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 2500,
+        "rating": 4.2,
+        "reviewCount": 267
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:209"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chij7-cgk7mtrjsrpyr-lkvdim8",
+      "entityId": "place:google:chij7-cgk7mtrjsrpyr-lkvdim8",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "Prestige Tech Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 6300,
+        "rating": 4.4,
+        "reviewCount": 1369
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:210"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chijy0onmrqtrjsrbgsdk7cvame",
+      "entityId": "place:google:chijy0onmrqtrjsrbgsdk7cvame",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "Prestige Tech Park - PTP",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 7600,
+        "rating": 4.4,
+        "reviewCount": 132
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:211"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chijz6c4kactrjsrmbjzeep3swa",
+      "entityId": "place:google:chijz6c4kactrjsrmbjzeep3swa",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "Global Technology Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 8400,
+        "rating": 4.2,
+        "reviewCount": 286
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:212"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chij84dbbu8rrjsr-83zquu1h-s",
+      "entityId": "place:google:chij84dbbu8rrjsr-83zquu1h-s",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "Bagmane Tech Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 9000,
+        "rating": 4.4,
+        "reviewCount": 12482
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:213"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chijtybnzqatrjsr5ouyk5xsw-q",
+      "entityId": "place:google:chijtybnzqatrjsr5ouyk5xsw-q",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "99 Tech Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 12700,
+        "rating": 5.0,
+        "reviewCount": 2
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:214"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chij-0wxeraurjsrbsjqskqn1pk",
+      "entityId": "place:google:chij-0wxeraurjsrbsjqskqn1pk",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "Novel Tech Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 14500,
+        "rating": 4.4,
+        "reviewCount": 1372
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:215"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chijmxawauoxrjsrwzgrpkgd5ik",
+      "entityId": "place:google:chijmxawauoxrjsrwzgrpkgd5ik",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "Manyata Tech Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 14600,
+        "rating": 4.5,
+        "reviewCount": 613
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:216"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chijdf7pit0urjsrbggwindcuk0",
+      "entityId": "place:google:chijdf7pit0urjsrbggwindcuk0",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "AMR Tech Park work place",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 14800,
+        "rating": 4.0,
+        "reviewCount": 1514
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:218"
+      ]
+    },
+    {
+      "id": "around_this_home:tech:place-google-chijgvafrl4urjsr9lpqtao95lu",
+      "entityId": "place:google:chijgvafrl4urjsr9lpqtao95lu",
+      "layerId": "tech",
+      "kind": "place",
+      "label": "Ozone Manay Technology Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 14800,
+        "rating": 4.0,
+        "reviewCount": 2312
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "briefcase-business",
+        "priority": 4
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:217"
+      ]
+    },
+    {
+      "id": "around_this_home:parks:place-google-chijnxpnap8nrjsrpd2c9hq7zfm",
+      "entityId": "place:google:chijnxpnap8nrjsrpd2c9hq7zfm",
+      "layerId": "parks",
+      "kind": "place",
+      "label": "Inner circle municipal park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 1300,
+        "rating": 4.2,
+        "reviewCount": 3260
+      },
+      "display": {
+        "tone": "neutral",
+        "icon": "trees",
+        "priority": 6
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785605126:73"
+      ]
+    },
+    {
+      "id": "around_this_home:parks:place-google-chij3ynol9uprjsrn88lnqge8tw",
+      "entityId": "place:google:chij3ynol9uprjsrn88lnqge8tw",
+      "layerId": "parks",
+      "kind": "place",
+      "label": "Kadugodi Tree Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 600,
+        "rating": 4.4,
+        "reviewCount": 2903
+      },
+      "display": {
+        "tone": "neutral",
+        "icon": "trees",
+        "priority": 6
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785605126:74"
+      ]
+    },
+    {
+      "id": "around_this_home:parks:place-google-chijhwbuswqsrjsrxlppv0uqw6e",
+      "entityId": "place:google:chijhwbuswqsrjsrxlppv0uqw6e",
+      "layerId": "parks",
+      "kind": "place",
+      "label": "Nallurhalli Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 1600,
+        "rating": 3.8,
+        "reviewCount": 673
+      },
+      "display": {
+        "tone": "neutral",
+        "icon": "trees",
+        "priority": 6
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785601325:169"
+      ]
+    },
+    {
+      "id": "around_this_home:parks:place-google-chija6nybguorjsrmhqosdgj8f8",
+      "entityId": "place:google:chija6nybguorjsrmhqosdgj8f8",
+      "layerId": "parks",
+      "kind": "place",
+      "label": "Maithri Layout Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 1300,
+        "rating": 4.0,
+        "reviewCount": 420
+      },
+      "display": {
+        "tone": "neutral",
+        "icon": "trees",
+        "priority": 6
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785601325:168"
+      ]
+    },
+    {
+      "id": "around_this_home:parks:place-google-chijuviefr8rrjsrxnawie0ug7i",
+      "entityId": "place:google:chijuviefr8rrjsrxnawie0ug7i",
+      "layerId": "parks",
+      "kind": "place",
+      "label": "Kodigehalli Hoodi Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 2400,
+        "rating": 3.8,
+        "reviewCount": 94
+      },
+      "display": {
+        "tone": "neutral",
+        "icon": "trees",
+        "priority": 6
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785601325:170"
+      ]
+    },
+    {
+      "id": "around_this_home:breweries:place-google-chijgud8fp8nrjsrw69mgubed1u",
+      "entityId": "place:google:chijgud8fp8nrjsrw69mgubed1u",
+      "layerId": "breweries",
+      "kind": "place",
+      "label": "2 Pints Brewing Taproom & Kitchen",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 2700,
+        "rating": 4.7,
+        "reviewCount": 205
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "beer",
+        "priority": 8
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_breweries:1785605126:68"
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:metro:place-google-chijs-ojywiorjsrvtyln4bonnw",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 500,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_metro_stations:1785601325:171"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:metro:place-google-chij1-at8uqrrjsru3fouv135ok",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 600,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_metro_stations:1785601325:172"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:schools:place-google-chijcfj2rqitrjsrdyju7xvxbhy",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 1300,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:190"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:schools:place-google-chijq6qqqnmrrjsrqfqfsnuvjjc",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 3500,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:204"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:schools:place-google-chijkznd-64nrjsrd2yvdtanwl8",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 2500,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:197"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:schools:place-google-chijd9lkuteprjsr0nznbahcnfs",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 2700,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:198"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:schools:place-google-chijheodc3wnrjsree7cay9b2bk",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 2300,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:195"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:hospitals:place-google-chijocj7bfwrrjsrzhab8omuynq",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 1600,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785605126:71"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:hospitals:place-google-chijsxo6hfynrjsru4rk-jxt-cq",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 2500,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:225"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:hospitals:place-google-chijkbnmtagrrjsrdx0itevftle",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 1200,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785605126:70"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:hospitals:place-google-chijqz1rsegrrjsr3hotteuk9kk",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 2100,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:223"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:hospitals:place-google-chijcsjmg3urrjsrhjjb0w-dz9u",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 3200,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:229"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:hospitals:place-google-chijq5utjburrjsrhxo0v3blevo",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 5900,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:231"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:hospitals:place-google-chijlwutzgatrjsrraygxaldt7y",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 4600,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:230"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chij-xjj3mgrrjsrqhdd-j7mbgk",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 500,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785605126:78"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chijjemkiharrjsrf3fnufj11ec",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 500,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785605126:79"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chijbr0arpsrrjsrfy3bmjy-dma",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 600,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:205"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chijkyqs6perrjsrn6fbk1b0uve",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 1100,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:206"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chijgvmbigqorjsrk8ps2db2xou",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 1100,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785605126:77"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chijhyzfoosrrjsrye6gw1dkznw",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 1500,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:207"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chijbat3jy0rrjsrs-refxxxqgm",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 2100,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:208"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chijny9h5qksrjsrtvrqth5o0j8",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 2500,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:209"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chij7-cgk7mtrjsrpyr-lkvdim8",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 6300,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:210"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chijy0onmrqtrjsrbgsdk7cvame",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 7600,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:211"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chijz6c4kactrjsrmbjzeep3swa",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 8400,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:212"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chij84dbbu8rrjsr-83zquu1h-s",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 9000,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:213"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chijtybnzqatrjsr5ouyk5xsw-q",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 12700,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:214"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chij-0wxeraurjsrbsjqskqn1pk",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 14500,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:215"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chijmxawauoxrjsrwzgrpkgd5ik",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 14600,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:216"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chijdf7pit0urjsrbggwindcuk0",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 14800,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:218"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:tech:place-google-chijgvafrl4urjsr9lpqtao95lu",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 14800,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:217"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:parks:place-google-chijnxpnap8nrjsrpd2c9hq7zfm",
+      "edgeType": "near_place",
+      "relationClass": "context",
+      "direct": true,
+      "distanceM": 1300,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785605126:73"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:parks:place-google-chij3ynol9uprjsrn88lnqge8tw",
+      "edgeType": "near_place",
+      "relationClass": "context",
+      "direct": true,
+      "distanceM": 600,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785605126:74"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:parks:place-google-chijhwbuswqsrjsrxlppv0uqw6e",
+      "edgeType": "near_place",
+      "relationClass": "context",
+      "direct": true,
+      "distanceM": 1600,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785601325:169"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:parks:place-google-chija6nybguorjsrmhqosdgj8f8",
+      "edgeType": "near_place",
+      "relationClass": "context",
+      "direct": true,
+      "distanceM": 1300,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785601325:168"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:parks:place-google-chijuviefr8rrjsrxnawie0ug7i",
+      "edgeType": "near_place",
+      "relationClass": "context",
+      "direct": true,
+      "distanceM": 2400,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785601325:170"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "around_this_home:breweries:place-google-chijgud8fp8nrjsrw69mgubed1u",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 2700,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_breweries:1785605126:68"
+      ]
+    }
+  ],
+  "callouts": [],
+  "receipts": [
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_metro_stations:1785601325:171",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_metro_stations",
+      "claim": "Kadugodi Tree Park Metro (0.5 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=8950456211087285334&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_metro_stations:1785601325:172",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_metro_stations",
+      "claim": "Pattandur Agrahara (0.6 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=9936760870529431379&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 600 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:190",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_schools",
+      "claim": "Narayana eTechno (CBSE) School - Whitefield (1.3 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=1616325480287209589&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 1500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:204",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_schools",
+      "claim": "Gopalan National School (3.5 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=3974057079295310505&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 3500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:197",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_schools",
+      "claim": "VedaVihaan The Global School - Best Pre School & Day Care Whitefield - Campus - 2, ವೇದ ವಿಹಾನ್ ಗ್ಲೋಬಲ್ ಸ್ಕೂಲ್ - ವೈಟ್ ಫೀಲ್ಡ್ (2.5 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=13817199609018017295&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 2500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:198",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_schools",
+      "claim": "Pragathi ORCHIDS The International School - CBSE School in Whitefield- Affiliation No.830467 (2.7 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=18101616861430774994&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 2750 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_schools:1785601325:195",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_schools",
+      "claim": "The Sommer School (2.3 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=1862339117432196728&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 2500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785605126:71",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_hospitals",
+      "claim": "Manipal Hospital Whitefield (1.6 km, 4.7 rating, 36146 reviews)",
+      "sourceType": "Google",
+      "sourceUrl": "https://maps.google.com/?cid=15332696838885152358&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T17:25:26Z",
+      "confidence": 0.82,
+      "scope": "within 1750 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:225",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_hospitals",
+      "claim": "Manipal Hospital Varthur Road (2.5 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=2663999700547701435&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 2500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785605126:70",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_hospitals",
+      "claim": "Aster Hospital Whitefield Bangalore (1.2 km, 4.7 rating, 10896 reviews)",
+      "sourceType": "Google",
+      "sourceUrl": "https://maps.google.com/?cid=12804935806198381837&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T17:25:26Z",
+      "confidence": 0.82,
+      "scope": "within 1250 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:223",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_hospitals",
+      "claim": "Medicover Hospitals (2.1 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=12246425266692494302&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 2250 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:229",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_hospitals",
+      "claim": "RxDx Clinics, Whitefield (3.2 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=15406747735277277724&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 3250 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:231",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_hospitals",
+      "claim": "Geetha Hospital - Multispeciality Hospital in Virgonagar, Aavalahalli (5.9 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=18019548004942615327&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 6000 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_hospitals:1785601325:230",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_hospitals",
+      "claim": "Abhayahasta Multispeciality Hospital (Balagere Road) (4.6 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=13166235039589377605&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 4750 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785605126:78",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "SCB Brigade Tech Park (0.5 km, 4.4 rating, 73 reviews)",
+      "sourceType": "Google",
+      "sourceUrl": "https://maps.google.com/?cid=679705164713758890&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T17:25:26Z",
+      "confidence": 0.82,
+      "scope": "within 500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785605126:79",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "Sattva Tech Park Zeta (0.5 km, 4.3 rating, 7 reviews)",
+      "sourceType": "Google",
+      "sourceUrl": "https://maps.google.com/?cid=5175890868150563095&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T17:25:26Z",
+      "confidence": 0.82,
+      "scope": "within 500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:205",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "International Tech Park Bengaluru (ITPB) (0.6 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=6921538493845548311&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 600 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:206",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "First Technology Park (1.1 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=5888865877190485919&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 1250 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785605126:77",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "H M Tech Park (1.1 km, 4.0 rating, 267 reviews)",
+      "sourceType": "Google",
+      "sourceUrl": "https://maps.google.com/?cid=16527355447962552979&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T17:25:26Z",
+      "confidence": 0.82,
+      "scope": "within 1250 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:207",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "Prasad Tech Park (1.5 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=15880899925075095137&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 1500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:208",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "Mind Comp Tech Park (2.1 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=7151811986435537483&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 2250 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:209",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "Sigma Soft Tech Park Gamma Block (2.5 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=4598824061568570445&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 2500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:210",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "Prestige Tech Park (6.3 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=14954276528848865957&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 6500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:211",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "Prestige Tech Park - PTP (7.6 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=13936553630776517636&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 7750 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:212",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "Global Technology Park (8.4 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=50515869781530776&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 8500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:213",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "Bagmane Tech Park (9.0 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=16971733055600971259&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 9000 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:214",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "99 Tech Park (12.7 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=16484109893542405604&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 12750 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:215",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "Novel Tech Park (14.5 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=18002197962051035653&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 14500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:216",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "Manyata Tech Park (14.6 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=3019133208599672923&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 14750 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:218",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "AMR Tech Park work place (14.8 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=12517856831027437932&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 15000 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_tech_parks:1785601325:217",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_tech_parks",
+      "claim": "Ozone Manay Technology Park (14.8 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=13106667931749233652&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 15000 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785605126:73",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_public_parks",
+      "claim": "Inner circle municipal park (1.3 km, 4.2 rating, 3260 reviews)",
+      "sourceType": "Google",
+      "sourceUrl": "https://maps.google.com/?cid=6038406924878011709&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T17:25:26Z",
+      "confidence": 0.82,
+      "scope": "within 1500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785605126:74",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_public_parks",
+      "claim": "Kadugodi Tree Park (0.6 km, 4.4 rating, 2903 reviews)",
+      "sourceType": "Google",
+      "sourceUrl": "https://maps.google.com/?cid=4391296233917239095&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T17:25:26Z",
+      "confidence": 0.82,
+      "scope": "within 600 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785601325:169",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_public_parks",
+      "claim": "Nallurhalli Park (1.6 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=11627045516257244100&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 1750 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785601325:168",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_public_parks",
+      "claim": "Maithri Layout Park (1.3 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=18442701382871448112&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 1500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_public_parks:1785601325:170",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_public_parks",
+      "claim": "Kodigehalli Hoodi Park (2.4 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=12833874571817308356&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 2500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_breweries:1785605126:68",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_breweries",
+      "claim": "2 Pints Brewing Taproom & Kitchen (2.7 km, 4.7 rating, 205 reviews)",
+      "sourceType": "Google",
+      "sourceUrl": "https://maps.google.com/?cid=6158494646594350939&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T17:25:26Z",
+      "confidence": 0.82,
+      "scope": "within 2750 m"
+    }
+  ],
+  "fillRate": {
+    "filledLayers": 2,
+    "partialLayers": 4,
+    "emptyLayers": 3,
+    "shownFeatures": 37,
+    "availableFeatures": 77,
+    "value": 0.44444445
+  },
+  "gaps": [
+    {
+      "layerId": "metro",
+      "fillState": "partial"
+    },
+    {
+      "layerId": "schools",
+      "fillState": "partial"
+    },
+    {
+      "layerId": "hospitals",
+      "fillState": "partial"
+    },
+    {
+      "layerId": "fitness",
+      "fillState": "empty"
+    },
+    {
+      "layerId": "parks",
+      "fillState": "partial"
+    },
+    {
+      "layerId": "lakes",
+      "fillState": "empty"
+    },
+    {
+      "layerId": "red_flags",
+      "fillState": "empty"
+    }
+  ]
+}

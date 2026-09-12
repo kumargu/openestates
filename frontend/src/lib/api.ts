@@ -119,6 +119,9 @@ async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promis
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const localFixture = await getDevFixture<T>(path);
+  if (localFixture !== null) return localFixture;
+
   const res = await fetch(`${API_ORIGIN}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

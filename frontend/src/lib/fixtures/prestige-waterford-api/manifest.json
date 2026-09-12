@@ -1,0 +1,62 @@
+{
+  "propertyId": "discovered-prestige-waterford-3bhk",
+  "capturedFrom": "http://127.0.0.1:4000",
+  "capturedOn": "2026-09-12",
+  "redactions": [
+    {
+      "location": "Google Street View image URL key query parameters",
+      "replacement": "REDACTED_FOR_FIXTURE"
+    }
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/properties/discovered-prestige-waterford-3bhk",
+      "status": 200,
+      "response": "property.json"
+    },
+    {
+      "method": "GET",
+      "path": "/api/properties/discovered-prestige-waterford-3bhk/evidence",
+      "status": 200,
+      "response": "evidence.json"
+    },
+    {
+      "method": "GET",
+      "path": "/api/properties/discovered-prestige-waterford-3bhk/rera",
+      "status": 200,
+      "response": "rera.json"
+    },
+    {
+      "method": "GET",
+      "path": "/api/properties/discovered-prestige-waterford-3bhk/recommendations",
+      "status": 200,
+      "response": "recommendations.json"
+    },
+    {
+      "method": "GET",
+      "path": "/api/properties/discovered-prestige-waterford-3bhk/surfaces/around_this_home",
+      "status": 200,
+      "response": "surface-around-this-home.json"
+    },
+    {
+      "method": "GET",
+      "path": "/api/properties/discovered-prestige-waterford-3bhk/surfaces/arrival_story",
+      "status": 200,
+      "response": "surface-arrival-story.json"
+    },
+    {
+      "method": "GET",
+      "path": "/api/properties/discovered-prestige-waterford-3bhk/surfaces?ids=around_this_home%2Carrival_story",
+      "status": 200,
+      "response": "surfaces.json"
+    },
+    {
+      "method": "POST",
+      "path": "/api/properties/surfaces/batch",
+      "status": 200,
+      "request": "surfaces-batch.request.json",
+      "response": "surfaces-batch.json"
+    }
+  ]
+}
