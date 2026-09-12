@@ -22,6 +22,11 @@ export function geometryForPlace(place: NumberedPlace, polygons: MapOverlayPolyg
   return { polygons: polygons.filter(owns), lines: lines.filter(owns) };
 }
 
+/** Point-only evidence needs a circular veil opening; mapped extents already have one. */
+export function nearbyPointCutouts(places: NumberedPlace[], visiblePolygons: MapOverlayPolygon[]) {
+  return places.filter(place => geometryForPlace(place, visiblePolygons, []).polygons.length === 0);
+}
+
 export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons: MapOverlayPolygon[],
   lines: MapOverlayLine[], selectedId: string | null, depth: NearbyDepth, elevation: number, width: number,
   safeFrame?: AtlasSafeFrame, tiltOverride?: number) {

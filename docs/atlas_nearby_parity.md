@@ -139,3 +139,49 @@ continuous route contract has no explicit junction-stop collection. Do not turn
 polyline bends, regular waypoints or guessed entrances into buyer stops. A
 follow-up needs sourced stop identities and route associations, then verification
 of pause/resume, speed changes and Street View handoff on the real map.
+
+## Cosmetic and control pass from the three supplied screenshots
+
+The reference screenshot gives the geography more space than the PR frames.
+The PR lake views also show dark circular patches inside highlighted polygons.
+The renderer was creating both polygon holes and circle holes for the same
+identified lake. Removed that duplicate: point-only evidence retains circles,
+while mapped places use their sourced extent. Tests cover overview, isolated
+selection and the missing-polygon fallback. This does not claim arbitrary
+overlapping polygons are unioned; only duplicate point/extent cutouts are fixed.
+
+UI changes:
+- Compact the property title while exploring; keep the original Home identity.
+- Reduce top/bottom shading so the canvas is less dim around its edges.
+- Put Top view, Site outline and Dim surroundings in one native Map view
+  disclosure. Keep full readable labels on mobile, replacing AIR/SITE/FOCUS.
+- Use a narrower, lighter drawer, restrained selected rows, and a joined
+  With home / Look closer control. Keep source links and stable numbering.
+- Remove the tour-scope selector and neighborhood-wide tour option. The single
+  tour action now always tours the visible category; pause/resume is retained.
+- Remove the duplicate Society shortcut from the nearby rail; Home remains in
+  the bottom journey navigation, whose active modes expose pressed state.
+
+UI Critic: no extra fact cards or instructions were added; the map receives
+more visual space and only the tour action gets the strongest drawer fill.
+Keyboard users can open Map view with Enter and tab through the settings.
+Touch targets remain at least 44px on mobile. The title resize transition is
+disabled for reduced motion. React review retained existing camera ownership,
+lazy loading and event-driven selection; no new runtime dependencies or loops.
+Borrowed Human Atlas's compact inspection hierarchy, not its mesh manipulation.
+The earlier ThreeUI research still provides no verified map-specific source.
+
+Validation: 276 frontend tests, ESLint, TypeScript and Atlas build pass (existing
+large-chunk warning). Browser spec now covers collapsed settings, top-view
+toggle, keyboard disclosure on mobile and absence of the removed tour selector.
+That browser spec has **not run** for this pass. A supplied Maps key was used only
+in the dev-server environment, never written into source or committed.
+
+Visual gate remains open for environment reasons: the local browser daemon
+failed, official Chrome download hit a certificate error, the Playwright Chrome
+download timed out, and the cloud browser refused localhost. The PR's deployed
+Vercel preview requires sign-in. No after screenshots or real-Google visual pass
+are claimed. Review desktop/mobile lakes, pair/inspect/top views, Map view menu
+overlap, brightness and road/Street View controls in an authenticated preview
+before merge. The supplied screenshots informed the changes but are not after
+evidence. This pass changes no additional camera angles or sourced road data.
