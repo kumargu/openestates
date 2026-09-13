@@ -1,28 +1,30 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getFixtureResponse } from "../src/lib/dev-fixtures.ts";
-import {
-  getWaterfordApiFixtureResponse,
-  waterfordFixturePropertyId,
-  waterfordFixtureServingBundleVersion,
-} from "../src/lib/waterford-api-fixtures.ts";
+import propertyDetail from "../fixtures/prestige-waterford-api/property-detail.json" with { type: "json" };
+import arrivalStory from "../fixtures/prestige-waterford-api/arrival-story.json" with { type: "json" };
+import aroundThisHome from "../fixtures/prestige-waterford-api/around-this-home.json" with { type: "json" };
+import manifest from "../fixtures/prestige-waterford-api/manifest.json" with { type: "json" };
 import type {
   PropertyDetailResponse,
   SurfaceSceneResponse,
 } from "../src/lib/types.ts";
 
+const waterfordFixturePropertyId = "discovered-prestige-waterford-3bhk";
+const waterfordFixtureServingBundleVersion =
+  "catalog-71-ffb4dc50-117e-453c-b26f-41822430324e";
 const propertyPath = `/api/properties/${waterfordFixturePropertyId}`;
+const detail = propertyDetail as unknown as PropertyDetailResponse;
+const scenes = {
+  arrival_story: arrivalStory as unknown as SurfaceSceneResponse,
+  around_this_home: aroundThisHome as unknown as SurfaceSceneResponse,
+};
 
-function scene(surfaceId: string): SurfaceSceneResponse {
-  const response = getWaterfordApiFixtureResponse(
-    `${propertyPath}/surfaces/${surfaceId}`,
-  );
-  assert.ok(response);
-  return response as SurfaceSceneResponse;
+function scene(surfaceId: keyof typeof scenes): SurfaceSceneResponse {
+  return structuredClone(scenes[surfaceId]);
 }
 
 test("Waterford fixture exposes the production-shaped property response", () => {
-  const response = getFixtureResponse(propertyPath) as PropertyDetailResponse;
+  const response = structuredClone(detail);
 
   assert.equal(response.property.id, waterfordFixturePropertyId);
   assert.equal(
@@ -35,6 +37,22 @@ test("Waterford fixture exposes the production-shaped property response", () => 
   );
   assert.equal(response.map_context.places.length, 41);
   assert.equal(response.map_context.lakes?.length, 7);
+});
+
+test("Waterford manifest maps every property-page request to a snapshot", () => {
+  assert.equal(manifest.property_id, waterfordFixturePropertyId);
+  assert.equal(
+    manifest.serving_bundle_version,
+    waterfordFixtureServingBundleVersion,
+  );
+  assert.deepEqual(
+    manifest.responses.map((response) => response.endpoint),
+    [
+      propertyPath,
+      `${propertyPath}/surfaces/arrival_story`,
+      `${propertyPath}/surfaces/around_this_home`,
+    ],
+  );
 });
 
 test("Waterford fixture keeps arrival and nearby scenes on one bundle", () => {
@@ -74,18 +92,5 @@ test("Waterford nearby snapshot preserves points and exact lake footprints", () 
   assert.equal(
     nearby.layers.find((layer) => layer.id === "lakes")?.shownCount,
     5,
-  );
-});
-
-test("Waterford fixture ignores focus query data without changing snapshots", () => {
-  const plain = scene("around_this_home");
-  const focused = getFixtureResponse(
-    `${propertyPath}/surfaces/around_this_home?focus=${encodeURIComponent("{}")}`,
-  );
-
-  assert.deepEqual(focused, plain);
-  assert.equal(
-    getWaterfordApiFixtureResponse(`${propertyPath}/surfaces/not_configured`),
-    null,
   );
 });

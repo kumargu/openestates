@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node ./node_modules/vite/bin/vite.js",
     "dev:atlas": "node ./node_modules/vite/bin/vite.js --mode atlas",
-    "dev:waterford": "node ./node_modules/vite/bin/vite.js --mode atlas",
+    "dev:waterford": "node ./node_modules/vite/bin/vite.js --mode waterford",
     "build": "tsc -b && node ./node_modules/vite/bin/vite.js build",
     "lint": "eslint . --max-warnings=0",
     "test": "node --experimental-strip-types --test tests/*.test.ts",

@@ -8,7 +8,6 @@ import type {
   SearchResponse,
 } from "./types.ts";
 import { atlasFixtureCard, atlasFixtureId, atlasFixtureScene } from './dev-atlas-fixtures.ts';
-import { getWaterfordApiFixtureResponse } from "./waterford-api-fixtures.ts";
 
 const now = "2026-07-11T00:00:00.000Z";
 
@@ -368,9 +367,6 @@ const areaContexts: Record<string, SearchAreaContext> = {
 export function getFixtureResponse(path: string): unknown | null {
   const [pathname, queryString = ""] = path.split("?");
   const params = new URLSearchParams(queryString);
-  const waterfordResponse = getWaterfordApiFixtureResponse(path);
-  if (waterfordResponse !== null) return waterfordResponse;
-
   if (pathname === `/api/properties/${atlasFixtureId}`) return makeDetail(atlasFixtureCard(fixtureProperties[0]));
   const atlasSurface = pathname.match(new RegExp(`^/api/properties/${atlasFixtureId}/surfaces/([^/]+)$`));
   if (atlasSurface) return atlasFixtureScene(decodeURIComponent(atlasSurface[1]));

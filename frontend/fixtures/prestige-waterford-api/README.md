@@ -27,6 +27,12 @@ exercise Google 3D. Property image URLs remain the original lake-backed
 `/media` paths, so image review still needs a reachable media server; the Atlas
 scene itself does not.
 
+Waterford mode serves these JSON files from Vite's development server at their
+original API paths. They are not imported into application source and add no
+bytes to the production bundle. Responses include
+`X-OpenEstates-Fixture: prestige-waterford` so automated browser checks can
+prove they did not reach a backend.
+
 This is a UI regression fixture, not a second source of product truth. Refresh
 all three files together when intentionally moving the test bed to a newer
 serving bundle.
