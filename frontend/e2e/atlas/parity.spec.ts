@@ -92,6 +92,7 @@ test("records the complete PR 126 spatial story in the PR 132 shell", async ({pa
   await startCameraTrace(page);
 
   await captureScene(page, testInfo, "01-society", "society:society");
+  await atlas.getByRole('button', {name: 'Tour home', exact: true}).click();
   await captureScene(page, testInfo, "02-above", "society:above");
   await captureScene(page, testInfo, "03-neighborhood", "society:neighborhood");
 

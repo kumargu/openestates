@@ -37,7 +37,7 @@
     "drawsOccludedSegments": false
   },
   "boundary": { "fill": "#f8f1df12", "stroke": "#fff7e3e6" },
-  "quiet": { "fill": "#061b2870", "radiusDegrees": 0.08 },
+  "quiet": { "fill": "#142c3838", "radiusDegrees": 0.08 },
   "focus": { "rangeM": 700, "tilt": 55, "durationMs": 1200, "movementFraction": 0.7 },
   "cameraFit": {
     "safeMarginPx": 32,
@@ -48,9 +48,9 @@
     "pairHeadingOffsetDegrees": 90,
     "inspectHeadingOffsetDegrees": 35,
     "homeHeadingDegrees": 210,
-    "overviewTilt": 25,
-    "pairTilt": 30,
-    "inspectTilt": 44,
+    "overviewTilt": 46,
+    "pairTilt": 52,
+    "inspectTilt": 64,
     "homeTilt": 55,
     "overviewMinimumRangeM": 1000,
     "inspectMinimumRangeM": 420

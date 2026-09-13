@@ -75,10 +75,20 @@ test("creates the Astra visual review matrix", async ({ page }, testInfo) => {
   await atlas.locator(".property-atlas__place-list button").first().click();
   await expect(map).toHaveAttribute("data-atlas-depth", "pair");
   await capture(atlas, map, testInfo, "03-school-with-home-desktop");
+  const pairRange = Number(await map.getAttribute('data-atlas-camera-target-range'));
 
   await atlas.getByRole("button", { name: "Look closer", exact: true }).click();
   await expect(map).toHaveAttribute("data-atlas-depth", "inspect");
+  await expect.poll(async () => Number(await map.getAttribute('data-atlas-camera-target-range')))
+    .toBeLessThan(pairRange);
   await capture(atlas, map, testInfo, "04-school-close-desktop");
+
+  await atlas.getByRole('button', {name: 'Close nearby places', exact: true}).click();
+  await expect(atlas.getByRole('button', {name: 'Schools', exact: true})).toBeFocused();
+  await atlas.getByRole('button', {name: 'Nearby', exact: true}).click();
+  await expect(map).toHaveAttribute('data-atlas-depth', 'inspect');
+  await atlas.getByRole('button', {name: 'With home', exact: true}).click();
+  await expect(map).toHaveAttribute('data-atlas-depth', 'pair');
 
   await atlas.getByRole("button", { name: "Road journey", exact: true }).click();
   await expect(map).toHaveAttribute("data-atlas-scene", "road:flight", {

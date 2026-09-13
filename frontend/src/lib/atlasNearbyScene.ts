@@ -58,6 +58,11 @@ export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons:
   let fitPoints: AtlasFitPoint[];
   if (depth === 'home') {
     fitPoints = [...homeGround, marker(origin)];
+  } else if (selected && selectedAnchor && depth === 'inspect') {
+    // Inspection is a destination portrait. The explicit With home action
+    // restores the relationship composition; fitting a distant home here
+    // makes a close view indistinguishable from comparison.
+    fitPoints = [...geometryGround, selectedAnchor, marker(selectedAnchor)];
   } else if (selected && selectedAnchor && depth !== 'overview') {
     fitPoints = [
       ...homeGround,

@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ErrorInfo,
   type ReactNode,
@@ -128,7 +129,9 @@ export function PropertyArrivalMap({
   identity,
 }: Props) {
   const { controller: playbackController, state: playbackState } = useArrivalPlaybackController();
-  const [societyAutoPlay, setSocietyAutoPlay] = useState(true);
+  const [societyAutoPlay, setSocietyAutoPlay] = useState(presentation !== 'atlas');
+  const [societyTourStarted, setSocietyTourStarted] = useState(presentation !== 'atlas');
+  const categoriesRef = useRef<HTMLElement>(null);
   const [societyPlaybackVersion, setSocietyPlaybackVersion] = useState(0);
   const [approachAutoPlay, setApproachAutoPlay] = useState(true);
   const [selectedSearchSocietyId, setSelectedSearchSocietyId] = useState<string | null>(null);
@@ -249,7 +252,8 @@ export function PropertyArrivalMap({
   const navigationActionLabel = approachReplayAvailable
     ? roadExperience?.replayLabel
     : societyActionLabel;
-  const navigationActionText = approachReplayAvailable ? "Replay" : societyActionText;
+  const navigationActionText = approachReplayAvailable ? "Replay"
+    : societyAction === 'play' && !societyTourStarted ? 'Tour home' : societyActionText;
   const cancelSocietyPlayback = useCallback(() => setSocietyAutoPlay(false), []);
   const cancelApproachPlayback = useCallback(() => setApproachAutoPlay(false), []);
 
@@ -357,6 +361,7 @@ export function PropertyArrivalMap({
   const selectPlace = (id: string | null) => {
     playbackController.cancel('settled'); setSelectedPlaceId(id);
     setNearbyDepth(id ? 'pair' : 'overview');
+    setAbove(false);
   };
   const tourPlaces = () => {
     if (playbackState === 'playing') { playbackController.pause(); return; }
@@ -366,6 +371,10 @@ export function PropertyArrivalMap({
       && (chapter.view !== 'nearby' || chapter.layerId === currentNearbyLayer?.id));
     if (chapters.length === 0) return;
     setNearbyTourRequest((current) => ({id: (current?.id ?? 0) + 1, chapters}));
+  };
+  const closeDrawer = () => {
+    setAtlasDrawerOpen(false);
+    categoriesRef.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus();
   };
   const applyNearbyTourScene = (scene: NearbyTourSceneState) => {
     setView(scene.view);
@@ -444,7 +453,7 @@ export function PropertyArrivalMap({
 
   if (presentation === "atlas") {
     return (
-      <section className="property-arrival-map property-arrival-map--atlas" data-exploring={activeView !== 'society'} aria-label={`Explore ${identity?.title ?? context.home.name}`}>
+      <section className="property-arrival-map property-arrival-map--atlas" data-exploring={activeView !== 'society'} data-depth={nearbyDepth} aria-label={`Explore ${identity?.title ?? context.home.name}`}>
         <div className="property-atlas__shade" aria-hidden="true" />
         {mapSurface}
 
@@ -462,7 +471,7 @@ export function PropertyArrivalMap({
           </div>
         ) : null}
 
-        <nav className="property-atlas__categories" aria-label="Explore nearby">
+        <nav ref={categoriesRef} className="property-atlas__categories" aria-label="Explore nearby">
           {atlasCategories.filter(category => category.view !== 'society').map((category) => (
             <button
               key={category.id}
@@ -505,7 +514,7 @@ export function PropertyArrivalMap({
             disabled={!context.home.boundary}
             onClick={() => setQuiet((current) => !current)}
           >
-            Dim surroundings
+            Quiet surroundings
           </button>
           </div>
         </details>
@@ -517,16 +526,18 @@ export function PropertyArrivalMap({
         ) : null}
 
         {atlasDrawerOpen && (activeView === "metro" || activeView === "nearby") ? (
-          <aside className="property-atlas__drawer" aria-label={activeAtlasCategoryLabel}>
+          <aside className="property-atlas__drawer" aria-label={activeAtlasCategoryLabel} onKeyDown={event => {
+            if (event.key === 'Escape') { event.stopPropagation(); closeDrawer(); }
+          }}>
             <header>
               <h2>{activeAtlasCategoryLabel}</h2>
-              <button type="button" aria-label="Close nearby places" onClick={() => setAtlasDrawerOpen(false)}>×</button>
+              <button type="button" aria-label="Close nearby places" onClick={closeDrawer}>×</button>
             </header>
-            <div className="property-atlas__drawer-summary">
+            {selectedPlaceId && <div className="property-atlas__drawer-summary">
               <button type="button" aria-pressed={!selectedPlaceId && nearbyDepth === 'overview'} onClick={() => selectPlace(null)}>
-                Show together
+                ← Show together
               </button>
-            </div>
+            </div>}
             <div className="property-atlas__place-list">
               {visiblePlaces.map((place) => {
                 const id = place.feature_id ?? place.name;
@@ -551,7 +562,7 @@ export function PropertyArrivalMap({
                 <div className="property-atlas__focus-actions">
                   <button type="button" aria-pressed={nearbyDepth === 'pair'} onClick={() => selectPlace(selectedPlaceId)}>With home</button>
                   <button type="button" aria-pressed={nearbyDepth === 'inspect'} onClick={() => {
-                    playbackController.cancel('settled'); setNearbyDepth('inspect');
+                    playbackController.cancel('settled'); setAbove(false); setNearbyDepth('inspect');
                   }}>Look closer</button>
                 </div>
                 {selectedPlace.source_url ? (
@@ -588,12 +599,14 @@ export function PropertyArrivalMap({
             <button
               type="button"
               className="property-atlas__play"
-              aria-label={navigationActionLabel ?? navigationActionText}
+              aria-label={navigationAction === 'play' && !societyTourStarted && !approachReplayAvailable
+                ? 'Tour home' : navigationActionLabel ?? navigationActionText}
               onClick={() => {
                 if (navigationAction === "pause") playbackController.pause();
                 else if (navigationAction === "resume") playbackController.resume();
                 else if (approachReplayAvailable) setApproachAutoPlay(true);
                 else {
+                  setSocietyTourStarted(true);
                   setSocietyAutoPlay(true);
                   setSocietyPlaybackVersion((current) => current + 1);
                 }
@@ -608,7 +621,12 @@ export function PropertyArrivalMap({
             className={activeView === 'nearby' || activeView === 'metro' ? 'is-active' : undefined}
             aria-pressed={activeView === 'nearby' || activeView === 'metro'}
             onClick={() => {
-              const next = atlasCategories.find((category) => category.view === "nearby")
+              if (activeView === 'nearby' || activeView === 'metro') {
+                setAtlasDrawerOpen(current => !current);
+                return;
+              }
+              const next = atlasCategories.find((category) => category.id === `nearby:${currentNearbyLayer?.id}`)
+                ?? atlasCategories.find((category) => category.view === "nearby")
                 ?? atlasCategories.find((category) => category.view === "metro");
               if (next) selectAtlasCategory(next);
             }}

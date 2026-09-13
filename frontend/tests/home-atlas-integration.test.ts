@@ -65,7 +65,7 @@ test('nearby relationship keeps home, uses real extents and never drops distant 
   const selected = places[0];
   assert.ok(geometryForPlace(selected, polygons, []).polygons.length > 0);
   const overview = nearbySceneCamera(home, places, polygons, [], null, 'overview', 900, 1400);
-  assert.equal(overview.tilt, 25);
+  assert.equal(overview.tilt, atlasPolicy.cameraFit.overviewTilt);
   const pair = nearbySceneCamera(home, places, polygons, [], selected.feature_id!, 'pair', 900, 1400);
   const pairDistance = distanceMetres(
     {lat: home.latitude, lng: home.longitude},
@@ -195,7 +195,7 @@ test('nearby comparisons preserve orientation when selecting opposite-side alter
   }
 });
 
-test('inspect framing gives selected geometry more screen presence while retaining home', () => {
+test('inspection frames destination geometry while With home preserves the relationship', () => {
   const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
   const home = resolveHomeAnchor(context)!;
   const places = buildNumberedPlaces(context.places.filter(place => place.layer === 'lake'));
@@ -218,13 +218,26 @@ test('inspect framing gives selected geometry more screen presence while retaini
     );
   };
   assert.ok(span(inspect) > span(pair));
-  const homeMarker = projectCameraPointToScreen(inspect, {
+  const homeMarker = projectCameraPointToScreen(pair, {
     lat: home.latitude,
     lng: home.longitude,
     heightM: atlasPolicy.nearby.markerLiftM,
   }, frame, atlasPolicy.cameraFit.fieldOfViewDegrees);
   assert.ok(homeMarker.x >= frame.left && homeMarker.x <= frame.width - frame.right);
   assert.ok(homeMarker.y >= frame.top && homeMarker.y <= frame.height - frame.bottom);
+});
+
+test('a distant point-only destination has a close portrait independent of home distance', () => {
+  const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
+  const home = resolveHomeAnchor(context)!;
+  const [place] = buildNumberedPlaces(context.places);
+  const distant = {...place, latitude: home.latitude + 0.1, feature_id: 'distant-portrait'};
+  for (const width of [390, 1440]) {
+    const pair = nearbySceneCamera(home, [distant], [], [], distant.feature_id, 'pair', 900, width);
+    const portrait = nearbySceneCamera(home, [distant], [], [], distant.feature_id, 'inspect', 900, width);
+    assert.ok(portrait.range < pair.range / 2);
+    assert.ok(Math.abs(portrait.center.lat - distant.latitude) < 0.002);
+  }
 });
 
 test('missing place collections stay a calm sparse scene', () => {
@@ -298,7 +311,11 @@ test('Aerial refits the selected relationship at its final tilt, including mobil
       const camera = nearbySceneCamera(home, places, polygons, [], selected.feature_id!, depth,
         900, frame.width, frame, atlasPolicy.above.tilt);
       assert.equal(camera.tilt, atlasPolicy.above.tilt);
-      for (const point of points) {
+      const subjectPoints = depth === 'inspect'
+        ? [...polygons.flatMap(p => p.coordinates.map(([lng, lat]) => ({lat, lng, heightM: 0}))),
+          {lat: selected.latitude, lng: selected.longitude, heightM: atlasPolicy.nearby.markerLiftM}]
+        : points;
+      for (const point of subjectPoints) {
         const p = projectCameraPointToScreen(camera, point, frame, atlasPolicy.cameraFit.fieldOfViewDegrees);
         const padding = atlasPolicy.cameraFit.opticalPaddingPx - 0.5;
         assert.ok(p.x >= frame.left + padding && p.x <= frame.width - frame.right - padding);
