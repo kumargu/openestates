@@ -200,7 +200,6 @@ export function PropertyArrivalMap({
   const [showBoundary, setShowBoundary] = useState(true);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [nearbyDepth, setNearbyDepth] = useState<NearbyDepth>('overview');
-  const [tourScope, setTourScope] = useState<'category' | 'neighborhood'>('category');
   const [atlasDrawerOpen, setAtlasDrawerOpen] = useState(false);
   const [nearbyTourRequest, setNearbyTourRequest] = useState<NearbyTourRequest | null>(null);
   const activeView = views.some((candidate) => candidate.id === view)
@@ -363,10 +362,8 @@ export function PropertyArrivalMap({
     if (playbackState === 'playing') { playbackController.pause(); return; }
     if (playbackState === 'paused') { playbackController.resume(); return; }
     setQuiet(true);
-    const chapters = tourScope === 'category'
-      ? allTourChapters.filter((chapter) => chapter.view === activeView
-        && (chapter.view !== 'nearby' || chapter.layerId === currentNearbyLayer?.id))
-      : allTourChapters;
+    const chapters = allTourChapters.filter((chapter) => chapter.view === activeView
+      && (chapter.view !== 'nearby' || chapter.layerId === currentNearbyLayer?.id));
     if (chapters.length === 0) return;
     setNearbyTourRequest((current) => ({id: (current?.id ?? 0) + 1, chapters}));
   };
@@ -447,7 +444,7 @@ export function PropertyArrivalMap({
 
   if (presentation === "atlas") {
     return (
-      <section className="property-arrival-map property-arrival-map--atlas" aria-label={`Explore ${identity?.title ?? context.home.name}`}>
+      <section className="property-arrival-map property-arrival-map--atlas" data-exploring={activeView !== 'society'} aria-label={`Explore ${identity?.title ?? context.home.name}`}>
         <div className="property-atlas__shade" aria-hidden="true" />
         {mapSurface}
 
@@ -466,7 +463,7 @@ export function PropertyArrivalMap({
         ) : null}
 
         <nav className="property-atlas__categories" aria-label="Explore nearby">
-          {atlasCategories.map((category) => (
+          {atlasCategories.filter(category => category.view !== 'society').map((category) => (
             <button
               key={category.id}
               type="button"
@@ -479,7 +476,9 @@ export function PropertyArrivalMap({
           ))}
         </nav>
 
-        <div className="property-atlas__view-tools" role="group" aria-label="Map view">
+        <details className="property-atlas__view-tools">
+          <summary>Map view</summary>
+          <div role="group" aria-label="Map view">
           <button
             type="button"
             aria-pressed={above}
@@ -490,7 +489,7 @@ export function PropertyArrivalMap({
               setAbove((current) => !current);
             }}
           >
-            Aerial
+            Top view
           </button>
           <button
             type="button"
@@ -506,9 +505,10 @@ export function PropertyArrivalMap({
             disabled={!context.home.boundary}
             onClick={() => setQuiet((current) => !current)}
           >
-            Focus
+            Dim surroundings
           </button>
-        </div>
+          </div>
+        </details>
 
         {missingArrivalState ? (
           <p className="property-atlas__status" role="status" aria-live="polite">
@@ -560,14 +560,9 @@ export function PropertyArrivalMap({
               </div>
             ) : null}
             <button type="button" className="property-atlas__tour" onClick={tourPlaces}>
-              {playbackState === "playing" ? "Pause tour" : playbackState === "paused" ? "Resume tour" : tourScope === 'neighborhood' ? 'Tour neighborhood' : `Tour ${activeAtlasCategoryLabel?.toLocaleLowerCase("en-IN") ?? "places"}`}
+              <span aria-hidden="true">{playbackState === 'playing' ? 'Ⅱ' : '▶'}</span>{' '}
+              {playbackState === "playing" ? "Pause tour" : playbackState === "paused" ? "Resume tour" : `Tour ${activeAtlasCategoryLabel?.toLocaleLowerCase("en-IN") ?? "places"}`}
             </button>
-            <select className="property-atlas__tour-scope" aria-label="Tour scope" value={tourScope}
-              disabled={playbackState === 'playing' || playbackState === 'paused'}
-              onChange={event => setTourScope(event.target.value as 'category' | 'neighborhood')}>
-              <option value="category">Category</option>
-              <option value="neighborhood">Neighborhood</option>
-            </select>
           </aside>
         ) : null}
 
@@ -575,6 +570,7 @@ export function PropertyArrivalMap({
           <button
             type="button"
             className={activeView === "society" ? "is-active" : undefined}
+            aria-pressed={activeView === 'society'}
             onClick={() => selectAtlasCategory({ view: "society" })}
           >
             Home
@@ -583,6 +579,7 @@ export function PropertyArrivalMap({
             type="button"
             disabled={!hasApproachLayer}
             className={activeView === "approach" ? "is-active" : undefined}
+            aria-pressed={activeView === 'approach'}
             onClick={() => selectAtlasCategory({ view: "approach" })}
           >
             Road journey
@@ -608,6 +605,8 @@ export function PropertyArrivalMap({
           ) : null}
           <button
             type="button"
+            className={activeView === 'nearby' || activeView === 'metro' ? 'is-active' : undefined}
+            aria-pressed={activeView === 'nearby' || activeView === 'metro'}
             onClick={() => {
               const next = atlasCategories.find((category) => category.view === "nearby")
                 ?? atlasCategories.find((category) => category.view === "metro");

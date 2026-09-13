@@ -42,6 +42,8 @@ test("static responses carry the launch security policy", () => {
   assert.match(globalHeaders?.["Content-Security-Policy"] ?? "", /https:\/\/maps\.googleapis\.com/);
   assert.match(globalHeaders?.["Content-Security-Policy"] ?? "", /https:\/\/maps\.gstatic\.com/);
   assert.match(globalHeaders?.["Content-Security-Policy"] ?? "", /https:\/\/streetviewpixels-pa\.googleapis\.com/);
+  assert.match(globalHeaders?.["Content-Security-Policy"] ?? "", /script-src[^;]*'wasm-unsafe-eval'/);
+  assert.doesNotMatch(globalHeaders?.["Content-Security-Policy"] ?? "", /(?:^|\s)'unsafe-eval'(?:\s|;|$)/);
 });
 
 test("Node major matches CI and Vercel", () => {

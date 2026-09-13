@@ -1,0 +1,858 @@
+{
+  "contractVersion": 1,
+  "surfaceId": "arrival_story",
+  "propertyId": "discovered-prestige-waterford-3bhk",
+  "servingBundleVersion": "catalog-71-ffb4dc50-117e-453c-b26f-41822430324e",
+  "entityRefs": {
+    "property_entity_id": "property:discovered-prestige-waterford-3bhk",
+    "society_entity_id": "society:prestige-waterford",
+    "area_entity_id": "area:itpl,-whitefield"
+  },
+  "anchor": {
+    "entityId": "society:prestige-waterford",
+    "label": "PRESTIGE WATERFORD",
+    "area": "Itpl, Whitefield",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [
+        77.74218189999999,
+        12.9819914
+      ]
+    },
+    "boundary": {
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "sourceType": "OpenStreetMap",
+      "sourceUrl": "https://www.openstreetmap.org/way/133630420",
+      "confidence": 0.78
+    },
+    "coordinateQuality": "exact"
+  },
+  "experience": {
+    "revealDurationMs": 7000,
+    "startRangeM": 1800.0,
+    "finalRangeM": 700.0,
+    "finalTilt": 48.0,
+    "finalHeading": 210.0,
+    "rotationArcDegrees": 140.0,
+    "boundaryPadding": 1.35,
+    "mobileBoundaryPadding": 1.6,
+    "missingBoundaryState": "Society boundary not mapped",
+    "googleUnavailableState": "Map unavailable",
+    "societyPlayLabel": "Play society reveal",
+    "societyPauseLabel": "Pause society reveal",
+    "societyResumeLabel": "Resume society reveal",
+    "searchContextLabel": "Also in your search",
+    "searchContextViewHomeLabel": "View home",
+    "backToSocietyLabel": "Back to this society"
+  },
+  "viewport": {
+    "center": [
+      77.7420955,
+      12.98119905
+    ],
+    "bounds": {
+      "west": 77.7363516,
+      "south": 12.9730344,
+      "east": 77.7478394,
+      "north": 12.9893637
+    },
+    "radiusM": 3000
+  },
+  "layers": [
+    {
+      "id": "metro",
+      "label": "Metro",
+      "family": "access",
+      "renderKind": "pin",
+      "mapPresentation": "immersive_3d",
+      "relationClass": "access",
+      "enabledByDefault": true,
+      "rank": 1,
+      "availableCount": 16,
+      "shownCount": 2,
+      "fillState": "partial"
+    },
+    {
+      "id": "entrance",
+      "label": "Entrance",
+      "family": "access",
+      "renderKind": "arrival_marker",
+      "mapPresentation": "immersive_3d",
+      "emptyState": "Entrance not mapped",
+      "featureValueLabels": {
+        "status": {
+          "inferred": "Likely entrance",
+          "verified": "Entrance"
+        }
+      },
+      "relationClass": "access",
+      "enabledByDefault": true,
+      "rank": 2,
+      "availableCount": 1,
+      "shownCount": 1,
+      "fillState": "filled"
+    },
+    {
+      "id": "approach_road",
+      "label": "Approach road",
+      "family": "access",
+      "renderKind": "terrain_corridor",
+      "mapPresentation": "immersive_3d",
+      "experience": {
+        "kind": "street_view_tour",
+        "routeDirection": null,
+        "waypointSpacingM": 65,
+        "overviewDwellMs": 1800,
+        "dwellMs": 2500,
+        "anchorLookAheadM": 35,
+        "anchorPitch": 6.0,
+        "anchorInteriorPitch": 10.0,
+        "anchorInteriorDwellMs": 2000,
+        "anchorPoseTransitionMs": 700,
+        "cameraAltitudeM": 25.0,
+        "cameraRangeM": 145.0,
+        "cameraTilt": 80.0,
+        "cameraFov": 38.0,
+        "streetViewZoom": 0.8,
+        "transitionMs": 4200,
+        "targetDurationMs": 28000,
+        "minimumDurationMs": 24000,
+        "maximumDurationMs": 32000,
+        "minimumFrameDwellMs": 1500,
+        "panoramaCrossfadeMs": 280,
+        "entranceDwellMs": 5000,
+        "maximumPanoramaGapM": 140,
+        "shortGapState": "Street View skips a short gap",
+        "endsHereState": "Street View ends here",
+        "unavailableState": "Street View unavailable",
+        "pauseLabel": "Pause approach road",
+        "resumeLabel": "Resume approach road",
+        "replayLabel": "Replay approach road"
+      },
+      "emptyState": "Approach road not mapped",
+      "relationClass": "access",
+      "enabledByDefault": true,
+      "rank": 3,
+      "availableCount": 1,
+      "shownCount": 1,
+      "fillState": "filled"
+    }
+  ],
+  "features": [
+    {
+      "id": "arrival_story:metro:place-google-chijs-ojywiorjsrvtyln4bonnw",
+      "entityId": "place:google:chijs-ojywiorjsrvtyln4bonnw",
+      "layerId": "metro",
+      "kind": "place",
+      "label": "Kadugodi Tree Park",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 500,
+        "rating": 4.5,
+        "reviewCount": 1536
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "train",
+        "priority": 1
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_metro_stations:1785601325:171"
+      ]
+    },
+    {
+      "id": "arrival_story:metro:place-google-chij1-at8uqrrjsru3fouv135ok",
+      "entityId": "place:google:chij1-at8uqrrjsru3fouv135ok",
+      "layerId": "metro",
+      "kind": "place",
+      "label": "Pattandur Agrahara",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 600,
+        "rating": 4.4,
+        "reviewCount": 538
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "train",
+        "priority": 1
+      },
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_metro_stations:1785601325:172"
+      ]
+    },
+    {
+      "id": "arrival_story:entrance:place-society-entrance-society-rera-53c0b81882e6acc6-node-12638053899",
+      "entityId": "place:society-entrance:society-rera-53c0b81882e6acc6-node-12638053899",
+      "layerId": "entrance",
+      "kind": "entrance",
+      "label": "Entrance",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.7437612,
+              12.9824745
+            ],
+            [
+              77.7405505,
+              12.9824213
+            ],
+            [
+              77.7404213,
+              12.9824192
+            ],
+            [
+              77.7403155,
+              12.981656
+            ],
+            [
+              77.7394255,
+              12.9814691
+            ],
+            [
+              77.739374,
+              12.9807949
+            ],
+            [
+              77.7393516,
+              12.9805031
+            ],
+            [
+              77.7406114,
+              12.9803659
+            ],
+            [
+              77.7406458,
+              12.9803736
+            ],
+            [
+              77.7406699,
+              12.9804808
+            ],
+            [
+              77.741189,
+              12.9804402
+            ],
+            [
+              77.7414713,
+              12.9806973
+            ],
+            [
+              77.7420818,
+              12.9812533
+            ],
+            [
+              77.7422118,
+              12.9813717
+            ],
+            [
+              77.7428352,
+              12.9816647
+            ],
+            [
+              77.7434694,
+              12.9815468
+            ],
+            [
+              77.7436802,
+              12.9819929
+            ],
+            [
+              77.7437453,
+              12.9821307
+            ],
+            [
+              77.743725,
+              12.98228
+            ],
+            [
+              77.7437612,
+              12.9824745
+            ]
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 169
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "entrance",
+        "priority": 2
+      },
+      "properties": {
+        "status": "inferred",
+        "associationMethod": "osm_gate_boundary_public_road"
+      },
+      "confidence": 0.78,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:society-entrance_entity:1788172848:163"
+      ]
+    },
+    {
+      "id": "arrival_story:approach_road:place-approach-road-society-rera-53c0b81882e6acc6-23213668",
+      "entityId": "place:approach-road:society-rera-53c0b81882e6acc6-23213668",
+      "layerId": "approach_road",
+      "kind": "approach_road",
+      "label": "ECC Road",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.7413357,
+            12.9760344
+          ],
+          [
+            77.7417137,
+            12.9770455
+          ],
+          [
+            77.7419124,
+            12.9775769
+          ],
+          [
+            77.7419495,
+            12.9776762
+          ],
+          [
+            77.742028,
+            12.9780589
+          ],
+          [
+            77.7420749,
+            12.9782874
+          ],
+          [
+            77.7420842,
+            12.9783591
+          ],
+          [
+            77.7421298,
+            12.9786474
+          ],
+          [
+            77.7421359,
+            12.9786878
+          ],
+          [
+            77.742183,
+            12.9788947
+          ],
+          [
+            77.7421907,
+            12.9789112
+          ],
+          [
+            77.7422762,
+            12.9790953
+          ],
+          [
+            77.7423166,
+            12.9791736
+          ],
+          [
+            77.7423624,
+            12.9792552
+          ],
+          [
+            77.7425448,
+            12.9796341
+          ],
+          [
+            77.7426373,
+            12.9798261
+          ],
+          [
+            77.7427615,
+            12.9800841
+          ],
+          [
+            77.7428436,
+            12.9802546
+          ],
+          [
+            77.7429844,
+            12.9805469
+          ],
+          [
+            77.7430801,
+            12.9807456
+          ],
+          [
+            77.743212,
+            12.9810195
+          ],
+          [
+            77.743379,
+            12.9813228
+          ],
+          [
+            77.7435939,
+            12.9817538
+          ],
+          [
+            77.7436213,
+            12.9818087
+          ],
+          [
+            77.7436776,
+            12.9819217
+          ],
+          [
+            77.7437652,
+            12.9821367
+          ],
+          [
+            77.743819,
+            12.9822607
+          ],
+          [
+            77.7438711,
+            12.9823965
+          ],
+          [
+            77.7439898,
+            12.9827003
+          ],
+          [
+            77.7439871,
+            12.9827748
+          ],
+          [
+            77.7439483,
+            12.9829904
+          ],
+          [
+            77.7438694,
+            12.9833247
+          ],
+          [
+            77.7438466,
+            12.9833822
+          ],
+          [
+            77.7438044,
+            12.9837053
+          ],
+          [
+            77.7437913,
+            12.9838059
+          ],
+          [
+            77.7442767,
+            12.9850243
+          ],
+          [
+            77.744386,
+            12.9852987
+          ],
+          [
+            77.7446195,
+            12.9858097
+          ],
+          [
+            77.7448189,
+            12.9863119
+          ],
+          [
+            77.7448394,
+            12.9863637
+          ]
+        ]
+      },
+      "coordinateQuality": "exact",
+      "metrics": {
+        "distanceM": 0
+      },
+      "display": {
+        "tone": "positive",
+        "icon": "road",
+        "priority": 3
+      },
+      "properties": {
+        "associationMethod": "boundary_proximity",
+        "direction": "two_way"
+      },
+      "confidence": 0.78,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:approach_road:1788172848:0"
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "arrival_story:metro:place-google-chijs-ojywiorjsrvtyln4bonnw",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 500,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_metro_stations:1785601325:171"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "arrival_story:metro:place-google-chij1-at8uqrrjsru3fouv135ok",
+      "edgeType": "near_place",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 600,
+      "confidence": 0.82,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:nearby_metro_stations:1785601325:172"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "arrival_story:entrance:place-society-entrance-society-rera-53c0b81882e6acc6-node-12638053899",
+      "edgeType": "within_radius",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 169,
+      "confidence": 0.78,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:society-entrance_entity:1788172848:163"
+      ]
+    },
+    {
+      "fromId": "society:prestige-waterford",
+      "toId": "arrival_story:approach_road:place-approach-road-society-rera-53c0b81882e6acc6-23213668",
+      "edgeType": "within_radius",
+      "relationClass": "access",
+      "direct": true,
+      "distanceM": 0,
+      "confidence": 0.78,
+      "receiptIds": [
+        "receipt:society-rera-53c0b81882e6acc6:approach_road:1788172848:0"
+      ]
+    }
+  ],
+  "callouts": [],
+  "receipts": [
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_metro_stations:1785601325:171",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_metro_stations",
+      "claim": "Kadugodi Tree Park Metro (0.5 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=8950456211087285334&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 500 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:nearby_metro_stations:1785601325:172",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "nearby_metro_stations",
+      "claim": "Pattandur Agrahara (0.6 km)",
+      "sourceType": "Computed",
+      "sourceUrl": "https://maps.google.com/?cid=9936760870529431379&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "learnedAt": "2026-08-01T16:22:05.088280Z",
+      "confidence": 0.82,
+      "scope": "within 600 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:society-entrance_entity:1788172848:163",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "society.entrance_entity",
+      "claim": "place:society-entrance:society-rera-53c0b81882e6acc6-node-12638053899",
+      "sourceType": "OpenStreetMap",
+      "sourceUrl": "https://www.openstreetmap.org/node/12638053899",
+      "learnedAt": "2026-08-31T10:40:48.126258Z",
+      "confidence": 0.78,
+      "scope": "within 200 m"
+    },
+    {
+      "id": "receipt:society-rera-53c0b81882e6acc6:approach_road:1788172848:0",
+      "entityId": "society:rera-53c0b81882e6acc6",
+      "factKey": "approach_road",
+      "claim": "ECC Road",
+      "sourceType": "OpenStreetMap",
+      "sourceUrl": "https://www.openstreetmap.org/way/23213668",
+      "learnedAt": "2026-08-31T10:40:48.126258Z",
+      "confidence": 0.78,
+      "scope": "within 0 m"
+    }
+  ],
+  "fillRate": {
+    "filledLayers": 2,
+    "partialLayers": 1,
+    "emptyLayers": 0,
+    "shownFeatures": 4,
+    "availableFeatures": 18,
+    "value": 0.8333333
+  },
+  "gaps": [
+    {
+      "layerId": "metro",
+      "fillState": "partial"
+    }
+  ]
+}

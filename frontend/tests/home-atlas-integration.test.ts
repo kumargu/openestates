@@ -23,6 +23,7 @@ import atlasPolicy from "../../app/config/ui/home-atlas.json" with { type: "json
 import { AtlasCameraArbiter } from "../src/lib/atlasCameraArbiter.ts";
 import {
   geometryForPlace,
+  nearbyPointCutouts,
   nearbySceneCamera,
   nearbyRelationArc,
 } from '../src/lib/atlasNearbyScene.ts';
@@ -230,6 +231,20 @@ test('missing place collections stay a calm sparse scene', () => {
   const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
   const sparse = {...context, places: undefined} as unknown as typeof context;
   assert.doesNotThrow(() => resolveHomeAnchor(sparse));
+});
+
+test('Focus does not punch a second circular hole inside a mapped lake', () => {
+  const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
+  const lakes = buildNumberedPlaces(context.places.filter(place => place.layer === 'lake'));
+  const polygons = context.layer_polygons!.lake;
+  assert.ok(lakes.length > 0);
+  assert.equal(nearbyPointCutouts(lakes, polygons).length, 0);
+  const schools = buildNumberedPlaces(context.places.filter(place => place.layer === 'school'));
+  assert.ok(schools.length > 0);
+  assert.deepEqual(nearbyPointCutouts(schools, polygons), schools, 'point-only schools retain their highlight');
+  const selectedGeometry = geometryForPlace(lakes[0], polygons, []).polygons;
+  assert.equal(nearbyPointCutouts([lakes[0]], selectedGeometry).length, 0, 'pair isolation preserves the same rule');
+  assert.deepEqual(nearbyPointCutouts([lakes[0]], []), [lakes[0]], 'absent geometry keeps the point fallback');
 });
 
 test('inspect spends spare frame space on selection without sacrificing home or scale', () => {

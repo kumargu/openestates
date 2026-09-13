@@ -1,0 +1,1017 @@
+{
+  "property_id": "discovered-prestige-waterford-3bhk",
+  "entity_refs": {
+    "property_entity_id": "property:discovered-prestige-waterford-3bhk",
+    "society_entity_id": "society:prestige-waterford",
+    "area_entity_id": "area:itpl,-whitefield"
+  },
+  "serving_bundle_version": "catalog-71-ffb4dc50-117e-453c-b26f-41822430324e",
+  "sections": [
+    {
+      "kind": "home_state",
+      "title": "Lifecycle",
+      "summary": "Home state: delivered",
+      "subtitle": "Delivered, under-construction, age, and timeline facts.",
+      "scope": "society",
+      "relationship": "project lifecycle",
+      "priority": 5,
+      "constellation": "trust",
+      "header_meta": "3 facts · Computed",
+      "confidence_pct": 88,
+      "source_types": [
+        "Computed"
+      ],
+      "entity_ids": [
+        "society:rera-53c0b81882e6acc6"
+      ],
+      "presentation": {
+        "variant": "timeline",
+        "density": "compact",
+        "max_preview_items": 3
+      },
+      "items": [
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "home_state",
+          "label": "Delivery state",
+          "value": "Home state: delivered",
+          "scope": "society",
+          "relationship": "project lifecycle",
+          "source_type": "Computed",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+          "learned_at": "2026-08-01T17:40:49.114590+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "home_age_bucket",
+          "label": "Age band",
+          "value": "Home age: 1-5 yrs old",
+          "scope": "society",
+          "relationship": "project lifecycle",
+          "source_type": "Computed",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+          "learned_at": "2026-08-01T17:40:49.114590+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "home_timeline_state",
+          "label": "Timeline",
+          "value": "Timeline state: delayed",
+          "scope": "society",
+          "relationship": "project lifecycle",
+          "source_type": "Computed",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+          "learned_at": "2026-08-01T17:40:49.114590+00:00"
+        }
+      ],
+      "missing": []
+    },
+    {
+      "kind": "rera",
+      "title": "RERA",
+      "summary": "RERA No: PRM/KA/RERA/1251/446/PR/200811/003528",
+      "subtitle": "Official project registration and delivery record.",
+      "scope": "society",
+      "relationship": "project registration",
+      "priority": 10,
+      "constellation": "trust",
+      "header_meta": "5 facts · Rera",
+      "confidence_pct": 100,
+      "source_types": [
+        "Rera"
+      ],
+      "entity_ids": [
+        "society:rera-53c0b81882e6acc6"
+      ],
+      "presentation": {
+        "variant": "timeline",
+        "density": "compact",
+        "max_preview_items": 4
+      },
+      "items": [
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rera_number",
+          "label": "Registration",
+          "value": "RERA No: PRM/KA/RERA/1251/446/PR/200811/003528",
+          "scope": "society",
+          "relationship": "project registration",
+          "source_type": "Rera",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+          "learned_at": "2026-08-01T16:21:47.974742+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rera_status",
+          "label": "Status",
+          "value": "RERA Status: APPROVED",
+          "scope": "society",
+          "relationship": "project registration",
+          "source_type": "Rera",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+          "learned_at": "2026-08-01T16:21:47.974746+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rera_completion_date",
+          "label": "Completion",
+          "value": "Expected Completion: 2024-09-15",
+          "scope": "society",
+          "relationship": "project registration",
+          "source_type": "Rera",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+          "learned_at": "2026-08-01T16:21:47.974792+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rera_total_land_area_sqm",
+          "label": "Land area",
+          "value": "Total Land Area: 66823 sq m",
+          "scope": "society",
+          "relationship": "project registration",
+          "source_type": "Rera",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+          "learned_at": "2026-08-01T16:21:47.974853+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rera_delay_months",
+          "label": "Delay",
+          "value": "Project delayed by 9 months",
+          "scope": "society",
+          "relationship": "project registration",
+          "source_type": "Rera",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+          "learned_at": "2026-08-01T16:21:47.974823+00:00"
+        }
+      ],
+      "missing": []
+    },
+    {
+      "kind": "approach_road",
+      "title": "Approach road",
+      "summary": "Road quality: Approach road inferred from Google project coordinates; visual road-width verifica...",
+      "subtitle": "Last-lane access context from reviews and visual proof.",
+      "scope": "road_segment",
+      "relationship": "gate approach",
+      "priority": 15,
+      "constellation": "commute",
+      "header_meta": "2 facts · Google",
+      "confidence_pct": 73,
+      "source_types": [
+        "Google"
+      ],
+      "entity_ids": [
+        "road_segment:approach-road",
+        "road_segment:rera-53c0b81882e6acc6-approach"
+      ],
+      "presentation": {
+        "variant": "media_grid",
+        "density": "standard",
+        "max_preview_items": 3
+      },
+      "items": [
+        {
+          "entity_id": "road_segment:rera-53c0b81882e6acc6-approach",
+          "key": "access_road_quality",
+          "label": "Road quality",
+          "value": "Road quality: Approach road inferred from Google project coordinates; visual road-width verification is pending.",
+          "scope": "road_segment",
+          "relationship": "approach road",
+          "source_type": "Google",
+          "source_url": "https://maps.google.com/?cid=13971216255020941300&g_mp=CiVnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLkdldFBsYWNlEAIYBCAA",
+          "learned_at": "2026-08-01T17:45:48.038381+00:00"
+        },
+        {
+          "entity_id": "road_segment:approach-road",
+          "key": "street_view_strip_available",
+          "label": "Approach road",
+          "value": "6 outside road views",
+          "scope": "road_segment",
+          "relationship": "gate approach",
+          "values": [
+            "Gate approach",
+            "Road axis",
+            "Opposite approach",
+            "Cross approach",
+            "Approach road ahead",
+            "Next stretch"
+          ],
+          "source_type": "Google",
+          "source_url": "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=12.9819914%2C77.7421819&heading=0.0&pitch=0.0&fov=80.0",
+          "learned_at": "2026-09-12T16:52:02.416285+00:00"
+        }
+      ],
+      "missing": [],
+      "media": [
+        {
+          "kind": "street_view_strip",
+          "provider": "Google Street View",
+          "title": "Approach road",
+          "caption": "Last-lane context · Street View latest available",
+          "capture_date_label": "Street View latest available",
+          "coverage_quality": "usable",
+          "frames": [
+            {
+              "label": "Gate approach",
+              "distance_from_gate_m": 0,
+              "image_url": "https://maps.googleapis.com/maps/api/streetview?size=640x420&location=12.9819914%2C77.7421819&radius=250&heading=0.0&pitch=0.0&fov=80.0&source=outdoor&key=REDACTED_FOR_FIXTURE",
+              "heading": 0.0,
+              "pitch": 0.0,
+              "fov": 80.0,
+              "capture_date": "latest available",
+              "source_url": "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=12.9819914%2C77.7421819&heading=0.0&pitch=0.0&fov=80.0"
+            },
+            {
+              "label": "Road axis",
+              "distance_from_gate_m": 0,
+              "image_url": "https://maps.googleapis.com/maps/api/streetview?size=640x420&location=12.9819914%2C77.7421819&radius=250&heading=90.0&pitch=0.0&fov=80.0&source=outdoor&key=REDACTED_FOR_FIXTURE",
+              "heading": 90.0,
+              "pitch": 0.0,
+              "fov": 80.0,
+              "capture_date": "latest available",
+              "source_url": "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=12.9819914%2C77.7421819&heading=90.0&pitch=0.0&fov=80.0"
+            },
+            {
+              "label": "Opposite approach",
+              "distance_from_gate_m": 0,
+              "image_url": "https://maps.googleapis.com/maps/api/streetview?size=640x420&location=12.9819914%2C77.7421819&radius=250&heading=180.0&pitch=0.0&fov=80.0&source=outdoor&key=REDACTED_FOR_FIXTURE",
+              "heading": 180.0,
+              "pitch": 0.0,
+              "fov": 80.0,
+              "capture_date": "latest available",
+              "source_url": "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=12.9819914%2C77.7421819&heading=180.0&pitch=0.0&fov=80.0"
+            },
+            {
+              "label": "Cross approach",
+              "distance_from_gate_m": 0,
+              "image_url": "https://maps.googleapis.com/maps/api/streetview?size=640x420&location=12.9819914%2C77.7421819&radius=250&heading=270.0&pitch=0.0&fov=80.0&source=outdoor&key=REDACTED_FOR_FIXTURE",
+              "heading": 270.0,
+              "pitch": 0.0,
+              "fov": 80.0,
+              "capture_date": "latest available",
+              "source_url": "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=12.9819914%2C77.7421819&heading=270.0&pitch=0.0&fov=80.0"
+            },
+            {
+              "label": "Approach road ahead",
+              "distance_from_gate_m": 80,
+              "image_url": "https://maps.googleapis.com/maps/api/streetview?size=640x420&location=12.9819914%2C77.7421819&radius=250&heading=0.0&pitch=0.0&fov=80.0&source=outdoor&key=REDACTED_FOR_FIXTURE",
+              "heading": 0.0,
+              "pitch": 0.0,
+              "fov": 80.0,
+              "capture_date": "latest available",
+              "source_url": "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=12.9819914%2C77.7421819&heading=0.0&pitch=0.0&fov=80.0"
+            },
+            {
+              "label": "Next stretch",
+              "distance_from_gate_m": 160,
+              "image_url": "https://maps.googleapis.com/maps/api/streetview?size=640x420&location=12.9819914%2C77.7421819&radius=250&heading=0.0&pitch=0.0&fov=80.0&source=outdoor&key=REDACTED_FOR_FIXTURE",
+              "heading": 0.0,
+              "pitch": 0.0,
+              "fov": 80.0,
+              "capture_date": "latest available",
+              "source_url": "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=12.9819914%2C77.7421819&heading=0.0&pitch=0.0&fov=80.0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "market",
+      "title": "Market trail",
+      "summary": "3 BHK listing: INR 2.60 Cr-4.10 Cr for 1197-2060 sq ft",
+      "subtitle": "Pricing, appreciation, and nearby comparable signals.",
+      "scope": "society",
+      "relationship": "project market trail",
+      "priority": 20,
+      "constellation": "value",
+      "header_meta": "39 facts · ExternalListing",
+      "confidence_pct": 68,
+      "source_types": [
+        "ExternalListing"
+      ],
+      "entity_ids": [
+        "society:rera-53c0b81882e6acc6"
+      ],
+      "presentation": {
+        "variant": "fact_grid",
+        "density": "standard",
+        "max_preview_items": 6
+      },
+      "items": [
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_3bhk",
+          "label": "3BHK listing",
+          "value": "3 BHK listing: INR 2.60 Cr-4.10 Cr for 1197-2060 sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_price_3bhk",
+          "label": "3BHK listing price",
+          "value": "3 BHK listing price: INR 34500000",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_price_range_3bhk",
+          "label": "3BHK listing price range",
+          "value": "3 BHK listing price range: 2.60 Cr-4.10 Cr",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_area_sqft_3bhk",
+          "label": "3BHK listing area",
+          "value": "3 BHK listing area: 2027 sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_area_sqft_range_3bhk",
+          "label": "3BHK listing area range",
+          "value": "3 BHK listing area range: 1197-2060 sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_price_per_sqft_range_3bhk",
+          "label": "3BHK listing rate range",
+          "value": "3 BHK listing rate range: INR 14080-20227/sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_area_type_3bhk",
+          "label": "3BHK area basis",
+          "value": "3 BHK listing area type: mixed listed area",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_source_url_3bhk",
+          "label": "3BHK listing source",
+          "value": "Listing source: https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_source_name_3bhk",
+          "label": "3BHK source name",
+          "value": "3 BHK listing source: MagicBricks",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_monthly_range_3bhk",
+          "label": "3BHK monthly rent",
+          "value": "3 BHK monthly rent range: 85000-1.5 L",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_area_sqft_range_3bhk",
+          "label": "3BHK rent area",
+          "value": "3 BHK rent listing area range: 1009-2060 sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_per_sqft_range_3bhk",
+          "label": "3BHK rent rate",
+          "value": "3 BHK rent rate range: INR 41-149/sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_source_url_3bhk",
+          "label": "3BHK rent source",
+          "value": "Rent source: https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_source_name_3bhk",
+          "label": "3BHK rent source name",
+          "value": "3 BHK rent source: MagicBricks",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_price_range_1bhk",
+          "label": "1BHK listing price range",
+          "value": "1 BHK listing price range: 1.25 Cr-1.55 Cr",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_area_sqft_range_1bhk",
+          "label": "1BHK listing area range",
+          "value": "1 BHK listing area range: 415-630 sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_price_per_sqft_range_1bhk",
+          "label": "1BHK listing rate range",
+          "value": "1 BHK listing rate range: INR 19562-24603/sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_source_url_1bhk",
+          "label": "1BHK listing source",
+          "value": "Listing source: https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_source_name_1bhk",
+          "label": "1BHK source name",
+          "value": "1 BHK listing source: MagicBricks",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_monthly_range_1bhk",
+          "label": "1BHK monthly rent",
+          "value": "1 BHK monthly rent range: 50000-52000",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_area_sqft_range_1bhk",
+          "label": "1BHK rent area",
+          "value": "1 BHK rent listing area range: 504-630 sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_per_sqft_range_1bhk",
+          "label": "1BHK rent rate",
+          "value": "1 BHK rent rate range: INR 79-103/sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_source_url_1bhk",
+          "label": "1BHK rent source",
+          "value": "Rent source: https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_source_name_1bhk",
+          "label": "1BHK rent source name",
+          "value": "1 BHK rent source: MagicBricks",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_price_range_4bhk",
+          "label": "4BHK listing price range",
+          "value": "4 BHK listing price range: 3.95 Cr-5.60 Cr",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_area_sqft_range_4bhk",
+          "label": "4BHK listing area range",
+          "value": "4 BHK listing area range: 1740-3200 sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_price_per_sqft_range_4bhk",
+          "label": "4BHK listing rate range",
+          "value": "4 BHK listing rate range: INR 15460-20198/sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_source_url_4bhk",
+          "label": "4BHK listing source",
+          "value": "Listing source: https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "listing_source_name_4bhk",
+          "label": "4BHK source name",
+          "value": "4 BHK listing source: MagicBricks",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-sale-in-bangalore-pppfs",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_monthly_range_4bhk",
+          "label": "4BHK monthly rent",
+          "value": "4 BHK monthly rent range: 1.2 L-1.3 L",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_area_sqft_range_4bhk",
+          "label": "4BHK rent area",
+          "value": "4 BHK rent listing area range: 1627-2555 sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_per_sqft_range_4bhk",
+          "label": "4BHK rent rate",
+          "value": "4 BHK rent rate range: INR 47-80/sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_source_url_4bhk",
+          "label": "4BHK rent source",
+          "value": "Rent source: https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_source_name_4bhk",
+          "label": "4BHK rent source name",
+          "value": "4 BHK rent source: MagicBricks",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.magicbricks.com/project-prestige-waterford-for-rent-in-bangalore-pppfr",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_monthly_range_3_5bhk",
+          "label": "3.5BHK monthly rent",
+          "value": "3.5 BHK monthly rent range: 90000-1.1 L",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.squareyards.com/rent/property-for-rent-in-prestige-waterford-bangalore",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_area_sqft_range_3_5bhk",
+          "label": "3.5BHK rent area",
+          "value": "3.5 BHK rent listing area range: 2027-2220 sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.squareyards.com/rent/property-for-rent-in-prestige-waterford-bangalore",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_per_sqft_range_3_5bhk",
+          "label": "3.5BHK rent rate",
+          "value": "3.5 BHK rent rate range: INR 41-54/sq ft",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.squareyards.com/rent/property-for-rent-in-prestige-waterford-bangalore",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_source_url_3_5bhk",
+          "label": "3.5BHK rent source",
+          "value": "Rent source: https://www.squareyards.com/rent/property-for-rent-in-prestige-waterford-bangalore",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.squareyards.com/rent/property-for-rent-in-prestige-waterford-bangalore",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "rent_source_name_3_5bhk",
+          "label": "3.5BHK rent source name",
+          "value": "3.5 BHK rent source: SquareYards",
+          "scope": "society",
+          "relationship": "project market trail",
+          "source_type": "ExternalListing",
+          "source_url": "https://www.squareyards.com/rent/property-for-rent-in-prestige-waterford-bangalore",
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        }
+      ],
+      "missing": [
+        "Registered resale transaction comps are not linked yet."
+      ]
+    },
+    {
+      "kind": "nearby",
+      "title": "Nearby",
+      "summary": "Schools: Basil Woods Juniors, Whitefield (0.4 km) +3 more",
+      "subtitle": "Map-backed places near the society.",
+      "scope": "society",
+      "relationship": "nearby map context",
+      "priority": 30,
+      "constellation": "commute",
+      "header_meta": "4 facts · Computed, Google",
+      "confidence_pct": 82,
+      "source_types": [
+        "Computed",
+        "Google"
+      ],
+      "entity_ids": [
+        "society:rera-53c0b81882e6acc6"
+      ],
+      "presentation": {
+        "variant": "schematic_map",
+        "density": "compact",
+        "max_preview_items": 6
+      },
+      "items": [
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "nearby_schools",
+          "label": "Schools",
+          "value": "4 map-backed places",
+          "scope": "society",
+          "relationship": "nearby map context",
+          "values": [
+            "Basil Woods Juniors, Whitefield (0.4 km)",
+            "Mont Ivy Preschools | Best Montessori Preschool in Whitefield | Preschools Near Me | Montessori Schools (0.4 km)",
+            "Holy Cross School and PU College (0.7 km)",
+            "Greenwood High Pre-school- Whitefield (1.2 km)"
+          ],
+          "source_type": "Computed",
+          "source_url": "https://maps.google.com/?cid=15022186812606848464&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "attributions": [
+            {
+              "value": "Basil Woods Juniors, Whitefield (0.4 km)",
+              "source_url": "https://maps.google.com/?cid=15022186812606848464&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+              "source_type": "Computed",
+              "learned_at": "2026-08-01T16:22:05.088280+00:00"
+            },
+            {
+              "value": "Mont Ivy Preschools | Best Montessori Preschool in Whitefield | Preschools Near Me | Montessori Schools (0.4 km)",
+              "source_url": "https://maps.google.com/?cid=899232323097302798&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+              "source_type": "Computed",
+              "learned_at": "2026-08-01T16:22:05.088280+00:00"
+            },
+            {
+              "value": "Holy Cross School and PU College (0.7 km)",
+              "source_url": "https://maps.google.com/?cid=16924077680391342888&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+              "source_type": "Google",
+              "learned_at": "2026-08-01T17:25:26+00:00"
+            },
+            {
+              "value": "Greenwood High Pre-school- Whitefield (1.2 km)",
+              "source_url": "https://maps.google.com/?cid=12175598615484643351&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+              "source_type": "Computed",
+              "learned_at": "2026-08-01T16:22:05.088280+00:00"
+            }
+          ],
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "nearby_metro_stations",
+          "label": "Metro",
+          "value": "2 map-backed places",
+          "scope": "society",
+          "relationship": "nearby map context",
+          "values": [
+            "Kadugodi Tree Park Metro (0.5 km)",
+            "Pattandur Agrahara (0.6 km)"
+          ],
+          "source_type": "Computed",
+          "source_url": "https://maps.google.com/?cid=8950456211087285334&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "attributions": [
+            {
+              "value": "Kadugodi Tree Park Metro (0.5 km)",
+              "source_url": "https://maps.google.com/?cid=8950456211087285334&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+              "source_type": "Computed",
+              "learned_at": "2026-08-01T16:22:05.088280+00:00"
+            },
+            {
+              "value": "Pattandur Agrahara (0.6 km)",
+              "source_url": "https://maps.google.com/?cid=9936760870529431379&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+              "source_type": "Computed",
+              "learned_at": "2026-08-01T16:22:05.088280+00:00"
+            }
+          ],
+          "learned_at": "2026-08-01T16:22:05.088280+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "nearby_hospitals",
+          "label": "Hospitals",
+          "value": "3 map-backed places",
+          "scope": "society",
+          "relationship": "nearby map context",
+          "values": [
+            "Amrik Hospital (0.6 km, 4.0 rating, 717 reviews)",
+            "Best Children's Hospital/Paediatrician in Whitefield, Bengaluru - Cloudnine Hospitals | PICU & NICU | 24x7 Emergency (1.0 km)",
+            "Aster Hospital Whitefield Bangalore (1.2 km, 4.7 rating, 10896 reviews)"
+          ],
+          "source_type": "Google",
+          "source_url": "https://maps.google.com/?cid=13355611315942097869&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "attributions": [
+            {
+              "value": "Amrik Hospital (0.6 km, 4.0 rating, 717 reviews)",
+              "source_url": "https://maps.google.com/?cid=13355611315942097869&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+              "source_type": "Google",
+              "learned_at": "2026-08-01T17:25:26+00:00"
+            },
+            {
+              "value": "Best Children's Hospital/Paediatrician in Whitefield, Bengaluru - Cloudnine Hospitals | PICU & NICU | 24x7 Emergency (1.0 km)",
+              "source_url": "https://maps.google.com/?cid=4708584433746712169&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+              "source_type": "Computed",
+              "learned_at": "2026-08-01T16:22:05.088280+00:00"
+            },
+            {
+              "value": "Aster Hospital Whitefield Bangalore (1.2 km, 4.7 rating, 10896 reviews)",
+              "source_url": "https://maps.google.com/?cid=12804935806198381837&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+              "source_type": "Google",
+              "learned_at": "2026-08-01T17:25:26+00:00"
+            }
+          ],
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        },
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "nearby_tech_parks",
+          "label": "Tech parks / offices",
+          "value": "3 map-backed places",
+          "scope": "society",
+          "relationship": "nearby map context",
+          "values": [
+            "SCB Brigade Tech Park (0.5 km, 4.4 rating, 73 reviews)",
+            "Sattva Tech Park Zeta (0.5 km, 4.3 rating, 7 reviews)",
+            "First Technology Park (1.1 km)"
+          ],
+          "source_type": "Google",
+          "source_url": "https://maps.google.com/?cid=679705164713758890&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "attributions": [
+            {
+              "value": "SCB Brigade Tech Park (0.5 km, 4.4 rating, 73 reviews)",
+              "source_url": "https://maps.google.com/?cid=679705164713758890&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+              "source_type": "Google",
+              "learned_at": "2026-08-01T17:25:26+00:00"
+            },
+            {
+              "value": "Sattva Tech Park Zeta (0.5 km, 4.3 rating, 7 reviews)",
+              "source_url": "https://maps.google.com/?cid=5175890868150563095&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+              "source_type": "Google",
+              "learned_at": "2026-08-01T17:25:26+00:00"
+            },
+            {
+              "value": "First Technology Park (1.1 km)",
+              "source_url": "https://maps.google.com/?cid=5888865877190485919&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+              "source_type": "Computed",
+              "learned_at": "2026-08-01T16:22:05.088280+00:00"
+            }
+          ],
+          "learned_at": "2026-08-01T17:25:26+00:00"
+        }
+      ],
+      "missing": []
+    },
+    {
+      "kind": "water_context",
+      "title": "Water context",
+      "summary": "Moderate groundwater potential zone near the society.",
+      "subtitle": "Groundwater potential around the society, joined offline from public environmental data.",
+      "scope": "society",
+      "relationship": "surrounding water quality",
+      "priority": 34,
+      "constellation": "risk",
+      "header_meta": "1 facts · OpenCity",
+      "confidence_pct": 85,
+      "source_types": [
+        "OpenCity"
+      ],
+      "entity_ids": [
+        "society:rera-53c0b81882e6acc6"
+      ],
+      "presentation": {
+        "variant": "risk_grid",
+        "density": "standard",
+        "max_preview_items": 3
+      },
+      "items": [
+        {
+          "entity_id": "society:rera-53c0b81882e6acc6",
+          "key": "environment.groundwater_potential_class",
+          "label": "Groundwater potential",
+          "value": "groundwater potential: Moderate",
+          "scope": "society",
+          "relationship": "surrounding water quality",
+          "source_type": "OpenCity",
+          "source_url": "https://data.opencity.in/dataset/035c1d40-8f4e-4780-90c5-ff1ce2281849/resource/d3ae3603-d786-4782-ae71-a034ad4ebc0b/download/1dda919d-ff28-4aa9-90ce-bd18e708927b.kml",
+          "learned_at": "2026-08-01T17:40:49.114590+00:00"
+        }
+      ],
+      "missing": []
+    },
+    {
+      "kind": "community",
+      "title": "Community pulse",
+      "summary": "Google review feedback is broadly positive overall. Residents praise amenities, connectivity, greenery, and maintenance. The main cautions are traffic.",
+      "subtitle": "Google review · Positive",
+      "scope": "society",
+      "relationship": "resident and review context",
+      "priority": 40,
+      "constellation": "lifestyle",
+      "header_meta": "5 facts",
+      "confidence_pct": 85,
+      "source_types": [],
+      "entity_ids": [
+        "society:prestige-waterford"
+      ],
+      "presentation": {
+        "variant": "story",
+        "density": "standard",
+        "max_preview_items": 4
+      },
+      "items": [],
+      "missing": [],
+      "community_pulse": {
+        "source_label": "Google review",
+        "sentiment_band": "Positive",
+        "paragraph": "Google review feedback is broadly positive overall. Residents praise amenities, connectivity, greenery, and maintenance. The main cautions are traffic.",
+        "positives": [
+          "amenities",
+          "connectivity",
+          "greenery",
+          "maintenance"
+        ],
+        "concerns": [
+          "traffic"
+        ],
+        "quotes": [
+          {
+            "text": "Excellent property with a lot of open space, luch and big garden, many amenities, soothing and nicely designed aesthetics, great location, good floor plan and construction quality. Great location. Close to everything one can look for. Metro, office, schools, shopping etc. Cat A builder. Premium configuration. Three side open flats. No common wall. Greenery inside and outside of the project. Loved at first sight. M...",
+            "source_type": "Google",
+            "source_url": "https://maps.google.com/?cid=13971216255020941300&g_mp=CiVnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLkdldFBsYWNlEAIYBCAA",
+            "polarity": "positive"
+          },
+          {
+            "text": "Nice and spacious residential scheme to live with ample space and amenities inside the scheme. Land area per flat is also really good. Overall nicely managed society to live in.",
+            "source_type": "Google",
+            "source_url": "https://maps.google.com/?cid=13971216255020941300&g_mp=CiVnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLkdldFBsYWNlEAIYBCAA",
+            "polarity": "positive"
+          },
+          {
+            "text": "One of the best amenities and location in Whitefield. lot of greenery and sudden transformation from City to Green when within City limits. Nice view and well ventilated flats.",
+            "source_type": "Google",
+            "source_url": "https://maps.google.com/?cid=13971216255020941300&g_mp=CiVnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLkdldFBsYWNlEAIYBCAA",
+            "polarity": "positive"
+          },
+          {
+            "text": "Past 18 months, I have been looking for a large community (10+ acre) , more green open space, luxury amenities, in a good, developed area, close to ORR offices. But couldn't find anything which satisfies all criteria. Finally found Waterford. I live in blr south but ended up buying Waterford in Whitefield. Compared Royal pavilion, Falcon city, Godrej Reflection (just compared) with Waterford and found Prestige Wat...",
+            "source_type": "Google",
+            "source_url": "https://maps.google.com/?cid=13971216255020941300&g_mp=CiVnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLkdldFBsYWNlEAIYBCAA",
+            "polarity": "positive"
+          },
+          {
+            "text": "Prestige Waterford has been a great experience so far. The location on ECC Road is a major plus — close to Whitefield’s business hubs, schools, and day-to-day amenities, yet still peaceful enough to feel residential. The project is well-planned with wide internal roads, plenty of open space, and good ventilation in most apartments. Clubhouse, pool, gym and sports areas are very well maintained, and security is ext...",
+            "source_type": "Google",
+            "source_url": "https://maps.google.com/?cid=13971216255020941300&g_mp=CiVnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLkdldFBsYWNlEAIYBCAA",
+            "polarity": "positive"
+          }
+        ],
+        "source_urls": [
+          "https://maps.google.com/?cid=13971216255020941300&g_mp=CiVnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLkdldFBsYWNlEAIYBCAA"
+        ]
+      }
+    }
+  ]
+}

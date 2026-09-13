@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 const runId = process.env.ATLAS_RUN_ID
   ?? new Date().toISOString().replace(/[:.]/g, "-");
+const browserChannel = process.env.ATLAS_BROWSER_CHANNEL?.trim() || "chromium";
 
 export default defineConfig({
   testDir: "./e2e/atlas",
@@ -14,7 +15,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "on",
-    channel: "chrome",
+    channel: browserChannel,
   },
   webServer: {
     command: "npm run dev:atlas -- --host 127.0.0.1 --port 5173",

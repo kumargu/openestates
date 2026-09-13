@@ -61,6 +61,15 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await expect(map.locator('[data-atlas-relationship="true"]')).toHaveCount(1);
   await page.waitForTimeout(1300);
   await arrival.screenshot({path:testInfo.outputPath('school-with-home.png')});
+  await expect(arrival).toHaveAttribute('data-exploring', 'true');
+  await expect(arrival.getByRole('combobox', {name: 'Tour scope'})).toHaveCount(0);
+  const settings = arrival.locator('.property-atlas__view-tools');
+  await expect(settings.getByRole('button', {name: 'Top view', exact: true})).toBeHidden();
+  await settings.locator('summary').click();
+  await settings.getByRole('button', {name: 'Top view', exact: true}).click();
+  await expect(settings.getByRole('button', {name: 'Top view', exact: true})).toHaveAttribute('aria-pressed', 'true');
+  await settings.getByRole('button', {name: 'Top view', exact: true}).click();
+  await settings.locator('summary').click();
   await arrival.getByRole('button', {name: 'Tour schools', exact: true}).click();
   await expect(map).toHaveAttribute('data-atlas-camera-owner', 'nearby');
   await expect(map).toHaveAttribute('data-atlas-scene', 'tour:nearby:school:overview');
@@ -84,6 +93,10 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await page.setViewportSize({width: 390, height: 844});
   await page.waitForTimeout(1300);
   await arrival.screenshot({path: testInfo.outputPath('mobile-nearby.png')});
+  await settings.locator('summary').press('Enter');
+  await expect(settings.getByRole('button', {name: 'Dim surroundings', exact: true})).toBeVisible();
+  await arrival.screenshot({path: testInfo.outputPath('mobile-map-settings.png')});
+  await settings.locator('summary').press('Enter');
   await page.setViewportSize({width: 1440, height: 1000});
   await arrival
     .getByRole("button", { name: "Road journey", exact: true })

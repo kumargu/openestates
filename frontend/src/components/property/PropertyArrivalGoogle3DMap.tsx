@@ -21,6 +21,7 @@ import type { AtlasFeature, AtlasScene } from "../../../../experiments/home-atla
 import policy from "../../../../app/config/ui/home-atlas.json" with { type: "json" };
 import {
   geometryForPlace,
+  nearbyPointCutouts,
   nearbyRelationArc,
   nearbySceneCamera,
   type AtlasSafeFrame,
@@ -1045,7 +1046,10 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           ? pathFromPolygon(home.boundary)
           : circlePath(home.latitude, home.longitude, 180)).reverse(),
         ...visiblePolygons.map((polygon) => pathFromPolygon(polygon).reverse()),
-        ...quietPlaces.map((place) => circlePath(place.latitude, place.longitude).reverse()),
+        // A polygon already opens this place in the veil. A second overlapping
+        // hole can toggle the fill back on and leave a dark disc inside a lake.
+        ...nearbyPointCutouts(quietPlaces, visiblePolygons)
+          .map((place) => circlePath(place.latitude, place.longitude).reverse()),
         ...(roadCorridor ? [roadCorridor.reverse()] : []),
       ];
       map.append(mask); nextChildren.push(mask);
