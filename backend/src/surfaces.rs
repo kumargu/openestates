@@ -599,6 +599,7 @@ struct PlaceLookup {
     entity_id: String,
     label: String,
     coordinates: Option<(f64, f64)>,
+    geometry: Option<SceneGeometry>,
     rating: Option<f64>,
     review_count: Option<u32>,
 }
@@ -627,6 +628,7 @@ impl ScenePlaceIndex {
                     .point_for_entity(&entity.entity_id)
                     .map(|point| (point.latitude, point.longitude))
                     .or_else(|| coordinates_from_rows(rows, &entity.entity_id)),
+                geometry: scene_geometry_from_rows(rows),
                 rating: numeric_fact(rows, "google_rating"),
                 review_count: numeric_fact(rows, "google_review_count").map(|value| value as u32),
             };
@@ -701,13 +703,15 @@ fn features_for_layer(
                         } else {
                             (anchor_coords, CoordinateQuality::Exact)
                         };
+                    let geometry = match linked_entity_id.as_deref() {
+                        Some(_) => linked_rows.and_then(scene_geometry_from_rows),
+                        None => scene_geometry_from_rows(rows),
+                    };
                     FactFeatureSource {
                         fact,
                         entity_id: linked_entity_id,
                         coordinates,
-                        geometry: linked_rows
-                            .and_then(scene_geometry_from_rows)
-                            .or_else(|| scene_geometry_from_rows(rows)),
+                        geometry,
                         property_rows: linked_rows.or(Some(rows)),
                         coordinate_quality,
                         index,
@@ -799,10 +803,11 @@ fn feature_candidate_from_fact(
                 parsed.name
             }
         });
-    let geometry = source
-        .geometry
-        .clone()
-        .unwrap_or_else(|| point_geometry(coordinates));
+    let geometry = match place {
+        Some(place) => place.geometry.clone(),
+        None => source.geometry.clone(),
+    }
+    .unwrap_or_else(|| point_geometry(coordinates));
     let distance_m = parsed.distance_km.map(km_to_meters).or_else(|| {
         let (anchor_lat, anchor_lng) = anchor_coords?;
         Some(km_to_meters(haversine_km(
@@ -1922,6 +1927,138 @@ mod tests {
         assert!(!scene.receipts[0]
             .claim
             .contains("place:stormwater-drain:one"));
+    }
+
+    #[test]
+    fn source_url_linked_point_place_does_not_inherit_anchor_polygon_geometry() {
+        let entities = vec![
+            serving_entity("society:one", "society", "One Society"),
+            serving_entity("place:school:one", "place", "Gopalan National School"),
+        ];
+        let facts = vec![
+            serving_fact(
+                "society:one",
+                "geo.latitude",
+                FactValue::Numeric(12.981),
+                None,
+            ),
+            serving_fact(
+                "society:one",
+                "geo.longitude",
+                FactValue::Numeric(77.742),
+                None,
+            ),
+            serving_fact(
+                "society:one",
+                "geo.geometry_geojson",
+                FactValue::Text(
+                    r#"{"type":"Polygon","coordinates":[[[77.74,12.98],[77.744,12.98],[77.744,12.984],[77.74,12.98]]]}"#
+                        .to_string(),
+                ),
+                None,
+            ),
+            serving_fact(
+                "society:one",
+                "nearby_schools",
+                FactValue::Text("Gopalan National School (3.5 km)".to_string()),
+                Some("https://maps.example/gopalan"),
+            ),
+            serving_fact(
+                "place:school:one",
+                "geo.latitude",
+                FactValue::Numeric(12.986),
+                None,
+            ),
+            serving_fact(
+                "place:school:one",
+                "geo.longitude",
+                FactValue::Numeric(77.707),
+                None,
+            ),
+            serving_fact(
+                "place:school:one",
+                "google_place_url",
+                FactValue::Text("https://maps.example/gopalan".to_string()),
+                None,
+            ),
+        ];
+        let bundle = loaded_bundle(entities, facts);
+        let surface = UiSurfaceConfig {
+            id: "around_this_home".to_string(),
+            title: "Around this home".to_string(),
+            kicker: None,
+            leaf_keys: Vec::new(),
+            traversal: Vec::new(),
+            components: Vec::new(),
+            primary_entity: Some("society".to_string()),
+            comparison_dimensions: Vec::new(),
+            proof_handoff: None,
+            scene: Some(crate::dag_config::UiSurfaceSceneConfig {
+                anchor: crate::dag_config::UiSurfaceAnchorConfig {
+                    entity_ref: "society".to_string(),
+                    boundary_fact_key: None,
+                },
+                experience: None,
+                layers: vec![UiSurfaceLayerRule {
+                    id: "schools".to_string(),
+                    label: "Schools".to_string(),
+                    fact_keys: vec!["nearby_schools".to_string()],
+                    feature_labels: HashMap::new(),
+                    feature_properties: HashMap::new(),
+                    feature_value_labels: HashMap::new(),
+                    empty_state: None,
+                    edge_types: Vec::new(),
+                    linked_entity_fact_keys: Vec::new(),
+                    sort_priority_fact_keys: Vec::new(),
+                    family: "access".to_string(),
+                    relation_class: "access".to_string(),
+                    render_kind: "pin".to_string(),
+                    map_presentation: None,
+                    experience: None,
+                    icon: None,
+                    sort: Some("distance".to_string()),
+                    max_items: None,
+                    expanded_max_items: None,
+                    spread_min_distance_km: None,
+                    show_review_metrics: None,
+                    include_name_markers: Vec::new(),
+                    include_related_society_facts: false,
+                    enabled_by_default: true,
+                    rank: Some(1),
+                }],
+            }),
+        };
+
+        let scene = build_surface_scene(
+            &sample_property(),
+            Some("One Society"),
+            KgEntityRefs {
+                property_entity_id: "property:one".to_string(),
+                society_entity_id: "society:one".to_string(),
+                area_entity_id: "area:whitefield".to_string(),
+                builder_entity_id: None,
+                source_entity_ids: Vec::new(),
+            },
+            &bundle,
+            &surface,
+        )
+        .expect("scene should build");
+
+        assert_eq!(scene.features.len(), 1);
+        assert_eq!(
+            scene.features[0].geometry,
+            SceneGeometry::Point {
+                coordinates: [77.707, 12.986],
+            }
+        );
+        assert_eq!(
+            scene.features[0].entity_id.as_deref(),
+            Some("place:school:one")
+        );
+        assert_eq!(
+            scene.features[0].coordinate_quality,
+            CoordinateQuality::Exact
+        );
     }
 
     #[test]
