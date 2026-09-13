@@ -28,6 +28,20 @@ Overlay lines/polygons retain `entity_id` from `SceneFeature.entityId`. Selectio
 
 The Waterford API fixture now preserves archived road segments and explicit polygon ownership from the original Atlas data. Production must supply equivalent identities; missing ownership is not repaired with project-specific heuristics.
 
+### Lake context restoration
+
+The promoted Waterford bundle does not yet contain a `nearby_lakes` society
+fact, while the backend's sourced city overlay contains exact OSM lake
+footprints. `contextPolygonKinds` now lets the surface config fill an otherwise
+empty scene layer from those footprints. A populated serving layer always wins;
+the bridge is generic by configured polygon kind and contains no Waterford or
+lake-name branch.
+
+Interaction note: Lakes reuse the existing category rest state, numbered drawer,
+pair focus, inspect focus, touch targets, and reduced-motion camera path. No new
+copy, control, motion, or layout was added. The prior ThreeUI review found no
+directly relevant primary-source map pattern, so none is claimed or borrowed.
+
 ## Regression coverage
 
 `frontend/tests/home-atlas-integration.test.ts` verifies lake identity, road segment preservation, polygon-only discovery, distant evidence retention, relation-arc endpoints/height, camera ownership, and point/polygon/line containment at near, medium, and distant ranges under translated and rotated coordinates. It also verifies inspect geometry occupies more screen space while the home stays inside the clear frame. Existing playback tests cover cancellation, pause, and resume.

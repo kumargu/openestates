@@ -108,6 +108,8 @@ pub struct UiSurfaceLayerRule {
     pub label: String,
     #[serde(default, rename = "factKeys")]
     pub fact_keys: Vec<String>,
+    #[serde(default, rename = "contextPolygonKinds")]
+    pub context_polygon_kinds: Vec<String>,
     #[serde(default, rename = "featureLabels")]
     pub feature_labels: HashMap<String, String>,
     #[serde(default, rename = "featureProperties")]
@@ -370,6 +372,16 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
             if layer.fact_keys.is_empty() && layer.edge_types.is_empty() {
                 return Err(DagConfigError::InvalidConfig(format!(
                     "surface {} layer {} has no factKeys or edgeTypes",
+                    surface.id, layer.id
+                )));
+            }
+            if layer
+                .context_polygon_kinds
+                .iter()
+                .any(|kind| kind.trim().is_empty())
+            {
+                return Err(DagConfigError::InvalidConfig(format!(
+                    "surface {} layer {} has a blank contextPolygonKinds value",
                     surface.id, layer.id
                 )));
             }

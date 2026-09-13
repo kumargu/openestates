@@ -141,6 +141,7 @@
             "id": "lakes",
             "label": "Lakes",
             "factKeys": ["nearby_lakes", "lake_within_250m"],
+            "contextPolygonKinds": ["lake"],
             "edgeTypes": ["near_place"],
             "family": "environment",
             "relationClass": "context",
