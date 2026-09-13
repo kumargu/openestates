@@ -1,10 +1,16 @@
-import { selectPrimaryAtlasRoute } from "../../../experiments/home-atlas/src/journey.ts";
+import {
+  selectPrimaryAtlasRoute,
+  type AtlasRoadDirection,
+} from "../../../experiments/home-atlas/src/journey.ts";
 import { buildContextLines } from "../../../experiments/home-atlas/src/contextLines.ts";
 import type { AtlasContextLineStyle } from "../../../experiments/home-atlas/src/contextLines.ts";
 import type { MapOverlayLine } from "./types.ts";
 
 /** An aerial inspection of mapped alignment, never a claimed driving route. */
-export function arrivalAtlasRoute(lines: MapOverlayLine[]) {
+export function arrivalAtlasRoute(
+  lines: MapOverlayLine[],
+  direction: AtlasRoadDirection = "as-mapped",
+) {
   const valid = lines.filter(
     (line) =>
       line.coordinates.length > 1 &&
@@ -22,6 +28,7 @@ export function arrivalAtlasRoute(lines: MapOverlayLine[]) {
       type: "LineString" as const,
       coordinates: line.coordinates,
     })),
+    { direction },
   );
   return route.lengthM > 0 ? route : null;
 }

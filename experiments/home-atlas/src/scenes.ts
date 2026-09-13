@@ -42,6 +42,7 @@ export function buildCategoryTour(input: Readonly<{
   const timing = { ...DEFAULT_CATEGORY_TOUR_TIMING, ...input.timing };
   const scenes: AtlasScene[] = [{
     id: `${input.categoryId}:overview`,
+    phase: "overview",
     targetFeatureId: input.home.id,
     camera: input.cameras.group(input.features),
     visibility: { mode: "category", categoryId: input.categoryId },
@@ -52,6 +53,7 @@ export function buildCategoryTour(input: Readonly<{
   for (const feature of input.features) {
     scenes.push({
       id: `${input.categoryId}:${feature.id}:pair`,
+      phase: "pair",
       targetFeatureId: feature.id,
       camera: input.cameras.pair(feature),
       visibility: { mode: "pair", featureId: feature.id },
@@ -60,6 +62,7 @@ export function buildCategoryTour(input: Readonly<{
     });
     scenes.push({
       id: `${input.categoryId}:${feature.id}:focus`,
+      phase: "inspect",
       targetFeatureId: feature.id,
       camera: input.cameras.focus(feature),
       visibility: { mode: "pair", featureId: feature.id },
@@ -69,6 +72,7 @@ export function buildCategoryTour(input: Readonly<{
     if (feature.segments && input.cameras.segment) {
       scenes.push({
         id: `${input.categoryId}:${feature.id}:segment`,
+        phase: "segment",
         targetFeatureId: feature.id,
         camera: input.cameras.segment(feature),
         visibility: { mode: "pair", featureId: feature.id },
@@ -80,6 +84,7 @@ export function buildCategoryTour(input: Readonly<{
 
   scenes.push({
     id: `${input.categoryId}:home`,
+    phase: "home",
     targetFeatureId: input.home.id,
     camera: input.cameras.home(),
     visibility: { mode: "home" },
@@ -88,4 +93,3 @@ export function buildCategoryTour(input: Readonly<{
   });
   return scenes;
 }
-

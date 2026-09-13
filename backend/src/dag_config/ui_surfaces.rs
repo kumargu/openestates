@@ -108,6 +108,8 @@ pub struct UiSurfaceLayerRule {
     pub label: String,
     #[serde(default, rename = "factKeys")]
     pub fact_keys: Vec<String>,
+    #[serde(default, rename = "contextPolygonKinds")]
+    pub context_polygon_kinds: Vec<String>,
     #[serde(default, rename = "featureLabels")]
     pub feature_labels: HashMap<String, String>,
     #[serde(default, rename = "featureProperties")]
@@ -157,6 +159,8 @@ pub struct UiSurfaceLayerRule {
 #[serde(rename_all = "camelCase")]
 pub struct UiSurfaceLayerExperienceConfig {
     pub kind: String,
+    #[serde(default)]
+    pub route_direction: Option<String>,
     pub waypoint_spacing_m: u32,
     #[serde(default)]
     pub overview_dwell_ms: Option<u32>,
@@ -371,6 +375,16 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                     surface.id, layer.id
                 )));
             }
+            if layer
+                .context_polygon_kinds
+                .iter()
+                .any(|kind| kind.trim().is_empty())
+            {
+                return Err(DagConfigError::InvalidConfig(format!(
+                    "surface {} layer {} has a blank contextPolygonKinds value",
+                    surface.id, layer.id
+                )));
+            }
             if let (Some(max_items), Some(expanded_max_items)) =
                 (layer.max_items, layer.expanded_max_items)
             {
@@ -416,6 +430,10 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                         if interior.saturating_add(transition) >= entrance
                 );
                 if experience.kind.trim().is_empty()
+                    || experience
+                        .route_direction
+                        .as_deref()
+                        .is_some_and(|direction| !matches!(direction, "as-mapped" | "reverse"))
                     || experience.waypoint_spacing_m == 0
                     || experience.overview_dwell_ms == Some(0)
                     || experience.dwell_ms == 0

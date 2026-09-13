@@ -2,6 +2,7 @@ import data from "./fixtures/home-atlas.json" with { type: "json" };
 import type {
   SurfaceSceneResponse,
   SceneFeature,
+  MapLayerExperience,
   PropertyCard,
 } from "./types.ts";
 
@@ -139,7 +140,7 @@ export function atlasFixtureScene(surfaceId: string): SurfaceSceneResponse {
       relationClass: "context",
       renderKind: id === "approach" ? "terrain_corridor" : "pin",
       mapPresentation: "immersive_3d",
-      experience: id === "approach" ? data.roadExperience : undefined,
+      experience: id === "approach" ? data.roadExperience as MapLayerExperience : undefined,
       enabledByDefault: true,
       availableCount: features.filter((f) => f.layerId === id).length,
       shownCount: features.filter((f) => f.layerId === id).length,

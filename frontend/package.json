@@ -14,6 +14,7 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:smoke": "node --experimental-strip-types --test tests/*.smoke.test.ts",
     "test:atlas-browser": "playwright test --config playwright.atlas.config.ts",
+    "test:atlas-parity": "playwright test --config playwright.atlas.config.ts e2e/atlas/parity.spec.ts",
     "verify:dist": "node scripts/verify-dist.mjs",
     "smoke": "npm run build && npm run verify:dist && npm run test:smoke",
     "preview": "node ./node_modules/vite/bin/vite.js preview"

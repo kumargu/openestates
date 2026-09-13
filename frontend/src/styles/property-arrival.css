@@ -646,7 +646,7 @@
 }
 
 .property-atlas__drawer-summary {
-  justify-content: space-between;
+  justify-content: flex-end;
   margin: 1rem 0 0.55rem;
   color: #a9beb4;
   font-size: 0.74rem;
@@ -910,17 +910,17 @@
     font-size: 0.64rem;
   }
 
-  .property-atlas__view-tools button:nth-child(1)::after { content: "TOP"; }
-  .property-atlas__view-tools button:nth-child(2)::after { content: "OSM"; }
-  .property-atlas__view-tools button:nth-child(3)::after { content: "QUIET"; }
+  .property-atlas__view-tools button:nth-child(1)::after { content: "AIR"; }
+  .property-atlas__view-tools button:nth-child(2)::after { content: "SITE"; }
+  .property-atlas__view-tools button:nth-child(3)::after { content: "FOCUS"; }
 
   .property-atlas__drawer {
-    top: 9.7rem;
+    top: auto;
     right: 0.8rem;
     bottom: 10rem;
     left: 0.8rem;
     width: auto;
-    max-height: none;
+    max-height: min(46dvh, 24rem);
   }
 
   .property-atlas__dock {

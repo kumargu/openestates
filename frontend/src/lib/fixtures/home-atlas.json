@@ -1401,6 +1401,7 @@
   },
   "roadExperience": {
     "kind": "street_view_tour",
+    "routeDirection": "reverse",
     "waypointSpacingM": 65,
     "overviewDwellMs": 1800,
     "dwellMs": 2500,

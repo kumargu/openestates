@@ -78,10 +78,10 @@ export type AtlasVisibility =
 
 export type AtlasScene = Readonly<{
   id: string;
+  phase: "overview" | "pair" | "inspect" | "segment" | "home";
   targetFeatureId: string;
   camera: AtlasCamera;
   visibility: AtlasVisibility;
   caption: string;
   durationMs: number;
 }>;
-

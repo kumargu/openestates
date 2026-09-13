@@ -8,6 +8,7 @@ import {
   buildAerialJourney,
   buildAtlasRoute,
   clampRoadPlaybackRate,
+  dampHeading,
   pointAlongRoute,
   projectPointOntoRoute,
   projectStreetHandoff,
@@ -93,6 +94,8 @@ test("camera blending takes the shortest path across north", () => {
   });
 
   assert.equal(blendCamera(camera(359), camera(1), 0.5).heading, 0);
+  const damped = dampHeading(359, 1, 3, 0.25);
+  assert.ok(damped > 359 || damped < 1);
 });
 
 

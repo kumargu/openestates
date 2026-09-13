@@ -10,7 +10,10 @@ use crate::dag_config::ui_surfaces_config;
 use crate::proof_focus::ProofFocus;
 use crate::routes::enrichment::kg_entity_refs_for_property;
 use crate::state::AppState;
-use crate::surfaces::{build_surface_scene_with_focus, SurfaceSceneResponse};
+use crate::surfaces::{
+    build_surface_scene_with_focus, merge_surface_context_polygons, SceneGeometry,
+    SurfaceSceneResponse,
+};
 
 const MAX_SURFACE_BATCH_PROPERTIES: usize = 24;
 const MAX_SURFACE_IDS: usize = 8;
@@ -184,7 +187,18 @@ async fn build_property_surfaces_response(
             surface,
             surface_focus,
         ) {
-            Some(scene) => scenes.push(scene),
+            Some(mut scene) => {
+                if let Some(SceneGeometry::Point { coordinates }) = scene.anchor.geometry.as_ref() {
+                    let (green_patches, lakes) = crate::routes::map_overlays::clip_green_patches(
+                        state.map_overlays.as_ref(),
+                        (coordinates[1], coordinates[0]),
+                    );
+                    let context_polygons =
+                        green_patches.into_iter().chain(lakes).collect::<Vec<_>>();
+                    merge_surface_context_polygons(&mut scene, surface, &context_polygons);
+                }
+                scenes.push(scene);
+            }
             None => missing.push(SurfaceSceneMissing {
                 surface_id: surface_id.clone(),
                 reason: "surface_scene_empty".to_string(),
