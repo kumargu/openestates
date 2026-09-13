@@ -15,6 +15,13 @@ type FrontendMediaManifest = {
   }>
 }
 
+type StaticApiFixtureManifest = {
+  responses: Array<{
+    endpoint: string
+    file: string
+  }>
+}
+
 const frontendRoot = dirname(fileURLToPath(import.meta.url))
 const publicRoot = resolve(frontendRoot, 'public')
 const DEPLOYABLE_PUBLIC_ROOTS = ['favicon.svg', 'landing', 'story-lab']
@@ -91,6 +98,39 @@ function deployablePublicAssetsPlugin(): Plugin {
   }
 }
 
+function waterfordApiFixturePlugin(mode: string): Plugin {
+  return {
+    name: 'waterford-api-fixture',
+    configureServer(server) {
+      if (mode !== 'waterford') return
+
+      const fixtureRoot = resolve(frontendRoot, 'fixtures/prestige-waterford-api')
+      const manifest = JSON.parse(
+        readFileSync(resolve(fixtureRoot, 'manifest.json'), 'utf8'),
+      ) as StaticApiFixtureManifest
+      const responses = new Map(manifest.responses.map((response) => [
+        response.endpoint,
+        readFileSync(resolve(fixtureRoot, response.file)),
+      ]))
+
+      server.middlewares.use((request, response, next) => {
+        if (request.method !== 'GET') return next()
+        const pathname = new URL(
+          request.url ?? '/',
+          'http://waterford-fixture.local',
+        ).pathname
+        const body = responses.get(pathname)
+        if (!body) return next()
+
+        response.statusCode = 200
+        response.setHeader('Content-Type', 'application/json; charset=utf-8')
+        response.setHeader('X-OpenEstates-Fixture', 'prestige-waterford')
+        response.end(body)
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
   const origins = productionOrigins(mode)
@@ -105,6 +145,7 @@ export default defineConfig(({ command, mode }) => {
     },
     publicDir: command === 'build' ? false : 'public',
     plugins: [
+      waterfordApiFixturePlugin(mode),
       react(),
       deployablePublicAssetsPlugin(),
       robotsPlugin(origins.apiOrigin),

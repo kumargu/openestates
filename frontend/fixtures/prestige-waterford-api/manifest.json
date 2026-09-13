@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "captured_at": "2026-09-13",
+  "property_id": "discovered-prestige-waterford-3bhk",
+  "serving_bundle_version": "catalog-71-ffb4dc50-117e-453c-b26f-41822430324e",
+  "responses": [
+    {
+      "file": "property-detail.json",
+      "endpoint": "/api/properties/discovered-prestige-waterford-3bhk",
+      "source_bytes": 138334,
+      "source_sha256": "f00f7a3a4420feeb6bd9280e07ccec34a8b54ac44a490a1010cf3a64708a0457"
+    },
+    {
+      "file": "arrival-story.json",
+      "endpoint": "/api/properties/discovered-prestige-waterford-3bhk/surfaces/arrival_story",
+      "source_bytes": 9812,
+      "source_sha256": "3f3f48d81c536293d8909a940b396d251130aacc67aa2a9157b232e6017bd79c"
+    },
+    {
+      "file": "around-this-home.json",
+      "endpoint": "/api/properties/discovered-prestige-waterford-3bhk/surfaces/around_this_home",
+      "source_bytes": 63766,
+      "source_sha256": "1b64cd36fbae377396e616e9db6f16568ae5e4137aacec6e97e640c5f5fa1329"
+    }
+  ]
+}
