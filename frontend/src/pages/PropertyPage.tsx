@@ -25,6 +25,7 @@ import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnc
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
+import { PropertyArrivalMap } from "../components/property/PropertyArrivalMap.tsx";
 import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
 import {
   PropertySceneCard,
@@ -195,6 +196,9 @@ function PropertyPageBody({
     useState<SurfaceSceneResponse | null>(null);
   const [arrivalScene, setArrivalScene] =
     useState<SurfaceSceneResponse | null>(null);
+  const [arrivalSceneStatus, setArrivalSceneStatus] = useState<
+    "loading" | "ready" | "missing"
+  >("loading");
   const [searchContextSocieties, setSearchContextSocieties] =
     useState<ArrivalSearchSociety[]>([]);
   const [status, setStatus] = useState<
@@ -327,10 +331,14 @@ function PropertyPageBody({
 
     getPropertySurface(propertyId, ARRIVAL_STORY_SURFACE_ID)
       .then((scene) => {
-        if (!cancelled) setArrivalScene(scene);
+        if (cancelled) return;
+        setArrivalScene(scene);
+        setArrivalSceneStatus("ready");
       })
       .catch(() => {
-        if (!cancelled) setArrivalScene(null);
+        if (cancelled) return;
+        setArrivalScene(null);
+        setArrivalSceneStatus("missing");
       });
 
     return () => {
@@ -439,7 +447,7 @@ function PropertyPageBody({
   );
   const arrivalContext = propertyMapContextFromSurfaceScene(
     arrivalScene,
-    data.map_context,
+    aroundThisHomeContext,
   );
   const showNearbyPlate = hasAroundThisHomePlate(aroundThisHomeContext);
   const displayTitle = p.title.trim();
@@ -456,6 +464,71 @@ function PropertyPageBody({
   );
   const exploreHref = propertyExploreHref(p.area);
   const returnHref = propertySearchContext?.returnUrl ?? exploreHref;
+  const hasAtlasScene = Boolean(
+    arrivalScene?.experience
+    && arrivalContext
+    && Number.isFinite(arrivalContext.home.latitude)
+    && Number.isFinite(arrivalContext.home.longitude),
+  );
+
+  if (arrivalSceneStatus === "loading") {
+    return (
+      <div
+        className="property-atlas-page property-atlas-page--loading"
+        aria-label="Loading property atlas"
+        aria-busy="true"
+      >
+        <PageTitle title={pageTitle} />
+        <div className="property-atlas-page__loading-mark" aria-hidden="true" />
+      </div>
+    );
+  }
+
+  if (hasAtlasScene && arrivalContext) {
+    return (
+      <div className="property-atlas-page">
+        <PageTitle title={pageTitle} />
+        <meta name="description" content={pageDescription} />
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={pageDescription} />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content={PUBLIC_BRAND_NAME} />
+        <meta property="og:url" content={canonicalUrl} />
+        <link rel="canonical" href={canonicalUrl} />
+        {socialImageUrl && <meta property="og:image" content={socialImageUrl} />}
+        <script type="application/ld+json">
+          {JSON.stringify(buildPropertyJsonLd(p))}
+        </script>
+        <PropertyArrivalMap
+          key={p.id}
+          context={arrivalContext}
+          searchContextSocieties={searchContextSocieties}
+          presentation="atlas"
+          identity={{
+            location: story.identity.location,
+            title: story.identity.title,
+            facts: story.identity.facts.map((fact) => fact.value),
+            actions: (
+              <>
+                <SaveHeartButton
+                  propertyId={p.id}
+                  className="property-action-link property-action-save"
+                  label="Save"
+                />
+                <NotebookCommentAnchor
+                  propertyId={p.id}
+                  labels={[]}
+                  detail={displayTitle}
+                  source="Property detail"
+                  label="Note"
+                />
+              </>
+            ),
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="property-decision-page property-story-page">

@@ -48,6 +48,8 @@ type StreetViewResponse = {
 };
 
 type StreetViewPanorama = {
+  getPosition: () => { lat: () => number; lng: () => number } | null;
+  getPov: () => { heading: number; pitch: number };
   setPano: (pano: string) => void;
   setPov: (pov: { heading: number; pitch: number }) => void;
   setVisible: (visible: boolean) => void;
@@ -183,6 +185,12 @@ export class GoogleStreetViewAdapter {
     for (const slot of this.slots) slot.panorama.setVisible(false);
   }
 
+  position() {
+    const panorama = this.slots[this.activeSlot].panorama;
+    const point = panorama.getPosition();
+    return point ? { latitude: point.lat(), longitude: point.lng(), heading: panorama.getPov().heading } : null;
+  }
+
   private inactiveSlot(): 0 | 1 {
     return this.activeSlot === 0 ? 1 : 0;
   }
@@ -300,6 +308,7 @@ type GuidedStreetViewTourOptions = {
 };
 
 export type GuidedStreetViewTour = {
+  position: () => { latitude: number; longitude: number; heading: number } | null;
   active: boolean;
   progress: { current: number; total: number } | null;
   replay: () => void;
@@ -517,5 +526,6 @@ export function useGuidedStreetViewTour({
     setReplayVersion((current) => current + 1);
   }, [playbackController]);
 
-  return { active: active && ready, progress, replay, status };
+  const position = useCallback(() => adapterRef.current?.position() ?? null, []);
+  return { active: active && ready, progress, replay, status, position };
 }

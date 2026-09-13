@@ -136,6 +136,7 @@ export function PropertyArrivalFilm({
       </header>
       {showMap && mapContext ? (
         <PropertyArrivalMap
+          key={propertyId}
           context={mapContext}
           searchContextSocieties={searchContextSocieties}
           onUnavailable={hasRealViews ? () => setMapUnavailableForProperty(propertyId) : undefined}

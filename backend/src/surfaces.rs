@@ -12,6 +12,7 @@ use crate::knowledge::FactValue;
 use crate::models::{KgEntityRefs, Property};
 use crate::proof_focus::ProofFocus;
 use crate::related_societies::related_society_entity_ids_with_entities;
+use crate::routes::map_overlays::MapOverlayPolygon;
 use crate::search::geo::{extract_first_distance_km, haversine_km};
 use crate::serving::{
     resolve_serving_coordinates, LoadedServingBundle, ServingEntityFactRows, ServingFactRecord,
@@ -492,6 +493,174 @@ pub fn build_surface_scene_with_focus(
     })
 }
 
+/// Fill a configured empty scene layer from exact, source-owned context polygons.
+///
+/// This keeps the surface response authoritative while legacy city overlays are
+/// migrated into the serving DAG. A populated serving layer always wins, and
+/// config declares which polygon kinds may fill an otherwise empty layer.
+pub fn merge_surface_context_polygons(
+    scene: &mut SurfaceSceneResponse,
+    surface: &UiSurfaceConfig,
+    polygons: &[MapOverlayPolygon],
+) {
+    let Some(scene_config) = surface.scene.as_ref() else {
+        return;
+    };
+    let mut changed = false;
+
+    for layer_rule in &scene_config.layers {
+        if layer_rule.context_polygon_kinds.is_empty()
+            || scene
+                .features
+                .iter()
+                .any(|feature| feature.layer_id == layer_rule.id)
+        {
+            continue;
+        }
+
+        let mut matching = polygons
+            .iter()
+            .filter(|polygon| {
+                polygon.coordinates.len() >= 4
+                    && layer_rule
+                        .context_polygon_kinds
+                        .iter()
+                        .any(|kind| kind.eq_ignore_ascii_case(&polygon.kind))
+            })
+            .collect::<Vec<_>>();
+        matching.sort_by(|left, right| {
+            distance_sort_key(left.distance_km.map(km_to_meters))
+                .cmp(&distance_sort_key(right.distance_km.map(km_to_meters)))
+                .then_with(|| left.name.cmp(&right.name))
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        matching.dedup_by(|left, right| left.id == right.id);
+        let available_count = matching.len();
+        if let Some(max_items) = layer_rule.max_items {
+            matching.truncate(max_items);
+        }
+        let shown_count = matching.len();
+        if shown_count == 0 {
+            continue;
+        }
+
+        let layer_rank = layer_rule.rank.unwrap_or_else(|| {
+            scene
+                .layers
+                .iter()
+                .find(|layer| layer.id == layer_rule.id)
+                .map(|layer| layer.rank)
+                .unwrap_or(1)
+        });
+        let fact_key = layer_rule
+            .fact_keys
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "context_geometry".to_string());
+
+        for polygon in matching {
+            let distance_m = polygon.distance_km.map(km_to_meters);
+            let id_segment = polygon
+                .id
+                .chars()
+                .map(|character| {
+                    if character.is_ascii_alphanumeric() || matches!(character, '-' | '_') {
+                        character
+                    } else {
+                        '-'
+                    }
+                })
+                .collect::<String>();
+            let feature_id = format!("{}:{}:context-{}", surface.id, layer_rule.id, id_segment);
+            let receipt_id = format!("receipt:{feature_id}");
+            let claim = distance_m
+                .map(|distance| format!("{} is {} m from this home", polygon.name, distance))
+                .unwrap_or_else(|| polygon.name.clone());
+
+            scene.relations.push(SceneRelation {
+                from_id: scene.anchor.entity_id.clone(),
+                to_id: feature_id.clone(),
+                edge_type: relation_edge_type(layer_rule),
+                relation_class: layer_rule.relation_class.clone(),
+                direct: true,
+                distance_m,
+                confidence: 1.0,
+                receipt_ids: vec![receipt_id.clone()],
+            });
+            scene.receipts.push(SceneReceipt {
+                id: receipt_id.clone(),
+                entity_id: scene.anchor.entity_id.clone(),
+                fact_key: fact_key.clone(),
+                claim,
+                source_type: polygon.source_type.clone(),
+                source_url: None,
+                learned_at: Utc::now(),
+                confidence: 1.0,
+                scope: None,
+            });
+            scene.features.push(SceneFeature {
+                id: feature_id,
+                entity_id: None,
+                layer_id: layer_rule.id.clone(),
+                kind: polygon.kind.clone(),
+                label: polygon.name.clone(),
+                short_label: None,
+                details: Vec::new(),
+                geometry: SceneGeometry::Polygon {
+                    coordinates: vec![polygon.coordinates.clone()],
+                },
+                coordinate_quality: CoordinateQuality::Exact,
+                metrics: Some(SceneMetrics {
+                    distance_m,
+                    travel_time_min: None,
+                    rating: None,
+                    review_count: None,
+                    severity: None,
+                }),
+                display: SceneFeatureDisplay {
+                    tone: tone_for_layer(layer_rule),
+                    icon: icon_for_layer(layer_rule),
+                    priority: layer_rank,
+                },
+                properties: HashMap::new(),
+                confidence: 1.0,
+                receipt_ids: vec![receipt_id],
+            });
+        }
+
+        if let Some(layer) = scene
+            .layers
+            .iter_mut()
+            .find(|layer| layer.id == layer_rule.id)
+        {
+            layer.available_count = available_count;
+            layer.shown_count = shown_count;
+            layer.fill_state = fill_state(available_count, shown_count);
+        }
+        changed = true;
+    }
+
+    if !changed {
+        return;
+    }
+    scene.fill_rate = scene_fill_rate(&scene.layers);
+    scene.gaps = scene
+        .layers
+        .iter()
+        .filter(|layer| layer.fill_state != FillState::Filled)
+        .map(|layer| SceneGap {
+            layer_id: layer.id.clone(),
+            fill_state: layer.fill_state,
+        })
+        .collect();
+    let anchor_coords = scene
+        .anchor
+        .geometry
+        .as_ref()
+        .and_then(point_coordinates_from_geometry);
+    scene.viewport = scene_viewport(anchor_coords, &scene.features);
+}
+
 #[derive(Debug, Clone)]
 struct SceneFeatureCandidate {
     entity_id: Option<String>,
@@ -599,6 +768,7 @@ struct PlaceLookup {
     entity_id: String,
     label: String,
     coordinates: Option<(f64, f64)>,
+    geometry: Option<SceneGeometry>,
     rating: Option<f64>,
     review_count: Option<u32>,
 }
@@ -627,6 +797,7 @@ impl ScenePlaceIndex {
                     .point_for_entity(&entity.entity_id)
                     .map(|point| (point.latitude, point.longitude))
                     .or_else(|| coordinates_from_rows(rows, &entity.entity_id)),
+                geometry: scene_geometry_from_rows(rows),
                 rating: numeric_fact(rows, "google_rating"),
                 review_count: numeric_fact(rows, "google_review_count").map(|value| value as u32),
             };
@@ -701,13 +872,15 @@ fn features_for_layer(
                         } else {
                             (anchor_coords, CoordinateQuality::Exact)
                         };
+                    let geometry = match linked_entity_id.as_deref() {
+                        Some(_) => linked_rows.and_then(scene_geometry_from_rows),
+                        None => scene_geometry_from_rows(rows),
+                    };
                     FactFeatureSource {
                         fact,
                         entity_id: linked_entity_id,
                         coordinates,
-                        geometry: linked_rows
-                            .and_then(scene_geometry_from_rows)
-                            .or_else(|| scene_geometry_from_rows(rows)),
+                        geometry,
                         property_rows: linked_rows.or(Some(rows)),
                         coordinate_quality,
                         index,
@@ -799,10 +972,11 @@ fn feature_candidate_from_fact(
                 parsed.name
             }
         });
-    let geometry = source
-        .geometry
-        .clone()
-        .unwrap_or_else(|| point_geometry(coordinates));
+    let geometry = match place {
+        Some(place) => place.geometry.clone(),
+        None => source.geometry.clone(),
+    }
+    .unwrap_or_else(|| point_geometry(coordinates));
     let distance_m = parsed.distance_km.map(km_to_meters).or_else(|| {
         let (anchor_lat, anchor_lng) = anchor_coords?;
         Some(km_to_meters(haversine_km(
@@ -1709,6 +1883,159 @@ mod tests {
     }
 
     #[test]
+    fn configured_context_polygons_fill_an_empty_surface_layer() {
+        let entities = vec![serving_entity("society:one", "society", "One Society")];
+        let facts = vec![
+            serving_fact(
+                "society:one",
+                "geo.latitude",
+                FactValue::Numeric(12.98),
+                None,
+            ),
+            serving_fact(
+                "society:one",
+                "geo.longitude",
+                FactValue::Numeric(77.74),
+                None,
+            ),
+        ];
+        let bundle = loaded_bundle(entities, facts);
+        let surface = UiSurfaceConfig {
+            id: "around_this_home".to_string(),
+            title: "Around this home".to_string(),
+            kicker: None,
+            leaf_keys: Vec::new(),
+            traversal: Vec::new(),
+            components: Vec::new(),
+            primary_entity: Some("society".to_string()),
+            comparison_dimensions: Vec::new(),
+            proof_handoff: None,
+            scene: Some(crate::dag_config::UiSurfaceSceneConfig {
+                anchor: crate::dag_config::UiSurfaceAnchorConfig {
+                    entity_ref: "society".to_string(),
+                    boundary_fact_key: None,
+                },
+                experience: None,
+                layers: vec![UiSurfaceLayerRule {
+                    id: "water_bodies".to_string(),
+                    label: "Water bodies".to_string(),
+                    fact_keys: vec!["nearby_water_bodies".to_string()],
+                    context_polygon_kinds: vec!["lake".to_string()],
+                    feature_labels: HashMap::new(),
+                    feature_properties: HashMap::new(),
+                    feature_value_labels: HashMap::new(),
+                    empty_state: None,
+                    edge_types: vec!["near_place".to_string()],
+                    linked_entity_fact_keys: Vec::new(),
+                    sort_priority_fact_keys: Vec::new(),
+                    family: "environment".to_string(),
+                    relation_class: "context".to_string(),
+                    render_kind: "pin".to_string(),
+                    map_presentation: None,
+                    experience: None,
+                    icon: Some("waves".to_string()),
+                    sort: Some("distance".to_string()),
+                    max_items: Some(1),
+                    expanded_max_items: None,
+                    spread_min_distance_km: None,
+                    show_review_metrics: None,
+                    include_name_markers: Vec::new(),
+                    include_related_society_facts: false,
+                    enabled_by_default: false,
+                    rank: Some(7),
+                }],
+            }),
+        };
+        let mut scene = build_surface_scene(
+            &sample_property(),
+            Some("One Society"),
+            KgEntityRefs {
+                property_entity_id: "property:one".to_string(),
+                society_entity_id: "society:one".to_string(),
+                area_entity_id: "area:whitefield".to_string(),
+                builder_entity_id: None,
+                source_entity_ids: Vec::new(),
+            },
+            &bundle,
+            &surface,
+        )
+        .expect("scene should build from its anchor");
+        assert!(scene.features.is_empty());
+
+        merge_surface_context_polygons(
+            &mut scene,
+            &surface,
+            &[
+                MapOverlayPolygon {
+                    id: "way/one".to_string(),
+                    name: "Nearest Lake".to_string(),
+                    kind: "lake".to_string(),
+                    coordinates: vec![
+                        [77.741, 12.981],
+                        [77.742, 12.981],
+                        [77.742, 12.982],
+                        [77.741, 12.981],
+                    ],
+                    distance_km: Some(0.2),
+                    source_type: "OpenStreetMap".to_string(),
+                },
+                MapOverlayPolygon {
+                    id: "way/two".to_string(),
+                    name: "Farther Lake".to_string(),
+                    kind: "lake".to_string(),
+                    coordinates: vec![
+                        [77.75, 12.99],
+                        [77.751, 12.99],
+                        [77.751, 12.991],
+                        [77.75, 12.99],
+                    ],
+                    distance_km: Some(1.5),
+                    source_type: "OpenStreetMap".to_string(),
+                },
+            ],
+        );
+
+        assert_eq!(scene.features.len(), 1);
+        assert_eq!(scene.features[0].label, "Nearest Lake");
+        assert_eq!(scene.features[0].layer_id, "water_bodies");
+        assert!(matches!(
+            scene.features[0].geometry,
+            SceneGeometry::Polygon { .. }
+        ));
+        assert_eq!(
+            scene.features[0].metrics.as_ref().unwrap().distance_m,
+            Some(200)
+        );
+        assert_eq!(scene.receipts[0].source_type, "OpenStreetMap");
+        assert_eq!(scene.relations[0].to_id, scene.features[0].id);
+        let layer = &scene.layers[0];
+        assert_eq!(layer.available_count, 2);
+        assert_eq!(layer.shown_count, 1);
+        assert_eq!(layer.fill_state, FillState::Partial);
+
+        let selected_feature_id = scene.features[0].id.clone();
+        merge_surface_context_polygons(
+            &mut scene,
+            &surface,
+            &[MapOverlayPolygon {
+                id: "way/replacement".to_string(),
+                name: "Replacement Lake".to_string(),
+                kind: "lake".to_string(),
+                coordinates: vec![
+                    [77.73, 12.97],
+                    [77.731, 12.97],
+                    [77.731, 12.971],
+                    [77.73, 12.97],
+                ],
+                distance_km: Some(0.1),
+                source_type: "OpenStreetMap".to_string(),
+            }],
+        );
+        assert_eq!(scene.features.len(), 1, "a populated scene layer wins");
+        assert_eq!(scene.features[0].id, selected_feature_id);
+    }
+
+    #[test]
     fn linked_entity_fact_pairs_receipt_fact_with_map_entity() {
         let fact_index = crate::serving::ServingFactIndex::from_records(
             vec![
@@ -1862,6 +2189,7 @@ mod tests {
                     id: "drains".to_string(),
                     label: "Drains".to_string(),
                     fact_keys: vec!["stormwater_drain_nearby".to_string()],
+                    context_polygon_kinds: Vec::new(),
                     feature_labels: HashMap::new(),
                     feature_properties: HashMap::new(),
                     feature_value_labels: HashMap::new(),
@@ -1925,6 +2253,139 @@ mod tests {
     }
 
     #[test]
+    fn source_url_linked_point_place_does_not_inherit_anchor_polygon_geometry() {
+        let entities = vec![
+            serving_entity("society:one", "society", "One Society"),
+            serving_entity("place:school:one", "place", "Gopalan National School"),
+        ];
+        let facts = vec![
+            serving_fact(
+                "society:one",
+                "geo.latitude",
+                FactValue::Numeric(12.981),
+                None,
+            ),
+            serving_fact(
+                "society:one",
+                "geo.longitude",
+                FactValue::Numeric(77.742),
+                None,
+            ),
+            serving_fact(
+                "society:one",
+                "geo.geometry_geojson",
+                FactValue::Text(
+                    r#"{"type":"Polygon","coordinates":[[[77.74,12.98],[77.744,12.98],[77.744,12.984],[77.74,12.98]]]}"#
+                        .to_string(),
+                ),
+                None,
+            ),
+            serving_fact(
+                "society:one",
+                "nearby_schools",
+                FactValue::Text("Gopalan National School (3.5 km)".to_string()),
+                Some("https://maps.example/gopalan"),
+            ),
+            serving_fact(
+                "place:school:one",
+                "geo.latitude",
+                FactValue::Numeric(12.986),
+                None,
+            ),
+            serving_fact(
+                "place:school:one",
+                "geo.longitude",
+                FactValue::Numeric(77.707),
+                None,
+            ),
+            serving_fact(
+                "place:school:one",
+                "google_place_url",
+                FactValue::Text("https://maps.example/gopalan".to_string()),
+                None,
+            ),
+        ];
+        let bundle = loaded_bundle(entities, facts);
+        let surface = UiSurfaceConfig {
+            id: "around_this_home".to_string(),
+            title: "Around this home".to_string(),
+            kicker: None,
+            leaf_keys: Vec::new(),
+            traversal: Vec::new(),
+            components: Vec::new(),
+            primary_entity: Some("society".to_string()),
+            comparison_dimensions: Vec::new(),
+            proof_handoff: None,
+            scene: Some(crate::dag_config::UiSurfaceSceneConfig {
+                anchor: crate::dag_config::UiSurfaceAnchorConfig {
+                    entity_ref: "society".to_string(),
+                    boundary_fact_key: None,
+                },
+                experience: None,
+                layers: vec![UiSurfaceLayerRule {
+                    id: "schools".to_string(),
+                    label: "Schools".to_string(),
+                    fact_keys: vec!["nearby_schools".to_string()],
+                    context_polygon_kinds: Vec::new(),
+                    feature_labels: HashMap::new(),
+                    feature_properties: HashMap::new(),
+                    feature_value_labels: HashMap::new(),
+                    empty_state: None,
+                    edge_types: Vec::new(),
+                    linked_entity_fact_keys: Vec::new(),
+                    sort_priority_fact_keys: Vec::new(),
+                    family: "access".to_string(),
+                    relation_class: "access".to_string(),
+                    render_kind: "pin".to_string(),
+                    map_presentation: None,
+                    experience: None,
+                    icon: None,
+                    sort: Some("distance".to_string()),
+                    max_items: None,
+                    expanded_max_items: None,
+                    spread_min_distance_km: None,
+                    show_review_metrics: None,
+                    include_name_markers: Vec::new(),
+                    include_related_society_facts: false,
+                    enabled_by_default: true,
+                    rank: Some(1),
+                }],
+            }),
+        };
+
+        let scene = build_surface_scene(
+            &sample_property(),
+            Some("One Society"),
+            KgEntityRefs {
+                property_entity_id: "property:one".to_string(),
+                society_entity_id: "society:one".to_string(),
+                area_entity_id: "area:whitefield".to_string(),
+                builder_entity_id: None,
+                source_entity_ids: Vec::new(),
+            },
+            &bundle,
+            &surface,
+        )
+        .expect("scene should build");
+
+        assert_eq!(scene.features.len(), 1);
+        assert_eq!(
+            scene.features[0].geometry,
+            SceneGeometry::Point {
+                coordinates: [77.707, 12.986],
+            }
+        );
+        assert_eq!(
+            scene.features[0].entity_id.as_deref(),
+            Some("place:school:one")
+        );
+        assert_eq!(
+            scene.features[0].coordinate_quality,
+            CoordinateQuality::Exact
+        );
+    }
+
+    #[test]
     fn surface_scene_uses_configured_fact_priority_before_distance_cap() {
         let entities = vec![serving_entity("society:one", "society", "One Society")];
         let facts = vec![
@@ -1977,6 +2438,7 @@ mod tests {
                         "nearby_graveyards".to_string(),
                         "high_voltage_transmission_line_nearby".to_string(),
                     ],
+                    context_polygon_kinds: Vec::new(),
                     feature_labels: HashMap::new(),
                     feature_properties: HashMap::new(),
                     feature_value_labels: HashMap::new(),
@@ -2083,6 +2545,7 @@ mod tests {
                         "nearby_graveyards".to_string(),
                         "high_voltage_transmission_line_nearby".to_string(),
                     ],
+                    context_polygon_kinds: Vec::new(),
                     feature_labels: HashMap::new(),
                     feature_properties: HashMap::new(),
                     feature_value_labels: HashMap::new(),
@@ -2211,6 +2674,7 @@ mod tests {
                     id: "tech".to_string(),
                     label: "Tech parks".to_string(),
                     fact_keys: vec!["nearby_tech_parks".to_string()],
+                    context_polygon_kinds: Vec::new(),
                     feature_labels: HashMap::new(),
                     feature_properties: HashMap::new(),
                     feature_value_labels: HashMap::new(),
@@ -2342,6 +2806,7 @@ mod tests {
                     id: "red_flags".to_string(),
                     label: "Red flags".to_string(),
                     fact_keys: vec!["high_voltage_transmission_line_nearby".to_string()],
+                    context_polygon_kinds: Vec::new(),
                     feature_labels: HashMap::new(),
                     feature_properties: HashMap::from([(
                         "status".to_string(),
@@ -2463,6 +2928,7 @@ mod tests {
                     id: "red_flags".to_string(),
                     label: "Red flags".to_string(),
                     fact_keys: vec!["nearby_graveyards".to_string()],
+                    context_polygon_kinds: Vec::new(),
                     feature_labels: HashMap::new(),
                     feature_properties: HashMap::new(),
                     feature_value_labels: HashMap::new(),
@@ -2560,6 +3026,7 @@ mod tests {
             id: "groundwater".to_string(),
             label: "Groundwater".to_string(),
             fact_keys: vec!["environment.groundwater_potential_class".to_string()],
+            context_polygon_kinds: Vec::new(),
             feature_labels: HashMap::new(),
             feature_properties: HashMap::new(),
             feature_value_labels: HashMap::new(),
@@ -2592,6 +3059,7 @@ mod tests {
             id: "approach_waterlogging".to_string(),
             label: "Waterlogging".to_string(),
             fact_keys: vec!["risk.approach_road_waterlogging".to_string()],
+            context_polygon_kinds: Vec::new(),
             feature_labels: HashMap::new(),
             feature_properties: HashMap::new(),
             feature_value_labels: HashMap::new(),
