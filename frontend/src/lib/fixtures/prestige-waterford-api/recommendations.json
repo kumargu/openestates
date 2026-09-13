@@ -1,0 +1,1660 @@
+{
+  "status": "ready",
+  "engine_version": "recommendations-v2",
+  "scoring_policy_version": 3,
+  "serving_bundle_version": "catalog-71-ffb4dc50-117e-453c-b26f-41822430324e",
+  "items": [
+    {
+      "branch_id": "better_value",
+      "lens": "value",
+      "headline": "Better value",
+      "property": {
+        "id": "discovered-spectra-raaya-3bhk",
+        "kg_entity_refs": {
+          "property_entity_id": "property:discovered-spectra-raaya-3bhk",
+          "society_entity_id": "society:spectra-raaya",
+          "area_entity_id": "area:whitefield"
+        },
+        "title": "3 BHK in Spectra Raaya",
+        "area": "Whitefield",
+        "price": 24650000,
+        "price_min": 18000000,
+        "price_max": 29000000,
+        "price_per_sqft": 14534,
+        "bhk": 3,
+        "sqft": 1696,
+        "carpet_area_sqft": 1696,
+        "super_builtup_sqft": 1696,
+        "society_name": "Spectra Raaya",
+        "builder_name": "Spectra Constructions Private Limited",
+        "hero_image": "",
+        "transparency_tags": [
+          "Source: Serving bundle",
+          "Fresh area scan",
+          "RERA verified"
+        ],
+        "description_summary": "Spectra Raaya in Whitefield",
+        "possession_status": "APPROVED",
+        "metro_distance_mins": 0,
+        "floor": 0,
+        "total_floors": 0,
+        "facing": "Not specified",
+        "google_rating": 4.4,
+        "google_review_count": 220,
+        "google_reviews_url": "https://maps.google.com/?cid=5395268968651472345&g_mp=CiVnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLkdldFBsYWNlEAIYBCAA",
+        "society_land_acres": 4.280606523155705,
+        "open_space_pct": 79.17,
+        "decision_labels": [
+          {
+            "key": "project_delay",
+            "label": "8 month delay",
+            "severity": "caution",
+            "scope": "project",
+            "visualId": "risk",
+            "value": 8.0,
+            "valueText": "8",
+            "unit": "months",
+            "surfaces": [
+              "property_context",
+              "compare_primary",
+              "note_suggestion"
+            ],
+            "priority": 80,
+            "sourceFactKeys": [
+              "rera_delay_months"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "risk",
+              "project_delay"
+            ],
+            "compareGroup": "delivery_history",
+            "groupId": "attention",
+            "placement": "primary"
+          },
+          {
+            "key": "project_size_units",
+            "label": "318 homes",
+            "severity": "info",
+            "scope": "project",
+            "visualId": "layout",
+            "value": 318.0,
+            "valueText": "318",
+            "surfaces": [
+              "compare_secondary",
+              "note_suggestion"
+            ],
+            "priority": 54,
+            "sourceFactKeys": [
+              "project_unit_count"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "layout",
+              "project_size"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "project_land_area",
+            "label": "4.3 acres",
+            "severity": "info",
+            "scope": "project",
+            "visualId": "open-space",
+            "value": 4.28,
+            "valueText": "4.3",
+            "surfaces": [
+              "compare_secondary",
+              "note_suggestion"
+            ],
+            "priority": 52,
+            "sourceFactKeys": [
+              "project_land_area_acres"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "open-space",
+              "project_density"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "parking_per_home_available",
+            "label": "1.44 parking/home",
+            "severity": "positive",
+            "scope": "project",
+            "visualId": "visit",
+            "value": 1.4433962264150944,
+            "valueText": "1.44",
+            "unit": "parking_per_home",
+            "surfaces": [
+              "compare_secondary",
+              "note_suggestion"
+            ],
+            "priority": 48,
+            "sourceFactKeys": [
+              "parking_total_car_count",
+              "project_unit_count"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "visit",
+              "parking"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "project_tower_count",
+            "label": "7 towers",
+            "severity": "info",
+            "scope": "project",
+            "visualId": "layout",
+            "value": 7.0,
+            "valueText": "7",
+            "surfaces": [
+              "compare_secondary"
+            ],
+            "priority": 44,
+            "sourceFactKeys": [
+              "project_tower_count"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "layout",
+              "project_size"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "project_max_floors",
+            "label": "11 floors",
+            "severity": "info",
+            "scope": "project",
+            "visualId": "layout",
+            "value": 11.0,
+            "valueText": "11",
+            "surfaces": [
+              "compare_secondary"
+            ],
+            "priority": 42,
+            "sourceFactKeys": [
+              "project_max_floor_count"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "layout",
+              "project_size"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "legal_land_docs_available",
+            "label": "Land docs available",
+            "severity": "positive",
+            "scope": "project",
+            "visualId": "legal",
+            "value": 3.0,
+            "valueText": "3",
+            "surfaces": [
+              "compare_secondary",
+              "admin_audit"
+            ],
+            "priority": 30,
+            "sourceFactKeys": [
+              "rera_legal_land_document_count"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "legal",
+              "land_documents"
+            ],
+            "compareGroup": "documents",
+            "groupId": "documents",
+            "placement": "audit"
+          },
+          {
+            "key": "sanction_plan_available",
+            "label": "Sanction plan available",
+            "severity": "positive",
+            "scope": "project",
+            "visualId": "layout",
+            "value": 1.0,
+            "valueText": "1",
+            "surfaces": [
+              "compare_secondary",
+              "admin_audit"
+            ],
+            "priority": 28,
+            "sourceFactKeys": [
+              "sanction_plan_asset_count"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "layout",
+              "sanction_plan"
+            ],
+            "compareGroup": "documents",
+            "groupId": "documents",
+            "placement": "audit"
+          }
+        ],
+        "decision_check_summary": {
+          "tileLabel": "RERA",
+          "tone": "caution",
+          "registrationNumber": "PRM/KA/RERA/1251/446/PR/190809/002788",
+          "registrationNumberCompact": "PRM/KA/.../002788",
+          "registryUrl": "https://rera.karnataka.gov.in/projectViewDetails",
+          "primaryCount": 1,
+          "totalCount": 8,
+          "primaryLabels": [
+            {
+              "key": "project_delay",
+              "label": "8 month delay",
+              "severity": "caution",
+              "scope": "project",
+              "visualId": "risk",
+              "value": 8.0,
+              "valueText": "8",
+              "unit": "months",
+              "surfaces": [
+                "property_context",
+                "compare_primary",
+                "note_suggestion"
+              ],
+              "priority": 80,
+              "sourceFactKeys": [
+                "rera_delay_months"
+              ],
+              "confidence": 0.85,
+              "notebookLabels": [
+                "risk",
+                "project_delay"
+              ],
+              "compareGroup": "delivery_history",
+              "groupId": "attention",
+              "placement": "primary"
+            }
+          ],
+          "groups": [
+            {
+              "id": "attention",
+              "title": "Cautions",
+              "labels": [
+                {
+                  "key": "project_delay",
+                  "label": "8 month delay",
+                  "severity": "caution",
+                  "scope": "project",
+                  "visualId": "risk",
+                  "value": 8.0,
+                  "valueText": "8",
+                  "unit": "months",
+                  "surfaces": [
+                    "property_context",
+                    "compare_primary",
+                    "note_suggestion"
+                  ],
+                  "priority": 80,
+                  "sourceFactKeys": [
+                    "rera_delay_months"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "risk",
+                    "project_delay"
+                  ],
+                  "compareGroup": "delivery_history",
+                  "groupId": "attention",
+                  "placement": "primary"
+                }
+              ]
+            },
+            {
+              "id": "project_facts",
+              "title": "Project facts",
+              "labels": [
+                {
+                  "key": "project_size_units",
+                  "label": "318 homes",
+                  "severity": "info",
+                  "scope": "project",
+                  "visualId": "layout",
+                  "value": 318.0,
+                  "valueText": "318",
+                  "surfaces": [
+                    "compare_secondary",
+                    "note_suggestion"
+                  ],
+                  "priority": 54,
+                  "sourceFactKeys": [
+                    "project_unit_count"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "layout",
+                    "project_size"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                },
+                {
+                  "key": "project_land_area",
+                  "label": "4.3 acres",
+                  "severity": "info",
+                  "scope": "project",
+                  "visualId": "open-space",
+                  "value": 4.28,
+                  "valueText": "4.3",
+                  "surfaces": [
+                    "compare_secondary",
+                    "note_suggestion"
+                  ],
+                  "priority": 52,
+                  "sourceFactKeys": [
+                    "project_land_area_acres"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "open-space",
+                    "project_density"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                },
+                {
+                  "key": "parking_per_home_available",
+                  "label": "1.44 parking/home",
+                  "severity": "positive",
+                  "scope": "project",
+                  "visualId": "visit",
+                  "value": 1.4433962264150944,
+                  "valueText": "1.44",
+                  "unit": "parking_per_home",
+                  "surfaces": [
+                    "compare_secondary",
+                    "note_suggestion"
+                  ],
+                  "priority": 48,
+                  "sourceFactKeys": [
+                    "parking_total_car_count",
+                    "project_unit_count"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "visit",
+                    "parking"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                },
+                {
+                  "key": "project_tower_count",
+                  "label": "7 towers",
+                  "severity": "info",
+                  "scope": "project",
+                  "visualId": "layout",
+                  "value": 7.0,
+                  "valueText": "7",
+                  "surfaces": [
+                    "compare_secondary"
+                  ],
+                  "priority": 44,
+                  "sourceFactKeys": [
+                    "project_tower_count"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "layout",
+                    "project_size"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                },
+                {
+                  "key": "project_max_floors",
+                  "label": "11 floors",
+                  "severity": "info",
+                  "scope": "project",
+                  "visualId": "layout",
+                  "value": 11.0,
+                  "valueText": "11",
+                  "surfaces": [
+                    "compare_secondary"
+                  ],
+                  "priority": 42,
+                  "sourceFactKeys": [
+                    "project_max_floor_count"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "layout",
+                    "project_size"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                }
+              ]
+            },
+            {
+              "id": "documents",
+              "title": "Documents",
+              "labels": [
+                {
+                  "key": "legal_land_docs_available",
+                  "label": "Land docs available",
+                  "severity": "positive",
+                  "scope": "project",
+                  "visualId": "legal",
+                  "value": 3.0,
+                  "valueText": "3",
+                  "surfaces": [
+                    "compare_secondary",
+                    "admin_audit"
+                  ],
+                  "priority": 30,
+                  "sourceFactKeys": [
+                    "rera_legal_land_document_count"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "legal",
+                    "land_documents"
+                  ],
+                  "compareGroup": "documents",
+                  "groupId": "documents",
+                  "placement": "audit"
+                },
+                {
+                  "key": "sanction_plan_available",
+                  "label": "Sanction plan available",
+                  "severity": "positive",
+                  "scope": "project",
+                  "visualId": "layout",
+                  "value": 1.0,
+                  "valueText": "1",
+                  "surfaces": [
+                    "compare_secondary",
+                    "admin_audit"
+                  ],
+                  "priority": 28,
+                  "sourceFactKeys": [
+                    "sanction_plan_asset_count"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "layout",
+                    "sanction_plan"
+                  ],
+                  "compareGroup": "documents",
+                  "groupId": "documents",
+                  "placement": "audit"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "contrast": "15% lower per sqft in Whitefield",
+      "evidence_delta": {
+        "fact_count": 23,
+        "gap_count": 1,
+        "confidence_pct": 78,
+        "fact_delta": -31,
+        "gap_delta": 0
+      },
+      "channels": [
+        {
+          "channel": "price_band",
+          "score": 0.65
+        },
+        {
+          "channel": "spatial_nearby",
+          "score": 0.5697713552237808
+        }
+      ],
+      "magnitude": 1.0
+    },
+    {
+      "branch_id": "safer_timeline",
+      "lens": "trust",
+      "headline": "Safer file",
+      "property": {
+        "id": "discovered-brigade-lakefront-crimson-3bhk",
+        "kg_entity_refs": {
+          "property_entity_id": "property:discovered-brigade-lakefront-crimson-3bhk",
+          "society_entity_id": "society:brigade-lakefront-crimson",
+          "area_entity_id": "area:whitefield"
+        },
+        "title": "3 BHK in Brigade Lakefront - Crimson",
+        "area": "Whitefield",
+        "price": 32250000,
+        "price_min": 30000000,
+        "price_max": 48000000,
+        "price_per_sqft": 19026,
+        "bhk": 3,
+        "sqft": 1695,
+        "carpet_area_sqft": 1695,
+        "super_builtup_sqft": 1695,
+        "society_name": "Brigade Lakefront - Crimson",
+        "builder_name": "Brigade Enterprises Ltd",
+        "images": [
+          "/media/images/sha256/f6/f65ae2d118e3245e3db4fa5733b23514db50e3af235a7667f66c5d2fc2aa29c5.jpg",
+          "/media/images/sha256/28/280f0c999ef7a9375214563d0afd6156833a2dabe12b0716489610149fd29c86.jpg",
+          "/media/images/sha256/ef/ef835adbbe64fb863677e1eb07c37b5e1141d42cf0368183c55663a37602c514.jpg",
+          "/media/images/sha256/83/83b046879013ac03016a563b07eafb70e185b2155f6be5fbf71e0fcf0a51e06c.jpg",
+          "/media/images/sha256/41/410cf028632df5c6844ca6821bd33dd7a2ce23386c7323cc64bbd4649de39f1c.jpg",
+          "/media/images/sha256/df/df60976d7f2e0f93b97b73fb0e129cda98a511c657be2fdc88c2dfa042a9d797.jpg",
+          "/media/images/sha256/75/75c44e346ababce35d1f7b2070fa09541120a984617fa81fc9203e2e483dc3e1.jpg"
+        ],
+        "hero_image": "/media/images/sha256/f6/f65ae2d118e3245e3db4fa5733b23514db50e3af235a7667f66c5d2fc2aa29c5.jpg",
+        "transparency_tags": [
+          "Source: RERA",
+          "Fresh area scan",
+          "RERA verified"
+        ],
+        "description_summary": "Brigade Lakefront - Crimson in Whitefield",
+        "possession_status": "APPROVED",
+        "metro_distance_mins": 0,
+        "floor": 0,
+        "total_floors": 0,
+        "facing": "Not specified",
+        "google_rating": 4.8,
+        "google_review_count": 9,
+        "google_reviews_url": "https://maps.google.com/?cid=8882075205845937283&g_mp=CiVnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLkdldFBsYWNlEAIYBCAA",
+        "society_land_acres": 4.493611361980402,
+        "open_space_pct": 80.33,
+        "home_state_display": "Delivered · 7.1 yrs old",
+        "decision_labels": [
+          {
+            "key": "project_size_units",
+            "label": "336 homes",
+            "severity": "info",
+            "scope": "project",
+            "visualId": "layout",
+            "value": 336.0,
+            "valueText": "336",
+            "surfaces": [
+              "compare_secondary",
+              "note_suggestion"
+            ],
+            "priority": 54,
+            "sourceFactKeys": [
+              "project_unit_count"
+            ],
+            "confidence": 1.0,
+            "notebookLabels": [
+              "layout",
+              "project_size"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "project_land_area",
+            "label": "4.5 acres",
+            "severity": "info",
+            "scope": "project",
+            "visualId": "open-space",
+            "value": 4.49,
+            "valueText": "4.5",
+            "surfaces": [
+              "compare_secondary",
+              "note_suggestion"
+            ],
+            "priority": 52,
+            "sourceFactKeys": [
+              "project_land_area_acres"
+            ],
+            "confidence": 1.0,
+            "notebookLabels": [
+              "open-space",
+              "project_density"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "parking_per_home_available",
+            "label": "1 parking/home",
+            "severity": "positive",
+            "scope": "project",
+            "visualId": "visit",
+            "value": 1.0,
+            "valueText": "1",
+            "unit": "parking_per_home",
+            "surfaces": [
+              "compare_secondary",
+              "note_suggestion"
+            ],
+            "priority": 48,
+            "sourceFactKeys": [
+              "parking_total_car_count",
+              "project_unit_count"
+            ],
+            "confidence": 1.0,
+            "notebookLabels": [
+              "visit",
+              "parking"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "project_tower_count",
+            "label": "6 towers",
+            "severity": "info",
+            "scope": "project",
+            "visualId": "layout",
+            "value": 6.0,
+            "valueText": "6",
+            "surfaces": [
+              "compare_secondary"
+            ],
+            "priority": 44,
+            "sourceFactKeys": [
+              "project_tower_count"
+            ],
+            "confidence": 1.0,
+            "notebookLabels": [
+              "layout",
+              "project_size"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "project_max_floors",
+            "label": "13 floors",
+            "severity": "info",
+            "scope": "project",
+            "visualId": "layout",
+            "value": 13.0,
+            "valueText": "13",
+            "surfaces": [
+              "compare_secondary"
+            ],
+            "priority": 42,
+            "sourceFactKeys": [
+              "project_max_floor_count"
+            ],
+            "confidence": 1.0,
+            "notebookLabels": [
+              "layout",
+              "project_size"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "legal_land_docs_available",
+            "label": "Land docs available",
+            "severity": "positive",
+            "scope": "project",
+            "visualId": "legal",
+            "value": 5.0,
+            "valueText": "5",
+            "surfaces": [
+              "compare_secondary",
+              "admin_audit"
+            ],
+            "priority": 30,
+            "sourceFactKeys": [
+              "rera_legal_land_document_count"
+            ],
+            "confidence": 1.0,
+            "notebookLabels": [
+              "legal",
+              "land_documents"
+            ],
+            "compareGroup": "documents",
+            "groupId": "documents",
+            "placement": "audit"
+          },
+          {
+            "key": "site_plan_available",
+            "label": "Site plan available",
+            "severity": "positive",
+            "scope": "project",
+            "visualId": "layout",
+            "value": 1.0,
+            "valueText": "1",
+            "surfaces": [
+              "compare_secondary",
+              "note_suggestion"
+            ],
+            "priority": 26,
+            "sourceFactKeys": [
+              "site_plan_asset_count"
+            ],
+            "confidence": 1.0,
+            "notebookLabels": [
+              "layout",
+              "site_plan"
+            ],
+            "compareGroup": "layout",
+            "groupId": "documents",
+            "placement": "more"
+          },
+          {
+            "key": "floor_plan_available",
+            "label": "Floor plan available",
+            "severity": "positive",
+            "scope": "project",
+            "visualId": "layout",
+            "value": 1.0,
+            "valueText": "1",
+            "surfaces": [
+              "compare_secondary",
+              "admin_audit"
+            ],
+            "priority": 24,
+            "sourceFactKeys": [
+              "floor_plan_asset_count"
+            ],
+            "confidence": 1.0,
+            "notebookLabels": [
+              "layout",
+              "floor_plan"
+            ],
+            "compareGroup": "layout",
+            "groupId": "documents",
+            "placement": "audit"
+          }
+        ],
+        "decision_check_summary": {
+          "tileLabel": "RERA",
+          "tone": "positive",
+          "registrationNumber": "PRM/KA/RERA/1251/446/PR/171016/000503",
+          "registrationNumberCompact": "PRM/KA/.../000503",
+          "registryUrl": "https://rera.karnataka.gov.in/projectViewDetails",
+          "primaryCount": 4,
+          "totalCount": 8,
+          "primaryLabels": [
+            {
+              "key": "parking_per_home_available",
+              "label": "1 parking/home",
+              "severity": "positive",
+              "scope": "project",
+              "visualId": "visit",
+              "value": 1.0,
+              "valueText": "1",
+              "unit": "parking_per_home",
+              "surfaces": [
+                "compare_secondary",
+                "note_suggestion"
+              ],
+              "priority": 48,
+              "sourceFactKeys": [
+                "parking_total_car_count",
+                "project_unit_count"
+              ],
+              "confidence": 1.0,
+              "notebookLabels": [
+                "visit",
+                "parking"
+              ],
+              "compareGroup": "project_density",
+              "groupId": "project_facts",
+              "placement": "more"
+            },
+            {
+              "key": "legal_land_docs_available",
+              "label": "Land docs available",
+              "severity": "positive",
+              "scope": "project",
+              "visualId": "legal",
+              "value": 5.0,
+              "valueText": "5",
+              "surfaces": [
+                "compare_secondary",
+                "admin_audit"
+              ],
+              "priority": 30,
+              "sourceFactKeys": [
+                "rera_legal_land_document_count"
+              ],
+              "confidence": 1.0,
+              "notebookLabels": [
+                "legal",
+                "land_documents"
+              ],
+              "compareGroup": "documents",
+              "groupId": "documents",
+              "placement": "audit"
+            },
+            {
+              "key": "site_plan_available",
+              "label": "Site plan available",
+              "severity": "positive",
+              "scope": "project",
+              "visualId": "layout",
+              "value": 1.0,
+              "valueText": "1",
+              "surfaces": [
+                "compare_secondary",
+                "note_suggestion"
+              ],
+              "priority": 26,
+              "sourceFactKeys": [
+                "site_plan_asset_count"
+              ],
+              "confidence": 1.0,
+              "notebookLabels": [
+                "layout",
+                "site_plan"
+              ],
+              "compareGroup": "layout",
+              "groupId": "documents",
+              "placement": "more"
+            },
+            {
+              "key": "floor_plan_available",
+              "label": "Floor plan available",
+              "severity": "positive",
+              "scope": "project",
+              "visualId": "layout",
+              "value": 1.0,
+              "valueText": "1",
+              "surfaces": [
+                "compare_secondary",
+                "admin_audit"
+              ],
+              "priority": 24,
+              "sourceFactKeys": [
+                "floor_plan_asset_count"
+              ],
+              "confidence": 1.0,
+              "notebookLabels": [
+                "layout",
+                "floor_plan"
+              ],
+              "compareGroup": "layout",
+              "groupId": "documents",
+              "placement": "audit"
+            }
+          ],
+          "groups": [
+            {
+              "id": "project_facts",
+              "title": "Project facts",
+              "labels": [
+                {
+                  "key": "project_size_units",
+                  "label": "336 homes",
+                  "severity": "info",
+                  "scope": "project",
+                  "visualId": "layout",
+                  "value": 336.0,
+                  "valueText": "336",
+                  "surfaces": [
+                    "compare_secondary",
+                    "note_suggestion"
+                  ],
+                  "priority": 54,
+                  "sourceFactKeys": [
+                    "project_unit_count"
+                  ],
+                  "confidence": 1.0,
+                  "notebookLabels": [
+                    "layout",
+                    "project_size"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                },
+                {
+                  "key": "project_land_area",
+                  "label": "4.5 acres",
+                  "severity": "info",
+                  "scope": "project",
+                  "visualId": "open-space",
+                  "value": 4.49,
+                  "valueText": "4.5",
+                  "surfaces": [
+                    "compare_secondary",
+                    "note_suggestion"
+                  ],
+                  "priority": 52,
+                  "sourceFactKeys": [
+                    "project_land_area_acres"
+                  ],
+                  "confidence": 1.0,
+                  "notebookLabels": [
+                    "open-space",
+                    "project_density"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                },
+                {
+                  "key": "parking_per_home_available",
+                  "label": "1 parking/home",
+                  "severity": "positive",
+                  "scope": "project",
+                  "visualId": "visit",
+                  "value": 1.0,
+                  "valueText": "1",
+                  "unit": "parking_per_home",
+                  "surfaces": [
+                    "compare_secondary",
+                    "note_suggestion"
+                  ],
+                  "priority": 48,
+                  "sourceFactKeys": [
+                    "parking_total_car_count",
+                    "project_unit_count"
+                  ],
+                  "confidence": 1.0,
+                  "notebookLabels": [
+                    "visit",
+                    "parking"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                },
+                {
+                  "key": "project_tower_count",
+                  "label": "6 towers",
+                  "severity": "info",
+                  "scope": "project",
+                  "visualId": "layout",
+                  "value": 6.0,
+                  "valueText": "6",
+                  "surfaces": [
+                    "compare_secondary"
+                  ],
+                  "priority": 44,
+                  "sourceFactKeys": [
+                    "project_tower_count"
+                  ],
+                  "confidence": 1.0,
+                  "notebookLabels": [
+                    "layout",
+                    "project_size"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                },
+                {
+                  "key": "project_max_floors",
+                  "label": "13 floors",
+                  "severity": "info",
+                  "scope": "project",
+                  "visualId": "layout",
+                  "value": 13.0,
+                  "valueText": "13",
+                  "surfaces": [
+                    "compare_secondary"
+                  ],
+                  "priority": 42,
+                  "sourceFactKeys": [
+                    "project_max_floor_count"
+                  ],
+                  "confidence": 1.0,
+                  "notebookLabels": [
+                    "layout",
+                    "project_size"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                }
+              ]
+            },
+            {
+              "id": "documents",
+              "title": "Documents",
+              "labels": [
+                {
+                  "key": "legal_land_docs_available",
+                  "label": "Land docs available",
+                  "severity": "positive",
+                  "scope": "project",
+                  "visualId": "legal",
+                  "value": 5.0,
+                  "valueText": "5",
+                  "surfaces": [
+                    "compare_secondary",
+                    "admin_audit"
+                  ],
+                  "priority": 30,
+                  "sourceFactKeys": [
+                    "rera_legal_land_document_count"
+                  ],
+                  "confidence": 1.0,
+                  "notebookLabels": [
+                    "legal",
+                    "land_documents"
+                  ],
+                  "compareGroup": "documents",
+                  "groupId": "documents",
+                  "placement": "audit"
+                },
+                {
+                  "key": "site_plan_available",
+                  "label": "Site plan available",
+                  "severity": "positive",
+                  "scope": "project",
+                  "visualId": "layout",
+                  "value": 1.0,
+                  "valueText": "1",
+                  "surfaces": [
+                    "compare_secondary",
+                    "note_suggestion"
+                  ],
+                  "priority": 26,
+                  "sourceFactKeys": [
+                    "site_plan_asset_count"
+                  ],
+                  "confidence": 1.0,
+                  "notebookLabels": [
+                    "layout",
+                    "site_plan"
+                  ],
+                  "compareGroup": "layout",
+                  "groupId": "documents",
+                  "placement": "more"
+                },
+                {
+                  "key": "floor_plan_available",
+                  "label": "Floor plan available",
+                  "severity": "positive",
+                  "scope": "project",
+                  "visualId": "layout",
+                  "value": 1.0,
+                  "valueText": "1",
+                  "surfaces": [
+                    "compare_secondary",
+                    "admin_audit"
+                  ],
+                  "priority": 24,
+                  "sourceFactKeys": [
+                    "floor_plan_asset_count"
+                  ],
+                  "confidence": 1.0,
+                  "notebookLabels": [
+                    "layout",
+                    "floor_plan"
+                  ],
+                  "compareGroup": "layout",
+                  "groupId": "documents",
+                  "placement": "audit"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "contrast": "Stronger legal timeline safety evidence",
+      "tradeoff": "Tradeoff: ~12% higher per sqft",
+      "evidence_delta": {
+        "fact_count": 28,
+        "gap_count": 2,
+        "confidence_pct": 82,
+        "fact_delta": -26,
+        "gap_delta": 1
+      },
+      "channels": [
+        {
+          "channel": "price_band",
+          "score": 0.65
+        },
+        {
+          "channel": "spatial_nearby",
+          "score": 0.49093877111360534
+        }
+      ],
+      "magnitude": 0.5375
+    },
+    {
+      "branch_id": "similar_tradeoff",
+      "lens": "proof",
+      "headline": "Similar tradeoff",
+      "property": {
+        "id": "discovered-prestige-boulevard-3bhk",
+        "kg_entity_refs": {
+          "property_entity_id": "property:discovered-prestige-boulevard-3bhk",
+          "society_entity_id": "society:prestige-boulevard",
+          "area_entity_id": "area:whitefield"
+        },
+        "title": "3 BHK in PRESTIGE BOULEVARD",
+        "area": "Whitefield",
+        "price": 28000000,
+        "price_min": 27500000,
+        "price_max": 32000000,
+        "price_per_sqft": 17114,
+        "bhk": 3,
+        "sqft": 1636,
+        "carpet_area_sqft": 1636,
+        "super_builtup_sqft": 1636,
+        "society_name": "PRESTIGE BOULEVARD",
+        "builder_name": "Prestige Estates Projects Limited",
+        "hero_image": "",
+        "transparency_tags": [
+          "Source: Serving bundle",
+          "Fresh area scan",
+          "RERA verified"
+        ],
+        "description_summary": "PRESTIGE BOULEVARD in Whitefield",
+        "possession_status": "APPROVED",
+        "metro_distance_mins": 0,
+        "floor": 0,
+        "total_floors": 0,
+        "facing": "Not specified",
+        "google_rating": 4.3,
+        "google_review_count": 65,
+        "google_reviews_url": "https://maps.google.com/?cid=330790732344519455&g_mp=CiVnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLkdldFBsYWNlEAIYBCAA",
+        "society_land_acres": 2.4999651443033115,
+        "open_space_pct": 17.0,
+        "decision_labels": [
+          {
+            "key": "builder_complaint_history",
+            "label": "76 builder complaints",
+            "severity": "caution",
+            "scope": "builder",
+            "visualId": "risk",
+            "value": 76.0,
+            "valueText": "76",
+            "surfaces": [
+              "property_context",
+              "compare_primary",
+              "note_suggestion"
+            ],
+            "priority": 76,
+            "sourceFactKeys": [
+              "rera_promoter_complaints_count"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "risk",
+              "builder_complaints"
+            ],
+            "compareGroup": "builder_history",
+            "groupId": "attention",
+            "placement": "primary"
+          },
+          {
+            "key": "project_size_units",
+            "label": "148 homes",
+            "severity": "info",
+            "scope": "project",
+            "visualId": "layout",
+            "value": 148.0,
+            "valueText": "148",
+            "surfaces": [
+              "compare_secondary",
+              "note_suggestion"
+            ],
+            "priority": 54,
+            "sourceFactKeys": [
+              "project_unit_count"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "layout",
+              "project_size"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "project_land_area",
+            "label": "2.5 acres",
+            "severity": "info",
+            "scope": "project",
+            "visualId": "open-space",
+            "value": 2.5,
+            "valueText": "2.5",
+            "surfaces": [
+              "compare_secondary",
+              "note_suggestion"
+            ],
+            "priority": 52,
+            "sourceFactKeys": [
+              "project_land_area_acres"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "open-space",
+              "project_density"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "parking_per_home_available",
+            "label": "1.05 parking/home",
+            "severity": "positive",
+            "scope": "project",
+            "visualId": "visit",
+            "value": 1.054054054054054,
+            "valueText": "1.05",
+            "unit": "parking_per_home",
+            "surfaces": [
+              "compare_secondary",
+              "note_suggestion"
+            ],
+            "priority": 48,
+            "sourceFactKeys": [
+              "parking_total_car_count",
+              "project_unit_count"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "visit",
+              "parking"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "project_tower_count",
+            "label": "10 towers",
+            "severity": "info",
+            "scope": "project",
+            "visualId": "layout",
+            "value": 10.0,
+            "valueText": "10",
+            "surfaces": [
+              "compare_secondary"
+            ],
+            "priority": 44,
+            "sourceFactKeys": [
+              "project_tower_count"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "layout",
+              "project_size"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "project_max_floors",
+            "label": "4 floors",
+            "severity": "info",
+            "scope": "project",
+            "visualId": "layout",
+            "value": 4.0,
+            "valueText": "4",
+            "surfaces": [
+              "compare_secondary"
+            ],
+            "priority": 42,
+            "sourceFactKeys": [
+              "project_max_floor_count"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "layout",
+              "project_size"
+            ],
+            "compareGroup": "project_density",
+            "groupId": "project_facts",
+            "placement": "more"
+          },
+          {
+            "key": "legal_land_docs_available",
+            "label": "Land docs available",
+            "severity": "positive",
+            "scope": "project",
+            "visualId": "legal",
+            "value": 2.0,
+            "valueText": "2",
+            "surfaces": [
+              "compare_secondary",
+              "admin_audit"
+            ],
+            "priority": 30,
+            "sourceFactKeys": [
+              "rera_legal_land_document_count"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "legal",
+              "land_documents"
+            ],
+            "compareGroup": "documents",
+            "groupId": "documents",
+            "placement": "audit"
+          },
+          {
+            "key": "floor_plan_available",
+            "label": "Floor plan available",
+            "severity": "positive",
+            "scope": "project",
+            "visualId": "layout",
+            "value": 1.0,
+            "valueText": "1",
+            "surfaces": [
+              "compare_secondary",
+              "admin_audit"
+            ],
+            "priority": 24,
+            "sourceFactKeys": [
+              "floor_plan_asset_count"
+            ],
+            "confidence": 0.85,
+            "notebookLabels": [
+              "layout",
+              "floor_plan"
+            ],
+            "compareGroup": "layout",
+            "groupId": "documents",
+            "placement": "audit"
+          }
+        ],
+        "decision_check_summary": {
+          "tileLabel": "RERA",
+          "tone": "caution",
+          "registrationNumber": "PRM/KA/RERA/1251/446/PR/170824/000057",
+          "registrationNumberCompact": "PRM/KA/.../000057",
+          "registryUrl": "https://rera.karnataka.gov.in/projectViewDetails",
+          "primaryCount": 1,
+          "totalCount": 8,
+          "primaryLabels": [
+            {
+              "key": "builder_complaint_history",
+              "label": "76 builder complaints",
+              "severity": "caution",
+              "scope": "builder",
+              "visualId": "risk",
+              "value": 76.0,
+              "valueText": "76",
+              "surfaces": [
+                "property_context",
+                "compare_primary",
+                "note_suggestion"
+              ],
+              "priority": 76,
+              "sourceFactKeys": [
+                "rera_promoter_complaints_count"
+              ],
+              "confidence": 0.85,
+              "notebookLabels": [
+                "risk",
+                "builder_complaints"
+              ],
+              "compareGroup": "builder_history",
+              "groupId": "attention",
+              "placement": "primary"
+            }
+          ],
+          "groups": [
+            {
+              "id": "attention",
+              "title": "Cautions",
+              "labels": [
+                {
+                  "key": "builder_complaint_history",
+                  "label": "76 builder complaints",
+                  "severity": "caution",
+                  "scope": "builder",
+                  "visualId": "risk",
+                  "value": 76.0,
+                  "valueText": "76",
+                  "surfaces": [
+                    "property_context",
+                    "compare_primary",
+                    "note_suggestion"
+                  ],
+                  "priority": 76,
+                  "sourceFactKeys": [
+                    "rera_promoter_complaints_count"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "risk",
+                    "builder_complaints"
+                  ],
+                  "compareGroup": "builder_history",
+                  "groupId": "attention",
+                  "placement": "primary"
+                }
+              ]
+            },
+            {
+              "id": "project_facts",
+              "title": "Project facts",
+              "labels": [
+                {
+                  "key": "project_size_units",
+                  "label": "148 homes",
+                  "severity": "info",
+                  "scope": "project",
+                  "visualId": "layout",
+                  "value": 148.0,
+                  "valueText": "148",
+                  "surfaces": [
+                    "compare_secondary",
+                    "note_suggestion"
+                  ],
+                  "priority": 54,
+                  "sourceFactKeys": [
+                    "project_unit_count"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "layout",
+                    "project_size"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                },
+                {
+                  "key": "project_land_area",
+                  "label": "2.5 acres",
+                  "severity": "info",
+                  "scope": "project",
+                  "visualId": "open-space",
+                  "value": 2.5,
+                  "valueText": "2.5",
+                  "surfaces": [
+                    "compare_secondary",
+                    "note_suggestion"
+                  ],
+                  "priority": 52,
+                  "sourceFactKeys": [
+                    "project_land_area_acres"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "open-space",
+                    "project_density"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                },
+                {
+                  "key": "parking_per_home_available",
+                  "label": "1.05 parking/home",
+                  "severity": "positive",
+                  "scope": "project",
+                  "visualId": "visit",
+                  "value": 1.054054054054054,
+                  "valueText": "1.05",
+                  "unit": "parking_per_home",
+                  "surfaces": [
+                    "compare_secondary",
+                    "note_suggestion"
+                  ],
+                  "priority": 48,
+                  "sourceFactKeys": [
+                    "parking_total_car_count",
+                    "project_unit_count"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "visit",
+                    "parking"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                },
+                {
+                  "key": "project_tower_count",
+                  "label": "10 towers",
+                  "severity": "info",
+                  "scope": "project",
+                  "visualId": "layout",
+                  "value": 10.0,
+                  "valueText": "10",
+                  "surfaces": [
+                    "compare_secondary"
+                  ],
+                  "priority": 44,
+                  "sourceFactKeys": [
+                    "project_tower_count"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "layout",
+                    "project_size"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                },
+                {
+                  "key": "project_max_floors",
+                  "label": "4 floors",
+                  "severity": "info",
+                  "scope": "project",
+                  "visualId": "layout",
+                  "value": 4.0,
+                  "valueText": "4",
+                  "surfaces": [
+                    "compare_secondary"
+                  ],
+                  "priority": 42,
+                  "sourceFactKeys": [
+                    "project_max_floor_count"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "layout",
+                    "project_size"
+                  ],
+                  "compareGroup": "project_density",
+                  "groupId": "project_facts",
+                  "placement": "more"
+                }
+              ]
+            },
+            {
+              "id": "documents",
+              "title": "Documents",
+              "labels": [
+                {
+                  "key": "legal_land_docs_available",
+                  "label": "Land docs available",
+                  "severity": "positive",
+                  "scope": "project",
+                  "visualId": "legal",
+                  "value": 2.0,
+                  "valueText": "2",
+                  "surfaces": [
+                    "compare_secondary",
+                    "admin_audit"
+                  ],
+                  "priority": 30,
+                  "sourceFactKeys": [
+                    "rera_legal_land_document_count"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "legal",
+                    "land_documents"
+                  ],
+                  "compareGroup": "documents",
+                  "groupId": "documents",
+                  "placement": "audit"
+                },
+                {
+                  "key": "floor_plan_available",
+                  "label": "Floor plan available",
+                  "severity": "positive",
+                  "scope": "project",
+                  "visualId": "layout",
+                  "value": 1.0,
+                  "valueText": "1",
+                  "surfaces": [
+                    "compare_secondary",
+                    "admin_audit"
+                  ],
+                  "priority": 24,
+                  "sourceFactKeys": [
+                    "floor_plan_asset_count"
+                  ],
+                  "confidence": 0.85,
+                  "notebookLabels": [
+                    "layout",
+                    "floor_plan"
+                  ],
+                  "compareGroup": "layout",
+                  "groupId": "documents",
+                  "placement": "audit"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "contrast": "Similar profile from the serving bundle",
+      "evidence_delta": {
+        "fact_count": 22,
+        "gap_count": 1,
+        "confidence_pct": 78,
+        "fact_delta": -32,
+        "gap_delta": 0
+      },
+      "channels": [
+        {
+          "channel": "price_band",
+          "score": 0.65
+        },
+        {
+          "channel": "same_builder",
+          "score": 0.25
+        },
+        {
+          "channel": "spatial_nearby",
+          "score": 0.7564821947295441
+        }
+      ],
+      "magnitude": 0.8282411
+    }
+  ]
+}

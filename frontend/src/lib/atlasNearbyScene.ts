@@ -1,10 +1,16 @@
-import { groupCamera, featureCamera } from '../../../experiments/home-atlas/src/camera.ts';
 import { distanceMetres } from '../../../experiments/home-atlas/src/geometry.ts';
-import type { AtlasFeature } from '../../../experiments/home-atlas/src/types.ts';
+import {
+  bearingDegrees,
+  fitCameraToScreen,
+  type AtlasFitPoint,
+  type AtlasScreenFrame,
+} from '../../../experiments/home-atlas/src/screenFit.ts';
+import policy from '../../../app/config/ui/home-atlas.json' with { type: 'json' };
 import type { MapOverlayLine, MapOverlayPolygon } from './types.ts';
 import type { NumberedPlace } from './nearbyPlateProjection.ts';
 
 export type NearbyDepth = 'overview' | 'pair' | 'inspect' | 'home';
+export type AtlasSafeFrame = AtlasScreenFrame;
 type Home = { latitude: number; longitude: number; name: string; boundary?: MapOverlayPolygon };
 const points = (coordinates: [number, number][]) => coordinates.map(([lng, lat]) => ({ lat, lng }));
 
@@ -16,34 +22,110 @@ export function geometryForPlace(place: NumberedPlace, polygons: MapOverlayPolyg
   return { polygons: polygons.filter(owns), lines: lines.filter(owns) };
 }
 
+/** Point-only evidence needs a circular veil opening; mapped extents already have one. */
+export function nearbyPointCutouts(places: NumberedPlace[], visiblePolygons: MapOverlayPolygon[]) {
+  return places.filter(place => geometryForPlace(place, visiblePolygons, []).polygons.length === 0);
+}
+
 export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons: MapOverlayPolygon[],
-  lines: MapOverlayLine[], selectedId: string | null, depth: NearbyDepth, elevation: number, width: number) {
+  lines: MapOverlayLine[], selectedId: string | null, depth: NearbyDepth, elevation: number, width: number,
+  safeFrame?: AtlasSafeFrame, tiltOverride?: number) {
   const origin = { lat: home.latitude, lng: home.longitude };
-  const makeFeature = (id: string, position: {lat: number; lng: number}, boundary?: MapOverlayPolygon): AtlasFeature => ({
-    id, name: id, categoryId: 'context', position,
-    boundary: boundary ? points(boundary.coordinates) : undefined,
-    evidence: { location: {providerId: 'scene'}, distance: {
-      metres: distanceMetres(origin, position), method: 'straight_line', target: 'place_point',
-    } },
-  });
-  const anchor = makeFeature('home', origin, home.boundary);
-  const context = {home: anchor, defaultElevationM: elevation, viewportWidthPx: width,
-    tuning: {maxContextDistanceM: Number.POSITIVE_INFINITY}};
   const selected = places.find(p => (p.feature_id ?? p.name) === selectedId);
-  const active = selected && depth !== 'overview' ? [selected] : places;
   const geometry = selected && depth !== 'overview' ? geometryForPlace(selected, polygons, lines) : {polygons, lines};
-  const features = [
-    ...active.map(p => makeFeature(p.feature_id ?? p.name, {lat:p.latitude, lng:p.longitude})),
-    ...geometry.polygons.filter(p => p.coordinates.length).map(p => makeFeature(p.id, points(p.coordinates)[0], p)),
-    ...geometry.lines.filter(l => l.coordinates.length).map(l => ({...makeFeature(l.id, points(l.coordinates)[0]), segments:[{id:l.id,path:points(l.coordinates)}]})),
+  const frame = safeFrame ?? {
+    width,
+    height: Math.max(390, width * 0.7),
+    left: policy.cameraFit.safeMarginPx,
+    right: policy.cameraFit.safeMarginPx,
+    top: policy.cameraFit.safeMarginPx,
+    bottom: policy.cameraFit.safeMarginPx,
+  };
+  const homeGround = home.boundary?.coordinates.length
+    ? points(home.boundary.coordinates)
+    : [origin];
+  const selectedAnchor = selected
+    ? {lat: selected.latitude, lng: selected.longitude}
+    : undefined;
+  const geometryGround = [
+    ...geometry.polygons.flatMap((polygon) => points(polygon.coordinates)),
+    ...geometry.lines.flatMap((line) => points(line.coordinates)),
   ];
-  if (depth === 'home') return featureCamera(context, anchor);
-  if (depth === 'inspect' && selected) {
-    const focus = makeFeature(selected.feature_id ?? selected.name, {lat:selected.latitude,lng:selected.longitude});
-    if (!geometry.polygons.length && !geometry.lines.length) return featureCamera(context, focus);
-    return {...groupCamera({...context, home:focus}, features), tilt: geometry.polygons.length ? 30 : 50};
+  const marker = (point: {lat: number; lng: number}): AtlasFitPoint => ({
+    ...point,
+    heightM: policy.nearby.markerLiftM,
+  });
+  let fitPoints: AtlasFitPoint[];
+  if (depth === 'home') {
+    fitPoints = [...homeGround, marker(origin)];
+  } else if (selected && selectedAnchor && depth === 'inspect') {
+    // Inspection is a destination portrait. The explicit With home action
+    // restores the relationship composition; fitting a distant home here
+    // makes a close view indistinguishable from comparison.
+    fitPoints = [...geometryGround, selectedAnchor, marker(selectedAnchor)];
+  } else if (selected && selectedAnchor && depth !== 'overview') {
+    fitPoints = [
+      ...homeGround,
+      ...geometryGround,
+      marker(origin),
+      marker(selectedAnchor),
+      ...nearbyRelationArc(home, selected).map((point) => ({
+        lat: point.lat,
+        lng: point.lng,
+        heightM: point.altitude,
+      })),
+    ];
+  } else {
+    fitPoints = [
+      ...homeGround,
+      ...geometryGround,
+      marker(origin),
+      ...places.map((place) => marker({lat: place.latitude, lng: place.longitude})),
+    ];
   }
-  return groupCamera(context, [anchor, ...features]);
+  // Comparisons retain the category overview's orientation. Only the explicit
+  // Look closer action turns toward the selected subject for an oblique view.
+  const target = depth === 'inspect' && selectedAnchor ? selectedAnchor : places.length
+    ? {
+      lat: places.reduce((total, place) => total + place.latitude, 0) / places.length,
+      lng: places.reduce((total, place) => total + place.longitude, 0) / places.length,
+    }
+    : origin;
+  const relationshipHeading = bearingDegrees(origin, target);
+  const heading = depth === 'home'
+    ? policy.cameraFit.homeHeadingDegrees
+    : relationshipHeading + (depth === 'inspect'
+      ? policy.cameraFit.inspectHeadingOffsetDegrees
+      : depth === 'pair'
+      ? policy.cameraFit.pairHeadingOffsetDegrees
+      : policy.cameraFit.overviewHeadingOffsetDegrees);
+  const tilt = depth === 'home'
+    ? policy.cameraFit.homeTilt
+    : depth === 'inspect'
+    ? policy.cameraFit.inspectTilt
+    : depth === 'pair'
+    ? policy.cameraFit.pairTilt
+    : policy.cameraFit.overviewTilt;
+  const minimumRangeM = depth === 'home'
+    ? policy.focus.rangeM
+    : depth === 'inspect'
+    ? policy.cameraFit.inspectMinimumRangeM
+    : depth === 'pair'
+    ? policy.nearby.pairMinimumRangeM
+    : policy.cameraFit.overviewMinimumRangeM;
+  return fitCameraToScreen({
+    points: fitPoints,
+    frame,
+    heading,
+    tilt: tiltOverride ?? tilt,
+    focusPoint: depth === 'inspect' && selectedAnchor ? marker(selectedAnchor) : undefined,
+    fieldOfViewDegrees: policy.cameraFit.fieldOfViewDegrees,
+    minimumRangeM: width < policy.road.mobileBreakpointPx
+      ? minimumRangeM * policy.society.mobileRangeScale
+      : minimumRangeM,
+    opticalPaddingPx: policy.cameraFit.opticalPaddingPx,
+    altitudeM: elevation + policy.cameraFit.centerAltitudeOffsetM,
+  });
 }
 
 /** Elevated straight-line relationship, not a claimed walking route. */

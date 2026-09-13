@@ -515,6 +515,7 @@ export type ArrivalSceneExperience = {
 
 export type MapLayerExperience = {
   kind: string;
+  routeDirection?: "as-mapped" | "reverse";
   waypointSpacingM: number;
   overviewDwellMs?: number;
   dwellMs: number;

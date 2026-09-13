@@ -196,6 +196,17 @@ export function headingAlongRoute(
   return normalizeHeading(Math.atan2(longitude, after.latitude - before.latitude) * 180 / Math.PI);
 }
 
+export function dampHeading(
+  currentHeading: number,
+  targetHeading: number,
+  damping: number,
+  elapsedSeconds: number,
+): number {
+  const delta = (targetHeading - currentHeading + 540) % 360 - 180;
+  const progress = 1 - Math.exp(-Math.max(0, elapsedSeconds) * Math.max(0, damping));
+  return normalizeHeading(currentHeading + delta * progress);
+}
+
 export function projectPointOntoRoute(
   route: AtlasRoute,
   point: AtlasPoint,
