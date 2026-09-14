@@ -130,3 +130,52 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await arrival.screenshot({ path: testInfo.outputPath("mobile-road.png") });
   expect(errors).toEqual([]);
 });
+
+for (const viewport of [{width: 1440, height: 1000}, {width: 390, height: 844}]) {
+  test(`nearby close inspection preserves geometry and context at ${viewport.width}px`, async ({page}, testInfo) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/property/fixture-prestige-waterford-3bhk');
+    const arrival = page.locator('.property-arrival-map--atlas');
+    const map = arrival.locator('gmp-map-3d');
+    await expect(map).toHaveAttribute('data-google-initialized', 'true', {timeout: 30000});
+    for (const category of ['Lakes', 'Schools']) {
+      await arrival.getByRole('button', {name: category, exact: true}).click();
+      await arrival.locator('.property-atlas__place-list button').first().click();
+      await expect(map).toHaveAttribute('data-atlas-depth', 'pair');
+      await expect.poll(() => map.evaluate(el => {
+        const target = Number((el as HTMLElement).dataset.atlasCameraTargetRange);
+        return Math.abs((el as HTMLElement & {range: number}).range - target);
+      }), {timeout: 20000}).toBeLessThan(1);
+      await expect(map).toHaveAttribute('data-google-steady', 'true', {timeout: 20000});
+      await arrival.screenshot({path: testInfo.outputPath(`${category}-pair.png`)});
+      await arrival.getByRole('button', {name: 'Look closer', exact: true}).click();
+      await expect(map).toHaveAttribute('data-atlas-depth', 'inspect');
+      await expect.poll(() => map.evaluate(el => (el as HTMLElement & {tilt: number}).tilt)).toBeGreaterThan(25);
+      await expect.poll(() => map.evaluate(el => {
+        const target = Number((el as HTMLElement).dataset.atlasCameraTargetRange);
+        return Math.abs((el as HTMLElement & {range: number}).range - target);
+      }), {timeout: 20000}).toBeLessThan(1);
+      await expect(map).toHaveAttribute('data-google-steady', 'true', {timeout: 20000});
+      await arrival.screenshot({path: testInfo.outputPath(`${category}-inspect.png`)});
+      const renderer = arrival.locator('[data-atlas-detail-only]');
+      if (await renderer.getAttribute('data-atlas-detail-only') === 'true') {
+        await expect(arrival.locator('.nearby-map__locator')).toBeVisible();
+        await expect(arrival.locator('.nearby-map__locator title')).toContainText('straight-line');
+      }
+      await arrival.getByRole('button', {name: 'With home', exact: true}).click();
+      await expect(map).toHaveAttribute('data-atlas-depth', 'pair');
+      await expect(arrival.locator('.nearby-map__locator')).toHaveCount(0);
+    }
+    // Keep the sourced Purple Line stretch in the scene during station inspection.
+    await arrival.getByRole('button', {name: 'Metro', exact: true}).click();
+    const lineCount = await map.locator('gmp-polyline-3d-interactive').count();
+    await arrival.locator('.property-atlas__place-list button').first().click();
+    await arrival.getByRole('button', {name: 'Look closer', exact: true}).click();
+    await expect(map.locator('gmp-polyline-3d-interactive')).toHaveCount(lineCount + 1);
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    await arrival.getByRole('button', {name: 'With home', exact: true}).click();
+    await expect(map).toHaveAttribute('data-atlas-depth', 'pair');
+    await arrival.getByRole('button', {name: 'Look closer', exact: true}).click();
+    await expect(map).toHaveAttribute('data-atlas-depth', 'inspect');
+  });
+}

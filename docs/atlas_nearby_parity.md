@@ -153,3 +153,67 @@ continuous route contract has no explicit junction-stop collection. Do not turn
 polyline bends, regular waypoints or guessed entrances into buyer stops. A
 follow-up needs sourced stop identities and route associations, then verification
 of pause/resume, speed changes and Street View handoff on the real map.
+
+## Readable close inspection — September 13
+
+Buyer decision: inspection may let home leave the main 3D view when retaining it
+would make the selected subject miniature. Pair/Show together still fit the full
+relationship/category. Entrances and internal-path emphasis are out of scope.
+Geography is never rescaled, moved, or shortened. Purple Line rendering and the
+continuous road geometry remain intact; inspection and road Focus use a lighter
+veil so surrounding buildings and road enclosure remain readable.
+
+`nearbyScenePresentation` chooses among a small configured set of headings and
+fits the sourced subject at a geometry-appropriate tilt. Polygon kind can override
+tilt through `inspection.stylesByKind`; point-only places use an oblique peek
+without inventing a campus. The range budget compares detail versus relationship
+framing, not kilometres. When context costs more than the configured scale budget,
+a small north-up locator carries H, the selected pin number and computed
+straight-line distance. The locator has its own scale and is not a route.
+Mobile inspection uses its measured free canvas and bounded padding, rather than
+multiplying the minimum range to zoom out further.
+
+Manual and tour scenes share the calculation. Google `fov` is explicitly aligned
+with the fitter; existing `flyCameraTo` interpolates the centre/range/tilt change.
+A stale terrain response cannot write the current camera range after selection
+changes. Existing camera ownership, gesture cancellation, pause/resume and reduced
+motion are retained.
+
+References / interaction note:
+- Google Maps 3D reference: https://developers.google.com/maps/documentation/javascript/reference/3d-map
+- Human Atlas selected-bounds fitting beside its inspector:
+  https://github.com/ashemag/human-atlas/blob/553f1db7e23b872cdffcec01fba8e59b88053551/app/scene.tsx
+- ThreeUI research again found no established map-specific implementation to copy.
+  Human Atlas informs selected-bounds fitting, not mesh explosion, artificial
+  geographic lighting, anatomical materials, or its rendering architecture.
+- Rest/hover unchanged. Existing keyboard/touch Look closer and With home controls
+  select the same presentation as tour scenes; reduced motion retains zero-duration
+  dispatch. No extra buyer controls, entrance markers or path annotations.
+
+The earlier tests requiring home inside every inspection were changed for this
+explicit product decision. Pair containment is unchanged; inspection now checks
+subject containment plus explicit locator mode. Tests cover polygon and point
+subjects, north-up locator direction, unrelated-place independence and desktop,
+portrait and landscape framing. These are approximation tests, not terrain or
+photographic-composition proof.
+
+UI critic: no new headings, fact cards or controls. The locator is functional
+context for distant inspection. Its placement, final subject size and occlusion
+need the live-render check below before this draft is ready to merge.
+
+Verification in this workspace: frontend tests, Atlas experiment tests, lint,
+TypeScript/Atlas build and whitespace checks. Node 24 is available here; the
+repository pins Node 22, so CI must confirm the pinned runtime. Existing large
+chunk warning remains. The Maps key is in a checkout-local excluded environment
+file and is not committed.
+
+Live verification is blocked: the cloud browser rejects the local preview with
+ERR_BLOCKED_BY_CLIENT; local Chrome installation fails on container permissions,
+and the Chromium download times out. No after screenshots are claimed. Added
+real-Google desktop/mobile inspection cases to the existing browser suite to
+capture Lakes/Schools pair and inspect, locator return, metro stretch retention,
+and reduced motion. Run `npm run test:atlas-browser` with an authorised key and
+Chrome before merge. Inspect screenshots for terrain/building occlusion and the
+locator covering important geometry; run the existing full journey for gesture,
+pause/resume, road and Street View return. The approximate fitter still does not
+model Google's full perspective or terrain visibility.

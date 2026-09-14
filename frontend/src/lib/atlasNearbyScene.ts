@@ -22,7 +22,7 @@ export function geometryForPlace(place: NumberedPlace, polygons: MapOverlayPolyg
   return { polygons: polygons.filter(owns), lines: lines.filter(owns) };
 }
 
-export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons: MapOverlayPolygon[],
+export function nearbyScenePresentation(home: Home, places: NumberedPlace[], polygons: MapOverlayPolygon[],
   lines: MapOverlayLine[], selectedId: string | null, depth: NearbyDepth, elevation: number, width: number,
   safeFrame?: AtlasSafeFrame, tiltOverride?: number) {
   const origin = { lat: home.latitude, lng: home.longitude };
@@ -103,7 +103,7 @@ export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons:
     : depth === 'pair'
     ? policy.nearby.pairMinimumRangeM
     : policy.cameraFit.overviewMinimumRangeM;
-  return fitCameraToScreen({
+  const fitInput = {
     points: fitPoints,
     frame,
     heading,
@@ -115,7 +115,59 @@ export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons:
       : minimumRangeM,
     opticalPaddingPx: policy.cameraFit.opticalPaddingPx,
     altitudeM: elevation + policy.cameraFit.centerAltitudeOffsetM,
+  };
+  const camera = fitCameraToScreen(fitInput);
+  if (depth !== 'inspect' || !selectedAnchor || !selected) {
+    return {camera, detailOnly: false};
+  }
+
+  // Selected geometry controls inspection; distant context must not make it
+  // miniature. Candidate headings expose geometry without moving any fact.
+  const kind = geometry.polygons[0]?.kind ?? geometry.lines[0]?.kind;
+  const style = kind
+    ? (policy.inspection.stylesByKind as Record<string, {tilt: number}>)[kind]
+    : undefined;
+  const inspectTilt = tiltOverride ?? style?.tilt ?? (geometry.polygons.length
+    ? policy.inspection.polygonTilt
+    : geometry.lines.length ? policy.inspection.lineTilt : policy.inspection.defaultTilt);
+  const subjectPoints = [...geometryGround, selectedAnchor, marker(selectedAnchor)];
+  const candidates = policy.inspection.headingOffsetsDegrees.map(offset => {
+    const input = {...fitInput, heading: heading + offset, tilt: inspectTilt,
+      minimumRangeM: policy.inspection.minimumRangeM,
+      // On small canvases do not spend most of the available height on padding.
+      opticalPaddingPx: Math.min(policy.inspection.opticalPaddingPx,
+        Math.max(0, (frame.width - frame.left - frame.right) * policy.inspection.maximumPaddingFraction),
+        Math.max(0, (frame.height - frame.top - frame.bottom) * policy.inspection.maximumPaddingFraction)),
+    };
+    const detail = fitCameraToScreen({...input, points: subjectPoints});
+    const together = fitCameraToScreen(input);
+    // A screen-scale budget, not a kilometre cutoff: large distant geometry
+    // may still fit with home, while a small nearby building may not.
+    const detailOnly = together.range > detail.range * policy.inspection.maximumContextScale;
+    return {camera: detailOnly ? detail : together, detailOnly,
+      score: (detailOnly ? detail.range : together.range) * (1 + Math.abs(offset) * policy.inspection.headingPenaltyPerDegree)};
   });
+  const best = candidates.reduce((a, b) => b.score < a.score ? b : a);
+  return {camera: best.camera, detailOnly: best.detailOnly};
+}
+
+export function nearbySceneCamera(...args: Parameters<typeof nearbyScenePresentation>) {
+  return nearbyScenePresentation(...args).camera;
+}
+
+/** North-up geographic relationship, separately framed and never a travel route. */
+export function nearbyLocator(home: Home, selected: NumberedPlace) {
+  const bearing = bearingDegrees({lat: home.latitude, lng: home.longitude},
+    {lat: selected.latitude, lng: selected.longitude}) * Math.PI / 180;
+  const dx = Math.sin(bearing), dy = -Math.cos(bearing);
+  const halfWidth = 38, halfHeight = 12;
+  const scale = Math.min(halfWidth / Math.max(Math.abs(dx), 1e-6),
+    halfHeight / Math.max(Math.abs(dy), 1e-6));
+  const metres = distanceMetres({lat: home.latitude, lng: home.longitude},
+    {lat: selected.latitude, lng: selected.longitude});
+  return {home: {x: 60 - dx * scale, y: 30 - dy * scale},
+    place: {x: 60 + dx * scale, y: 30 + dy * scale},
+    distance: metres < 1000 ? `${Math.round(metres)} m` : `${(metres / 1000).toFixed(1)} km`};
 }
 
 /** Elevated straight-line relationship, not a claimed walking route. */
