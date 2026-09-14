@@ -23,6 +23,8 @@ import {
   geometryForPlace,
   nearbyRelationArc,
   nearbySceneCamera,
+  nearbyScenePresentation,
+  nearbyLocator,
   type AtlasSafeFrame,
   type NearbyDepth,
 } from '../../lib/atlasNearbyScene.ts';
@@ -153,6 +155,7 @@ type Popover3DElement = Map3DChild & {
 type Maps3DLibrary = {
   Map3DElement: new (options: {
     center: LatLngAltitude;
+    fov?: number;
     defaultUIHidden?: boolean;
     gestureHandling?: "COOPERATIVE" | "GREEDY";
     heading: number;
@@ -714,6 +717,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
             lng: initialCamera.center.longitude,
             altitude: initialCamera.center.altitude,
           },
+          fov: policy.cameraFit.fieldOfViewDegrees,
           defaultUIHidden: true,
           gestureHandling: "COOPERATIVE",
           heading: initialCamera.heading,
@@ -1027,7 +1031,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     }
     if (quiet) {
       const mask = new library.Polygon3DElement({ altitudeMode: 'CLAMP_TO_GROUND',
-        fillColor: policy.quiet.fill, strokeColor: '#00000000', strokeWidth: 0 });
+        fillColor: nearbyDepth === 'inspect' || roadTourActive ? policy.inspection.contextFill : policy.quiet.fill, strokeColor: '#00000000', strokeWidth: 0 });
       const r = policy.quiet.radiusDegrees;
       mask.path = [
         {lat: home.latitude-r, lng: home.longitude-r}, {lat: home.latitude-r, lng: home.longitude+r},
@@ -1379,7 +1383,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           durationMillis: window.matchMedia('(prefers-reduced-motion: reduce)').matches
             ? 0
             : durationMs,
-          endCamera: item.scene.camera,
+          endCamera: {...item.scene.camera, fov: policy.cameraFit.fieldOfViewDegrees},
         });
       });
     };
@@ -1428,7 +1432,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           ? Math.min(nearbyTransitionMs, remainingMs)
           : nearbyTransitionMs;
         map.flyCameraTo({durationMillis: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : durationMs,
-          endCamera: nextCamera});
+          endCamera: {...nextCamera, fov: policy.cameraFit.fieldOfViewDegrees}});
       });
     };
     const unregister = playbackController.registerResumer(move);
@@ -1436,12 +1440,25 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       const pose = nearbySceneCamera(home, places, polygons ?? [], [...metroLines, ...contextLines], selectedPlaceId,
         nearbyDepth, elevation, containerRef.current?.clientWidth ?? window.innerWidth, safeFrame,
         above ? policy.above.tilt : undefined);
+      if (cancelled || cameraMoveRef.current !== moveId) return;
       camera = pose;
       map.dataset.atlasCameraTargetRange = String(camera.range);
       move();
     }).catch(() => undefined);
     return () => {cancelled = true; unregister();};
   }, [above, selectedPlaceId, nearbyDepth, nearbyTransitionMs, places, home, polygons, metroLines, contextLines, cameraMode, terrainCorridor, playbackController, playbackState, ready, roadTourActive, safeFrame, streetRequested]);
+
+  const inspectionLocator = useMemo(() => {
+    if (!safeFrame || cameraMode !== 'evidence' || nearbyDepth !== 'inspect'
+      || roadTourActive || streetRequested) return null;
+    const selected = places.find(place => (place.feature_id ?? place.name) === selectedPlaceId);
+    if (!selected) return null;
+    const presentation = nearbyScenePresentation(home, places, polygons ?? [],
+      [...metroLines, ...contextLines], selectedPlaceId, nearbyDepth, groundElevation, mapWidth,
+      safeFrame, above ? policy.above.tilt : undefined);
+    return presentation.detailOnly ? {...nearbyLocator(home, selected), number: selected.number} : null;
+  }, [safeFrame, cameraMode, nearbyDepth, roadTourActive, streetRequested, places, selectedPlaceId,
+    home, polygons, metroLines, contextLines, groundElevation, mapWidth, above]);
 
   if (loadError) throw loadError;
 
@@ -1455,6 +1472,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       role="region"
       aria-label="Nearby evidence map"
       aria-busy={!ready}
+      data-atlas-detail-only={Boolean(inspectionLocator)}
       data-map-renderer={streetViewReady ? "google-street-view" : "google-3d"}
     >
       <div
@@ -1469,6 +1487,22 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         aria-hidden={!streetViewReady}
         inert={!streetViewReady}
       />
+      {inspectionLocator && safeFrame && (
+        <svg className="nearby-map__locator" viewBox="0 0 120 76" role="img"
+          aria-label="North-up location of home and selected place; straight-line relationship, separate scale"
+          style={{left: safeFrame.left, top: safeFrame.top,
+            width: policy.inspection.locatorWidthPx, height: policy.inspection.locatorHeightPx}}>
+          <title>{inspectionLocator.distance} straight-line from home; north-up, separate scale</title>
+          <text x="110" y="13" className="nearby-map__locator-north">N</text>
+          <line x1={inspectionLocator.home.x} y1={inspectionLocator.home.y}
+            x2={inspectionLocator.place.x} y2={inspectionLocator.place.y} />
+          <circle cx={inspectionLocator.home.x} cy={inspectionLocator.home.y} r="10" />
+          <text x={inspectionLocator.home.x} y={inspectionLocator.home.y}>H</text>
+          <circle cx={inspectionLocator.place.x} cy={inspectionLocator.place.y} r="10" />
+          <text x={inspectionLocator.place.x} y={inspectionLocator.place.y}>{inspectionLocator.number}</text>
+          <text x="60" y="65">{inspectionLocator.distance}</text>
+        </svg>
+      )}
       {roadTourActive && accessLines[0]?.name && (
         <div className="nearby-map__road-title">
           {accessLines[0].name}

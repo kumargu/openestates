@@ -24,6 +24,8 @@ import { AtlasCameraArbiter } from "../src/lib/atlasCameraArbiter.ts";
 import {
   geometryForPlace,
   nearbySceneCamera,
+  nearbyScenePresentation,
+  nearbyLocator,
   nearbyRelationArc,
 } from '../src/lib/atlasNearbyScene.ts';
 import { buildNumberedPlaces, resolveHomeAnchor } from '../src/lib/nearbyPlateProjection.ts';
@@ -73,14 +75,12 @@ test('nearby relationship keeps home, uses real extents and never drops distant 
   assert.ok(pair.range >= 950);
   assert.ok(pair.range <= pairDistance * 2.2, 'pair stays prominent instead of framing excess geography');
   const close = nearbySceneCamera(home, places, polygons, [], selected.feature_id!, 'inspect', 900, 1400);
-  assert.equal(close.tilt, atlasPolicy.cameraFit.inspectTilt);
-  assert.equal(
-    close.heading,
+  assert.equal(close.tilt, atlasPolicy.inspection.stylesByKind.lake.tilt);
+  assert.ok(atlasPolicy.inspection.headingOffsetsDegrees.some(offset => close.heading ===
     (bearingDegrees(
       {lat: home.latitude, lng: home.longitude},
       {lat: selected.latitude, lng: selected.longitude},
-    ) + atlasPolicy.cameraFit.inspectHeadingOffsetDegrees) % 360,
-  );
+    ) + atlasPolicy.cameraFit.inspectHeadingOffsetDegrees + offset + 360) % 360));
   const distant = {...selected, latitude:home.latitude+0.15, longitude:home.longitude, feature_id:'distant', place_entity_id:'distant'};
   const broad = nearbySceneCamera(home, [distant], [], [], null, 'overview', 900, 1400);
   assert.ok(broad.range > overview.range, 'backend-scoped evidence must not be silently radius-filtered');
@@ -194,7 +194,7 @@ test('nearby comparisons preserve orientation when selecting opposite-side alter
   }
 });
 
-test('inspect framing gives selected geometry more screen presence while retaining home', () => {
+test('inspect prioritises selected geometry and explicitly moves distant home to locator', () => {
   const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
   const home = resolveHomeAnchor(context)!;
   const places = buildNumberedPlaces(context.places.filter(place => place.layer === 'lake'));
@@ -217,13 +217,14 @@ test('inspect framing gives selected geometry more screen presence while retaini
     );
   };
   assert.ok(span(inspect) > span(pair));
-  const homeMarker = projectCameraPointToScreen(inspect, {
-    lat: home.latitude,
-    lng: home.longitude,
-    heightM: atlasPolicy.nearby.markerLiftM,
-  }, frame, atlasPolicy.cameraFit.fieldOfViewDegrees);
-  assert.ok(homeMarker.x >= frame.left && homeMarker.x <= frame.width - frame.right);
-  assert.ok(homeMarker.y >= frame.top && homeMarker.y <= frame.height - frame.bottom);
+  const presentation = nearbyScenePresentation(home, places, polygons, [], selected.feature_id!,
+    'inspect', 900, 1440, frame);
+  assert.ok(presentation.detailOnly, 'distant home has an explicit locator presentation');
+  for (const point of geometry) {
+    const p = projectCameraPointToScreen(inspect, point, frame, atlasPolicy.cameraFit.fieldOfViewDegrees);
+    assert.ok(p.x >= frame.left && p.x <= frame.width - frame.right);
+    assert.ok(p.y >= frame.top && p.y <= frame.height - frame.bottom);
+  }
 });
 
 test('missing place collections stay a calm sparse scene', () => {
@@ -262,7 +263,7 @@ test('inspect spends spare frame space on selection without sacrificing home or 
   }
 });
 
-test('Aerial refits the selected relationship at its final tilt, including mobile', () => {
+test('Aerial contains its subject at final tilt; pair still contains the full relationship', () => {
   const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
   const home = {...resolveHomeAnchor(context)!, boundary: context.home.boundary};
   const places = buildNumberedPlaces(context.places.filter(place => place.layer === 'lake'));
@@ -283,9 +284,13 @@ test('Aerial refits the selected relationship at its final tilt, including mobil
       const camera = nearbySceneCamera(home, places, polygons, [], selected.feature_id!, depth,
         900, frame.width, frame, atlasPolicy.above.tilt);
       assert.equal(camera.tilt, atlasPolicy.above.tilt);
-      for (const point of points) {
+      const contained = depth === 'pair' ? points : [
+        ...polygons.flatMap(p => p.coordinates.map(([lng, lat]) => ({lat, lng, heightM: 0}))),
+        {lat: selected.latitude, lng: selected.longitude, heightM: atlasPolicy.nearby.markerLiftM},
+      ];
+      for (const point of contained) {
         const p = projectCameraPointToScreen(camera, point, frame, atlasPolicy.cameraFit.fieldOfViewDegrees);
-        const padding = atlasPolicy.cameraFit.opticalPaddingPx - 0.5;
+        const padding = depth === 'pair' ? atlasPolicy.cameraFit.opticalPaddingPx - 0.5 : 0;
         assert.ok(p.x >= frame.left + padding && p.x <= frame.width - frame.right - padding);
         assert.ok(p.y >= frame.top + padding && p.y <= frame.height - frame.bottom - padding);
       }
@@ -378,4 +383,37 @@ test("missing and invalid geometry never creates a synthetic road", () => {
     ]),
     null,
   );
+});
+
+
+test('inspection retains nearby home, handles point-only places, and does not let unrelated geometry shrink detail', () => {
+  const home = {latitude: 12.98, longitude: 77.74, name: 'Home'};
+  const near = {id: 'near', feature_id: 'near', number: 1, name: 'Place', layer: 'school',
+    latitude: 12.9801, longitude: 77.7401};
+  const far = {...near, id: 'far', feature_id: 'far', latitude: 13.02, longitude: 77.78};
+  for (const frame of [
+    {width: 1440, height: 1000, left: 32, right: 420, top: 96, bottom: 120},
+    {width: 390, height: 844, left: 16, right: 16, top: 160, bottom: 420},
+    {width: 844, height: 390, left: 16, right: 300, top: 70, bottom: 100},
+  ]) {
+    const close = nearbyScenePresentation(home, [near], [], [], 'near', 'inspect', 900, frame.width, frame);
+    assert.equal(close.detailOnly, false);
+    assert.equal(close.camera.tilt, atlasPolicy.inspection.defaultTilt);
+    const detail = nearbyScenePresentation(home, [near, far], [], [], 'far', 'inspect', 900, frame.width, frame);
+    assert.equal(detail.detailOnly, true);
+    assert.deepEqual(detail, nearbyScenePresentation(home, [far], [], [], 'far', 'inspect', 900, frame.width, frame));
+    for (const [presentation, subjects] of [[close, [home, near]], [detail, [far]]] as const) {
+      for (const subject of subjects) {
+        const screen = projectCameraPointToScreen(presentation.camera,
+          {lat: subject.latitude, lng: subject.longitude, heightM: atlasPolicy.nearby.markerLiftM},
+          frame, atlasPolicy.cameraFit.fieldOfViewDegrees);
+        assert.ok(screen.x >= frame.left && screen.x <= frame.width - frame.right);
+        assert.ok(screen.y >= frame.top && screen.y <= frame.height - frame.bottom);
+      }
+    }
+  }
+  const locator = nearbyLocator(home, far);
+  assert.ok(locator.place.x > locator.home.x, 'east stays right in north-up locator');
+  assert.ok(locator.place.y < locator.home.y, 'north stays up');
+  assert.deepEqual(geometryForPlace(far, [], []), {polygons: [], lines: []}, 'no invented campus');
 });

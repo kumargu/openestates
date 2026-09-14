@@ -950,3 +950,22 @@
     animation: none;
   }
 }
+
+/* A separately framed, north-up relationship while the 3D camera inspects detail. */
+.nearby-map__locator {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 8px;
+  background: rgb(18 29 31 / 82%);
+  color: #f6f6ef;
+}
+.nearby-map__locator line { stroke: #c5d5cb; stroke-width: 1.5; stroke-dasharray: 3 3; }
+.nearby-map__locator circle { fill: #263d39; stroke: #d6edbc; stroke-width: 1; }
+.nearby-map__locator text {
+  fill: currentColor;
+  font: 500 12px system-ui;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.nearby-map__locator .nearby-map__locator-north { fill: #c5d5cb; }

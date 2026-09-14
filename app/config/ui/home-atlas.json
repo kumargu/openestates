@@ -70,5 +70,31 @@
     "lake": { "fill": "#7dd8f426", "stroke": "#7dd8f4cc" },
     "road": { "fill": "#f4c17618", "stroke": "#f4c176dd" },
     "metro": { "fill": "#d5a7ff18", "stroke": "#d5a7ffdd" }
+  },
+  "inspection": {
+    "minimumRangeM": 280,
+    "maximumContextScale": 1.3,
+    "maximumPaddingFraction": 0.08,
+    "headingPenaltyPerDegree": 0.0027777778,
+    "opticalPaddingPx": 28,
+    "headingOffsetsDegrees": [
+      0,
+      -25,
+      25
+    ],
+    "defaultTilt": 58,
+    "polygonTilt": 40,
+    "lineTilt": 58,
+    "stylesByKind": {
+      "lake": {
+        "tilt": 32
+      },
+      "park": {
+        "tilt": 38
+      }
+    },
+    "locatorWidthPx": 120,
+    "locatorHeightPx": 76,
+    "contextFill": "#061b2840"
   }
 }
