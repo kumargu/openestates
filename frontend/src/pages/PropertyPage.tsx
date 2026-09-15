@@ -330,7 +330,11 @@ function PropertyPageBody({
     if (!propertyId) return;
     let cancelled = false;
 
-    getPropertySurface(propertyId, ARRIVAL_STORY_SURFACE_ID)
+    getPropertySurface(
+      propertyId,
+      ARRIVAL_STORY_SURFACE_ID,
+      propertySceneProofFocus(proofFocus),
+    )
       .then((scene) => {
         if (cancelled) return;
         setArrivalScene(scene);
@@ -345,7 +349,7 @@ function PropertyPageBody({
     return () => {
       cancelled = true;
     };
-  }, [data?.property?.id]);
+  }, [data?.property?.id, proofFocus]);
 
   useEffect(() => {
     if (
@@ -480,6 +484,22 @@ function PropertyPageBody({
       },
     }
     : story;
+  const propertyActions = (
+    <>
+      <SaveHeartButton
+        propertyId={p.id}
+        className="property-action-link property-action-save"
+        label="Save"
+      />
+      <NotebookCommentAnchor
+        propertyId={p.id}
+        labels={[]}
+        detail={displayTitle}
+        source="Property detail"
+        label="Note"
+      />
+    </>
+  );
 
   if (arrivalSceneStatus === "loading") {
     return (
@@ -540,22 +560,7 @@ function PropertyPageBody({
             sectionId="property-cover"
             story={pageStory}
             identityPlacement="overlay"
-            actions={(
-              <>
-                <SaveHeartButton
-                  propertyId={p.id}
-                  className="property-action-link property-action-save"
-                  label="Save"
-                />
-                <NotebookCommentAnchor
-                  propertyId={p.id}
-                  labels={[]}
-                  detail={displayTitle}
-                  source="Property detail"
-                  label="Note"
-                />
-              </>
-            )}
+            actions={propertyActions}
             playback={{
               playing: storyPlaying,
               onPlayingChange: setStoryPlaying,
@@ -568,16 +573,21 @@ function PropertyPageBody({
             {hasAtlasScene && arrivalContext ? (
               <section
                 id="around-this-home"
-                className="property-atlas-chapter"
-                aria-labelledby="property-atlas-chapter-title"
+                className="property-map-section"
+                aria-labelledby="around-this-home-title"
                 tabIndex={-1}
               >
                 <header className="property-story-heading">
-                  <h2 id="property-atlas-chapter-title">Around this home.</h2>
+                  <span>Location</span>
+                  <h2 id="around-this-home-title">Around this home.</h2>
                 </header>
                 <PropertyArrivalMap
-                  key={`${p.id}:atlas`}
+                  key={`${p.id}:atlas:${proofFocus?.layerId ?? "default"}:${proofFocus?.featureId ?? proofFocus?.entityId ?? ""}`}
+                  propertyId={p.id}
                   context={arrivalContext}
+                  initialProofFocus={proofFocus
+                    ? arrivalContext.proof_focus
+                    : undefined}
                   searchContextSocieties={searchContextSocieties}
                   presentation="atlas"
                 />

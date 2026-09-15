@@ -144,6 +144,7 @@ export function PropertyArrivalFilm({
       {showMap && mapContext ? (
         <PropertyArrivalMap
           key={propertyId}
+          propertyId={propertyId}
           context={mapContext}
           searchContextSocieties={searchContextSocieties}
           presentation={presentation}

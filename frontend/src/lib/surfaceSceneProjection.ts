@@ -73,7 +73,7 @@ export function propertyMapContextFromSurfaceScene(
     layers,
     arrivalExperience: scene.experience ?? fallback?.arrivalExperience,
     places,
-    proof_focus: scene.proofFocus,
+    proof_focus: scene.proofFocus ?? fallback?.proof_focus,
     water: fallback?.water,
     metro_lines: mergeLines(accessLines, fallback?.metro_lines ?? []),
     access_lines: mergedAccessLines,

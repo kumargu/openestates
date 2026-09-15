@@ -7,8 +7,10 @@ Branch: `feat/home-atlas-property-integration`. Prepared from `origin/main` at
 The archived experiment remains intact. This integration changes the real
 property page, not the Sites prototype. When an `arrival_story` scene carries a
 valid anchor and experience policy, it joins the normal property journey: a
-three-frame cinematic hero, Home + Nearby Atlas, a separate approach-road
-chapter, and reviews. The workspace sidebar remains the sole navigation shell.
+three-frame cinematic hero, the existing `Around this home` chapter frame, the
+existing `The way in` chapter frame, and reviews. The two chapter frames now
+render the sourced 3D geometry and approach journey. The workspace sidebar
+remains the sole navigation shell.
 Properties without that immersive scene keep the existing 2D evidence path. The
 Rust serving contract is unchanged.
 
@@ -75,16 +77,36 @@ by this change. Do not describe that separate layout as integrated.
 
 ## Buyer experience
 
-- The cinematic hero owns the property name, facts, Save, and Note. Atlas does
-  not repeat them.
-- Atlas opens on the home. Nearby layers live in one compact on-map panel;
-  direct row toggles replace the old Home / Arrival / Nearby tabs and dropdown.
+- The cinematic hero remains its own first chapter and owns the property name,
+  facts, Save, and Note.
+- `Around this home` remains a separate location chapter. Its map is replaced
+  by the sourced 3D Atlas without changing the surrounding page composition.
+- `The way in` remains the next arrival chapter and uses the dynamic approach
+  geometry.
+- Atlas opens on the home inside the original `Around this home` shell. Its
+  narrow left rail keeps Schools, Hospitals, Tech parks, Parks, Lakes, and
+  Metro outside the map instead of covering rendered geometry.
+- Choosing a layer fits its scoped evidence with the home; choosing a
+  destination fits the home-to-place pair.
+- The hero is intentionally shorter than the evidence chapters. Nearby has a
+  taller resting frame and can grow vertically for active layers, selections,
+  and tours.
+- The restored layer rail is slightly narrower than its pre-126 width. Its
+  active row ends in an arrow. During tour playback it folds to icon width so
+  the map gains space; pause or completion restores labels and radius controls.
 - A segmented 2 km / 5 km / All control scopes every Nearby point layer.
-  Changing it updates the map, row counts, list, and tour. A selected or
-  search-matched place remains visible outside the chosen radius.
+  Changing it updates the map markers and tour. A selected or search-matched
+  place remains visible outside the chosen radius. The radius is visually
+  inactive until a layer is selected.
 - Scene-derived Schools, Hospitals, Tech parks, Parks, Lakes, Breweries, and
   Metro remain payload-driven. One layer is shown at a time so eligibility and
   proof stay legible.
+- Layer rows remain stable when a radius has no matching point. A quiet map
+  state explains the empty scope; line or polygon geometry still renders.
+- Search proof focus is forwarded to the arrival scene and opens the matching
+  layer or place. Selected places retain Directions, Source, and Add note
+  actions, and closing a selection returns keyboard focus to its layer row.
+- The existing full-screen map action remains available with the 3D renderer.
 - Metro points and the actual API-provided track segments. Segments stay separate;
   no straight line is invented between stations. Browse, selected place, and
   category tour reuse one camera owner.
@@ -122,18 +144,20 @@ by this change. Do not describe that separate layout as integrated.
 
 ## Interaction/design note
 
-[#137](https://github.com/kumargu/openestates/issues/137) borrows Human Atlas's
-spatial separation: layers on the left, camera actions on the right, and the
-subject in the available center. It applies that pattern to sourced property
-geometry without borrowing the anatomical dashboard, multi-layer combinations,
-explode slider, auto-rotation, or decorative orbit.
+[#137](https://github.com/kumargu/openestates/issues/137) restores the exact
+pre-126 `Around this home` composition: a narrow layer rail on the left and the
+map in its own uninterrupted slot. Only the renderer and camera behavior change;
+the old OSM map is replaced by sourced Google 3D geometry. The anatomical
+dashboard, multi-layer combinations, explode slider, auto-rotation, and
+decorative orbit were not borrowed.
 
-At rest, all Nearby switches are off and the home remains the subject. Hover,
-keyboard focus, and pressed states are explicit. Selecting a row expands only
-that layer's scoped places; selecting a place adds Directions locally and fits
-the home-to-place pair between both control rails. Reduced motion skips
-automatic flights. The browser layout is the completed target in this pass;
-touch/mobile adaptation remains a separate follow-up.
+At rest, the cinematic hero remains the first chapter and `Around this home`
+opens on the home-focused map with all layer switches off. Choosing a layer
+fits its scoped evidence; selecting a destination fits the pair. The layer rail
+never enters the map footprint, so camera framing no longer needs drawer
+collision behavior. Reduced motion skips automatic flights. Touch/mobile
+adaptation keeps the full horizontal layer controls instead of using the
+desktop tour fold.
 
 Nearby motion reuses the existing sourced chapter sequence through one rail
 control that becomes Pause and Resume. No timeline, speed control, or decorative
@@ -146,17 +170,22 @@ available from its existing action.
 The selected place remains selected while the inspector is visible. A selected
 home-to-destination relationship rotates onto the map's wide axis before fitting,
 so bearing alone cannot force a much wider camera range. Camera fitting reserves
-the layer panel and camera rail before solving the scene. A direct gesture
-interrupts a tour without moving the camera.
-Searched for a directly applicable ThreeUI map interaction; no specific additional
-map implementation was established. No unverified ThreeUI source is claimed.
-Did not borrow anatomical geometry, explosion/lift, or side-by-side map
-comparisons.
+the camera rail; the layer rail sits outside the rendered map. A direct gesture interrupts a tour
+without moving the camera. Pair scenes use sourced markers and geometry only;
+the straight-line distance remains in the selected row instead of drawing a
+synthetic connector that could be mistaken for a route.
 
-Rest: hero followed by the home-focused Atlas. Browse: one active layer, direct
-radius choices, and its nearby rows. Selected: the same row adds rating and
-Directions. Tour: one play/pause action appears on the camera rail. Save and Note
-stay on the hero.
+ThreeUI's Animated Top Dock was checked for its pointer, focus, and
+reduced-motion treatment. Its proximity spring, item growth, shader/glass
+variants, and decorative motion were intentionally not borrowed: this stage
+needs stable targets and the map already supplies motion.
+
+Rest: shorter cinematic hero followed by the taller home-focused location
+chapter. Browse: the persistent side rail, direct radius choices, and one
+arrow-marked active layer. Selected: a compact map card adds distance and
+Directions. Tour: one play/pause action appears on the camera rail; the rail
+folds only while playback is running and unfolds on pause. Save and Note stay
+on the hero.
 
 ## Verification and remaining gate
 
@@ -176,10 +205,11 @@ captures the hero, Home + Nearby Atlas, selected pair, approach road, and review
 `frontend/test-results/atlas/`. It requires the Google key and working real 3D;
 it does not silently pass using a mocked renderer.
 
-The localhost browser pass used real Google 3D. It confirmed the three-frame
-hero, default home framing, 2 km scope, layer toggles, selected-pair clearance,
-Approach Road playback controls, and restored Google reviews. Mobile was not
-treated as an acceptance target for this iteration.
+The localhost browser pass used real Google 3D. It confirmed the restored
+hero → Around this home → The way in → reviews composition, the pre-126 layer
+rail, home and category framing, 2 km scope, layer toggles, the purple Metro
+track, and Approach Road.
+Mobile was not treated as an acceptance target for this iteration.
 
 Observed in this environment: lint, TypeScript, the production build, all 280
 frontend tests, and `git diff --check` pass.

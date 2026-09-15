@@ -1653,7 +1653,7 @@
 }
 
 .nearby-plate__story-layout .nearby-plate__canvas {
-  height: clamp(32rem, 64svh, 42rem);
+  height: var(--property-story-nearby-height, clamp(36rem, 68svh, 46rem));
   border-color: var(--property-story-rule, rgba(32, 39, 33, 0.14));
   border-radius: 16px;
 }

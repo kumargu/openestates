@@ -37,7 +37,7 @@
     "strokeColor": "#d5a7ff",
     "strokeWidth": 5,
     "altitudeMode": "clamp_to_ground",
-    "drawsOccludedSegments": false
+    "drawsOccludedSegments": true
   },
   "boundary": { "fill": "#f8f1df12", "stroke": "#fff7e3e6" },
   "quiet": { "fill": "#061b2870", "radiusDegrees": 0.08 },
@@ -78,7 +78,6 @@
     }
   },
   "stageLayout": {
-    "nearbyPanelWidthPx": 240,
     "cameraRailClearancePx": 76
   },
   "geometryStyles": {

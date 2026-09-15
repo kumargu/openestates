@@ -21,7 +21,6 @@ import type { AtlasFeature, AtlasScene } from "../../../../experiments/home-atla
 import { atlasPolicy as policy } from "../../lib/atlasUiPolicy.ts";
 import {
   geometryForPlace,
-  nearbyRelationArc,
   nearbySceneCamera,
   type AtlasSafeFrame,
   type NearbyDepth,
@@ -1176,7 +1175,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
             width: contextLine.style.strokeWidth,
             outerColor: "#ffffffcc",
             outerWidth: 0.35,
-            drawsOccludedSegments: false,
+            drawsOccludedSegments: contextLine.style.drawsOccludedSegments,
           },
           null,
           nextChildren,
@@ -1207,15 +1206,6 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     }
 
     let activePopover: Popover3DElement | null = null;
-    if (selected && cameraMode === 'evidence') {
-      const arc = new library.Polyline3DInteractiveElement({
-        altitudeMode: 'RELATIVE_TO_GROUND', path: nearbyRelationArc(home, selected),
-        strokeColor: '#d6edbcc4', strokeWidth: 3, drawsOccludedSegments: false,
-      });
-      arc.setAttribute('aria-label', 'Straight-line relationship to home, not a travel route');
-      arc.dataset.atlasRelationship = 'true';
-      map.append(arc); nextChildren.push(arc);
-    }
     const markerPlaces = roadTourActive || nearbyDepth === 'home'
       ? []
       : places;

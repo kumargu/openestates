@@ -6,6 +6,10 @@
   --property-story-rule: rgba(32, 39, 33, 0.14);
   --property-story-caution: #a64f36;
   --property-story-media-height: clamp(28rem, 58svh, 38rem);
+  --property-story-hero-height: clamp(28rem, 54svh, 36rem);
+  --property-story-deck-height: clamp(32rem, 64svh, 42rem);
+  --property-story-nearby-height: clamp(36rem, 68svh, 46rem);
+  --property-story-nearby-expanded-height: clamp(40rem, 76svh, 52rem);
   --property-story-section-space: clamp(4rem, 8vw, 7rem);
   max-width: none;
   padding: 0;
