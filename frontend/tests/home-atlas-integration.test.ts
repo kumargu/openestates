@@ -22,7 +22,6 @@ import {
 import atlasPolicy from "../../app/config/ui/home-atlas.json" with { type: "json" };
 import { AtlasCameraArbiter } from "../src/lib/atlasCameraArbiter.ts";
 import {
-  chooseAtlasPanelPlacement,
   initialAtlasNearbyUiState,
   reduceAtlasNearbyUi,
 } from "../src/lib/atlasNearbyUi.ts";
@@ -96,32 +95,6 @@ test("Nearby UI has one reversible state and preserves selected context", () => 
     [state.mode, state.selectedPlaceId, state.framing],
     ["browse", "school:one", "closer"],
   );
-});
-
-test("Nearby panel consumes only space that leaves the configured map minimum", () => {
-  const place = (
-    width: number,
-    height: number,
-    mode: "browse" | "selected",
-    previousPlacement: "none" | "side" | "bottom" = "none",
-  ) => chooseAtlasPanelPlacement({
-    width,
-    height,
-    mode,
-    previousPlacement,
-    minimumMapWidthPx: atlasPolicy.stageLayout.minimumMapWidthPx,
-    minimumMapHeightPx: atlasPolicy.stageLayout.minimumMapHeightPx,
-    browsePanelWidthPx: atlasPolicy.stageLayout.browsePanelWidthPx,
-    compactPanelWidthPx: atlasPolicy.stageLayout.compactPanelWidthPx,
-    placementHysteresisPx: atlasPolicy.stageLayout.placementHysteresisPx,
-  });
-  assert.equal(place(1232, 768, "browse"), "side");
-  assert.equal(place(1072, 668, "browse"), "side");
-  assert.equal(place(992, 668, "browse"), "bottom");
-  assert.equal(place(390, 650, "selected"), "bottom");
-  assert.equal(place(1072, 420, "browse"), "bottom");
-  assert.equal(place(1035, 668, "browse", "side"), "side");
-  assert.equal(place(1035, 668, "browse", "bottom"), "bottom");
 });
 
 test('nearby relationship keeps home, uses real extents and never drops distant API evidence', () => {

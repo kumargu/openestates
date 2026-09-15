@@ -5,7 +5,7 @@ import {
   type AtlasFitPoint,
   type AtlasScreenFrame,
 } from '../../../experiments/home-atlas/src/screenFit.ts';
-import policy from '../../../app/config/ui/home-atlas.json' with { type: 'json' };
+import { atlasPolicy as policy } from './atlasUiPolicy.ts';
 import type { MapOverlayLine, MapOverlayPolygon } from './types.ts';
 import type { NumberedPlace } from './nearbyPlateProjection.ts';
 

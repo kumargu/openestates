@@ -7,7 +7,7 @@ import {
   type AtlasCameraPose,
   type AtlasRoute,
 } from "../../../experiments/home-atlas/src/journey.ts";
-import policy from "../../../app/config/ui/home-atlas.json" with { type: "json" };
+import { atlasPolicy as policy } from "../lib/atlasUiPolicy.ts";
 
 /** Renderer driver subordinate to the page's single playback controller. */
 export function useAtlasRoadFlight({

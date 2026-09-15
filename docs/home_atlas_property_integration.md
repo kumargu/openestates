@@ -6,10 +6,11 @@ Branch: `feat/home-atlas-property-integration`. Prepared from `origin/main` at
 `b4c2ccc` (PR #128), with PR #126 (`b36ccae`) merged at `7797111`.
 The archived experiment remains intact. This integration changes the real
 property page, not the Sites prototype. When an `arrival_story` scene carries a
-valid anchor and experience policy, the map owns the property canvas and the
-existing workspace sidebar remains the sole navigation shell. The older stacked
-hero/map/reviews composition remains the fail-closed path for properties without
-that immersive scene. The Rust serving contract is unchanged.
+valid anchor and experience policy, it joins the normal property journey: a
+three-frame cinematic hero, Home + Nearby Atlas, a separate approach-road
+chapter, and reviews. The workspace sidebar remains the sole navigation shell.
+Properties without that immersive scene keep the existing 2D evidence path. The
+Rust serving contract is unchanged.
 
 ## Run locally
 
@@ -61,10 +62,9 @@ existing self-only defaults for unrelated resources.
 | Aerial animation frames | `useAtlasRoadFlight`, subordinate to that controller |
 | Street-level rendering | Existing `useGuidedStreetViewTour` |
 | `rest` / `browse` / `selected` / `tour` UI state | `PropertyArrivalMap` via `atlasNearbyUi` |
-| Inspector placement and cancellable layout-settled signal | `useAtlasStageLayout` |
 | Google elements, overlays, focus camera | Existing `PropertyArrivalGoogle3DMap` |
 | Road speed/camera tuning and overlay styling | `app/config/ui/home-atlas.json` |
-| Property identity and save/note actions | Existing property detail projection and controls |
+| Property identity and save/note actions | The cinematic property hero |
 
 The renderer consumes scene-provided coordinates. It has no Waterford-name branch.
 Society camera framing continues to fit the mapped footprint through
@@ -75,28 +75,24 @@ by this change. Do not describe that separate layout as integrated.
 
 ## Buyer experience
 
-- One flexible map deck beside the unchanged workspace sidebar: a stable property
-  title strip, a dominant full-width 3D map, and compact Home / Arrival / Nearby
-  controls. The property identity appears once.
-- Nearby opens one 320px floating category inspector without narrowing the map.
-  The selected deck grows vertically. The inspector changes sides or collapses
-  when its footprint would cover the home or selected destination.
-- Nearby point layers open at a configured 2 km scope, with 5 km and All as
-  explicit buyer choices. Scope changes only the overview, list, and tour; a
-  selected or search-matched place remains visible outside the chosen radius.
+- The cinematic hero owns the property name, facts, Save, and Note. Atlas does
+  not repeat them.
+- Atlas opens on the home. Nearby layers live in one compact on-map panel;
+  direct row toggles replace the old Home / Arrival / Nearby tabs and dropdown.
+- A segmented 2 km / 5 km / All control scopes every Nearby point layer.
+  Changing it updates the map, row counts, list, and tour. A selected or
+  search-matched place remains visible outside the chosen radius.
 - Scene-derived Schools, Hospitals, Tech parks, Parks, Lakes, Breweries, and
-  Metro live in the inspector's category selector. Categories disappear when
-  the backend returns no evidence rather than rendering empty controls.
-- Society reveal, an optional top perspective, sourced OSM boundary, and quiet
-  surroundings. Quiet mode retains holes for the home and the places currently
-  being inspected, so focus remains readable instead of dimming the evidence.
+  Metro remain payload-driven. One layer is shown at a time so eligibility and
+  proof stay legible.
 - Metro points and the actual API-provided track segments. Segments stay separate;
   no straight line is invented between stations. Browse, selected place, and
   category tour reuse one camera owner.
-- Nearby categories are derived from the existing payload. Existing 2D evidence
-  remains available. Polygon overlays preserve supplied holes and multipolygon
-  parts; missing polygons are not manufactured.
-- Approach road starts with context, descends to the accepted forward aerial
+- Nearby categories are derived from the existing payload. Polygon overlays
+  preserve supplied holes and multipolygon parts; missing polygons are not
+  manufactured.
+- Approach Road is a shorter chapter below Atlas. It starts with context,
+  descends to the accepted forward aerial
   camera, holds briefly for orientation, then moves continuously. One speed
   slider controls 0.5–2× progression. This is an aerial inspection of mapped road
   alignment, not a claim about walking/driving permissions, widths, or travel time.
@@ -126,42 +122,41 @@ by this change. Do not describe that separate layout as integrated.
 
 ## Interaction/design note
 
-Issue #137 borrows Cursor's spatial discipline: a stable top bar, a dominant
-editor-like canvas, and one anchored inspector instead of stacked map tools. It
-applies that pattern to the existing Atlas states and sourced geometry; it does
-not borrow Cursor branding, density, or iconography.
+[#137](https://github.com/kumargu/openestates/issues/137) borrows Human Atlas's
+spatial separation: layers on the left, camera actions on the right, and the
+subject in the available center. It applies that pattern to sourced property
+geometry without borrowing the anatomical dashboard, multi-layer combinations,
+explode slider, auto-rotation, or decorative orbit.
 
-The compact map-control rail borrows Human Atlas's separation of scene content
-from camera controls. At rest it is quiet; hover, keyboard focus, pressed, and
-disabled states remain explicit, and reduced motion continues to skip automatic
-flights. Touch targets widen on constrained screens. The anatomy layer panel,
-explode slider, auto-rotation, and lettered directional presets were intentionally
-not borrowed.
+At rest, all Nearby switches are off and the home remains the subject. Hover,
+keyboard focus, and pressed states are explicit. Selecting a row expands only
+that layer's scoped places; selecting a place adds Directions locally and fits
+the home-to-place pair between both control rails. Reduced motion skips
+automatic flights. The browser layout is the completed target in this pass;
+touch/mobile adaptation remains a separate follow-up.
 
 Nearby motion reuses the existing sourced chapter sequence through one rail
 control that becomes Pause and Resume. No timeline, speed control, or decorative
 orbit was added.
 
-The shell uses the same warm background as the rest of the property experience.
-Rounded map, inspector, and journey surfaces restore the property page's richer
-card language without adding gutters or reducing the measured map area.
+The page uses the same warm background as the rest of the property experience.
+The hero is limited to three cinematic frames while the full gallery remains
+available from its existing action.
 
 The selected place remains selected while the inspector is visible. A selected
 home-to-destination relationship rotates onto the map's wide axis before fitting,
-so bearing alone cannot force a much wider camera range. Camera fitting waits for
-the deck transition and stable map bounds; stale settle work is cancelled. Panel
-placement is derived from the fitted subjects, and a direct gesture interrupts a
-tour without moving the camera.
+so bearing alone cannot force a much wider camera range. Camera fitting reserves
+the layer panel and camera rail before solving the scene. A direct gesture
+interrupts a tour without moving the camera.
 Searched for a directly applicable ThreeUI map interaction; no specific additional
 map implementation was established. No unverified ThreeUI source is claimed.
 Did not borrow anatomical geometry, explosion/lift, or side-by-side map
 comparisons.
 
-Rest: title strip, map, and journey only. Browse: one bounded category/list
-inspector. Selected: one compact fact card. Tour: that same card adds progress
-and one pause/resume control. Hover/focus keeps visible rings; touch uses the
-bottom inspector and horizontal place list. Reduced motion removes the layout
-transition and automatic aerial flight. Save/note reuse the existing controls.
+Rest: hero followed by the home-focused Atlas. Browse: one active layer, direct
+radius choices, and its nearby rows. Selected: the same row adds rating and
+Directions. Tour: one play/pause action appears on the camera rail. Save and Note
+stay on the hero.
 
 ## Verification and remaining gate
 
@@ -177,23 +172,17 @@ npm run test:atlas-browser
 ```
 
 The browser check runs the actual property route with only fixture API data and
-captures society, metro focus, road, and mobile road screenshots in
+captures the hero, Home + Nearby Atlas, selected pair, approach road, and reviews in
 `frontend/test-results/atlas/`. It requires the Google key and working real 3D;
 it does not silently pass using a mocked renderer.
 
-Observed in this environment: lint, TypeScript, the production bundle, and all
-265 frontend tests pass. The Atlas browser specification now asserts the
-full-stage shell, direct category drawer, focused nearby item, aerial road speed,
-pause/resume, Street View exit, and mobile state. The host runs Node 24, while the
-repository targets Node 22; CI/local Node 22 is an additional parity gate.
+The localhost browser pass used real Google 3D. It confirmed the three-frame
+hero, default home framing, 2 km scope, layer toggles, selected-pair clearance,
+Approach Road playback controls, and restored Google reviews. Mobile was not
+treated as an acceptance target for this iteration.
 
-**Local real-3D browser validation is blocked here.** Playwright is installed but
-its Chromium binary is absent, and the managed cloud browser cannot reach the
-localhost server. No certificate checks or browser safeguards were disabled. No
-photographic smoothness approval is claimed from this environment.
-Before merging, run the browser gate above on a machine with Google access and
-review the road descent, pause/resume, station focus, quiet boundary, mobile
-controls, and Street View exit.
+Observed in this environment: lint, TypeScript, the production build, all 280
+frontend tests, and `git diff --check` pass.
 
 The real promoted Parquet bundle/Rust API was not available for end-to-end
 validation in this pass. Sparse production scenes will remain sparse: they do

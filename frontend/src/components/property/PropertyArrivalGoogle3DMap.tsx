@@ -18,8 +18,7 @@ import {
 import { distanceMetres } from "../../../../experiments/home-atlas/src/geometry.ts";
 import { buildCategoryTour } from "../../../../experiments/home-atlas/src/scenes.ts";
 import type { AtlasFeature, AtlasScene } from "../../../../experiments/home-atlas/src/types.ts";
-import { projectCameraPointToScreen } from "../../../../experiments/home-atlas/src/screenFit.ts";
-import policy from "../../../../app/config/ui/home-atlas.json" with { type: "json" };
+import { atlasPolicy as policy } from "../../lib/atlasUiPolicy.ts";
 import {
   geometryForPlace,
   nearbyRelationArc,
@@ -102,9 +101,6 @@ export type ArrivalGoogle3DMapProps = {
   onSelectSecondarySociety?: (societyId: string) => void;
   onPlaybackCancelled?: () => void;
   onUserCameraGesture?: () => void;
-  onNearbyPanelPlacement?: (
-    placement: "left" | "right" | "collapsed",
-  ) => void;
   onToggleExpanded: () => void;
   selectedPlaceId?: string | null;
   nearbyDepth?: NearbyDepth;
@@ -117,59 +113,14 @@ export type ArrivalGoogle3DMapProps = {
   showExpandAction?: boolean;
   homeFirst?: boolean;
   anchorNearbyOnHome?: boolean;
-  layoutSettledVersion?: number;
-  layoutSettling?: boolean;
+  safeFrameLeftPx?: number;
+  safeFrameRightPx?: number;
   suspendNearbyCamera?: boolean;
   nearbyCameraVersion?: number;
   nearbyTransitionMs?: number;
   nearbyTourRequest?: NearbyTourRequest | null;
   onNearbyTourScene?: (state: NearbyTourSceneState) => void;
 };
-
-const ATLAS_CAMERA_RAIL_CLEARANCE_PX = 76;
-
-function chooseNearbyPanelPlacement(
-  camera: ReturnType<typeof nearbySceneCamera>,
-  home: { latitude: number; longitude: number },
-  selected: NumberedPlace | undefined,
-  frame: AtlasSafeFrame,
-): "left" | "right" | "collapsed" {
-  const subjects = [
-    { lat: home.latitude, lng: home.longitude, heightM: policy.nearby.markerLiftM },
-    ...(selected
-      ? [{
-          lat: selected.latitude,
-          lng: selected.longitude,
-          heightM: policy.nearby.markerLiftM,
-        }]
-      : []),
-  ].map((point) => projectCameraPointToScreen(
-    camera,
-    point,
-    frame,
-    policy.cameraFit.fieldOfViewDegrees,
-  ));
-  const inset = 16;
-  const collisionPadding = 36;
-  const panelWidth = Math.min(320, Math.max(0, frame.width - inset * 2));
-  const panelHeight = Math.min(430, Math.max(0, frame.height - inset * 2));
-  const collides = (side: "left" | "right") => {
-    const edgeInset = side === "left"
-      ? inset
-      : ATLAS_CAMERA_RAIL_CLEARANCE_PX;
-    const startX = side === "left"
-      ? edgeInset
-      : frame.width - edgeInset - panelWidth;
-    return subjects.some((point) =>
-      point.x >= startX - collisionPadding
-      && point.x <= startX + panelWidth + collisionPadding
-      && point.y >= inset - collisionPadding
-      && point.y <= inset + panelHeight + collisionPadding);
-  };
-  if (!collides("right")) return "right";
-  if (!collides("left")) return "left";
-  return "collapsed";
-}
 
 type LatLngAltitude = { lat: number; lng: number; altitude?: number };
 
@@ -505,15 +456,14 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     showExpandAction = true,
     homeFirst = false,
     anchorNearbyOnHome = false,
-    layoutSettledVersion,
-    layoutSettling = false,
+    safeFrameLeftPx,
+    safeFrameRightPx,
     suspendNearbyCamera = false,
     nearbyCameraVersion = 0,
     nearbyTransitionMs = policy.focus.durationMs,
     nearbyTourRequest = null,
     onNearbyTourScene,
     onUserCameraGesture,
-    onNearbyPanelPlacement,
   } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const streetViewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -545,8 +495,8 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       const next = {
         width: mapRect.width,
         height: mapRect.height,
-        left: margin,
-        right: margin,
+        left: safeFrameLeftPx ?? margin,
+        right: safeFrameRightPx ?? margin,
         top: margin,
         bottom: margin,
       };
@@ -555,24 +505,12 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         && Object.keys(next).every((key) => current[key as keyof AtlasSafeFrame] === next[key as keyof AtlasSafeFrame])
         ? current
         : next);
-      if (mapRef.current && layoutSettledVersion !== undefined) {
-        mapRef.current.dataset.atlasLayoutSettledVersion = String(
-          layoutSettledVersion,
-        );
-      }
     };
     commitBounds();
-    if (layoutSettledVersion !== undefined) return undefined;
     const observer = new ResizeObserver(commitBounds);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [layoutSettledVersion]);
-  useEffect(() => {
-    if (!mapRef.current || layoutSettledVersion === undefined) return;
-    mapRef.current.dataset.atlasLayoutSettledVersion = String(
-      layoutSettledVersion,
-    );
-  }, [layoutSettledVersion, ready]);
+  }, [safeFrameLeftPx, safeFrameRightPx]);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [streetRequested, setStreetRequested] = useState(false);
   const [streetStart, setStreetStart] = useState(0);
@@ -692,8 +630,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const roadFlight = useAtlasRoadFlight({
     active: Boolean(ready)
       && roadTourActive
-      && !streetRequested
-      && !layoutSettling,
+      && !streetRequested,
     route: atlasRoute, controller: playbackController,
     elevation: groundElevation,
     width: mapWidth,
@@ -1373,7 +1310,6 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       !map
       || !ready
       || !safeFrame
-      || layoutSettling
       || !request
       || request.chapters.length === 0
       || executedTourRequestRef.current === request.id
@@ -1518,7 +1454,6 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     groundElevation,
     home,
     mapWidth,
-    layoutSettling,
     nearbyTourRequest,
     playbackController,
     ready,
@@ -1528,7 +1463,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || terrainCorridor || roadTourActive || streetRequested || cameraMode !== 'evidence'
-      || layoutSettling || suspendNearbyCamera
+      || suspendNearbyCamera
       || playbackState === 'playing' || playbackState === 'paused' || playbackState === 'preparing') return;
     const moveId = ++cameraMoveRef.current;
     let cancelled = false;
@@ -1554,20 +1489,11 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         nearbyDepth, elevation, containerRef.current?.clientWidth ?? window.innerWidth, safeFrame,
         above ? policy.above.tilt : undefined, anchorNearbyOnHome);
       camera = pose;
-      if (safeFrame) {
-        onNearbyPanelPlacement?.(chooseNearbyPanelPlacement(
-          pose,
-          home,
-          places.find((place) =>
-            (place.feature_id ?? place.name) === selectedPlaceId),
-          safeFrame,
-        ));
-      }
       map.dataset.atlasCameraTargetRange = String(camera.range);
       move();
     }).catch(() => undefined);
     return () => {cancelled = true; unregister();};
-  }, [above, selectedPlaceId, nearbyDepth, nearbyTransitionMs, places, home, polygons, metroLines, contextLines, cameraMode, terrainCorridor, playbackController, playbackState, ready, roadTourActive, safeFrame, streetRequested, layoutSettling, suspendNearbyCamera, nearbyCameraVersion, onNearbyPanelPlacement, anchorNearbyOnHome]);
+  }, [above, selectedPlaceId, nearbyDepth, nearbyTransitionMs, places, home, polygons, metroLines, contextLines, cameraMode, terrainCorridor, playbackController, playbackState, ready, roadTourActive, safeFrame, streetRequested, suspendNearbyCamera, nearbyCameraVersion, anchorNearbyOnHome]);
 
   if (loadError) throw loadError;
 

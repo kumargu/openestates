@@ -1,7 +1,6 @@
 export type AtlasNearbyMode = "rest" | "browse" | "selected" | "tour";
 export type AtlasNearbyFraming = "context" | "closer";
 export type AtlasCameraOwner = "system" | "user";
-export type AtlasPanelPlacement = "none" | "side" | "bottom";
 
 export type AtlasNearbyUiState = Readonly<{
   mode: AtlasNearbyMode;
@@ -116,45 +115,4 @@ export function reduceAtlasNearbyUi(
         cameraOwner: "system",
       };
   }
-}
-
-export type AtlasStageLayoutInput = Readonly<{
-  width: number;
-  height: number;
-  mode: AtlasNearbyMode;
-  previousPlacement: AtlasPanelPlacement;
-  minimumMapWidthPx: number;
-  minimumMapHeightPx: number;
-  browsePanelWidthPx: number;
-  compactPanelWidthPx: number;
-  placementHysteresisPx: number;
-}>;
-
-export function atlasPanelWidth(
-  mode: AtlasNearbyMode,
-  browsePanelWidthPx: number,
-  compactPanelWidthPx: number,
-): number {
-  if (mode === "rest") return 0;
-  return mode === "browse" ? browsePanelWidthPx : compactPanelWidthPx;
-}
-
-export function chooseAtlasPanelPlacement(
-  input: AtlasStageLayoutInput,
-): AtlasPanelPlacement {
-  if (input.mode === "rest") return "none";
-  const panelWidth = atlasPanelWidth(
-    input.mode,
-    input.browsePanelWidthPx,
-    input.compactPanelWidthPx,
-  );
-  const thresholdAdjustment = input.previousPlacement === "side"
-    ? -input.placementHysteresisPx
-    : input.previousPlacement === "bottom"
-      ? input.placementHysteresisPx
-      : 0;
-  const sideFits = input.width - panelWidth
-    >= input.minimumMapWidthPx + thresholdAdjustment
-    && input.height >= input.minimumMapHeightPx;
-  return sideFits ? "side" : "bottom";
 }

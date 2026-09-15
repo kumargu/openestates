@@ -54,6 +54,7 @@ import {
 } from "../lib/proof-focus.ts";
 import { backendUrl, publicSiteUrl } from "../lib/runtimeConfig.ts";
 import { useSearchSpan } from "../components/workspace/SearchSpanContext.ts";
+import { atlasHeroFrameLimit } from "../lib/atlasUiPolicy.ts";
 
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -470,6 +471,15 @@ function PropertyPageBody({
     && Number.isFinite(arrivalContext.home.latitude)
     && Number.isFinite(arrivalContext.home.longitude),
   );
+  const pageStory = hasAtlasScene
+    ? {
+      ...story,
+      media: {
+        ...story.media,
+        frames: story.media.frames.slice(0, atlasHeroFrameLimit),
+      },
+    }
+    : story;
 
   if (arrivalSceneStatus === "loading") {
     return (
@@ -480,52 +490,6 @@ function PropertyPageBody({
       >
         <PageTitle title={pageTitle} />
         <div className="property-atlas-page__loading-mark" aria-hidden="true" />
-      </div>
-    );
-  }
-
-  if (hasAtlasScene && arrivalContext) {
-    return (
-      <div className="property-atlas-page">
-        <PageTitle title={pageTitle} />
-        <meta name="description" content={pageDescription} />
-        <meta property="og:title" content={pageTitle} />
-        <meta property="og:description" content={pageDescription} />
-        <meta property="og:type" content="website" />
-        <meta property="og:site_name" content={PUBLIC_BRAND_NAME} />
-        <meta property="og:url" content={canonicalUrl} />
-        <link rel="canonical" href={canonicalUrl} />
-        {socialImageUrl && <meta property="og:image" content={socialImageUrl} />}
-        <script type="application/ld+json">
-          {JSON.stringify(buildPropertyJsonLd(p))}
-        </script>
-        <PropertyArrivalMap
-          key={p.id}
-          context={arrivalContext}
-          searchContextSocieties={searchContextSocieties}
-          presentation="atlas"
-          identity={{
-            location: story.identity.location,
-            title: story.identity.title,
-            facts: story.identity.facts.map((fact) => fact.value),
-            actions: (
-              <>
-                <SaveHeartButton
-                  propertyId={p.id}
-                  className="property-action-link property-action-save"
-                  label="Save"
-                />
-                <NotebookCommentAnchor
-                  propertyId={p.id}
-                  labels={[]}
-                  detail={displayTitle}
-                  source="Property detail"
-                  label="Note"
-                />
-              </>
-            ),
-          }}
-        />
       </div>
     );
   }
@@ -574,7 +538,7 @@ function PropertyPageBody({
 
           <PropertySceneCard
             sectionId="property-cover"
-            story={story}
+            story={pageStory}
             identityPlacement="overlay"
             actions={(
               <>
@@ -601,7 +565,24 @@ function PropertyPageBody({
           <main className="property-clean-flow">
             <PropertySearchMatch data={data} focus={proofFocus} />
 
-            {story.map.available && aroundThisHomeContext && (
+            {hasAtlasScene && arrivalContext ? (
+              <section
+                id="around-this-home"
+                className="property-atlas-chapter"
+                aria-labelledby="property-atlas-chapter-title"
+                tabIndex={-1}
+              >
+                <header className="property-story-heading">
+                  <h2 id="property-atlas-chapter-title">Around this home.</h2>
+                </header>
+                <PropertyArrivalMap
+                  key={`${p.id}:atlas`}
+                  context={arrivalContext}
+                  searchContextSocieties={searchContextSocieties}
+                  presentation="atlas"
+                />
+              </section>
+            ) : story.map.available && aroundThisHomeContext ? (
               <section
                 id="around-this-home"
                 className="property-map-section"
@@ -613,7 +594,7 @@ function PropertyPageBody({
                   context={aroundThisHomeContext}
                 />
               </section>
-            )}
+            ) : null}
 
             <PropertyArrivalFilm
               propertyId={p.id}
@@ -621,6 +602,7 @@ function PropertyPageBody({
               frames={story.arrival.frames}
               mapContext={arrivalContext}
               searchContextSocieties={searchContextSocieties}
+              presentation={hasAtlasScene ? "approach" : "embedded"}
               playback={{
                 playing: storyPlaying,
                 onPlayingChange: setStoryPlaying,

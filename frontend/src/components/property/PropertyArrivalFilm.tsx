@@ -25,6 +25,7 @@ type Props = {
   cinematicMotion?: boolean;
   mapContext?: PropertyMapContext | null;
   searchContextSocieties?: ArrivalSearchSociety[];
+  presentation?: "embedded" | "approach";
 };
 
 const ARRIVAL_CLOSE_DISTANCE_M = 50;
@@ -87,6 +88,7 @@ export function PropertyArrivalFilm({
   cinematicMotion = true,
   mapContext,
   searchContextSocieties,
+  presentation = "embedded",
 }: Props) {
   const distinctFrames = useMemo(() => distinctArrivalFrames(frames), [frames]);
   const frameKey = distinctFrames.map((frame) => frame.id).join("|");
@@ -122,7 +124,12 @@ export function PropertyArrivalFilm({
   const mapAvailable = hasArrivalMap(mapContext);
   if (!mapAvailable && (filmstripFrames.length === 0 || usableFrameCount === 0)) return null;
   const hasRealViews = filmstripFrames.length > 0 && usableFrameCount > 0;
-  const showMap = mapAvailable && mapUnavailableForProperty !== propertyId;
+  const hasApproachMap = Boolean(mapContext?.layers?.some(
+    (layer) => layer.renderKind === "terrain_corridor",
+  ));
+  const showMap = mapAvailable
+    && (presentation !== "approach" || hasApproachMap)
+    && mapUnavailableForProperty !== propertyId;
 
   return (
     <section
@@ -139,6 +146,7 @@ export function PropertyArrivalFilm({
           key={propertyId}
           context={mapContext}
           searchContextSocieties={searchContextSocieties}
+          presentation={presentation}
           onUnavailable={hasRealViews ? () => setMapUnavailableForProperty(propertyId) : undefined}
         />
       ) : (
