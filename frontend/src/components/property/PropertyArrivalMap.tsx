@@ -30,6 +30,7 @@ import { useArrivalPlaybackController } from "../../lib/arrivalPlayback.ts";
 import {
   buildNumberedPlaces,
   metroStationsAroundHome,
+  placeMatchesProofFocus,
   resolveHomeAnchor,
 } from "../../lib/nearbyPlateProjection.ts";
 import {
@@ -227,6 +228,9 @@ export function PropertyArrivalMap({
   const [showBoundary, setShowBoundary] = useState(true);
   const [nearbyTourDepth, setNearbyTourDepth] = useState<NearbyDepth>("overview");
   const [nearbyTourRequest, setNearbyTourRequest] = useState<NearbyTourRequest | null>(null);
+  const [nearbyScopeId, setNearbyScopeId] = useState(
+    atlasPolicy.nearby.scope.defaultId,
+  );
   const [nearbyPanelPlacement, setNearbyPanelPlacement] = useState<
     "left" | "right" | "collapsed"
   >("right");
@@ -447,8 +451,25 @@ export function PropertyArrivalMap({
 
   if (!home || views.length === 0) return null;
 
-  const visiblePlaces = activeView === "metro" ? metroPlaces : activeView === 'nearby' ? nearbyPlaces : entrancePlaces;
   const selectedPlaceId = nearbyUi.selectedPlaceId;
+  const nearbyScope = atlasPolicy.nearby.scope.options.find(
+    (option) => option.id === nearbyScopeId,
+  ) ?? atlasPolicy.nearby.scope.options[0];
+  const scopedNearbyPlaces = presentation === "atlas"
+    && activeView === "nearby"
+    && nearbyScope.radiusKm !== null
+    ? nearbyPlaces.filter((place) =>
+      (typeof place.distance_km !== "number"
+        || place.distance_km <= nearbyScope.radiusKm)
+      || (place.feature_id ?? place.name) === selectedPlaceId
+      || placeMatchesProofFocus(place, context.proof_focus)
+    )
+    : nearbyPlaces;
+  const visiblePlaces = activeView === "metro"
+    ? metroPlaces
+    : activeView === "nearby"
+      ? buildNumberedPlaces(scopedNearbyPlaces)
+      : entrancePlaces;
   const selectedPlace = visiblePlaces.find((place) =>
     (place.feature_id ?? place.name) === selectedPlaceId) ?? null;
   const activeAtlasCategoryLabel = activeView === "nearby"
@@ -470,9 +491,18 @@ export function PropertyArrivalMap({
     if (playbackState === 'playing') { playbackController.pause(); return; }
     if (playbackState === 'paused') { playbackController.resume(); return; }
     setQuiet(true);
-    const chapters = allTourChapters.filter((chapter) =>
-      chapter.categoryId === nearbyUi.categoryId
-    );
+    const visiblePlaceIds = new Set(visiblePlaces.map(
+      (place) => place.feature_id ?? place.name,
+    ));
+    const chapters = allTourChapters
+      .filter((chapter) => chapter.categoryId === nearbyUi.categoryId)
+      .map((chapter) => ({
+        ...chapter,
+        places: chapter.places.filter((place) =>
+          visiblePlaceIds.has(place.feature_id ?? place.name)
+        ),
+      }))
+      .filter((chapter) => chapter.places.length > 0);
     if (chapters.length === 0) return;
     dispatchNearbyUi({
       type: "start_tour",
@@ -586,9 +616,7 @@ export function PropertyArrivalMap({
       ? "right"
       : nearbyPanelPlacement;
     const canTourNearby = (activeView === "metro" || activeView === "nearby")
-      && allTourChapters.some((chapter) =>
-        chapter.categoryId === nearbyUi.categoryId
-      );
+      && visiblePlaces.length > 0;
     const nearbyTourAction = playbackState === "playing"
       ? "Pause nearby tour"
       : playbackState === "paused"
@@ -781,7 +809,7 @@ export function PropertyArrivalMap({
             >
               <header>
                 <strong>Nearby</strong>
-                <label>
+                <label className="property-atlas__category-control">
                   <span className="sr-only">Nearby category</span>
                   <select
                     aria-label="Nearby category"
@@ -800,9 +828,39 @@ export function PropertyArrivalMap({
                     ))}
                   </select>
                 </label>
+                {activeView === "nearby" ? (
+                  <label className="property-atlas__scope-control">
+                    <span className="sr-only">Nearby radius</span>
+                    <select
+                      aria-label="Nearby radius"
+                      value={nearbyScope.id}
+                      onChange={(event) => {
+                        playbackController.cancel("settled");
+                        if (nearbyUi.mode === "tour") {
+                          dispatchNearbyUi({ type: "stop_tour" });
+                        }
+                        setNearbyPanelPlacement("right");
+                        setNearbyPanelForcedOpen(false);
+                        setNearbyScopeId(event.target.value);
+                      }}
+                    >
+                      {atlasPolicy.nearby.scope.options.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
               </header>
               <div className="property-atlas__floating-list">
-                {visiblePlaces.map((place) => {
+                {visiblePlaces.length === 0 ? (
+                  <p className="property-atlas__scope-empty" role="status">
+                    {activeView === "nearby"
+                      ? `No places within ${nearbyScope.label}.`
+                      : "No stations to show."}
+                  </p>
+                ) : visiblePlaces.map((place) => {
                   const id = place.feature_id ?? place.name;
                   const isSelected = id === selectedPlaceId;
                   return (

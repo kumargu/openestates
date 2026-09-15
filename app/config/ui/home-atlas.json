@@ -64,7 +64,15 @@
     "returnHomeMs": 5500,
     "pairMinimumRangeM": 950,
     "pairRangeMultiplier": 2.15,
-    "markerLiftM": 45
+    "markerLiftM": 45,
+    "scope": {
+      "defaultId": "2km",
+      "options": [
+        { "id": "2km", "label": "2 km", "radiusKm": 2 },
+        { "id": "5km", "label": "5 km", "radiusKm": 5 },
+        { "id": "all", "label": "All", "radiusKm": null }
+      ]
+    }
   },
   "stageLayout": {
     "minimumMapWidthPx": 720,

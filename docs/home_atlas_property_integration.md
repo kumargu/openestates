@@ -81,6 +81,9 @@ by this change. Do not describe that separate layout as integrated.
 - Nearby opens one 320px floating category inspector without narrowing the map.
   The selected deck grows vertically. The inspector changes sides or collapses
   when its footprint would cover the home or selected destination.
+- Nearby point layers open at a configured 2 km scope, with 5 km and All as
+  explicit buyer choices. Scope changes only the overview, list, and tour; a
+  selected or search-matched place remains visible outside the chosen radius.
 - Scene-derived Schools, Hospitals, Tech parks, Parks, Lakes, Breweries, and
   Metro live in the inspector's category selector. Categories disappear when
   the backend returns no evidence rather than rendering empty controls.

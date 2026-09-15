@@ -1031,6 +1031,10 @@
   flex: 1;
 }
 
+.property-atlas__floating-panel > header > .property-atlas__scope-control {
+  flex: 0 0 4.75rem;
+}
+
 .property-atlas__floating-panel select {
   width: 100%;
   min-height: 36px;
@@ -1044,10 +1048,24 @@
   font-weight: 650;
 }
 
+.property-atlas__scope-control select {
+  padding-right: 1.1rem;
+  padding-left: 0.65rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .property-atlas__floating-list {
   min-height: 0;
   padding: 0.35rem;
   overflow-y: auto;
+}
+
+.property-atlas__scope-empty {
+  margin: 0;
+  padding: 1.25rem 0.75rem;
+  color: var(--atlas-ui-secondary);
+  font-size: 0.72rem;
+  text-align: center;
 }
 
 .property-atlas__floating-list button {
