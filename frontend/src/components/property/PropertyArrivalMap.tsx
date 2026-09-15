@@ -671,39 +671,6 @@ export function PropertyArrivalMap({
                 {identity.actions}
               </div>
             ) : null}
-            <details className="property-atlas__view-menu">
-              <summary>View</summary>
-              <div role="group" aria-label="Map view">
-                <button
-                  type="button"
-                  aria-pressed={above}
-                  disabled={activeView === "approach"}
-                  onClick={() => {
-                    playbackController.cancel("settled");
-                    setSocietyAutoPlay(false);
-                    setAbove((current) => !current);
-                  }}
-                >
-                  Aerial
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={showBoundary}
-                  disabled={!context.home.boundary}
-                  onClick={() => setShowBoundary((current) => !current)}
-                >
-                  Site outline
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={quiet}
-                  disabled={!context.home.boundary}
-                  onClick={() => setQuiet((current) => !current)}
-                >
-                  Focus
-                </button>
-              </div>
-            </details>
           </div>
         </header>
 
@@ -718,15 +685,60 @@ export function PropertyArrivalMap({
             <div className="property-atlas__shade" aria-hidden="true" />
             {mapSurface}
 
-            {nearbyUi.cameraOwner === "user" ? (
+            <nav className="property-atlas__camera-rail" aria-label="Map controls">
               <button
                 type="button"
-                className="property-atlas__reset"
-                onClick={() => dispatchNearbyUi({ type: "reset_camera" })}
+                aria-label="Aerial view"
+                title="Aerial view"
+                aria-pressed={above}
+                disabled={activeView === "approach"}
+                onClick={() => {
+                  playbackController.cancel("settled");
+                  setSocietyAutoPlay(false);
+                  setAbove((current) => !current);
+                }}
               >
-                Reset view
+                <span aria-hidden="true">A</span>
               </button>
-            ) : null}
+              <button
+                type="button"
+                aria-label="Site outline"
+                title="Site outline"
+                aria-pressed={showBoundary}
+                disabled={!context.home.boundary}
+                onClick={() => setShowBoundary((current) => !current)}
+              >
+                <svg aria-hidden="true" viewBox="0 0 20 20">
+                  <path d="m4 6 5-3 7 3-1 8-6 3-5-4Z" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                aria-label="Focus surroundings"
+                title="Focus surroundings"
+                aria-pressed={quiet}
+                disabled={!context.home.boundary}
+                onClick={() => setQuiet((current) => !current)}
+              >
+                <svg aria-hidden="true" viewBox="0 0 20 20">
+                  <path d="M7 3H3v4m10-4h4v4M7 17H3v-4m10 4h4v-4" />
+                  <circle cx="10" cy="10" r="2.5" />
+                </svg>
+              </button>
+              {nearbyUi.cameraOwner === "user" ? (
+                <>
+                  <i aria-hidden="true" />
+                  <button
+                    type="button"
+                    aria-label="Reset view"
+                    title="Reset view"
+                    onClick={() => dispatchNearbyUi({ type: "reset_camera" })}
+                  >
+                    <span aria-hidden="true">↺</span>
+                  </button>
+                </>
+              ) : null}
+            </nav>
 
             {missingArrivalState ? (
               <p className="property-atlas__status" role="status" aria-live="polite">

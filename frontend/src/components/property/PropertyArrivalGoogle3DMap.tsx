@@ -126,6 +126,8 @@ export type ArrivalGoogle3DMapProps = {
   onNearbyTourScene?: (state: NearbyTourSceneState) => void;
 };
 
+const ATLAS_CAMERA_RAIL_CLEARANCE_PX = 76;
+
 function chooseNearbyPanelPlacement(
   camera: ReturnType<typeof nearbySceneCamera>,
   home: { latitude: number; longitude: number },
@@ -152,9 +154,12 @@ function chooseNearbyPanelPlacement(
   const panelWidth = Math.min(320, Math.max(0, frame.width - inset * 2));
   const panelHeight = Math.min(430, Math.max(0, frame.height - inset * 2));
   const collides = (side: "left" | "right") => {
-    const startX = side === "left"
+    const edgeInset = side === "left"
       ? inset
-      : frame.width - inset - panelWidth;
+      : ATLAS_CAMERA_RAIL_CLEARANCE_PX;
+    const startX = side === "left"
+      ? edgeInset
+      : frame.width - edgeInset - panelWidth;
     return subjects.some((point) =>
       point.x >= startX - collisionPadding
       && point.x <= startX + panelWidth + collisionPadding

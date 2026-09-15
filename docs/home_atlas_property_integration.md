@@ -128,6 +128,13 @@ editor-like canvas, and one anchored inspector instead of stacked map tools. It
 applies that pattern to the existing Atlas states and sourced geometry; it does
 not borrow Cursor branding, density, or iconography.
 
+The compact map-control rail borrows Human Atlas's separation of scene content
+from camera controls. At rest it is quiet; hover, keyboard focus, pressed, and
+disabled states remain explicit, and reduced motion continues to skip automatic
+flights. Touch targets widen on constrained screens. The anatomy layer panel,
+explode slider, auto-rotation, and lettered directional presets were intentionally
+not borrowed.
+
 The shell uses the same warm background as the rest of the property experience.
 Rounded map, inspector, and journey surfaces restore the property page's richer
 card language without adding gutters or reducing the measured map area.
