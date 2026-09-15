@@ -135,6 +135,10 @@ flights. Touch targets widen on constrained screens. The anatomy layer panel,
 explode slider, auto-rotation, and lettered directional presets were intentionally
 not borrowed.
 
+Nearby motion reuses the existing sourced chapter sequence through one rail
+control that becomes Pause and Resume. No timeline, speed control, or decorative
+orbit was added.
+
 The shell uses the same warm background as the rest of the property experience.
 Rounded map, inspector, and journey surfaces restore the property page's richer
 card language without adding gutters or reducing the measured map area.

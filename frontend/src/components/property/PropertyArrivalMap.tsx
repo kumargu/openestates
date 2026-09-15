@@ -585,6 +585,15 @@ export function PropertyArrivalMap({
     const renderedPanelPlacement = nearbyPanelPlacement === "collapsed"
       ? "right"
       : nearbyPanelPlacement;
+    const canTourNearby = (activeView === "metro" || activeView === "nearby")
+      && allTourChapters.some((chapter) =>
+        chapter.categoryId === nearbyUi.categoryId
+      );
+    const nearbyTourAction = playbackState === "playing"
+      ? "Pause nearby tour"
+      : playbackState === "paused"
+        ? "Resume nearby tour"
+        : "Tour nearby places";
 
     return (
       <section
@@ -725,6 +734,22 @@ export function PropertyArrivalMap({
                   <circle cx="10" cy="10" r="2.5" />
                 </svg>
               </button>
+              {canTourNearby ? (
+                <>
+                  <i aria-hidden="true" />
+                  <button
+                    type="button"
+                    aria-label={nearbyTourAction}
+                    title={nearbyTourAction}
+                    aria-pressed={playbackState === "playing"}
+                    onClick={tourPlaces}
+                  >
+                    <span aria-hidden="true">
+                      {playbackState === "playing" ? "Ⅱ" : "▶"}
+                    </span>
+                  </button>
+                </>
+              ) : null}
               {nearbyUi.cameraOwner === "user" ? (
                 <>
                   <i aria-hidden="true" />
