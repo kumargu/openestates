@@ -66,6 +66,16 @@
     "pairRangeMultiplier": 2.15,
     "markerLiftM": 45
   },
+  "stageLayout": {
+    "minimumMapWidthPx": 720,
+    "minimumMapHeightPx": 440,
+    "browsePanelWidthPx": 336,
+    "compactPanelWidthPx": 264,
+    "bottomPanelHeightPx": 176,
+    "placementHysteresisPx": 24,
+    "transitionMs": 240,
+    "stableFrames": 2
+  },
   "geometryStyles": {
     "lake": { "fill": "#7dd8f426", "stroke": "#7dd8f4cc" },
     "road": { "fill": "#f4c17618", "stroke": "#f4c176dd" },

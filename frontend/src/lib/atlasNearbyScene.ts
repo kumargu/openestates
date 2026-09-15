@@ -24,7 +24,7 @@ export function geometryForPlace(place: NumberedPlace, polygons: MapOverlayPolyg
 
 export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons: MapOverlayPolygon[],
   lines: MapOverlayLine[], selectedId: string | null, depth: NearbyDepth, elevation: number, width: number,
-  safeFrame?: AtlasSafeFrame, tiltOverride?: number) {
+  safeFrame?: AtlasSafeFrame, tiltOverride?: number, focusHome = false) {
   const origin = { lat: home.latitude, lng: home.longitude };
   const selected = places.find(p => (p.feature_id ?? p.name) === selectedId);
   const geometry = selected && depth !== 'overview' ? geometryForPlace(selected, polygons, lines) : {polygons, lines};
@@ -73,9 +73,11 @@ export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons:
       ...places.map((place) => marker({lat: place.latitude, lng: place.longitude})),
     ];
   }
-  // Comparisons retain the category overview's orientation. Only the explicit
-  // Look closer action turns toward the selected subject for an oblique view.
-  const target = depth === 'inspect' && selectedAnchor ? selectedAnchor : places.length
+  // A selected pair uses its own relationship axis so distance is spent across
+  // the wide screen dimension instead of forcing a category-oriented zoom-out.
+  const target = selectedAnchor && (depth === 'pair' || depth === 'inspect')
+    ? selectedAnchor
+    : places.length
     ? {
       lat: places.reduce((total, place) => total + place.latitude, 0) / places.length,
       lng: places.reduce((total, place) => total + place.longitude, 0) / places.length,
@@ -108,7 +110,11 @@ export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons:
     frame,
     heading,
     tilt: tiltOverride ?? tilt,
-    focusPoint: depth === 'inspect' && selectedAnchor ? marker(selectedAnchor) : undefined,
+    focusPoint: depth === 'inspect' && selectedAnchor
+      ? marker(selectedAnchor)
+      : focusHome
+      ? marker(origin)
+      : undefined,
     fieldOfViewDegrees: policy.cameraFit.fieldOfViewDegrees,
     minimumRangeM: width < policy.road.mobileBreakpointPx
       ? minimumRangeM * policy.society.mobileRangeScale

@@ -22,6 +22,11 @@ import {
 import atlasPolicy from "../../app/config/ui/home-atlas.json" with { type: "json" };
 import { AtlasCameraArbiter } from "../src/lib/atlasCameraArbiter.ts";
 import {
+  chooseAtlasPanelPlacement,
+  initialAtlasNearbyUiState,
+  reduceAtlasNearbyUi,
+} from "../src/lib/atlasNearbyUi.ts";
+import {
   geometryForPlace,
   nearbySceneCamera,
   nearbyRelationArc,
@@ -53,6 +58,70 @@ test("Waterford API scene reaches production metro, boundary, nearby and road pr
     projectStreetHandoff(route, { longitude, latitude }, 40).distanceAlongM,
     0,
   );
+});
+
+test("Nearby UI has one reversible state and preserves selected context", () => {
+  let state = reduceAtlasNearbyUi(initialAtlasNearbyUiState, {
+    type: "open_browse",
+    categoryId: "nearby:school",
+  });
+  assert.equal(state.mode, "browse");
+  state = reduceAtlasNearbyUi(state, {
+    type: "select_place",
+    placeId: "school:one",
+  });
+  state = reduceAtlasNearbyUi(state, {
+    type: "set_framing",
+    framing: "closer",
+  });
+  state = reduceAtlasNearbyUi(state, {
+    type: "start_tour",
+    placeId: "school:one",
+  });
+  assert.deepEqual(
+    [state.mode, state.selectedPlaceId, state.framing, state.cameraOwner],
+    ["tour", "school:one", "closer", "system"],
+  );
+  state = reduceAtlasNearbyUi(state, { type: "user_gesture" });
+  assert.deepEqual(
+    [state.mode, state.selectedPlaceId, state.cameraOwner],
+    ["selected", "school:one", "user"],
+  );
+  const resetVersion = state.cameraResetVersion;
+  state = reduceAtlasNearbyUi(state, { type: "reset_camera" });
+  assert.equal(state.cameraOwner, "system");
+  assert.equal(state.cameraResetVersion, resetVersion + 1);
+  state = reduceAtlasNearbyUi(state, { type: "expand_list" });
+  assert.deepEqual(
+    [state.mode, state.selectedPlaceId, state.framing],
+    ["browse", "school:one", "closer"],
+  );
+});
+
+test("Nearby panel consumes only space that leaves the configured map minimum", () => {
+  const place = (
+    width: number,
+    height: number,
+    mode: "browse" | "selected",
+    previousPlacement: "none" | "side" | "bottom" = "none",
+  ) => chooseAtlasPanelPlacement({
+    width,
+    height,
+    mode,
+    previousPlacement,
+    minimumMapWidthPx: atlasPolicy.stageLayout.minimumMapWidthPx,
+    minimumMapHeightPx: atlasPolicy.stageLayout.minimumMapHeightPx,
+    browsePanelWidthPx: atlasPolicy.stageLayout.browsePanelWidthPx,
+    compactPanelWidthPx: atlasPolicy.stageLayout.compactPanelWidthPx,
+    placementHysteresisPx: atlasPolicy.stageLayout.placementHysteresisPx,
+  });
+  assert.equal(place(1232, 768, "browse"), "side");
+  assert.equal(place(1072, 668, "browse"), "side");
+  assert.equal(place(992, 668, "browse"), "bottom");
+  assert.equal(place(390, 650, "selected"), "bottom");
+  assert.equal(place(1072, 420, "browse"), "bottom");
+  assert.equal(place(1035, 668, "browse", "side"), "side");
+  assert.equal(place(1035, 668, "browse", "bottom"), "bottom");
 });
 
 test('nearby relationship keeps home, uses real extents and never drops distant API evidence', () => {
@@ -159,7 +228,7 @@ test('screen-space fitting contains point, polygon, line, and lifted anchors at 
   }
 });
 
-test('nearby comparisons preserve orientation when selecting opposite-side alternatives', () => {
+test('nearby comparisons turn each selected relationship onto the wide screen axis', () => {
   const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
   const home = {...resolveHomeAnchor(context)!, boundary: context.home.boundary};
   const template = buildNumberedPlaces(context.places)[0];
@@ -172,10 +241,18 @@ test('nearby comparisons preserve orientation when selecting opposite-side alter
     {width: 1440, height: 1000, left: 32, right: 420, top: 96, bottom: 120},
     {width: 390, height: 844, left: 16, right: 16, top: 160, bottom: 420},
   ]) {
-    const overview = nearbySceneCamera(home, places, [], [], null, 'overview', 900, frame.width, frame);
     for (const selected of places) {
       const pair = nearbySceneCamera(home, places, [], [], selected.feature_id, 'pair', 900, frame.width, frame);
-      assert.equal(pair.heading, overview.heading, 'selection must not rotate the comparison world');
+      const expectedHeading = (
+        bearingDegrees(
+          {lat: home.latitude, lng: home.longitude},
+          {lat: selected.latitude, lng: selected.longitude},
+        ) + atlasPolicy.cameraFit.pairHeadingOffsetDegrees
+      ) % 360;
+      const headingError = Math.abs(
+        ((pair.heading - expectedHeading + 540) % 360) - 180,
+      );
+      assert.ok(headingError < 1e-6, 'selected pair should spend distance across map width');
       assert.equal(pair.tilt, atlasPolicy.cameraFit.pairTilt);
       const reversed = nearbySceneCamera(home, [...places].reverse(), [], [], selected.feature_id,
         'pair', 900, frame.width, frame);

@@ -95,7 +95,7 @@ test("records the complete PR 126 spatial story in the PR 132 shell", async ({pa
   await captureScene(page, testInfo, "02-above", "society:above");
   await captureScene(page, testInfo, "03-neighborhood", "society:neighborhood");
 
-  await atlas.getByRole("button", {name: "Road journey", exact: true}).click();
+  await atlas.getByRole("button", {name: "Approach", exact: true}).click();
   await captureScene(page, testInfo, "04-road-context", "road:context", 30_000);
   await captureScene(page, testInfo, "05-road-flight", "road:flight", 30_000);
   await expect.poll(async () => {
@@ -106,12 +106,13 @@ test("records the complete PR 126 spatial story in the PR 132 shell", async ({pa
   await atlas.screenshot({path: testInfo.outputPath("06-road-arrival.png")});
   await expect(map).toHaveAttribute("data-atlas-instance", instance ?? "");
 
+  await atlas.getByRole("button", {name: "Nearby", exact: true}).click();
   for (const category of ["Schools", "Metro", "Lakes"]) {
-    await atlas.getByRole("button", {name: category, exact: true}).first().click();
+    await atlas.getByLabel("Nearby category").selectOption({label: category});
     await expect(map).toHaveAttribute("data-atlas-visibility", "category");
     await atlas.screenshot({path: testInfo.outputPath(`${category.toLowerCase()}-overview.png`)});
-    const drawer = atlas.locator(".property-atlas__drawer");
-    await drawer.getByRole("button", {name: new RegExp(`^Tour ${category.toLowerCase()}`)}).click();
+    const panel = atlas.locator(".property-atlas__panel");
+    await panel.getByRole("button", {name: "Start tour", exact: true}).click();
     await expect(map).toHaveAttribute("data-atlas-depth", "pair", {timeout: 15_000});
     await expect(map).toHaveAttribute("data-atlas-visibility", "pair");
     await expect(map).toHaveAttribute("data-atlas-marker-count", "2");
@@ -124,8 +125,9 @@ test("records the complete PR 126 spatial story in the PR 132 shell", async ({pa
     await expect(map).toHaveAttribute("data-atlas-depth", "inspect", {timeout: 15_000});
     await atlas.screenshot({path: testInfo.outputPath(`${category.toLowerCase()}-inspect.png`)});
     await expect(map).toHaveAttribute("data-atlas-depth", "home", {timeout: 90_000});
-    await expect(drawer.getByRole("button", {name: new RegExp(`^Tour ${category.toLowerCase()}`)}))
+    await expect(panel.getByRole("button", {name: "Replay tour", exact: true}))
       .toBeVisible({timeout: policy.nearby.returnHomeMs + 2_000});
+    await atlas.getByRole("button", {name: "Nearby", exact: true}).click();
   }
 
   const trace = await finishCameraTrace(page, testInfo);

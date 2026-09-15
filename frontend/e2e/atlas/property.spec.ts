@@ -2,9 +2,10 @@ import { expect, test } from "@playwright/test";
 
 // Only backend responses are fixtures. This test deliberately requires real
 // Google Maps, an authorized key, and a WebGL-capable browser. No fake canvas.
-test("property page: society, metro focus, nearby, aerial road, Street View exit", async ({
+test("property page: adaptive Nearby workbench, camera control, road and Street View", async ({
   page,
 }, testInfo) => {
+  test.setTimeout(240000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/property/fixture-prestige-waterford-3bhk");
@@ -18,75 +19,205 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await expect(map).toHaveAttribute("data-google-initialized", "true", {
     timeout: 30000,
   });
-  await arrival.screenshot({ path: testInfo.outputPath("society.png") });
-  await arrival.getByRole("button", { name: "Metro", exact: true }).click();
+  await expect(arrival).toHaveAttribute("data-nearby-mode", "rest");
+  await expect(arrival).toHaveAttribute("data-panel-placement", "none");
   await expect(
-    arrival.getByRole("button", { name: "Show together", exact: true }),
-  ).toBeVisible();
+    arrival.getByRole("heading", { name: "PRESTIGE WATERFORD" }),
+  ).toHaveCount(1);
+  await arrival.screenshot({ path: testInfo.outputPath("society.png") });
+
+  await arrival.getByRole("button", { name: "Nearby", exact: true }).click();
+  await expect(arrival).toHaveAttribute("data-nearby-mode", "browse");
+  await expect(arrival).toHaveAttribute("data-panel-placement", "side");
+  await expect(arrival).toHaveAttribute("data-layout-settling", "false");
+  await expect.poll(async () =>
+    (await arrival.locator(".property-atlas__map-frame").boundingBox())?.width
+      ?? 0
+  ).toBeGreaterThanOrEqual(720);
+
+  await arrival.getByLabel("Nearby category").selectOption({ label: "Metro" });
   await expect(arrival.locator("gmp-polyline-3d-interactive")).toHaveCount(16);
   await arrival.locator(".property-atlas__place-list button").nth(1).click();
+  await expect(arrival).toHaveAttribute("data-nearby-mode", "selected");
+  await expect(arrival.locator(".property-atlas__place-card h2")).toBeFocused();
   await expect(
-    arrival.locator(".property-atlas__place-list button").nth(1),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(map).toHaveAttribute('data-atlas-depth', 'pair');
-  await expect(map).toHaveAttribute('data-atlas-marker-count', '2');
+    arrival.getByRole("button", { name: "Look closer", exact: true }),
+  ).toBeVisible();
+  await expect(map).toHaveAttribute("data-atlas-depth", "pair");
+  await expect(map).toHaveAttribute("data-atlas-marker-count", "2");
   await expect(map.locator('[data-atlas-relationship="true"]')).toHaveCount(1);
-  await expect(map.locator(':scope > gmp-marker-3d-interactive')).toHaveCount(2);
-  await expect(map.locator('gmp-marker-3d-interactive[title="Prestige Waterford"]'))
-    .not.toHaveAttribute('label', /.+/);
-  await expect(map.locator(':scope > gmp-marker-3d-interactive[label]')).toHaveCount(0);
-  const pairDistance = Number(await map.getAttribute('data-atlas-pair-distance'));
-  const pairRange = Number(await map.getAttribute('data-atlas-camera-target-range'));
+  await expect(map.locator(":scope > gmp-marker-3d-interactive")).toHaveCount(2);
+  await expect(
+    map.locator('gmp-marker-3d-interactive[title="Prestige Waterford"]'),
+  ).not.toHaveAttribute("label", /.+/);
+  await expect(
+    map.locator(":scope > gmp-marker-3d-interactive[label]"),
+  ).toHaveCount(0);
+  const pairDistance = Number(await map.getAttribute("data-atlas-pair-distance"));
+  const pairRange = Number(
+    await map.getAttribute("data-atlas-camera-target-range"),
+  );
   expect(pairDistance).toBeGreaterThan(0);
   expect(pairRange).toBeGreaterThanOrEqual(950);
   expect(pairRange).toBeLessThan(Number.POSITIVE_INFINITY);
-  await expect(map.locator(':scope > gmp-marker-3d-interactive').first())
-    .toHaveAttribute('altitude-mode', 'relative-to-ground');
-  await arrival.getByRole('button', {name:'Look closer',exact:true}).click();
-  await expect(map).toHaveAttribute('data-atlas-depth', 'inspect');
-  await arrival.getByRole('button', {name:'With home',exact:true}).click();
-  await expect(map).toHaveAttribute('data-atlas-depth', 'pair');
+  await expect(map.locator(":scope > gmp-marker-3d-interactive").first())
+    .toHaveAttribute("altitude-mode", "relative-to-ground");
+
+  await arrival
+    .getByRole("button", { name: "Look closer", exact: true })
+    .click();
+  await expect(map).toHaveAttribute("data-atlas-depth", "inspect");
+  await arrival
+    .getByRole("button", { name: "Show context", exact: true })
+    .click();
+  await expect(map).toHaveAttribute("data-atlas-depth", "pair");
   await arrival.screenshot({ path: testInfo.outputPath("metro-focus.png") });
-  await arrival.getByRole("button", { name: "Schools", exact: true }).click();
-  await expect(arrival.locator(".property-atlas__place-list button")).toHaveCount(2);
-  await expect(map).toHaveAttribute('data-atlas-depth', 'overview');
+
+  const selectedScene = await map.getAttribute("data-atlas-scene");
+  await arrival.getByRole("button", { name: /^All metro$/i }).click();
+  await expect(arrival).toHaveAttribute("data-nearby-mode", "browse");
+  await expect(map).toHaveAttribute("data-atlas-scene", selectedScene ?? "");
+  await expect(
+    arrival.locator(".property-atlas__place-list button[aria-pressed=true]"),
+  ).toHaveCount(1);
+  await arrival.getByLabel("Nearby category").selectOption({ label: "Schools" });
+  await expect(
+    arrival.locator(".property-atlas__place-list button"),
+  ).toHaveCount(2);
+  await expect(map).toHaveAttribute("data-atlas-depth", "overview");
   await expect(map.locator('[data-atlas-relationship="true"]')).toHaveCount(0);
-  for (const name of await arrival.locator('.property-atlas__place-list strong').allTextContents()) {
-    await expect(map.getByLabel(name, {exact: true})).toHaveCount(0);
+  for (
+    const name of await arrival
+      .locator(".property-atlas__place-list strong")
+      .allTextContents()
+  ) {
+    await expect(map.getByLabel(name, { exact: true })).toHaveCount(0);
   }
-  await arrival.screenshot({path:testInfo.outputPath('schools-together.png')});
-  await arrival.locator('.property-atlas__place-list button').first().click();
-  await expect(map).toHaveAttribute('data-atlas-depth', 'pair');
-  await expect(map).toHaveAttribute('data-atlas-marker-count', '2');
+  await arrival.screenshot({
+    path: testInfo.outputPath("schools-together.png"),
+  });
+
+  await arrival.locator(".property-atlas__place-list button").first().click();
+  await expect(map).toHaveAttribute("data-atlas-depth", "pair");
+  await expect(map).toHaveAttribute("data-atlas-marker-count", "2");
   await expect(map.locator('[data-atlas-relationship="true"]')).toHaveCount(1);
-  await page.waitForTimeout(1300);
-  await arrival.screenshot({path:testInfo.outputPath('school-with-home.png')});
-  await arrival.getByRole('button', {name: 'Tour schools', exact: true}).click();
-  await expect(map).toHaveAttribute('data-atlas-camera-owner', 'nearby');
-  await expect(map).toHaveAttribute('data-atlas-scene', 'tour:nearby:school:overview');
-  await expect(map).toHaveAttribute('data-atlas-depth', 'pair', {timeout: 10_000});
-  await expect(map).toHaveAttribute('data-atlas-scene', /:pair$/);
-  await arrival.getByRole('button', {name: 'Pause tour', exact: true}).click();
+  await arrival.screenshot({
+    path: testInfo.outputPath("school-with-home.png"),
+  });
+  const selectedPanel = arrival.locator(".property-atlas__panel");
+  const selectedName = await selectedPanel
+    .locator(".property-atlas__place-card h2")
+    .textContent();
+  const selectedDistance = await selectedPanel
+    .locator(".property-atlas__place-distance")
+    .textContent();
+  expect(selectedName).toBeTruthy();
+  expect(selectedDistance).toBeTruthy();
+  await expect(
+    selectedPanel.getByRole("heading", {
+      name: selectedName!,
+      exact: true,
+    }),
+  ).toHaveCount(1);
+  await expect(
+    selectedPanel.getByText(selectedDistance!, { exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    arrival.getByRole("button", { name: "Reset view" }),
+  ).toHaveCount(0);
+
+  await arrival.getByRole("button", { name: "Start tour", exact: true }).click();
+  await expect(arrival).toHaveAttribute("data-nearby-mode", "tour");
+  await expect(map).toHaveAttribute("data-atlas-camera-owner", "nearby");
+  await expect(map).toHaveAttribute(
+    "data-atlas-scene",
+    "tour:nearby:school:overview",
+  );
+  await expect(map).toHaveAttribute("data-atlas-depth", "pair", {
+    timeout: 10000,
+  });
+  await expect(map).toHaveAttribute("data-atlas-scene", /:pair$/);
+  await arrival
+    .getByRole("button", { name: "Pause tour", exact: true })
+    .click();
   const pausedNearbyCamera = await map.evaluate((element) => JSON.stringify({
-    center: (element as HTMLElement & {center: unknown}).center,
-    heading: (element as HTMLElement & {heading: number}).heading,
-    range: (element as HTMLElement & {range: number}).range,
+    center: (element as HTMLElement & { center: unknown }).center,
+    heading: (element as HTMLElement & { heading: number }).heading,
+    range: (element as HTMLElement & { range: number }).range,
   }));
   await page.waitForTimeout(400);
   expect(await map.evaluate((element) => JSON.stringify({
-    center: (element as HTMLElement & {center: unknown}).center,
-    heading: (element as HTMLElement & {heading: number}).heading,
-    range: (element as HTMLElement & {range: number}).range,
+    center: (element as HTMLElement & { center: unknown }).center,
+    heading: (element as HTMLElement & { heading: number }).heading,
+    range: (element as HTMLElement & { range: number }).range,
   }))).toBe(pausedNearbyCamera);
-  await arrival.getByRole('button', {name: 'Resume tour', exact: true}).click();
-  await expect(map).toHaveAttribute('data-atlas-depth', 'inspect', {timeout: 10_000});
-  await arrival.locator('.property-atlas__place-list button.is-active').click();
-  await page.setViewportSize({width: 390, height: 844});
-  await page.waitForTimeout(1300);
-  await arrival.screenshot({path: testInfo.outputPath('mobile-nearby.png')});
-  await page.setViewportSize({width: 1440, height: 1000});
   await arrival
-    .getByRole("button", { name: "Road journey", exact: true })
+    .getByRole("button", { name: "Resume tour", exact: true })
+    .click();
+  await expect(map).toHaveAttribute("data-atlas-depth", "inspect", {
+    timeout: 10000,
+  });
+
+  await map.dispatchEvent("pointerdown", {
+    pointerId: 1,
+    clientX: 120,
+    clientY: 120,
+    buttons: 1,
+  });
+  await map.dispatchEvent("pointermove", {
+    pointerId: 1,
+    clientX: 140,
+    clientY: 132,
+    buttons: 1,
+  });
+  await map.dispatchEvent("pointerup", {
+    pointerId: 1,
+    clientX: 140,
+    clientY: 132,
+  });
+  await expect(arrival).toHaveAttribute("data-nearby-mode", "selected");
+  await expect(
+    arrival.getByRole("button", { name: "Reset view" }),
+  ).toBeVisible();
+  const manualCamera = await map.evaluate((element) => JSON.stringify({
+    center: (element as HTMLElement & { center: unknown }).center,
+    heading: (element as HTMLElement & { heading: number }).heading,
+    range: (element as HTMLElement & { range: number }).range,
+  }));
+  await page.waitForTimeout(400);
+  expect(await map.evaluate((element) => JSON.stringify({
+    center: (element as HTMLElement & { center: unknown }).center,
+    heading: (element as HTMLElement & { heading: number }).heading,
+    range: (element as HTMLElement & { range: number }).range,
+  }))).toBe(manualCamera);
+  await arrival.getByRole("button", { name: "Reset view" }).click();
+  await expect(
+    arrival.getByRole("button", { name: "Reset view" }),
+  ).toHaveCount(0);
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(arrival).toHaveAttribute("data-panel-placement", "side");
+  await expect.poll(async () =>
+    (await arrival.locator(".property-atlas__map-frame").boundingBox())?.width
+      ?? 0
+  ).toBeGreaterThanOrEqual(720);
+  await arrival.screenshot({
+    path: testInfo.outputPath("constrained-selected.png"),
+  });
+  await arrival.getByRole("button", { name: /^All schools$/i }).click();
+  await expect(arrival).toHaveAttribute("data-nearby-mode", "browse");
+  await expect(arrival).toHaveAttribute("data-panel-placement", "side");
+  await expect.poll(async () =>
+    (await arrival.locator(".property-atlas__map-frame").boundingBox())?.width
+      ?? 0
+  ).toBeGreaterThanOrEqual(720);
+  await arrival.screenshot({
+    path: testInfo.outputPath("constrained-browse.png"),
+  });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await arrival
+    .getByRole("button", { name: "Approach", exact: true })
     .click();
   await expect(arrival.getByLabel("Road tour speed")).toBeVisible({
     timeout: 15000,
@@ -100,13 +231,16 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await expect(
     arrival.getByRole("button", { name: "Resume road tour", exact: true }),
   ).toBeVisible();
-  const paused = await map.evaluate((el) =>
-    JSON.stringify((el as HTMLElement & { center: unknown }).center),
+  await expect(map).toHaveAttribute("data-google-steady", "true", {
+    timeout: 5000,
+  });
+  const paused = await map.evaluate((element) =>
+    JSON.stringify((element as HTMLElement & { center: unknown }).center)
   );
   await page.waitForTimeout(400);
   expect(
-    await map.evaluate((el) =>
-      JSON.stringify((el as HTMLElement & { center: unknown }).center),
+    await map.evaluate((element) =>
+      JSON.stringify((element as HTMLElement & { center: unknown }).center)
     ),
   ).toBe(paused);
   await arrival
@@ -116,7 +250,7 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await arrival
     .getByRole("button", { name: "Street View", exact: true })
     .click();
-  // Exit is reachable immediately, even if panorama coverage fails or is slow.
+  // Exit remains reachable immediately if panorama coverage fails or is slow.
   await expect(
     arrival.getByRole("button", { name: "Back to aerial", exact: true }),
   ).toBeVisible();
@@ -126,7 +260,5 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   await expect(
     arrival.locator('[data-map-renderer="google-3d"]'),
   ).toBeVisible();
-  await page.setViewportSize({ width: 390, height: 844 });
-  await arrival.screenshot({ path: testInfo.outputPath("mobile-road.png") });
   expect(errors).toEqual([]);
 });

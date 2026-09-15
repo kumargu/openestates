@@ -60,7 +60,8 @@ existing self-only defaults for unrelated resources.
 | Playback state, waits, pause, resume, cancellation | Existing `ArrivalPlaybackController` |
 | Aerial animation frames | `useAtlasRoadFlight`, subordinate to that controller |
 | Street-level rendering | Existing `useGuidedStreetViewTour` |
-| UI switches and selected place | Existing `PropertyArrivalMap` |
+| `rest` / `browse` / `selected` / `tour` UI state | `PropertyArrivalMap` via `atlasNearbyUi` |
+| Inspector placement and cancellable layout-settled signal | `useAtlasStageLayout` |
 | Google elements, overlays, focus camera | Existing `PropertyArrivalGoogle3DMap` |
 | Road speed/camera tuning and overlay styling | `app/config/ui/home-atlas.json` |
 | Property identity and save/note actions | Existing property detail projection and controls |
@@ -74,19 +75,21 @@ by this change. Do not describe that separate layout as integrated.
 
 ## Buyer experience
 
-- One uninterrupted, viewport-height 3D world beside the existing sidebar. The
-  property name and essential facts sit directly on the scene; the duplicate
-  listing hero, old map, and arrival tile are not stacked above it.
-- Direct, scene-derived Society, Schools, Hospitals, Roads, Metro, Lakes, and
-  other nearby categories. Categories disappear when the backend returns no
-  evidence rather than rendering empty controls.
+- One flexible map deck beside the unchanged workspace sidebar: a stable property
+  title strip, a dominant full-width 3D map, and compact Home / Arrival / Nearby
+  controls. The property identity appears once.
+- Nearby opens one 320px floating category inspector without narrowing the map.
+  The selected deck grows vertically. The inspector changes sides or collapses
+  when its footprint would cover the home or selected destination.
+- Scene-derived Schools, Hospitals, Tech parks, Parks, Lakes, Breweries, and
+  Metro live in the inspector's category selector. Categories disappear when
+  the backend returns no evidence rather than rendering empty controls.
 - Society reveal, an optional top perspective, sourced OSM boundary, and quiet
   surroundings. Quiet mode retains holes for the home and the places currently
   being inspected, so focus remains readable instead of dimming the evidence.
 - Metro points and the actual API-provided track segments. Segments stay separate;
-  no straight line is invented between stations. Numbered nearby list, individual
-  focus, Show together, source-backed detail card, and a guided sequence through
-  available places live in one right-side drawer.
+  no straight line is invented between stations. Browse, selected place, and
+  category tour reuse one camera owner.
 - Nearby categories are derived from the existing payload. Existing 2D evidence
   remains available. Polygon overlays preserve supplied holes and multipolygon
   parts; missing polygons are not manufactured.
@@ -99,9 +102,10 @@ by this change. Do not describe that separate layout as integrated.
   Street View loads or has no coverage. Escape also exits. The returned panorama
   position is projected onto the same aerial route, preserving heading; replay
   is explicit after returning.
-- Pointer interaction, view changes, and document hiding cancel automatic
-  movement. Pause/resume uses the existing controller. Reduced-motion users do
-  not receive the automatic aerial flight.
+- Direct map gestures stop a Nearby tour immediately and preserve the current
+  camera. `Reset view` appears only after that manual takeover. Marker selection
+  is not treated as a map gesture. Pause/resume uses the existing controller.
+  Reduced-motion users do not receive the automatic aerial flight.
 
 ## Integration gaps fixed
 
@@ -119,22 +123,31 @@ by this change. Do not describe that separate layout as integrated.
 
 ## Interaction/design note
 
-Inspected the preserved Human Atlas `app/page.tsx` selection/visibility/view
-state and its focus scene, plus its slider component. Borrowed separate camera
-and selection state, cancellable cinematic movement, and a small continuous road
-speed lever. The accepted Atlas Site supplied the full-stage composition, direct
-nearby categories, numbered evidence drawer, OSM/quiet analysis controls, and
-calm bottom journey dock.
+Issue #137 borrows Cursor's spatial discipline: a stable top bar, a dominant
+editor-like canvas, and one anchored inspector instead of stacked map tools. It
+applies that pattern to the existing Atlas states and sourced geometry; it does
+not borrow Cursor branding, density, or iconography.
+
+The shell uses the same warm background as the rest of the property experience.
+Rounded map, inspector, and journey surfaces restore the property page's richer
+card language without adding gutters or reducing the measured map area.
+
+The selected place remains selected while the inspector is visible. A selected
+home-to-destination relationship rotates onto the map's wide axis before fitting,
+so bearing alone cannot force a much wider camera range. Camera fitting waits for
+the deck transition and stable map bounds; stale settle work is cancelled. Panel
+placement is derived from the fitted subjects, and a direct gesture interrupts a
+tour without moving the camera.
 Searched for a directly applicable ThreeUI map interaction; no specific additional
 map implementation was established. No unverified ThreeUI source is claimed.
 Did not borrow anatomical geometry, explosion/lift, or side-by-side map
 comparisons.
 
-Rest: the 3D property canvas is the primary surface. Hover/focus: restrained
-glass controls and visible focus rings. Touch: a horizontally scrollable category
-rail, full-width bottom dock, and a bounded drawer. Reduced motion: settle the
-camera instead of automatically flying. Property identity is projected once;
-save/note reuse the existing controls and do not create a second state store.
+Rest: title strip, map, and journey only. Browse: one bounded category/list
+inspector. Selected: one compact fact card. Tour: that same card adds progress
+and one pause/resume control. Hover/focus keeps visible rings; touch uses the
+bottom inspector and horizontal place list. Reduced motion removes the layout
+transition and automatic aerial flight. Save/note reuse the existing controls.
 
 ## Verification and remaining gate
 
