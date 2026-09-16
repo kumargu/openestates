@@ -6,6 +6,13 @@ const DRACO_LOADER_URL = "https://esm.sh/three@0.185.0/examples/jsm/loaders/DRAC
 const TILES_RENDERER_URL = "https://esm.sh/3d-tiles-renderer@0.5.2?external=three";
 const TILES_PLUGINS_URL = "https://esm.sh/3d-tiles-renderer@0.5.2/plugins?external=three";
 
+const WATERFORD = {
+  // Existing OpenEstates Atlas fixture point + Google ElevationService sample.
+  lat: 12.9819914,
+  lon: 77.7421819,
+  elevationM: 921.2407,
+};
+
 function runtimeImport(url: string): Promise<any> {
   return import(/* @vite-ignore */ url);
 }
@@ -59,7 +66,7 @@ export function WaterfordCinematicLabPage() {
       }
 
       setStatus("Loading Waterford");
-      setDetail("Google Tiles verified · loading Three.js + 3DTilesRendererJS…");
+      setDetail("Google Tiles verified · loading the cinematic renderer…");
 
       const [THREE, orbitModule, dracoModule, tilesModule, pluginsModule] = await Promise.all([
         runtimeImport(THREE_URL),
@@ -78,7 +85,6 @@ export function WaterfordCinematicLabPage() {
         MathUtils,
         PerspectiveCamera,
         Scene,
-        SRGBColorSpace,
         WebGLRenderer,
       } = THREE;
       const { OrbitControls } = orbitModule;
@@ -94,7 +100,14 @@ export function WaterfordCinematicLabPage() {
 
       const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const isCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, isCoarsePointer ? 1.35 : 1.65);
+      const deviceDpr = Math.max(1, window.devicePixelRatio || 1);
+
+      // NASA's reference uses devicePixelRatio directly. The old lab capped mobile at
+      // 1.35, which made photogrammetry look soft on high-density phones. Keep motion
+      // affordable, but let a settled scene become genuinely sharp.
+      const movingDpr = Math.min(deviceDpr, isCoarsePointer ? 1.75 : 2.0);
+      const settledDpr = Math.min(deviceDpr, isCoarsePointer ? 2.5 : 2.25);
+      let activeDpr = movingDpr;
 
       const scene = new Scene();
       const renderer = new WebGLRenderer({
@@ -102,30 +115,25 @@ export function WaterfordCinematicLabPage() {
         alpha: false,
         powerPreference: "high-performance",
       });
-      renderer.outputColorSpace = SRGBColorSpace;
-      renderer.setClearColor(0x101518, 1);
-      renderer.setPixelRatio(pixelRatio);
+      renderer.setClearColor(0x151c1f, 1);
+      renderer.setPixelRatio(activeDpr);
       root.replaceChildren(renderer.domElement);
 
-      // Tighter than the NASA reference: Waterford should read as the subject, not as
-      // one object in an infinite globe.
-      const camera = new PerspectiveCamera(50, 1, 20, 1_600_000);
-      camera.position.set(720, 430, -900);
+      // Match the NASA reference lens. Waterford is much shorter than Tokyo Tower, so
+      // the camera is adapted to the site's ~16 acre footprint rather than copied by
+      // distance alone.
+      const camera = new PerspectiveCamera(60, 1, 30, 1_600_000);
 
       const controls = new OrbitControls(camera, renderer.domElement);
-      controls.target.set(0, 48, 0);
+      controls.target.set(0, 42, 0);
       controls.enableDamping = true;
-      controls.dampingFactor = 0.055;
       controls.enablePan = false;
-      controls.enableZoom = true;
-      controls.zoomSpeed = 0.65;
-      controls.rotateSpeed = 0.42;
-      controls.minDistance = 240;
-      controls.maxDistance = 1_850;
-      controls.minPolarAngle = MathUtils.degToRad(30);
-      controls.maxPolarAngle = MathUtils.degToRad(72);
-      controls.autoRotate = !prefersReducedMotion;
-      controls.autoRotateSpeed = 0.32;
+      controls.minDistance = 190;
+      controls.maxDistance = 1_600;
+      controls.minPolarAngle = 0;
+      controls.maxPolarAngle = 3 * Math.PI / 8;
+      controls.autoRotate = false;
+      controls.autoRotateSpeed = 0.5;
 
       const tiles = new TilesRenderer();
       tiles.registerPlugin(new GoogleCloudAuthPlugin({
@@ -140,34 +148,73 @@ export function WaterfordCinematicLabPage() {
       dracoLoader.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
       tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader }));
       tiles.registerPlugin(new ReorientationPlugin({
-        lat: 12.98142 * MathUtils.DEG2RAD,
-        lon: 77.74156 * MathUtils.DEG2RAD,
-        height: 850,
+        lat: WATERFORD.lat * MathUtils.DEG2RAD,
+        lon: WATERFORD.lon * MathUtils.DEG2RAD,
+        height: WATERFORD.elevationM,
       }));
 
       scene.add(tiles.group);
       tiles.setCamera(camera);
 
-      const detailMoving = isCoarsePointer ? 20 : 17;
-      const detailSettled = isCoarsePointer ? 15 : 11;
+      const detailMoving = isCoarsePointer ? 16 : 14;
+      const detailSettled = isCoarsePointer ? 9 : 7;
+      tiles.errorTarget = detailMoving;
+
       let qualityTimer = 0;
       let idleResumeTimer = 0;
+      let autoStartTimer = 0;
       let firstUsefulFrame = false;
       let lastAttribution = "";
       let lastAttributionUpdate = 0;
+      let lastProgressUpdate = 0;
+      let initialCameraPlaced = false;
       const startedAt = performance.now();
       let raf = 0;
+
+      const resize = () => {
+        const width = Math.max(1, root.clientWidth);
+        const height = Math.max(1, root.clientHeight);
+        const aspect = width / height;
+        camera.aspect = aspect;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height, false);
+        tiles.setResolutionFromRenderer(camera, renderer);
+
+        if (!initialCameraPlaced) {
+          // Portrait needs extra range because horizontal FOV is much narrower. This
+          // still keeps the society dominant instead of showing a generic city view.
+          if (aspect < 0.72) {
+            camera.position.set(430, 330, 430);
+          } else if (aspect < 1.1) {
+            camera.position.set(390, 310, 390);
+          } else {
+            camera.position.set(340, 285, 340);
+          }
+          camera.lookAt(controls.target);
+          controls.update();
+          initialCameraPlaced = true;
+        }
+      };
+
+      const applyPixelRatio = (next: number) => {
+        if (Math.abs(activeDpr - next) < 0.05) return;
+        activeDpr = next;
+        renderer.setPixelRatio(activeDpr);
+        resize();
+      };
 
       const setMovingQuality = () => {
         window.clearTimeout(qualityTimer);
         tiles.errorTarget = detailMoving;
+        applyPixelRatio(movingDpr);
       };
 
       const setSettledQuality = () => {
         window.clearTimeout(qualityTimer);
         qualityTimer = window.setTimeout(() => {
           tiles.errorTarget = detailSettled;
-        }, 180);
+          applyPixelRatio(settledDpr);
+        }, 240);
       };
 
       const scheduleAutoMotionResume = () => {
@@ -175,12 +222,14 @@ export function WaterfordCinematicLabPage() {
         if (prefersReducedMotion) return;
         idleResumeTimer = window.setTimeout(() => {
           controls.autoRotate = true;
-          tiles.errorTarget = isCoarsePointer ? 18 : 14;
-        }, 4200);
+          // Preserve the sharp settled scene during the slow cinematic orbit.
+          tiles.errorTarget = Math.max(detailSettled, 9);
+        }, 2600);
       };
 
       const onControlStart = () => {
         controls.autoRotate = false;
+        window.clearTimeout(autoStartTimer);
         setMovingQuality();
         window.clearTimeout(idleResumeTimer);
         hintRef.current?.classList.add("is-quiet");
@@ -193,15 +242,6 @@ export function WaterfordCinematicLabPage() {
 
       controls.addEventListener("start", onControlStart);
       controls.addEventListener("end", onControlEnd);
-
-      const resize = () => {
-        const width = Math.max(1, root.clientWidth);
-        const height = Math.max(1, root.clientHeight);
-        camera.aspect = width / height;
-        camera.updateProjectionMatrix();
-        renderer.setSize(width, height, false);
-        tiles.setResolutionFromRenderer(camera, renderer);
-      };
 
       const resizeObserver = new ResizeObserver(resize);
       resizeObserver.observe(root);
@@ -223,6 +263,17 @@ export function WaterfordCinematicLabPage() {
         }
       };
 
+      const updateLoadingProgress = (now: number) => {
+        if (firstUsefulFrame || now - lastProgressUpdate < 700) return;
+        lastProgressUpdate = now;
+        const stats = tiles.stats ?? {};
+        const visible = tiles.visibleTiles?.size ?? 0;
+        const loaded = stats.loaded ?? 0;
+        const downloading = stats.downloading ?? 0;
+        const parsing = stats.parsing ?? 0;
+        setDetail(`Google 3D · visible ${visible} · loaded ${loaded} · downloading ${downloading} · parsing ${parsing}`);
+      };
+
       const frame = (now: number) => {
         if (cancelled) return;
         raf = requestAnimationFrame(frame);
@@ -234,15 +285,23 @@ export function WaterfordCinematicLabPage() {
         tiles.update();
         renderer.render(scene, camera);
 
-        if (!firstUsefulFrame && (tiles.visibleTiles?.size ?? 0) >= 4) {
+        const visibleCount = tiles.visibleTiles?.size ?? 0;
+        if (!firstUsefulFrame && visibleCount >= 4) {
           firstUsefulFrame = true;
           const elapsed = Math.max(0, performance.now() - startedAt);
           setStatus("Prestige Waterford");
-          setDetail(`Live photorealistic 3D · first scene ${(elapsed / 1000).toFixed(1)}s`);
+          setDetail(`High-resolution Google 3D · ${visibleCount} tiles · first view ${(elapsed / 1000).toFixed(1)}s`);
           document.body.classList.add("scene-ready");
           setSettledQuality();
+
+          if (!prefersReducedMotion) {
+            autoStartTimer = window.setTimeout(() => {
+              controls.autoRotate = true;
+            }, 900);
+          }
         }
 
+        updateLoadingProgress(now);
         updateAttribution(now);
       };
 
@@ -252,6 +311,7 @@ export function WaterfordCinematicLabPage() {
         cancelAnimationFrame(raf);
         window.clearTimeout(qualityTimer);
         window.clearTimeout(idleResumeTimer);
+        window.clearTimeout(autoStartTimer);
         resizeObserver.disconnect();
         controls.removeEventListener("start", onControlStart);
         controls.removeEventListener("end", onControlEnd);
@@ -287,27 +347,18 @@ export function WaterfordCinematicLabPage() {
   return (
     <div className="waterford-cinematic-lab">
       <style>{`
-        body { background: #101518; }
+        body { background: #151c1f; }
         .waterford-cinematic-lab {
           position: fixed;
           inset: 0;
           z-index: 100000;
           overflow: hidden;
-          background: #101518;
+          background: #151c1f;
           color: rgba(255,255,255,.94);
           font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
         #scene-root { position: absolute; inset: 0; }
         #scene-root canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-        .scene-vignette {
-          position: absolute;
-          inset: 0;
-          z-index: 2;
-          pointer-events: none;
-          background:
-            linear-gradient(180deg, rgba(4,7,8,.20) 0%, transparent 22%, transparent 76%, rgba(4,7,8,.24) 100%),
-            radial-gradient(ellipse at center, transparent 60%, rgba(5,8,9,.12) 100%);
-        }
         .scene-copy {
           position: absolute;
           z-index: 3;
@@ -315,7 +366,9 @@ export function WaterfordCinematicLabPage() {
           top: max(20px, env(safe-area-inset-top));
           pointer-events: none;
           text-shadow: 0 1px 18px rgba(0,0,0,.72);
+          transition: opacity .8s ease;
         }
+        body.scene-ready .scene-copy { opacity: .72; }
         #scene-status {
           margin: 0;
           font-size: clamp(18px, 2vw, 26px);
@@ -325,10 +378,10 @@ export function WaterfordCinematicLabPage() {
         #scene-detail {
           margin-top: 6px;
           max-width: min(760px, 82vw);
-          font-size: 12px;
+          font-size: 11px;
           line-height: 1.45;
           letter-spacing: .02em;
-          color: rgba(255,255,255,.66);
+          color: rgba(255,255,255,.62);
         }
         #scene-hint {
           position: absolute;
@@ -338,20 +391,20 @@ export function WaterfordCinematicLabPage() {
           transform: translateX(-50%);
           white-space: nowrap;
           padding: 8px 12px;
-          border: 1px solid rgba(255,255,255,.12);
+          border: 1px solid rgba(255,255,255,.14);
           border-radius: 999px;
-          background: rgba(12,16,18,.45);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
+          background: rgba(12,16,18,.38);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
           font-size: 11px;
           letter-spacing: .02em;
-          color: rgba(255,255,255,.76);
+          color: rgba(255,255,255,.82);
           pointer-events: none;
           opacity: 0;
           transition: opacity .8s ease;
         }
         body.scene-ready #scene-hint { opacity: 1; }
-        #scene-hint.is-quiet { opacity: .22; }
+        #scene-hint.is-quiet { opacity: .18; }
         #scene-attribution {
           position: absolute;
           z-index: 4;
@@ -392,13 +445,12 @@ export function WaterfordCinematicLabPage() {
         }
         @media (max-width: 680px) {
           .scene-copy { left: 16px; top: 16px; }
-          #scene-detail { max-width: 76vw; }
+          #scene-detail { max-width: 84vw; }
           #scene-attribution { max-width: 64vw; font-size: 9px; }
         }
       `}</style>
 
       <div ref={sceneRootRef} id="scene-root" aria-label="Interactive photorealistic 3D view of Prestige Waterford" />
-      <div className="scene-vignette" aria-hidden="true" />
 
       <div className="scene-copy">
         <h1 id="scene-status">{status}</h1>
