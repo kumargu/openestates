@@ -41,7 +41,7 @@
   },
   "boundary": { "fill": "#f8f1df12", "stroke": "#fff7e3e6" },
   "quiet": { "fill": "#061b2870", "radiusDegrees": 0.08 },
-  "focus": { "rangeM": 700, "tilt": 55, "durationMs": 1200, "movementFraction": 0.7 },
+  "focus": { "rangeM": 700, "tilt": 55, "durationMs": 1800, "movementFraction": 0.7 },
   "cameraFit": {
     "safeMarginPx": 32,
     "opticalPaddingPx": 52,
@@ -53,10 +53,10 @@
     "homeHeadingDegrees": 210,
     "overviewTilt": 25,
     "pairTilt": 30,
-    "inspectTilt": 44,
+    "inspectTilt": 58,
     "homeTilt": 55,
     "overviewMinimumRangeM": 1000,
-    "inspectMinimumRangeM": 420
+    "inspectMinimumRangeM": 260
   },
   "above": { "tilt": 12 },
   "nearby": {
@@ -78,7 +78,8 @@
     }
   },
   "stageLayout": {
-    "cameraRailClearancePx": 76
+    "cameraRailClearancePx": 76,
+    "turnDegrees": 90
   },
   "geometryStyles": {
     "lake": { "fill": "#7dd8f426", "stroke": "#7dd8f4cc" },

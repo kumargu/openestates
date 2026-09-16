@@ -28,7 +28,6 @@ import {
 import {
   geometryForPlace,
   nearbySceneCamera,
-  nearbyRelationArc,
 } from '../src/lib/atlasNearbyScene.ts';
 import { buildNumberedPlaces, resolveHomeAnchor } from '../src/lib/nearbyPlateProjection.ts';
 
@@ -126,11 +125,6 @@ test('nearby relationship keeps home, uses real extents and never drops distant 
   const distant = {...selected, latitude:home.latitude+0.15, longitude:home.longitude, feature_id:'distant', place_entity_id:'distant'};
   const broad = nearbySceneCamera(home, [distant], [], [], null, 'overview', 900, 1400);
   assert.ok(broad.range > overview.range, 'backend-scoped evidence must not be silently radius-filtered');
-  const arc = nearbyRelationArc(home, selected);
-  assert.equal(arc.length, 41);
-  assert.equal(arc[0].lat, home.latitude);
-  assert.equal(arc.at(-1)!.lng, selected.longitude);
-  assert.ok(arc[20].altitude > arc[0].altitude);
   assert.ok(nearbySceneCamera(home, places, polygons, [], null, 'overview', 900, 390).range > overview.range);
   const returnedHome = nearbySceneCamera(home, places, polygons, [], null, 'home', 900, 1400);
   assert.equal(returnedHome.tilt, 55);
@@ -201,7 +195,7 @@ test('screen-space fitting contains point, polygon, line, and lifted anchors at 
   }
 });
 
-test('nearby comparisons turn each selected relationship onto the wide screen axis', () => {
+test('nearby comparisons fit each relationship to the available screen axis', () => {
   const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
   const home = {...resolveHomeAnchor(context)!, boundary: context.home.boundary};
   const template = buildNumberedPlaces(context.places)[0];
@@ -225,7 +219,7 @@ test('nearby comparisons turn each selected relationship onto the wide screen ax
       const headingError = Math.abs(
         ((pair.heading - expectedHeading + 540) % 360) - 180,
       );
-      assert.ok(headingError < 1e-6, 'selected pair should spend distance across map width');
+      assert.ok(headingError < 1e-6 || Math.abs(headingError - 90) < 1e-6, 'pair uses a fitted horizontal or vertical relationship axis');
       assert.equal(pair.tilt, atlasPolicy.cameraFit.pairTilt);
       const reversed = nearbySceneCamera(home, [...places].reverse(), [], [], selected.feature_id,
         'pair', 900, frame.width, frame);
@@ -233,7 +227,6 @@ test('nearby comparisons turn each selected relationship onto the wide screen ax
       const anchors = [
         {lat: home.latitude, lng: home.longitude, heightM: atlasPolicy.nearby.markerLiftM},
         {lat: selected.latitude, lng: selected.longitude, heightM: atlasPolicy.nearby.markerLiftM},
-        ...nearbyRelationArc(home, selected).map(p => ({lat: p.lat, lng: p.lng, heightM: p.altitude})),
       ];
       for (const anchor of anchors) {
         const screen = projectCameraPointToScreen(pair, anchor, frame, atlasPolicy.cameraFit.fieldOfViewDegrees);
@@ -244,7 +237,7 @@ test('nearby comparisons turn each selected relationship onto the wide screen ax
   }
 });
 
-test('inspect framing gives selected geometry more screen presence while retaining home', () => {
+test('inspect framing fits destination geometry independently of home distance', () => {
   const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
   const home = resolveHomeAnchor(context)!;
   const places = buildNumberedPlaces(context.places.filter(place => place.layer === 'lake'));
@@ -267,13 +260,15 @@ test('inspect framing gives selected geometry more screen presence while retaini
     );
   };
   assert.ok(span(inspect) > span(pair));
-  const homeMarker = projectCameraPointToScreen(inspect, {
-    lat: home.latitude,
-    lng: home.longitude,
-    heightM: atlasPolicy.nearby.markerLiftM,
-  }, frame, atlasPolicy.cameraFit.fieldOfViewDegrees);
-  assert.ok(homeMarker.x >= frame.left && homeMarker.x <= frame.width - frame.right);
-  assert.ok(homeMarker.y >= frame.top && homeMarker.y <= frame.height - frame.bottom);
+  const relocatedHome = {...home, longitude: home.longitude + 0.5};
+  const distantInspect = nearbySceneCamera(relocatedHome, places, polygons, [], selected.feature_id!, 'inspect', 900, 1440, frame);
+  const distantPair = nearbySceneCamera(relocatedHome, places, polygons, [], selected.feature_id!, 'pair', 900, 1440, frame);
+  assert.ok(distantInspect.range < distantPair.range / 5, 'distant home must not prevent close inspection');
+  for (const point of geometry) {
+    const screen = projectCameraPointToScreen(distantInspect, point, frame, atlasPolicy.cameraFit.fieldOfViewDegrees);
+    assert.ok(screen.x >= frame.left && screen.x <= frame.width - frame.right);
+    assert.ok(screen.y >= frame.top && screen.y <= frame.height - frame.bottom);
+  }
 });
 
 test('missing place collections stay a calm sparse scene', () => {
@@ -323,7 +318,6 @@ test('Aerial refits the selected relationship at its final tilt, including mobil
     ...polygons.flatMap(p => p.coordinates.map(([lng, lat]) => ({lat, lng, heightM: 0}))),
     {lat: home.latitude, lng: home.longitude, heightM: atlasPolicy.nearby.markerLiftM},
     {lat: selected.latitude, lng: selected.longitude, heightM: atlasPolicy.nearby.markerLiftM},
-    ...nearbyRelationArc(home, selected).map(p => ({lat: p.lat, lng: p.lng, heightM: p.altitude})),
   ];
   for (const frame of [
     {width: 1440, height: 1000, left: 32, right: 420, top: 96, bottom: 120},
@@ -333,7 +327,11 @@ test('Aerial refits the selected relationship at its final tilt, including mobil
       const camera = nearbySceneCamera(home, places, polygons, [], selected.feature_id!, depth,
         900, frame.width, frame, atlasPolicy.above.tilt);
       assert.equal(camera.tilt, atlasPolicy.above.tilt);
-      for (const point of points) {
+      const requiredPoints = depth === 'inspect'
+        ? [...polygons.flatMap(p => p.coordinates.map(([lng, lat]) => ({lat, lng, heightM: 0}))),
+          {lat: selected.latitude, lng: selected.longitude, heightM: atlasPolicy.nearby.markerLiftM}]
+        : points;
+      for (const point of requiredPoints) {
         const p = projectCameraPointToScreen(camera, point, frame, atlasPolicy.cameraFit.fieldOfViewDegrees);
         const padding = atlasPolicy.cameraFit.opticalPaddingPx - 0.5;
         assert.ok(p.x >= frame.left + padding && p.x <= frame.width - frame.right - padding);
@@ -428,4 +426,14 @@ test("missing and invalid geometry never creates a synthetic road", () => {
     ]),
     null,
   );
+});
+
+test("returning home clears selection and stopping a non-tour preserves rest", () => {
+  assert.equal(reduceAtlasNearbyUi(initialAtlasNearbyUiState, {type: "stop_tour"}), initialAtlasNearbyUiState);
+  const selected = reduceAtlasNearbyUi(initialAtlasNearbyUiState, {type: "select_place", placeId: "school:one"});
+  const overview = reduceAtlasNearbyUi(selected, {type: "show_tour_place", categoryId: "nearby:school", placeId: null});
+  assert.equal(overview.selectedPlaceId, null, "overview must not retain the previous destination");
+  const home = reduceAtlasNearbyUi(selected, {type: "close"});
+  assert.equal(home.selectedPlaceId, null);
+  assert.equal(home.mode, "rest");
 });

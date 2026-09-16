@@ -63,21 +63,8 @@ async function finishCameraTrace(page: Page, testInfo: TestInfo): Promise<Camera
   return trace;
 }
 
-async function captureScene(
-  page: Page,
-  testInfo: TestInfo,
-  name: string,
-  scene: string,
-  timeout = 90_000,
-) {
-  const map = page.locator("gmp-map-3d");
-  await expect(map).toHaveAttribute("data-atlas-scene", scene, {timeout});
-  await page.locator(".property-arrival-map--atlas").screenshot({
-    path: testInfo.outputPath(`${name}.png`),
-  });
-}
 
-test("records the complete PR 126 spatial story in the PR 132 shell", async ({page}, testInfo) => {
+test("records complete category tours without remounting the explorer", async ({page}, testInfo) => {
   test.setTimeout(420_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -91,33 +78,18 @@ test("records the complete PR 126 spatial story in the PR 132 shell", async ({pa
   const instance = await map.getAttribute("data-atlas-instance");
   await startCameraTrace(page);
 
-  await captureScene(page, testInfo, "01-society", "society:society");
-  await captureScene(page, testInfo, "02-above", "society:above");
-  await captureScene(page, testInfo, "03-neighborhood", "society:neighborhood");
+  await atlas.screenshot({path: testInfo.outputPath("01-home.png")});
 
-  await atlas.getByRole("button", {name: "Approach", exact: true}).click();
-  await captureScene(page, testInfo, "04-road-context", "road:context", 30_000);
-  await captureScene(page, testInfo, "05-road-flight", "road:flight", 30_000);
-  await expect.poll(async () => {
-    const distance = Number(await map.getAttribute("data-atlas-road-distance"));
-    const length = Number(await map.getAttribute("data-atlas-road-length"));
-    return length > 0 && distance >= length - 0.5;
-  }, {timeout: 150_000}).toBe(true);
-  await atlas.screenshot({path: testInfo.outputPath("06-road-arrival.png")});
-  await expect(map).toHaveAttribute("data-atlas-instance", instance ?? "");
-
-  await atlas.getByRole("button", {name: "Nearby", exact: true}).click();
   for (const category of ["Schools", "Metro", "Lakes"]) {
-    await atlas.getByLabel("Nearby category").selectOption({label: category});
+    await atlas.getByRole("button", {name: category, exact: true}).click();
     await expect(map).toHaveAttribute("data-atlas-visibility", "category");
     await atlas.screenshot({path: testInfo.outputPath(`${category.toLowerCase()}-overview.png`)});
-    const panel = atlas.locator(".property-atlas__panel");
-    await panel.getByRole("button", {name: "Start tour", exact: true}).click();
+    await atlas.getByRole("button", {name: "Start tour", exact: true}).click();
     await expect(map).toHaveAttribute("data-atlas-depth", "pair", {timeout: 15_000});
     await expect(map).toHaveAttribute("data-atlas-visibility", "pair");
     await expect(map).toHaveAttribute("data-atlas-marker-count", "2");
     await expect(map.locator(":scope > gmp-marker-3d-interactive")).toHaveCount(2);
-    await expect(map.locator(":scope > gmp-marker-3d-interactive[label]")).toHaveCount(0);
+    await expect(map.locator(":scope > gmp-marker-3d-interactive[label]")).toHaveCount(2);
     await expect.poll(async () => Number(
       await map.getAttribute("data-atlas-camera-target-range"),
     )).toBeGreaterThan(0);
@@ -125,19 +97,12 @@ test("records the complete PR 126 spatial story in the PR 132 shell", async ({pa
     await expect(map).toHaveAttribute("data-atlas-depth", "inspect", {timeout: 15_000});
     await atlas.screenshot({path: testInfo.outputPath(`${category.toLowerCase()}-inspect.png`)});
     await expect(map).toHaveAttribute("data-atlas-depth", "home", {timeout: 90_000});
-    await expect(panel.getByRole("button", {name: "Replay tour", exact: true}))
+    await expect(atlas.getByRole("button", {name: "Start tour", exact: true}))
       .toBeVisible({timeout: policy.nearby.returnHomeMs + 2_000});
-    await atlas.getByRole("button", {name: "Nearby", exact: true}).click();
+    await expect(map).toHaveAttribute("data-atlas-instance", instance ?? "");
   }
 
   const trace = await finishCameraTrace(page, testInfo);
-  const roadSamples = trace.filter((sample) => sample.roadDistanceM !== undefined);
-  expect(roadSamples.length).toBeGreaterThan(10);
-  for (let index = 1; index < roadSamples.length; index += 1) {
-    expect(roadSamples[index].roadDistanceM!).toBeGreaterThanOrEqual(
-      roadSamples[index - 1].roadDistanceM! - 0.5,
-    );
-  }
   const transitions = trace.filter((sample, index) =>
     sample.scene !== trace[index - 1]?.scene);
   const expectedDuration = (scene: string): number | undefined => {
@@ -153,7 +118,9 @@ test("records the complete PR 126 spatial story in the PR 132 shell", async ({pa
     const expectedMs = expectedDuration(transition.scene);
     if (!expectedMs) continue;
     const endMs = transitions[index + 1]?.atMs ?? trace.at(-1)!.atMs;
-    expect(Math.abs(endMs - transition.atMs - expectedMs) / expectedMs).toBeLessThanOrEqual(0.05);
+    // Destination terrain may be fetched between shots; dwell must never be skipped.
+    expect(endMs - transition.atMs).toBeGreaterThanOrEqual(expectedMs * 0.95);
+    expect(endMs - transition.atMs).toBeLessThan(expectedMs + 5000);
   }
   expect(errors).toEqual([]);
 });

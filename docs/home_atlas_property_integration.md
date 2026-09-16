@@ -218,3 +218,66 @@ The real promoted Parquet bundle/Rust API was not available for end-to-end
 validation in this pass. Sparse production scenes will remain sparse: they do
 not silently borrow fixture evidence. Validate one real Waterford ID against your
 local backend before treating this as production-ready.
+
+## PR 138 — immersive explorer refinement (2026-09-16)
+
+The buyer can now read nearby place names before moving the camera, inspect a
+place at its own scale, and expand the whole explorer without losing controls.
+The native dialog promotes the existing Google map into the browser's top layer;
+closing it preserves the scene and restores focus. The inspector sits below the
+map, so it never covers the geometry the camera is fitting. The category rail
+and map dimensions remain stable across play/pause.
+
+### Camera and geometry contract
+
+- `pair` contains the home, destination and explicitly associated OSM geometry.
+  It compares horizontal and vertical fits to use the available viewport.
+- `inspect` contains the destination's real polygon/line extents and marker.
+  Home is deliberately allowed outside the frame; `Show with home` restores the
+  relationship. This supersedes the former inspect-must-contain-home contract.
+- The invisible synthetic relationship arc has been removed from camera fitting.
+  No routes, entrance connectors, buildings or source facts are manufactured.
+- Inspection asks the existing cached Google Elevation service for the destination
+  terrain, including tour inspection. Google `flyCameraTo` presents the scene;
+  OSM geometry identity, polygon holes and separate route segments are preserved.
+- `View another side` refits the same geometry at a 90-degree heading increment.
+  `Top view` and `Focus surroundings` are explicit controls; close-ups show the
+  unmasked photorealistic scene. Manual pointer and keyboard gestures stop motion.
+- Tours expose previous/next view, progress, pause/resume and end. Null selection
+  in overview/return-home really clears the previous destination.
+
+### Interaction note / UI critic
+
+ThreeUI's current catalog was checked (https://threeui.com/). Its decorative
+WebGL backgrounds do not solve this explorer's evidence-navigation problem; no
+new ThreeUI implementation was copied. The existing narrow rail is developed
+into persistent category navigation plus a named place list. Google camera API
+reference: https://developers.google.com/maps/documentation/javascript/3d/animate-camera.
+
+Rest: home-focused scene, named categories and one explicit expand action.
+Hover: quiet row highlight. Selection: place details and actions below the map.
+Focus: visible rings, selected inspector focus without scrolling, native modal
+focus containment and return to the expand control. Touch: horizontal category
+and place rows; actions have 44px minimum height. Reduced motion: existing camera
+flights settle immediately. Playback never folds the rail or resizes the stage.
+No proximity magnification, decorative orbit, floating identity card or new
+buyer-facing renderer terminology was borrowed.
+
+UI critic source/code pass: no duplicate property identity, no card obscuring
+map evidence, no invented facts, and no decorative autoplay added. A visual
+approval is still required: this environment's managed browser blocks localhost;
+the repository browser test cannot launch because Chrome is absent. Installing
+Chrome was attempted and failed on the environment's OS permission restrictions.
+No new screenshots or real-Google camera smoothness approval are claimed.
+
+### Verification for this refinement
+
+- Frontend lint and production TypeScript/Vite build.
+- All 281 frontend tests pass, including 15 focused Atlas tests with the new
+  home-reset regression and revised destination-only inspection contract.
+- Browser specs updated for the actual category rail, inspection controls,
+  native fullscreen, stable pause/resume, mobile selection and separate approach
+  chapter. They retain real Google 3D; there is no mock renderer fallback.
+- Run `npm run test:atlas-browser` with Chrome and `VITE_GOOGLE_MAPS_API_KEY`
+  available to capture home, inspection, fullscreen, mobile and road screenshots.
+- The key is runtime-only and is not stored in the repository.

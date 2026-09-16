@@ -70,7 +70,7 @@ export function reduceAtlasNearbyUi(
       return {
         ...state,
         mode: "tour",
-        selectedPlaceId: action.placeId ?? state.selectedPlaceId,
+        selectedPlaceId: action.placeId,
         cameraOwner: "system",
       };
     case "show_tour_place":
@@ -78,10 +78,11 @@ export function reduceAtlasNearbyUi(
         ...state,
         mode: "tour",
         categoryId: action.categoryId,
-        selectedPlaceId: action.placeId ?? state.selectedPlaceId,
+        selectedPlaceId: action.placeId,
         cameraOwner: "system",
       };
     case "stop_tour":
+      if (state.mode !== "tour") return state;
       return {
         ...state,
         mode: state.selectedPlaceId ? "selected" : "browse",
@@ -112,6 +113,8 @@ export function reduceAtlasNearbyUi(
       return {
         ...state,
         mode: "rest",
+        selectedPlaceId: null,
+        framing: "context",
         cameraOwner: "system",
       };
   }
