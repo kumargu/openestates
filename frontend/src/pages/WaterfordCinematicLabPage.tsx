@@ -1,20 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 
-type LabConfig = {
-  apiKey: string;
-  lat: number;
-  lon: number;
-  height: number;
-  maxDpr: number;
-};
+const THREE_URL = "https://esm.sh/three@0.185.0";
+const ORBIT_CONTROLS_URL = "https://esm.sh/three@0.185.0/examples/jsm/controls/OrbitControls.js";
+const DRACO_LOADER_URL = "https://esm.sh/three@0.185.0/examples/jsm/loaders/DRACOLoader.js";
+const TILES_RENDERER_URL = "https://esm.sh/3d-tiles-renderer@0.5.2?external=three";
+const TILES_PLUGINS_URL = "https://esm.sh/3d-tiles-renderer@0.5.2/plugins?external=three";
 
-type LabWindow = Window & {
-  __WATERFORD_LAB_CONFIG__?: LabConfig;
-};
+function runtimeImport(url: string): Promise<any> {
+  return import(/* @vite-ignore */ url);
+}
 
 export function WaterfordCinematicLabPage() {
   const mapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? "";
+  const sceneRootRef = useRef<HTMLDivElement | null>(null);
+  const attributionRef = useRef<HTMLDivElement | null>(null);
+  const hintRef = useRef<HTMLDivElement | null>(null);
   const started = useRef(false);
+  const [status, setStatus] = useState("Preparing Waterford");
+  const [detail, setDetail] = useState("Starting the cinematic 3D renderer…");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,6 +25,7 @@ export function WaterfordCinematicLabPage() {
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previousOverflow;
+      document.body.classList.remove("scene-ready");
     };
   }, []);
 
@@ -29,55 +33,255 @@ export function WaterfordCinematicLabPage() {
     if (started.current) return;
     started.current = true;
 
-    const labWindow = window as LabWindow;
-    labWindow.__WATERFORD_LAB_CONFIG__ = {
-      apiKey: mapsKey,
-      lat: 12.98142,
-      lon: 77.74156,
-      height: 850,
-      maxDpr: 1.65,
-    };
-
-    const status = document.getElementById("scene-status");
-    const detail = document.getElementById("scene-detail");
+    let cancelled = false;
+    let teardown: (() => void) | undefined;
 
     async function start() {
-      try {
-        if (!mapsKey) {
-          throw new Error("VITE_GOOGLE_MAPS_API_KEY is not present in this preview build.");
-        }
-
-        if (status) status.textContent = "Checking Google 3D Tiles";
-        if (detail) detail.textContent = "Verifying Photorealistic 3D Tiles access…";
-
-        const rootUrl = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(mapsKey)}`;
-        const response = await fetch(rootUrl, { cache: "no-store" });
-        if (!response.ok) {
-          let reason = "";
-          try {
-            reason = (await response.text()).slice(0, 500);
-          } catch {
-            // Ignore body parsing failures; status is enough to diagnose the API gate.
-          }
-          throw new Error(
-            `Google Photorealistic 3D Tiles API returned HTTP ${response.status}${reason ? `: ${reason}` : ""}`,
-          );
-        }
-
-        if (status) status.textContent = "Loading Waterford";
-        if (detail) detail.textContent = "Google Tiles verified · starting cinematic renderer…";
-
-        const sceneUrl: string = "/labs/waterford-cinematic/scene.js";
-        await import(/* @vite-ignore */ sceneUrl);
-      } catch (caught) {
-        const message = caught instanceof Error ? caught.message : String(caught);
-        setError(message);
-        if (status) status.textContent = "Waterford could not start";
-        if (detail) detail.textContent = message;
+      if (!mapsKey) {
+        throw new Error("VITE_GOOGLE_MAPS_API_KEY is not present in this Vercel preview build.");
       }
+
+      setStatus("Checking Google 3D Tiles");
+      setDetail("Verifying Photorealistic 3D Tiles access…");
+
+      const rootUrl = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(mapsKey)}`;
+      const response = await fetch(rootUrl, { cache: "no-store" });
+      if (!response.ok) {
+        let reason = "";
+        try {
+          reason = (await response.text()).slice(0, 500);
+        } catch {
+          // Status alone is enough to diagnose the API gate.
+        }
+        throw new Error(
+          `Google Photorealistic 3D Tiles API returned HTTP ${response.status}${reason ? `: ${reason}` : ""}`,
+        );
+      }
+
+      setStatus("Loading Waterford");
+      setDetail("Google Tiles verified · loading Three.js + 3DTilesRendererJS…");
+
+      const [THREE, orbitModule, dracoModule, tilesModule, pluginsModule] = await Promise.all([
+        runtimeImport(THREE_URL),
+        runtimeImport(ORBIT_CONTROLS_URL),
+        runtimeImport(DRACO_LOADER_URL),
+        runtimeImport(TILES_RENDERER_URL),
+        runtimeImport(TILES_PLUGINS_URL),
+      ]);
+
+      if (cancelled) return undefined;
+
+      const root = sceneRootRef.current;
+      if (!root) throw new Error("Waterford scene host disappeared before renderer startup.");
+
+      const {
+        MathUtils,
+        PerspectiveCamera,
+        Scene,
+        SRGBColorSpace,
+        WebGLRenderer,
+      } = THREE;
+      const { OrbitControls } = orbitModule;
+      const { DRACOLoader } = dracoModule;
+      const { TilesRenderer } = tilesModule;
+      const {
+        GLTFExtensionsPlugin,
+        GoogleCloudAuthPlugin,
+        ReorientationPlugin,
+        TileCompressionPlugin,
+        TilesFadePlugin,
+      } = pluginsModule;
+
+      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const isCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, isCoarsePointer ? 1.35 : 1.65);
+
+      const scene = new Scene();
+      const renderer = new WebGLRenderer({
+        antialias: true,
+        alpha: false,
+        powerPreference: "high-performance",
+      });
+      renderer.outputColorSpace = SRGBColorSpace;
+      renderer.setClearColor(0x101518, 1);
+      renderer.setPixelRatio(pixelRatio);
+      root.replaceChildren(renderer.domElement);
+
+      // Tighter than the NASA reference: Waterford should read as the subject, not as
+      // one object in an infinite globe.
+      const camera = new PerspectiveCamera(50, 1, 20, 1_600_000);
+      camera.position.set(720, 430, -900);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 48, 0);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.055;
+      controls.enablePan = false;
+      controls.enableZoom = true;
+      controls.zoomSpeed = 0.65;
+      controls.rotateSpeed = 0.42;
+      controls.minDistance = 240;
+      controls.maxDistance = 1_850;
+      controls.minPolarAngle = MathUtils.degToRad(30);
+      controls.maxPolarAngle = MathUtils.degToRad(72);
+      controls.autoRotate = !prefersReducedMotion;
+      controls.autoRotateSpeed = 0.32;
+
+      const tiles = new TilesRenderer();
+      tiles.registerPlugin(new GoogleCloudAuthPlugin({
+        apiToken: mapsKey,
+        autoRefreshToken: true,
+        useRecommendedSettings: true,
+      }));
+      tiles.registerPlugin(new TileCompressionPlugin());
+      tiles.registerPlugin(new TilesFadePlugin());
+
+      const dracoLoader = new DRACOLoader();
+      dracoLoader.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
+      tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader }));
+      tiles.registerPlugin(new ReorientationPlugin({
+        lat: 12.98142 * MathUtils.DEG2RAD,
+        lon: 77.74156 * MathUtils.DEG2RAD,
+        height: 850,
+      }));
+
+      scene.add(tiles.group);
+      tiles.setCamera(camera);
+
+      const detailMoving = isCoarsePointer ? 20 : 17;
+      const detailSettled = isCoarsePointer ? 15 : 11;
+      let qualityTimer = 0;
+      let idleResumeTimer = 0;
+      let firstUsefulFrame = false;
+      let lastAttribution = "";
+      let lastAttributionUpdate = 0;
+      const startedAt = performance.now();
+      let raf = 0;
+
+      const setMovingQuality = () => {
+        window.clearTimeout(qualityTimer);
+        tiles.errorTarget = detailMoving;
+      };
+
+      const setSettledQuality = () => {
+        window.clearTimeout(qualityTimer);
+        qualityTimer = window.setTimeout(() => {
+          tiles.errorTarget = detailSettled;
+        }, 180);
+      };
+
+      const scheduleAutoMotionResume = () => {
+        window.clearTimeout(idleResumeTimer);
+        if (prefersReducedMotion) return;
+        idleResumeTimer = window.setTimeout(() => {
+          controls.autoRotate = true;
+          tiles.errorTarget = isCoarsePointer ? 18 : 14;
+        }, 4200);
+      };
+
+      const onControlStart = () => {
+        controls.autoRotate = false;
+        setMovingQuality();
+        window.clearTimeout(idleResumeTimer);
+        hintRef.current?.classList.add("is-quiet");
+      };
+
+      const onControlEnd = () => {
+        setSettledQuality();
+        scheduleAutoMotionResume();
+      };
+
+      controls.addEventListener("start", onControlStart);
+      controls.addEventListener("end", onControlEnd);
+
+      const resize = () => {
+        const width = Math.max(1, root.clientWidth);
+        const height = Math.max(1, root.clientHeight);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height, false);
+        tiles.setResolutionFromRenderer(camera, renderer);
+      };
+
+      const resizeObserver = new ResizeObserver(resize);
+      resizeObserver.observe(root);
+      resize();
+
+      const updateAttribution = (now: number) => {
+        if (now - lastAttributionUpdate < 500) return;
+        lastAttributionUpdate = now;
+        const values = (tiles.getAttributions?.() ?? [])
+          .filter((entry: any) => entry && entry.type === "string" && entry.value)
+          .map((entry: any) => String(entry.value).trim())
+          .filter(Boolean);
+        const next = values.join(" · ");
+        if (next !== lastAttribution) {
+          lastAttribution = next;
+          if (attributionRef.current) {
+            attributionRef.current.textContent = next ? `Google Maps · ${next}` : "Google Maps";
+          }
+        }
+      };
+
+      const frame = (now: number) => {
+        if (cancelled) return;
+        raf = requestAnimationFrame(frame);
+
+        controls.update();
+        tiles.setResolutionFromRenderer(camera, renderer);
+        tiles.setCamera(camera);
+        camera.updateMatrixWorld();
+        tiles.update();
+        renderer.render(scene, camera);
+
+        if (!firstUsefulFrame && (tiles.visibleTiles?.size ?? 0) >= 4) {
+          firstUsefulFrame = true;
+          const elapsed = Math.max(0, performance.now() - startedAt);
+          setStatus("Prestige Waterford");
+          setDetail(`Live photorealistic 3D · first scene ${(elapsed / 1000).toFixed(1)}s`);
+          document.body.classList.add("scene-ready");
+          setSettledQuality();
+        }
+
+        updateAttribution(now);
+      };
+
+      raf = requestAnimationFrame(frame);
+
+      return () => {
+        cancelAnimationFrame(raf);
+        window.clearTimeout(qualityTimer);
+        window.clearTimeout(idleResumeTimer);
+        resizeObserver.disconnect();
+        controls.removeEventListener("start", onControlStart);
+        controls.removeEventListener("end", onControlEnd);
+        controls.dispose();
+        dracoLoader.dispose();
+        tiles.dispose();
+        renderer.dispose();
+        root.replaceChildren();
+        document.body.classList.remove("scene-ready");
+      };
     }
 
-    void start();
+    void start()
+      .then((cleanup) => {
+        if (!cleanup) return;
+        if (cancelled) cleanup();
+        else teardown = cleanup;
+      })
+      .catch((caught) => {
+        if (cancelled) return;
+        const message = caught instanceof Error ? caught.message : String(caught);
+        setError(message);
+        setStatus("Waterford could not start");
+        setDetail(message);
+      });
+
+    return () => {
+      cancelled = true;
+      teardown?.();
+    };
   }, [mapsKey]);
 
   return (
@@ -101,8 +305,8 @@ export function WaterfordCinematicLabPage() {
           z-index: 2;
           pointer-events: none;
           background:
-            linear-gradient(180deg, rgba(4,7,8,.26) 0%, transparent 24%, transparent 74%, rgba(4,7,8,.30) 100%),
-            radial-gradient(ellipse at center, transparent 54%, rgba(5,8,9,.18) 100%);
+            linear-gradient(180deg, rgba(4,7,8,.20) 0%, transparent 22%, transparent 76%, rgba(4,7,8,.24) 100%),
+            radial-gradient(ellipse at center, transparent 60%, rgba(5,8,9,.12) 100%);
         }
         .scene-copy {
           position: absolute;
@@ -193,16 +397,16 @@ export function WaterfordCinematicLabPage() {
         }
       `}</style>
 
-      <div id="scene-root" aria-label="Interactive photorealistic 3D view of Prestige Waterford" />
+      <div ref={sceneRootRef} id="scene-root" aria-label="Interactive photorealistic 3D view of Prestige Waterford" />
       <div className="scene-vignette" aria-hidden="true" />
 
       <div className="scene-copy">
-        <h1 id="scene-status">Preparing Waterford</h1>
-        <div id="scene-detail">Starting the cinematic 3D renderer…</div>
+        <h1 id="scene-status">{status}</h1>
+        <div id="scene-detail">{detail}</div>
       </div>
 
-      <div id="scene-hint">Drag to look · pinch or scroll to move closer</div>
-      <div id="scene-attribution">Google Maps</div>
+      <div ref={hintRef} id="scene-hint">Drag to look · pinch or scroll to move closer</div>
+      <div ref={attributionRef} id="scene-attribution">Google Maps</div>
 
       {error && (
         <div className="scene-error" role="alert">
