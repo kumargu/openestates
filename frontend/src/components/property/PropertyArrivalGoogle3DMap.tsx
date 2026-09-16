@@ -18,10 +18,9 @@ import {
 import { distanceMetres } from "../../../../experiments/home-atlas/src/geometry.ts";
 import { buildCategoryTour } from "../../../../experiments/home-atlas/src/scenes.ts";
 import type { AtlasFeature, AtlasScene } from "../../../../experiments/home-atlas/src/types.ts";
-import policy from "../../../../app/config/ui/home-atlas.json" with { type: "json" };
+import { atlasPolicy as policy } from "../../lib/atlasUiPolicy.ts";
 import {
   geometryForPlace,
-  nearbyRelationArc,
   nearbySceneCamera,
   type AtlasSafeFrame,
   type NearbyDepth,
@@ -66,6 +65,7 @@ export type NearbyTourChapter = Readonly<{
 export type NearbyTourRequest = Readonly<{
   id: number;
   chapters: readonly NearbyTourChapter[];
+  startStep?: number;
 }>;
 
 export type NearbyTourSceneState = Readonly<{
@@ -73,6 +73,8 @@ export type NearbyTourSceneState = Readonly<{
   layerId?: string;
   selectedPlaceId: string | null;
   depth: NearbyDepth;
+  step: number;
+  total: number;
 }>;
 
 export type ArrivalGoogle3DMapProps = {
@@ -88,6 +90,7 @@ export type ArrivalGoogle3DMapProps = {
   accessLines: MapOverlayLine[];
   showMetroLines: boolean;
   expanded: boolean;
+  expandInPlace?: boolean;
   cameraMode: ArrivalCameraMode;
   terrainCorridor: boolean;
   layerExperience?: MapLayerExperience;
@@ -100,6 +103,7 @@ export type ArrivalGoogle3DMapProps = {
   selectedSecondarySocietyId?: string | null;
   onSelectSecondarySociety?: (societyId: string) => void;
   onPlaybackCancelled?: () => void;
+  onUserCameraGesture?: () => void;
   onToggleExpanded: () => void;
   selectedPlaceId?: string | null;
   nearbyDepth?: NearbyDepth;
@@ -110,7 +114,13 @@ export type ArrivalGoogle3DMapProps = {
   polygons?: MapOverlayPolygon[];
   contextLines?: MapOverlayLine[];
   showExpandAction?: boolean;
-  drawerOpen?: boolean;
+  homeFirst?: boolean;
+  anchorNearbyOnHome?: boolean;
+  safeFrameLeftPx?: number;
+  safeFrameRightPx?: number;
+  suspendNearbyCamera?: boolean;
+  nearbyCameraVersion?: number;
+  nearbyHeadingOffset?: number;
   nearbyTransitionMs?: number;
   nearbyTourRequest?: NearbyTourRequest | null;
   onNearbyTourScene?: (state: NearbyTourSceneState) => void;
@@ -426,6 +436,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     accessLines,
     showMetroLines,
     expanded,
+    expandInPlace = false,
     cameraMode,
     terrainCorridor,
     layerExperience,
@@ -448,10 +459,17 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     polygons,
     contextLines = EMPTY_CONTEXT_LINES,
     showExpandAction = true,
-    drawerOpen = false,
+    homeFirst = false,
+    anchorNearbyOnHome = false,
+    safeFrameLeftPx,
+    safeFrameRightPx,
+    suspendNearbyCamera = false,
+    nearbyCameraVersion = 0,
+    nearbyHeadingOffset = 0,
     nearbyTransitionMs = policy.focus.durationMs,
     nearbyTourRequest = null,
     onNearbyTourScene,
+    onUserCameraGesture,
   } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const streetViewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -474,66 +492,31 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const [groundElevation, setGroundElevation] = useState(0);
   const [mapWidth, setMapWidth] = useState(1000);
   const [safeFrame, setSafeFrame] = useState<AtlasSafeFrame | undefined>();
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const observer = new ResizeObserver(entries => setMapWidth(entries[0].contentRect.width));
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
   useLayoutEffect(() => {
     const container = containerRef.current;
-    const shell = container?.closest('.property-arrival-map--atlas');
-    if (!container || !shell) return undefined;
-    const measure = () => {
+    if (!container) return undefined;
+    const commitBounds = () => {
       const mapRect = container.getBoundingClientRect();
       const margin = policy.cameraFit.safeMarginPx;
-      const rect = (selector: string) => shell.querySelector(selector)?.getBoundingClientRect();
-      const categories = rect('.property-atlas__categories');
-      const drawer = drawerOpen ? rect('.property-atlas__drawer') : undefined;
-      const dock = rect('.property-atlas__dock');
-      const sidebar = document.querySelector('.workspace-sidebar')?.getBoundingClientRect();
-      const drawerIsBottomSheet = Boolean(drawer && drawer.width >= mapRect.width * 0.7);
-      // The identity occupies only the upper-left corner. Treating it as a
-      // full-height exclusion leaves a sliver of map and forces a huge zoom
-      // out. Pair focus can safely use the canvas below it.
-      const left = sidebar && sidebar.right > mapRect.left && sidebar.left < mapRect.right
-        ? Math.max(margin, sidebar.right - mapRect.left + margin)
-        : margin;
-      const right = drawer && !drawerIsBottomSheet && drawer.left < mapRect.right
-        ? Math.max(0, mapRect.right - drawer.left + margin)
-        : margin;
-      const top = categories && categories.bottom > mapRect.top
-        ? Math.max(0, categories.bottom - mapRect.top + margin)
-        : margin;
-      const dockBottom = dock && dock.top < mapRect.bottom
-        ? Math.max(0, mapRect.bottom - dock.top + margin)
-        : margin;
-      const drawerBottom = drawer && drawerIsBottomSheet && drawer.top < mapRect.bottom
-        ? Math.max(0, mapRect.bottom - drawer.top + margin)
-        : margin;
-      const bottom = Math.max(dockBottom, drawerBottom);
       const next = {
         width: mapRect.width,
         height: mapRect.height,
-        left: Math.min(left, Math.max(margin, mapRect.width - right - 160)),
-        right: Math.min(right, Math.max(margin, mapRect.width - left - 160)),
-        top: Math.min(top, Math.max(margin, mapRect.height - bottom - 120)),
-        bottom: Math.min(bottom, Math.max(margin, mapRect.height - top - 120)),
+        left: safeFrameLeftPx ?? margin,
+        right: safeFrameRightPx ?? margin,
+        top: margin,
+        bottom: margin,
       };
+      setMapWidth(mapRect.width);
       setSafeFrame((current) => current
         && Object.keys(next).every((key) => current[key as keyof AtlasSafeFrame] === next[key as keyof AtlasSafeFrame])
         ? current
         : next);
     };
-    measure();
-    const observer = new ResizeObserver(measure);
+    commitBounds();
+    const observer = new ResizeObserver(commitBounds);
     observer.observe(container);
-    observer.observe(shell);
-    const sidebar = document.querySelector('.workspace-sidebar');
-    if (sidebar) observer.observe(sidebar);
     return () => observer.disconnect();
-  }, [drawerOpen]);
+  }, [safeFrameLeftPx, safeFrameRightPx]);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [streetRequested, setStreetRequested] = useState(false);
   const [streetStart, setStreetStart] = useState(0);
@@ -651,7 +634,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     map.dataset.atlasScene = `road:${phase}`;
   }, []);
   const roadFlight = useAtlasRoadFlight({
-    active: Boolean(ready) && roadTourActive && !streetRequested,
+    active: Boolean(ready)
+      && roadTourActive
+      && !streetRequested,
     route: atlasRoute, controller: playbackController,
     elevation: groundElevation,
     width: mapWidth,
@@ -850,6 +835,24 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         });
       };
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!autoPlaySociety && homeFirst) {
+        const final = societyComposition.final;
+        cameraArbiterRef.current.submit("society", () => {
+          settleCameraFraming(map, targetCamera(
+            societyComposition.center.latitude,
+            societyComposition.center.longitude,
+            elevation,
+            final.range,
+            final.tilt,
+            final.heading,
+          ));
+          map.dataset.atlasCameraOwner = "society";
+          map.dataset.atlasScene = "society:home";
+          map.dataset.atlasProgress = "1";
+        });
+        playbackController.cancel("settled");
+        return;
+      }
       if (!autoPlaySociety || reducedMotion) {
         if (reducedMotion || !previouslyAutoPlaying) {
           applySocietyPose(manualProgress);
@@ -962,6 +965,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     roadExperience,
     roadLandingFocus,
     roadTourActive,
+    homeFirst,
     societyPlaybackVersion,
     societyComposition,
     terrainCorridor,
@@ -973,25 +977,85 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return undefined;
-    const cancelAutomaticCamera = () => {
+    let pointerId: number | null = null;
+    let pointerOrigin: { x: number; y: number } | null = null;
+    let gestureCommitted = false;
+    const isFeatureInteraction = (event: Event) => event
+      .composedPath()
+      .some((node) => node instanceof Element && node.matches([
+        "gmp-marker-3d-interactive",
+        "gmp-polyline-3d-interactive",
+        "gmp-polygon-3d-interactive",
+        "gmp-popover",
+      ].join(",")));
+    const commitManualGesture = () => {
+      if (gestureCommitted) return;
+      gestureCommitted = true;
+      cameraMoveRef.current += 1;
+      map.stopCameraAnimation();
+      playbackController.cancel("settled");
+      onPlaybackCancelled?.();
+      onUserCameraGesture?.();
+    };
+    const pointerDown = (event: PointerEvent) => {
+      if (isFeatureInteraction(event)) return;
+      pointerId = event.pointerId;
+      pointerOrigin = { x: event.clientX, y: event.clientY };
+      gestureCommitted = false;
+    };
+    const pointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId || !pointerOrigin) return;
+      if (Math.hypot(
+        event.clientX - pointerOrigin.x,
+        event.clientY - pointerOrigin.y,
+      ) >= 8) {
+        commitManualGesture();
+      }
+    };
+    const pointerEnd = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return;
+      pointerId = null;
+      pointerOrigin = null;
+      gestureCommitted = false;
+    };
+    const wheel = (event: WheelEvent) => {
+      if (!isFeatureInteraction(event)) commitManualGesture();
+    };
+    const keyboardGesture = (event: KeyboardEvent) => {
+      if (isFeatureInteraction(event)) return;
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "+", "-", "PageUp", "PageDown"].includes(event.key)) {
+        gestureCommitted = false;
+        commitManualGesture();
+      }
+    };
+    const visibilityChanged = () => {
+      if (!document.hidden) return;
       cameraMoveRef.current += 1;
       playbackController.cancel("settled");
       onPlaybackCancelled?.();
     };
-    const visibilityChanged = () => {
-      if (document.hidden) cancelAutomaticCamera();
-    };
-    map.addEventListener("pointerdown", cancelAutomaticCamera);
-    map.addEventListener("touchstart", cancelAutomaticCamera, { passive: true });
-    map.addEventListener("wheel", cancelAutomaticCamera, { passive: true });
+    map.addEventListener("pointerdown", pointerDown);
+    map.addEventListener("pointermove", pointerMove);
+    map.addEventListener("pointerup", pointerEnd);
+    map.addEventListener("pointercancel", pointerEnd);
+    map.addEventListener("wheel", wheel, { passive: true });
+    map.addEventListener("keydown", keyboardGesture);
     document.addEventListener("visibilitychange", visibilityChanged);
     return () => {
-      map.removeEventListener("pointerdown", cancelAutomaticCamera);
-      map.removeEventListener("touchstart", cancelAutomaticCamera);
-      map.removeEventListener("wheel", cancelAutomaticCamera);
+      map.removeEventListener("pointerdown", pointerDown);
+      map.removeEventListener("pointermove", pointerMove);
+      map.removeEventListener("pointerup", pointerEnd);
+      map.removeEventListener("pointercancel", pointerEnd);
+      map.removeEventListener("wheel", wheel);
+      map.removeEventListener("keydown", keyboardGesture);
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
-  }, [onPlaybackCancelled, playbackController, ready]);
+  }, [
+    onPlaybackCancelled,
+    onUserCameraGesture,
+    playbackController,
+    ready,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1127,7 +1191,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
             width: contextLine.style.strokeWidth,
             outerColor: "#ffffffcc",
             outerWidth: 0.35,
-            drawsOccludedSegments: false,
+            drawsOccludedSegments: contextLine.style.drawsOccludedSegments,
           },
           null,
           nextChildren,
@@ -1146,6 +1210,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           ...(cameraMode === "evidence" ? {altitude: policy.nearby.markerLiftM} : {}),
         },
         title: home.name,
+        label: "This home",
       });
       homeMarker.append(new markerLibrary.PinElement({
         ...mapMarkerPinOptions("home", cameraMode === "evidence" ? "selected" : "active"),
@@ -1158,24 +1223,16 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     }
 
     let activePopover: Popover3DElement | null = null;
-    if (selected && cameraMode === 'evidence') {
-      const arc = new library.Polyline3DInteractiveElement({
-        altitudeMode: 'RELATIVE_TO_GROUND', path: nearbyRelationArc(home, selected),
-        strokeColor: '#d6edbcc4', strokeWidth: 3, drawsOccludedSegments: false,
-      });
-      arc.setAttribute('aria-label', 'Straight-line relationship to home, not a travel route');
-      arc.dataset.atlasRelationship = 'true';
-      map.append(arc); nextChildren.push(arc);
-    }
     const markerPlaces = roadTourActive || nearbyDepth === 'home'
       ? []
       : isolatesSelection && selected ? [selected] : places;
     for (const place of markerPlaces) {
+      const isSelectedPlace = (place.feature_id ?? place.name) === selectedPlaceId;
       const popover = cameraMode === 'evidence' ? null : createPlacePopover(library, place);
-      const pinLabel = cameraMode === 'evidence' ? `Map pin ${place.number}` : place.name;
+      const pinLabel = `${place.number}. ${place.name}`;
       const marker = new library.Marker3DInteractiveElement({
         altitudeMode: cameraMode === "evidence" ? "RELATIVE_TO_GROUND" : "CLAMP_TO_GROUND",
-        collisionBehavior: (place.feature_id ?? place.name) === selectedPlaceId || !selectedPlaceId ? "REQUIRED" : "OPTIONAL_AND_HIDES_LOWER_PRIORITY",
+        collisionBehavior: isSelectedPlace || !selectedPlaceId ? "REQUIRED" : "OPTIONAL_AND_HIDES_LOWER_PRIORITY",
         drawsWhenOccluded: true,
         extruded: cameraMode === "evidence",
         gmpPopoverTargetElement: popover ?? undefined,
@@ -1185,13 +1242,15 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           ...(cameraMode === "evidence" ? {altitude: policy.nearby.markerLiftM} : {}),
         },
         title: pinLabel,
+        label: isSelectedPlace ? place.name : undefined,
       });
       marker.append(new markerLibrary.PinElement({ ...mapMarkerPinOptions(
         place.icon,
-        (place.feature_id ?? place.name) === selectedPlaceId ? "selected" : "active",
+        isSelectedPlace ? "selected" : "active",
       ),
         ...(cameraMode === 'evidence' ? {glyphSrc: undefined, glyphText: String(place.number)} : {}),
       }));
+      marker.style.opacity = isolatesSelection && !isSelectedPlace ? "0.32" : "1";
       marker.tabIndex = 0;
       marker.setAttribute("aria-label", pinLabel);
       marker.addEventListener('gmp-click', () => onSelectPlace?.(place.feature_id ?? place.name));
@@ -1369,6 +1428,8 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         layerId: item.chapter.layerId,
         selectedPlaceId,
         depth,
+        step: planned.findIndex(entry => entry.scene.id === item.scene.id) + 1,
+        total: planned.length,
       });
       cameraArbiterRef.current.submit('nearby', () => {
         map.dataset.atlasCameraOwner = 'nearby';
@@ -1391,8 +1452,23 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       ));
     });
     void (async () => {
-      for (const item of planned) {
+      for (let item of planned.slice(request.startStep ?? 0)) {
         if (!run.isCurrent()) return;
+        if (item.scene.phase === 'inspect') {
+          const destination = item.chapter.places.find(place =>
+            (place.feature_id ?? place.name) === item.scene.targetFeatureId);
+          if (destination) {
+            try {
+              const elevation = await loadGoogleTerrainElevation(destination.latitude, destination.longitude);
+              if (!run.isCurrent()) return;
+              item = { ...item, scene: { ...item.scene, camera: {
+                ...item.scene.camera, center: { ...item.scene.camera.center,
+                  altitude: elevation + policy.cameraFit.centerAltitudeOffsetM },
+              } } };
+            } catch { /* Keep the existing terrain reference when elevation is unavailable. */ }
+          }
+        }
+        if (!(await run.wait(0))) return;
         apply(item, Math.round(item.scene.durationMs * policy.focus.movementFraction));
         if (!(await run.wait(item.scene.durationMs))) return;
       }
@@ -1412,6 +1488,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || terrainCorridor || roadTourActive || streetRequested || cameraMode !== 'evidence'
+      || suspendNearbyCamera
       || playbackState === 'playing' || playbackState === 'paused' || playbackState === 'preparing') return;
     const moveId = ++cameraMoveRef.current;
     let cancelled = false;
@@ -1432,16 +1509,20 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       });
     };
     const unregister = playbackController.registerResumer(move);
-    void loadGoogleTerrainElevation(home.latitude, home.longitude).then(elevation => {
+    const inspected = nearbyDepth === 'inspect'
+      ? places.find(place => (place.feature_id ?? place.name) === selectedPlaceId)
+      : undefined;
+    void loadGoogleTerrainElevation(inspected?.latitude ?? home.latitude, inspected?.longitude ?? home.longitude).then(elevation => {
+      if (cancelled || cameraMoveRef.current !== moveId) return;
       const pose = nearbySceneCamera(home, places, polygons ?? [], [...metroLines, ...contextLines], selectedPlaceId,
         nearbyDepth, elevation, containerRef.current?.clientWidth ?? window.innerWidth, safeFrame,
-        above ? policy.above.tilt : undefined);
+        above ? policy.above.tilt : undefined, anchorNearbyOnHome, nearbyHeadingOffset);
       camera = pose;
       map.dataset.atlasCameraTargetRange = String(camera.range);
       move();
     }).catch(() => undefined);
     return () => {cancelled = true; unregister();};
-  }, [above, selectedPlaceId, nearbyDepth, nearbyTransitionMs, places, home, polygons, metroLines, contextLines, cameraMode, terrainCorridor, playbackController, playbackState, ready, roadTourActive, safeFrame, streetRequested]);
+  }, [above, selectedPlaceId, nearbyDepth, nearbyTransitionMs, places, home, polygons, metroLines, contextLines, cameraMode, terrainCorridor, playbackController, playbackState, ready, roadTourActive, safeFrame, streetRequested, suspendNearbyCamera, nearbyCameraVersion, anchorNearbyOnHome, nearbyHeadingOffset]);
 
   if (loadError) throw loadError;
 
@@ -1451,7 +1532,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
 
   return (
     <div
-      className={`nearby-map nearby-map--google${expanded ? " is-expanded" : ""}`}
+      className={`nearby-map nearby-map--google${expanded && !expandInPlace ? " is-expanded" : ""}`}
       role="region"
       aria-label="Nearby evidence map"
       aria-busy={!ready}

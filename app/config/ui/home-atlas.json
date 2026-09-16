@@ -1,4 +1,7 @@
 {
+  "page": {
+    "heroFrameLimit": 3
+  },
   "road": {
     "baseSpeedMps": 12,
     "minimumRate": 0.5,
@@ -34,11 +37,11 @@
     "strokeColor": "#d5a7ff",
     "strokeWidth": 5,
     "altitudeMode": "clamp_to_ground",
-    "drawsOccludedSegments": false
+    "drawsOccludedSegments": true
   },
   "boundary": { "fill": "#f8f1df12", "stroke": "#fff7e3e6" },
   "quiet": { "fill": "#061b2870", "radiusDegrees": 0.08 },
-  "focus": { "rangeM": 700, "tilt": 55, "durationMs": 1200, "movementFraction": 0.7 },
+  "focus": { "rangeM": 700, "tilt": 55, "durationMs": 1800, "movementFraction": 0.7 },
   "cameraFit": {
     "safeMarginPx": 32,
     "opticalPaddingPx": 52,
@@ -50,10 +53,10 @@
     "homeHeadingDegrees": 210,
     "overviewTilt": 25,
     "pairTilt": 30,
-    "inspectTilt": 44,
+    "inspectTilt": 58,
     "homeTilt": 55,
     "overviewMinimumRangeM": 1000,
-    "inspectMinimumRangeM": 420
+    "inspectMinimumRangeM": 260
   },
   "above": { "tilt": 12 },
   "nearby": {
@@ -64,7 +67,19 @@
     "returnHomeMs": 5500,
     "pairMinimumRangeM": 950,
     "pairRangeMultiplier": 2.15,
-    "markerLiftM": 45
+    "markerLiftM": 45,
+    "scope": {
+      "defaultId": "2km",
+      "options": [
+        { "id": "2km", "label": "2 km", "radiusKm": 2 },
+        { "id": "5km", "label": "5 km", "radiusKm": 5 },
+        { "id": "all", "label": "All", "radiusKm": null }
+      ]
+    }
+  },
+  "stageLayout": {
+    "cameraRailClearancePx": 76,
+    "turnDegrees": 90
   },
   "geometryStyles": {
     "lake": { "fill": "#7dd8f426", "stroke": "#7dd8f4cc" },

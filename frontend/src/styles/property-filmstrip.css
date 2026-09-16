@@ -348,7 +348,10 @@
 }
 
 .property-filmstrip--stage {
-  --property-story-media-height: clamp(32rem, 72svh, 48rem);
+  --property-story-media-height: var(
+    --property-story-hero-height,
+    clamp(28rem, 54svh, 36rem)
+  );
   min-height: 32rem;
 }
 
