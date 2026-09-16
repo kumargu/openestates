@@ -67,7 +67,8 @@ export function WaterfordCinematicLabPage() {
         if (status) status.textContent = "Loading Waterford";
         if (detail) detail.textContent = "Google Tiles verified · starting cinematic renderer…";
 
-        await import(/* @vite-ignore */ "/labs/waterford-cinematic/scene.js");
+        const sceneUrl: string = "/labs/waterford-cinematic/scene.js";
+        await import(/* @vite-ignore */ sceneUrl);
       } catch (caught) {
         const message = caught instanceof Error ? caught.message : String(caught);
         setError(message);
