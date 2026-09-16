@@ -68,8 +68,9 @@ export function WaterfordCinematicLabPage() {
     }
     #scene-detail {
       margin-top: 6px;
+      max-width: min(760px, 82vw);
       font-size: 12px;
-      line-height: 1.4;
+      line-height: 1.45;
       letter-spacing: .02em;
       color: rgba(255,255,255,.66);
       transition: opacity .5s ease;
@@ -116,28 +117,35 @@ export function WaterfordCinematicLabPage() {
       pointer-events: none;
     }
 
-    .key-warning {
+    #scene-error {
       position: fixed;
-      z-index: 5;
+      z-index: 6;
       left: 50%;
       top: 50%;
       transform: translate(-50%, -50%);
-      width: min(520px, calc(100vw - 40px));
+      display: none;
+      width: min(640px, calc(100vw - 36px));
       padding: 22px;
       border: 1px solid rgba(255,255,255,.14);
       border-radius: 18px;
-      background: rgba(13,17,19,.84);
-      backdrop-filter: blur(16px);
-      text-align: center;
-      color: rgba(255,255,255,.82);
-      display: none;
+      background: rgba(13,17,19,.90);
+      box-shadow: 0 24px 90px rgba(0,0,0,.32);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
     }
-    body.key-missing .key-warning { display: block; }
+    body.scene-failed #scene-error { display: block; }
+    #scene-error strong { display: block; font-size: 16px; }
+    #scene-error-message {
+      margin-top: 9px;
+      font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: rgba(255,255,255,.62);
+      overflow-wrap: anywhere;
+    }
 
     @media (max-width: 680px) {
       .scene-copy { left: 16px; top: 16px; }
       #scene-hint { bottom: 26px; }
-      #scene-detail { max-width: 72vw; }
+      #scene-detail { max-width: 76vw; }
       #scene-attribution { max-width: 64vw; font-size: 9px; }
     }
 
@@ -161,25 +169,74 @@ export function WaterfordCinematicLabPage() {
   <div class="scene-vignette" aria-hidden="true"></div>
 
   <div class="scene-copy">
-    <h1 id="scene-status">Loading Waterford</h1>
-    <div id="scene-detail">Google Photorealistic 3D Tiles · Three.js</div>
+    <h1 id="scene-status">Checking Google 3D Tiles</h1>
+    <div id="scene-detail">Verifying the preview key before starting the renderer…</div>
   </div>
 
   <div id="scene-hint">Drag to look · pinch or scroll to move closer</div>
   <div id="scene-attribution">Google Maps</div>
 
-  <div class="key-warning">
-    <strong>Google Maps key is not configured for this preview.</strong>
-    <div style="margin-top:8px;font-size:12px;line-height:1.5;color:rgba(255,255,255,.58)">
-      Set VITE_GOOGLE_MAPS_API_KEY in the Vercel preview environment. No key is stored in this lab's source.
-    </div>
+  <div id="scene-error" role="alert">
+    <strong id="scene-error-title">Waterford could not start</strong>
+    <div id="scene-error-message"></div>
   </div>
 
   <script>
     window.__WATERFORD_LAB_CONFIG__ = ${runtimeConfig};
-    if (!window.__WATERFORD_LAB_CONFIG__.apiKey) document.body.classList.add("key-missing");
+
+    const statusEl = document.getElementById("scene-status");
+    const detailEl = document.getElementById("scene-detail");
+    const errorTitleEl = document.getElementById("scene-error-title");
+    const errorMessageEl = document.getElementById("scene-error-message");
+
+    function fail(title, error) {
+      const message = error instanceof Error ? error.message : String(error || "Unknown error");
+      statusEl.textContent = title;
+      detailEl.textContent = message;
+      errorTitleEl.textContent = title;
+      errorMessageEl.textContent = message;
+      document.body.classList.add("scene-failed");
+    }
+
+    window.addEventListener("error", (event) => {
+      if (!document.body.classList.contains("scene-ready")) {
+        fail("Renderer error", event.error || event.message);
+      }
+    });
+
+    window.addEventListener("unhandledrejection", (event) => {
+      if (!document.body.classList.contains("scene-ready")) {
+        fail("Renderer error", event.reason);
+      }
+    });
+
+    async function startWaterford() {
+      const key = String(window.__WATERFORD_LAB_CONFIG__.apiKey || "").trim();
+      if (!key) {
+        fail("Google Maps key missing", "VITE_GOOGLE_MAPS_API_KEY is not present in this Vercel preview build.");
+        return;
+      }
+
+      try {
+        const rootUrl = "https://tile.googleapis.com/v1/3dtiles/root.json?key=" + encodeURIComponent(key);
+        const response = await fetch(rootUrl, { cache: "no-store" });
+        if (!response.ok) {
+          let reason = "";
+          try { reason = (await response.text()).slice(0, 500); } catch { /* ignore */ }
+          throw new Error("Google Photorealistic 3D Tiles API returned HTTP " + response.status + (reason ? ": " + reason : ""));
+        }
+
+        statusEl.textContent = "Loading Waterford";
+        detailEl.textContent = "Google Tiles API verified · loading Three.js renderer…";
+
+        await import("/labs/waterford-cinematic/scene.js");
+      } catch (error) {
+        fail("Waterford could not start", error);
+      }
+    }
+
+    startWaterford();
   </script>
-  <script type="module" src="/labs/waterford-cinematic/scene.js"></script>
 </body>
 </html>`;
   }, [mapsKey]);
