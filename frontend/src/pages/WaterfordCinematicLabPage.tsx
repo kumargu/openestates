@@ -135,22 +135,29 @@ export function WaterfordCinematicLabPage() {
       keyLight.position.set(500, 900, 400);
       scene.add(keyLight);
 
-      // Start deliberately close to the NASA reference geometry. We want to prove the
-      // material pipeline before doing any authored OpenEstates camera choreography.
-      const camera = new PerspectiveCamera(60, 1, 10, 1_600_000);
-      camera.position.set(500, 430, 500);
+      // Waterford is a roughly 20-floor residential composition, not a skyscraper.
+      // Keep the camera in an architectural / facade-level envelope so the towers feel
+      // like the subject instead of an object viewed from a high drone. The local Y
+      // axis is meters after ReorientationPlugin, so ~65 m places the camera around
+      // upper-mid-tower height while the target stays around the middle floors.
+      const camera = new PerspectiveCamera(52, 1, 5, 1_600_000);
+      camera.position.set(300, 65, 300);
 
       const controls = new OrbitControls(camera, renderer.domElement);
-      controls.target.set(0, 25, 0);
+      controls.target.set(0, 32, 0);
       controls.enableDamping = true;
-      controls.dampingFactor = 0.05;
+      controls.dampingFactor = 0.055;
       controls.enablePan = false;
-      controls.minDistance = 180;
-      controls.maxDistance = 3_000;
-      controls.minPolarAngle = 0;
-      controls.maxPolarAngle = 3 * Math.PI / 8;
+      controls.rotateSpeed = 0.55;
+      controls.zoomSpeed = 0.72;
+      controls.minDistance = 120;
+      controls.maxDistance = 900;
+      // Prevent the experience from drifting back into a top-down GIS view. Roughly
+      // 60–88 degrees from vertical keeps motion near the tower / skyline band.
+      controls.minPolarAngle = Math.PI / 3;
+      controls.maxPolarAngle = Math.PI / 2 - 0.035;
       controls.autoRotate = false;
-      controls.autoRotateSpeed = 0.5;
+      controls.autoRotateSpeed = 0.38;
       camera.lookAt(controls.target);
       controls.update();
 
