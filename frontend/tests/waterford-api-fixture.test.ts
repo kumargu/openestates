@@ -6,7 +6,7 @@ import aroundThisHome from "../fixtures/prestige-waterford-api/around-this-home.
 import manifest from "../fixtures/prestige-waterford-api/manifest.json" with { type: "json" };
 import { propertyMapContextFromSurfaceScene } from "../src/lib/surfaceSceneProjection.ts";
 import { homeSceneCamera, homeOrbitCamera } from "../src/lib/atlasNearbyScene.ts";
-import { resolveHomeAnchor } from "../src/lib/nearbyPlateProjection.ts";
+import { placeMatchesProofFocus, resolveHomeAnchor } from "../src/lib/nearbyPlateProjection.ts";
 import { projectCameraPointToScreen } from "../src/lib/atlas/screenFit.ts";
 import atlasPolicy from "../src/lib/atlasPolicy.ts";
 import type {
@@ -155,4 +155,31 @@ test("composed scenes list each canonical station once despite different scene f
     {...nearby, places: [...nearby.places, distinct, otherLayer]})!;
   assert.ok(merged.places.some(place => place.place_entity_id === distinct.place_entity_id));
   assert.ok(merged.places.some(place => place.layer === otherLayer.layer));
+});
+
+
+test("canonical scene merging retains source links and feature-only proof", () => {
+  const nearby = propertyMapContextFromSurfaceScene(scene("around_this_home"), detail.map_context)!;
+  const original = nearby.places.find(place => place.layer === 'metro')!;
+  original.source_url = 'https://example.org/station-proof';
+  nearby.proof_focus = {surfaceId: 'around_this_home', layerId: original.layer,
+    factKey: 'nearby', featureId: original.feature_id, reason: 'Matched station'};
+  const arrival = scene('arrival_story');
+  arrival.receipts = arrival.receipts.map(receipt => ({...receipt, sourceUrl: undefined}));
+  const merged = propertyMapContextFromSurfaceScene(arrival, nearby)!;
+  const station = merged.places.find(place => place.place_entity_id === original.place_entity_id)!;
+  assert.equal(station.source_url, original.source_url);
+  assert.equal(placeMatchesProofFocus(station, merged.proof_focus), true);
+});
+
+test("same-scene canonical duplicates collapse but unidentified same-name places stay distinct", () => {
+  const arrival = scene('arrival_story');
+  const original = arrival.features.find(feature => feature.layerId === 'metro' && feature.geometry.type === 'Point')!;
+  arrival.features.push({...original, id: 'duplicate-scene-feature'});
+  const merged = propertyMapContextFromSurfaceScene(arrival)!;
+  assert.equal(merged.places.filter(place => place.place_entity_id === original.entityId).length, 1);
+  const unidentified = {...merged.places.find(place => place.place_entity_id === original.entityId)!,
+    feature_id: undefined, place_entity_id: undefined, latitude: 13.5, longitude: 78};
+  const distinct = propertyMapContextFromSurfaceScene(arrival, {...merged, places: [unidentified]})!;
+  assert.ok(distinct.places.some(place => place.latitude === 13.5));
 });

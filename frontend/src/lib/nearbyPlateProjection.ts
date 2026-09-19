@@ -84,7 +84,7 @@ export function placeId(place: MapPlacePin, index = 0): string {
 export function placeMatchesProofFocus(place: MapPlacePin, focus?: ProofFocus | null): boolean {
   if (!focus) return false;
   if (place.layer !== focus.layerId) return false;
-  if (focus.featureId && place.feature_id === focus.featureId) return true;
+  if (focus.featureId && (place.feature_id === focus.featureId || place.feature_ids?.includes(focus.featureId))) return true;
   if (focus.entityId && place.place_entity_id === focus.entityId) return true;
   if (focus.matchedLabel && textContains(place.name, focus.matchedLabel)) return true;
   if (focus.matchedValue && textContains(focus.matchedValue, place.name)) return true;

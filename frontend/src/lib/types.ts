@@ -386,6 +386,8 @@ export type MapHomeAnchor = {
 
 export type MapPlacePin = {
   feature_id?: string;
+  /** Local scene-composition aliases; not required from the API. */
+  feature_ids?: string[];
   place_entity_id?: string;
   layer: MapNearbyLayer | string;
   icon?: string;

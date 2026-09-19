@@ -42,7 +42,8 @@ export function homeOrbitCamera(home: Home, elevation: number, frame: AtlasSafeF
 export function geometryForPlace(place: NumberedPlace, polygons: MapOverlayPolygon[], lines: MapOverlayLine[]) {
   const owns = (shape: { id: string; entity_id?: string }) =>
     Boolean(place.place_entity_id && shape.entity_id === place.place_entity_id)
-    || Boolean(place.feature_id && (shape.id === place.feature_id || shape.id.startsWith(`${place.feature_id}:`)));
+    || [place.feature_id, ...(place.feature_ids ?? [])].some(id =>
+      Boolean(id && (shape.id === id || shape.id.startsWith(`${id}:`))));
   return { polygons: polygons.filter(owns), lines: lines.filter(owns) };
 }
 

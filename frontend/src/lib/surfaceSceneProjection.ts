@@ -24,11 +24,21 @@ export function propertyMapContextFromSurfaceScene(
         point.geometry.type === 'Point' && point.layerId === feature.layerId && feature.entityId && point.entityId === feature.entityId)))
     .map((feature) => mapPlacePinFromFeature(feature, receiptsById))
     .filter((place): place is MapPlacePin => Boolean(place));
-  const places = [
-    ...scenePlaces,
-    ...(fallback?.places ?? []).filter((place) =>
-      !scenePlaces.some((candidate) => samePlacePin(candidate, place))),
-  ];
+  const places: MapPlacePin[] = [];
+  for (const place of [...scenePlaces, ...(fallback?.places ?? [])]) {
+    const index = places.findIndex(candidate => samePlacePin(candidate, place));
+    if (index < 0) { places.push(place); continue; }
+    const primary = places[index];
+    places[index] = {
+      ...place,
+      ...Object.fromEntries(Object.entries(primary).filter(([, value]) => value !== undefined)),
+      feature_ids: [...new Set([primary.feature_id, ...(primary.feature_ids ?? []),
+        place.feature_id, ...(place.feature_ids ?? [])].filter((id): id is string => Boolean(id)))],
+      source_url: primary.source_url ?? place.source_url,
+      source_type: primary.source_url ? primary.source_type : place.source_url ? place.source_type : primary.source_type,
+      properties: {...place.properties, ...primary.properties},
+    };
+  }
   const redFlagLines = scene.features
     .filter((feature) => feature.layerId === "red_flags")
     .map((feature) => mapLineFromFeature(feature, receiptsById))
@@ -191,7 +201,10 @@ function samePlacePin(left: MapPlacePin, right: MapPlacePin): boolean {
     return left.place_entity_id === right.place_entity_id;
   }
   if (left.feature_id && right.feature_id) return left.feature_id === right.feature_id;
-  return left.name === right.name;
+  // Labels alone do not establish identity (branches can share a name).
+  return left.name === right.name
+    && Number.isFinite(left.latitude) && Number.isFinite(left.longitude)
+    && left.latitude === right.latitude && left.longitude === right.longitude;
 }
 
 function mapPlacePinFromFeature(
