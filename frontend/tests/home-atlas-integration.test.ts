@@ -5,28 +5,141 @@ import { propertyMapContextFromSurfaceScene } from "../src/lib/surfaceSceneProje
 import {
   arrivalAtlasRoute,
   arrivalAtlasContextLines,
+  lineColorFromName,
 } from "../src/lib/homeAtlasProjection.ts";
 import {
   advanceRoadDistance,
   dampHeading,
   projectStreetHandoff,
-} from "../../experiments/home-atlas/src/journey.ts";
-import { distanceMetres } from "../../experiments/home-atlas/src/geometry.ts";
+} from "../src/lib/atlas/journey.ts";
+import { distanceMetres } from "../src/lib/atlas/geometry.ts";
 import {
   bearingDegrees,
   fitCameraToScreen,
   projectCameraPointToScreen,
   type AtlasFitPoint,
   type AtlasScreenFrame,
-} from "../../experiments/home-atlas/src/screenFit.ts";
-import atlasPolicy from "../../app/config/ui/home-atlas.json" with { type: "json" };
+} from "../src/lib/atlas/screenFit.ts";
+import atlasPolicy from "../src/lib/atlasPolicy.ts";
 import { AtlasCameraArbiter } from "../src/lib/atlasCameraArbiter.ts";
 import {
   geometryForPlace,
+  homeOrbitCamera,
+  homeSceneCamera,
   nearbySceneCamera,
   nearbyRelationArc,
 } from '../src/lib/atlasNearbyScene.ts';
 import { buildNumberedPlaces, resolveHomeAnchor } from '../src/lib/nearbyPlateProjection.ts';
+
+test('composed Atlas retains proof focus and every configured line layer', () => {
+  const scene = atlasFixtureScene('arrival_story');
+  const fallback = propertyMapContextFromSurfaceScene(scene)!;
+  const proof = { surfaceId: 'around_this_home', layerId: 'custom-layer', factKey: 'custom-fact', reason: 'matched', entityId: 'custom-place' };
+  fallback.proof_focus = proof;
+  const line = { id: 'custom-line', name: 'Custom alignment', kind: 'line', coordinates: [[77.7, 12.9], [77.8, 12.9]] as [number, number][], source_type: 'test' };
+  fallback.layer_lines = { ...fallback.layer_lines, 'custom-layer': [line] };
+  const merged = propertyMapContextFromSurfaceScene(scene, fallback)!;
+  assert.deepEqual(merged.proof_focus, proof);
+  assert.deepEqual(merged.layer_lines?.['custom-layer'], [line]);
+  assert.equal(new Set(merged.layer_lines?.approach.map((item) => item.id)).size, merged.layer_lines?.approach.length);
+  const explicit = { ...proof, entityId: 'new-place' };
+  assert.deepEqual(propertyMapContextFromSurfaceScene({ ...scene, proofFocus: explicit }, fallback)?.proof_focus, explicit);
+});
+
+test('home opening fits the complete boundary beside desktop chrome at different browser sizes', () => {
+  const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
+  const home = {...resolveHomeAnchor(context)!, name: context.home.name, boundary: context.home.boundary};
+  for (const frame of [
+    {width: 1280, height: 1000, left: 32, right: 32, top: 220, bottom: 120},
+    {width: 1046, height: 800, left: 32, right: 420, top: 220, bottom: 120},
+    {width: 1600, height: 1100, left: 32, right: 420, top: 220, bottom: 120},
+    {width: 1166, height: 768, left: 32, right: 464, top: 226, bottom: 32},
+    {width: 1046, height: 620, left: 32, right: 464, top: 226, bottom: 32},
+  ]) {
+    for (const tilt of [undefined, atlasPolicy.above.tilt]) {
+      const camera = homeSceneCamera(home, 900, frame, tilt);
+      assert.equal(camera.fov, atlasPolicy.cameraFit.homeFieldOfViewDegrees);
+      assert.equal(camera.heading, atlasPolicy.cameraFit.homeHeadingDegrees);
+      assert.equal(camera.tilt, tilt ?? atlasPolicy.cameraFit.homeTilt);
+      assert.equal(camera.center.altitude, 900 + atlasPolicy.cameraFit.homeCenterAltitudeOffsetM);
+      assert.ok(camera.range >= atlasPolicy.cameraFit.homeMinimumRangeM);
+      const projected = home.boundary!.coordinates.map(([lng, lat]) =>
+        projectCameraPointToScreen(camera, {lat, lng}, frame, camera.fov));
+      const padding = atlasPolicy.cameraFit.opticalPaddingPx - 0.5;
+      for (const point of projected) {
+        assert.ok(point.x >= frame.left + padding && point.x <= frame.width - frame.right - padding);
+        assert.ok(point.y >= frame.top + padding && point.y <= frame.height - frame.bottom - padding);
+      }
+      const width = Math.max(...projected.map(p => p.x)) - Math.min(...projected.map(p => p.x));
+      const height = Math.max(...projected.map(p => p.y)) - Math.min(...projected.map(p => p.y));
+      assert.ok(Math.max(width / (frame.width - frame.left - frame.right),
+        height / (frame.height - frame.top - frame.bottom)) > 0.5, 'home uses the available canvas');
+    }
+  }
+});
+
+test('Home orbit derives its range from mapped geometry and the available desktop frame', () => {
+  const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
+  const home = {...resolveHomeAnchor(context)!, name: context.home.name, boundary: context.home.boundary};
+  const frame = {width: 1440, height: 1000, left: 32, right: 420, top: 96, bottom: 120};
+  const camera = homeOrbitCamera(home, 900, frame);
+  assert.deepEqual(camera, homeSceneCamera(home, 900, frame));
+  assert.equal(atlasPolicy.homeOrbit.cycleMs, 180_000);
+
+  const atMetres = (east: number, north: number): [number, number] => [
+    home.longitude + east / (111_320 * Math.cos(home.latitude * Math.PI / 180)),
+    home.latitude + north / 111_320,
+  ];
+  const boundaries = [
+    undefined,
+    {id: 'small', name: 'Small site', kind: 'boundary', source_type: 'test', coordinates: [
+      atMetres(-40, -40), atMetres(40, -40), atMetres(40, 40), atMetres(-40, 40), atMetres(-40, -40),
+    ]},
+    {id: 'large', name: 'Large site', kind: 'boundary', source_type: 'test', coordinates: [
+      atMetres(-500, -350), atMetres(500, -350), atMetres(500, 350), atMetres(-500, 350), atMetres(-500, -350),
+    ]},
+    {id: 'long', name: 'Elongated site', kind: 'boundary', source_type: 'test', coordinates: [
+      atMetres(-700, -45), atMetres(700, -45), atMetres(700, 45), atMetres(-700, 45), atMetres(-700, -45),
+    ]},
+  ];
+  for (const desktopFrame of [
+    frame,
+    {width: 1166, height: 768, left: 32, right: 464, top: 226, bottom: 32},
+  ]) {
+    const ranges = boundaries.map((boundary) => homeOrbitCamera({...home, boundary}, 900, desktopFrame).range);
+    assert.ok(ranges[0] >= atlasPolicy.cameraFit.homeMinimumRangeM);
+    assert.ok(ranges[1] >= atlasPolicy.cameraFit.homeMinimumRangeM);
+    assert.ok(ranges[2] > Math.max(ranges[0], ranges[1]));
+    assert.ok(ranges[3] > Math.max(ranges[0], ranges[1]));
+  }
+});
+
+test('Metro segments derive CSS colors from canonical API line names', () => {
+  const line = (id: string, name: string) => ({
+    id,
+    name,
+    kind: 'metro_line',
+    coordinates: [[77.74, 12.98], [77.75, 12.99]] as [number, number][],
+    source_type: 'OpenStreetMap',
+  });
+  const contextLines = arrivalAtlasContextLines([
+    line('purple', 'Purple Line'),
+    line('yellow', 'Yellow Line'),
+    line('unknown', 'Namma Metro'),
+  ], metroLine => ({
+    strokeColor: lineColorFromName(metroLine.name, atlasPolicy.metro.strokeColor),
+    strokeWidth: atlasPolicy.metro.strokeWidth,
+    altitudeMode: 'clamp_to_ground',
+    drawsOccludedSegments: atlasPolicy.metro.drawsOccludedSegments,
+  }));
+
+  assert.deepEqual(contextLines.map(item => item.style.strokeColor), [
+    'purple',
+    'yellow',
+    atlasPolicy.metro.strokeColor,
+  ]);
+  assert.ok(contextLines.every(item => item.style.strokeWidth === atlasPolicy.metro.strokeWidth));
+});
 
 test("Waterford API scene reaches production metro, boundary, nearby and road projections", () => {
   const scene = atlasFixtureScene("arrival_story");
@@ -48,6 +161,12 @@ test("Waterford API scene reaches production metro, boundary, nearby and road pr
   const halfway = advanceRoadDistance(route, 0, 1000, 1);
   assert.equal(halfway, 12);
   assert.equal(advanceRoadDistance(route, 0, 1000, 2), 24);
+  // The production policy starts at 2×, with slower and faster inspection available.
+  assert.equal(atlasPolicy.road.defaultRate, 2);
+  assert.equal(advanceRoadDistance(route, 0, 1000, atlasPolicy.road.defaultRate, atlasPolicy.road), 24);
+  assert.equal(advanceRoadDistance(route, 0, 1000, atlasPolicy.road.minimumRate, atlasPolicy.road), 6);
+  assert.equal(advanceRoadDistance(route, 0, 1000, atlasPolicy.road.maximumRate, atlasPolicy.road), 48);
+  assert.equal(advanceRoadDistance(route, route.lengthM - 1, 1000, atlasPolicy.road.maximumRate, atlasPolicy.road), route.lengthM);
   const [longitude, latitude] = route.coordinates[0];
   assert.equal(
     projectStreetHandoff(route, { longitude, latitude }, 40).distanceAlongM,
@@ -64,7 +183,7 @@ test('nearby relationship keeps home, uses real extents and never drops distant 
   const selected = places[0];
   assert.ok(geometryForPlace(selected, polygons, []).polygons.length > 0);
   const overview = nearbySceneCamera(home, places, polygons, [], null, 'overview', 900, 1400);
-  assert.equal(overview.tilt, 25);
+  assert.equal(overview.tilt, atlasPolicy.cameraFit.overviewTilt);
   const pair = nearbySceneCamera(home, places, polygons, [], selected.feature_id!, 'pair', 900, 1400);
   const pairDistance = distanceMetres(
     {lat: home.latitude, lng: home.longitude},
@@ -74,13 +193,8 @@ test('nearby relationship keeps home, uses real extents and never drops distant 
   assert.ok(pair.range <= pairDistance * 2.2, 'pair stays prominent instead of framing excess geography');
   const close = nearbySceneCamera(home, places, polygons, [], selected.feature_id!, 'inspect', 900, 1400);
   assert.equal(close.tilt, atlasPolicy.cameraFit.inspectTilt);
-  assert.equal(
-    close.heading,
-    (bearingDegrees(
-      {lat: home.latitude, lng: home.longitude},
-      {lat: selected.latitude, lng: selected.longitude},
-    ) + atlasPolicy.cameraFit.inspectHeadingOffsetDegrees) % 360,
-  );
+  const revealTurn = ((close.heading - overview.heading + 540) % 360) - 180;
+  assert.ok(Math.abs(revealTurn) <= 20, 'reveal keeps the category orientation legible');
   const distant = {...selected, latitude:home.latitude+0.15, longitude:home.longitude, feature_id:'distant', place_entity_id:'distant'};
   const broad = nearbySceneCamera(home, [distant], [], [], null, 'overview', 900, 1400);
   assert.ok(broad.range > overview.range, 'backend-scoped evidence must not be silently radius-filtered');
@@ -91,7 +205,11 @@ test('nearby relationship keeps home, uses real extents and never drops distant 
   assert.ok(arc[20].altitude > arc[0].altitude);
   assert.ok(nearbySceneCamera(home, places, polygons, [], null, 'overview', 900, 390).range > overview.range);
   const returnedHome = nearbySceneCamera(home, places, polygons, [], null, 'home', 900, 1400);
-  assert.equal(returnedHome.tilt, 55);
+  assert.equal(returnedHome.tilt, atlasPolicy.cameraFit.homeTilt);
+  assert.equal(returnedHome.heading, atlasPolicy.cameraFit.homeHeadingDegrees);
+  assert.equal(returnedHome.fov, atlasPolicy.cameraFit.homeFieldOfViewDegrees);
+  assert.equal(returnedHome.center.altitude, 900 + atlasPolicy.cameraFit.homeCenterAltitudeOffsetM);
+  assert.ok(returnedHome.range >= atlasPolicy.cameraFit.homeMinimumRangeM);
 });
 
 test('screen-space fitting contains point, polygon, line, and lifted anchors at any coordinate', () => {
@@ -192,6 +310,38 @@ test('nearby comparisons preserve orientation when selecting opposite-side alter
       }
     }
   }
+});
+
+test('ordinary Nearby turns each selected relationship to keep Home prominent', () => {
+  const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
+  const home = {...resolveHomeAnchor(context)!, boundary: context.home.boundary};
+  const places = buildNumberedPlaces(context.places.filter(place => place.layer === 'school'));
+  const frame: AtlasScreenFrame = {
+    width: 1440,
+    height: 1000,
+    left: 32,
+    right: 420,
+    top: 96,
+    bottom: 120,
+  };
+  const headings = new Set<number>();
+  for (const selected of places) {
+    const stable = nearbySceneCamera(home, places, [], [], selected.feature_id!, 'inspect',
+      900, frame.width, frame);
+    const pair = nearbySceneCamera(home, places, [], [], selected.feature_id!, 'pair',
+      900, frame.width, frame, undefined, 'selected-home-foreground');
+    const inspect = nearbySceneCamera(home, places, [], [], selected.feature_id!, 'inspect',
+      900, frame.width, frame, undefined, 'selected-home-foreground');
+    const expected = (bearingDegrees(
+      {lat: home.latitude, lng: home.longitude},
+      {lat: selected.latitude, lng: selected.longitude},
+    ) + atlasPolicy.cameraFit.selectedHomeForegroundHeadingOffsetDegrees) % 360;
+    assert.ok(Math.abs(inspect.heading - expected) < 1e-6);
+    assert.equal(pair.heading, inspect.heading, 'pair and reveal must not introduce a second turn');
+    assert.ok(inspect.range < stable.range, 'fixture Home should gain screen presence');
+    headings.add(inspect.heading);
+  }
+  assert.equal(headings.size, places.length, 'selection, not category centroid, owns the inspect bearing');
 });
 
 test('inspect framing gives selected geometry more screen presence while retaining home', () => {

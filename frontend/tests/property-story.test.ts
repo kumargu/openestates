@@ -14,7 +14,7 @@ import {
 import {
   storyLabDetailFixture,
   storyLabMediaFixture,
-} from "../src/lib/propertyStoryFixtures.ts";
+} from "./property-story-fixtures.ts";
 
 function richDetail() {
   return storyLabDetailFixture({
@@ -35,7 +35,7 @@ test("property story projection is deterministic", () => {
   );
 });
 
-test("Story Lab projection matrix stays deterministic and bounded", () => {
+test("property story projection matrix stays deterministic and bounded", () => {
   const propertyIds = [
     "fixture-prestige-lakeside-3bhk",
     "fixture-sobha-royal-pavilion-4bhk",
@@ -326,69 +326,6 @@ test("partial official records and unresolved reviews stay compact without inven
   assert.equal(
     story.decks.some((deck) => deck.kind === "reviews"),
     true,
-  );
-});
-
-test("short compare projects current home plus two distinct peers and handoff", () => {
-  const detail = richDetail();
-  const base = detail.similar_properties[0];
-  assert.ok(base);
-  const peerA = {
-    ...base,
-    id: "peer-a",
-    society_name: "Peer A",
-    kg_entity_refs: undefined,
-  };
-  const peerB = {
-    ...base,
-    id: "peer-b",
-    society_name: "Peer B",
-    kg_entity_refs: undefined,
-  };
-  const peerC = {
-    ...base,
-    id: "peer-c",
-    society_name: "Peer C",
-    kg_entity_refs: undefined,
-  };
-  const duplicatePeerB = {
-    ...peerB,
-    id: "peer-b-sibling",
-  };
-  detail.similar_properties = [peerA];
-  const firstVisit = projectPropertyStory(detail, {
-    recommendationProperties: [peerB, duplicatePeerB, peerC],
-  });
-  assert.deepEqual(
-    firstVisit.comparisons.map((home) => home.id),
-    [detail.property.id, "peer-b", "peer-c"],
-  );
-
-  const story = projectPropertyStory(detail, {
-    comparisonProperties: [peerA],
-    recommendationProperties: [peerB, peerC],
-  });
-  assert.deepEqual(
-    story.comparisons.map((home) => home.id),
-    [detail.property.id, "peer-a", "peer-b"],
-  );
-  assert.deepEqual(
-    story.comparisons.map((home) => home.isCurrent),
-    [true, false, false],
-  );
-  assert.equal(
-    story.compareHref,
-    `/workspace/compare?ids=${encodeURIComponent(
-      `${detail.property.id},peer-a,peer-b`,
-    )}&focus=${encodeURIComponent(detail.property.id)}`,
-  );
-
-  detail.similar_properties = [peerA];
-  const sparseCompare = projectPropertyStory(detail);
-  assert.deepEqual(sparseCompare.comparisons, []);
-  assert.equal(
-    sparseCompare.decks.some((deck) => deck.kind === "compare"),
-    false,
   );
 });
 

@@ -24,11 +24,21 @@ export function propertyMapContextFromSurfaceScene(
         point.geometry.type === 'Point' && point.layerId === feature.layerId && feature.entityId && point.entityId === feature.entityId)))
     .map((feature) => mapPlacePinFromFeature(feature, receiptsById))
     .filter((place): place is MapPlacePin => Boolean(place));
-  const places = [
-    ...scenePlaces,
-    ...(fallback?.places ?? []).filter((place) =>
-      !scenePlaces.some((candidate) => samePlacePin(candidate, place))),
-  ];
+  const places: MapPlacePin[] = [];
+  for (const place of [...scenePlaces, ...(fallback?.places ?? [])]) {
+    const index = places.findIndex(candidate => samePlacePin(candidate, place));
+    if (index < 0) { places.push(place); continue; }
+    const primary = places[index];
+    places[index] = {
+      ...place,
+      ...Object.fromEntries(Object.entries(primary).filter(([, value]) => value !== undefined)),
+      feature_ids: [...new Set([primary.feature_id, ...(primary.feature_ids ?? []),
+        place.feature_id, ...(place.feature_ids ?? [])].filter((id): id is string => Boolean(id)))],
+      source_url: primary.source_url ?? place.source_url,
+      source_type: primary.source_url ? primary.source_type : place.source_url ? place.source_type : primary.source_type,
+      properties: {...place.properties, ...primary.properties},
+    };
+  }
   const redFlagLines = scene.features
     .filter((feature) => feature.layerId === "red_flags")
     .map((feature) => mapLineFromFeature(feature, receiptsById))
@@ -38,6 +48,9 @@ export function propertyMapContextFromSurfaceScene(
     .map((feature) => mapLineFromFeature(feature, receiptsById))
     .filter((line): line is MapOverlayLine => Boolean(line));
   const layerLines = mapLinesByLayer(scene, receiptsById);
+  for (const [layerId, lines] of Object.entries(fallback?.layer_lines ?? {})) {
+    layerLines[layerId] = mergeLines(layerLines[layerId] ?? [], lines);
+  }
   const layerPolygons = { ...fallback?.layer_polygons };
   for (const feature of scene.features) {
     const polygons = feature.geometry.type === 'Polygon' ? [feature.geometry.coordinates]
@@ -52,12 +65,16 @@ export function propertyMapContextFromSurfaceScene(
   }
 
   const mergedAccessLines = mergeLines(accessLines, fallback?.access_lines ?? []);
+  const mergedMetroLines = mergeLines(
+    layerLines.metro ?? [],
+    mergeLines(mergedAccessLines, fallback?.metro_lines ?? []),
+  );
   const mergedRedFlagLines = [
     ...redFlagLines,
     ...(fallback?.red_flag_lines ?? []).filter((line) =>
       !redFlagLines.some((candidate) => candidate.id === line.id)),
   ];
-  layerLines.metro = mergedAccessLines;
+  layerLines.metro = mergedMetroLines;
   layerLines.red_flags = mergedRedFlagLines;
   const layers = mergedLayers(scene, fallback, mergedRedFlagLines);
 
@@ -73,9 +90,9 @@ export function propertyMapContextFromSurfaceScene(
     layers,
     arrivalExperience: scene.experience ?? fallback?.arrivalExperience,
     places,
-    proof_focus: scene.proofFocus,
+    proof_focus: scene.proofFocus ?? fallback?.proof_focus,
     water: fallback?.water,
-    metro_lines: mergeLines(accessLines, fallback?.metro_lines ?? []),
+    metro_lines: mergedMetroLines,
     access_lines: mergedAccessLines,
     red_flag_lines: mergedRedFlagLines,
     layer_lines: layerLines,
@@ -88,23 +105,24 @@ export function propertyMapContextFromSurfaceScene(
 function mapAnchorBoundary(scene: SurfaceSceneResponse): PropertyMapContext["home"]["boundary"] {
   const boundary = scene.anchor.boundary;
   if (!boundary) return undefined;
-  let coordinates: [number, number][] | undefined;
+  let rings: [number, number][][] | undefined;
   if (boundary.geometry.type === "Polygon") {
-    coordinates = boundary.geometry.coordinates[0];
+    rings = boundary.geometry.coordinates;
   } else if (boundary.geometry.type === "MultiPolygon") {
-    coordinates = boundary.geometry.coordinates
-      .map((polygon) => polygon[0])
-      .filter((ring): ring is [number, number][] => Boolean(ring))
-      .sort((left, right) => polygonRingArea(right) - polygonRingArea(left))[0];
+    rings = boundary.geometry.coordinates
+      .filter(polygon => polygon[0]?.length >= 4)
+      .sort((left, right) => polygonRingArea(right[0]) - polygonRingArea(left[0]))[0];
   } else {
     return undefined;
   }
+  const coordinates = rings?.[0];
   if (!coordinates || coordinates.length < 4) return undefined;
   return {
     id: `${scene.anchor.entityId}:boundary`,
     name: scene.anchor.label,
     kind: "society_boundary",
     coordinates,
+    holes: rings!.slice(1),
     source_type: boundary.sourceType,
   };
 }
@@ -178,11 +196,16 @@ function mergedLayers(
 }
 
 function samePlacePin(left: MapPlacePin, right: MapPlacePin): boolean {
-  if (left.feature_id && right.feature_id) return left.feature_id === right.feature_id;
+  if (left.layer !== right.layer) return false;
+  // Feature IDs belong to a scene; the same entity can appear in multiple scenes.
   if (left.place_entity_id && right.place_entity_id) {
-    return left.place_entity_id === right.place_entity_id && left.layer === right.layer;
+    return left.place_entity_id === right.place_entity_id;
   }
-  return left.layer === right.layer && left.name === right.name;
+  if (left.feature_id && right.feature_id) return left.feature_id === right.feature_id;
+  // Labels alone do not establish identity (branches can share a name).
+  return left.name === right.name
+    && Number.isFinite(left.latitude) && Number.isFinite(left.longitude)
+    && left.latitude === right.latitude && left.longitude === right.longitude;
 }
 
 function mapPlacePinFromFeature(

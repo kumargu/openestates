@@ -689,7 +689,7 @@ test("surface scene projection merges fallback places additively", () => {
     ...emptyMapContext,
     places: [
       { layer: "hospitals", name: "Aster", distance_km: 3.2, source_type: "Google" },
-      { place_entity_id: "place:manipal", layer: "hospitals", name: "Manipal Hospital Whitefield", distance_km: 2.7, source_type: "Google" },
+      { feature_id: "another_scene:hospitals:place-manipal", place_entity_id: "place:manipal", layer: "hospitals", name: "Manipal Hospital Whitefield", distance_km: 2.7, source_type: "Google" },
     ],
   };
 

@@ -46,8 +46,6 @@ type CorridorProjection = CorridorCameraFocus & {
   latitudeMeters: number;
 };
 
-const METRO_CORRIDOR_BUFFER_KM = 0.9;
-const METRO_MAX_SEGMENTS = 3;
 const VIEWPORT_PADDING = 1.35;
 
 export function arrivalMarkerPlaces(
@@ -196,32 +194,80 @@ export function metroLinesNearArrival(
   home: { latitude: number; longitude: number },
   places: NumberedPlace[],
   metroLines: MapOverlayLine[],
+  vicinityRadiusM: number,
 ): MapOverlayLine[] {
-  if (metroLines.length <= METRO_MAX_SEGMENTS) return metroLines;
-  const anchors: [number, number][] = [
-    [home.longitude, home.latitude],
-    ...places.map((place): [number, number] => [place.longitude, place.latitude]),
+  if (!(vicinityRadiusM > 0)) return [];
+  const longitudeScale = 111_320 * Math.max(0.2, Math.cos(home.latitude * Math.PI / 180));
+  const local = ([longitude, latitude]: [number, number]) => ({
+    x: (longitude - home.longitude) * longitudeScale,
+    y: (latitude - home.latitude) * 111_320,
+  });
+  const anchors = [
+    {x: 0, y: 0},
+    ...places.map((place) => local([place.longitude, place.latitude])),
   ];
-  const scored = metroLines
-    .map((line) => ({
-      line,
-      distanceKm: Math.min(
-        ...line.coordinates.flatMap(([longitude, latitude]) =>
-          anchors.map(([anchorLongitude, anchorLatitude]) => distanceKm(
-            latitude,
-            longitude,
-            anchorLatitude,
-            anchorLongitude,
-          ))),
-      ),
-    }))
-    .sort((left, right) => left.distanceKm - right.distanceKm);
-  const nearestDistanceKm = scored[0]?.distanceKm ?? 0;
-  return scored
-    .filter(({ distanceKm: lineDistanceKm }) =>
-      lineDistanceKm <= nearestDistanceKm + METRO_CORRIDOR_BUFFER_KM)
-    .slice(0, METRO_MAX_SEGMENTS)
-    .map(({ line }) => line);
+  const interpolate = (start: [number, number], end: [number, number], t: number): [number, number] => [
+    start[0] + (end[0] - start[0]) * t,
+    start[1] + (end[1] - start[1]) * t,
+  ];
+  const intervalsForSegment = (start: [number, number], end: [number, number]) => {
+    const a = local(start);
+    const b = local(end);
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lengthSquared = dx * dx + dy * dy;
+    if (lengthSquared < 1e-6) return [];
+    const intervals = anchors.flatMap((anchor) => {
+      const offsetX = a.x - anchor.x;
+      const offsetY = a.y - anchor.y;
+      const linear = 2 * (offsetX * dx + offsetY * dy);
+      const constant = offsetX * offsetX + offsetY * offsetY - vicinityRadiusM * vicinityRadiusM;
+      const discriminant = linear * linear - 4 * lengthSquared * constant;
+      if (discriminant < 0) return [];
+      const root = Math.sqrt(discriminant);
+      const from = Math.max(0, (-linear - root) / (2 * lengthSquared));
+      const to = Math.min(1, (-linear + root) / (2 * lengthSquared));
+      return to > from ? [[from, to] as [number, number]] : [];
+    }).sort((left, right) => left[0] - right[0]);
+    const merged: [number, number][] = [];
+    for (const interval of intervals) {
+      const previous = merged.at(-1);
+      if (previous && interval[0] <= previous[1] + 1e-9) previous[1] = Math.max(previous[1], interval[1]);
+      else merged.push([...interval]);
+    }
+    return merged;
+  };
+  const sameCoordinate = (left: [number, number], right: [number, number]) =>
+    Math.abs(left[0] - right[0]) < 1e-9 && Math.abs(left[1] - right[1]) < 1e-9;
+
+  return metroLines.flatMap((line) => {
+    const fragments: [number, number][][] = [];
+    let current: [number, number][] | null = null;
+    for (let index = 1; index < line.coordinates.length; index += 1) {
+      const start = line.coordinates[index - 1];
+      const end = line.coordinates[index];
+      const intervals = intervalsForSegment(start, end);
+      for (const [from, to] of intervals) {
+        const clippedStart = interpolate(start, end, from);
+        const clippedEnd = interpolate(start, end, to);
+        if (current && sameCoordinate(current.at(-1)!, clippedStart)) current.push(clippedEnd);
+        else {
+          if (current) fragments.push(current);
+          current = [clippedStart, clippedEnd];
+        }
+      }
+      if (intervals.length === 0 || intervals.at(-1)![1] < 1 - 1e-9) {
+        if (current) fragments.push(current);
+        current = null;
+      }
+    }
+    if (current) fragments.push(current);
+    return fragments.map((coordinates, index) => ({
+      ...line,
+      id: index === 0 ? line.id : `${line.id}:vicinity:${index}`,
+      coordinates,
+    }));
+  });
 }
 
 export function corridorCameraFocus(

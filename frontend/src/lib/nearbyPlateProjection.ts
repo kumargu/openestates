@@ -78,14 +78,17 @@ export function compactPlaceLabel(name: string): string {
 }
 
 export function placeId(place: MapPlacePin, index = 0): string {
-  return place.feature_id ?? place.place_entity_id ?? `${place.layer}-${place.name}-${index}`;
+  return place.feature_id ?? place.place_entity_id ?? (Number.isFinite(place.latitude) && Number.isFinite(place.longitude)
+    ? JSON.stringify([place.layer, place.name, place.latitude, place.longitude])
+    : `${place.layer}-${place.name}-${index}`);
 }
 
 export function placeMatchesProofFocus(place: MapPlacePin, focus?: ProofFocus | null): boolean {
   if (!focus) return false;
   if (place.layer !== focus.layerId) return false;
-  if (focus.featureId && place.feature_id === focus.featureId) return true;
-  if (focus.entityId && place.place_entity_id === focus.entityId) return true;
+  if (focus.featureId && (place.feature_id === focus.featureId || place.feature_ids?.includes(focus.featureId))) return true;
+  if (focus.entityId) return place.place_entity_id === focus.entityId;
+  if (focus.featureId) return false;
   if (focus.matchedLabel && textContains(place.name, focus.matchedLabel)) return true;
   if (focus.matchedValue && textContains(focus.matchedValue, place.name)) return true;
   return false;

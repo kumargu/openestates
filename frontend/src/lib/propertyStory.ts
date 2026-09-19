@@ -2,10 +2,8 @@ import { initialPropertySceneUrls } from "./propertyScene.ts";
 import { backendUrl } from "./runtimeConfig.ts";
 import { hasAroundThisHomePlate } from "./nearbyPlateProjection.ts";
 import { visibleEvidenceSections } from "./evidence.ts";
-import { workspaceCompareHref } from "./workspaceNav.ts";
 import type {
   DecisionLabel,
-  PropertyCard,
   PropertyDetailResponse,
 } from "./types.ts";
 
@@ -114,20 +112,6 @@ export type StoryRecordCard = {
   }>;
 };
 
-export type StoryComparison = {
-  id: string;
-  title: string;
-  area: string;
-  bhk?: number;
-  price?: number;
-  sizeLabel?: string;
-  status?: string;
-  societyName?: string;
-  heroImage?: string;
-  googleRating?: number;
-  isCurrent: boolean;
-};
-
 export type StoryCoverage = {
   level: "rich" | "partial" | "sparse";
   availableDecks: number;
@@ -144,8 +128,7 @@ export type PropertyStoryDeck =
   | (StoryDeckBase & { kind: "map" })
   | (StoryDeckBase & { kind: "arrival" })
   | (StoryDeckBase & { kind: "reviews" })
-  | (StoryDeckBase & { kind: "record" })
-  | (StoryDeckBase & { kind: "compare" });
+  | (StoryDeckBase & { kind: "record" });
 
 export type PropertyStoryModel = {
   identity: StoryIdentity;
@@ -154,8 +137,6 @@ export type PropertyStoryModel = {
   arrival: StoryArrivalModel;
   reviews: StoryReviewsModel;
   recordCards: StoryRecordCard[];
-  comparisons: StoryComparison[];
-  compareHref?: string;
   coverage: StoryCoverage;
   motionSeed: number;
   motionTheme: StoryMotionTheme;
@@ -166,8 +147,6 @@ export type PropertyStoryProjectionOptions = {
   media?: StoryMediaFrameInput[];
   motionTheme?: StoryMotionTheme;
   mapAvailable?: boolean;
-  comparisonProperties?: PropertyCard[];
-  recommendationProperties?: PropertyCard[];
 };
 
 export type StoryMotionDefinition = {
@@ -218,7 +197,6 @@ const STORY_DECK_ORDER: PropertyStoryDeck["kind"][] = [
   "arrival",
   "reviews",
   "record",
-  "compare",
 ];
 
 function hasKnownNumber(
@@ -494,97 +472,6 @@ function documentFactValue(label: DecisionLabel): string | undefined {
   return text;
 }
 
-export function projectStoryComparison(
-  property: PropertyCard,
-  currentPropertyId?: string,
-): StoryComparison {
-  return {
-    id: property.id,
-    title: property.society_name.trim() || property.title,
-    area: property.area,
-    bhk: hasKnownNumber(property.bhk) ? property.bhk : undefined,
-    price: hasKnownNumber(property.price) ? property.price : undefined,
-    sizeLabel: hasKnownNumber(property.carpet_area_sqft)
-      ? `${property.carpet_area_sqft.toLocaleString("en-IN")} sqft carpet`
-      : hasKnownNumber(property.super_builtup_sqft)
-        ? `${property.super_builtup_sqft.toLocaleString("en-IN")} sqft super built-up`
-        : hasKnownNumber(property.sqft)
-          ? `${property.sqft.toLocaleString("en-IN")} sqft`
-          : undefined,
-    status:
-      property.home_state_display
-      || property.project_status_display
-      || property.possession_status
-      || undefined,
-    societyName: property.society_name.trim() || undefined,
-    heroImage: property.hero_image || property.images?.[0] || undefined,
-    googleRating: hasKnownNumber(property.google_rating)
-      ? property.google_rating
-      : undefined,
-    isCurrent: property.id === currentPropertyId,
-  };
-}
-
-function projectComparisons(
-  data: PropertyDetailResponse,
-  comparisonProperties: PropertyCard[] = [],
-  recommendationProperties: PropertyCard[] = [],
-): { homes: StoryComparison[]; href?: string } {
-  const currentSocietyName = data.society?.name.trim() || undefined;
-  const current: StoryComparison = {
-    id: data.property.id,
-    title: currentSocietyName || storyTitle(data),
-    area: data.property.area,
-    bhk: hasKnownNumber(data.property.bhk) ? data.property.bhk : undefined,
-    price: hasKnownNumber(data.property.price) ? data.property.price : undefined,
-    sizeLabel: hasKnownNumber(data.property.carpet_area_sqft)
-      ? `${data.property.carpet_area_sqft.toLocaleString("en-IN")} sqft carpet`
-      : hasKnownNumber(data.property.super_builtup_sqft)
-        ? `${data.property.super_builtup_sqft.toLocaleString("en-IN")} sqft super built-up`
-        : undefined,
-    status: compactStatus(data),
-    societyName: currentSocietyName,
-    heroImage: data.property.hero_image || data.property.images?.[0] || undefined,
-    googleRating: hasKnownNumber(data.external_reviews?.google_rating)
-      ? data.external_reviews?.google_rating
-      : undefined,
-    isCurrent: true,
-  };
-  const candidates = [
-    ...comparisonProperties,
-    ...recommendationProperties,
-    ...(data.recommendation_branches ?? []).map((branch) => branch.property),
-    ...data.similar_properties,
-  ];
-  const homes: StoryComparison[] = [current];
-  const usedIds = new Set([current.id]);
-  const usedSocieties = new Set([
-    data.entity_refs?.society_entity_id
-      || currentSocietyName?.toLocaleLowerCase()
-      || current.title.toLocaleLowerCase(),
-  ]);
-  for (const property of candidates) {
-    if (usedIds.has(property.id)) continue;
-    const societyKey =
-      property.kg_entity_refs?.society_entity_id
-      || property.society_name.trim().toLocaleLowerCase()
-      || property.title.trim().toLocaleLowerCase();
-    if (usedSocieties.has(societyKey)) continue;
-    usedIds.add(property.id);
-    usedSocieties.add(societyKey);
-    homes.push(projectStoryComparison(property, current.id));
-    if (homes.length === 3) break;
-  }
-  if (homes.length !== 3) return { homes: [] };
-  return {
-    homes,
-    href: workspaceCompareHref(
-      homes.map((home) => home.id),
-      current.id,
-    ),
-  };
-}
-
 export function selectStoryMotionTheme(input: {
   frames: StoryMediaFrame[];
   motionSeed: number;
@@ -636,7 +523,6 @@ function orderedDecks(input: {
   hasArrival: boolean;
   reviewState: StoryReviewsModel["state"];
   hasRecord: boolean;
-  hasComparisons: boolean;
 }): PropertyStoryDeck[] {
   const decks: PropertyStoryDeck[] = [
     {
@@ -672,13 +558,6 @@ function orderedDecks(input: {
           primaryFactKeys: ["rera_registration"],
         }]
       : []),
-    ...(input.hasComparisons
-      ? [{
-          id: "short-compare",
-          kind: "compare" as const,
-          primaryFactKeys: ["comparison_options"],
-        }]
-      : []),
   ];
   return decks.sort(
     (left, right) =>
@@ -696,12 +575,6 @@ export function projectPropertyStory(
   const arrival = projectArrival(data);
   const reviews = projectReviews(data);
   const recordCards = projectRecordCards(data);
-  const compare = projectComparisons(
-    data,
-    options.comparisonProperties,
-    options.recommendationProperties,
-  );
-  const comparisons = compare.homes;
   const map = {
     available: options.mapAvailable
       ?? hasAroundThisHomePlate(data.map_context ?? null),
@@ -718,10 +591,9 @@ export function projectPropertyStory(
     hasArrival: arrival.frames.length > 0,
     reviewState: reviews.state,
     hasRecord: recordCards.length > 0,
-    hasComparisons: comparisons.length > 0,
   });
   const availableDecks = decks.length;
-  const coverageLevel = availableDecks >= 6
+  const coverageLevel = availableDecks >= STORY_DECK_ORDER.length
     ? "rich"
     : availableDecks >= 4
       ? "partial"
@@ -741,8 +613,6 @@ export function projectPropertyStory(
     arrival,
     reviews,
     recordCards,
-    comparisons,
-    compareHref: compare.href,
     coverage: {
       level: coverageLevel,
       availableDecks,

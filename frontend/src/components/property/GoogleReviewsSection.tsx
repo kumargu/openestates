@@ -6,6 +6,7 @@ import { formatGoogleRating } from "../../lib/reviewFormatting.ts";
 
 type Props = {
   reviews?: PropertyDetailResponse["external_reviews"] | null;
+  expandable?: boolean;
 };
 
 function hasKnownNumber(
@@ -63,7 +64,7 @@ function reviewText(value: string): string {
   return value.replace(/\*\*([^*]+)\*\*/g, "$1").trim();
 }
 
-export function GoogleReviewsSection({ reviews }: Props) {
+export function GoogleReviewsSection({ reviews, expandable = false }: Props) {
   const googleUrl = reviews?.google_reviews_url;
   const rating = formatGoogleRating(reviews?.google_rating);
   const reviewCount = formatReviewCount(reviews?.google_review_count);
@@ -90,6 +91,19 @@ export function GoogleReviewsSection({ reviews }: Props) {
         <div className="property-review-grid">
           {reviewCards.map((review) => {
             const dateLabel = reviewDateLabel(review.date_label);
+            if (expandable) return <details key={review.id} className="property-review-card property-review-card--expandable">
+              <summary>
+                <span className="property-review-card__identity">
+                  {review.author && <strong>{review.author}</strong>}
+                  {hasKnownNumber(review.rating) && <span aria-label={`${review.rating} out of 5 stars`}>★ {review.rating}</span>}
+                  {dateLabel && <small>{dateLabel}</small>}
+                </span>
+                <span className="property-review-card__preview">{reviewText(review.text)}</span>
+                <span className="property-review-card__read">Read review <span aria-hidden="true">↗</span></span>
+                <span className="property-review-card__close">Close review <span aria-hidden="true">−</span></span>
+              </summary>
+              <p className="property-review-card__full">{reviewText(review.text)}</p>
+            </details>;
             return (
               <article key={review.id} className="property-review-card">
                 {(review.rating || dateLabel) && (
