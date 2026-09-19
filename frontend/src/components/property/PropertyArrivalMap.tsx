@@ -728,7 +728,7 @@ export function PropertyArrivalMap({
           <button type="button" aria-label="Zoom in" title="Zoom in" disabled={mapStatus !== "ready" || activeView === "approach"} onClick={() => cameraAction("zoom-in")}><AtlasIcon name="plus" /></button>
           <button type="button" aria-label="Zoom out" title="Zoom out" disabled={mapStatus !== "ready" || activeView === "approach"} onClick={() => cameraAction("zoom-out")}><AtlasIcon name="minus" /></button>
           <button type="button" aria-label="View another side" title="View another side" disabled={mapStatus !== "ready" || activeView === "approach"} onClick={() => cameraAction("rotate")}><AtlasIcon name="rotate" /></button>
-          <button type="button" aria-label="Top view" title="Top view" aria-pressed={above} disabled={mapStatus !== "ready" || activeView === "approach"} onClick={() => { playbackController.cancel("settled"); setSocietyAutoPlay(false); setAbove((current) => !current); }}><AtlasIcon name="top" /></button>
+          <button type="button" aria-label="Top view" title="Top view" aria-pressed={above} disabled={mapStatus !== "ready" || activeView === "approach"} onClick={() => { browseInterrupted.current = true; playbackController.cancel("settled"); setSocietyAutoPlay(false); setAbove((current) => !current); }}><AtlasIcon name="top" /></button>
           <button type="button" aria-label="Site outline" title="Site outline" aria-pressed={showBoundary} disabled={mapStatus !== "ready" || !context.home.boundary} onClick={() => setShowBoundary((current) => !current)}>
             <AtlasIcon name="outline" />
           </button>

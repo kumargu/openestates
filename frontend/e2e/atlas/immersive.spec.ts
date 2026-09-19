@@ -257,3 +257,21 @@ test('Metro combines repeated scene stations into one row and marker per place',
   await expect(map.locator('[data-atlas-selected="true"]')).toHaveCount(1);
   await expect(rows).toHaveCount(2);
 });
+
+test('Top view owns the camera after a pending list scroll', async ({page}) => {
+  await page.setViewportSize({width: 1600, height: 1000});
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await page.goto('/property/discovered-prestige-waterford-3bhk');
+  const map = page.locator('gmp-map-3d');
+  await expect(map).toHaveAttribute('data-google-initialized', 'true', {timeout: 45_000});
+  await page.getByRole('button', {name: 'Schools', exact: true}).click();
+  const list = page.getByRole('region', {name: 'Places ordered by distance'});
+  const ids = () => map.locator('[data-atlas-place-id]').evaluateAll(elements => elements.map(el => (el as HTMLElement).dataset.atlasPlaceId));
+  await expect(map.locator('[data-atlas-place-id]')).toHaveCount(3);
+  const initial = await ids();
+  await list.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await page.getByRole('button', {name: 'Top view', exact: true}).click();
+  await page.waitForTimeout(650);
+  expect(await ids()).toEqual(initial);
+  await expect.poll(() => map.evaluate(el => (el as HTMLElement & {tilt: number}).tilt)).toBeCloseTo(12, 1);
+});
