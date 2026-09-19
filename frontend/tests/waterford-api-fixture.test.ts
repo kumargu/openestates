@@ -183,3 +183,16 @@ test("same-scene canonical duplicates collapse but unidentified same-name places
   const distinct = propertyMapContextFromSurfaceScene(arrival, {...merged, places: [unidentified]})!;
   assert.ok(distinct.places.some(place => place.latitude === 13.5));
 });
+
+
+test("home boundary projection retains sourced interior rings", () => {
+  const arrival = scene('arrival_story');
+  const hole: [number, number][] = [[77.75, 12.98], [77.751, 12.98], [77.751, 12.981], [77.75, 12.98]];
+  const boundary = arrival.anchor.boundary!;
+  assert.equal(boundary.geometry.type, 'Polygon');
+  if (boundary.geometry.type !== 'Polygon') return;
+  boundary.geometry.coordinates.push(hole);
+  assert.deepEqual(propertyMapContextFromSurfaceScene(arrival)!.home.boundary!.holes, [hole]);
+  boundary.geometry = {type: 'MultiPolygon', coordinates: [boundary.geometry.coordinates]};
+  assert.deepEqual(propertyMapContextFromSurfaceScene(arrival)!.home.boundary!.holes, [hole]);
+});

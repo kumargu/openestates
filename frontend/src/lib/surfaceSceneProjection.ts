@@ -105,23 +105,24 @@ export function propertyMapContextFromSurfaceScene(
 function mapAnchorBoundary(scene: SurfaceSceneResponse): PropertyMapContext["home"]["boundary"] {
   const boundary = scene.anchor.boundary;
   if (!boundary) return undefined;
-  let coordinates: [number, number][] | undefined;
+  let rings: [number, number][][] | undefined;
   if (boundary.geometry.type === "Polygon") {
-    coordinates = boundary.geometry.coordinates[0];
+    rings = boundary.geometry.coordinates;
   } else if (boundary.geometry.type === "MultiPolygon") {
-    coordinates = boundary.geometry.coordinates
-      .map((polygon) => polygon[0])
-      .filter((ring): ring is [number, number][] => Boolean(ring))
-      .sort((left, right) => polygonRingArea(right) - polygonRingArea(left))[0];
+    rings = boundary.geometry.coordinates
+      .filter(polygon => polygon[0]?.length >= 4)
+      .sort((left, right) => polygonRingArea(right[0]) - polygonRingArea(left[0]))[0];
   } else {
     return undefined;
   }
+  const coordinates = rings?.[0];
   if (!coordinates || coordinates.length < 4) return undefined;
   return {
     id: `${scene.anchor.entityId}:boundary`,
     name: scene.anchor.label,
     kind: "society_boundary",
     coordinates,
+    holes: rings!.slice(1),
     source_type: boundary.sourceType,
   };
 }
