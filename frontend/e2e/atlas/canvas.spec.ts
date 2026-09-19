@@ -20,8 +20,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
     await expect(places).toHaveCount(2);
     await places.first().click();
     await expect(places.first()).toHaveAttribute("aria-pressed", "true");
-    await panel.getByRole("button", { name: "Replay view", exact: true }).scrollIntoViewIfNeeded();
-    await expect(panel.getByRole("button", { name: "Replay view", exact: true })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Replay view", exact: true })).toHaveCount(0);
     await expect(places).toHaveCount(2); // Focusing one place does not delete the rest.
     await expect(panel.getByRole("button", { name: "Close panel" })).toBeInViewport({ ratio: 1 });
 
@@ -52,7 +51,7 @@ test("unavailable Google map keeps nearby places accessible", async ({ page }) =
   await canvas.getByRole("button", { name: "Schools", exact: true }).click();
   await expect(canvas.locator(".property-atlas__place-list strong")).toHaveCount(2);
   await canvas.locator(".property-atlas__place-list > div > button").first().click();
-  await expect(canvas.getByRole("button", { name: "Replay view", exact: true })).toBeDisabled();
+  await expect(canvas.getByRole("button", { name: "Tour schools", exact: true })).toBeDisabled();
   await canvas.getByRole("button", { name: "Close panel" }).click();
   await expect(canvas.getByRole("button", { name: "Schools", exact: true })).toBeFocused();
 });

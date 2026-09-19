@@ -56,7 +56,8 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
   expect(pairRange).toBeLessThan(Number.POSITIVE_INFINITY);
   await expect(map.locator(':scope > gmp-marker-3d-interactive').first())
     .toHaveAttribute('altitude-mode', 'relative-to-ground');
-  await arrival.getByRole('button', {name:'Replay view',exact:true}).click();
+  await expect(arrival.getByRole('button', {name:'Replay view',exact:true})).toHaveCount(0);
+  await arrival.locator('.property-atlas__place-list > div > button[aria-pressed="true"]').click();
   await expect(map).toHaveAttribute('data-atlas-flight-stage', 'settled', {timeout: 10_000});
   await arrival.getByRole("button", { name: "Schools", exact: true }).click();
   await expect(arrival.locator(".property-atlas__place-list > div > button")).toHaveCount(2);

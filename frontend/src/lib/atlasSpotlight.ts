@@ -79,9 +79,9 @@ export function spotlightPaths(subject: SpotlightSubject, range: number, height:
 
 /** Geographic feathered illumination follows the live lens, including manual zoom. */
 export function attachAtlasSpotlight(map: SpotlightMap, subjects: SpotlightSubject[],
-  createPolygon: (options: PolygonOptions) => Polygon, animate: boolean): () => void {
+  createPolygon: (options: PolygonOptions) => Polygon, animate: boolean, veilFill = policy.spotlight.veilFill): () => void {
   const p = policy.spotlight;
-  const veils = p.featherScales.map(() => createPolygon({ fillColor: p.veilFill, strokeColor: '#00000000', strokeWidth: 0 }));
+  const veils = p.featherScales.map(() => createPolygon({ fillColor: veilFill, strokeColor: '#00000000', strokeWidth: 0 }));
   const halos = subjects.filter(s => !s.footprints?.length && (s.emphasis === 'place' || s.emphasis === 'selected')).map(subject => ({ subject,
     element: createPolygon({ fillColor: p.haloFill, strokeColor: p.haloStroke, strokeWidth: 2 }) }));
   const pulseSubject = subjects.find(s => s.emphasis === 'selected' && !s.footprints?.length);

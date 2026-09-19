@@ -185,11 +185,13 @@ function mergedLayers(
 }
 
 function samePlacePin(left: MapPlacePin, right: MapPlacePin): boolean {
-  if (left.feature_id && right.feature_id) return left.feature_id === right.feature_id;
+  if (left.layer !== right.layer) return false;
+  // Feature IDs belong to a scene; the same entity can appear in multiple scenes.
   if (left.place_entity_id && right.place_entity_id) {
-    return left.place_entity_id === right.place_entity_id && left.layer === right.layer;
+    return left.place_entity_id === right.place_entity_id;
   }
-  return left.layer === right.layer && left.name === right.name;
+  if (left.feature_id && right.feature_id) return left.feature_id === right.feature_id;
+  return left.name === right.name;
 }
 
 function mapPlacePinFromFeature(

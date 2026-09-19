@@ -128,6 +128,7 @@ export type ArrivalGoogle3DMapProps = {
   cameraRequest?: AtlasCameraRequest | null;
   onReady?: () => void;
   nearbyTransitionMs?: number;
+  nearbyOrientationPlaces?: NumberedPlace[];
   nearbyTourRequest?: NearbyTourRequest | null;
   onNearbyTourScene?: (state: NearbyTourSceneState) => void;
 };
@@ -467,6 +468,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     cameraRequest = null,
     onReady,
     nearbyTransitionMs = policy.focus.durationMs,
+    nearbyOrientationPlaces = places,
     nearbyTourRequest = null,
     onNearbyTourScene,
   } = props;
@@ -1148,7 +1150,10 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     if (roadCorridor) subjects.push({anchor: roadCorridor[Math.floor(roadCorridor.length / 2)], extent: roadCorridor, emphasis: 'road'});
     const removeSpotlight = quiet ? attachAtlasSpotlight(map, subjects,
       options => new library.Polygon3DElement({ ...options, altitudeMode: 'CLAMP_TO_GROUND', drawsOccludedSegments: false }),
-      !window.matchMedia('(prefers-reduced-motion: reduce)').matches) : undefined;
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      cameraMode === 'evidence' && !roadTourActive
+        ? isolatesSelection ? policy.spotlight.nearbySelectedVeilFill : policy.spotlight.nearbyOverviewVeilFill
+        : policy.spotlight.veilFill) : undefined;
     for (const society of secondarySocieties) {
       if (society.home.boundary) {
         addPolygon(
@@ -1549,7 +1554,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     const pose = (depth: NearbyDepth, elevation: number) => nearbySceneCamera(home, places, polygons ?? [],
       [...metroLines, ...contextLines], selectedPlaceId, depth, elevation,
       containerRef.current?.clientWidth ?? window.innerWidth, safeFrame, above ? policy.above.tilt : undefined,
-      nearbyCameraOrientation);
+      nearbyCameraOrientation, nearbyOrientationPlaces);
     const fly = (camera: CameraOptions, stage: string, durationMs: number, next?: () => void) => {
       if (!current()) return;
       detach();
@@ -1588,7 +1593,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       });
     }
     return () => { stop(); unregister(); };
-  }, [above, selectedPlaceId, nearbyDepth, nearbySelectionVersion, nearbyTransitionMs, places, home, polygons, metroLines, contextLines, cameraMode, terrainCorridor, playbackController, playbackState, ready, roadTourActive, safeFrame, streetRequested, groundElevation, nearbyCameraOrientation]);
+  }, [above, selectedPlaceId, nearbyDepth, nearbySelectionVersion, nearbyTransitionMs, places, home, polygons, metroLines, contextLines, cameraMode, terrainCorridor, playbackController, playbackState, ready, roadTourActive, safeFrame, streetRequested, groundElevation, nearbyCameraOrientation, nearbyOrientationPlaces]);
 
   const appliedCameraRequest = useRef<number | null>(null);
   useEffect(() => {

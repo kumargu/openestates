@@ -40,7 +40,6 @@
     "strokeWidth": 6,
     "altitudeMode": "clamp_to_ground",
     "drawsOccludedSegments": true,
-    "restingPlaceCount": 1,
     "vicinityRadiusM": 650
   },
   "boundary": { "fill": "#f8f1df12", "stroke": "#fff7e3e6" },
@@ -54,14 +53,15 @@
     "homeRadiusPx": 72,
     "featherScales": [1],
     "veilFill": "#061b28b0",
+    "nearbyOverviewVeilFill": "#061b2866",
+    "nearbySelectedVeilFill": "#061b287a",
     "haloFill": "#d9f3ee0a",
     "haloStroke": "#d9f3ee70",
     "pulseStroke": "#e6fff7",
     "pulseDurationMs": 2200,
     "pulseCount": 2,
     "minimumTiltCosine": 0.5,
-    "extentPaddingScale": 1.12,
-    "distantFocusThresholdM": 2500
+    "extentPaddingScale": 1.12
   },
   "focus": { "rangeM": 700, "tilt": 55, "durationMs": 1200, "movementFraction": 0.7 },
   "cameraFit": {
@@ -89,6 +89,9 @@
   "above": { "tilt": 12 },
   "controls": { "zoomFactor": 1.5, "minimumRangeM": 80, "maximumRangeM": 40000, "rotateDegrees": 90, "durationMs": 650 },
   "nearby": {
+    "initialPlaceCount": 3,
+    "scrollSettleMs": 300,
+    "listPeekPx": 22,
     "homePinScale": 1.65,
     "homePinBackground": "#fff0ba",
     "selectionContextMs": 650,

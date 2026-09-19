@@ -49,6 +49,8 @@ test('desktop: lake illumination, continuous reveal, interrupted flight and road
   const veil = map.locator('[data-atlas-spotlight-kind="veil"]');
   await expect(veil).toHaveCount(1);
   await expect(page.getByRole('button', {name: 'Site outline', exact: true})).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => veil.evaluate(element =>
+    (element as HTMLElement & {innerPaths?: unknown[]}).innerPaths?.length ?? 0)).toBeGreaterThan(0);
   const quietHome = await map.evaluate(element => {
     const mask = element.querySelector('[data-atlas-spotlight-kind="veil"]') as HTMLElement & {fillColor: string; innerPaths: {lat: number; lng: number}[][]};
     const outline = element.querySelector('[data-atlas-polygon-id]') as HTMLElement & {path: {lat: number; lng: number}[]};
@@ -63,8 +65,9 @@ test('desktop: lake illumination, continuous reveal, interrupted flight and road
   const places = page.locator('.property-atlas__place-list > div > button');
   const count = await places.count();
   expect(count).toBeGreaterThan(1);
-  await expect(map.locator('[data-atlas-place-id]')).toHaveCount(count);
-  await expect(veil).toHaveCount(0);
+  await expect(map.locator('[data-atlas-place-id]')).toHaveCount(Math.min(3, count));
+  await expect(veil).toHaveCount(1);
+  expect(await veil.evaluate(element => (element as HTMLElement & {fillColor: string}).fillColor.toLowerCase())).toBe('#061b2866');
   await expect(map.locator('[data-atlas-spotlight-kind="halo"], [data-atlas-spotlight-kind="pulse"]')).toHaveCount(0);
   const lakePolygons = map.locator('[data-atlas-polygon-kind="lake"]');
   expect(await lakePolygons.count()).toBeGreaterThan(0);
@@ -96,8 +99,10 @@ test('desktop: lake illumination, continuous reveal, interrupted flight and road
     await places.nth(index).click();
     await expect(map).toHaveAttribute('data-atlas-flight-stage', 'reveal', {timeout: 10_000});
     await expect(map).toHaveAttribute('data-atlas-flight-stage', 'settled', {timeout: 10_000});
-    await expect(map.locator('[data-atlas-place-id]')).toHaveCount(count);
+    await expect(map.locator('[data-atlas-place-id]')).toHaveCount(Math.min(3, count) + (index >= 3 ? 1 : 0));
     await expect(map.locator('[data-atlas-selected="true"]')).toHaveCount(1);
+    await expect(veil).toHaveCount(1);
+    expect(await veil.evaluate(element => (element as HTMLElement & {fillColor: string}).fillColor.toLowerCase())).toBe('#061b287a');
     await expect(map.locator('[data-atlas-relationship]')).toHaveCount(1);
     const tilt = await map.evaluate(m => (m as HTMLElement & {tilt: number}).tilt);
     expect(tilt).toBeGreaterThan(50);
@@ -107,11 +112,12 @@ test('desktop: lake illumination, continuous reveal, interrupted flight and road
     expect(await lakePolygons.evaluateAll(elements => elements.map(element => ({
       id: (element as HTMLElement).dataset.atlasPolygonId,
       path: (element as HTMLElement & {path: {lat: number; lng: number}[]}).path.map(point => ({lat: point.lat, lng: point.lng})),
-    })))).toEqual(originalPolygons);
+    })))).toEqual(expect.arrayContaining(originalPolygons));
   }
   await expect(page.getByRole('button', {name: 'Look closer', exact: true})).toHaveCount(0);
   await expect(page.getByRole('button', {name: 'With home', exact: true})).toHaveCount(0);
-  await page.getByRole('button', {name: 'Replay view', exact: true}).click();
+  await expect(page.getByRole('button', {name: 'Replay view', exact: true})).toHaveCount(0);
+  await places.first().click();
   await expect(map).toHaveAttribute('data-atlas-flight-stage', 'context');
   // A manual gesture must stop the pending reveal, not just the current flight.
   await page.mouse.move(700, 400);
@@ -147,4 +153,107 @@ test('desktop: lake illumination, continuous reveal, interrupted flight and road
   await places.first().click();
   await expect(map).toHaveAttribute('data-atlas-flight-stage', 'settled');
   expect(errors).toEqual([]);
+});
+
+
+test('nearby starts with three by distance and follows settled list scrolling', async ({page}) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({width: 1600, height: 1000});
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await page.goto('/property/discovered-prestige-waterford-3bhk');
+  const map = page.locator('gmp-map-3d');
+  await expect(map).toHaveAttribute('data-google-initialized', 'true', {timeout: 45_000});
+  await page.getByRole('button', {name: 'Schools', exact: true}).click();
+  const list = page.getByRole('region', {name: 'Places ordered by distance'});
+  const rows = list.locator(':scope > div');
+  const markers = map.locator('[data-atlas-place-id]');
+  const count = await rows.count();
+  expect(count).toBeGreaterThan(3);
+  await expect(markers).toHaveCount(3);
+  const distances = await list.locator('.property-atlas__place-distance').allTextContents();
+  const metres = distances.map(text => parseFloat(text) * (text.includes('km') ? 1000 : 1));
+  expect(metres).toEqual([...metres].sort((a, b) => a - b));
+  const initial = await markers.evaluateAll(elements => elements.map(el => (el as HTMLElement).dataset.atlasPlaceId));
+  const layout = await list.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    const rows = Array.from(element.children).map(child => child.getBoundingClientRect());
+    return {thirdBottom: rows[2].bottom, fourthTop: rows[3].top, bottom: rect.bottom,
+      overflow: element.scrollHeight > element.clientHeight};
+  });
+  expect(layout.overflow).toBe(true);
+  expect(layout.thirdBottom).toBeLessThanOrEqual(layout.bottom);
+  expect(layout.fourthTop).toBeLessThan(layout.bottom);
+  const heading = await map.evaluate(el => (el as HTMLElement & {heading: number}).heading);
+  await list.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await expect.poll(() => markers.evaluateAll(elements => elements.map(el => (el as HTMLElement).dataset.atlasPlaceId)))
+    .not.toEqual(initial);
+  await expect(markers).toHaveCount(3);
+  await expect(map).toHaveAttribute('data-atlas-flight-stage', 'settled');
+  expect(await map.evaluate(el => (el as HTMLElement & {heading: number}).heading)).toBeCloseTo(heading, 3);
+  await page.getByRole('button', {name: 'Home', exact: true}).click();
+  await page.getByRole('button', {name: 'Schools', exact: true}).click();
+  await expect.poll(() => markers.evaluateAll(elements => elements.map(el => (el as HTMLElement).dataset.atlasPlaceId)))
+    .toEqual(initial);
+  // Manual map controls retain ownership even if the list subsequently scrolls.
+  await page.getByRole('button', {name: 'Zoom in', exact: true}).click();
+  await list.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await page.waitForTimeout(600);
+  expect(await markers.evaluateAll(elements => elements.map(el => (el as HTMLElement).dataset.atlasPlaceId))).toEqual(initial);
+  // A queued scroll cannot resurrect a category after the user leaves it.
+  await page.getByRole('button', {name: 'Show together', exact: true}).click();
+  await list.evaluate(element => { element.scrollTop = 0; });
+  await page.getByRole('button', {name: 'Home', exact: true}).click();
+  await page.waitForTimeout(600);
+  await expect(map).toHaveAttribute('data-atlas-camera-owner', 'society');
+});
+
+
+test('near and far selected places both illuminate their area and Home', async ({page}) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({width: 1600, height: 1000});
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await page.goto('/property/discovered-prestige-waterford-3bhk');
+  const map = page.locator('gmp-map-3d');
+  await expect(map).toHaveAttribute('data-google-initialized', 'true', {timeout: 45_000});
+  await page.getByRole('button', {name: 'Schools', exact: true}).click();
+  const rows = page.locator('.property-atlas__place-list > div > button');
+  for (const index of [0, (await rows.count()) - 1, 1]) {
+    await rows.nth(index).click();
+    await expect(map).toHaveAttribute('data-atlas-flight-stage', 'settled');
+    await expect.poll(() => map.evaluate(element => {
+      type Point = {lat: number; lng: number};
+      const veil = element.querySelector('[data-atlas-spotlight-kind="veil"]') as HTMLElement & {fillColor: string; innerPaths: Point[][] | null};
+      const contains = (point: Point, path: Point[]) => path.reduce((inside, current, index) => {
+        const previous = path[(index + path.length - 1) % path.length];
+        const crosses = (current.lat > point.lat) !== (previous.lat > point.lat)
+          && point.lng < (previous.lng - current.lng) * (point.lat - current.lat) / (previous.lat - current.lat) + current.lng;
+        return crosses ? !inside : inside;
+      }, false);
+      const markers = ['[data-atlas-home]', '[data-atlas-selected="true"]'].map(selector =>
+        element.querySelector(selector) as HTMLElement & {position: Point});
+      return Boolean(veil?.fillColor.toLowerCase() === '#061b287a' && markers.every(marker =>
+        marker && veil.innerPaths?.some(path => contains(marker.position, path))));
+    })).toBe(true);
+    await expect(map.locator('[data-atlas-spotlight-kind="halo"]')).toHaveCount(1);
+    await expect(map.locator('[data-atlas-spotlight-kind="pulse"]')).toHaveCount(0);
+  }
+});
+
+
+test('Metro combines repeated scene stations into one row and marker per place', async ({page}) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({width: 1600, height: 1000});
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await page.goto('/property/discovered-prestige-waterford-3bhk');
+  const map = page.locator('gmp-map-3d');
+  await expect(map).toHaveAttribute('data-google-initialized', 'true', {timeout: 45_000});
+  await page.getByRole('button', {name: 'Metro', exact: true}).click();
+  const rows = page.locator('.property-atlas__place-list > div > button');
+  await expect(rows).toHaveCount(2);
+  const names = await rows.locator('strong').allTextContents();
+  expect(new Set(names).size).toBe(names.length);
+  await expect(map.locator('[data-atlas-place-id]')).toHaveCount(2);
+  await rows.last().click();
+  await expect(map.locator('[data-atlas-selected="true"]')).toHaveCount(1);
+  await expect(rows).toHaveCount(2);
 });

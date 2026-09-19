@@ -139,3 +139,20 @@ test("Waterford nearby snapshot preserves points and exact lake footprints", () 
     5,
   );
 });
+
+
+test("composed scenes list each canonical station once despite different scene feature IDs", () => {
+  const nearby = propertyMapContextFromSurfaceScene(scene("around_this_home"), detail.map_context)!;
+  const arrival = propertyMapContextFromSurfaceScene(scene("arrival_story"), nearby)!;
+  const expected = detail.map_context.places.filter(place => place.layer === 'metro');
+  const stations = arrival.places.filter(place => place.layer === 'metro');
+  assert.equal(stations.length, expected.length);
+  assert.deepEqual(stations.map(place => place.place_entity_id).sort(), expected.map(place => place.place_entity_id).sort());
+  assert.ok(stations.every(place => place.feature_id?.startsWith('arrival_story:')));
+  const distinct = {...stations[0], place_entity_id: 'place:distinct-station', feature_id: 'other:station'};
+  const otherLayer = {...stations[0], layer: 'another-layer', feature_id: 'other:layer'};
+  const merged = propertyMapContextFromSurfaceScene(scene("arrival_story"),
+    {...nearby, places: [...nearby.places, distinct, otherLayer]})!;
+  assert.ok(merged.places.some(place => place.place_entity_id === distinct.place_entity_id));
+  assert.ok(merged.places.some(place => place.layer === otherLayer.layer));
+});

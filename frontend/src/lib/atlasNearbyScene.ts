@@ -49,7 +49,7 @@ export function geometryForPlace(place: NumberedPlace, polygons: MapOverlayPolyg
 export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons: MapOverlayPolygon[],
   lines: MapOverlayLine[], selectedId: string | null, depth: NearbyDepth, elevation: number, width: number,
   safeFrame?: AtlasSafeFrame, tiltOverride?: number,
-  orientation: NearbyCameraOrientation = 'category-stable') {
+  orientation: NearbyCameraOrientation = 'category-stable', orientationPlaces = places) {
   const origin = { lat: home.latitude, lng: home.longitude };
   const selected = places.find(p => (p.feature_id ?? p.name) === selectedId);
   const geometry = selected && depth !== 'overview' ? geometryForPlace(selected, polygons, lines) : {polygons, lines};
@@ -98,10 +98,10 @@ export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons:
       ...places.map((place) => marker({lat: place.latitude, lng: place.longitude})),
     ];
   }
-  const categoryTarget = places.length
+  const categoryTarget = orientationPlaces.length
     ? {
-      lat: places.reduce((total, place) => total + place.latitude, 0) / places.length,
-      lng: places.reduce((total, place) => total + place.longitude, 0) / places.length,
+      lat: orientationPlaces.reduce((total, place) => total + place.latitude, 0) / orientationPlaces.length,
+      lng: orientationPlaces.reduce((total, place) => total + place.longitude, 0) / orientationPlaces.length,
     }
     : origin;
   // Ordinary Nearby inspection follows the selected relationship so Home can
