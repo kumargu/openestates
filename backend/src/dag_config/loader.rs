@@ -182,4 +182,20 @@ mod tests {
             from_json.topological_order().unwrap()
         );
     }
+
+    #[test]
+    fn osm_power_source_failure_cannot_block_society_snapshot() {
+        let registry = load_asset_registry().expect("asset registry loads");
+        let snapshot = registry
+            .get(
+                &crate::assets::AssetId::new("society_fact_snapshot")
+                    .expect("static asset id is valid"),
+            )
+            .expect("society fact snapshot is registered");
+        let osm_power =
+            crate::assets::AssetId::new("osm_power_line_facts").expect("static asset id is valid");
+
+        assert!(snapshot.dependencies.contains(&osm_power));
+        assert!(snapshot.is_optional_dependency(&osm_power));
+    }
 }

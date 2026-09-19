@@ -357,7 +357,7 @@
     {
       "id": "osm_power_line_facts",
       "stage": "silver",
-      "description": "OpenStreetMap transmission-line proximity facts with geometry for red-flag map overlays.",
+      "description": "Optional OpenStreetMap transmission-line proximity facts with geometry for red-flag map overlays. Source failure records an enrichment gap and does not block society promotion.",
       "dependencies": [
         "canonical_society_nodes"
       ],
