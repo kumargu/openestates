@@ -36,15 +36,15 @@ test("property page: society, metro focus, nearby, aerial road, Street View exit
     arrival.getByRole("button", { name: "Show together", exact: true }),
   ).toBeVisible();
   expect(await arrival.locator("gmp-polyline-3d-interactive").count()).toBeGreaterThan(0);
-  await expect(map).toHaveAttribute('data-atlas-marker-count', '2');
+  await expect(map).toHaveAttribute('data-atlas-marker-count', '4');
   await arrival.locator(".property-atlas__place-list > div > button").nth(1).click();
   await expect(
     arrival.locator(".property-atlas__place-list > div > button").nth(1),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(map).toHaveAttribute('data-atlas-depth', 'inspect');
-  await expect(map).toHaveAttribute('data-atlas-marker-count', '2');
+  await expect(map).toHaveAttribute('data-atlas-marker-count', '4');
   await expect(map.locator('[data-atlas-relationship="true"]')).toHaveCount(1);
-  await expect(map.locator(':scope > gmp-marker-3d-interactive')).toHaveCount(2);
+  await expect(map.locator(':scope > gmp-marker-3d-interactive')).toHaveCount(4);
   await expect(map.locator('gmp-marker-3d-interactive[title="Prestige Waterford"]'))
     .not.toHaveAttribute('label', /.+/);
   await expect(map.locator(':scope > gmp-marker-3d-interactive[label]')).toHaveCount(1);
