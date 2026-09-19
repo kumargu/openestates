@@ -56,3 +56,50 @@ test("missing mapped road is explicit and never creates a synthetic tour", async
   await expect(canvas.getByRole("status").filter({ hasText: "Approach road not mapped" })).toBeVisible();
   await expect(canvas.getByLabel("Road tour speed")).toHaveCount(0);
 });
+
+test('Street View keeps the complete home arrival regardless of aerial progress', async ({page}) => {
+  test.setTimeout(120_000);
+  await page.goto('/property/discovered-prestige-waterford-3bhk');
+  const map = page.locator('gmp-map-3d');
+  await expect(map).toHaveAttribute('data-google-initialized', 'true', {timeout: 45_000});
+  await map.evaluate(element => { element.dataset.streetRestoreInstance = 'same-aerial'; });
+  // Observe real Google lookup requests; keep its service and panoramas intact.
+  await page.evaluate(async () => {
+    type Request = {location: {lat: number; lng: number}};
+    const browser = window as unknown as {
+      google: {maps: {importLibrary(name: string): Promise<{StreetViewService: {prototype: {getPanorama(request: Request): Promise<unknown>}}}>}};
+      streetLookups: Request['location'][];
+    };
+    browser.streetLookups = [];
+    const library = await browser.google.maps.importLibrary('streetView');
+    const original = library.StreetViewService.prototype.getPanorama;
+    library.StreetViewService.prototype.getPanorama = function(request: Request) {
+      browser.streetLookups.push({...request.location});
+      return original.call(this, request);
+    };
+  });
+  const lookups = () => page.evaluate(() => (window as unknown as {streetLookups: {lat: number; lng: number}[]}).streetLookups);
+  await page.getByRole('button', {name: 'Approach road', exact: true}).click();
+  await page.getByRole('button', {name: 'Pause road tour', exact: true}).click();
+  await page.getByRole('button', {name: 'Street View', exact: true}).click();
+  await expect(page.locator('[data-map-renderer="google-street-view"]')).toBeVisible({timeout: 30_000});
+  const opening = await lookups();
+  expect(opening.length).toBeGreaterThan(2);
+  await page.getByRole('button', {name: 'Pause road tour', exact: true}).click();
+  await page.getByRole('button', {name: 'Back to aerial', exact: true}).click();
+  await expect(map).toHaveAttribute('data-street-restore-instance', 'same-aerial');
+  await page.getByRole('button', {name: 'Replay road tour', exact: true}).click();
+  await page.getByLabel('Road tour speed').focus();
+  await page.getByLabel('Road tour speed').press('End');
+  await expect.poll(() => map.getAttribute('data-atlas-road-distance').then(Number), {timeout: 30_000}).toBeGreaterThan(150);
+  await page.getByRole('button', {name: 'Pause road tour', exact: true}).click();
+  await map.dispatchEvent('pointerdown'); // Manual aerial interruption must not disable an explicit Street View request.
+  await page.evaluate(() => { (window as unknown as {streetLookups: unknown[]}).streetLookups = []; });
+  await page.getByRole('button', {name: 'Street View', exact: true}).click();
+  await expect.poll(async () => (await lookups()).length).toBeGreaterThan(0);
+  expect(await lookups()).toEqual(opening);
+  await expect(page.locator('[data-map-renderer="google-street-view"]')).toBeVisible({timeout: 30_000});
+  await expect(page.getByRole('button', {name: 'Pause road tour', exact: true})).toBeVisible();
+  await page.getByRole('button', {name: 'Back to aerial', exact: true}).click();
+  await expect(map).toHaveAttribute('data-street-restore-instance', 'same-aerial');
+});

@@ -15,7 +15,6 @@ import {
 } from "../../lib/homeAtlasProjection.ts";
 import {
   blendCamera,
-  pointAlongRoute,
   projectStreetHandoff,
   type AtlasCameraPose,
 } from "../../lib/atlas/journey.ts";
@@ -575,7 +574,6 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   }, [drawerOpen]);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [streetRequested, setStreetRequested] = useState(false);
-  const [streetStart, setStreetStart] = useState(0);
   const homeLatitude = home.latitude;
   const homeLongitude = home.longitude;
   const roadExperience = layerExperience?.kind === "street_view_tour"
@@ -644,13 +642,15 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const roadTour = useGuidedStreetViewTour({
     active: Boolean(roadLandingFocus) && streetRequested,
     anchor: entranceAnchor,
-    autoPlay: autoPlayApproach,
+    // Choosing Street View starts the complete home-arrival journey, even if
+    // the separate aerial tour was interrupted or had already passed the gate.
+    autoPlay: true,
     containerRef: streetViewContainerRef,
     experience: roadExperience,
     interiorAnchor: societyInteriorAnchor,
     onPlaybackCancelled,
     playbackController,
-    waypoints: useMemo(() => roadWaypoints.slice(streetStart), [roadWaypoints, streetStart]),
+    waypoints: roadWaypoints,
   });
   const playbackState = useSyncExternalStore(
     playbackController.subscribe,
@@ -1688,15 +1688,6 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           {roadExperience && <button type="button" onClick={() => {
             if (streetRequested) exitStreet();
             else {
-              if (atlasRoute) {
-                const point = pointAlongRoute(atlasRoute, roadFlight.position());
-                let best = 0;
-                roadWaypoints.forEach((candidate, i) => {
-                  const distance = (p: typeof candidate) => Math.hypot(p.latitude-point.latitude, p.longitude-point.longitude);
-                  if (distance(candidate) < distance(roadWaypoints[best])) best = i;
-                });
-                setStreetStart(best);
-              }
               playbackController.cancel('settled'); setStreetRequested(true);
             }
           }}>{streetRequested ? 'Back to aerial' : 'Street View'}</button>}
