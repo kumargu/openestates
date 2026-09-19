@@ -4,6 +4,11 @@ import propertyDetail from "../fixtures/prestige-waterford-api/property-detail.j
 import arrivalStory from "../fixtures/prestige-waterford-api/arrival-story.json" with { type: "json" };
 import aroundThisHome from "../fixtures/prestige-waterford-api/around-this-home.json" with { type: "json" };
 import manifest from "../fixtures/prestige-waterford-api/manifest.json" with { type: "json" };
+import { propertyMapContextFromSurfaceScene } from "../src/lib/surfaceSceneProjection.ts";
+import { homeSceneCamera, homeOrbitCamera } from "../src/lib/atlasNearbyScene.ts";
+import { resolveHomeAnchor } from "../src/lib/nearbyPlateProjection.ts";
+import { projectCameraPointToScreen } from "../src/lib/atlas/screenFit.ts";
+import atlasPolicy from "../src/lib/atlasPolicy.ts";
 import type {
   PropertyDetailResponse,
   SurfaceSceneResponse,
@@ -72,6 +77,46 @@ test("Waterford fixture keeps arrival and nearby scenes on one bundle", () => {
   assert.equal(arrival.relations.length, 4);
   assert.equal(nearby.features.length, 46);
   assert.equal(nearby.relations.length, 46);
+});
+
+test("composed property scenes retain every API metro segment when surfaces contain only stations", () => {
+  const nearby = propertyMapContextFromSurfaceScene(scene("around_this_home"), detail.map_context);
+  const arrival = propertyMapContextFromSurfaceScene(scene("arrival_story"), nearby)!;
+  const expected = detail.map_context.metro_lines!;
+  assert.ok(expected.length > 0);
+  assert.deepEqual(arrival.layer_lines?.metro, expected);
+  assert.deepEqual(arrival.metro_lines, expected);
+  assert.equal(new Set(arrival.layer_lines?.metro.map(line => line.id)).size, expected.length);
+});
+
+test("captured home boundary fits desktop chrome and camera altitude follows supplied terrain", () => {
+  const context = propertyMapContextFromSurfaceScene(scene("arrival_story"))!;
+  const home = { ...resolveHomeAnchor(context)!, name: context.home.name, boundary: context.home.boundary };
+  for (const frame of [
+    { width: 1166, height: 900, left: 32, right: 112, top: 226, bottom: 32 },
+    { width: 1046, height: 620, left: 32, right: 464, top: 226, bottom: 32 },
+  ]) {
+    const camera = homeSceneCamera(home, 0, frame);
+    for (const [lng, lat] of home.boundary!.coordinates) {
+      const point = projectCameraPointToScreen(camera, { lat, lng }, frame, camera.fov);
+      assert.ok(point.x >= frame.left && point.x <= frame.width - frame.right);
+      assert.ok(point.y >= frame.top && point.y <= frame.height - frame.bottom);
+    }
+    // A synthetic elevation tests translation only; it is not a Waterford ground claim.
+    const elevated = homeSceneCamera(home, 123, frame);
+    assert.equal(elevated.center.altitude, 123 + atlasPolicy.cameraFit.homeCenterAltitudeOffsetM);
+    assert.equal(elevated.range, camera.range);
+  }
+  const orbit = homeOrbitCamera(home, 123, {
+    width: 1166,
+    height: 900,
+    left: 32,
+    right: 112,
+    top: 226,
+    bottom: 32,
+  });
+  assert.equal(orbit.center.altitude, 123 + atlasPolicy.cameraFit.homeCenterAltitudeOffsetM);
+  assert.equal(orbit.fov, atlasPolicy.cameraFit.homeFieldOfViewDegrees);
 });
 
 test("Waterford nearby snapshot preserves points and exact lake footprints", () => {

@@ -38,6 +38,9 @@ export function propertyMapContextFromSurfaceScene(
     .map((feature) => mapLineFromFeature(feature, receiptsById))
     .filter((line): line is MapOverlayLine => Boolean(line));
   const layerLines = mapLinesByLayer(scene, receiptsById);
+  for (const [layerId, lines] of Object.entries(fallback?.layer_lines ?? {})) {
+    layerLines[layerId] = mergeLines(layerLines[layerId] ?? [], lines);
+  }
   const layerPolygons = { ...fallback?.layer_polygons };
   for (const feature of scene.features) {
     const polygons = feature.geometry.type === 'Polygon' ? [feature.geometry.coordinates]
@@ -52,12 +55,16 @@ export function propertyMapContextFromSurfaceScene(
   }
 
   const mergedAccessLines = mergeLines(accessLines, fallback?.access_lines ?? []);
+  const mergedMetroLines = mergeLines(
+    layerLines.metro ?? [],
+    mergeLines(mergedAccessLines, fallback?.metro_lines ?? []),
+  );
   const mergedRedFlagLines = [
     ...redFlagLines,
     ...(fallback?.red_flag_lines ?? []).filter((line) =>
       !redFlagLines.some((candidate) => candidate.id === line.id)),
   ];
-  layerLines.metro = mergedAccessLines;
+  layerLines.metro = mergedMetroLines;
   layerLines.red_flags = mergedRedFlagLines;
   const layers = mergedLayers(scene, fallback, mergedRedFlagLines);
 
@@ -73,9 +80,9 @@ export function propertyMapContextFromSurfaceScene(
     layers,
     arrivalExperience: scene.experience ?? fallback?.arrivalExperience,
     places,
-    proof_focus: scene.proofFocus,
+    proof_focus: scene.proofFocus ?? fallback?.proof_focus,
     water: fallback?.water,
-    metro_lines: mergeLines(accessLines, fallback?.metro_lines ?? []),
+    metro_lines: mergedMetroLines,
     access_lines: mergedAccessLines,
     red_flag_lines: mergedRedFlagLines,
     layer_lines: layerLines,

@@ -6,8 +6,8 @@ import {
   roadFlightCamera,
   type AtlasCameraPose,
   type AtlasRoute,
-} from "../../../experiments/home-atlas/src/journey.ts";
-import policy from "../../../app/config/ui/home-atlas.json" with { type: "json" };
+} from "../lib/atlas/journey.ts";
+import policy from "../lib/atlasPolicy.ts";
 
 /** Renderer driver subordinate to the page's single playback controller. */
 export function useAtlasRoadFlight({
@@ -33,7 +33,7 @@ export function useAtlasRoadFlight({
   onProgress?: (distanceM: number, routeLengthM: number, heading: number) => void;
   onPhase?: (phase: "context" | "descent" | "flight" | "settled") => void;
 }) {
-  const [rate, setRate] = useState(1);
+  const [rate, setRate] = useState(policy.road.defaultRate);
   const [version, setVersion] = useState(0);
   const distance = useRef(0);
   const handoffHeading = useRef<number | null>(null);

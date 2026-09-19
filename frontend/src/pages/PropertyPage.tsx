@@ -26,6 +26,9 @@ import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
 import { PropertyArrivalMap } from "../components/property/PropertyArrivalMap.tsx";
+import { PropertyAtlasFacts, PropertyAtlasPhotos } from "../components/property/PropertyAtlasContent.tsx";
+import { GoogleReviewsSection } from "../components/property/GoogleReviewsSection.tsx";
+import { AtlasIcon } from "../components/property/AtlasIcon.tsx";
 import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
 import {
   PropertySceneCard,
@@ -216,6 +219,14 @@ function PropertyPageBody({
   const currentSearchResult = propertySearchContext?.results.find(
     (result) => result.propertyId === id,
   );
+  // Keep the scene geometry stable during unrelated page updates. Boundary
+  // identity is a dependency of the Google map's creation effect.
+  const aroundThisHomeContext = useMemo(() => propertyMapContextFromSurfaceScene(
+    aroundThisHomeScene, data?.map_context,
+  ), [aroundThisHomeScene, data?.map_context]);
+  const arrivalContext = useMemo(() => propertyMapContextFromSurfaceScene(
+    arrivalScene, aroundThisHomeContext,
+  ), [arrivalScene, aroundThisHomeContext]);
 
   useLayoutEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -350,12 +361,13 @@ function PropertyPageBody({
     if (
       status !== "ok"
       || !proofFocus?.targetId
-      || propertySearchContext
+      || (propertySearchContext && proofFocus.destinationKind !== "section")
     ) return undefined;
     let secondFrame = 0;
     const firstFrame = window.requestAnimationFrame(() => {
       secondFrame = window.requestAnimationFrame(() => {
-        const target = document.getElementById(proofFocus.targetId ?? "");
+        const target = document.getElementById(proofFocus.targetId ?? "")
+          ?? document.querySelector<HTMLElement>('[data-proof-focused="true"]');
         if (!target) return;
         target.scrollIntoView({ block: "start" });
         target.focus({ preventScroll: true });
@@ -441,14 +453,6 @@ function PropertyPageBody({
     .join(". ");
   const canonicalUrl = publicSiteUrl(`/property/${encodeURIComponent(p.id)}`);
   const socialImageUrl = p.hero_image ? backendUrl(p.hero_image) : null;
-  const aroundThisHomeContext = propertyMapContextFromSurfaceScene(
-    aroundThisHomeScene,
-    data.map_context,
-  );
-  const arrivalContext = propertyMapContextFromSurfaceScene(
-    arrivalScene,
-    aroundThisHomeContext,
-  );
   const showNearbyPlate = hasAroundThisHomePlate(aroundThisHomeContext);
   const displayTitle = p.title.trim();
   const story = projectPropertyStory(data, {
@@ -470,6 +474,8 @@ function PropertyPageBody({
     && Number.isFinite(arrivalContext.home.latitude)
     && Number.isFinite(arrivalContext.home.longitude),
   );
+  const hasGoogleReviews = Boolean(data.external_reviews?.reviews?.length
+    || data.external_reviews?.google_reviews_url || hasKnownNumber(data.external_reviews?.google_rating));
 
   if (arrivalSceneStatus === "loading") {
     return (
@@ -504,6 +510,9 @@ function PropertyPageBody({
           context={arrivalContext}
           searchContextSocieties={searchContextSocieties}
           presentation="atlas"
+          pageScrollable
+          photos={story.media.galleryUrls.length > 0 ? <PropertyAtlasPhotos story={story} /> : undefined}
+          reviewsTargetId={hasGoogleReviews ? "resident-voice" : undefined}
           identity={{
             location: story.identity.location,
             title: story.identity.title,
@@ -526,6 +535,19 @@ function PropertyPageBody({
             ),
           }}
         />
+        {hasGoogleReviews && <section id="resident-voice" className="property-atlas-reviews" aria-labelledby="atlas-reviews-title" tabIndex={-1}>
+          <header>
+            <h2 id="atlas-reviews-title">What residents say</h2>
+            <button type="button" aria-controls="property-atlas" onClick={() => {
+              const target = document.getElementById("property-atlas");
+              target?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
+              target?.focus({ preventScroll: true });
+            }}><AtlasIcon name="previous" />Back to map</button>
+          </header>
+          <GoogleReviewsSection reviews={data.external_reviews} expandable />
+        </section>}
+        <PropertySearchMatch data={data} focus={proofFocus} />
+        <PropertyAtlasFacts data={data} story={story} focus={proofFocus} />
       </div>
     );
   }

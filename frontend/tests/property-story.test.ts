@@ -14,7 +14,7 @@ import {
 import {
   storyLabDetailFixture,
   storyLabMediaFixture,
-} from "../src/lib/propertyStoryFixtures.ts";
+} from "./property-story-fixtures.ts";
 
 function richDetail() {
   return storyLabDetailFixture({
@@ -35,7 +35,7 @@ test("property story projection is deterministic", () => {
   );
 });
 
-test("Story Lab projection matrix stays deterministic and bounded", () => {
+test("property story projection matrix stays deterministic and bounded", () => {
   const propertyIds = [
     "fixture-prestige-lakeside-3bhk",
     "fixture-sobha-royal-pavilion-4bhk",
