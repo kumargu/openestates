@@ -193,19 +193,6 @@ export function PropertyArrivalMap({
     () => context.layer_lines?.[metroLayer?.id ?? 'metro'] ?? context.metro_lines ?? [],
     [context.layer_lines, context.metro_lines, metroLayer?.id],
   );
-  const restingMetroPlaces = useMemo(
-    () => metroPlaces.slice(0, atlasPolicy.nearby.initialPlaceCount),
-    [metroPlaces],
-  );
-  const restingMetroLines = useMemo(
-    () => home ? metroLinesNearArrival(
-      home,
-      restingMetroPlaces,
-      metroSourceLines,
-      atlasPolicy.metro.vicinityRadiusM,
-    ) : [],
-    [home, metroSourceLines, restingMetroPlaces],
-  );
   const entrancePlaces = useMemo(
     () => arrivalMarkerPlaces(normalizedContext, entranceLayer),
     [normalizedContext, entranceLayer],
@@ -416,15 +403,16 @@ export function PropertyArrivalMap({
     name: context.home.name,
     boundary: context.home.boundary,
   }) : null, [context.home.boundary, context.home.name, home]);
+  const touring = playbackState === 'playing' || playbackState === 'paused' || playbackState === 'preparing';
   const mapMetroPlaces = useMemo(() => nearbyBrowseWindow(metroPlaces, browseStart,
     atlasPolicy.nearby.initialPlaceCount, selectedPlaceId, context.proof_focus),
   [metroPlaces, browseStart, selectedPlaceId, context.proof_focus]);
-  const metroLines = useMemo(() => home ? metroLinesNearArrival(
+  const metroLines = useMemo(() => touring ? metroSourceLines : home ? metroLinesNearArrival(
     home,
     mapMetroPlaces,
     metroSourceLines,
     atlasPolicy.metro.vicinityRadiusM,
-  ) : [], [home, mapMetroPlaces, metroSourceLines]);
+  ) : [], [home, mapMetroPlaces, metroSourceLines, touring]);
   const allTourChapters = useMemo<NearbyTourChapter[]>(() => [
     ...nearbyLayers.map((layer) => ({
       categoryId: `nearby:${layer.id}`,
@@ -439,9 +427,9 @@ export function PropertyArrivalMap({
       view: 'metro' as const,
       places: metroPlaces,
       polygons: [],
-      lines: restingMetroLines,
+      lines: metroSourceLines,
     }] : []),
-  ], [context.layer_lines, context.layer_polygons, restingMetroLines, metroPlaces, nearbyLayers, places, home]);
+  ], [context.layer_lines, context.layer_polygons, metroSourceLines, metroPlaces, nearbyLayers, places, home]);
 
   const selectPlace = useCallback((id: string | null) => {
     playbackController.cancel('settled');
@@ -456,11 +444,10 @@ export function PropertyArrivalMap({
   }, [selectPlace, presentation, openPanel]);
 
   const visiblePlaces = activeView === "metro" ? metroPlaces : activeView === 'nearby' ? nearbyPlaces : entrancePlaces;
-  const touring = playbackState === 'playing' || playbackState === 'paused' || playbackState === 'preparing';
   const browsePlaces = useMemo(() => nearbyBrowseWindow(nearbyPlaces, browseStart,
     atlasPolicy.nearby.initialPlaceCount, selectedPlaceId, context.proof_focus),
   [nearbyPlaces, browseStart, selectedPlaceId, context.proof_focus]);
-  const mapPlaces = activeView === 'metro' ? mapMetroPlaces
+  const mapPlaces = activeView === 'metro' ? touring ? metroPlaces : mapMetroPlaces
     : activeView === 'nearby' && presentation === 'atlas' && !touring ? browsePlaces : visiblePlaces;
   const browseGeometry = useMemo(() => {
     const polygons = context.layer_polygons?.[currentNearbyLayer?.id ?? ''] ?? [];

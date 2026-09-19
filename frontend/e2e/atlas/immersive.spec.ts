@@ -275,3 +275,24 @@ test('Top view owns the camera after a pending list scroll', async ({page}) => {
   expect(await ids()).toEqual(initial);
   await expect.poll(() => map.evaluate(el => (el as HTMLElement & {tilt: number}).tilt)).toBeCloseTo(12, 1);
 });
+
+test('Metro tour retains every supplied line while resting views stay local', async ({page, request}) => {
+  const detail = await (await request.get('/api/properties/discovered-prestige-waterford-3bhk')).json();
+  const sourceLines = detail.map_context.metro_lines as {coordinates: [number, number][]}[];
+  expect(sourceLines.length).toBeGreaterThan(0);
+  await page.setViewportSize({width: 1600, height: 1000});
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await page.goto('/property/discovered-prestige-waterford-3bhk');
+  const map = page.locator('gmp-map-3d');
+  await expect(map).toHaveAttribute('data-google-initialized', 'true', {timeout: 45_000});
+  await page.getByRole('button', {name: 'Metro', exact: true}).click();
+  await page.getByRole('button', {name: 'Tour metro', exact: true}).click();
+  await expect(map).toHaveAttribute('data-atlas-scene', /tour:.*overview/);
+  await page.getByRole('button', {name: 'Pause tour', exact: true}).click();
+  const paths = await map.locator(':scope > gmp-polyline-3d-interactive').evaluateAll(elements =>
+    elements.map(element => (element as HTMLElement & {path: {lat: number; lng: number}[]})
+      .path.map(point => [point.lng, point.lat])));
+  for (const line of sourceLines) expect(paths).toContainEqual(line.coordinates);
+  await page.getByRole('button', {name: 'End tour', exact: true}).click();
+  await expect(page.getByRole('button', {name: 'Tour metro', exact: true})).toBeVisible();
+});
