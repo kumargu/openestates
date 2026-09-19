@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "1.0",
+  "categoryId": "metro",
+  "homeId": "prestige-waterford",
+  "source": {
+    "providerId": "openstreetmap",
+    "retrievedAt": "2026-09-08",
+    "caveat": "Passenger alignment only. Depot, siding and crossover tracks are excluded."
+  },
+  "stationFeatureIds": [
+    "metro-kadugodi-tree-park",
+    "metro-pattandur-agrahara"
+  ],
+  "passengerAlignmentSegmentIds": [
+    "458951602",
+    "458951605",
+    "494676178",
+    "549187816",
+    "549187817",
+    "549187818",
+    "607901215",
+    "607901216",
+    "607901217",
+    "607901219",
+    "607901220",
+    "1190024586",
+    "1190024589",
+    "1190025013",
+    "1240358636",
+    "1240358637"
+  ],
+  "maximumContextDistanceM": 3200,
+  "presentation": {
+    "strokeColor": "#d5a7ff",
+    "strokeWidth": 5,
+    "altitudeMode": "clamp_to_ground",
+    "drawsOccludedSegments": false
+  }
+}
