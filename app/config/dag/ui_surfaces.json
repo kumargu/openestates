@@ -693,22 +693,7 @@
           "resident_review_summary"
         ]
       }
-    },
-    {
-      "id": "property_short_compare",
-      "title": "Compare homes",
-      "components": [
-        "PropertyShortCompare"
-      ],
-      "primary_entity": "property",
-      "comparisonDimensions": [
-        { "key": "price", "label": "Price", "valueKey": "price", "format": "inr_short" },
-        { "key": "configuration", "label": "Home", "valueKey": "bhk", "format": "bhk" },
-        { "key": "size", "label": "Size", "valueKey": "sizeLabel", "format": "text" },
-        { "key": "status", "label": "Status", "valueKey": "status", "format": "text" },
-        { "key": "google_rating", "label": "Rating", "valueKey": "googleRating", "format": "rating" }
-      ]
     }
   ],
-  "surface_count": 10
+  "surface_count": 9
 }

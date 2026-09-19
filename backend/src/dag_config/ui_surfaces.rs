@@ -695,18 +695,4 @@ mod tests {
                 .all(|layer| layer.relation_class == "risk_externality"));
         }
     }
-
-    #[test]
-    fn short_compare_dimensions_come_from_ui_config() {
-        let config = load_ui_surfaces().expect("ui_surfaces.json should load");
-        let compare = config
-            .surfaces
-            .iter()
-            .find(|surface| surface.id == "property_short_compare")
-            .expect("property_short_compare surface exists");
-
-        assert_eq!(compare.comparison_dimensions.len(), 5);
-        assert_eq!(compare.comparison_dimensions[0].label, "Price");
-        assert_eq!(compare.comparison_dimensions[4].label, "Rating");
-    }
 }
