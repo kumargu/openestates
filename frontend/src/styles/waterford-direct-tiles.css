@@ -1,0 +1,341 @@
+.waterford-direct-tiles {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow: hidden;
+  background: #11181c;
+  color: #f7f5ef;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.waterford-direct-tiles__canvas,
+.waterford-direct-tiles__canvas canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.waterford-direct-tiles__canvas canvas {
+  display: block;
+  touch-action: none;
+}
+
+.waterford-direct-tiles__header {
+  position: absolute;
+  top: max(1rem, env(safe-area-inset-top));
+  left: max(1rem, env(safe-area-inset-left));
+  right: max(1rem, env(safe-area-inset-right));
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  pointer-events: none;
+}
+
+.waterford-direct-tiles__header > div {
+  padding: 0.9rem 1rem 0.85rem;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 16px;
+  background: rgba(12, 18, 21, 0.72);
+  backdrop-filter: blur(18px) saturate(120%);
+  box-shadow: 0 18px 50px rgba(0,0,0,0.18);
+}
+
+.waterford-direct-tiles__eyebrow {
+  display: block;
+  margin-bottom: 0.24rem;
+  color: rgba(247,245,239,0.66);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.waterford-direct-tiles h1 {
+  margin: 0;
+  font-size: clamp(1.2rem, 2vw, 1.65rem);
+  letter-spacing: -0.035em;
+}
+
+.waterford-direct-tiles__header p {
+  margin: 0.25rem 0 0;
+  color: rgba(247,245,239,0.66);
+  font-size: 0.78rem;
+}
+
+.waterford-direct-tiles__compare {
+  pointer-events: auto;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.95rem;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 999px;
+  background: rgba(12, 18, 21, 0.72);
+  color: inherit;
+  text-decoration: none;
+  font-size: 0.78rem;
+  font-weight: 700;
+  backdrop-filter: blur(18px);
+}
+
+.waterford-direct-tiles__controls {
+  position: absolute;
+  left: 50%;
+  bottom: max(4.3rem, calc(env(safe-area-inset-bottom) + 4.3rem));
+  width: min(920px, calc(100vw - 2rem));
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  padding: 0.65rem;
+  border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 18px;
+  background: rgba(12, 18, 21, 0.76);
+  backdrop-filter: blur(20px) saturate(125%);
+  box-shadow: 0 18px 60px rgba(0,0,0,0.24);
+}
+
+.waterford-direct-tiles__control-group {
+  min-width: 0;
+}
+
+.waterford-direct-tiles__control-group > span {
+  display: block;
+  margin: 0 0 0.45rem 0.2rem;
+  color: rgba(247,245,239,0.55);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.waterford-direct-tiles__segmented {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+.waterford-direct-tiles__segmented--compact {
+  grid-template-columns: repeat(3, minmax(84px, 1fr));
+}
+
+.waterford-direct-tiles__segmented button {
+  min-height: 54px;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: rgba(255,255,255,0.055);
+  color: rgba(247,245,239,0.72);
+  cursor: pointer;
+  text-align: left;
+}
+
+.waterford-direct-tiles__segmented button:hover {
+  background: rgba(255,255,255,0.09);
+}
+
+.waterford-direct-tiles__segmented button.is-active {
+  border-color: rgba(255,255,255,0.25);
+  background: rgba(247,245,239,0.92);
+  color: #12191c;
+}
+
+.waterford-direct-tiles__segmented strong,
+.waterford-direct-tiles__segmented small {
+  display: block;
+}
+
+.waterford-direct-tiles__segmented strong {
+  font-size: 0.78rem;
+}
+
+.waterford-direct-tiles__segmented small {
+  margin-top: 0.18rem;
+  opacity: 0.62;
+  font-size: 0.62rem;
+}
+
+.waterford-direct-tiles__telemetry {
+  position: absolute;
+  right: max(1rem, env(safe-area-inset-right));
+  top: 6.3rem;
+  min-width: 230px;
+  padding: 0.75rem 0.8rem;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  background: rgba(12, 18, 21, 0.72);
+  backdrop-filter: blur(18px);
+}
+
+.waterford-direct-tiles__telemetry > div span,
+.waterford-direct-tiles__telemetry > div strong {
+  display: block;
+}
+
+.waterford-direct-tiles__telemetry > div span {
+  color: rgba(247,245,239,0.58);
+  font-size: 0.67rem;
+}
+
+.waterford-direct-tiles__telemetry > div strong {
+  margin-top: 0.18rem;
+  font-size: 0.76rem;
+}
+
+.waterford-direct-tiles__telemetry dl {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.35rem;
+  margin: 0.65rem 0 0;
+}
+
+.waterford-direct-tiles__telemetry dl div {
+  min-width: 0;
+}
+
+.waterford-direct-tiles__telemetry dt {
+  color: rgba(247,245,239,0.48);
+  font-size: 0.58rem;
+}
+
+.waterford-direct-tiles__telemetry dd {
+  margin: 0.12rem 0 0;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.waterford-direct-tiles__error {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(520px, calc(100vw - 2rem));
+  transform: translate(-50%, -50%);
+  display: grid;
+  gap: 0.45rem;
+  padding: 1.15rem 1.2rem;
+  border: 1px solid rgba(255, 173, 143, 0.42);
+  border-radius: 16px;
+  background: rgba(37, 20, 18, 0.91);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.35);
+}
+
+.waterford-direct-tiles__error strong {
+  font-size: 1rem;
+}
+
+.waterford-direct-tiles__error span {
+  color: rgba(255,255,255,0.78);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.waterford-direct-tiles__error small {
+  color: rgba(255,255,255,0.52);
+  font-size: 0.7rem;
+}
+
+.waterford-direct-tiles__footer {
+  position: absolute;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  left: max(1rem, env(safe-area-inset-left));
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  color: rgba(247,245,239,0.56);
+  font-size: 0.62rem;
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+}
+
+.waterford-direct-tiles__attribution {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  max-width: min(64vw, 760px);
+  text-align: right;
+}
+
+.waterford-direct-tiles__google-logo {
+  width: auto;
+  height: 15px;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+}
+
+@media (max-width: 860px) {
+  .waterford-direct-tiles__header p,
+  .waterford-direct-tiles__telemetry {
+    display: none;
+  }
+
+  .waterford-direct-tiles__controls {
+    grid-template-columns: 1fr;
+    bottom: max(4rem, calc(env(safe-area-inset-bottom) + 4rem));
+  }
+
+  .waterford-direct-tiles__lod {
+    display: none;
+  }
+
+  .waterford-direct-tiles__segmented button {
+    min-height: 48px;
+    padding: 0.35rem;
+    text-align: center;
+  }
+
+  .waterford-direct-tiles__segmented small {
+    display: none;
+  }
+
+  .waterford-direct-tiles__footer > span {
+    display: none;
+  }
+
+  .waterford-direct-tiles__attribution {
+    margin-left: auto;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .waterford-direct-tiles__header {
+    align-items: center;
+  }
+
+  .waterford-direct-tiles__header > div {
+    padding: 0.72rem 0.8rem;
+  }
+
+  .waterford-direct-tiles h1 {
+    font-size: 1rem;
+  }
+
+  .waterford-direct-tiles__compare {
+    min-height: 40px;
+    padding: 0 0.7rem;
+    font-size: 0.68rem;
+  }
+
+  .waterford-direct-tiles__controls {
+    width: calc(100vw - 1rem);
+    padding: 0.45rem;
+  }
+
+  .waterford-direct-tiles__segmented {
+    gap: 0.15rem;
+  }
+
+  .waterford-direct-tiles__segmented strong {
+    font-size: 0.68rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waterford-direct-tiles__segmented button {
+    transition: none;
+  }
+}
