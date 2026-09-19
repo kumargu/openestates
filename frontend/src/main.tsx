@@ -26,6 +26,7 @@ const ReraReportPage = lazy(() => import("./pages/ReraReportPage.tsx").then(m =>
 const WorkspacePage = lazy(() => import("./pages/WorkspacePage.tsx").then(m => ({ default: m.WorkspacePage })));
 const PropertyStoryLabPage = lazy(() => import("./pages/PropertyStoryLabPage.tsx").then(m => ({ default: m.PropertyStoryLabPage })));
 const WaterfordDirectTilesLabPage = lazy(() => import("./pages/WaterfordDirectTilesLabPage.tsx").then(m => ({ default: m.WaterfordDirectTilesLabPage })));
+const TokyoTowerDirectTilesLabPage = lazy(() => import("./pages/TokyoTowerDirectTilesLabPage.tsx").then(m => ({ default: m.TokyoTowerDirectTilesLabPage })));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.tsx").then(m => ({ default: m.NotFoundPage })));
 
 /** Scroll to top and move focus to main content on route change */
@@ -104,6 +105,7 @@ export function App() {
                   <Route path="/workspace/buy-vs-rent" element={<HomePlanPage />} />
                   <Route path="/workspace/buy-vs-rent/:id" element={<HomePlanPage />} />
                   <Route path="/labs/waterford-direct-tiles" element={<WaterfordDirectTilesLabPage />} />
+                  <Route path="/labs/tokyo-tower-direct-tiles" element={<TokyoTowerDirectTilesLabPage />} />
                   {import.meta.env.DEV && (
                     <>
                       <Route path="/dev/story-lab" element={<PropertyStoryLabPage />} />
