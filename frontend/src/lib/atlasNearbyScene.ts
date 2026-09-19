@@ -52,7 +52,7 @@ export function nearbySceneCamera(home: Home, places: NumberedPlace[], polygons:
   safeFrame?: AtlasSafeFrame, tiltOverride?: number,
   orientation: NearbyCameraOrientation = 'category-stable', orientationPlaces = places) {
   const origin = { lat: home.latitude, lng: home.longitude };
-  const selected = places.find(p => (p.feature_id ?? p.name) === selectedId);
+  const selected = places.find(p => (p.id) === selectedId);
   const geometry = selected && depth !== 'overview' ? geometryForPlace(selected, polygons, lines) : {polygons, lines};
   const frame = safeFrame ?? {
     width,

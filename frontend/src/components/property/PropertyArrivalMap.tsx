@@ -268,7 +268,7 @@ export function PropertyArrivalMap({
   useEffect(() => {
     const focus = context.proof_focus;
     if (!focus || focus.destinationKind === "section") return;
-    const place = places.find((candidate) => placeMatchesProofFocus(candidate, focus));
+    const place = buildNumberedPlaces(places).find((candidate) => placeMatchesProofFocus(candidate, focus));
     if (!place) return;
     const proofKey = JSON.stringify(focus);
     if (appliedProofRef.current === proofKey) return;
@@ -279,7 +279,7 @@ export function PropertyArrivalMap({
       setNearbyLayerId(place.layer);
       setView(place.layer === metroLayer?.id ? "metro" : "nearby");
       setCameraMode("evidence");
-      setSelectedPlaceId(place.feature_id ?? place.name);
+      setSelectedPlaceId(place.id);
       setNearbyDepth("inspect");
       setPanel("nearby");
     });
@@ -507,7 +507,7 @@ export function PropertyArrivalMap({
   if (!home || views.length === 0) return null;
 
   const selectedPlace = visiblePlaces.find((place) =>
-    (place.feature_id ?? place.name) === selectedPlaceId) ?? null;
+    (place.id) === selectedPlaceId) ?? null;
   const atlasQuiet = atlasPolicy.spotlight.enabled;
   const atlasCategories = [
     { id: "society", label: "Home", view: "society" as ArrivalView },
@@ -672,7 +672,7 @@ export function PropertyArrivalMap({
                 </div>
                 <div key={browseCategory} className="property-atlas__place-list" tabIndex={0} role="region" aria-label="Places ordered by distance">
                   {visiblePlaces.map((place) => {
-                    const id = place.feature_id ?? place.name;
+                    const id = place.id;
                     return (
                       <div className={id === selectedPlaceId ? "is-selected" : undefined} key={id}>
                         <button type="button" className={id === selectedPlaceId ? "is-active" : undefined} aria-pressed={id === selectedPlaceId} onClick={() => selectPlace(id)}>
@@ -800,8 +800,8 @@ export function PropertyArrivalMap({
       {(activeView === 'metro' || activeView === 'nearby') && visiblePlaces.length > 0 && <div className="atlas-place-list" aria-label="Nearby places">
         <button type="button" onClick={tourPlaces}>{playbackState === 'playing' ? 'Pause' : playbackState === 'paused' ? 'Resume' : 'Tour places'}</button>
         <button type="button" aria-pressed={!selectedPlaceId} onClick={() => selectPlace(null)}>Show all</button>
-        {visiblePlaces.map((place, index) => <button type="button" key={place.feature_id ?? place.name}
-          aria-pressed={selectedPlaceId === (place.feature_id ?? place.name)} onClick={() => selectPlace(place.feature_id ?? place.name)}>
+        {visiblePlaces.map((place, index) => <button type="button" key={place.id}
+          aria-pressed={selectedPlaceId === (place.id)} onClick={() => selectPlace(place.id)}>
           <span>{index + 1}</span>{place.name}
           {typeof place.distance_km === 'number' && <small>{place.distance_km.toFixed(1)} km straight-line</small>}
         </button>)}

@@ -27,7 +27,7 @@ test('three-place browsing preserves stable numbers and adds a distant selection
   assert.deepEqual(nearbyBrowseWindow(places, 0, count, null), places.slice(0, 3));
   assert.deepEqual(nearbyBrowseWindow(places, 3, count, null), places.slice(3, 6));
   const last = places.at(-1)!;
-  assert.deepEqual(nearbyBrowseWindow(places, 0, count, last.feature_id ?? last.name), [...places.slice(0, 3), last]);
+  assert.deepEqual(nearbyBrowseWindow(places, 0, count, last.id), [...places.slice(0, 3), last]);
   assert.deepEqual(nearbyBrowseWindow(places, 999, count, null), places.slice(-3));
 });
 
@@ -43,4 +43,15 @@ test('proof outside the opening window stays additive and missing distances use 
   const [derived] = nearbyPlacesByDistance([{...last, distance_km: undefined}], home);
   assert.ok(Number.isFinite(derived.distance_km) && derived.distance_km! >= 0);
   assert.equal(nearbyPlacesByDistance([], home).length, 0);
+});
+
+test('same-named places without scene IDs remain independently selectable', () => {
+  const places = nearbyPlacesByDistance([
+    {layer: 'schools', name: 'Shared name', place_entity_id: 'place:first', latitude: 13, longitude: 77, distance_km: 1, source_type: 'OSM'},
+    {layer: 'schools', name: 'Shared name', place_entity_id: 'place:second', latitude: 13.01, longitude: 77, distance_km: 2, source_type: 'OSM'},
+  ], home);
+  assert.deepEqual(nearbyBrowseWindow(places, 0, 1, places[1].id), places);
+  const proof = {surfaceId: 'around_this_home', layerId: 'schools', factKey: 'nearby',
+    entityId: 'place:second', matchedLabel: 'Shared name', reason: 'Matched school'};
+  assert.deepEqual(nearbyBrowseWindow(places, 1, 1, null, proof), [places[1]]);
 });

@@ -19,5 +19,5 @@ export function nearbyBrowseWindow(places: NumberedPlace[], start: number, count
   selectedId: string | null, proof?: ProofFocus | null) {
   const first = Math.max(0, Math.min(start, Math.max(0, places.length - count)));
   return places.filter((place, index) => (index >= first && index < first + count)
-    || (place.feature_id ?? place.name) === selectedId || placeMatchesProofFocus(place, proof));
+    || (place.id) === selectedId || placeMatchesProofFocus(place, proof));
 }

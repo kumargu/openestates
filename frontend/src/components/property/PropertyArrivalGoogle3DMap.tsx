@@ -1123,7 +1123,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         nextChildren,
       );
     }
-    const selected = places.find(place => (place.feature_id ?? place.name) === selectedPlaceId);
+    const selected = places.find(place => (place.id) === selectedPlaceId);
     const isolatesSelection = Boolean(selected) && nearbyDepth !== 'overview';
     const visibleContextLines = contextLines;
     const visiblePolygons = polygons ?? [];
@@ -1287,7 +1287,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       : places;
     for (const place of markerPlaces) {
       const popover = cameraMode === 'evidence' ? null : createPlacePopover(library, place);
-      const isSelected = (place.feature_id ?? place.name) === selectedPlaceId;
+      const isSelected = (place.id) === selectedPlaceId;
       const pinLabel = place.name;
       const marker = new library.Marker3DInteractiveElement({
         altitudeMode: cameraMode === "evidence" ? "RELATIVE_TO_GROUND" : "CLAMP_TO_GROUND",
@@ -1312,12 +1312,12 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       }));
       marker.tabIndex = 0;
       marker.setAttribute("aria-label", pinLabel);
-      marker.dataset.atlasPlaceId = place.feature_id ?? place.name;
+      marker.dataset.atlasPlaceId = place.id;
       marker.dataset.atlasSelected = String(isSelected);
-      marker.addEventListener('gmp-click', () => onSelectPlace?.(place.feature_id ?? place.name));
+      marker.addEventListener('gmp-click', () => onSelectPlace?.(place.id));
       marker.addEventListener('keydown', event => {
         if (event instanceof KeyboardEvent && (event.key === 'Enter' || event.key === ' ')) {
-          event.preventDefault(); onSelectPlace?.(place.feature_id ?? place.name);
+          event.preventDefault(); onSelectPlace?.(place.id);
         }
       });
       if (popover) {
@@ -1409,7 +1409,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       const features: AtlasFeature[] = chapter.places.map((place) => {
         const geometry = geometryForPlace(place, chapter.polygons, chapter.lines);
         return {
-          id: place.feature_id ?? place.name,
+          id: place.id,
           name: place.name,
           categoryId: chapter.categoryId,
           position: {lat: place.latitude, lng: place.longitude},
@@ -1549,7 +1549,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     const detach = () => { if (onEnd) map.removeEventListener('gmp-animationend', onEnd); onEnd = undefined; };
     const stop = () => { cancelled = true; detach(); };
     const unregister = playbackController.registerStopper(stop);
-    const selected = places.find((place) => (place.feature_id ?? place.name) === selectedPlaceId);
+    const selected = places.find((place) => (place.id) === selectedPlaceId);
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const pose = (depth: NearbyDepth, elevation: number) => nearbySceneCamera(home, places, polygons ?? [],
       [...metroLines, ...contextLines], selectedPlaceId, depth, elevation,
