@@ -5,15 +5,21 @@ const WATERFORD = {
   name: "Prestige Waterford",
   latitude: 12.9819914,
   longitude: 77.7421819,
+  ellipsoidHeightM: 850,
 };
 
 const MODULES = {
-  three: "https://esm.sh/three@0.186.0",
-  orbit: "https://esm.sh/three@0.186.0/examples/jsm/controls/OrbitControls.js",
-  draco: "https://esm.sh/three@0.186.0/examples/jsm/loaders/DRACOLoader.js",
-  tiles: "https://esm.sh/3d-tiles-renderer@0.5.3?deps=three@0.186.0",
-  plugins: "https://esm.sh/3d-tiles-renderer@0.5.3/plugins?deps=three@0.186.0",
+  three: "https://esm.sh/three@0.185.0",
+  orbit: "https://esm.sh/three@0.185.0/examples/jsm/controls/OrbitControls.js",
+  draco: "https://esm.sh/three@0.185.0/examples/jsm/loaders/DRACOLoader.js",
+  ktx2: "https://esm.sh/three@0.185.0/examples/jsm/loaders/KTX2Loader.js",
+  meshopt: "https://esm.sh/three@0.185.0/examples/jsm/libs/meshopt_decoder.module.js",
+  tiles: "https://esm.sh/3d-tiles-renderer@0.5.2?external=three",
+  plugins: "https://esm.sh/3d-tiles-renderer@0.5.2/plugins?external=three",
 };
+
+const BASIS_TRANSCODER_PATH =
+  "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/libs/basis/";
 
 const CAMERA_STOPS = [
   { range: 1200, label: "1,200 m", detail: "Neighbourhood" },
@@ -24,9 +30,9 @@ const CAMERA_STOPS = [
 ] as const;
 
 const LOD_TARGETS = [
-  { value: 8, label: "Max detail" },
+  { value: 6, label: "Settled max" },
+  { value: 8, label: "High detail" },
   { value: 20, label: "NASA default" },
-  { value: 35, label: "Fast" },
 ] as const;
 
 type RuntimeStats = {
@@ -37,6 +43,8 @@ type RuntimeStats = {
   visible: number;
   active: number;
   cacheMb: number;
+  texturedMeshes: number;
+  meshes: number;
 };
 
 const EMPTY_STATS: RuntimeStats = {
@@ -47,14 +55,20 @@ const EMPTY_STATS: RuntimeStats = {
   visible: 0,
   active: 0,
   cacheMb: 0,
+  texturedMeshes: 0,
+  meshes: 0,
 };
+
+function runtimeImport(url: string): Promise<any> {
+  return import(/* @vite-ignore */ url);
+}
 
 function cameraPosition(THREE: any, range: number) {
   const heading = THREE.MathUtils.degToRad(225);
   const elevation = THREE.MathUtils.degToRad(32);
   const horizontal = range * Math.cos(elevation);
   const vertical = range * Math.sin(elevation);
-  const targetY = 30;
+  const targetY = 32;
 
   return {
     position: new THREE.Vector3(
@@ -100,6 +114,8 @@ export function WaterfordDirectTilesLabPage() {
     let tiles: any;
     let lastTelemetry = 0;
     let cameraTween = 0;
+    let meshCount = 0;
+    let texturedMeshCount = 0;
 
     const renderAttribution = () => {
       const target = attributionRef.current;
@@ -124,35 +140,59 @@ export function WaterfordDirectTilesLabPage() {
 
     void (async () => {
       try {
-        setStatus("Loading NASA 3D Tiles renderer…");
+        setStatus("Checking Google Photorealistic 3D Tiles…");
+        const preflight = await fetch(
+          `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(apiKey)}`,
+          { cache: "no-store" },
+        );
+        if (!preflight.ok) {
+          throw new Error(
+            `Google Photorealistic 3D Tiles API returned HTTP ${preflight.status}`,
+          );
+        }
 
-        const [THREE, controlsModule, dracoModule, tilesModule, pluginsModule] = await Promise.all([
-          import(/* @vite-ignore */ MODULES.three),
-          import(/* @vite-ignore */ MODULES.orbit),
-          import(/* @vite-ignore */ MODULES.draco),
-          import(/* @vite-ignore */ MODULES.tiles),
-          import(/* @vite-ignore */ MODULES.plugins),
+        setStatus("Loading NASA renderer + material decoders…");
+
+        const [
+          THREE,
+          controlsModule,
+          dracoModule,
+          ktxModule,
+          meshoptModule,
+          tilesModule,
+          pluginsModule,
+        ] = await Promise.all([
+          runtimeImport(MODULES.three),
+          runtimeImport(MODULES.orbit),
+          runtimeImport(MODULES.draco),
+          runtimeImport(MODULES.ktx2),
+          runtimeImport(MODULES.meshopt),
+          runtimeImport(MODULES.tiles),
+          runtimeImport(MODULES.plugins),
         ]);
         if (disposed) return;
 
         const { OrbitControls } = controlsModule;
         const { DRACOLoader } = dracoModule;
+        const { KTX2Loader } = ktxModule;
+        const { MeshoptDecoder } = meshoptModule;
         const { TilesRenderer } = tilesModule;
         const {
           GoogleCloudAuthPlugin,
-          TileCompressionPlugin,
           TilesFadePlugin,
           GLTFExtensionsPlugin,
           ReorientationPlugin,
         } = pluginsModule;
 
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x11181c);
+        scene.background = new THREE.Color(0x151c1f);
 
         renderer = new THREE.WebGLRenderer({
           antialias: true,
+          alpha: false,
           powerPreference: "high-performance",
         });
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(host.clientWidth, host.clientHeight, false);
         host.replaceChildren(renderer.domElement);
@@ -160,21 +200,25 @@ export function WaterfordDirectTilesLabPage() {
         const camera = new THREE.PerspectiveCamera(
           60,
           host.clientWidth / Math.max(1, host.clientHeight),
-          1,
+          5,
           1_600_000,
         );
 
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
-        controls.dampingFactor = 0.08;
+        controls.dampingFactor = 0.055;
         controls.enablePan = false;
-        controls.minDistance = 150;
+        controls.rotateSpeed = 0.55;
+        controls.zoomSpeed = 0.72;
+        controls.minDistance = 120;
         controls.maxDistance = 2_500;
-        controls.maxPolarAngle = THREE.MathUtils.degToRad(72);
+        controls.minPolarAngle = Math.PI / 3;
+        controls.maxPolarAngle = Math.PI / 2 - 0.035;
 
         const initial = cameraPosition(THREE, 500);
         camera.position.copy(initial.position);
         controls.target.copy(initial.target);
+        camera.lookAt(initial.target);
         controls.update();
 
         tiles = new TilesRenderer();
@@ -184,34 +228,59 @@ export function WaterfordDirectTilesLabPage() {
           logoUrl: "https://www.gstatic.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png",
           useRecommendedSettings: true,
         }));
-        tiles.registerPlugin(new TileCompressionPlugin());
         tiles.registerPlugin(new TilesFadePlugin());
 
         const dracoLoader = new DRACOLoader();
-        dracoLoader.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
-        tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader }));
+        dracoLoader.setDecoderPath(
+          "https://www.gstatic.com/draco/versioned/decoders/1.5.7/",
+        );
 
-        const reorientation = new ReorientationPlugin({
-          lat: THREE.MathUtils.degToRad(WATERFORD.latitude),
-          lon: THREE.MathUtils.degToRad(WATERFORD.longitude),
-        });
-        tiles.registerPlugin(reorientation);
+        const ktxLoader = new KTX2Loader();
+        ktxLoader.setTranscoderPath(BASIS_TRANSCODER_PATH);
+        ktxLoader.detectSupport(renderer);
 
+        tiles.registerPlugin(
+          new GLTFExtensionsPlugin({
+            dracoLoader,
+            ktxLoader,
+            meshoptDecoder: MeshoptDecoder,
+          }),
+        );
+        tiles.registerPlugin(
+          new ReorientationPlugin({
+            lat: THREE.MathUtils.degToRad(WATERFORD.latitude),
+            lon: THREE.MathUtils.degToRad(WATERFORD.longitude),
+            height: WATERFORD.ellipsoidHeightM,
+          }),
+        );
+
+        // Keep this A/B fidelity-first. TileCompressionPlugin changes texture
+        // mip behavior, so it is intentionally excluded from the baseline.
         tiles.errorTarget = 8;
         tiles.loadSiblings = true;
         tiles.loadAncestors = true;
-        if (tiles.lruCache && "maxBytesSize" in tiles.lruCache) {
-          tiles.lruCache.maxBytesSize = Math.max(
-            Number(tiles.lruCache.maxBytesSize) || 0,
-            512 * 1024 * 1024,
-          );
-        }
 
         scene.add(tiles.group);
         tiles.setResolutionFromRenderer(camera, renderer);
         tiles.setCamera(camera);
 
-        tiles.addEventListener?.("load-model", () => {
+        tiles.addEventListener?.("load-model", ({ scene: modelScene }: any) => {
+          modelScene?.traverse?.((object: any) => {
+            if (!object?.isMesh) return;
+            meshCount += 1;
+            const materials = Array.isArray(object.material)
+              ? object.material
+              : [object.material];
+            if (
+              materials.some(
+                (material: any) =>
+                  material &&
+                  Object.values(material).some((value: any) => value?.isTexture),
+              )
+            ) {
+              texturedMeshCount += 1;
+            }
+          });
           if (!disposed) setStatus("Direct tiles ready");
         });
         tiles.addEventListener?.("load-error", (event: any) => {
@@ -281,6 +350,8 @@ export function WaterfordDirectTilesLabPage() {
               visible: Number(tiles.visibleTiles?.size) || 0,
               active: Number(tiles.activeTiles?.size) || 0,
               cacheMb: cacheBytes / 1024 / 1024,
+              texturedMeshes: texturedMeshCount,
+              meshes: meshCount,
             });
             renderAttribution();
           }
@@ -318,7 +389,11 @@ export function WaterfordDirectTilesLabPage() {
 
   return (
     <div className="waterford-direct-tiles">
-      <div ref={canvasHostRef} className="waterford-direct-tiles__canvas" aria-label="Direct Google Photorealistic 3D Tiles view of Prestige Waterford" />
+      <div
+        ref={canvasHostRef}
+        className="waterford-direct-tiles__canvas"
+        aria-label="Direct Google Photorealistic 3D Tiles view of Prestige Waterford"
+      />
 
       <header className="waterford-direct-tiles__header">
         <div>
@@ -336,7 +411,10 @@ export function WaterfordDirectTilesLabPage() {
         </a>
       </header>
 
-      <section className="waterford-direct-tiles__controls" aria-label="Camera and detail controls">
+      <section
+        className="waterford-direct-tiles__controls"
+        aria-label="Camera and detail controls"
+      >
         <div className="waterford-direct-tiles__control-group">
           <span>Camera distance</span>
           <div className="waterford-direct-tiles__segmented">
@@ -375,13 +453,17 @@ export function WaterfordDirectTilesLabPage() {
       <aside className="waterford-direct-tiles__telemetry">
         <div>
           <span>{status}</span>
-          <strong>{currentStop.label} · {lodTarget}px SSE</strong>
+          <strong>
+            {currentStop.label} · {lodTarget}px SSE
+          </strong>
         </div>
         <dl>
           <div><dt>Visible</dt><dd>{stats.visible}</dd></div>
           <div><dt>Active</dt><dd>{stats.active}</dd></div>
           <div><dt>Loading</dt><dd>{stats.downloading + stats.parsing + stats.queued}</dd></div>
           <div><dt>Cache</dt><dd>{stats.cacheMb.toFixed(0)} MB</dd></div>
+          <div><dt>Meshes</dt><dd>{stats.meshes}</dd></div>
+          <div><dt>Textured</dt><dd>{stats.texturedMeshes}</dd></div>
         </dl>
       </aside>
 
@@ -397,7 +479,11 @@ export function WaterfordDirectTilesLabPage() {
 
       <footer className="waterford-direct-tiles__footer">
         <span>Prestige Waterford · 12.9819914, 77.7421819</span>
-        <div ref={attributionRef} className="waterford-direct-tiles__attribution" aria-label="Map data attribution" />
+        <div
+          ref={attributionRef}
+          className="waterford-direct-tiles__attribution"
+          aria-label="Map data attribution"
+        />
       </footer>
     </div>
   );
