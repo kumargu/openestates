@@ -21,7 +21,7 @@ use super::{
     SkillFactMaterializer, SkillFactsInput, SocietyFactSnapshotError,
     SocietyFactSnapshotMaterializer, SocietyGoldSnapshotMaterialization,
     SocietyGoldSnapshotMaterializeError, SocietyGoldSnapshotMaterializer,
-    SourceEntityResolutionScope, SourceWatermark, StormwaterAssetError, TransitAssetError,
+    SourceEntityResolutionScope, SourceWatermark, TransitAssetError,
     APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
     BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
@@ -32,7 +32,7 @@ use super::{
     OSM_SOCIETY_ACCESS_FACTS_ASSET_ID, RERA_CLAIMS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
     RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
     RERA_SOURCE_RECORDS_ASSET_ID, SOCIETY_FACT_SNAPSHOT_ASSET_ID, SOCIETY_GOLD_SNAPSHOT_ASSET_ID,
-    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID, STORMWATER_DRAIN_FACTS_ASSET_ID,
+    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
 };
 use crate::knowledge::KnowledgeGraph;
 use crate::lake::{LakeError, LakeStore};
@@ -1179,10 +1179,6 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::OsmSocietyAccessFacts,
         );
         executors.insert(
-            static_asset_id(STORMWATER_DRAIN_FACTS_ASSET_ID),
-            BuiltInAssetExecutor::StormwaterDrainFacts,
-        );
-        executors.insert(
             static_asset_id(SOCIETY_FACT_SNAPSHOT_ASSET_ID),
             BuiltInAssetExecutor::SocietyFactSnapshot,
         );
@@ -1223,7 +1219,6 @@ enum BuiltInAssetExecutor {
     OsmLocalityBoundaryFacts,
     OsmPowerLineFacts,
     OsmSocietyAccessFacts,
-    StormwaterDrainFacts,
     SocietyFactSnapshot,
     SocietyGoldSnapshot,
     #[cfg(test)]
@@ -1885,41 +1880,6 @@ impl BuiltInAssetExecutor {
                 let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
-            Self::StormwaterDrainFacts => {
-                ensure_global_partition(context.asset_id, context.asset_partition)?;
-                let input = context
-                    .options
-                    .source_inputs
-                    .stormwater_drains
-                    .as_ref()
-                    .ok_or_else(|| source_input_error(&context))?;
-                let parent_records = context
-                    .dag
-                    .dependency_materialization_records(
-                        context.asset_id,
-                        &context.options.partition,
-                        context.records_by_asset,
-                        context.dependency_snapshot,
-                    )
-                    .await?;
-                let canonical_record = dependency_record(
-                    context.asset_id,
-                    &parent_records,
-                    CANONICAL_SOCIETY_NODES_ASSET_ID,
-                )?;
-                let input = super::canonicalize_stormwater_drain_input(
-                    &context.dag.lake,
-                    input,
-                    canonical_record,
-                    &context.options.source_inputs.source_entities,
-                    context.options.source_scope,
-                )
-                .await?;
-                let input =
-                    super::stormwater_drain_facts_input(&input, &context.run_id.to_string())?;
-                let materialization = execute_skill_fact_asset(context, &input).await?;
-                Ok(ExecutedAsset::SkillFacts(materialization))
-            }
             Self::SocietyFactSnapshot => {
                 let parent_records = context
                     .dag
@@ -2194,7 +2154,6 @@ pub enum AssetDagExecutorError {
     Locality(LocalityAssetError),
     OsmAccess(OsmAccessAssetError),
     OsmPower(OsmPowerAssetError),
-    Stormwater(StormwaterAssetError),
     SocietyFactSnapshot(SocietyFactSnapshotError),
     ReraEvidence(ReraEvidenceError),
     ReraSourceRecords(ReraSourceRecordsError),
@@ -2286,7 +2245,6 @@ impl fmt::Display for AssetDagExecutorError {
             Self::Locality(err) => write!(f, "locality asset execution failed: {err}"),
             Self::OsmAccess(err) => write!(f, "OSM access asset execution failed: {err}"),
             Self::OsmPower(err) => write!(f, "OSM power asset execution failed: {err}"),
-            Self::Stormwater(err) => write!(f, "stormwater asset execution failed: {err}"),
             Self::SocietyFactSnapshot(err) => {
                 write!(f, "current project facts compaction failed: {err}")
             }
@@ -2498,12 +2456,6 @@ impl From<OsmAccessAssetError> for AssetDagExecutorError {
     }
 }
 
-impl From<StormwaterAssetError> for AssetDagExecutorError {
-    fn from(err: StormwaterAssetError) -> Self {
-        Self::Stormwater(err)
-    }
-}
-
 impl From<SocietyFactSnapshotError> for AssetDagExecutorError {
     fn from(err: SocietyFactSnapshotError) -> Self {
         Self::SocietyFactSnapshot(err)
@@ -2666,7 +2618,6 @@ fn source_input_unavailable_reason(
         OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID => source_inputs.osm_locality_boundaries.is_none(),
         OSM_SOCIETY_ACCESS_FACTS_ASSET_ID => source_inputs.osm_society_access.is_none(),
         OSM_POWER_LINE_FACTS_ASSET_ID => source_inputs.osm_power_infrastructure.is_none(),
-        STORMWATER_DRAIN_FACTS_ASSET_ID => source_inputs.stormwater_drains.is_none(),
         _ => false,
     };
     missing.then(|| "source input missing; enrichment gap recorded".to_string())
@@ -2742,7 +2693,6 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
         && source_inputs.osm_locality_boundaries.is_none()
         && source_inputs.osm_society_access.is_none()
         && source_inputs.osm_power_infrastructure.is_none()
-        && source_inputs.stormwater_drains.is_none()
 }
 
 #[cfg(test)]

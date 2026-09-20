@@ -38,7 +38,6 @@ pub mod society_gold;
 pub mod source_inputs;
 pub mod source_provider;
 mod source_resolution;
-pub mod stormwater;
 pub mod transit;
 pub mod types;
 
@@ -174,10 +173,6 @@ pub use source_provider::{
 };
 pub use source_resolution::{
     SourceEntityResolutionError, SourceEntityResolutionScope, SourceEntityResolver,
-};
-pub use stormwater::{
-    canonicalize_stormwater_drain_input, stormwater_drain_facts_input, StormwaterAssetError,
-    StormwaterDrainObservationRecord, StormwaterDrainRiskInput, STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 pub use transit::{
     bengaluru_metro_station_facts_input, BengaluruMetroStationInput, BengaluruMetroStationsInput,

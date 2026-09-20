@@ -383,20 +383,6 @@
       }
     },
     {
-      "id": "stormwater_drain_facts",
-      "stage": "silver",
-      "description": "Stormwater drain and Rajakaluve proximity facts with geometry for red-flag map overlays.",
-      "dependencies": [
-        "canonical_society_nodes"
-      ],
-      "refresh": "monthly",
-      "cost_tier": "free",
-      "trust_tier": "support",
-      "partition_policy": {
-        "kind": "global"
-      }
-    },
-    {
       "id": "society_fact_snapshot",
       "stage": "gold",
       "description": "Compacted society-scoped fact rows for immutable gold snapshots. Graph-shaped assets stay as direct dependencies.",
@@ -413,8 +399,7 @@
         "bengaluru_metro_station_facts",
         "osm_locality_boundary_facts",
         "osm_society_access_facts",
-        "osm_power_line_facts",
-        "stormwater_drain_facts"
+        "osm_power_line_facts"
       ],
       "refresh": "on_change",
       "cost_tier": "free",
@@ -458,8 +443,7 @@
         "bengaluru_metro_station_facts",
         "osm_locality_boundary_facts",
         "osm_society_access_facts",
-        "osm_power_line_facts",
-        "stormwater_drain_facts"
+        "osm_power_line_facts"
       ]
     },
     {

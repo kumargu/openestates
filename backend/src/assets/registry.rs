@@ -770,15 +770,6 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Support,
         ),
         asset(
-            "stormwater_drain_facts",
-            AssetStage::Silver,
-            "Stormwater drain and Rajakaluve proximity facts with geometry for red-flag map overlays.",
-            &["canonical_society_nodes"],
-            RefreshCadence::Monthly,
-            CostTier::Free,
-            TrustTier::Support,
-        ),
-        asset(
             "society_fact_snapshot",
             AssetStage::Gold,
             "Compacted society-scoped fact rows for immutable gold snapshots. Graph-shaped assets stay as direct dependencies.",
@@ -796,7 +787,6 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "osm_locality_boundary_facts",
                 "osm_society_access_facts",
                 "osm_power_line_facts",
-                "stormwater_drain_facts",
             ],
             RefreshCadence::OnChange,
             CostTier::Free,
@@ -827,8 +817,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_optional_dependency("bengaluru_metro_station_facts")
         .with_optional_dependency("osm_locality_boundary_facts")
         .with_optional_dependency("osm_society_access_facts")
-        .with_optional_dependency("osm_power_line_facts")
-        .with_optional_dependency("stormwater_drain_facts"),
+        .with_optional_dependency("osm_power_line_facts"),
         asset(
             "society_gold_snapshot",
             AssetStage::Gold,

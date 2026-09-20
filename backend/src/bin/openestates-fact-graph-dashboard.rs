@@ -274,11 +274,7 @@ fn numeric_fact(facts: &[&ServingFactRecord], fact_key: &str) -> Option<f64> {
 
 fn fact_priority(fact: &ServingFactRecord) -> (u8, String) {
     let key = fact.fact_key.to_ascii_lowercase();
-    let priority = if key.contains("high_voltage")
-        || key.contains("stormwater")
-        || key.contains("rajakaluve")
-        || key.contains("lake")
-    {
+    let priority = if key.contains("high_voltage") || key.contains("lake") {
         0
     } else if key.starts_with("nearby_") || key.contains("groundwater") {
         1
@@ -294,12 +290,7 @@ fn fact_priority(fact: &ServingFactRecord) -> (u8, String) {
 
 fn fact_group(fact_key: &str) -> String {
     let key = fact_key.to_ascii_lowercase();
-    if key.contains("high_voltage")
-        || key.contains("stormwater")
-        || key.contains("rajakaluve")
-        || key.contains("lake")
-        || key.contains("graveyard")
-    {
+    if key.contains("high_voltage") || key.contains("lake") || key.contains("graveyard") {
         "risk".to_string()
     } else if key.starts_with("nearby_") {
         "proximity".to_string()

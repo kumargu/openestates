@@ -19,7 +19,6 @@ from pipeline.collect_asset_sources import (
     collect_google_nearby_places,
     collect_google_places,
     collect_osm_power_infrastructure,
-    collect_stormwater_drains,
     capture_scoped_rera_regulatory_payloads,
     geospatial_society_inputs,
     google_nearby_collection_categories,
@@ -1357,170 +1356,6 @@ class CollectAssetSourcesTest(unittest.TestCase):
             )
 
         self.assertEqual(len(calls), 3)
-
-    def test_collect_stormwater_drains_emits_rajakaluve_rows(self):
-        request = {
-            "partition": {"parts": [["dt", "2026-07-27"]]},
-            "planned_at": "2026-07-27T09:00:00Z",
-            "source_entities": [
-                {
-                    "entity_id": "society:whitefield-test",
-                    "name": "Whitefield Test",
-                    "area": "Whitefield",
-                    "city": "Bengaluru",
-                    "project_key": "PRM-WF",
-                }
-            ],
-        }
-        google_places = {
-            "records": [
-                {
-                    "entity_id": "society:whitefield-test",
-                    "latitude": 12.9700,
-                    "longitude": 77.7500,
-                }
-            ]
-        }
-        overpass = {
-            "elements": [
-                {
-                    "type": "way",
-                    "id": 987,
-                    "tags": {
-                        "waterway": "drain",
-                        "name": "Whitefield Rajakaluve",
-                    },
-                    "geometry": [
-                        {"lat": 12.9695, "lon": 77.7495},
-                        {"lat": 12.9705, "lon": 77.7505},
-                    ],
-                }
-            ]
-        }
-
-        output = collect_stormwater_drains(
-            request,
-            google_places_input=google_places,
-            fetch=lambda _url, _query: overpass,
-        )
-
-        self.assertEqual(output["snapshot_date"], "2026-07-27")
-        self.assertEqual(len(output["records"]), 1)
-        record = output["records"][0]
-        self.assertEqual(record["entity_id"], "society:whitefield-test")
-        self.assertEqual(record["drain_id"], "way/987")
-        self.assertEqual(record["drain_type"], "rajakaluve")
-        self.assertEqual(record["hierarchy"], "primary_swd")
-        self.assertLess(record["distance_meters"], 5.0)
-        self.assertIn("LineString", record["geometry_geojson"])
-
-    def test_collect_stormwater_drains_rejects_partial_subject_failure(self):
-        request = {
-            "partition": {"parts": [["dt", "2026-07-27"]]},
-            "planned_at": "2026-07-27T09:00:00Z",
-            "source_entities": [
-                {
-                    "entity_id": "society:overpass-fails",
-                    "name": "Overpass Fails",
-                    "area": "Whitefield",
-                    "city": "Bengaluru",
-                    "project_key": "PRM-FAIL",
-                },
-                {
-                    "entity_id": "society:overpass-succeeds",
-                    "name": "Overpass Succeeds",
-                    "area": "Whitefield",
-                    "city": "Bengaluru",
-                    "project_key": "PRM-OK",
-                },
-            ],
-        }
-        google_places = {
-            "records": [
-                {
-                    "entity_id": "society:overpass-fails",
-                    "latitude": 12.9700,
-                    "longitude": 77.7500,
-                },
-                {
-                    "entity_id": "society:overpass-succeeds",
-                    "latitude": 12.9800,
-                    "longitude": 77.7600,
-                },
-            ]
-        }
-        overpass = {
-            "elements": [
-                {
-                    "type": "way",
-                    "id": 654,
-                    "tags": {"waterway": "drain", "name": "Whitefield Rajakaluve"},
-                    "geometry": [
-                        {"lat": 12.9795, "lon": 77.7595},
-                        {"lat": 12.9805, "lon": 77.7605},
-                    ],
-                }
-            ]
-        }
-        calls = []
-
-        def fetch(_url, _query):
-            calls.append(_query)
-            if len(calls) == 1:
-                raise HTTPError("https://overpass.example", 504, "timeout", None, None)
-            return overpass
-
-        with self.assertRaisesRegex(ValueError, "unavailable for 1 of 2 subjects"):
-            collect_stormwater_drains(
-                request,
-                google_places_input=google_places,
-                fetch=fetch,
-            )
-
-    def test_collect_stormwater_drains_never_promotes_partial_rows(self):
-        request = {
-            "partition": {"parts": [["dt", "2026-07-27"]]},
-            "planned_at": "2026-07-27T09:00:00Z",
-            "source_entities": [
-                {
-                    "entity_id": "society:overpass-fails",
-                    "name": "Overpass Fails",
-                    "city": "Bengaluru",
-                    "latitude": 12.9700,
-                    "longitude": 77.7500,
-                },
-                {
-                    "entity_id": "society:overpass-succeeds",
-                    "name": "Overpass Succeeds",
-                    "city": "Bengaluru",
-                    "latitude": 12.9800,
-                    "longitude": 77.7600,
-                },
-            ],
-        }
-        overpass = {
-            "elements": [
-                {
-                    "type": "way",
-                    "id": 654,
-                    "tags": {"waterway": "drain", "name": "Whitefield Rajakaluve"},
-                    "geometry": [
-                        {"lat": 12.9795, "lon": 77.7595},
-                        {"lat": 12.9805, "lon": 77.7605},
-                    ],
-                }
-            ]
-        }
-        calls = []
-
-        def fetch(_url, _query):
-            calls.append(_query)
-            if len(calls) == 1:
-                raise HTTPError("https://overpass.example", 504, "timeout", None, None)
-            return overpass
-
-        with self.assertRaisesRegex(ValueError, "unavailable for 1 of 2 subjects"):
-            collect_stormwater_drains(request, fetch=fetch)
 
     def test_reddit_transient_failure_retries_before_returning_empty(self):
         unavailable = RedditSourceUnavailable("temporary failure")
@@ -3097,7 +2932,6 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(record["fetch_source"], "google_places_text_search")
 
     def test_google_nearby_collection_emits_raw_category_rows(self):
-        self.assertNotIn("stormwater_drain", google_nearby_collection_categories())
         output = collect_google_nearby_places(
             {
                 "partition": {"parts": [["dt", "2026-07-14"]]},

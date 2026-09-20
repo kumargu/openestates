@@ -156,7 +156,6 @@ BENGALURU_METRO_STATION_FACTS = "bengaluru_metro_station_facts"
 OSM_LOCALITY_BOUNDARY_FACTS = "osm_locality_boundary_facts"
 OSM_POWER_LINE_FACTS = "osm_power_line_facts"
 OSM_SOCIETY_ACCESS_FACTS = "osm_society_access_facts"
-STORMWATER_DRAIN_FACTS = "stormwater_drain_facts"
 RERA_DETAIL_RECEIPT_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_detail_receipts"
 RERA_REGULATORY_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_records"
 RERA_REGULATORY_LIST_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_lists"
@@ -188,7 +187,6 @@ SUPPORTED_ASSETS = frozenset(
         OSM_LOCALITY_BOUNDARY_FACTS,
         OSM_SOCIETY_ACCESS_FACTS,
         OSM_POWER_LINE_FACTS,
-        STORMWATER_DRAIN_FACTS,
     )
 )
 
@@ -332,15 +330,6 @@ def collect_asset_sources(
             )
         except Exception as error:
             record_source_failure(source_failures, [OSM_POWER_LINE_FACTS], error)
-    if STORMWATER_DRAIN_FACTS in requested:
-        try:
-            output["stormwater_drains"] = collect_stormwater_drains(
-                request,
-                output.get(RERA_REGISTRY_MONTHLY),
-                output.get(GOOGLE_PLACES_WEEKLY),
-            )
-        except Exception as error:
-            record_source_failure(source_failures, [STORMWATER_DRAIN_FACTS], error)
     if source_failures:
         output["source_failures"] = source_failures
     return output
@@ -484,88 +473,6 @@ def collect_osm_power_infrastructure(
                 ),
             }
         ],
-    }
-
-
-def collect_stormwater_drains(
-    request: Dict[str, Any],
-    rera_input: Dict[str, Any] = None,
-    google_places_input: Dict[str, Any] = None,
-    fetch: Callable[[str, str], Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    planned_at = normalized_planned_at(request)
-    snapshot_date = partition_values(request).get("dt") or planned_at[:10]
-    config = load_dag_config("stormwater_drain_risk.json")
-    policy = config.get("drains") or {}
-    collector = config.get("collector") or {}
-    subjects = geospatial_society_inputs(request, rera_input, google_places_input)
-    if not subjects:
-        raise ValueError("stormwater drain collection requires society coordinates")
-
-    max_distance = float(policy.get("max_distance_meters") or 250.0)
-    source_url = collector_url(collector)
-    records = []
-    query_hashes = []
-    overpass_failures = []
-    waterway_values = optional_string_list(collector.get("waterway_values")) or [
-        "drain",
-        "ditch",
-        "canal",
-    ]
-    for subject in subjects:
-        bbox = padded_bbox(
-            [subject],
-            max_distance + float(collector.get("bbox_padding_meters") or 0.0),
-        )
-        query = stormwater_overpass_query(
-            bbox,
-            waterway_values,
-            int(collector.get("query_timeout_seconds") or 60),
-        )
-        query_hashes.append(hashlib.sha256(query.encode("utf-8")).hexdigest())
-        try:
-            payload = (fetch or fetch_overpass_json)(source_url, query)
-            records.extend(
-                stormwater_records_from_overpass(
-                    payload,
-                    [subject],
-                    max_distance,
-                    query,
-                    collector,
-                    planned_at,
-                )
-            )
-        except Exception as error:
-            overpass_failures.append("{}: {}".format(subject["entity_id"], error))
-            logger.warning(
-                "Stormwater Overpass collection failed for %s: %s",
-                subject["entity_id"],
-                error,
-            )
-    if overpass_failures:
-        raise ValueError(
-            "stormwater Overpass was unavailable for {} of {} subjects: {}".format(
-                len(overpass_failures), len(subjects), "; ".join(overpass_failures[:5])
-            )
-        )
-    records = dedupe_spatial_records(records, "drain_id")
-    watermark_source = str(collector.get("source_id") or "openstreetmap_stormwater")
-    if not records:
-        watermark_source = "{}_empty".format(watermark_source)
-    watermarks = [
-        {
-            "source": watermark_source,
-            "high_watermark": "query_sha256:{};records={}".format(
-                hashlib.sha256(";".join(query_hashes).encode("utf-8")).hexdigest(),
-                len(records),
-            ),
-        }
-    ]
-    return {
-        "snapshot_date": snapshot_date,
-        "collection_status": "complete" if records else "complete_empty",
-        "records": records,
-        "source_watermarks": watermarks,
     }
 
 
@@ -783,29 +690,6 @@ out tags geom;
     ).strip()
 
 
-def stormwater_overpass_query(
-    bbox: Tuple[float, float, float, float],
-    waterway_values: List[str],
-    timeout_seconds: int,
-) -> str:
-    pattern = "|".join(sorted({value for value in waterway_values if value}))
-    south, west, north, east = bbox
-    return """
-[out:json][timeout:{timeout}];
-(
-  way["waterway"~"^({pattern})$"]({south:.7f},{west:.7f},{north:.7f},{east:.7f});
-);
-out tags geom;
-""".format(
-        timeout=timeout_seconds,
-        pattern=pattern or "drain|ditch|canal",
-        south=south,
-        west=west,
-        north=north,
-        east=east,
-    ).strip()
-
-
 def osm_power_records_from_overpass(
     payload: Dict[str, Any],
     subjects: List[Dict[str, Any]],
@@ -850,55 +734,6 @@ def osm_power_records_from_overpass(
                 }
             )
     return dedupe_spatial_records(records, "osm_id")
-
-
-def stormwater_records_from_overpass(
-    payload: Dict[str, Any],
-    subjects: List[Dict[str, Any]],
-    max_distance_meters: float,
-    query: str,
-    collector: Dict[str, Any],
-    planned_at: str,
-) -> List[Dict[str, Any]]:
-    records = []
-    for element in overpass_way_elements(payload):
-        tags = element_tags(element)
-        points = element_geometry_points(element)
-        if len(points) < 2:
-            continue
-        drain_type = stormwater_drain_type(tags, collector)
-        geometry_geojson = line_geojson(points)
-        drain_id = osm_element_id(element)
-        for subject in subjects:
-            distance_meters, closest = distance_from_subject_to_line(subject, points)
-            if distance_meters > max_distance_meters:
-                continue
-            records.append(
-                {
-                    "entity_id": subject["entity_id"],
-                    "project_key": optional_string(subject.get("project_key")),
-                    "query": subject_query(subject, "stormwater drain"),
-                    "drain_id": drain_id,
-                    "name": optional_string(tags.get("name") or tags.get("waterway")),
-                    "drain_type": drain_type,
-                    "hierarchy": stormwater_hierarchy(tags, collector),
-                    "distance_meters": distance_meters,
-                    "intersects_property": distance_meters <= 1.0,
-                    "subject_latitude": subject["latitude"],
-                    "subject_longitude": subject["longitude"],
-                    "latitude": closest["latitude"],
-                    "longitude": closest["longitude"],
-                    "geometry_geojson": geometry_geojson,
-                    "encroachment_record": optional_string(tags.get("encroachment")),
-                    "source_tags": tags,
-                    "source_url": osm_source_url(element),
-                    "source_type": str(collector.get("source_type") or "OpenStreetMap"),
-                    "confidence": float(collector.get("confidence") or 0.74),
-                    "fetched_at": planned_at,
-                    "fetch_source": str(collector.get("fetch_source") or "overpass_stormwater_snapshot"),
-                }
-            )
-    return dedupe_spatial_records(records, "drain_id")
 
 
 def geospatial_society_inputs(
@@ -1115,36 +950,6 @@ def voltage_kv_from_tag(value: Any) -> Optional[float]:
             voltage /= 1000.0
         voltages.append(voltage)
     return max(voltages) if voltages else None
-
-
-def stormwater_drain_type(tags: Dict[str, str], collector: Dict[str, Any]) -> str:
-    text = " ".join(
-        optional_string(tags.get(key)) or ""
-        for key in ("name", "waterway", "description", "local_name")
-    ).lower()
-    if any(marker in text for marker in optional_string_list(collector.get("rajakaluve_name_markers"))):
-        return "rajakaluve"
-    waterway = (optional_string(tags.get("waterway")) or "").lower()
-    if waterway in ("drain", "ditch"):
-        return "stormwater_drain"
-    if waterway == "canal":
-        return "primary_swd"
-    return "stormwater_drain"
-
-
-def stormwater_hierarchy(tags: Dict[str, str], collector: Dict[str, Any]) -> Optional[str]:
-    text = " ".join(
-        optional_string(tags.get(key)) or ""
-        for key in ("name", "description", "local_name")
-    ).lower()
-    for rule in collector.get("hierarchy_name_markers") or []:
-        if not isinstance(rule, dict):
-            continue
-        hierarchy = optional_string(rule.get("hierarchy"))
-        markers = optional_string_list(rule.get("markers"))
-        if hierarchy and any(marker in text for marker in markers):
-            return hierarchy
-    return None
 
 
 def padded_bbox(

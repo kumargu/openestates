@@ -1715,7 +1715,7 @@ mod tests {
 
     #[test]
     fn relation_targets_stop_before_exclusion_boundaries() {
-        let query = "3bhk near Marathahalli but away from a stormwater drain";
+        let query = "3bhk near Marathahalli but away from a transmission line";
         let slots = parse_query_slots(query);
         let tokens = query_tokens(query);
         let targets = slots

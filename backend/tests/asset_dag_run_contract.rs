@@ -519,15 +519,6 @@ async fn dag_plan_fans_all_current_support_partitions_into_society_gold_lineage(
         AssetPartition::global(),
     );
     write_current(&materializations, &osm_power_line_facts).await;
-    let stormwater_drain_facts = materialization_in_partition(
-        "stormwater_drain_facts",
-        AssetStage::Silver,
-        "2026-07-13",
-        vec![canonical.materialization_id.clone()],
-        now,
-        AssetPartition::global(),
-    );
-    write_current(&materializations, &stormwater_drain_facts).await;
     let rera_project_plan_frames = materialization_in_partition(
         "rera_project_plan_frames",
         AssetStage::Silver,
@@ -558,7 +549,6 @@ async fn dag_plan_fans_all_current_support_partitions_into_society_gold_lineage(
             locality_boundary_facts.materialization_id.clone(),
             osm_society_access_facts.materialization_id.clone(),
             osm_power_line_facts.materialization_id.clone(),
-            stormwater_drain_facts.materialization_id.clone(),
         ],
         now,
         AssetPartition::new([("society", "fixture-society")]),

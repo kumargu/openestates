@@ -350,22 +350,13 @@ mod tests {
         assert!(config
             .categories
             .iter()
-            .any(|category| category.fact_key == "nearby_breweries"));
-        let stormwater = config
-            .categories
-            .iter()
-            .find(|category| category.fact_key == "stormwater_drain_nearby")
-            .expect("stormwater should be a serving place category");
-        assert_eq!(stormwater.collection_sources, ["openstreetmap"]);
-        assert_eq!(stormwater.relation_class, "risk_externality");
-        assert!(!stormwater.chainable);
+            .any(|category| category.fact_key == "nearby_schools"));
     }
 
     #[test]
     fn query_category_lookup_is_config_driven() {
-        let requested = requested_nearby_place_categories("walkable gym and brewery nearby");
+        let requested = requested_nearby_place_categories("walkable gym nearby");
         assert!(requested.contains(&"nearby_fitness"));
-        assert!(requested.contains(&"nearby_breweries"));
         assert!(requested_nearby_place_categories("nearby").is_empty());
         assert!(requested_nearby_place_categories("clinic nearby").contains(&"nearby_hospitals"));
         assert!(requested_nearby_place_categories("purple line access")
@@ -393,10 +384,6 @@ mod tests {
         assert!(nearby_place_fact_key_matches_category(
             "nearby_metro_stations",
             "subway-station"
-        ));
-        assert!(nearby_place_fact_key_matches_category(
-            "stormwater_drain_nearby",
-            "stormwater-drain"
         ));
         assert!(!nearby_place_fact_key_matches_category(
             "nearby_public_parks",

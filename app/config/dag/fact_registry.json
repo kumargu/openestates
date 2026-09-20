@@ -29,8 +29,6 @@
       "lake_within_250m",
       "high_voltage_transmission_line_nearby",
       "high_voltage_transmission_line_place_entity",
-      "stormwater_drain_nearby",
-      "stormwater_drain_place_entity",
       "rajakaluve_nearby",
       "rajakaluve_encroachment_record"
     ],
@@ -2514,24 +2512,6 @@
         "weight": 1.0
       },
       {
-        "rank": 12,
-        "patterns": [
-          "rajakaluve",
-          "stormwater drain",
-          "storm water drain",
-          "swd",
-          "drain encroachment"
-        ],
-        "label": "stormwater drain nearby",
-        "expanded_keys": [
-          "stormwater_drain_nearby",
-          "rajakaluve_nearby",
-          "rajakaluve_encroachment_record",
-          "surroundings_signal"
-        ],
-        "weight": 1.0
-      },
-      {
         "rank": 13,
         "patterns": [
           "graveyard",
@@ -4988,12 +4968,10 @@
       ],
       "enrichment_terms": [
         "rajakaluve",
-        "storm drain",
-        "stormwater drain"
+        "storm drain"
       ],
       "answers_preferences": [
-        "rajakaluve",
-        "stormwater"
+        "rajakaluve"
       ],
       "never_default": true,
       "source_types": [
@@ -7232,66 +7210,6 @@
       }
     },
     {
-      "fact_key": "stormwater_drain_nearby",
-      "bucket": "externalities",
-      "label": "stormwater drain nearby",
-      "lens": "risk",
-      "polarity": "concern",
-      "scopes": [
-        "society"
-      ],
-      "enrichment_terms": [
-        "stormwater drain",
-        "storm water drain",
-        "swd"
-      ],
-      "answers_preferences": [
-        "stormwater drain",
-        "swd",
-        "flooding risk",
-        "red flag"
-      ],
-      "never_default": true,
-      "source_types": [
-        "OpenCity",
-        "Manual"
-      ],
-      "display_template": "stormwater drain nearby: {value}",
-      "scoring_hint": {
-        "direction": "text_match",
-        "weight": 1.2
-      }
-    },
-    {
-      "fact_key": "stormwater_drain_place_entity",
-      "bucket": "externalities",
-      "label": "stormwater drain map entity",
-      "lens": "proof",
-      "polarity": "neutral",
-      "scopes": [
-        "society"
-      ],
-      "enrichment_terms": [
-        "stormwater drain",
-        "map overlay"
-      ],
-      "answers_preferences": [
-        "map overlay",
-        "geometry",
-        "red flag"
-      ],
-      "never_default": true,
-      "source_types": [
-        "OpenCity",
-        "Manual"
-      ],
-      "display_template": "stormwater drain map entity: {value}",
-      "scoring_hint": {
-        "direction": "text_match",
-        "weight": 0.0
-      }
-    },
-    {
       "fact_key": "rajakaluve_nearby",
       "bucket": "externalities",
       "label": "Rajakaluve nearby",
@@ -7301,12 +7219,10 @@
         "society"
       ],
       "enrichment_terms": [
-        "rajakaluve",
-        "stormwater drain"
+        "rajakaluve"
       ],
       "answers_preferences": [
         "rajakaluve",
-        "stormwater drain",
         "red flag"
       ],
       "never_default": true,
@@ -8152,7 +8068,7 @@
       }
     }
   ],
-  "fact_count": 142,
+  "fact_count": 139,
   "excluded_search_fact_keys": [
     "google_review_cards",
     "google_review_snippets"

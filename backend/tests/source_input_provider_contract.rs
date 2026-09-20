@@ -43,7 +43,6 @@ async fn scoped_dag_skips_failed_optional_source_branches_without_losing_gold() 
         "osm_locality_boundary_facts",
         "osm_society_access_facts",
         "osm_power_line_facts",
-        "stormwater_drain_facts",
     ];
     let source_failures = failed_sources
         .iter()

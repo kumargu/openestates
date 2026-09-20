@@ -30,10 +30,6 @@ THEME_QUERIES = {
         "bengaluru groundwater potential",
         "groundwater bengaluru",
     ],
-    "stormwater_drains": [
-        "bengaluru stormwater drains",
-        "rajakaluve bengaluru",
-    ],
     "lakes_wetlands": [
         "bengaluru lakes wetlands",
         "bengaluru lake boundary",
@@ -55,9 +51,6 @@ THEME_QUERIES = {
 THEME_FILTERS = {
     "groundwater_potential": {
         "include_any": ["groundwater", "aquifer", "borewell"],
-    },
-    "stormwater_drains": {
-        "include_any": ["stormwater", "storm water", "drain", "rajakaluve", "nalla"],
     },
     "lakes_wetlands": {
         "include_any": ["lake", "wetland", "water body", "waterbody"],
