@@ -1285,7 +1285,13 @@ fn producer_hash(root: &Path) -> Result<String, CatalogError> {
         "app/config/dag/asset_registry.json",
         "app/config/dag/nearby_place_categories.json",
         "app/config/dag/fact_registry.json",
+        "app/config/dag/osm_access_corridors.json",
+        "app/config/dag/osm_power_infrastructure.json",
+        "app/config/dag/source_adapters/overpass_transport.json",
         "pipeline/collect_asset_sources.py",
+        "pipeline/sources/osm_access_corridors.py",
+        "pipeline/sources/overpass_transport.py",
+        "pipeline/sources/request_pipeline.py",
     ] {
         digest.update(path.as_bytes());
         digest.update(std::fs::read(root.join(path)).map_err(LakeError::Io)?);

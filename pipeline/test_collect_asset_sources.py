@@ -1313,7 +1313,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
         def fetch(_url, query):
             calls.append(query)
             if len(calls) == 1:
-                raise TimeoutError("combined query timed out")
+                raise ValueError("combined query was too broad")
             return overpass
 
         output = collect_osm_power_infrastructure(
@@ -1346,7 +1346,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         def fetch(_url, _query):
             calls.append(True)
-            raise TimeoutError("overpass unavailable")
+            raise ValueError("overpass response was unusable")
 
         with self.assertRaisesRegex(ValueError, "failed for 2 of 2 subjects"):
             collect_osm_power_infrastructure(

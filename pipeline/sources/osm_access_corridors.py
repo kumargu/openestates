@@ -9,6 +9,8 @@ import math
 import re
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
+from pipeline.sources.overpass_transport import OverpassTransport
+
 Coordinate = Tuple[float, float]
 
 
@@ -29,6 +31,7 @@ def collect_society_access_records(
     boundary_geometry_tag_keys = _string_list(
         collector.get("boundary_geometry_tag_keys")
     )
+    tasks = []
     for subject in subjects:
         query = society_access_overpass_query(
             _padded_bbox([subject], padding_meters),
@@ -37,10 +40,17 @@ def collect_society_access_records(
             timeout_seconds,
         )
         query_hashes.append(hashlib.sha256(query.encode("utf-8")).hexdigest())
+        tasks.append((subject, query))
+
+    transport = OverpassTransport(fetch, collector.get("transport_policy"))
+    outcomes = transport.map_requests(source_url, [query for _, query in tasks])
+    for (subject, query), outcome in zip(tasks, outcomes):
         try:
+            if outcome.error is not None:
+                raise outcome.error
             record = society_access_record(
                 subject,
-                fetch(source_url, query),
+                outcome.value or {},
                 query,
                 collector,
                 planned_at,

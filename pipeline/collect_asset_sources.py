@@ -20,7 +20,6 @@ from html import unescape
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from pipeline.skills.fetch_rera import (
@@ -50,6 +49,10 @@ from pipeline.skills.rera_document_intelligence import (
     canonical_rera_society_entity_id,
 )
 from pipeline.sources.osm_access_corridors import collect_society_access_records
+from pipeline.sources.overpass_transport import (
+    OverpassTransport,
+    fetch_overpass_json_once as fetch_overpass_json,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -301,10 +304,11 @@ def collect_asset_sources(
         try:
             from pipeline.sources.osm_locality_boundaries import collect_locality_boundaries
 
+            overpass = OverpassTransport(fetch_overpass_json)
             output["osm_locality_boundaries"] = collect_locality_boundaries(
                 snapshot_date,
                 os.environ.get("OPENESTATES_OVERPASS_API_URL") or OVERPASS_API_URL,
-                fetch_overpass_json,
+                overpass.request,
             )
         except Exception as error:
             record_source_failure(source_failures, [OSM_LOCALITY_BOUNDARY_FACTS], error)
@@ -379,7 +383,9 @@ def collect_bengaluru_metro_stations(
         os.environ.get("OPENESTATES_BENGALURU_METRO_OVERPASS_QUERY")
         or BENGALURU_METRO_OVERPASS_QUERY
     )
-    payload = (fetch or fetch_overpass_json)(source_url, query)
+    payload = OverpassTransport(fetch or fetch_overpass_json).request(
+        source_url, query
+    )
     stations = bengaluru_metro_stations_from_overpass(payload)
     if not stations:
         raise ValueError("Overpass payload produced zero usable Bengaluru metro stations")
@@ -400,30 +406,6 @@ def collect_bengaluru_metro_stations(
             },
         ],
     }
-
-
-def fetch_overpass_json(url: str, query: str) -> Dict[str, Any]:
-    for attempt in range(1, 4):
-        request = Request(
-            url,
-            data=urlencode({"data": query}).encode("utf-8"),
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
-                "User-Agent": "OpenEstates DAG source collector",
-            },
-            method="POST",
-        )
-        try:
-            with urlopen(request, timeout=45) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except HTTPError as error:
-            if attempt >= 3 or error.code not in (429, 500, 502, 503, 504):
-                raise
-        except URLError:
-            if attempt >= 3:
-                raise
-        time.sleep(float(attempt * 2))
-    raise RuntimeError("Overpass request exhausted retries")
 
 
 def collect_osm_power_infrastructure(
@@ -553,8 +535,9 @@ def collect_osm_power_records_from_overpass(
         query_timeout,
     )
     query_hashes.append(hashlib.sha256(combined_query.encode("utf-8")).hexdigest())
+    transport = OverpassTransport(fetch, collector.get("transport_policy"))
     try:
-        payload = fetch(source_url, combined_query)
+        payload = transport.request(source_url, combined_query)
         records = osm_power_records_from_overpass(
             payload,
             subjects,
@@ -571,6 +554,7 @@ def collect_osm_power_records_from_overpass(
 
     records = []
     failures = []
+    tasks = []
     for subject in subjects:
         query = osm_power_overpass_query(
             padded_bbox([subject], max_distance_meters + bbox_padding),
@@ -579,11 +563,16 @@ def collect_osm_power_records_from_overpass(
             query_timeout,
         )
         query_hashes.append(hashlib.sha256(query.encode("utf-8")).hexdigest())
+        tasks.append((subject, query))
+
+    outcomes = transport.map_requests(source_url, [query for _, query in tasks])
+    for (subject, query), outcome in zip(tasks, outcomes):
         try:
-            payload = fetch_overpass_with_retries(fetch, source_url, query, collector)
+            if outcome.error is not None:
+                raise outcome.error
             records.extend(
                 osm_power_records_from_overpass(
-                    payload,
+                    outcome.value or {},
                     [subject],
                     max_distance_meters,
                     query,
@@ -610,51 +599,6 @@ def collect_osm_power_records_from_overpass(
             )
         )
     return dedupe_spatial_records(records, "osm_id"), query_hashes
-
-
-def fetch_overpass_with_retries(
-    fetch: Callable[[str, str], Dict[str, Any]],
-    source_url: str,
-    query: str,
-    collector: Dict[str, Any],
-) -> Dict[str, Any]:
-    retry_count = max(0, int(collector.get("subject_query_retry_count") or 0))
-    retry_delay_seconds = max(0.0, float(collector.get("subject_query_retry_delay_seconds") or 0.0))
-    retry_status_codes = {
-        int(code)
-        for code in (collector.get("retry_status_codes") or [])
-        if str(code).strip().isdigit()
-    }
-    attempt = 0
-    while True:
-        try:
-            return fetch(source_url, query)
-        except Exception as error:
-            if attempt >= retry_count or not overpass_error_is_retryable(error, retry_status_codes):
-                raise
-            attempt += 1
-            delay = retry_after_seconds(error) or retry_delay_seconds
-            if delay > 0.0:
-                time.sleep(delay)
-
-
-def overpass_error_is_retryable(error: Exception, retry_status_codes: set) -> bool:
-    if isinstance(error, HTTPError):
-        return error.code in retry_status_codes
-    return False
-
-
-def retry_after_seconds(error: Exception) -> Optional[float]:
-    if not isinstance(error, HTTPError):
-        return None
-    header = error.headers.get("Retry-After") if error.headers else None
-    try:
-        value = float(header) if header else None
-    except ValueError:
-        return None
-    if value is None or value < 0.0:
-        return None
-    return value
 
 
 def osm_power_overpass_query(

@@ -11,9 +11,6 @@
     "bbox_padding_meters": 500.0,
     "fallback_to_subject_queries": true,
     "allow_partial_subject_failures": false,
-    "subject_query_retry_count": 2,
-    "subject_query_retry_delay_seconds": 20.0,
-    "retry_status_codes": [429, 504],
     "confidence": 0.82,
     "voltage_query_values": ["66000", "110000", "132000", "220000", "400000", "765000"]
   },
