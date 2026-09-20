@@ -147,6 +147,15 @@ def society_access_record(
             boundary_way_id=boundary[0],
             boundary_geometry_geojson=boundary[2],
         )
+    if road:
+        width_raw = _optional_string(road["tags"].get("width"))
+        width_meters = _osm_width_meters(width_raw)
+        if width_meters is not None:
+            record.update(
+                road_width_meters=width_meters,
+                road_width_raw=width_raw,
+                road_width_way_id=road["id"],
+            )
     route = _entrance_bound_route(roads, road, entrance, collector) if road and entrance else None
     if road and route:
         bounded, direction = route
@@ -204,6 +213,26 @@ def _eligible_roads(payload: Dict[str, Any], collector: Dict[str, Any]) -> List[
         )
         roads.append({"id": str(element.get("id") or ""), "name": name, "points": points, "tags": tags})
     return roads
+
+
+def _osm_width_meters(value: Optional[str]) -> Optional[float]:
+    """Parse only explicit OSM widths expressed in meters.
+
+    OSM treats a bare numeric ``width`` value as meters. Ranges, approximate
+    values, lane counts, and non-metric units stay absent rather than becoming
+    an invented buyer fact.
+    """
+    if value is None:
+        return None
+    match = re.fullmatch(
+        r"\s*([0-9]+(?:\.[0-9]+)?)\s*(?:m|met(?:er|re)s?)?\s*",
+        value,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return None
+    width = float(match.group(1))
+    return width if 0.0 < width <= 100.0 else None
 
 
 def _select_frontage_road(

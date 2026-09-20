@@ -1,6 +1,6 @@
 {
-  "version": 4,
-  "description": "Society-centric OpenStreetMap boundaries, explicit entrances and sourced public approach corridors.",
+  "version": 5,
+  "description": "Society-centric OpenStreetMap boundaries, explicit entrances, sourced public approach corridors, and optional directly tagged frontage-road width.",
   "collector": {
     "source_id": "openstreetmap_society_access",
     "source_type": "OpenStreetMap",
@@ -38,6 +38,9 @@
     "association_fact_key": "road.association_method",
     "source_geometry_fact_key": "road.source_geometry_geojson",
     "corridor_length_fact_key": "road.corridor_length_m"
+  },
+  "road_width": {
+    "fact_key": "road_width"
   },
   "entrance": {
     "linked_entity_fact_key": "society.entrance_entity",
