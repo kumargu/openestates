@@ -1124,12 +1124,7 @@ fn merge_catalog_records(snapshots: Vec<CatalogRecords>) -> Result<CatalogRecord
     let mut rera_evidence = BTreeMap::<String, ServingReraEvidenceRecord>::new();
     for snapshot in snapshots {
         for entity in snapshot.entities {
-            merge_record(
-                &mut entities,
-                entity.entity_id.clone(),
-                entity,
-                "entity identity",
-            )?;
+            merge_entity_record(&mut entities, entity)?;
         }
         for fact in snapshot.facts {
             let key = serde_json::to_string(&fact)?;
@@ -1162,6 +1157,33 @@ fn merge_catalog_records(snapshots: Vec<CatalogRecords>) -> Result<CatalogRecord
         edges: edges.into_values().collect(),
         rera_evidence: rera_evidence.into_values().collect(),
     })
+}
+
+fn merge_entity_record(
+    entities: &mut BTreeMap<String, ServingEntityRecord>,
+    entity: ServingEntityRecord,
+) -> Result<(), CatalogError> {
+    let Some(existing) = entities.get_mut(&entity.entity_id) else {
+        entities.insert(entity.entity_id.clone(), entity);
+        return Ok(());
+    };
+    if existing.entity_type != entity.entity_type
+        || existing.name != entity.name
+        || existing.root_source != entity.root_source
+        || existing.visibility != entity.visibility
+    {
+        return Err(CatalogError::Invalid(format!(
+            "contradictory entity identity rows for {}",
+            entity.entity_id
+        )));
+    }
+    let terms = existing
+        .searchable_text
+        .split_whitespace()
+        .chain(entity.searchable_text.split_whitespace())
+        .collect::<BTreeSet<_>>();
+    existing.searchable_text = terms.into_iter().collect::<Vec<_>>().join(" ");
+    Ok(())
 }
 
 fn merge_record<T: PartialEq>(
@@ -1882,5 +1904,29 @@ mod tests {
             .entities
             .iter()
             .any(|entity| entity.entity_id == "area:market:whitefield"));
+    }
+
+    #[test]
+    fn catalog_merge_combines_search_text_for_the_same_place_identity() {
+        let mut first = CatalogRecords::default();
+        first.entities.push(ServingEntityRecord {
+            entity_id: "place:google:shared".to_string(),
+            entity_type: "place".to_string(),
+            name: "Shared Park".to_string(),
+            root_source: Some("google".to_string()),
+            visibility: ServingEntityVisibility::Searchable,
+            searchable_text: "Shared Park google_review_count 100".to_string(),
+        });
+        let mut second = first.clone();
+        second.entities[0].searchable_text =
+            "Shared Park google_review_count 101 place.category park".to_string();
+
+        let merged = merge_catalog_records(vec![first, second]).unwrap();
+
+        assert_eq!(merged.entities.len(), 1);
+        assert_eq!(
+            merged.entities[0].searchable_text,
+            "100 101 Park Shared google_review_count park place.category"
+        );
     }
 }
