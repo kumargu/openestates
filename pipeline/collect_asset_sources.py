@@ -161,7 +161,7 @@ RERA_DETAIL_RECEIPT_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "re
 RERA_REGULATORY_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_records"
 RERA_REGULATORY_LIST_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_lists"
 RERA_REGULATORY_DOCUMENT_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_documents"
-RERA_REGULATORY_CACHE_VERSION = "rera_regulatory_cache.v1"
+RERA_REGULATORY_CACHE_VERSION = "rera_regulatory_cache.v2"
 GROUNDWATER_KML_URL = (
     "https://data.opencity.in/dataset/035c1d40-8f4e-4780-90c5-ff1ce2281849/"
     "resource/d3ae3603-d786-4782-ae71-a034ad4ebc0b/download/"
@@ -2478,11 +2478,7 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
             body = bytes.fromhex(str(receipt.get("body_hex") or ""))
             key = (
                 rera_receipt_id(body),
-                rera_capture_id(
-                    rera_receipt_id(body),
-                    str(receipt.get("source_url") or ""),
-                    str(receipt.get("captured_at") or ""),
-                ),
+                rera_capture_id(rera_receipt_id(body), str(receipt.get("source_url") or "")),
             )
             if key in regulatory_receipt_keys:
                 continue
@@ -2528,13 +2524,7 @@ def collect_rera_source_records(request: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("K-RERA listing raw receipt is empty")
 
     receipt_id = "rera_receipt:sha256:{}".format(hashlib.sha256(body).hexdigest())
-    capture_observed_at = observed_at[:-1] + "+00:00" if observed_at.endswith("Z") else observed_at
-    capture_material = "rera_capture.v1\n{}\n{}\n{}".format(
-        receipt_id, LISTING_URL, capture_observed_at
-    )
-    capture_id = "rera_capture:sha256:{}".format(
-        hashlib.sha256(capture_material.encode("utf-8")).hexdigest()
-    )
+    capture_id = rera_capture_id(receipt_id, LISTING_URL)
     listing_text = body.decode("utf-8", errors="replace")
     arrays = {}
     for suffix in ("", "2", "3", "4"):
@@ -2649,15 +2639,8 @@ def rera_receipt_id(body: bytes) -> str:
     return "rera_receipt:sha256:{}".format(hashlib.sha256(body).hexdigest())
 
 
-def rera_capture_id(receipt_id: str, source_url: str, captured_at: str) -> str:
-    parsed = datetime.fromisoformat(str(captured_at).replace("Z", "+00:00"))
-    if parsed.microsecond == 0:
-        timestamp = parsed.isoformat(timespec="seconds")
-    elif parsed.microsecond % 1000 == 0:
-        timestamp = parsed.isoformat(timespec="milliseconds")
-    else:
-        timestamp = parsed.isoformat(timespec="microseconds")
-    material = "rera_capture.v1\n{}\n{}\n{}".format(receipt_id, source_url, timestamp)
+def rera_capture_id(receipt_id: str, source_url: str) -> str:
+    material = "rera_capture.v2\n{}\n{}".format(receipt_id, source_url)
     return "rera_capture:sha256:{}".format(
         hashlib.sha256(material.encode("utf-8")).hexdigest()
     )
@@ -2975,7 +2958,7 @@ def capture_scoped_rera_regulatory_payloads(
         )
         compressed_body = gzip.compress(body, compresslevel=9, mtime=0)
         receipt_id = rera_receipt_id(compressed_body)
-        capture_id = rera_capture_id(receipt_id, source_url, checked_at)
+        capture_id = rera_capture_id(receipt_id, source_url)
         captures.append(
             {
                 "config": list_config,
@@ -3049,11 +3032,7 @@ def capture_scoped_rera_regulatory_payloads(
                 )
                 downloaded_documents[candidate.document_url] = document_body
             document_receipt_id = rera_receipt_id(document_body)
-            document_capture_id = rera_capture_id(
-                document_receipt_id,
-                candidate.document_url,
-                checked_at,
-            )
+            document_capture_id = rera_capture_id(document_receipt_id, candidate.document_url)
             parent_capture = next(
                 capture
                 for capture in captures
@@ -3179,11 +3158,7 @@ def load_scoped_rera_regulatory_payloads(request: Dict[str, Any]) -> List[Dict[s
             receipt_keys.add(
                 (
                     receipt_id,
-                    rera_capture_id(
-                        receipt_id,
-                        str(receipt.get("source_url") or ""),
-                        str(receipt.get("captured_at") or ""),
-                    ),
+                    rera_capture_id(receipt_id, str(receipt.get("source_url") or "")),
                 )
             )
             normalized_receipts.append(receipt)
@@ -3389,7 +3364,7 @@ def rera_square_metres(value: str) -> Optional[float]:
 def project_detail_receipt_ids(snapshot: Dict[str, Any]) -> Tuple[str, str]:
     body = bytes.fromhex(snapshot["body_hex"])
     receipt_id = rera_receipt_id(body)
-    return receipt_id, rera_capture_id(receipt_id, snapshot["source_url"], snapshot["captured_at"])
+    return receipt_id, rera_capture_id(receipt_id, snapshot["source_url"])
 
 
 def rera_declared_inventory_rows(detail_html: str) -> List[Dict[str, Any]]:
