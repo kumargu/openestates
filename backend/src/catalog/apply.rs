@@ -35,8 +35,19 @@ pub struct CatalogApplyReport {
     pub collected_assets: Vec<String>,
     pub reused_assets: Vec<String>,
     pub failed_assets: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<CatalogSkippedSociety>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_ledger: Option<ArtifactRef>,
     pub collection_ms: u64,
     pub assembly_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CatalogSkippedSociety {
+    pub society_id: String,
+    pub reason: String,
+    pub retryable: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -487,12 +498,12 @@ impl CatalogStore {
                     })
                     .cloned();
                 if !operation.societies.contains_key(&id) {
-                    let (inputs, pins, input_lineage) = if let Some(entry) = &prior {
+                    let (inputs, pins, input_lineage, error) = if let Some(entry) = &prior {
                         let (manifest, records) = self.read_snapshot(entry).await?;
-                        let mut pins = if manifest.materializations.is_empty()
+                        let lineage_required = manifest.materializations.is_empty()
                             && (!change.refresh_modules.is_empty()
-                                || !request.shared_refresh_modules.is_empty())
-                        {
+                                || !request.shared_refresh_modules.is_empty());
+                        let mut pins = if lineage_required {
                             self.recover_snapshot_lineage(entry, &records).await?
                         } else {
                             manifest.materializations
@@ -507,9 +518,11 @@ impl CatalogStore {
                                     .get(record.asset_id.as_str())
                                     .is_some_and(|collector| collector.scope == "shared")
                         });
-                        (inputs, pins, manifest.input_lineage)
+                        let error = (lineage_required && pins.is_empty())
+                            .then(|| "no recoverable collection lineage".to_string());
+                        (inputs, pins, manifest.input_lineage, error)
                     } else {
-                        (BTreeMap::new(), Vec::new(), BTreeMap::new())
+                        (BTreeMap::new(), Vec::new(), BTreeMap::new(), None)
                     };
                     operation.societies.insert(
                         id.clone(),
@@ -520,12 +533,15 @@ impl CatalogStore {
                             input_lineage,
                             run_id: MaterializationId::new(),
                             snapshot: None,
-                            error: None,
+                            error,
                         },
                     );
                     self.save_operation(&key, &mut operation).await?;
                 }
                 let mut work = operation.societies[&id].clone();
+                if work.error.is_some() {
+                    continue;
+                }
                 let registry = openestates_registry();
                 work.pins.retain(|record| {
                     registry.get(&record.asset_id).is_some()
@@ -889,12 +905,19 @@ impl CatalogStore {
                 collected_assets: Vec::new(),
                 reused_assets: Vec::new(),
                 failed_assets: BTreeMap::new(),
+                skipped: Vec::new(),
+                failure_ledger: None,
                 collection_ms: operation.collection_ms,
                 assembly_ms: started.elapsed().as_millis() as u64,
             };
             for (id, work) in &operation.societies {
                 if let Some(error) = &work.error {
                     report.publication.warnings.push(format!("{id}: {error}"));
+                    report.skipped.push(CatalogSkippedSociety {
+                        society_id: id.clone(),
+                        reason: error.clone(),
+                        retryable: false,
+                    });
                 }
                 let previous = operation.roster.societies.iter().find(|entry| {
                     !seed_identities(&entry.seed).is_disjoint(&seed_identities(&work.seed))
@@ -969,6 +992,7 @@ impl CatalogStore {
             }
             report.reused_assets.sort();
             report.reused_assets.dedup();
+            report.failure_ledger = self.persist_failure_ledger(&operation, &report).await?;
             operation.report = Some(report);
             operation.generation = Some(generation);
             self.save_operation(&key, &mut operation).await?;
@@ -1162,6 +1186,126 @@ impl CatalogStore {
             .await?;
         Ok(self.lake.get_json(&key).await?)
     }
+
+    async fn persist_failure_ledger(
+        &self,
+        operation: &Operation,
+        report: &CatalogApplyReport,
+    ) -> Result<Option<ArtifactRef>, CatalogError> {
+        use super::failure_ledger::{write_catalog_failures_parquet, CatalogFailureRecord};
+
+        let recorded_at = Utc::now().to_rfc3339();
+        let base_revision = operation.base.as_ref().map(|pointer| pointer.revision);
+        let mut records = Vec::new();
+        for (collection_id, collection) in &operation.collections {
+            let Some(message) = &collection.error else {
+                continue;
+            };
+            let (scope, asset_id) = collection_id
+                .split_once('/')
+                .unwrap_or((collection_id.as_str(), "unknown"));
+            let society_id = (scope != "shared").then(|| scope.to_string());
+            let (error_code, retryable) = collection_failure_class(message);
+            let disposition = failure_disposition(report, society_id.as_deref());
+            let identity = format!(
+                "{}\0{}\0{}\0{}\0{}",
+                operation.request.operation_id, scope, asset_id, error_code, message
+            );
+            records.push(CatalogFailureRecord {
+                failure_id: digest(identity.as_bytes()),
+                operation_id: operation.request.operation_id.clone(),
+                base_revision,
+                published_revision: report.publication.revision,
+                scope: scope.to_string(),
+                society_id,
+                asset_id: Some(asset_id.to_string()),
+                stage: "collection".to_string(),
+                error_code: error_code.to_string(),
+                message: message.clone(),
+                disposition,
+                retryable,
+                producer_hash: operation.producer_hash.clone(),
+                context_json: serde_json::to_string(collection)?,
+                recorded_at: recorded_at.clone(),
+            });
+        }
+        for (society_id, work) in &operation.societies {
+            let Some(message) = &work.error else {
+                continue;
+            };
+            let (stage, error_code, retryable) = society_failure_class(message);
+            let identity = format!(
+                "{}\0{}\0{}\0{}",
+                operation.request.operation_id, society_id, error_code, message
+            );
+            records.push(CatalogFailureRecord {
+                failure_id: digest(identity.as_bytes()),
+                operation_id: operation.request.operation_id.clone(),
+                base_revision,
+                published_revision: report.publication.revision,
+                scope: society_id.clone(),
+                society_id: Some(society_id.clone()),
+                asset_id: None,
+                stage: stage.to_string(),
+                error_code: error_code.to_string(),
+                message: message.clone(),
+                disposition: failure_disposition(report, Some(society_id)),
+                retryable,
+                producer_hash: operation.producer_hash.clone(),
+                context_json: serde_json::to_string(work)?,
+                recorded_at: recorded_at.clone(),
+            });
+        }
+        if records.is_empty() {
+            return Ok(None);
+        }
+        records.sort_by(|left, right| left.failure_id.cmp(&right.failure_id));
+        let key = LakeKey::new(format!(
+            "diagnostics/catalog_failures/operation={}/part-00000.parquet",
+            operation.request.operation_id
+        ))?;
+        let metadata = self
+            .lake
+            .put_bytes(&key, write_catalog_failures_parquet(&records)?)
+            .await?;
+        Ok(Some(ArtifactRef::parquet(metadata)))
+    }
+}
+
+fn collection_failure_class(message: &str) -> (&'static str, bool) {
+    if message.starts_with("required collector input ") {
+        ("missing_prerequisite", false)
+    } else if message.starts_with("collector returned no ") {
+        ("collector_contract_error", false)
+    } else {
+        ("source_collection_failure", true)
+    }
+}
+
+fn society_failure_class(message: &str) -> (&'static str, &'static str, bool) {
+    match message {
+        "no recoverable collection lineage" => (
+            "lineage_recovery",
+            "no_recoverable_collection_lineage",
+            false,
+        ),
+        "required source evidence unavailable" => (
+            "snapshot_precondition",
+            "required_source_evidence_unavailable",
+            false,
+        ),
+        _ => ("snapshot", "society_snapshot_failure", false),
+    }
+}
+
+fn failure_disposition(report: &CatalogApplyReport, society_id: Option<&str>) -> String {
+    match society_id {
+        Some(id) if report.retained.iter().any(|retained| retained == id) => "retained",
+        Some(id) if report.omitted.iter().any(|omitted| omitted == id) => "omitted",
+        Some(_) => "skipped",
+        None => "shared_unavailable",
+    }
+    .to_string()
 }
 
 fn validate_request(
@@ -1288,6 +1432,8 @@ fn producer_hash(root: &Path) -> Result<String, CatalogError> {
         "app/config/dag/osm_access_corridors.json",
         "app/config/dag/osm_power_infrastructure.json",
         "app/config/dag/source_adapters/overpass_transport.json",
+        "backend/src/catalog/apply.rs",
+        "backend/src/catalog/failure_ledger.rs",
         "pipeline/collect_asset_sources.py",
         "pipeline/sources/osm_access_corridors.py",
         "pipeline/sources/overpass_transport.py",

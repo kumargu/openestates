@@ -31,17 +31,15 @@ stores a roster that pins the exact gold snapshots used by that bundle.
 
 ```bash
 cd backend
-cargo run --bin openestates-catalog -- add <society-seed.json>
-cargo run --bin openestates-catalog -- remove <society-id>
-cargo run --bin openestates-catalog -- rebuild
+cargo run --bin openestates-catalog -- apply <request.json>
 cargo run --bin openestates-catalog -- undo
 ```
 
-- `add` is an upsert and atomically replaces a matching RERA/runtime identity.
-- `remove` omits the society from the next generation.
-- `rebuild` recollects every seed in the authoritative roster, then rebuilds
-  global topology and proximity while assembling the new bundle. It does not
-  use old society gold or serving output.
+- `apply` accepts one operation ID, society upserts/removals, and selected
+  society or shared refresh modules. Repeating the same operation resumes saved
+  work or returns the completed report.
+- An empty change list rebuilds the bundle from pinned inputs without network
+  collection.
 - `undo` swaps current and previous generations.
 
 Every mutating command builds and validates first, then compare-and-swaps the
@@ -56,6 +54,21 @@ property entity linked to zero or multiple societies, an empty catalog, or a
 failed operation. Missing optional enrichment and serving quarantines are
 warnings. Geographic search continues to fail closed when topology evidence
 is unavailable.
+
+An existing society whose legacy snapshot has no recoverable asset lineage is
+retained and reported in `skipped`; collection is not started for that society.
+Every collection failure and skipped society is also written to immutable
+Parquet at:
+
+```text
+diagnostics/catalog_failures/operation=<operation_id>/part-00000.parquet
+```
+
+The apply report pins that artifact by key, size, and hash. Rows contain a
+stable failure ID, catalog revisions, society and asset scope, stage, error
+code, retryability, disposition, producer hash, and serialized operation
+context. This ledger is operational evidence for automated diagnosis and retry;
+it never contributes buyer facts, ranking, or serving output.
 
 The bundle validator verifies hashes, row counts, typed Parquet schemas,
 Tantivy artifacts, projected properties, eligibility, evidence relations, and

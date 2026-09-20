@@ -41,7 +41,8 @@ use crate::{
 };
 
 mod apply;
-pub use apply::{CatalogApplyReport, CatalogApplyRequest, CatalogUpsert};
+mod failure_ledger;
+pub use apply::{CatalogApplyReport, CatalogApplyRequest, CatalogSkippedSociety, CatalogUpsert};
 
 pub const CATALOG_FORMAT_VERSION: u32 = 1;
 const CATALOG_MAX_SOURCE_STDOUT_BYTES: usize = 512 * 1024 * 1024;
@@ -1561,6 +1562,9 @@ mod tests {
     use super::*;
     use crate::knowledge::FactValue;
     use crate::serving::ServingEntityVisibility;
+    use arrow::array::{Array, StringArray};
+    use bytes::Bytes;
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use std::sync::{Arc, Mutex};
     use tempfile::tempdir;
 
@@ -2129,13 +2133,23 @@ mod tests {
     async fn failed_refresh_preserves_the_compatible_prior_snapshot() {
         let root = tempdir().unwrap();
         let lake = LakeStore::local(root.path()).unwrap();
-        let store = CatalogStore::new(lake);
+        let store = CatalogStore::new(lake.clone());
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         store
             .upsert_snapshot(seed("alpha"), &records("alpha", "Alpha", 900.0), Vec::new())
             .await
             .unwrap();
         let before = store.current_roster().await.unwrap().societies[0].clone();
+        let manifest_key = LakeKey::new(before.snapshot_manifest_key.clone()).unwrap();
+        let mut manifest: SocietyGoldSnapshotManifest = lake.get_json(&manifest_key).await.unwrap();
+        manifest.materializations = vec![crate::assets::MaterializationRecord::succeeded(
+            AssetId::new(SOCIETY_GOLD_SNAPSHOT_ASSET_ID).unwrap(),
+            crate::assets::AssetStage::Gold,
+            AssetPartition::new([("society", "society-alpha")]),
+            "fixture-lineage",
+            Vec::new(),
+        )];
+        lake.put_json(&manifest_key, &manifest).await.unwrap();
         let provider = FailedCollection::default();
         let mut refresh = apply_request("failed-location");
         refresh.upserts.push(CatalogUpsert {
@@ -2159,7 +2173,108 @@ mod tests {
         assert!(report
             .failed_assets
             .contains_key("society:alpha/osm_society_access_facts"));
+        let ledger = report.failure_ledger.as_ref().expect("failure ledger");
+        let bytes = lake
+            .get_bytes(&LakeKey::new(ledger.key.clone()).unwrap())
+            .await
+            .unwrap();
+        let batches = ParquetRecordBatchReaderBuilder::try_new(Bytes::from(bytes))
+            .unwrap()
+            .build()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let error_codes = batches
+            .iter()
+            .flat_map(|batch| {
+                let values = batch
+                    .column_by_name("error_code")
+                    .unwrap()
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .unwrap();
+                (0..values.len())
+                    .map(|row| values.value(row).to_string())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            error_codes,
+            BTreeSet::from([
+                "missing_prerequisite".to_string(),
+                "source_collection_failure".to_string(),
+            ])
+        );
         assert_eq!(store.current_roster().await.unwrap().societies[0], before);
+    }
+
+    #[tokio::test]
+    async fn unrecoverable_legacy_lineage_is_skipped_and_persisted_as_parquet() {
+        let root = tempdir().unwrap();
+        let lake = LakeStore::local(root.path()).unwrap();
+        let store = CatalogStore::new(lake.clone());
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        store
+            .upsert_snapshot(seed("alpha"), &records("alpha", "Alpha", 900.0), Vec::new())
+            .await
+            .unwrap();
+        let before = store.current_roster().await.unwrap().societies[0].clone();
+        let mut refresh = apply_request("legacy-lineage-skip");
+        refresh.upserts.push(CatalogUpsert {
+            seed: seed("alpha"),
+            refresh_modules: vec!["location".to_string()],
+        });
+
+        let report = store
+            .apply_with_provider(refresh, project, &NoCollection)
+            .await
+            .unwrap();
+
+        assert!(report.updated.is_empty());
+        assert_eq!(report.retained, ["society:alpha"]);
+        assert!(report.collected_assets.is_empty());
+        assert_eq!(
+            report.skipped,
+            [CatalogSkippedSociety {
+                society_id: "society:alpha".to_string(),
+                reason: "no recoverable collection lineage".to_string(),
+                retryable: false,
+            }]
+        );
+        assert_eq!(store.current_roster().await.unwrap().societies[0], before);
+        let ledger = report.failure_ledger.expect("failure ledger");
+        assert!(ledger.key.ends_with(
+            "diagnostics/catalog_failures/operation=legacy-lineage-skip/part-00000.parquet"
+        ));
+        let bytes = lake
+            .get_bytes(&LakeKey::new(ledger.key).unwrap())
+            .await
+            .unwrap();
+        let batches = ParquetRecordBatchReaderBuilder::try_new(Bytes::from(bytes))
+            .unwrap()
+            .build()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+            1
+        );
+        let batch = &batches[0];
+        let error_codes = batch
+            .column_by_name("error_code")
+            .unwrap()
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        let dispositions = batch
+            .column_by_name("disposition")
+            .unwrap()
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        assert_eq!(error_codes.value(0), "no_recoverable_collection_lineage");
+        assert_eq!(dispositions.value(0), "retained");
     }
 
     #[tokio::test]
