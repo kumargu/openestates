@@ -1,0 +1,28 @@
+society,entity_id,google_place_id,google_place_name,google_latitude,google_longitude,osm_boundary_id,google_pin_inside_boundary,google_pin_to_boundary_m,osm_gate_id,google_pin_to_osm_gate_m
+Amrutha Platinum Towers,society:rera-526d82c4b10990fe,ChIJCSLHH8MTrjsRtv0LtRKh0CA,Amrutha Platinum Towers,12.9635977,77.73477969999999,way/1144036211,True,25.4,,
+Brigade Lakefront - Crimson,society:rera-ccfa353d22484c7b,ChIJ0eFriIARrjsRg2zAKFd4Q3s,Brigade Lakefront - Crimson,12.9805726,77.71102719999999,way/229628369,True,83.0,node/12157397236,206.2
+Brigade Lakefront - Crimson,society:rera-ccfa353d22484c7b,ChIJ0eFriIARrjsRg2zAKFd4Q3s,Brigade Lakefront - Crimson,12.980572599999999,77.71102719999999,way/229628369,True,83.0,node/12157397236,206.2
+Brigade Woods,society:rera-3f60497f6b602bb1,ChIJWUu0fQoRrjsRf9yr1p_C9o8,Brigade Woods,12.9837074,77.7437736,way/765656003,False,0.4,node/11121619834,96.2
+Desai Grandeur,society:rera-a46f28147c448b81,ChIJiZLBBQcOrjsRRRLpQi4ujPs,Desai Grandeur,12.976735999999999,77.7585245,way/1239793107,True,0.7,node/11395446224,4.8
+DESAI RADIANT,society:rera-b64904e17950889a,ChIJN34ZhwgOrjsR1wpr-wdoPHg,DESAI RADIANT,12.977986099999999,77.7571322,way/1239793104,True,8.6,node/11007667688,34.7
+DISHA COURTYARD,society:rera-d3a4c30f2b11eb1c,ChIJFVg5yA8NrjsRyCDGIyqYw0M,DISHA COURTYARD,12.974030599999999,77.7571707,way/773145599,True,49.8,node/11395383960,95.5
+Godrej Air,society:rera-c1af3dd6c1581e3e,ChIJpbq7Y5ARrjsRyy2NEfQ4x0E,Godrej Air,12.9874746,77.7120056,way/792488587,True,13.4,node/10581097203,130.1
+Godrej Air,society:rera-c1af3dd6c1581e3e,ChIJnXb50cQRrjsReE_CsJotMS4,Godrej Air,12.9878996,77.7119767,way/792488587,True,26.3,node/10581097203,85.4
+Godrej Air,society:rera-c1af3dd6c1581e3e,ChIJnXb50cQRrjsReE_CsJotMS4,Godrej Air,12.987899599999999,77.7119767,way/792488587,True,26.3,node/10581097203,85.4
+Godrej Splendour,society:rera-e33c7fdcc0d15688,ChIJBWQfoHYPrjsRIxxsAS3tHrA,Godrej Splendour,13.0120239,77.7470451,way/1132098866,True,56.0,,
+Godrej Splendour,society:rera-e33c7fdcc0d15688,ChIJBWQfoHYPrjsRIxxsAS3tHrA,Godrej Splendour,13.012023899999999,77.7470451,way/1132098866,True,56.0,,
+Godrej United,society:rera-a84cefe381eb87e8,ChIJaXWUof4NrjsRSiKKORL_a5Y,Godrej United,12.9939029,77.7048501,way/140235891,True,5.1,node/13127501237,62.1
+Godrej United,society:rera-a84cefe381eb87e8,ChIJpZQPWp8RrjsRB2AppJ3UYSU,Godrej United,12.996414200000002,77.7049164,way/140235891,False,37.3,node/13127501237,341.2
+Gopalan Aqua,society:rera-625bf95abd07dda7,ChIJTUGFHaAPrjsRKOmdSV2RcSk,Gopalan Aqua,12.978903899999999,77.7581517,way/773145595,True,53.9,node/11009664650,86.5
+Gopalan Aqua,society:rera-625bf95abd07dda7,ChIJTUGFHaAPrjsRKOmdSV2RcSk,Gopalan Aqua,12.979268399999999,77.7585134,way/773145595,True,26.6,node/11009664650,142.5
+Habitat Eden Heights,society:rera-50a0074af8c0d8be,ChIJS4fg0JYRrjsR4LWFzYOecyM,Habitat Eden Heights,12.9896559,77.7161533,way/353236629,True,27.1,node/2689350110,112.1
+MAHAVEER PROMENADE,society:rera-746a1e9128d28ad3,ChIJr7G2_NkRrjsRer3Px7G-CiY,MAHAVEER PROMENADE,13.007881,77.7405029,way/1132098870,True,4.5,node/11169600309,27.4
+MAHAVEER TRANQUIL,society:rera-d855bc3290c4af3e,ChIJqadkrxwSrjsRJX12_PqW7A8,MAHAVEER TRANQUIL,12.968653500000002,77.73351989999999,way/185975845,True,29.1,node/9874778564,108.3
+NARYA 5 ELEMENTS,society:rera-ed26990c2d277fa6,ChIJ1z5QCjwOrjsRjyzhlnz6DZA,NARYA 5 ELEMENTS,13.0033144,77.7607872,way/1304106633,False,1.8,node/11027505533,43.6
+Parimala Skyview,society:rera-886337bc84b09645,ChIJ3dnPfAMOrjsRHvgMLF7D_5A,Parimala Skyview,12.983607899999999,77.7507814,way/1134272289,True,8.5,node/11006946769,66.3
+Pavani Divine,society:rera-c8115c5bd2ddb21e,ChIJhSdiz8sRrjsRiesV_XGCsiI,Pavani Divine,12.9830141,77.71796379999999,way/886184260,False,2.1,node/11175884773,4.7
+PRESTIGE BOULEVARD,society:rera-cd6d20ba75389465,ChIJI50LX-gTrjsRH-tiIGs0lwQ,PRESTIGE BOULEVARD,12.974246599999999,77.7429442,way/1080943278,True,14.9,node/13174823519,136.5
+PRESTIGE FONTAINE BLEAU,society:rera-6a92ec2a5a1d4a4a,ChIJo4uCmf8RrjsRvr-Rnlpzdck,PRESTIGE FONTAINE BLEAU,12.9748571,77.7426289,way/1080943279,True,15.7,node/1599600493,82.7
+Prestige Lakeside Habitat,society:rera-7886bc98e6a977a5,ChIJFdRhRbwTrjsRDvVqv5TTK2I,Prestige Lakeside Habitat,12.9298932,77.7400905,way/266310354,True,6.8,node/12997705840,260.2
+Prestige Lakeside Habitat,society:rera-7886bc98e6a977a5,ChIJFdRhRbwTrjsRDvVqv5TTK2I,Prestige Lakeside Habitat,12.930858299999999,77.7380854,way/266310354,True,46.8,node/12997705840,187.2
+Prestige Lakeside Habitat,society:rera-7886bc98e6a977a5,ChIJFdRhRbwTrjsRDvVqv5TTK2I,Prestige Lakeside Habitat,12.9299486,77.7399951,way/266310354,True,9.1,node/12997705840,250.9

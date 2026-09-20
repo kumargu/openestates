@@ -98,14 +98,6 @@
         "livability_label": "road quality",
         "scope": "road_segment",
         "relationship": "approach road"
-      },
-      {
-        "key": "road_width",
-        "label": "Road width",
-        "livability_lens": "risk",
-        "livability_label": "road width",
-        "scope": "road_segment",
-        "relationship": "approach road"
       }
     ]
   },

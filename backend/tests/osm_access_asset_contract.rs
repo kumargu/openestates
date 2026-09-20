@@ -22,9 +22,6 @@ fn waterford_access() -> OsmSocietyAccessRecord {
         ),
         approach_direction: Some("two_way".to_string()),
         approach_association_method: Some("address_match".to_string()),
-        road_width_meters: None,
-        road_width_raw: None,
-        road_width_way_id: None,
         boundary_name: Some("Prestige Waterford".to_string()),
         boundary_way_id: Some("133630420".to_string()),
         boundary_geometry_geojson: Some(

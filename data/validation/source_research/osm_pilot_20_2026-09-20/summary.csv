@@ -1,21 +1,21 @@
-society,catalog,boundary_osm_id,boundary_area_acres,roads_returned,entrance,approach_road,road_width_m,structure_status,tiles_complete,tiles_total,building_footprints,with_levels,max_levels
-Amrutha Platinum Towers,True,way/1144036211,2.6,57,—,—,—,complete,1,1,2,2,10.0
-Brigade Lakefront - Crimson,True,way/229628369,20.0,134,inferred,—,—,complete,2,2,6,5,15.0
-Brigade Woods,True,way/765656003,6.4,58,inferred,—,—,complete,1,1,3,3,5.0
-Desai Grandeur,True,way/1239793107,1.7,59,inferred,—,—,complete,1,1,2,0,—
-DESAI RADIANT,True,way/1239793104,1.3,55,—,—,—,complete,1,1,1,0,—
-DISHA COURTYARD,True,way/773145599,4.4,43,inferred,Public road,—,complete,1,1,2,0,—
-Godrej Air,True,way/792488587,6.2,77,—,—,—,complete,1,1,10,9,17.0
-Godrej Splendour,True,way/1132098866,18.1,25,—,—,—,complete,2,2,2,0,—
-Godrej United,True,way/140235891,7.4,85,—,—,—,complete,1,1,2,2,17.0
-Gopalan Aqua,True,way/773145595,4.7,73,inferred,—,—,complete,1,1,2,2,15.0
-Habitat Eden Heights,True,way/353236629,4.5,118,inferred,Muniswamy Shetty Layout Road,—,complete,1,1,4,4,19.0
-MAHAVEER PROMENADE,True,way/1132098870,1.1,46,inferred,—,—,complete,1,1,1,1,4.0
-MAHAVEER TRANQUIL,True,way/185975845,2.6,61,inferred,—,—,complete,1,1,2,0,—
-NARYA 5 ELEMENTS,True,way/1304106633,1.6,22,inferred,—,—,complete,1,1,0,0,—
-Parimala Skyview,True,way/1134272289,0.9,65,—,—,—,complete,1,1,4,3,14.0
-Pavani Divine,True,way/886184260,2.7,65,—,—,—,complete,1,1,3,0,—
-PRESTIGE BOULEVARD,True,way/1080943278,2.7,50,inferred,—,—,complete,1,1,3,2,5.0
-PRESTIGE FONTAINE BLEAU,True,way/1080943279,1.0,37,inferred,—,—,complete,1,1,3,2,11.0
-Prestige Lakeside Habitat,True,way/266310354,103.6,247,—,—,—,complete,8,8,298,78,30.0
-Brigade Orchards,False,way/843854047,148.1,188,—,—,—,complete,7,7,118,96,7.0
+society,catalog,boundary_osm_id,boundary_area_acres,entrance,approach_road,structure_status,tiles_complete,tiles_total,building_footprints,with_levels,max_levels
+Amrutha Platinum Towers,True,way/1144036211,2.6,—,—,complete,1,1,2,2,10.0
+Brigade Lakefront - Crimson,True,way/229628369,20.0,inferred,—,complete,2,2,6,5,15.0
+Brigade Woods,True,way/765656003,6.4,inferred,—,complete,1,1,3,3,5.0
+Desai Grandeur,True,way/1239793107,1.7,inferred,—,complete,1,1,2,0,—
+DESAI RADIANT,True,way/1239793104,1.3,—,—,complete,1,1,1,0,—
+DISHA COURTYARD,True,way/773145599,4.4,inferred,Public road,complete,1,1,2,0,—
+Godrej Air,True,way/792488587,6.2,—,—,complete,1,1,10,9,17.0
+Godrej Splendour,True,way/1132098866,18.1,—,—,complete,2,2,2,0,—
+Godrej United,True,way/140235891,7.4,—,—,complete,1,1,2,2,17.0
+Gopalan Aqua,True,way/773145595,4.7,inferred,—,complete,1,1,2,2,15.0
+Habitat Eden Heights,True,way/353236629,4.5,inferred,Muniswamy Shetty Layout Road,complete,1,1,4,4,19.0
+MAHAVEER PROMENADE,True,way/1132098870,1.1,inferred,—,complete,1,1,1,1,4.0
+MAHAVEER TRANQUIL,True,way/185975845,2.6,inferred,—,complete,1,1,2,0,—
+NARYA 5 ELEMENTS,True,way/1304106633,1.6,inferred,—,complete,1,1,0,0,—
+Parimala Skyview,True,way/1134272289,0.9,—,—,complete,1,1,4,3,14.0
+Pavani Divine,True,way/886184260,2.7,—,—,complete,1,1,3,0,—
+PRESTIGE BOULEVARD,True,way/1080943278,2.7,inferred,—,complete,1,1,3,2,5.0
+PRESTIGE FONTAINE BLEAU,True,way/1080943279,1.0,inferred,—,complete,1,1,3,2,11.0
+Prestige Lakeside Habitat,True,way/266310354,103.6,—,—,complete,8,8,298,78,30.0
+Brigade Orchards,False,way/843854047,148.1,—,—,complete,7,7,118,96,7.0

@@ -53,12 +53,6 @@ pub struct OsmSocietyAccessRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approach_association_method: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub road_width_meters: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub road_width_raw: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub road_width_way_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boundary_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boundary_way_id: Option<String>,
@@ -88,14 +82,8 @@ pub struct OsmSocietyAccessRecord {
 #[derive(Debug, Clone, Deserialize)]
 struct OsmAccessConfigFile {
     approach_road: ApproachRoadConfig,
-    road_width: RoadWidthConfig,
     entrance: EntranceConfig,
     society_boundary: SocietyBoundaryConfig,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct RoadWidthConfig {
-    fact_key: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -133,14 +121,6 @@ pub fn osm_society_access_facts_input(
     records.sort_by(|left, right| left.entity_id.cmp(&right.entity_id));
 
     for record in records {
-        push_road_width_fact(
-            &mut facts,
-            &mut annotations,
-            &mut annotation_keys,
-            &config.road_width,
-            record,
-            run_id,
-        )?;
         push_approach_road_facts(
             &mut facts,
             &mut annotations,
@@ -184,35 +164,6 @@ pub fn osm_society_access_facts_input(
         fact_annotations: annotations,
         source_watermarks: input.source_watermarks.clone(),
     })
-}
-
-fn push_road_width_fact(
-    facts: &mut Vec<SkillFactRecord>,
-    annotations: &mut Vec<SkillFactAnnotationRecord>,
-    annotation_keys: &mut BTreeSet<(String, String)>,
-    config: &RoadWidthConfig,
-    record: &OsmSocietyAccessRecord,
-    run_id: &str,
-) -> Result<(), OsmAccessAssetError> {
-    let (Some(width), Some(way_id)) = (
-        record.road_width_meters,
-        record.road_width_way_id.as_deref(),
-    ) else {
-        return Ok(());
-    };
-    push_fact_with_source(
-        facts,
-        annotations,
-        annotation_keys,
-        &record.entity_id,
-        &config.fact_key,
-        FactValue::Numeric(width),
-        None,
-        &[],
-        record,
-        run_id,
-        Some(format!("https://www.openstreetmap.org/way/{way_id}")),
-    )
 }
 
 fn push_society_boundary_fact(
@@ -669,36 +620,6 @@ fn validate_input(input: &OsmSocietyAccessInput) -> Result<(), OsmAccessAssetErr
                 record.access_id
             )));
         }
-        let width_fields = [
-            record.road_width_meters.is_some(),
-            record.road_width_raw.is_some(),
-            record.road_width_way_id.is_some(),
-        ];
-        if width_fields.iter().any(|present| *present)
-            && !width_fields.iter().all(|present| *present)
-        {
-            return Err(OsmAccessAssetError::InvalidInput(format!(
-                "OSM road width {} is incomplete",
-                record.access_id
-            )));
-        }
-        if record
-            .road_width_meters
-            .is_some_and(|width| !width.is_finite() || width <= 0.0 || width > 100.0)
-            || record
-                .road_width_raw
-                .as_deref()
-                .is_some_and(|value| value.trim().is_empty())
-            || record
-                .road_width_way_id
-                .as_deref()
-                .is_some_and(|value| value.trim().is_empty())
-        {
-            return Err(OsmAccessAssetError::InvalidInput(format!(
-                "OSM road width {} is invalid",
-                record.access_id
-            )));
-        }
         let road_fields = [
             record.approach_road_name.is_some(),
             record.approach_way_id.is_some(),
@@ -839,7 +760,6 @@ fn load_config() -> Result<OsmAccessConfigFile, OsmAccessAssetError> {
             .linked_entity_fact_key
             .trim()
             .is_empty()
-        || config.road_width.fact_key.trim().is_empty()
         || config.approach_road.direction_fact_key.trim().is_empty()
         || config.approach_road.association_fact_key.trim().is_empty()
         || config

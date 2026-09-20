@@ -1041,12 +1041,10 @@
       "fact_keys": [
         "parking_quality",
         "visitor_parking",
-        "road_width",
         "access_road_quality",
         "approach_road_condition"
       ],
       "source_priority": [
-        "openstreetmap",
         "seller_disclosure",
         "google",
         "reddit"
@@ -1160,12 +1158,10 @@
       "fact_keys": [
         "rera_project_type",
         "plot_size_sqft",
-        "layout_quality",
-        "road_width"
+        "layout_quality"
       ],
       "source_priority": [
         "rera",
-        "openstreetmap",
         "seller_disclosure",
         "google",
         "reddit"
@@ -1568,7 +1564,6 @@
         "label": "approach road",
         "expanded_keys": [
           "access_road_quality",
-          "road_width",
           "approach_road_condition",
           "google_review_snippets",
           "traffic_reality"
@@ -2419,7 +2414,6 @@
         "label": "approach road",
         "expanded_keys": [
           "access_road_quality",
-          "road_width",
           "approach_road_condition",
           "media.approach_road_frames",
           "risk.approach_road_waterlogging",
@@ -3776,7 +3770,6 @@
       ],
       "fact_keys": [
         "access_road_quality",
-        "road_width",
         "approach_road_condition",
         "google_review_snippets",
         "traffic_reality",
@@ -6926,37 +6919,6 @@
       }
     },
     {
-      "fact_key": "road_width",
-      "bucket": "social_infra",
-      "label": "nearby road width",
-      "lens": "proof",
-      "polarity": "neutral",
-      "scopes": [
-        "society"
-      ],
-      "enrichment_terms": [
-        "road width",
-        "wide road",
-        "narrow road",
-        "approach road"
-      ],
-      "answers_preferences": [
-        "road width",
-        "wide road",
-        "narrow road",
-        "approach road"
-      ],
-      "never_default": true,
-      "source_types": [
-        "OpenStreetMap"
-      ],
-      "display_template": "nearby road width: {value} m",
-      "scoring_hint": {
-        "direction": "numeric",
-        "weight": 0.6
-      }
-    },
-    {
       "fact_key": "approach_road",
       "bucket": "social_infra",
       "label": "approach road",
@@ -8101,7 +8063,7 @@
       }
     }
   ],
-  "fact_count": 140,
+  "fact_count": 139,
   "excluded_search_fact_keys": [
     "google_review_cards",
     "google_review_snippets"
