@@ -92,6 +92,18 @@ class OsmSocietyAccessTests(unittest.TestCase):
         self.assertNotIn("approach_geometry_geojson", record)
         self.assertNotIn("entrance_status", record)
 
+    def test_equal_frontage_candidates_use_stable_osm_identity(self):
+        first = road(10)
+        second = road(11)
+        record = society_access_record(
+            subject(),
+            {"elements": [boundary(), first, second, gate()]},
+            "query",
+            {"eligible_highway_values": ["tertiary"]},
+            "2026-08-30T12:00:00Z",
+        )
+        self.assertEqual(record["approach_way_id"], "10")
+
     def test_reverse_oneway_is_oriented_legally(self):
         record = society_access_record(
             subject(),
@@ -206,6 +218,80 @@ class OsmSocietyAccessTests(unittest.TestCase):
         )
         self.assertEqual(record["boundary_way_id"], "way/12")
 
+    def test_construction_and_building_polygons_are_valid_boundaries(self):
+        construction = boundary()
+        construction["tags"] = {
+            "landuse": "construction",
+            "construction": "residential",
+            "name": "Waterford",
+        }
+        building = boundary()
+        building["id"] = 13
+        building["tags"] = {"building": "apartments", "name": "Waterford"}
+        construction_record = society_access_record(
+            subject(),
+            {"elements": [construction]},
+            "query",
+            {},
+            "2026-08-30T12:00:00Z",
+        )
+        building_record = society_access_record(
+            subject(),
+            {"elements": [building]},
+            "query",
+            {},
+            "2026-08-30T12:00:00Z",
+        )
+        self.assertEqual(construction_record["boundary_way_id"], "way/12")
+        self.assertEqual(building_record["boundary_way_id"], "way/13")
+
+    def test_whole_project_boundary_matches_phase_or_subproject_name(self):
+        soham = boundary()
+        soham["tags"]["name"] = "Sumadhura Soham"
+        soham_record = society_access_record(
+            subject(name="Sumadhura Soham Phase-I"),
+            {"elements": [soham]},
+            "query",
+            {"boundary_name_ignored_tokens": ["phase"]},
+            "2026-08-30T12:00:00Z",
+        )
+        lakefront = boundary()
+        lakefront["tags"]["name"] = "Brigade Lakefront"
+        lakefront_record = society_access_record(
+            subject(name="Brigade Lakefront Crimson"),
+            {"elements": [lakefront]},
+            "query",
+            {"boundary_name_min_coverage": 0.6},
+            "2026-08-30T12:00:00Z",
+        )
+        self.assertEqual(soham_record["boundary_name"], "Sumadhura Soham")
+        self.assertEqual(lakefront_record["boundary_name"], "Brigade Lakefront")
+
+    def test_builder_prefix_matches_but_unrelated_suffix_does_not(self):
+        radical = boundary()
+        radical["tags"]["name"] = "Total Environment - Pursuit Of A Radical Rhapsody"
+        radical_record = society_access_record(
+            subject(name="Pursuit of a Radical Rhapsody Phase 2"),
+            {"elements": [radical]},
+            "query",
+            {"boundary_name_ignored_tokens": ["phase"]},
+            "2026-08-30T12:00:00Z",
+        )
+        lawns = boundary()
+        lawns["tags"]["name"] = "Godrej Air Lawns"
+        lawns_record = society_access_record(
+            subject(name="Godrej Air"),
+            {"elements": [lawns]},
+            "query",
+            {},
+            "2026-08-30T12:00:00Z",
+        )
+        self.assertEqual(
+            radical_record["boundary_name"],
+            "Total Environment - Pursuit Of A Radical Rhapsody",
+        )
+        self.assertIsNone(lawns_record)
+
     def test_roundabout_is_not_routed_against_its_implied_oneway(self):
         outgoing = road(
             tags={"junction": "roundabout"},
@@ -240,11 +326,12 @@ class OsmSocietyAccessTests(unittest.TestCase):
 
     def test_overpass_query_requests_each_evidence_family(self):
         query = society_access_overpass_query(
-            (12.9, 77.5, 13.0, 77.6), ["primary", "residential"], ["residential"], 45
+            (12.9, 77.5, 13.0, 77.6), ["primary", "residential"], ["landuse", "building"], 45
         )
         self.assertIn('[timeout:45]', query)
         self.assertIn('way["highway"~"^(primary|residential)$"]', query)
-        self.assertIn('way["landuse"~"^(residential)$"]["name"]', query)
+        self.assertIn('way["name"]["landuse"]', query)
+        self.assertIn('way["name"]["building"]', query)
         self.assertIn('relation["type"="multipolygon"]', query)
         self.assertIn('node["barrier"="gate"]', query)
         self.assertIn('node["entrance"~"^(main|yes)$"]', query)
