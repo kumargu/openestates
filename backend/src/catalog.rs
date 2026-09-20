@@ -257,11 +257,23 @@ impl CatalogRecords {
                 .map(|edge| edge.from_entity_id.clone()),
         );
 
+        let incident_edges = self
+            .edges
+            .iter()
+            .filter(|edge| {
+                primary_ids.contains(&edge.from_entity_id)
+                    || primary_ids.contains(&edge.to_entity_id)
+            })
+            .collect::<Vec<_>>();
         let mut retained_ids = primary_ids.clone();
+        for edge in &incident_edges {
+            retained_ids.insert(edge.from_entity_id.clone());
+            retained_ids.insert(edge.to_entity_id.clone());
+        }
         retained_ids.extend(
             self.entities
                 .iter()
-                .filter(|entity| !matches!(entity.entity_type.as_str(), "society" | "property"))
+                .filter(|entity| entity.entity_type == "place")
                 .map(|entity| entity.entity_id.clone()),
         );
 
@@ -1849,5 +1861,26 @@ mod tests {
         assert!(scoped.facts.iter().any(|fact| {
             fact.entity_id == "place:school-near-waterford" && fact.fact_key == "geo.latitude"
         }));
+    }
+
+    #[test]
+    fn society_partition_excludes_unlinked_global_area_entities() {
+        let seed = seed("waterford");
+        let mut records = records("waterford", "WATERFORD", 1_500.0);
+        records.entities.push(ServingEntityRecord {
+            entity_id: "area:market:whitefield".to_string(),
+            entity_type: "area".to_string(),
+            name: "Whitefield".to_string(),
+            root_source: Some("market_locality".to_string()),
+            visibility: ServingEntityVisibility::Searchable,
+            searchable_text: "Whitefield".to_string(),
+        });
+
+        let scoped = records.for_society(&seed).unwrap();
+
+        assert!(!scoped
+            .entities
+            .iter()
+            .any(|entity| entity.entity_id == "area:market:whitefield"));
     }
 }
