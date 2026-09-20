@@ -329,7 +329,7 @@ def _society_boundary(
                 points,
             ))
             continue
-        polygons = _relation_polygons(element)
+        polygons = relation_polygons(element)
         if not polygons:
             continue
         geometry_value = (
@@ -412,7 +412,7 @@ def _boundary_name_score(
     return None
 
 
-def _relation_polygons(element: Dict[str, Any]) -> List[List[List[List[float]]]]:
+def relation_polygons(element: Dict[str, Any]) -> List[List[List[List[float]]]]:
     """Assemble closed multipolygon member ways without treating exteriors as holes."""
     role_paths: Dict[str, List[List[Coordinate]]] = {"outer": [], "inner": []}
     for member in element.get("members") or []:
