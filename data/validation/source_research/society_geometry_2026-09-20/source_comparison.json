@@ -1,0 +1,2718 @@
+{
+  "research_date": "2026-09-20",
+  "scope": "OSM named candidates and RERA coordinates for a 30-society Bengaluru sample",
+  "active_serving_bundle": "catalog-71-ffb4dc50-117e-453c-b26f-41822430324e",
+  "notes": [
+    "RERA coordinates are direct rera_lat_lng facts from immutable historical raw RERA runs.",
+    "No address was geocoded and labeled as a RERA coordinate.",
+    "The active serving bundle contains zero rera_lat_lng facts; historical availability is recorded explicitly.",
+    "OSM candidates were retained before any landuse or exact-name filter. Full candidate geometry is in osm_candidates.json."
+  ],
+  "records": [
+    {
+      "society": "Amrutha Platinum Towers",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-526d82c4b10990fe",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/180420/001525",
+      "rera_raw_project_name": "Amrutha Platinum Towers",
+      "rera_promoter_name": "Amrutha Rama Constructions Pvt Ltd",
+      "rera_project_address": null,
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/viewAllProjects?language=en",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 1144036211,
+      "osm_source_url": "https://www.openstreetmap.org/way/1144036211",
+      "osm_raw_name": "Amrutha Platinum Towers",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.96355,
+      "osm_longitude": 77.7347272,
+      "osm_version": 3,
+      "osm_timestamp": "2025-06-17T06:41:16Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 10.9
+    },
+    {
+      "society": "Brigade Lakefront - Crimson",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-ccfa353d22484c7b",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171016/000503",
+      "rera_raw_project_name": "Brigade Lakefront - Crimson",
+      "rera_promoter_name": "Brigade Enterprises Ltd",
+      "rera_project_address": "Next to SAP Labs EPIP Zone, Whitefield, Seetharampalya, Hoodi, Sonnenahalli Village",
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 12.980628,
+      "rera_longitude": 77.710933,
+      "rera_coordinate_variants": [
+        "12.980628,77.710933"
+      ],
+      "rera_coordinate_observations": 9,
+      "rera_coordinate_history": [
+        {
+          "value": "12.980628,77.710933",
+          "learned_at": "2026-07-26T09:41:24.564076+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.980628,77.710933",
+          "learned_at": "2026-07-26T09:41:24.564076+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.980628,77.710933",
+          "learned_at": "2026-07-26T09:41:24.564076+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.980628,77.710933",
+          "learned_at": "2026-07-26T09:41:24.564076+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.980628,77.710933",
+          "learned_at": "2026-07-28T22:09:41.817029+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.980628,77.710933",
+          "learned_at": "2026-07-28T22:11:52.520225+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.980628,77.710933",
+          "learned_at": "2026-07-28T22:13:48.229757+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.980628,77.710933",
+          "learned_at": "2026-08-01T11:02:35.619985+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.980628,77.710933",
+          "learned_at": "2026-08-10T12:20:51.148111+00:00",
+          "run_id": "collector-fetch_rera-2026-08-10",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [
+        {
+          "value": "Next to SAP Labs EPIP Zone, Whitefield, Seetharampalya, Hoodi, Sonnenahalli Village",
+          "learned_at": "2026-07-26T09:41:24.563939+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Next to SAP Labs EPIP Zone, Whitefield, Seetharampalya, Hoodi, Sonnenahalli Village",
+          "learned_at": "2026-08-01T11:02:35.619712+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Next to SAP Labs EPIP Zone, Whitefield, Seetharampalya, Hoodi, Sonnenahalli Village",
+          "learned_at": "2026-08-10T12:20:51.147787+00:00",
+          "run_id": "collector-fetch_rera-2026-08-10",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-08-10T12:20:51.148111+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-08-10",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 229628369,
+      "osm_source_url": "https://www.openstreetmap.org/way/229628369",
+      "osm_raw_name": "Brigade Lakefront",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9807146,
+      "osm_longitude": 77.7110148,
+      "osm_version": 16,
+      "osm_timestamp": "2025-09-18T04:33:31Z",
+      "osm_rera_distance_m": 13.1,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "whole_project_osm_vs_rera_subproject",
+      "existing_reference_distance_m": null
+    },
+    {
+      "society": "Brigade Woods",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-3f60497f6b602bb1",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/180611/001895",
+      "rera_raw_project_name": "Brigade Woods",
+      "rera_promoter_name": "Brigade Enterprises Ltd",
+      "rera_project_address": null,
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 12.984353,
+      "rera_longitude": 77.742083,
+      "rera_coordinate_variants": [
+        "12.984353,77.742083"
+      ],
+      "rera_coordinate_observations": 1,
+      "rera_coordinate_history": [
+        {
+          "value": "12.984353,77.742083",
+          "learned_at": "2026-09-06T14:34:21.085433+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-09-06T14:34:21.085433+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-09-06",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 765656003,
+      "osm_source_url": "https://www.openstreetmap.org/way/765656003",
+      "osm_raw_name": "Brigade Woods",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9842836,
+      "osm_longitude": 77.7413647,
+      "osm_version": 4,
+      "osm_timestamp": "2025-05-09T13:43:35Z",
+      "osm_rera_distance_m": 78.2,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 82.1
+    },
+    {
+      "society": "Desai Grandeur",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-a46f28147c448b81",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/180611/001887",
+      "rera_raw_project_name": "Desai Grandeur",
+      "rera_promoter_name": "M/s.Desai Developers",
+      "rera_project_address": null,
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/viewAllProjects?language=en",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 1239793107,
+      "osm_source_url": "https://www.openstreetmap.org/way/1239793107",
+      "osm_raw_name": "Desai Grandeur",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9773071,
+      "osm_longitude": 77.7584601,
+      "osm_version": 2,
+      "osm_timestamp": "2024-10-03T03:43:44Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 2.8
+    },
+    {
+      "society": "DESAI RADIANT",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-b64904e17950889a",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171214/001190",
+      "rera_raw_project_name": "DESAI RADIANT",
+      "rera_promoter_name": "DESAI DEVELOPERS",
+      "rera_project_address": null,
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 12.978338,
+      "rera_longitude": 77.756886,
+      "rera_coordinate_variants": [
+        "12.978338,77.756886"
+      ],
+      "rera_coordinate_observations": 1,
+      "rera_coordinate_history": [
+        {
+          "value": "12.978338,77.756886",
+          "learned_at": "2026-09-06T14:33:52.610905+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-09-06T14:33:52.610905+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-09-06",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 1239793104,
+      "osm_source_url": "https://www.openstreetmap.org/way/1239793104",
+      "osm_raw_name": "Desai Radiant",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9781772,
+      "osm_longitude": 77.7568122,
+      "osm_version": 1,
+      "osm_timestamp": "2024-01-15T03:57:50Z",
+      "osm_rera_distance_m": 19.6,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 15.2
+    },
+    {
+      "society": "DISHA COURTYARD",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-d3a4c30f2b11eb1c",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/190123/002296",
+      "rera_raw_project_name": "DISHA COURTYARD",
+      "rera_promoter_name": "DISHAGARDEN VIEW LLP",
+      "rera_project_address": null,
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/viewAllProjects?language=en",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 773145599,
+      "osm_source_url": "https://www.openstreetmap.org/way/773145599",
+      "osm_raw_name": "Disha Courtyard",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9740789,
+      "osm_longitude": 77.7571672,
+      "osm_version": 5,
+      "osm_timestamp": "2026-01-30T11:42:54Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 4.0
+    },
+    {
+      "society": "Godrej Air",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-c1af3dd6c1581e3e",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/170819/000006",
+      "rera_raw_project_name": "Godrej Air",
+      "rera_promoter_name": "Godrej Housing Projects LLP",
+      "rera_project_address": "Khatha No. 365, Sy.No. 13/6, 14/1, 16/4 and 16/5 of Hoodi Village, K.R. Puram Hobli, Bangalore East",
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [
+        {
+          "value": "Khatha No. 365, Sy.No. 13/6, 14/1, 16/4 and 16/5 of Hoodi Village, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-26T09:46:06.243363+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 365, Sy.No. 13/6, 14/1, 16/4 and 16/5 of Hoodi Village, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-26T09:46:06.243363+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 365, Sy.No. 13/6, 14/1, 16/4 and 16/5 of Hoodi Village, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-26T09:46:06.243363+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 365, Sy.No. 13/6, 14/1, 16/4 and 16/5 of Hoodi Village, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-26T09:46:06.243363+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 365, Sy.No. 13/6, 14/1, 16/4 and 16/5 of Hoodi Village, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-28T22:09:32.170257+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 365, Sy.No. 13/6, 14/1, 16/4 and 16/5 of Hoodi Village, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-28T22:11:39.398464+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 365, Sy.No. 13/6, 14/1, 16/4 and 16/5 of Hoodi Village, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-28T22:13:38.509487+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 365, Sy.No. 13/6, 14/1, 16/4 and 16/5 of Hoodi Village, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-08-10T12:20:44.954136+00:00",
+          "run_id": "collector-fetch_rera-2026-08-10",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 365, Sy.No. 13/6, 14/1, 16/4 and 16/5 of Hoodi Village, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-08-11T18:57:47.998827+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 365, Sy.No. 13/6, 14/1, 16/4 and 16/5 of Hoodi Village, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-08-11T18:57:47.998827+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 365, Sy.No. 13/6, 14/1, 16/4 and 16/5 of Hoodi Village, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-08-11T18:57:47.998827+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 365, Sy.No. 13/6, 14/1, 16/4 and 16/5 of Hoodi Village, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-09-19T11:51:15.077289+00:00",
+          "run_id": "collector-fetch_rera-2026-09-19",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 792488587,
+      "osm_source_url": "https://www.openstreetmap.org/way/792488587",
+      "osm_raw_name": "Godrej Air",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9873169,
+      "osm_longitude": 77.7116761,
+      "osm_version": 9,
+      "osm_timestamp": "2025-09-06T06:13:03Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": null
+    },
+    {
+      "society": "Godrej Splendour",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-e33c7fdcc0d15688",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/160622/005000",
+      "rera_raw_project_name": "Godrej Splendour",
+      "rera_promoter_name": "Godrej Properties Limited",
+      "rera_project_address": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 13.011153967939245,
+      "rera_longitude": 77.74625655126265,
+      "rera_coordinate_variants": [
+        "13.011153967939245,77.74625655126265"
+      ],
+      "rera_coordinate_observations": 14,
+      "rera_coordinate_history": [
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-07-26T09:35:18.250682+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-07-26T09:35:18.250682+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-07-26T09:35:18.250682+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-07-26T09:35:18.250682+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-07-26T09:35:18.250682+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-07-28T22:09:29.873134+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-07-28T22:11:33.464876+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-07-28T22:13:36.311468+00:00",
+          "run_id": "collector-fetch_rera-2026-07-31",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-07-28T22:13:36.311468+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-08-01T11:02:33.248508+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-08-10T12:20:41.950823+00:00",
+          "run_id": "collector-fetch_rera-2026-08-10",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-08-11T18:57:43.427532+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-08-11T18:57:43.427532+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.011153967939245,77.74625655126265",
+          "learned_at": "2026-08-11T18:57:43.427532+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [
+        {
+          "value": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+          "learned_at": "2026-07-26T09:35:18.250491+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+          "learned_at": "2026-07-26T09:35:18.250491+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+          "learned_at": "2026-07-26T09:35:18.250491+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+          "learned_at": "2026-07-26T09:35:18.250491+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+          "learned_at": "2026-07-26T09:35:18.250491+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+          "learned_at": "2026-07-28T22:09:29.872518+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+          "learned_at": "2026-07-28T22:11:33.464459+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+          "learned_at": "2026-07-28T22:13:36.311092+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+          "learned_at": "2026-08-01T11:02:33.248124+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+          "learned_at": "2026-08-10T12:20:41.950344+00:00",
+          "run_id": "collector-fetch_rera-2026-08-10",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+          "learned_at": "2026-08-11T18:57:43.426542+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+          "learned_at": "2026-08-11T18:57:43.426542+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "46/1, 46/2, 46/3, 46/4, 46/5, 46/6, 47, 49/3, 57(P), 61/2 of Dommasandra Village , Sy No.107/1, 107/2 of Kumbena Agrahara Village,BIDARAHALLI HOBLI, , Bengaluru East , Bengaluru Urban, Karnataka - 560049",
+          "learned_at": "2026-08-11T18:57:43.426542+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-08-11T18:57:43.427532+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-08-12",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 1132098866,
+      "osm_source_url": "https://www.openstreetmap.org/way/1132098866",
+      "osm_raw_name": "Godrej Splendour (u/c)",
+      "osm_category": "landuse",
+      "osm_feature_type": "construction",
+      "osm_landuse": "construction",
+      "osm_building": null,
+      "osm_construction": "residential",
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 13.0106407,
+      "osm_longitude": 77.7459467,
+      "osm_version": 3,
+      "osm_timestamp": "2025-12-05T12:40:42Z",
+      "osm_rera_distance_m": 66.2,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "name_with_source_qualifier",
+      "existing_reference_distance_m": null
+    },
+    {
+      "society": "Godrej United",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-a84cefe381eb87e8",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171010/000003",
+      "rera_raw_project_name": "Godrej United",
+      "rera_promoter_name": "United Oxygen Company Private Limited",
+      "rera_project_address": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 12.996003,
+      "rera_longitude": 77.704783,
+      "rera_coordinate_variants": [
+        "12.996003,77.704783"
+      ],
+      "rera_coordinate_observations": 14,
+      "rera_coordinate_history": [
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-07-26T09:47:16.939932+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-07-26T09:47:16.939932+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-07-26T09:47:16.939932+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-07-26T09:47:16.939932+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-07-26T09:47:16.939932+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-07-26T09:47:16.939932+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-07-26T09:47:16.939932+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-07-26T09:47:16.939932+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-07-26T09:47:16.939932+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-07-28T22:09:36.999298+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-07-28T22:11:47.967395+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-07-28T22:13:43.407703+00:00",
+          "run_id": "collector-fetch_rera-2026-07-31",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-07-28T22:13:43.407703+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.996003,77.704783",
+          "learned_at": "2026-09-06T14:33:17.092482+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [
+        {
+          "value": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-26T09:47:16.939791+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-26T09:47:16.939791+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-26T09:47:16.939791+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-26T09:47:16.939791+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-26T09:47:16.939791+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-26T09:47:16.939791+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-26T09:47:16.939791+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-26T09:47:16.939791+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-26T09:47:16.939791+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-28T22:09:36.998993+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-28T22:11:47.967107+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-07-28T22:13:43.407437+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khatha No. 30, Sy.No. 28/2, Hoodi Village, Whitefield Main Road,, K.R. Puram Hobli, Bangalore East",
+          "learned_at": "2026-09-06T14:33:17.091990+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-09-06T14:33:17.092482+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-09-06",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 140235891,
+      "osm_source_url": "https://www.openstreetmap.org/way/140235891",
+      "osm_raw_name": "Godrej United",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9947109,
+      "osm_longitude": 77.70433,
+      "osm_version": 10,
+      "osm_timestamp": "2024-09-13T11:46:07Z",
+      "osm_rera_distance_m": 151.8,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 25.9
+    },
+    {
+      "society": "Gopalan Aqua",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-625bf95abd07dda7",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/190327/002496",
+      "rera_raw_project_name": "Gopalan Aqua",
+      "rera_promoter_name": "GOPALAN ENTERPRISES",
+      "rera_project_address": null,
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/viewAllProjects?language=en",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 773145595,
+      "osm_source_url": "https://www.openstreetmap.org/way/773145595",
+      "osm_raw_name": "Gopalan Aqua",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9791394,
+      "osm_longitude": 77.7581806,
+      "osm_version": 3,
+      "osm_timestamp": "2025-11-27T03:31:19Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 39.9
+    },
+    {
+      "society": "Habitat Eden Heights",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-50a0074af8c0d8be",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171014/000258",
+      "rera_raw_project_name": "Habitat Eden Heights",
+      "rera_promoter_name": null,
+      "rera_project_address": "Sy. No 186/1, 186/4, 187/1, 187/2 & 187/3, Hoodi Village, K.R. Puram Hobli",
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 12.990256,
+      "rera_longitude": 77.715811,
+      "rera_coordinate_variants": [
+        "12.990256,77.715811"
+      ],
+      "rera_coordinate_observations": 1,
+      "rera_coordinate_history": [
+        {
+          "value": "12.990256,77.715811",
+          "learned_at": "2026-09-06T14:33:20.362913+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [
+        {
+          "value": "Sy. No 186/1, 186/4, 187/1, 187/2 & 187/3, Hoodi Village, K.R. Puram Hobli",
+          "learned_at": "2026-09-06T14:33:20.362230+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-09-06T14:33:20.362913+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-09-06",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 353236629,
+      "osm_source_url": "https://www.openstreetmap.org/way/353236629",
+      "osm_raw_name": "Habitat Eden Heights",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9897333,
+      "osm_longitude": 77.7162333,
+      "osm_version": 7,
+      "osm_timestamp": "2025-09-06T09:23:38Z",
+      "osm_rera_distance_m": 74.0,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 84.4
+    },
+    {
+      "society": "MAHAVEER PROMENADE",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-746a1e9128d28ad3",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171015/000455",
+      "rera_raw_project_name": "MAHAVEER PROMENADE",
+      "rera_promoter_name": null,
+      "rera_project_address": "MAHAVEER PROMENADE, SY. NO. 14, SADARAMANGALA VILLAGE, KR PURAM HOBLI",
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [
+        {
+          "value": "MAHAVEER PROMENADE, SY. NO. 14, SADARAMANGALA VILLAGE, KR PURAM HOBLI",
+          "learned_at": "2026-09-06T14:33:23.586969+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 3,
+      "osm_type": "way",
+      "osm_id": 1132098870,
+      "osm_source_url": "https://www.openstreetmap.org/way/1132098870",
+      "osm_raw_name": "Mahaveer Promenade",
+      "osm_category": "building",
+      "osm_feature_type": "apartments",
+      "osm_landuse": null,
+      "osm_building": "apartments",
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 13.0076912,
+      "osm_longitude": 77.7397546,
+      "osm_version": 1,
+      "osm_timestamp": "2023-01-15T04:29:02Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 39.2
+    },
+    {
+      "society": "MAHAVEER TRANQUIL",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-d855bc3290c4af3e",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171028/000807",
+      "rera_raw_project_name": "MAHAVEER TRANQUIL",
+      "rera_promoter_name": null,
+      "rera_project_address": "MAHAVEER TRANQUIL, SY. NO. 71, NELLURAHALLI VILLAGE, WHITEFIELD SUB DIVISION",
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [
+        {
+          "value": "MAHAVEER TRANQUIL, SY. NO. 71, NELLURAHALLI VILLAGE, WHITEFIELD SUB DIVISION",
+          "learned_at": "2026-09-06T14:33:36.835580+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 2,
+      "osm_type": "way",
+      "osm_id": 185975845,
+      "osm_source_url": "https://www.openstreetmap.org/way/185975845",
+      "osm_raw_name": "Mahaveer Tranquil",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.969053,
+      "osm_longitude": 77.7335103,
+      "osm_version": 6,
+      "osm_timestamp": "2023-02-26T15:49:34Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 30.6
+    },
+    {
+      "society": "NARYA 5 ELEMENTS",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-ed26990c2d277fa6",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171214/001859",
+      "rera_raw_project_name": "NARYA 5 ELEMENTS",
+      "rera_promoter_name": "Narya Constructions and Developers",
+      "rera_project_address": null,
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/viewAllProjects?language=en",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 1304106633,
+      "osm_source_url": "https://www.openstreetmap.org/way/1304106633",
+      "osm_raw_name": "Narya 5 Elements",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 13.0034294,
+      "osm_longitude": 77.7611056,
+      "osm_version": 2,
+      "osm_timestamp": "2024-08-12T08:33:42Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 5.2
+    },
+    {
+      "society": "Parimala Skyview",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-886337bc84b09645",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171214/001051",
+      "rera_raw_project_name": "Parimala Skyview",
+      "rera_promoter_name": "Vishnu Priya Group of builders and Developers",
+      "rera_project_address": null,
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/viewAllProjects?language=en",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 1134272289,
+      "osm_source_url": "https://www.openstreetmap.org/way/1134272289",
+      "osm_raw_name": "Parimala Skyview",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9838298,
+      "osm_longitude": 77.7507181,
+      "osm_version": 2,
+      "osm_timestamp": "2025-07-26T07:40:55Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 1.1
+    },
+    {
+      "society": "Pavani Divine",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-c8115c5bd2ddb21e",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171031/001412",
+      "rera_raw_project_name": "Pavani Divine",
+      "rera_promoter_name": "SAI SRAVANTHI INFRA PROJECTS PVT. LTD.,",
+      "rera_project_address": null,
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/viewAllProjects?language=en",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 886184260,
+      "osm_source_url": "https://www.openstreetmap.org/way/886184260",
+      "osm_raw_name": "Pavani Divine",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9835055,
+      "osm_longitude": 77.7166198,
+      "osm_version": 3,
+      "osm_timestamp": "2025-10-27T18:29:12Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 45.7
+    },
+    {
+      "society": "PRESTIGE BOULEVARD",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-cd6d20ba75389465",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/170824/000057",
+      "rera_raw_project_name": "PRESTIGE BOULEVARD",
+      "rera_promoter_name": null,
+      "rera_project_address": "SY. NOS. 60/1A & 63/1A, PATTANDUR AGRAHARA, K.R. PURAM HOBLI",
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [
+        {
+          "value": "SY. NOS. 60/1A & 63/1A, PATTANDUR AGRAHARA, K.R. PURAM HOBLI",
+          "learned_at": "2026-09-06T14:33:09.566204+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 1080943278,
+      "osm_source_url": "https://www.openstreetmap.org/way/1080943278",
+      "osm_raw_name": "Prestige Boulevard",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9747395,
+      "osm_longitude": 77.743108,
+      "osm_version": 2,
+      "osm_timestamp": "2023-03-12T17:38:16Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 70.8
+    },
+    {
+      "society": "PRESTIGE FONTAINE BLEAU",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-6a92ec2a5a1d4a4a",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171223/002017",
+      "rera_raw_project_name": "PRESTIGE FONTAINE BLEAU",
+      "rera_promoter_name": "PRESTIGE ESTATES PROJECTS LIMITED",
+      "rera_project_address": null,
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/viewAllProjects?language=en",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 1080943279,
+      "osm_source_url": "https://www.openstreetmap.org/way/1080943279",
+      "osm_raw_name": "Prestige Fontaine Bleau",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9751423,
+      "osm_longitude": 77.7427131,
+      "osm_version": 2,
+      "osm_timestamp": "2024-04-09T04:27:06Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 1.0
+    },
+    {
+      "society": "Prestige Lakeside Habitat",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-7886bc98e6a977a5",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/170915/000176",
+      "rera_raw_project_name": "Prestige Lakeside Habitat",
+      "rera_promoter_name": "Prestige Habitat Ventures",
+      "rera_project_address": "Prestige Lakeside Habitat, Gunjur Village, Varthur Hobli, Bangalore East",
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [
+        {
+          "value": "Prestige Lakeside Habitat, Gunjur Village, Varthur Hobli, Bangalore East",
+          "learned_at": "2026-07-27T09:10:46.023226+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Prestige Lakeside Habitat, Gunjur Village, Varthur Hobli, Bangalore East",
+          "learned_at": "2026-07-27T09:10:46.023226+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Prestige Lakeside Habitat, Gunjur Village, Varthur Hobli, Bangalore East",
+          "learned_at": "2026-07-27T09:10:46.023226+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Prestige Lakeside Habitat, Gunjur Village, Varthur Hobli, Bangalore East",
+          "learned_at": "2026-07-27T09:10:46.023226+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Prestige Lakeside Habitat, Gunjur Village, Varthur Hobli, Bangalore East",
+          "learned_at": "2026-07-27T09:10:46.023226+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Prestige Lakeside Habitat, Gunjur Village, Varthur Hobli, Bangalore East",
+          "learned_at": "2026-07-27T09:10:46.023226+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Prestige Lakeside Habitat, Gunjur Village, Varthur Hobli, Bangalore East",
+          "learned_at": "2026-07-27T09:10:46.023226+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Prestige Lakeside Habitat, Gunjur Village, Varthur Hobli, Bangalore East",
+          "learned_at": "2026-07-27T09:10:46.023226+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Prestige Lakeside Habitat, Gunjur Village, Varthur Hobli, Bangalore East",
+          "learned_at": "2026-07-28T22:09:34.612812+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Prestige Lakeside Habitat, Gunjur Village, Varthur Hobli, Bangalore East",
+          "learned_at": "2026-07-28T22:11:45.681176+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Prestige Lakeside Habitat, Gunjur Village, Varthur Hobli, Bangalore East",
+          "learned_at": "2026-07-28T22:13:40.924033+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Prestige Lakeside Habitat, Gunjur Village, Varthur Hobli, Bangalore East",
+          "learned_at": "2026-09-06T14:33:13.102763+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 266310354,
+      "osm_source_url": "https://www.openstreetmap.org/way/266310354",
+      "osm_raw_name": "Prestige Lakeside Habitat",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9315203,
+      "osm_longitude": 77.7344388,
+      "osm_version": 27,
+      "osm_timestamp": "2026-05-02T16:03:53Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 166.2
+    },
+    {
+      "society": "Prestige Lavender Fields",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-a19f2cf2456fc549",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/290423/005906",
+      "rera_raw_project_name": "Prestige Lavender Fields",
+      "rera_promoter_name": "Prestige Office Ventures",
+      "rera_project_address": null,
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/viewAllProjects?language=en",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 2,
+      "osm_type": "way",
+      "osm_id": 766409580,
+      "osm_source_url": "https://www.openstreetmap.org/way/766409580",
+      "osm_raw_name": "Prestige Lavender Fields",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9348989,
+      "osm_longitude": 77.7403528,
+      "osm_version": 13,
+      "osm_timestamp": "2026-05-02T16:03:53Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 53.9
+    },
+    {
+      "society": "PRESTIGE WATERFORD",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-53c0b81882e6acc6",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/200811/003528",
+      "rera_raw_project_name": "PRESTIGE WATERFORD",
+      "rera_promoter_name": "Prestige  Estates Projects Limited",
+      "rera_project_address": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 13.640739,
+      "rera_longitude": 78.244397,
+      "rera_coordinate_variants": [
+        "13.640739,78.244397"
+      ],
+      "rera_coordinate_observations": 24,
+      "rera_coordinate_history": [
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:44:07.973154+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:44:07.973154+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:44:07.973154+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:44:07.973154+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:44:07.973154+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:44:07.973154+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:44:07.973154+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:44:07.973154+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:44:07.973154+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:47:36.603113+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:47:36.603113+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:47:36.603113+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:47:36.603113+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:47:36.603113+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:47:36.603113+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:47:36.603113+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:47:36.603113+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:47:36.603113+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:47:36.603113+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-07-25T18:47:36.603113+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-08-10T12:21:01.455144+00:00",
+          "run_id": "collector-fetch_rera-2026-08-10",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-08-11T18:58:07.035997+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-08-11T18:58:07.035997+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "13.640739,78.244397",
+          "learned_at": "2026-08-11T18:58:07.035997+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:44:07.973039+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:44:07.973039+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:44:07.973039+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:44:07.973039+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:44:07.973039+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:44:07.973039+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:44:07.973039+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:44:07.973039+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:44:07.973039+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:47:36.602974+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:47:36.602974+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:47:36.602974+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:47:36.602974+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:47:36.602974+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:47:36.602974+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:47:36.602974+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:47:36.602974+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:47:36.602974+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:47:36.602974+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-07-25T18:47:36.602974+00:00",
+          "run_id": "collector-fetch_rera-2026-07-25",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Khata No. 1386, Sy. No. 123,127 & 128, Pattandura Agrahara Village. K. R. Puram Hobli",
+          "learned_at": "2026-08-10T12:21:01.454678+00:00",
+          "run_id": "collector-fetch_rera-2026-08-10",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-08-11T18:58:07.035997+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-08-12",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 133630420,
+      "osm_source_url": "https://www.openstreetmap.org/way/133630420",
+      "osm_raw_name": "Prestige Waterford",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9814204,
+      "osm_longitude": 77.7408686,
+      "osm_version": 6,
+      "osm_timestamp": "2026-05-11T05:38:10Z",
+      "osm_rera_distance_m": 91342.3,
+      "coordinate_agreement": "major_disagreement_over_1_5km",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 155.8
+    },
+    {
+      "society": "Ruchira Lilium",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-69bb8c1b442a965d",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171222/000996",
+      "rera_raw_project_name": "Ruchira Lilium",
+      "rera_promoter_name": "Ruchira Projects private limited",
+      "rera_project_address": null,
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 12.997682,
+      "rera_longitude": 77.76316,
+      "rera_coordinate_variants": [
+        "12.997682,77.763160"
+      ],
+      "rera_coordinate_observations": 1,
+      "rera_coordinate_history": [
+        {
+          "value": "12.997682,77.763160",
+          "learned_at": "2026-09-06T14:33:58.595246+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-09-06T14:33:58.595246+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-09-06",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 1307192713,
+      "osm_source_url": "https://www.openstreetmap.org/way/1307192713",
+      "osm_raw_name": "Ruchira Lilium",
+      "osm_category": "building",
+      "osm_feature_type": "apartments",
+      "osm_landuse": null,
+      "osm_building": "apartments",
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9972085,
+      "osm_longitude": 77.7630048,
+      "osm_version": 2,
+      "osm_timestamp": "2024-08-25T06:21:04Z",
+      "osm_rera_distance_m": 55.3,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 8.6
+    },
+    {
+      "society": "Spectra Raaya",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-6df3e8af3f384bee",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/190809/002788",
+      "rera_raw_project_name": "Spectra Raaya",
+      "rera_promoter_name": "Spectra Constructions Private Limited",
+      "rera_project_address": null,
+      "rera_coordinate_status": "absent_in_collected_rera",
+      "rera_latitude": null,
+      "rera_longitude": null,
+      "rera_coordinate_variants": [],
+      "rera_coordinate_observations": 0,
+      "rera_coordinate_history": [],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/viewAllProjects?language=en",
+      "rera_coordinate_learned_at": null,
+      "rera_coordinate_run_id": null,
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 452723282,
+      "osm_source_url": "https://www.openstreetmap.org/way/452723282",
+      "osm_raw_name": "Spectra Raaya",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9618053,
+      "osm_longitude": 77.7304705,
+      "osm_version": 6,
+      "osm_timestamp": "2026-09-13T06:37:59Z",
+      "osm_rera_distance_m": null,
+      "coordinate_agreement": "not_comparable",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 66.3
+    },
+    {
+      "society": "SUMADHURA CAPITOL RESIDENCES",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-20f63624d25038cb",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/051024/007125",
+      "rera_raw_project_name": "SUMADHURA CAPITOL RESIDENCES",
+      "rera_promoter_name": "SUMADHURA INFRACON PRIVATE LIMITED",
+      "rera_project_address": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 12.98535765887552,
+      "rera_longitude": 77.75078040700681,
+      "rera_coordinate_variants": [
+        "12.98535765887552,77.75078040700681"
+      ],
+      "rera_coordinate_observations": 24,
+      "rera_coordinate_history": [
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-23T14:32:34.869316+00:00",
+          "run_id": "collector-fetch_rera-2026-07-23",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-26T09:37:32.877385+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-26T09:37:32.877385+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-26T09:37:32.877385+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-26T09:37:32.877385+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-26T09:37:32.877385+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-26T09:37:32.877385+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-26T09:37:32.877385+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-26T09:37:32.877385+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-26T09:37:32.877385+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-28T22:09:22.945088+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-28T22:11:26.324573+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-28T22:13:29.466153+00:00",
+          "run_id": "collector-fetch_rera-2026-07-31",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-07-28T22:13:29.466153+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-08-01T13:33:26.830415+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-08-01T13:33:26.830415+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-08-01T13:33:26.830415+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-08-01T13:33:26.830415+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-08-01T13:33:26.830415+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-08-10T12:20:38.599446+00:00",
+          "run_id": "collector-fetch_rera-2026-08-10",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-08-10T12:20:38.599446+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-08-10T12:20:38.599446+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-08-10T12:20:38.599446+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.98535765887552,77.75078040700681",
+          "learned_at": "2026-09-19T15:38:33.005640+00:00",
+          "run_id": "collector-fetch_rera-2026-09-19",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-23T14:32:34.869136+00:00",
+          "run_id": "collector-fetch_rera-2026-07-23",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:37:32.877020+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:37:32.877020+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:37:32.877020+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:37:32.877020+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:37:32.877020+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:37:32.877020+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:37:32.877020+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:37:32.877020+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:37:32.877020+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-28T22:09:22.944521+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-28T22:11:26.324099+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-28T22:13:29.465682+00:00",
+          "run_id": "collector-fetch_rera-2026-07-31",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-28T22:13:29.465682+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-08-01T13:33:26.829969+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-08-01T13:33:26.829969+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-08-01T13:33:26.829969+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-08-01T13:33:26.829969+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-08-01T13:33:26.829969+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-08-10T12:20:38.598785+00:00",
+          "run_id": "collector-fetch_rera-2026-08-10",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-08-10T12:20:38.598785+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-08-10T12:20:38.598785+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-08-10T12:20:38.598785+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "Sy No. 14, 152 & 158 , Pattandur Agrahara Village,K R Puram Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-09-19T15:38:33.004617+00:00",
+          "run_id": "collector-fetch_rera-2026-09-19",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-09-19T15:38:33.005640+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-09-19",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 1150896026,
+      "osm_source_url": "https://www.openstreetmap.org/way/1150896026",
+      "osm_raw_name": "Sumadhura Capitol Residences (u/c)",
+      "osm_category": "landuse",
+      "osm_feature_type": "construction",
+      "osm_landuse": "construction",
+      "osm_building": null,
+      "osm_construction": "residential",
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9854025,
+      "osm_longitude": 77.7506461,
+      "osm_version": 3,
+      "osm_timestamp": "2025-07-20T13:25:43Z",
+      "osm_rera_distance_m": 15.4,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "name_with_source_qualifier",
+      "existing_reference_distance_m": null
+    },
+    {
+      "society": "SUMADHURA EDEN GARDEN",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-25c0f766df515a4a",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/180328/002632",
+      "rera_raw_project_name": "SUMADHURA EDEN GARDEN",
+      "rera_promoter_name": "SUMADHURA INFRACON PRIVATE LIMITED",
+      "rera_project_address": null,
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 13.028467,
+      "rera_longitude": 77.751914,
+      "rera_coordinate_variants": [
+        "13.028467,77.751914"
+      ],
+      "rera_coordinate_observations": 1,
+      "rera_coordinate_history": [
+        {
+          "value": "13.028467,77.751914",
+          "learned_at": "2026-09-06T14:34:07.886383+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-09-06T14:34:07.886383+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-09-06",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 799463665,
+      "osm_source_url": "https://www.openstreetmap.org/way/799463665",
+      "osm_raw_name": "Sumadhura Eden Garden",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 13.0276423,
+      "osm_longitude": 77.7514011,
+      "osm_version": 4,
+      "osm_timestamp": "2024-04-08T15:04:42Z",
+      "osm_rera_distance_m": 107.2,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 5.9
+    },
+    {
+      "society": "SUMADHURA NANDANAM",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-0df6367ce304a963",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/180507/001667",
+      "rera_raw_project_name": "SUMADHURA NANDANAM",
+      "rera_promoter_name": "SUMADHURA INFRACON PRIVATE LIMITED",
+      "rera_project_address": null,
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 12.991469,
+      "rera_longitude": 77.711525,
+      "rera_coordinate_variants": [
+        "12.991469,77.711525"
+      ],
+      "rera_coordinate_observations": 1,
+      "rera_coordinate_history": [
+        {
+          "value": "12.991469,77.711525",
+          "learned_at": "2026-09-06T14:34:14.207355+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-09-06T14:34:14.207355+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-09-06",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 1123146960,
+      "osm_source_url": "https://www.openstreetmap.org/way/1123146960",
+      "osm_raw_name": "Sumadhura Nandanam",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9912163,
+      "osm_longitude": 77.7124787,
+      "osm_version": 5,
+      "osm_timestamp": "2024-04-12T13:36:51Z",
+      "osm_rera_distance_m": 107.1,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "exact_normalized_name",
+      "existing_reference_distance_m": 25.6
+    },
+    {
+      "society": "SUMADHURA SOHAM PHASE-I",
+      "sample_status": "active_roster",
+      "entity_id": "society:sumadhura-soham",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171123/000704",
+      "rera_raw_project_name": "SUMADHURA SOHAM PHASE-I",
+      "rera_promoter_name": null,
+      "rera_project_address": null,
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 12.979734,
+      "rera_longitude": 77.743252,
+      "rera_coordinate_variants": [
+        "12.979734,77.743252"
+      ],
+      "rera_coordinate_observations": 1,
+      "rera_coordinate_history": [
+        {
+          "value": "12.979734,77.743252",
+          "learned_at": "2026-09-06T14:33:43.232865+00:00",
+          "run_id": "collector-fetch_rera-2026-09-06",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-09-06T14:33:43.232865+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-09-06",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 1072344841,
+      "osm_source_url": "https://www.openstreetmap.org/way/1072344841",
+      "osm_raw_name": "Sumadhura Soham",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9793215,
+      "osm_longitude": 77.7431241,
+      "osm_version": 1,
+      "osm_timestamp": "2022-06-22T15:46:34Z",
+      "osm_rera_distance_m": 47.9,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "whole_project_osm_vs_rera_phase",
+      "existing_reference_distance_m": null
+    },
+    {
+      "society": "Vaswani Exquisite",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-67ba4bfb38da8a8c",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171015/000784",
+      "rera_raw_project_name": "Vaswani Exquisite",
+      "rera_promoter_name": "Vaswani Whitefield Projects Pvt Ltd",
+      "rera_project_address": "ITPL Main Road, Next to Zuri hotel, Hoodi",
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 12.990097,
+      "rera_longitude": 77.723972,
+      "rera_coordinate_variants": [
+        "12.990097,77.723972"
+      ],
+      "rera_coordinate_observations": 15,
+      "rera_coordinate_history": [
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-07-27T09:10:42.899396+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-07-27T09:10:42.899396+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-07-27T09:10:42.899396+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-07-27T09:10:42.899396+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-07-27T09:10:42.899396+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-07-27T09:10:42.899396+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-07-27T09:10:42.899396+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-07-27T09:10:42.899396+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-07-28T22:09:39.475683+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-07-28T22:11:50.256297+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-07-28T22:13:45.790787+00:00",
+          "run_id": "collector-fetch_rera-2026-07-28",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-08-10T12:20:47.924631+00:00",
+          "run_id": "collector-fetch_rera-2026-08-10",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-08-11T18:57:53.849066+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-08-11T18:57:53.849066+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.990097,77.723972",
+          "learned_at": "2026-08-11T18:57:53.849066+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [
+        {
+          "value": "ITPL Main Road, Next to Zuri hotel, Hoodi",
+          "learned_at": "2026-07-27T09:10:42.899283+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "ITPL Main Road, Next to Zuri hotel, Hoodi",
+          "learned_at": "2026-07-27T09:10:42.899283+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "ITPL Main Road, Next to Zuri hotel, Hoodi",
+          "learned_at": "2026-07-27T09:10:42.899283+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "ITPL Main Road, Next to Zuri hotel, Hoodi",
+          "learned_at": "2026-07-27T09:10:42.899283+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "ITPL Main Road, Next to Zuri hotel, Hoodi",
+          "learned_at": "2026-07-27T09:10:42.899283+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "ITPL Main Road, Next to Zuri hotel, Hoodi",
+          "learned_at": "2026-08-10T12:20:47.924225+00:00",
+          "run_id": "collector-fetch_rera-2026-08-10",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "ITPL Main Road, Next to Zuri hotel, Hoodi",
+          "learned_at": "2026-08-11T18:57:53.848393+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "ITPL Main Road, Next to Zuri hotel, Hoodi",
+          "learned_at": "2026-08-11T18:57:53.848393+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "ITPL Main Road, Next to Zuri hotel, Hoodi",
+          "learned_at": "2026-08-11T18:57:53.848393+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-08-11T18:57:53.849066+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-08-12",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 312720671,
+      "osm_source_url": "https://www.openstreetmap.org/way/312720671",
+      "osm_raw_name": "Vaswani Exquisite Apartments",
+      "osm_category": "landuse",
+      "osm_feature_type": "residential",
+      "osm_landuse": "residential",
+      "osm_building": null,
+      "osm_construction": null,
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9893756,
+      "osm_longitude": 77.7240595,
+      "osm_version": 6,
+      "osm_timestamp": "2026-08-17T06:23:04Z",
+      "osm_rera_distance_m": 80.8,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "name_with_source_qualifier",
+      "existing_reference_distance_m": null
+    },
+    {
+      "society": "Vaswani Starlight",
+      "sample_status": "active_roster",
+      "entity_id": "society:rera-612b8984826874f8",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/180424/006808",
+      "rera_raw_project_name": "Vaswani Starlight",
+      "rera_promoter_name": "Vaswani Estates Developers Private Limited",
+      "rera_project_address": "KATHA NO. 170, SY NO. 81, 82/1(P), 82/2, 82/3, 83/1, 83/2,83/3, 84/1, PATTANDUR AGRAHARA VILLAGE, , K R PURAM HOBLI, WARD NO. 82, ECC ROAD , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 12.979323535243182,
+      "rera_longitude": 77.73737599693263,
+      "rera_coordinate_variants": [
+        "12.979323535243182,77.73737599693263"
+      ],
+      "rera_coordinate_observations": 12,
+      "rera_coordinate_history": [
+        {
+          "value": "12.979323535243182,77.73737599693263",
+          "learned_at": "2026-07-23T14:33:08.265345+00:00",
+          "run_id": "collector-fetch_rera-2026-07-23",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.979323535243182,77.73737599693263",
+          "learned_at": "2026-07-26T09:53:09.355041+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.979323535243182,77.73737599693263",
+          "learned_at": "2026-07-26T09:53:09.355041+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.979323535243182,77.73737599693263",
+          "learned_at": "2026-07-26T09:53:09.355041+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.979323535243182,77.73737599693263",
+          "learned_at": "2026-07-26T09:53:09.355041+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.979323535243182,77.73737599693263",
+          "learned_at": "2026-07-26T09:53:09.355041+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.979323535243182,77.73737599693263",
+          "learned_at": "2026-07-26T09:53:09.355041+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.979323535243182,77.73737599693263",
+          "learned_at": "2026-08-01T11:02:38.156836+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.979323535243182,77.73737599693263",
+          "learned_at": "2026-08-10T12:20:58.300386+00:00",
+          "run_id": "collector-fetch_rera-2026-08-10",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.979323535243182,77.73737599693263",
+          "learned_at": "2026-08-11T18:58:03.052417+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.979323535243182,77.73737599693263",
+          "learned_at": "2026-08-11T18:58:03.052417+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "12.979323535243182,77.73737599693263",
+          "learned_at": "2026-08-11T18:58:03.052417+00:00",
+          "run_id": "collector-fetch_rera-2026-08-12",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [
+        {
+          "value": "KATHA NO. 170, SY NO. 81, 82/1(P), 82/2, 82/3, 83/1, 83/2,83/3, 84/1, PATTANDUR AGRAHARA VILLAGE, , K R PURAM HOBLI, WARD NO. 82, ECC ROAD , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-23T14:33:08.265252+00:00",
+          "run_id": "collector-fetch_rera-2026-07-23",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "KATHA NO. 170, SY NO. 81, 82/1(P), 82/2, 82/3, 83/1, 83/2,83/3, 84/1, PATTANDUR AGRAHARA VILLAGE, , K R PURAM HOBLI, WARD NO. 82, ECC ROAD , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:53:09.354876+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "KATHA NO. 170, SY NO. 81, 82/1(P), 82/2, 82/3, 83/1, 83/2,83/3, 84/1, PATTANDUR AGRAHARA VILLAGE, , K R PURAM HOBLI, WARD NO. 82, ECC ROAD , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:53:09.354876+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "KATHA NO. 170, SY NO. 81, 82/1(P), 82/2, 82/3, 83/1, 83/2,83/3, 84/1, PATTANDUR AGRAHARA VILLAGE, , K R PURAM HOBLI, WARD NO. 82, ECC ROAD , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:53:09.354876+00:00",
+          "run_id": "collector-fetch_rera-2026-07-26",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "KATHA NO. 170, SY NO. 81, 82/1(P), 82/2, 82/3, 83/1, 83/2,83/3, 84/1, PATTANDUR AGRAHARA VILLAGE, , K R PURAM HOBLI, WARD NO. 82, ECC ROAD , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:53:09.354876+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "KATHA NO. 170, SY NO. 81, 82/1(P), 82/2, 82/3, 83/1, 83/2,83/3, 84/1, PATTANDUR AGRAHARA VILLAGE, , K R PURAM HOBLI, WARD NO. 82, ECC ROAD , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:53:09.354876+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "KATHA NO. 170, SY NO. 81, 82/1(P), 82/2, 82/3, 83/1, 83/2,83/3, 84/1, PATTANDUR AGRAHARA VILLAGE, , K R PURAM HOBLI, WARD NO. 82, ECC ROAD , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-07-26T09:53:09.354876+00:00",
+          "run_id": "collector-fetch_rera-2026-07-27",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "KATHA NO. 170, SY NO. 81, 82/1(P), 82/2, 82/3, 83/1, 83/2,83/3, 84/1, PATTANDUR AGRAHARA VILLAGE, , K R PURAM HOBLI, WARD NO. 82, ECC ROAD , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-08-01T11:02:38.156415+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        },
+        {
+          "value": "KATHA NO. 170, SY NO. 81, 82/1(P), 82/2, 82/3, 83/1, 83/2,83/3, 84/1, PATTANDUR AGRAHARA VILLAGE, , K R PURAM HOBLI, WARD NO. 82, ECC ROAD , Bengaluru East , Bengaluru Urban, Karnataka - 560066",
+          "learned_at": "2026-08-10T12:20:58.299834+00:00",
+          "run_id": "collector-fetch_rera-2026-08-10",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-08-11T18:58:03.052417+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-08-12",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 1079074871,
+      "osm_source_url": "https://www.openstreetmap.org/way/1079074871",
+      "osm_raw_name": "Vaswani Starlight (u/c)",
+      "osm_category": "landuse",
+      "osm_feature_type": "construction",
+      "osm_landuse": "construction",
+      "osm_building": null,
+      "osm_construction": "residential",
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9787894,
+      "osm_longitude": 77.7373212,
+      "osm_version": 4,
+      "osm_timestamp": "2025-05-09T13:43:35Z",
+      "osm_rera_distance_m": 59.7,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "name_with_source_qualifier",
+      "existing_reference_distance_m": null
+    },
+    {
+      "society": "Pursuit of a Radical Rhapsody Phase 2",
+      "sample_status": "historical_roster",
+      "entity_id": "society:rera-d871b9e8d8bb5c00",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/190102/002271",
+      "rera_raw_project_name": "PURSUIT OF A RADICAL RHAPSODY PHASE 2",
+      "rera_promoter_name": "Total Environment Habitat Private Limited",
+      "rera_project_address": "Sy. No. 170(P), 170/1A, 169/1 to 169/4, 176/3, 177, 172/1, 172/2, 175 (P) & 136/1, Hoodi Village, KR Puram Hobli, Ward No. 82, Bangalore",
+      "rera_coordinate_status": "historical_raw_observation",
+      "rera_latitude": 12.990461,
+      "rera_longitude": 77.721342,
+      "rera_coordinate_variants": [
+        "12.990461,77.721342"
+      ],
+      "rera_coordinate_observations": 1,
+      "rera_coordinate_history": [
+        {
+          "value": "12.990461,77.721342",
+          "learned_at": "2026-08-01T11:02:40.758744+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_address_history": [
+        {
+          "value": "Sy. No. 170(P), 170/1A, 169/1 to 169/4, 176/3, 177, 172/1, 172/2, 175 (P) & 136/1, Hoodi Village, KR Puram Hobli, Ward No. 82, Bangalore",
+          "learned_at": "2026-08-01T11:02:40.758332+00:00",
+          "run_id": "collector-fetch_rera-2026-08-01",
+          "source_url": "https://rera.karnataka.gov.in/projectViewDetails"
+        }
+      ],
+      "rera_source_url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "rera_coordinate_learned_at": "2026-08-01T11:02:40.758744+00:00",
+      "rera_coordinate_run_id": "collector-fetch_rera-2026-08-01",
+      "rera_coordinate_in_active_bundle": false,
+      "osm_match_status": "candidate_found",
+      "osm_candidate_count": 1,
+      "osm_type": "way",
+      "osm_id": 345899243,
+      "osm_source_url": "https://www.openstreetmap.org/way/345899243",
+      "osm_raw_name": "Total Environment - Pursuit Of A Radical Rhapsody",
+      "osm_category": "landuse",
+      "osm_feature_type": "construction",
+      "osm_landuse": "construction",
+      "osm_building": null,
+      "osm_construction": "residential",
+      "osm_geometry_type": "Polygon",
+      "osm_latitude": 12.9887336,
+      "osm_longitude": 77.7204129,
+      "osm_version": 12,
+      "osm_timestamp": "2026-08-17T06:23:04Z",
+      "osm_rera_distance_m": 216.9,
+      "coordinate_agreement": "close_within_250m",
+      "name_scope_relationship": "whole_project_osm_vs_rera_phase",
+      "existing_reference_distance_m": null
+    }
+  ]
+}

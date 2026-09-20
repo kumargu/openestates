@@ -1,0 +1,4192 @@
+{
+  "collected_on": "2026-09-20",
+  "source": "OpenStreetMap Nominatim",
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0",
+  "records": [
+    {
+      "sample": {
+        "entity_id": "society:rera-526d82c4b10990fe",
+        "alias_entity_id": "society:amrutha-platinum-towers",
+        "name": "Amrutha Platinum Towers",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/180420/001525",
+        "latitude": 12.9634618,
+        "longitude": 77.7347701,
+        "sample_status": "active_roster"
+      },
+      "query": "Amrutha Platinum Towers, Whitefield, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1144036211,
+          "source_url": "https://www.openstreetmap.org/way/1144036211",
+          "raw_name": "Amrutha Platinum Towers",
+          "display_name": "Amrutha Platinum Towers, Ramagondanahalli, Whitefield, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560066, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.96355,
+          "longitude": 77.7347272,
+          "bounding_box": [
+            12.9626167,
+            12.9643068,
+            77.734344,
+            77.7351962
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.734344,
+                  12.9627866
+                ],
+                [
+                  77.7347597,
+                  12.9626167
+                ],
+                [
+                  77.7348221,
+                  12.9628337
+                ],
+                [
+                  77.7351962,
+                  12.9642664
+                ],
+                [
+                  77.7345456,
+                  12.9643068
+                ],
+                [
+                  77.734344,
+                  12.9627866
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3475,
+          "distance_from_existing_reference_m": 10.9,
+          "osm_tags": {
+            "addr:city": "Bengaluru",
+            "addr:district": "Bengaluru Urban",
+            "addr:postcode": "560066",
+            "addr:street": "Nallurahalli Siddapura Road",
+            "landuse": "residential",
+            "name": "Amrutha Platinum Towers",
+            "operator": "Amrutha Rama Constructions Pvt. Ltd.",
+            "residential": "apartments",
+            "website": "https://www.amruthaplatinumtowers.com"
+          },
+          "osm_version": 3,
+          "osm_timestamp": "2025-06-17T06:41:16Z",
+          "osm_changeset": 167723493
+        }
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-ccfa353d22484c7b",
+        "alias_entity_id": "society:brigade-lakefront-crimson",
+        "name": "Brigade Lakefront - Crimson",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/171016/000503",
+        "sample_status": "active_roster"
+      },
+      "query": "Brigade Lakefront Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 229628369,
+          "source_url": "https://www.openstreetmap.org/way/229628369",
+          "raw_name": "Brigade Lakefront",
+          "display_name": "Brigade Lakefront, EPIP Zone, Bharath Aikya Ward, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560066, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9807146,
+          "longitude": 77.7110148,
+          "bounding_box": [
+            12.9784395,
+            12.9830195,
+            77.7091239,
+            77.7120381
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7091239,
+                  12.9826439
+                ],
+                [
+                  77.7093568,
+                  12.982188
+                ],
+                [
+                  77.7094172,
+                  12.9820697
+                ],
+                [
+                  77.7095636,
+                  12.981783
+                ],
+                [
+                  77.7097014,
+                  12.9815132
+                ],
+                [
+                  77.7101818,
+                  12.9805437
+                ],
+                [
+                  77.7106302,
+                  12.9796944
+                ],
+                [
+                  77.7109565,
+                  12.9791854
+                ],
+                [
+                  77.7109556,
+                  12.9789865
+                ],
+                [
+                  77.7109644,
+                  12.9784395
+                ],
+                [
+                  77.7111367,
+                  12.9787697
+                ],
+                [
+                  77.7117888,
+                  12.9803668
+                ],
+                [
+                  77.7120031,
+                  12.9808855
+                ],
+                [
+                  77.7119936,
+                  12.9809816
+                ],
+                [
+                  77.7119982,
+                  12.9811912
+                ],
+                [
+                  77.7120245,
+                  12.9815266
+                ],
+                [
+                  77.7120381,
+                  12.9820958
+                ],
+                [
+                  77.7116713,
+                  12.9820317
+                ],
+                [
+                  77.7116283,
+                  12.9823731
+                ],
+                [
+                  77.7116144,
+                  12.9824838
+                ],
+                [
+                  77.711547,
+                  12.9830195
+                ],
+                [
+                  77.7098495,
+                  12.9827413
+                ],
+                [
+                  77.7091239,
+                  12.9826439
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": null,
+          "distance_from_existing_reference_m": null,
+          "osm_tags": {
+            "addr:city": "Bengaluru",
+            "addr:postcode": "560066",
+            "developer": "Brigade Group",
+            "landuse": "residential",
+            "name": "Brigade Lakefront",
+            "phone": "1800 102 9977",
+            "residential": "apartments",
+            "website": "www.brigadelakefront.com"
+          },
+          "osm_version": 16,
+          "osm_timestamp": "2025-09-18T04:33:31Z",
+          "osm_changeset": 172092881
+        }
+      ],
+      "query_attempts": [
+        "Brigade Lakefront - Crimson, Whitefield, Bengaluru",
+        "Brigade Lakefront - Crimson, Bengaluru",
+        "Brigade Lakefront Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-3f60497f6b602bb1",
+        "alias_entity_id": "society:brigade-woods",
+        "name": "Brigade Woods",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/180611/001895",
+        "latitude": 12.9841,
+        "longitude": 77.7420982,
+        "sample_status": "active_roster"
+      },
+      "query": "Brigade Woods, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 765656003,
+          "source_url": "https://www.openstreetmap.org/way/765656003",
+          "raw_name": "Brigade Woods",
+          "display_name": "Brigade Woods, Pattanduru Agrahara, S.M Krishna Ward, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9842836,
+          "longitude": 77.7413647,
+          "bounding_box": [
+            12.9834169,
+            12.9847831,
+            77.7403875,
+            77.7438089
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7403875,
+                  12.983938
+                ],
+                [
+                  77.7429156,
+                  12.983553
+                ],
+                [
+                  77.7438089,
+                  12.9834169
+                ],
+                [
+                  77.7437586,
+                  12.9837879
+                ],
+                [
+                  77.7430088,
+                  12.9840397
+                ],
+                [
+                  77.7415565,
+                  12.9845275
+                ],
+                [
+                  77.7405322,
+                  12.9847831
+                ],
+                [
+                  77.7403875,
+                  12.983938
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3309,
+          "distance_from_existing_reference_m": 82.1,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Brigade Woods",
+            "residential": "apartments"
+          },
+          "osm_version": 4,
+          "osm_timestamp": "2025-05-09T13:43:35Z",
+          "osm_changeset": 166029152
+        }
+      ],
+      "query_attempts": [
+        "Brigade Woods, Whitefield, Bengaluru",
+        "Brigade Woods, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-a46f28147c448b81",
+        "alias_entity_id": "society:desai-grandeur",
+        "name": "Desai Grandeur",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/180611/001887",
+        "latitude": 12.9772849,
+        "longitude": 77.7584731,
+        "sample_status": "active_roster"
+      },
+      "query": "Desai Grandeur, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1239793107,
+          "source_url": "https://www.openstreetmap.org/way/1239793107",
+          "raw_name": "Desai Grandeur",
+          "display_name": "Desai Grandeur, Channasandra, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9773071,
+          "longitude": 77.7584601,
+          "bounding_box": [
+            12.9766493,
+            12.9779204,
+            77.758158,
+            77.7587882
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.758158,
+                  12.9767756
+                ],
+                [
+                  77.7585188,
+                  12.9767311
+                ],
+                [
+                  77.7587882,
+                  12.9766493
+                ],
+                [
+                  77.7586425,
+                  12.9777907
+                ],
+                [
+                  77.7583832,
+                  12.9778787
+                ],
+                [
+                  77.7583015,
+                  12.9779204
+                ],
+                [
+                  77.7582707,
+                  12.9778093
+                ],
+                [
+                  77.7581632,
+                  12.9768234
+                ],
+                [
+                  77.758158,
+                  12.9767756
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3493,
+          "distance_from_existing_reference_m": 2.8,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Desai Grandeur",
+            "residential": "apartments"
+          },
+          "osm_version": 2,
+          "osm_timestamp": "2024-10-03T03:43:44Z",
+          "osm_changeset": 157401308
+        }
+      ],
+      "query_attempts": [
+        "Desai Grandeur, Whitefield, Bengaluru",
+        "Desai Grandeur, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-b64904e17950889a",
+        "alias_entity_id": "society:desai-radiant",
+        "name": "DESAI RADIANT",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/171214/001190",
+        "latitude": 12.9781798,
+        "longitude": 77.756672,
+        "sample_status": "active_roster"
+      },
+      "query": "DESAI RADIANT, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1239793104,
+          "source_url": "https://www.openstreetmap.org/way/1239793104",
+          "raw_name": "Desai Radiant",
+          "display_name": "Desai Radiant, S.M Krishna Ward, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9781772,
+          "longitude": 77.7568122,
+          "bounding_box": [
+            12.9778969,
+            12.9784627,
+            77.7560632,
+            77.7572809
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7560632,
+                  12.9779413
+                ],
+                [
+                  77.7561276,
+                  12.9779334
+                ],
+                [
+                  77.7571951,
+                  12.9778969
+                ],
+                [
+                  77.7572809,
+                  12.9783242
+                ],
+                [
+                  77.7571051,
+                  12.9783573
+                ],
+                [
+                  77.756546,
+                  12.9784627
+                ],
+                [
+                  77.7565768,
+                  12.9782092
+                ],
+                [
+                  77.7561691,
+                  12.9781452
+                ],
+                [
+                  77.7560632,
+                  12.9779413
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3465,
+          "distance_from_existing_reference_m": 15.2,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Desai Radiant",
+            "residential": "apartments"
+          },
+          "osm_version": 1,
+          "osm_timestamp": "2024-01-15T03:57:50Z",
+          "osm_changeset": 146265915
+        }
+      ],
+      "query_attempts": [
+        "DESAI RADIANT, Whitefield, Bengaluru",
+        "DESAI RADIANT, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-d3a4c30f2b11eb1c",
+        "alias_entity_id": "society:disha-courtyard",
+        "name": "DISHA COURTYARD",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/190123/002296",
+        "latitude": 12.9741069,
+        "longitude": 77.7571442,
+        "sample_status": "active_roster"
+      },
+      "query": "DISHA COURTYARD, Whitefield, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 773145599,
+          "source_url": "https://www.openstreetmap.org/way/773145599",
+          "raw_name": "Disha Courtyard",
+          "display_name": "Disha Courtyard, Whitefield, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9740789,
+          "longitude": 77.7571672,
+          "bounding_box": [
+            12.9733803,
+            12.9748335,
+            77.7562094,
+            77.7580789
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7562094,
+                  12.9739501
+                ],
+                [
+                  77.7575532,
+                  12.9733803
+                ],
+                [
+                  77.7576497,
+                  12.9735737
+                ],
+                [
+                  77.7577919,
+                  12.9735058
+                ],
+                [
+                  77.7578144,
+                  12.9735536
+                ],
+                [
+                  77.7580459,
+                  12.9740431
+                ],
+                [
+                  77.7580789,
+                  12.9741148
+                ],
+                [
+                  77.7567424,
+                  12.9747817
+                ],
+                [
+                  77.7566385,
+                  12.9748335
+                ],
+                [
+                  77.7562094,
+                  12.9739501
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3491,
+          "distance_from_existing_reference_m": 4.0,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Disha Courtyard",
+            "residential": "apartments"
+          },
+          "osm_version": 5,
+          "osm_timestamp": "2026-01-30T11:42:54Z",
+          "osm_changeset": 177886362
+        }
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-c1af3dd6c1581e3e",
+        "alias_entity_id": "society:godrej-air",
+        "name": "Godrej Air",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/170819/000006",
+        "sample_status": "active_roster"
+      },
+      "query": "Godrej Air, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 792488587,
+          "source_url": "https://www.openstreetmap.org/way/792488587",
+          "raw_name": "Godrej Air",
+          "display_name": "Godrej Air, EPIP Zone, Bharath Aikya Ward, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560048, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9873169,
+          "longitude": 77.7116761,
+          "bounding_box": [
+            12.985909,
+            12.9887067,
+            77.711367,
+            77.7126389
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.711367,
+                  12.9860188
+                ],
+                [
+                  77.7119622,
+                  12.985909
+                ],
+                [
+                  77.7119628,
+                  12.9862527
+                ],
+                [
+                  77.7122359,
+                  12.9862636
+                ],
+                [
+                  77.7126348,
+                  12.9862615
+                ],
+                [
+                  77.7126389,
+                  12.9867673
+                ],
+                [
+                  77.711923,
+                  12.9868068
+                ],
+                [
+                  77.7119038,
+                  12.9873545
+                ],
+                [
+                  77.7121911,
+                  12.9873547
+                ],
+                [
+                  77.7122243,
+                  12.9880031
+                ],
+                [
+                  77.712256,
+                  12.9886207
+                ],
+                [
+                  77.7122447,
+                  12.9886223
+                ],
+                [
+                  77.7119336,
+                  12.9886706
+                ],
+                [
+                  77.7116892,
+                  12.9886854
+                ],
+                [
+                  77.7116616,
+                  12.9887067
+                ],
+                [
+                  77.7114967,
+                  12.9886116
+                ],
+                [
+                  77.7114625,
+                  12.9878067
+                ],
+                [
+                  77.7114458,
+                  12.9872793
+                ],
+                [
+                  77.711367,
+                  12.9860188
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.0,
+          "distance_from_existing_reference_m": null,
+          "osm_tags": {
+            "addr:city": "Bengaluru",
+            "addr:postcode": "560048",
+            "addr:street": "Hoodi Main Road",
+            "landuse": "residential",
+            "name": "Godrej Air",
+            "residential": "apartments"
+          },
+          "osm_version": 9,
+          "osm_timestamp": "2025-09-06T06:13:03Z",
+          "osm_changeset": 171526557
+        }
+      ],
+      "query_attempts": [
+        "Godrej Air, Whitefield, Bengaluru",
+        "Godrej Air, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-e33c7fdcc0d15688",
+        "alias_entity_id": "society:godrej-splendour",
+        "name": "Godrej Splendour",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/160622/005000",
+        "sample_status": "active_roster"
+      },
+      "query": "Godrej Splendour, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1132098866,
+          "source_url": "https://www.openstreetmap.org/way/1132098866",
+          "raw_name": "Godrej Splendour (u/c)",
+          "display_name": "Godrej Splendour (u/c), Belathur, Dommasandra, K Dommasandra, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "construction",
+          "latitude": 13.0106407,
+          "longitude": 77.7459467,
+          "bounding_box": [
+            13.0070823,
+            13.014269,
+            77.7456361,
+            77.7483183
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7456361,
+                  13.0082635
+                ],
+                [
+                  77.7459087,
+                  13.0071814
+                ],
+                [
+                  77.7459258,
+                  13.0071137
+                ],
+                [
+                  77.7461725,
+                  13.0070823
+                ],
+                [
+                  77.746154,
+                  13.0071597
+                ],
+                [
+                  77.7461382,
+                  13.0072258
+                ],
+                [
+                  77.7458829,
+                  13.0082949
+                ],
+                [
+                  77.7459102,
+                  13.0087345
+                ],
+                [
+                  77.7459572,
+                  13.0094911
+                ],
+                [
+                  77.746017,
+                  13.0104535
+                ],
+                [
+                  77.7460396,
+                  13.010509
+                ],
+                [
+                  77.746194,
+                  13.0108874
+                ],
+                [
+                  77.7470791,
+                  13.0107724
+                ],
+                [
+                  77.7473366,
+                  13.0116086
+                ],
+                [
+                  77.7478194,
+                  13.011525
+                ],
+                [
+                  77.747967,
+                  13.0125408
+                ],
+                [
+                  77.7481413,
+                  13.0137411
+                ],
+                [
+                  77.7481306,
+                  13.0139554
+                ],
+                [
+                  77.7483183,
+                  13.014269
+                ],
+                [
+                  77.7469182,
+                  13.0141906
+                ],
+                [
+                  77.7469236,
+                  13.0140599
+                ],
+                [
+                  77.7458507,
+                  13.0113734
+                ],
+                [
+                  77.7456361,
+                  13.0082635
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 0.8889,
+          "distance_from_existing_reference_m": null,
+          "osm_tags": {
+            "construction": "residential",
+            "landuse": "construction",
+            "name": "Godrej Splendour (u/c)",
+            "note": "G+27"
+          },
+          "osm_version": 3,
+          "osm_timestamp": "2025-12-05T12:40:42Z",
+          "osm_changeset": 175546182
+        }
+      ],
+      "query_attempts": [
+        "Godrej Splendour, Whitefield, Bengaluru",
+        "Godrej Splendour, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-a84cefe381eb87e8",
+        "alias_entity_id": "society:godrej-united",
+        "name": "Godrej United",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/171010/000003",
+        "latitude": 12.9946926,
+        "longitude": 77.7045681,
+        "sample_status": "active_roster"
+      },
+      "query": "Godrej United, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 140235891,
+          "source_url": "https://www.openstreetmap.org/way/140235891",
+          "raw_name": "Godrej United",
+          "display_name": "Godrej United, Hoodi, Kaveri Nagara, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9947109,
+          "longitude": 77.70433,
+          "bounding_box": [
+            12.9932848,
+            12.9961005,
+            77.703685,
+            77.7054512
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.703685,
+                  12.9942048
+                ],
+                [
+                  77.7046926,
+                  12.9939256
+                ],
+                [
+                  77.7047291,
+                  12.9933328
+                ],
+                [
+                  77.704922,
+                  12.9932848
+                ],
+                [
+                  77.7048785,
+                  12.9943692
+                ],
+                [
+                  77.7047659,
+                  12.9944711
+                ],
+                [
+                  77.7047995,
+                  12.9946253
+                ],
+                [
+                  77.7048759,
+                  12.9947964
+                ],
+                [
+                  77.7049792,
+                  12.9948252
+                ],
+                [
+                  77.7054512,
+                  12.9961005
+                ],
+                [
+                  77.7041851,
+                  12.9960484
+                ],
+                [
+                  77.703685,
+                  12.9942048
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.344,
+          "distance_from_existing_reference_m": 25.9,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Godrej United",
+            "residential": "apartments"
+          },
+          "osm_version": 10,
+          "osm_timestamp": "2024-09-13T11:46:07Z",
+          "osm_changeset": 156568053
+        }
+      ],
+      "query_attempts": [
+        "Godrej United, Whitefield, Bengaluru",
+        "Godrej United, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-625bf95abd07dda7",
+        "alias_entity_id": "society:gopalan-aqua",
+        "name": "Gopalan Aqua",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/190327/002496",
+        "latitude": 12.9787804,
+        "longitude": 77.7581713,
+        "sample_status": "active_roster"
+      },
+      "query": "Gopalan Aqua, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 773145595,
+          "source_url": "https://www.openstreetmap.org/way/773145595",
+          "raw_name": "Gopalan Aqua",
+          "display_name": "Gopalan Aqua, Channasandra, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9791394,
+          "longitude": 77.7581806,
+          "bounding_box": [
+            12.9778787,
+            12.979682,
+            77.7574941,
+            77.7588485
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7574941,
+                  12.9784902
+                ],
+                [
+                  77.7583015,
+                  12.9779204
+                ],
+                [
+                  77.7583832,
+                  12.9778787
+                ],
+                [
+                  77.7585279,
+                  12.9784027
+                ],
+                [
+                  77.7586141,
+                  12.9787149
+                ],
+                [
+                  77.7588485,
+                  12.9795638
+                ],
+                [
+                  77.7577436,
+                  12.979682
+                ],
+                [
+                  77.7574941,
+                  12.9784902
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3407,
+          "distance_from_existing_reference_m": 39.9,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Gopalan Aqua",
+            "residential": "apartments"
+          },
+          "osm_version": 3,
+          "osm_timestamp": "2025-11-27T03:31:19Z",
+          "osm_changeset": 175179381
+        }
+      ],
+      "query_attempts": [
+        "Gopalan Aqua, Whitefield, Bengaluru",
+        "Gopalan Aqua, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-50a0074af8c0d8be",
+        "alias_entity_id": "society:habitat-eden-heights",
+        "name": "Habitat Eden Heights",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/171014/000258",
+        "latitude": 12.9897083,
+        "longitude": 77.7154552,
+        "sample_status": "active_roster"
+      },
+      "query": "Habitat Eden Heights, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 353236629,
+          "source_url": "https://www.openstreetmap.org/way/353236629",
+          "raw_name": "Habitat Eden Heights",
+          "display_name": "Habitat Eden Heights, Hoodi, Kaveri Nagara, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9897333,
+          "longitude": 77.7162333,
+          "bounding_box": [
+            12.9888652,
+            12.9905514,
+            77.7139986,
+            77.7169118
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7139986,
+                  12.9902906
+                ],
+                [
+                  77.714121,
+                  12.9902423
+                ],
+                [
+                  77.7146452,
+                  12.9901358
+                ],
+                [
+                  77.71598,
+                  12.9899428
+                ],
+                [
+                  77.7158524,
+                  12.9895238
+                ],
+                [
+                  77.7157574,
+                  12.9890847
+                ],
+                [
+                  77.7167331,
+                  12.9888652
+                ],
+                [
+                  77.7169118,
+                  12.9892796
+                ],
+                [
+                  77.7164707,
+                  12.9893496
+                ],
+                [
+                  77.7166012,
+                  12.9899784
+                ],
+                [
+                  77.7165558,
+                  12.9901653
+                ],
+                [
+                  77.7156647,
+                  12.990279
+                ],
+                [
+                  77.7143145,
+                  12.9905514
+                ],
+                [
+                  77.7139986,
+                  12.9902906
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3303,
+          "distance_from_existing_reference_m": 84.4,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Habitat Eden Heights",
+            "residential": "apartments"
+          },
+          "osm_version": 7,
+          "osm_timestamp": "2025-09-06T09:23:38Z",
+          "osm_changeset": 171532670
+        }
+      ],
+      "query_attempts": [
+        "Habitat Eden Heights, Whitefield, Bengaluru",
+        "Habitat Eden Heights, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-746a1e9128d28ad3",
+        "alias_entity_id": "society:mahaveer-promenade",
+        "name": "MAHAVEER PROMENADE",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/171015/000455",
+        "latitude": 13.007339,
+        "longitude": 77.7397371,
+        "sample_status": "active_roster"
+      },
+      "query": "MAHAVEER PROMENADE, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 3,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1132098870,
+          "source_url": "https://www.openstreetmap.org/way/1132098870",
+          "raw_name": "Mahaveer Promenade",
+          "display_name": "Mahaveer Promenade, Belathur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560067, India",
+          "category": "building",
+          "type": "apartments",
+          "latitude": 13.0076912,
+          "longitude": 77.7397546,
+          "bounding_box": [
+            13.0071829,
+            13.0079369,
+            77.7388354,
+            77.7406405
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7388354,
+                  13.0071829
+                ],
+                [
+                  77.7390473,
+                  13.0071868
+                ],
+                [
+                  77.7390419,
+                  13.0074155
+                ],
+                [
+                  77.7406405,
+                  13.0078232
+                ],
+                [
+                  77.7406324,
+                  13.0079369
+                ],
+                [
+                  77.7401966,
+                  13.0078872
+                ],
+                [
+                  77.7388407,
+                  13.0075592
+                ],
+                [
+                  77.7388354,
+                  13.0071829
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3409,
+          "distance_from_existing_reference_m": 39.2,
+          "osm_tags": {
+            "addr:city": "Bengaluru",
+            "addr:housenumber": "Mahaveer Promenade",
+            "addr:postcode": "560067",
+            "addr:street": "Confident Oberon Main Rd, Krishnarajapura",
+            "building": "apartments",
+            "building:levels": "4",
+            "name": "Mahaveer Promenade"
+          },
+          "osm_version": 1,
+          "osm_timestamp": "2023-01-15T04:29:02Z",
+          "osm_changeset": 131285732
+        },
+        {
+          "osm_type": "way",
+          "osm_id": 679570164,
+          "source_url": "https://www.openstreetmap.org/way/679570164",
+          "raw_name": "Mahaveer Promenade",
+          "display_name": "Mahaveer Promenade, Belathur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 13.0072522,
+          "longitude": 77.7390073,
+          "bounding_box": [
+            13.0066628,
+            13.0080153,
+            77.738657,
+            77.7408172
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.738657,
+                  13.0076415
+                ],
+                [
+                  77.7386905,
+                  13.0066628
+                ],
+                [
+                  77.7391372,
+                  13.0067726
+                ],
+                [
+                  77.739125,
+                  13.0071058
+                ],
+                [
+                  77.7395636,
+                  13.0073985
+                ],
+                [
+                  77.7408172,
+                  13.0077269
+                ],
+                [
+                  77.7407786,
+                  13.0079736
+                ],
+                [
+                  77.7407706,
+                  13.0080153
+                ],
+                [
+                  77.7399927,
+                  13.0079733
+                ],
+                [
+                  77.7397782,
+                  13.0079238
+                ],
+                [
+                  77.7392223,
+                  13.0077838
+                ],
+                [
+                  77.738657,
+                  13.0076415
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3314,
+          "distance_from_existing_reference_m": 79.7,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Mahaveer Promenade",
+            "residential": "apartments"
+          },
+          "osm_version": 7,
+          "osm_timestamp": "2026-06-20T17:56:38Z",
+          "osm_changeset": 184362237
+        },
+        {
+          "osm_type": "way",
+          "osm_id": 838533035,
+          "source_url": "https://www.openstreetmap.org/way/838533035",
+          "raw_name": "Mahaveer Promenade",
+          "display_name": "Mahaveer Promenade, Belathur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560067, India",
+          "category": "highway",
+          "type": "residential",
+          "latitude": 13.0072054,
+          "longitude": 77.73878,
+          "bounding_box": [
+            13.0070367,
+            13.0080026,
+            77.7387375,
+            77.7408511
+          ],
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [
+                77.7408511,
+                13.007846
+              ],
+              [
+                77.7407448,
+                13.0078086
+              ],
+              [
+                77.740683,
+                13.0077881
+              ],
+              [
+                77.7402278,
+                13.0076509
+              ],
+              [
+                77.7399573,
+                13.0075686
+              ],
+              [
+                77.7396039,
+                13.00748
+              ],
+              [
+                77.7393917,
+                13.0074434
+              ],
+              [
+                77.7391425,
+                13.0073948
+              ],
+              [
+                77.7390946,
+                13.0073591
+              ],
+              [
+                77.7390885,
+                13.0073041
+              ],
+              [
+                77.7390961,
+                13.0071951
+              ],
+              [
+                77.7390991,
+                13.0071519
+              ],
+              [
+                77.7390856,
+                13.0071094
+              ],
+              [
+                77.7390491,
+                13.0070791
+              ],
+              [
+                77.7388554,
+                13.0070367
+              ],
+              [
+                77.7388123,
+                13.0070532
+              ],
+              [
+                77.7387952,
+                13.007088
+              ],
+              [
+                77.7387375,
+                13.0075348
+              ],
+              [
+                77.7387492,
+                13.0076019
+              ],
+              [
+                77.7388064,
+                13.0076432
+              ],
+              [
+                77.7392478,
+                13.0077602
+              ],
+              [
+                77.7400553,
+                13.0078998
+              ],
+              [
+                77.7406344,
+                13.0079967
+              ],
+              [
+                77.740699,
+                13.0080011
+              ],
+              [
+                77.7407822,
+                13.0080001
+              ],
+              [
+                77.7408309,
+                13.0080026
+              ]
+            ]
+          },
+          "geometry_type": "LineString",
+          "name_proximity_score": 1.3256,
+          "distance_from_existing_reference_m": 104.8,
+          "osm_tags": {
+            "access": "private",
+            "highway": "residential",
+            "lanes": "1",
+            "maxspeed": "20",
+            "name": "Mahaveer Promenade",
+            "oneway": "yes",
+            "surface": "concrete"
+          },
+          "osm_version": 5,
+          "osm_timestamp": "2024-09-30T11:26:05Z",
+          "osm_changeset": 157292409
+        }
+      ],
+      "query_attempts": [
+        "MAHAVEER PROMENADE, Whitefield, Bengaluru",
+        "MAHAVEER PROMENADE, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-d855bc3290c4af3e",
+        "alias_entity_id": "society:mahaveer-tranquil",
+        "name": "MAHAVEER TRANQUIL",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/171028/000807",
+        "latitude": 12.9687785,
+        "longitude": 77.7334898,
+        "sample_status": "active_roster"
+      },
+      "query": "MAHAVEER TRANQUIL, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 2,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 185975845,
+          "source_url": "https://www.openstreetmap.org/way/185975845",
+          "raw_name": "Mahaveer Tranquil",
+          "display_name": "Mahaveer Tranquil, Nallurahalli, S.M Krishna Ward, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.969053,
+          "longitude": 77.7335103,
+          "bounding_box": [
+            12.9679022,
+            12.9696548,
+            77.7331875,
+            77.7337922
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7331875,
+                  12.9679396
+                ],
+                [
+                  77.7336605,
+                  12.9679022
+                ],
+                [
+                  77.7337922,
+                  12.9685396
+                ],
+                [
+                  77.7337516,
+                  12.9696548
+                ],
+                [
+                  77.7336077,
+                  12.9696235
+                ],
+                [
+                  77.7332747,
+                  12.9695664
+                ],
+                [
+                  77.7331875,
+                  12.9679396
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3429,
+          "distance_from_existing_reference_m": 30.6,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Mahaveer Tranquil",
+            "residential": "apartments"
+          },
+          "osm_version": 6,
+          "osm_timestamp": "2023-02-26T15:49:34Z",
+          "osm_changeset": 133048332
+        },
+        {
+          "osm_type": "way",
+          "osm_id": 1270788418,
+          "source_url": "https://www.openstreetmap.org/way/1270788418",
+          "raw_name": "Mahaveer Tranquil",
+          "display_name": "Mahaveer Tranquil, Kengal Hanumanthaiah South, Bengaluru South City Corporation, Bengaluru, Bangalore South, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.8980108,
+          "longitude": 77.5838348,
+          "bounding_box": [
+            12.8975068,
+            12.8985409,
+            77.583337,
+            77.5843502
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.583337,
+                  12.8976729
+                ],
+                [
+                  77.583753,
+                  12.8975677
+                ],
+                [
+                  77.5841685,
+                  12.8975068
+                ],
+                [
+                  77.5843502,
+                  12.8983487
+                ],
+                [
+                  77.5834791,
+                  12.8985409
+                ],
+                [
+                  77.583337,
+                  12.8976729
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 0.6,
+          "distance_from_existing_reference_m": 18026.9,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Mahaveer Tranquil",
+            "residential": "apartments"
+          },
+          "osm_version": 2,
+          "osm_timestamp": "2025-08-31T19:28:11Z",
+          "osm_changeset": 171284760
+        }
+      ],
+      "query_attempts": [
+        "MAHAVEER TRANQUIL, Whitefield, Bengaluru",
+        "MAHAVEER TRANQUIL, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-ed26990c2d277fa6",
+        "alias_entity_id": "society:narya-5-elements",
+        "name": "NARYA 5 ELEMENTS",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/171214/001859",
+        "latitude": 13.0034758,
+        "longitude": 77.7610997,
+        "sample_status": "active_roster"
+      },
+      "query": "NARYA 5 ELEMENTS, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1304106633,
+          "source_url": "https://www.openstreetmap.org/way/1304106633",
+          "raw_name": "Narya 5 Elements",
+          "display_name": "Narya 5 Elements, Belathur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 13.0034294,
+          "longitude": 77.7611056,
+          "bounding_box": [
+            13.0029531,
+            13.0039985,
+            77.7605572,
+            77.7616422
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7605572,
+                  13.003562
+                ],
+                [
+                  77.7611808,
+                  13.0029531
+                ],
+                [
+                  77.7616422,
+                  13.0032968
+                ],
+                [
+                  77.7609864,
+                  13.0039985
+                ],
+                [
+                  77.7605572,
+                  13.003562
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3488,
+          "distance_from_existing_reference_m": 5.2,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Narya 5 Elements",
+            "residential": "apartments"
+          },
+          "osm_version": 2,
+          "osm_timestamp": "2024-08-12T08:33:42Z",
+          "osm_changeset": 155135964
+        }
+      ],
+      "query_attempts": [
+        "NARYA 5 ELEMENTS, Whitefield, Bengaluru",
+        "NARYA 5 ELEMENTS, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-886337bc84b09645",
+        "alias_entity_id": "society:parimala-skyview",
+        "name": "Parimala Skyview",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/171214/001051",
+        "latitude": 12.9838398,
+        "longitude": 77.7507197,
+        "sample_status": "active_roster"
+      },
+      "query": "Parimala Skyview, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1134272289,
+          "source_url": "https://www.openstreetmap.org/way/1134272289",
+          "raw_name": "Parimala Skyview",
+          "display_name": "Parimala Skyview, Pattanduru Agrahara, S.M Krishna Ward, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9838298,
+          "longitude": 77.7507181,
+          "bounding_box": [
+            12.9834581,
+            12.9842215,
+            77.7503941,
+            77.7510453
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7503941,
+                  12.9835782
+                ],
+                [
+                  77.7508079,
+                  12.9834581
+                ],
+                [
+                  77.7510453,
+                  12.9840813
+                ],
+                [
+                  77.7506309,
+                  12.9842215
+                ],
+                [
+                  77.7503941,
+                  12.9835782
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3497,
+          "distance_from_existing_reference_m": 1.1,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Parimala Skyview",
+            "residential": "apartments"
+          },
+          "osm_version": 2,
+          "osm_timestamp": "2025-07-26T07:40:55Z",
+          "osm_changeset": 169490594
+        }
+      ],
+      "query_attempts": [
+        "Parimala Skyview, Whitefield, Bengaluru",
+        "Parimala Skyview, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-c8115c5bd2ddb21e",
+        "alias_entity_id": "society:pavani-divine",
+        "name": "Pavani Divine",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/171031/001412",
+        "latitude": 12.9834935,
+        "longitude": 77.7170411,
+        "sample_status": "active_roster"
+      },
+      "query": "Pavani Divine, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 886184260,
+          "source_url": "https://www.openstreetmap.org/way/886184260",
+          "raw_name": "Pavani Divine",
+          "display_name": "Pavani Divine, Sitaramapalya, Kaveri Nagara, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9835055,
+          "longitude": 77.7166198,
+          "bounding_box": [
+            12.9828317,
+            12.9841553,
+            77.7161371,
+            77.7179451
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7161371,
+                  12.9836208
+                ],
+                [
+                  77.7161566,
+                  12.9832364
+                ],
+                [
+                  77.7164546,
+                  12.9832562
+                ],
+                [
+                  77.7164918,
+                  12.9828738
+                ],
+                [
+                  77.7170136,
+                  12.9829282
+                ],
+                [
+                  77.7170283,
+                  12.9829873
+                ],
+                [
+                  77.7177798,
+                  12.9828449
+                ],
+                [
+                  77.7178645,
+                  12.9828317
+                ],
+                [
+                  77.7179451,
+                  12.9830199
+                ],
+                [
+                  77.7170588,
+                  12.9831621
+                ],
+                [
+                  77.7170988,
+                  12.9834555
+                ],
+                [
+                  77.7170947,
+                  12.9835555
+                ],
+                [
+                  77.7171202,
+                  12.9841553
+                ],
+                [
+                  77.7169907,
+                  12.9840403
+                ],
+                [
+                  77.7166917,
+                  12.9838625
+                ],
+                [
+                  77.7167105,
+                  12.9837946
+                ],
+                [
+                  77.7165616,
+                  12.9837279
+                ],
+                [
+                  77.7161371,
+                  12.9836208
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3393,
+          "distance_from_existing_reference_m": 45.7,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Pavani Divine",
+            "residential": "apartments"
+          },
+          "osm_version": 3,
+          "osm_timestamp": "2025-10-27T18:29:12Z",
+          "osm_changeset": 173852089
+        }
+      ],
+      "query_attempts": [
+        "Pavani Divine, Whitefield, Bengaluru",
+        "Pavani Divine, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-cd6d20ba75389465",
+        "alias_entity_id": "society:prestige-boulevard",
+        "name": "PRESTIGE BOULEVARD",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/170824/000057",
+        "latitude": 12.9741145,
+        "longitude": 77.7429834,
+        "sample_status": "active_roster"
+      },
+      "query": "PRESTIGE BOULEVARD, Whitefield, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1080943278,
+          "source_url": "https://www.openstreetmap.org/way/1080943278",
+          "raw_name": "Prestige Boulevard",
+          "display_name": "Prestige Boulevard, Whitefield, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9747395,
+          "longitude": 77.743108,
+          "bounding_box": [
+            12.9727655,
+            12.9754635,
+            77.7425223,
+            77.7434445
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7425223,
+                  12.9728627
+                ],
+                [
+                  77.7428163,
+                  12.9727655
+                ],
+                [
+                  77.7434445,
+                  12.9753875
+                ],
+                [
+                  77.7431089,
+                  12.9754635
+                ],
+                [
+                  77.7427637,
+                  12.9740915
+                ],
+                [
+                  77.7425223,
+                  12.9728627
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3335,
+          "distance_from_existing_reference_m": 70.8,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Prestige Boulevard",
+            "residential": "apartments"
+          },
+          "osm_version": 2,
+          "osm_timestamp": "2023-03-12T17:38:16Z",
+          "osm_changeset": 133594955
+        }
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-6a92ec2a5a1d4a4a",
+        "alias_entity_id": "society:prestige-fontaine-bleau",
+        "name": "PRESTIGE FONTAINE BLEAU",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/171223/002017",
+        "latitude": 12.9751452,
+        "longitude": 77.7427047,
+        "sample_status": "active_roster"
+      },
+      "query": "PRESTIGE FONTAINE BLEAU, Whitefield, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1080943279,
+          "source_url": "https://www.openstreetmap.org/way/1080943279",
+          "raw_name": "Prestige Fontaine Bleau",
+          "display_name": "Prestige Fontaine Bleau, Whitefield, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9751423,
+          "longitude": 77.7427131,
+          "bounding_box": [
+            12.9746787,
+            12.9756117,
+            77.742411,
+            77.7429984
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.742411,
+                  12.9747572
+                ],
+                [
+                  77.7428023,
+                  12.9746787
+                ],
+                [
+                  77.7429984,
+                  12.9755273
+                ],
+                [
+                  77.7426458,
+                  12.9756117
+                ],
+                [
+                  77.742411,
+                  12.9747572
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3498,
+          "distance_from_existing_reference_m": 1.0,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Prestige Fontaine Bleau",
+            "residential": "apartments"
+          },
+          "osm_version": 2,
+          "osm_timestamp": "2024-04-09T04:27:06Z",
+          "osm_changeset": 149758972
+        }
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-7886bc98e6a977a5",
+        "alias_entity_id": "society:prestige-lakeside-habitat",
+        "name": "Prestige Lakeside Habitat",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/170915/000176",
+        "latitude": 12.9314858,
+        "longitude": 77.7359716,
+        "sample_status": "active_roster"
+      },
+      "query": "Prestige Lakeside Habitat, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 266310354,
+          "source_url": "https://www.openstreetmap.org/way/266310354",
+          "raw_name": "Prestige Lakeside Habitat",
+          "display_name": "Prestige Lakeside Habitat, Varthur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560066, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9315203,
+          "longitude": 77.7344388,
+          "bounding_box": [
+            12.9266233,
+            12.9363483,
+            77.7316447,
+            77.7402985
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7316447,
+                  12.9323192
+                ],
+                [
+                  77.7323752,
+                  12.9321673
+                ],
+                [
+                  77.7324442,
+                  12.9325829
+                ],
+                [
+                  77.7324846,
+                  12.9328045
+                ],
+                [
+                  77.7330308,
+                  12.9327826
+                ],
+                [
+                  77.7330673,
+                  12.93243
+                ],
+                [
+                  77.733129,
+                  12.9324248
+                ],
+                [
+                  77.7331249,
+                  12.9322667
+                ],
+                [
+                  77.733239,
+                  12.9322628
+                ],
+                [
+                  77.7332445,
+                  12.932239
+                ],
+                [
+                  77.7332614,
+                  12.9321496
+                ],
+                [
+                  77.7332765,
+                  12.9320292
+                ],
+                [
+                  77.7332363,
+                  12.9313479
+                ],
+                [
+                  77.7339759,
+                  12.9312883
+                ],
+                [
+                  77.733984,
+                  12.931189
+                ],
+                [
+                  77.7340329,
+                  12.9305885
+                ],
+                [
+                  77.7339516,
+                  12.9300949
+                ],
+                [
+                  77.7342839,
+                  12.9301213
+                ],
+                [
+                  77.7342233,
+                  12.9296939
+                ],
+                [
+                  77.733843,
+                  12.9296553
+                ],
+                [
+                  77.7336504,
+                  12.9296813
+                ],
+                [
+                  77.733445,
+                  12.9296916
+                ],
+                [
+                  77.7331696,
+                  12.929197
+                ],
+                [
+                  77.7331333,
+                  12.9291318
+                ],
+                [
+                  77.7331424,
+                  12.9289689
+                ],
+                [
+                  77.7332067,
+                  12.9289166
+                ],
+                [
+                  77.7332291,
+                  12.9285075
+                ],
+                [
+                  77.7332473,
+                  12.9283241
+                ],
+                [
+                  77.7332711,
+                  12.9280853
+                ],
+                [
+                  77.7329501,
+                  12.9280438
+                ],
+                [
+                  77.7329195,
+                  12.9280398
+                ],
+                [
+                  77.7326515,
+                  12.9280748
+                ],
+                [
+                  77.7326076,
+                  12.9279471
+                ],
+                [
+                  77.7326365,
+                  12.9277278
+                ],
+                [
+                  77.7327382,
+                  12.9276256
+                ],
+                [
+                  77.7329203,
+                  12.927114
+                ],
+                [
+                  77.7328766,
+                  12.9268117
+                ],
+                [
+                  77.7328657,
+                  12.9267268
+                ],
+                [
+                  77.7337032,
+                  12.9266233
+                ],
+                [
+                  77.7337227,
+                  12.9267449
+                ],
+                [
+                  77.7340006,
+                  12.9266899
+                ],
+                [
+                  77.7340238,
+                  12.926785
+                ],
+                [
+                  77.7341094,
+                  12.9270964
+                ],
+                [
+                  77.7341147,
+                  12.9271232
+                ],
+                [
+                  77.7337747,
+                  12.927227
+                ],
+                [
+                  77.7338511,
+                  12.9277304
+                ],
+                [
+                  77.7338801,
+                  12.9279791
+                ],
+                [
+                  77.7339167,
+                  12.9282924
+                ],
+                [
+                  77.7341914,
+                  12.9280906
+                ],
+                [
+                  77.7343787,
+                  12.9276615
+                ],
+                [
+                  77.7345759,
+                  12.9276255
+                ],
+                [
+                  77.7346053,
+                  12.9276221
+                ],
+                [
+                  77.7348718,
+                  12.9280382
+                ],
+                [
+                  77.7348845,
+                  12.928114
+                ],
+                [
+                  77.7353985,
+                  12.9288304
+                ],
+                [
+                  77.7353867,
+                  12.9289872
+                ],
+                [
+                  77.734812,
+                  12.9290375
+                ],
+                [
+                  77.734859,
+                  12.9294721
+                ],
+                [
+                  77.7346843,
+                  12.9295276
+                ],
+                [
+                  77.7347975,
+                  12.929725
+                ],
+                [
+                  77.7347852,
+                  12.9306589
+                ],
+                [
+                  77.7350521,
+                  12.9306838
+                ],
+                [
+                  77.7350391,
+                  12.9307949
+                ],
+                [
+                  77.7350275,
+                  12.9309373
+                ],
+                [
+                  77.7355783,
+                  12.9309006
+                ],
+                [
+                  77.7356347,
+                  12.9315622
+                ],
+                [
+                  77.7367382,
+                  12.9314571
+                ],
+                [
+                  77.7368908,
+                  12.9314824
+                ],
+                [
+                  77.7370222,
+                  12.9315582
+                ],
+                [
+                  77.7370625,
+                  12.9315608
+                ],
+                [
+                  77.7370691,
+                  12.9313844
+                ],
+                [
+                  77.7371056,
+                  12.9313605
+                ],
+                [
+                  77.7372649,
+                  12.9312563
+                ],
+                [
+                  77.7360776,
+                  12.9294004
+                ],
+                [
+                  77.7362239,
+                  12.9293842
+                ],
+                [
+                  77.7365244,
+                  12.9293509
+                ],
+                [
+                  77.7369399,
+                  12.9292814
+                ],
+                [
+                  77.7371512,
+                  12.929244
+                ],
+                [
+                  77.7373284,
+                  12.9292125
+                ],
+                [
+                  77.7373725,
+                  12.9292047
+                ],
+                [
+                  77.7376491,
+                  12.9301056
+                ],
+                [
+                  77.7380932,
+                  12.9300034
+                ],
+                [
+                  77.7382182,
+                  12.930458
+                ],
+                [
+                  77.7387509,
+                  12.9303432
+                ],
+                [
+                  77.738617,
+                  12.9299508
+                ],
+                [
+                  77.738995,
+                  12.9298155
+                ],
+                [
+                  77.7390961,
+                  12.9299495
+                ],
+                [
+                  77.739566,
+                  12.9298058
+                ],
+                [
+                  77.7396491,
+                  12.9299835
+                ],
+                [
+                  77.7401786,
+                  12.9297969
+                ],
+                [
+                  77.7402985,
+                  12.9300063
+                ],
+                [
+                  77.7392517,
+                  12.93036
+                ],
+                [
+                  77.7394218,
+                  12.9312602
+                ],
+                [
+                  77.7392135,
+                  12.9313557
+                ],
+                [
+                  77.7392417,
+                  12.9317451
+                ],
+                [
+                  77.7391532,
+                  12.9317726
+                ],
+                [
+                  77.7392019,
+                  12.9319628
+                ],
+                [
+                  77.739235,
+                  12.9321287
+                ],
+                [
+                  77.7392873,
+                  12.9323909
+                ],
+                [
+                  77.7394965,
+                  12.9323569
+                ],
+                [
+                  77.7395303,
+                  12.932447
+                ],
+                [
+                  77.7399413,
+                  12.9335439
+                ],
+                [
+                  77.7395068,
+                  12.9335361
+                ],
+                [
+                  77.7384908,
+                  12.9335662
+                ],
+                [
+                  77.7379903,
+                  12.933581
+                ],
+                [
+                  77.7377748,
+                  12.9336891
+                ],
+                [
+                  77.7376705,
+                  12.9339359
+                ],
+                [
+                  77.7372338,
+                  12.9342206
+                ],
+                [
+                  77.7369592,
+                  12.9343384
+                ],
+                [
+                  77.7369238,
+                  12.9346556
+                ],
+                [
+                  77.7360748,
+                  12.9351212
+                ],
+                [
+                  77.7356449,
+                  12.9350843
+                ],
+                [
+                  77.7350293,
+                  12.935467
+                ],
+                [
+                  77.7351387,
+                  12.9362041
+                ],
+                [
+                  77.7341006,
+                  12.9363483
+                ],
+                [
+                  77.7335109,
+                  12.9363088
+                ],
+                [
+                  77.733491,
+                  12.9360062
+                ],
+                [
+                  77.733609,
+                  12.935988
+                ],
+                [
+                  77.7338612,
+                  12.9356374
+                ],
+                [
+                  77.7336921,
+                  12.9349774
+                ],
+                [
+                  77.7336622,
+                  12.9348606
+                ],
+                [
+                  77.732492,
+                  12.934872
+                ],
+                [
+                  77.7323276,
+                  12.9348736
+                ],
+                [
+                  77.7323286,
+                  12.9348959
+                ],
+                [
+                  77.7323453,
+                  12.9352635
+                ],
+                [
+                  77.7321214,
+                  12.9352681
+                ],
+                [
+                  77.7321143,
+                  12.9344094
+                ],
+                [
+                  77.7323726,
+                  12.9344063
+                ],
+                [
+                  77.7323603,
+                  12.9337623
+                ],
+                [
+                  77.7318919,
+                  12.9336309
+                ],
+                [
+                  77.7317078,
+                  12.9326232
+                ],
+                [
+                  77.7316844,
+                  12.9325104
+                ],
+                [
+                  77.7316447,
+                  12.9323192
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3112,
+          "distance_from_existing_reference_m": 166.2,
+          "osm_tags": {
+            "addr:city": "Bangalore",
+            "addr:postcode": "560066",
+            "addr:street": "Whitefield-Sarjapur Road, Opposite Chrysalis School, Varthur, Gunjur Village, Bengaluru, Karnataka 560087",
+            "developer": "Prestige Group",
+            "landuse": "residential",
+            "name": "Prestige Lakeside Habitat",
+            "phone": "+91 88847 47474",
+            "website": "www.prestigelakesidehabitat.com"
+          },
+          "osm_version": 27,
+          "osm_timestamp": "2026-05-02T16:03:53Z",
+          "osm_changeset": 182124238
+        }
+      ],
+      "query_attempts": [
+        "Prestige Lakeside Habitat, Whitefield, Bengaluru",
+        "Prestige Lakeside Habitat, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-a19f2cf2456fc549",
+        "alias_entity_id": "society:prestige-lavender-fields",
+        "name": "Prestige Lavender Fields",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/290423/005906",
+        "latitude": 12.93466,
+        "longitude": 77.7399204,
+        "sample_status": "active_roster"
+      },
+      "query": "Prestige Lavender Fields, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 2,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 766409580,
+          "source_url": "https://www.openstreetmap.org/way/766409580",
+          "raw_name": "Prestige Lavender Fields",
+          "display_name": "Prestige Lavender Fields, Varthur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9348989,
+          "longitude": 77.7403528,
+          "bounding_box": [
+            12.932447,
+            12.9368731,
+            77.7384908,
+            77.74135
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7384908,
+                  12.9335662
+                ],
+                [
+                  77.7395068,
+                  12.9335361
+                ],
+                [
+                  77.7399413,
+                  12.9335439
+                ],
+                [
+                  77.7395303,
+                  12.932447
+                ],
+                [
+                  77.7397582,
+                  12.9324515
+                ],
+                [
+                  77.7398313,
+                  12.9324529
+                ],
+                [
+                  77.7399981,
+                  12.9324562
+                ],
+                [
+                  77.740379,
+                  12.9336535
+                ],
+                [
+                  77.7399713,
+                  12.9337803
+                ],
+                [
+                  77.7402717,
+                  12.9345292
+                ],
+                [
+                  77.7405619,
+                  12.9344828
+                ],
+                [
+                  77.7410066,
+                  12.9344116
+                ],
+                [
+                  77.7411966,
+                  12.9352476
+                ],
+                [
+                  77.74135,
+                  12.9359226
+                ],
+                [
+                  77.7406083,
+                  12.936001
+                ],
+                [
+                  77.7407011,
+                  12.9363175
+                ],
+                [
+                  77.7407888,
+                  12.9367316
+                ],
+                [
+                  77.7400318,
+                  12.9368731
+                ],
+                [
+                  77.7398505,
+                  12.936184
+                ],
+                [
+                  77.7393705,
+                  12.9362703
+                ],
+                [
+                  77.7392203,
+                  12.9353658
+                ],
+                [
+                  77.7396494,
+                  12.9352821
+                ],
+                [
+                  77.7395153,
+                  12.9344404
+                ],
+                [
+                  77.7390915,
+                  12.9345502
+                ],
+                [
+                  77.7388072,
+                  12.9342051
+                ],
+                [
+                  77.7386892,
+                  12.9342365
+                ],
+                [
+                  77.7386248,
+                  12.9341057
+                ],
+                [
+                  77.7384908,
+                  12.9335662
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3374,
+          "distance_from_existing_reference_m": 53.9,
+          "osm_tags": {
+            "developer": "Prestige Group",
+            "landuse": "residential",
+            "name": "Prestige Lavender Fields"
+          },
+          "osm_version": 13,
+          "osm_timestamp": "2026-05-02T16:03:53Z",
+          "osm_changeset": 182124238
+        },
+        {
+          "osm_type": "way",
+          "osm_id": 1414003396,
+          "source_url": "https://www.openstreetmap.org/way/1414003396",
+          "raw_name": "Prestige Lavender Fields (u/c)",
+          "display_name": "Prestige Lavender Fields (u/c), Varthur, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9319339,
+          "longitude": 77.7399992,
+          "bounding_box": [
+            12.9314066,
+            12.9324562,
+            77.7392019,
+            77.7415739
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7392019,
+                  12.9319628
+                ],
+                [
+                  77.7392872,
+                  12.9319474
+                ],
+                [
+                  77.7397522,
+                  12.9318631
+                ],
+                [
+                  77.7397974,
+                  12.9318549
+                ],
+                [
+                  77.7398622,
+                  12.9318432
+                ],
+                [
+                  77.7400142,
+                  12.9318157
+                ],
+                [
+                  77.7400357,
+                  12.9319203
+                ],
+                [
+                  77.7405713,
+                  12.9317271
+                ],
+                [
+                  77.7414599,
+                  12.9314066
+                ],
+                [
+                  77.7415739,
+                  12.9315563
+                ],
+                [
+                  77.740617,
+                  12.9318765
+                ],
+                [
+                  77.7407035,
+                  12.932132
+                ],
+                [
+                  77.7402422,
+                  12.9322235
+                ],
+                [
+                  77.7403253,
+                  12.9324536
+                ],
+                [
+                  77.7400572,
+                  12.9324557
+                ],
+                [
+                  77.7399981,
+                  12.9324562
+                ],
+                [
+                  77.7398313,
+                  12.9324529
+                ],
+                [
+                  77.7397582,
+                  12.9324515
+                ],
+                [
+                  77.7395303,
+                  12.932447
+                ],
+                [
+                  77.7394965,
+                  12.9323569
+                ],
+                [
+                  77.7392873,
+                  12.9323909
+                ],
+                [
+                  77.739235,
+                  12.9321287
+                ],
+                [
+                  77.7392019,
+                  12.9319628
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.2023,
+          "distance_from_existing_reference_m": 303.2,
+          "osm_tags": {
+            "developer": "Prestige Group",
+            "landuse": "residential",
+            "name": "Prestige Lavender Fields (u/c)"
+          },
+          "osm_version": 3,
+          "osm_timestamp": "2026-05-02T16:03:53Z",
+          "osm_changeset": 182124238
+        }
+      ],
+      "query_attempts": [
+        "Prestige Lavender Fields, Whitefield, Bengaluru",
+        "Prestige Lavender Fields, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-53c0b81882e6acc6",
+        "alias_entity_id": "society:prestige-waterford",
+        "name": "PRESTIGE WATERFORD",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/200811/003528",
+        "latitude": 12.9819914,
+        "longitude": 77.7421819,
+        "sample_status": "active_roster"
+      },
+      "query": "PRESTIGE WATERFORD, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 133630420,
+          "source_url": "https://www.openstreetmap.org/way/133630420",
+          "raw_name": "Prestige Waterford",
+          "display_name": "Prestige Waterford, Pattanduru Agrahara, S.M Krishna Ward, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9814204,
+          "longitude": 77.7408686,
+          "bounding_box": [
+            12.9803659,
+            12.9824745,
+            77.7393516,
+            77.7437612
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7393516,
+                  12.9805031
+                ],
+                [
+                  77.7406114,
+                  12.9803659
+                ],
+                [
+                  77.7406458,
+                  12.9803736
+                ],
+                [
+                  77.7406699,
+                  12.9804808
+                ],
+                [
+                  77.741189,
+                  12.9804402
+                ],
+                [
+                  77.7414713,
+                  12.9806973
+                ],
+                [
+                  77.7420818,
+                  12.9812533
+                ],
+                [
+                  77.7422118,
+                  12.9813717
+                ],
+                [
+                  77.7428352,
+                  12.9816647
+                ],
+                [
+                  77.7434694,
+                  12.9815468
+                ],
+                [
+                  77.7436802,
+                  12.9819929
+                ],
+                [
+                  77.7437453,
+                  12.9821307
+                ],
+                [
+                  77.743725,
+                  12.98228
+                ],
+                [
+                  77.7437612,
+                  12.9824745
+                ],
+                [
+                  77.7405505,
+                  12.9824213
+                ],
+                [
+                  77.7404213,
+                  12.9824192
+                ],
+                [
+                  77.7403155,
+                  12.981656
+                ],
+                [
+                  77.7394255,
+                  12.9814691
+                ],
+                [
+                  77.739374,
+                  12.9807949
+                ],
+                [
+                  77.7393516,
+                  12.9805031
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3136,
+          "distance_from_existing_reference_m": 155.8,
+          "osm_tags": {
+            "developer": "Prestige Group",
+            "landuse": "residential",
+            "name": "Prestige Waterford",
+            "note": "Was previously the Waterford Estate, an orchard",
+            "residential": "apartments"
+          },
+          "osm_version": 6,
+          "osm_timestamp": "2026-05-11T05:38:10Z",
+          "osm_changeset": 182493932
+        }
+      ],
+      "query_attempts": [
+        "PRESTIGE WATERFORD, Whitefield, Bengaluru",
+        "PRESTIGE WATERFORD, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-69bb8c1b442a965d",
+        "alias_entity_id": "society:ruchira-lilium",
+        "name": "Ruchira Lilium",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/171222/000996",
+        "latitude": 12.997285,
+        "longitude": 77.7630166,
+        "sample_status": "active_roster"
+      },
+      "query": "Ruchira Lilium, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1307192713,
+          "source_url": "https://www.openstreetmap.org/way/1307192713",
+          "raw_name": "Ruchira Lilium",
+          "display_name": "Ruchira Lilium, Chariot Street, Kadugodi, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560067, India",
+          "category": "building",
+          "type": "apartments",
+          "latitude": 12.9972085,
+          "longitude": 77.7630048,
+          "bounding_box": [
+            12.996913,
+            12.9976569,
+            77.7627796,
+            77.7632535
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7627796,
+                  12.9969601
+                ],
+                [
+                  77.7631588,
+                  12.996913
+                ],
+                [
+                  77.7632535,
+                  12.9976365
+                ],
+                [
+                  77.7630892,
+                  12.9976569
+                ],
+                [
+                  77.763063,
+                  12.9974568
+                ],
+                [
+                  77.7628481,
+                  12.9974835
+                ],
+                [
+                  77.7627796,
+                  12.9969601
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.348,
+          "distance_from_existing_reference_m": 8.6,
+          "osm_tags": {
+            "building": "apartments",
+            "building:levels": "6",
+            "name": "Ruchira Lilium"
+          },
+          "osm_version": 2,
+          "osm_timestamp": "2024-08-25T06:21:04Z",
+          "osm_changeset": 155721772
+        }
+      ],
+      "query_attempts": [
+        "Ruchira Lilium, Whitefield, Bengaluru",
+        "Ruchira Lilium, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-6df3e8af3f384bee",
+        "alias_entity_id": "society:spectra-raaya",
+        "name": "Spectra Raaya",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/190809/002788",
+        "latitude": 12.9612098,
+        "longitude": 77.7304492,
+        "sample_status": "active_roster"
+      },
+      "query": "Spectra Raaya, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 452723282,
+          "source_url": "https://www.openstreetmap.org/way/452723282",
+          "raw_name": "Spectra Raaya",
+          "display_name": "Spectra Raaya, Kundalahalli, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9618053,
+          "longitude": 77.7304705,
+          "bounding_box": [
+            12.9598838,
+            12.9624809,
+            77.7301115,
+            77.7307859
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7301115,
+                  12.9598865
+                ],
+                [
+                  77.7306229,
+                  12.9598838
+                ],
+                [
+                  77.7306407,
+                  12.9601645
+                ],
+                [
+                  77.730711,
+                  12.9611516
+                ],
+                [
+                  77.7307859,
+                  12.9624589
+                ],
+                [
+                  77.7307337,
+                  12.9624613
+                ],
+                [
+                  77.730221,
+                  12.9624809
+                ],
+                [
+                  77.7301115,
+                  12.9598865
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3345,
+          "distance_from_existing_reference_m": 66.3,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Spectra Raaya",
+            "residential": "apartments"
+          },
+          "osm_version": 6,
+          "osm_timestamp": "2026-09-13T06:37:59Z",
+          "osm_changeset": 188945529
+        }
+      ],
+      "query_attempts": [
+        "Spectra Raaya, Whitefield, Bengaluru",
+        "Spectra Raaya, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-20f63624d25038cb",
+        "alias_entity_id": "society:sumadhura-capitol-residences",
+        "name": "SUMADHURA CAPITOL RESIDENCES",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/051024/007125",
+        "sample_status": "active_roster"
+      },
+      "query": "SUMADHURA CAPITOL RESIDENCES, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1150896026,
+          "source_url": "https://www.openstreetmap.org/way/1150896026",
+          "raw_name": "Sumadhura Capitol Residences (u/c)",
+          "display_name": "Sumadhura Capitol Residences (u/c), Kadugodi, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "construction",
+          "latitude": 12.9854025,
+          "longitude": 77.7506461,
+          "bounding_box": [
+            12.9850454,
+            12.9862953,
+            77.7489587,
+            77.7514366
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7489587,
+                  12.985809
+                ],
+                [
+                  77.7510761,
+                  12.9850454
+                ],
+                [
+                  77.7514366,
+                  12.9860335
+                ],
+                [
+                  77.750771,
+                  12.9862953
+                ],
+                [
+                  77.7505443,
+                  12.9857596
+                ],
+                [
+                  77.7498094,
+                  12.9860601
+                ],
+                [
+                  77.7489587,
+                  12.985809
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 0.9333,
+          "distance_from_existing_reference_m": null,
+          "osm_tags": {
+            "construction": "residential",
+            "landuse": "construction",
+            "name": "Sumadhura Capitol Residences (u/c)"
+          },
+          "osm_version": 3,
+          "osm_timestamp": "2025-07-20T13:25:43Z",
+          "osm_changeset": 169196405
+        }
+      ],
+      "query_attempts": [
+        "SUMADHURA CAPITOL RESIDENCES, Whitefield, Bengaluru",
+        "SUMADHURA CAPITOL RESIDENCES, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-25c0f766df515a4a",
+        "alias_entity_id": "society:sumadhura-eden-garden",
+        "name": "SUMADHURA EDEN GARDEN",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/180328/002632",
+        "latitude": 13.0276734,
+        "longitude": 77.7514457,
+        "sample_status": "active_roster"
+      },
+      "query": "SUMADHURA EDEN GARDEN, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 799463665,
+          "source_url": "https://www.openstreetmap.org/way/799463665",
+          "raw_name": "Sumadhura Eden Garden",
+          "display_name": "Sumadhura Eden Garden, Doddabanahalli, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 13.0276423,
+          "longitude": 77.7514011,
+          "bounding_box": [
+            13.0264958,
+            13.0288509,
+            77.7499498,
+            77.7529417
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7499498,
+                  13.0279324
+                ],
+                [
+                  77.7499893,
+                  13.0278494
+                ],
+                [
+                  77.7501376,
+                  13.0277958
+                ],
+                [
+                  77.7500805,
+                  13.0274528
+                ],
+                [
+                  77.7505338,
+                  13.0273405
+                ],
+                [
+                  77.7504695,
+                  13.0269766
+                ],
+                [
+                  77.7511293,
+                  13.0268623
+                ],
+                [
+                  77.7515192,
+                  13.0267598
+                ],
+                [
+                  77.7519319,
+                  13.0266512
+                ],
+                [
+                  77.7519883,
+                  13.0267218
+                ],
+                [
+                  77.7528224,
+                  13.0264958
+                ],
+                [
+                  77.7529417,
+                  13.0268649
+                ],
+                [
+                  77.7526467,
+                  13.0269582
+                ],
+                [
+                  77.7525689,
+                  13.0270275
+                ],
+                [
+                  77.7525381,
+                  13.0271333
+                ],
+                [
+                  77.7526058,
+                  13.0273966
+                ],
+                [
+                  77.7526507,
+                  13.0274887
+                ],
+                [
+                  77.7528003,
+                  13.0280702
+                ],
+                [
+                  77.7528392,
+                  13.0286927
+                ],
+                [
+                  77.7513841,
+                  13.0288509
+                ],
+                [
+                  77.7513492,
+                  13.0285294
+                ],
+                [
+                  77.7509268,
+                  13.0285556
+                ],
+                [
+                  77.7507094,
+                  13.0284081
+                ],
+                [
+                  77.7502456,
+                  13.0281177
+                ],
+                [
+                  77.7499498,
+                  13.0279324
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.3486,
+          "distance_from_existing_reference_m": 5.9,
+          "osm_tags": {
+            "barrier": "wall",
+            "landuse": "residential",
+            "name": "Sumadhura Eden Garden",
+            "source": "bing; survey"
+          },
+          "osm_version": 4,
+          "osm_timestamp": "2024-04-08T15:04:42Z",
+          "osm_changeset": 149739653
+        }
+      ],
+      "query_attempts": [
+        "SUMADHURA EDEN GARDEN, Whitefield, Bengaluru",
+        "SUMADHURA EDEN GARDEN, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-0df6367ce304a963",
+        "alias_entity_id": "society:sumadhura-nandanam",
+        "name": "SUMADHURA NANDANAM",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/180507/001667",
+        "latitude": 12.991133,
+        "longitude": 77.7126988,
+        "sample_status": "active_roster"
+      },
+      "query": "SUMADHURA NANDANAM, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1123146960,
+          "source_url": "https://www.openstreetmap.org/way/1123146960",
+          "raw_name": "Sumadhura Nandanam",
+          "display_name": "Sumadhura Nandanam, Hoodi, Kaveri Nagara, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9912163,
+          "longitude": 77.7124787,
+          "bounding_box": [
+            12.9904586,
+            12.9918074,
+            77.7115471,
+            77.7138504
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7115471,
+                  12.991461
+                ],
+                [
+                  77.7127165,
+                  12.9909194
+                ],
+                [
+                  77.713679,
+                  12.9904586
+                ],
+                [
+                  77.7138504,
+                  12.9907781
+                ],
+                [
+                  77.7134023,
+                  12.9909717
+                ],
+                [
+                  77.7116252,
+                  12.9918074
+                ],
+                [
+                  77.7115471,
+                  12.991461
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 1.344,
+          "distance_from_existing_reference_m": 25.6,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Sumadhura Nandanam",
+            "name:kn": "ಸುಮಧುರ",
+            "residential": "apartments"
+          },
+          "osm_version": 5,
+          "osm_timestamp": "2024-04-12T13:36:51Z",
+          "osm_changeset": 149911429
+        }
+      ],
+      "query_attempts": [
+        "SUMADHURA NANDANAM, Whitefield, Bengaluru",
+        "SUMADHURA NANDANAM, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:sumadhura-soham",
+        "alias_entity_id": "society:sumadhura-soham",
+        "name": "SUMADHURA SOHAM PHASE-I",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/171123/000704",
+        "latitude": 12.9792988,
+        "longitude": 77.7431039,
+        "sample_status": "active_roster"
+      },
+      "query": "Sumadhura Soham Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1072344841,
+          "source_url": "https://www.openstreetmap.org/way/1072344841",
+          "raw_name": "Sumadhura Soham",
+          "display_name": "Sumadhura Soham, Pattanduru Agrahara, S.M Krishna Ward, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9793215,
+          "longitude": 77.7431241,
+          "bounding_box": [
+            12.9786515,
+            12.9799462,
+            77.7423116,
+            77.7438962
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7423116,
+                  12.978973
+                ],
+                [
+                  77.7435489,
+                  12.9786515
+                ],
+                [
+                  77.7438962,
+                  12.97967
+                ],
+                [
+                  77.7427564,
+                  12.9799462
+                ],
+                [
+                  77.7423116,
+                  12.978973
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": null,
+          "distance_from_existing_reference_m": null,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Sumadhura Soham",
+            "phone": "084319 99444",
+            "residential": "apartments"
+          },
+          "osm_version": 1,
+          "osm_timestamp": "2022-06-22T15:46:34Z",
+          "osm_changeset": 122717939
+        }
+      ],
+      "query_attempts": [
+        "SUMADHURA SOHAM PHASE-I, Whitefield, Bengaluru",
+        "SUMADHURA SOHAM PHASE-I, Bengaluru",
+        "Sumadhura Soham Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-67ba4bfb38da8a8c",
+        "alias_entity_id": "society:vaswani-exquisite",
+        "name": "Vaswani Exquisite",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/171015/000784",
+        "sample_status": "active_roster"
+      },
+      "query": "Vaswani Exquisite, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 312720671,
+          "source_url": "https://www.openstreetmap.org/way/312720671",
+          "raw_name": "Vaswani Exquisite Apartments",
+          "display_name": "Vaswani Exquisite Apartments, Hoodi, Kaveri Nagara, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "residential",
+          "latitude": 12.9893756,
+          "longitude": 77.7240595,
+          "bounding_box": [
+            12.988555,
+            12.9900946,
+            77.7232028,
+            77.724704
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7232028,
+                  12.9886924
+                ],
+                [
+                  77.7241535,
+                  12.988555
+                ],
+                [
+                  77.7243544,
+                  12.9888079
+                ],
+                [
+                  77.7246029,
+                  12.9891822
+                ],
+                [
+                  77.724704,
+                  12.9898646
+                ],
+                [
+                  77.7239959,
+                  12.9900946
+                ],
+                [
+                  77.7239744,
+                  12.9900162
+                ],
+                [
+                  77.7236319,
+                  12.990076
+                ],
+                [
+                  77.7235676,
+                  12.989569
+                ],
+                [
+                  77.723389,
+                  12.9891376
+                ],
+                [
+                  77.7232604,
+                  12.9888271
+                ],
+                [
+                  77.7232028,
+                  12.9886924
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 0.7556,
+          "distance_from_existing_reference_m": null,
+          "osm_tags": {
+            "landuse": "residential",
+            "name": "Vaswani Exquisite Apartments",
+            "residential": "apartments"
+          },
+          "osm_version": 6,
+          "osm_timestamp": "2026-08-17T06:23:04Z",
+          "osm_changeset": 187568906
+        }
+      ],
+      "query_attempts": [
+        "Vaswani Exquisite, Whitefield, Bengaluru",
+        "Vaswani Exquisite, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-612b8984826874f8",
+        "alias_entity_id": "society:vaswani-starlight",
+        "name": "Vaswani Starlight",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/180424/006808",
+        "sample_status": "active_roster"
+      },
+      "query": "Vaswani Starlight, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 1079074871,
+          "source_url": "https://www.openstreetmap.org/way/1079074871",
+          "raw_name": "Vaswani Starlight (u/c)",
+          "display_name": "Vaswani Starlight (u/c), Pattanduru Agrahara, S.M Krishna Ward, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, India",
+          "category": "landuse",
+          "type": "construction",
+          "latitude": 12.9787894,
+          "longitude": 77.7373212,
+          "bounding_box": [
+            12.9774421,
+            12.9800026,
+            77.7360257,
+            77.7389869
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7360257,
+                  12.9793997
+                ],
+                [
+                  77.7368894,
+                  12.978498
+                ],
+                [
+                  77.7374205,
+                  12.978302
+                ],
+                [
+                  77.7372998,
+                  12.9778184
+                ],
+                [
+                  77.7387536,
+                  12.9774421
+                ],
+                [
+                  77.7389869,
+                  12.9781844
+                ],
+                [
+                  77.7385256,
+                  12.9783543
+                ],
+                [
+                  77.7381662,
+                  12.9787149
+                ],
+                [
+                  77.7378979,
+                  12.9788639
+                ],
+                [
+                  77.7380937,
+                  12.9793684
+                ],
+                [
+                  77.7368549,
+                  12.9800026
+                ],
+                [
+                  77.7366641,
+                  12.9793919
+                ],
+                [
+                  77.7360928,
+                  12.979567
+                ],
+                [
+                  77.7360257,
+                  12.9793997
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 0.8947,
+          "distance_from_existing_reference_m": null,
+          "osm_tags": {
+            "construction": "residential",
+            "landuse": "construction",
+            "name": "Vaswani Starlight (u/c)"
+          },
+          "osm_version": 4,
+          "osm_timestamp": "2025-05-09T13:43:35Z",
+          "osm_changeset": 166029152
+        }
+      ],
+      "query_attempts": [
+        "Vaswani Starlight, Whitefield, Bengaluru",
+        "Vaswani Starlight, Bengaluru"
+      ]
+    },
+    {
+      "sample": {
+        "entity_id": "society:rera-d871b9e8d8bb5c00",
+        "alias_entity_id": "society:pursuit-of-a-radical-rhapsody-phase-2",
+        "name": "Pursuit of a Radical Rhapsody Phase 2",
+        "area": "Whitefield",
+        "city": "Bengaluru",
+        "project_key": "PRM/KA/RERA/1251/446/PR/190102/002271",
+        "sample_status": "historical_roster"
+      },
+      "query": "Radical Rhapsody, Bengaluru",
+      "request_status": "ok",
+      "request_error": null,
+      "candidate_count": 1,
+      "candidates": [
+        {
+          "osm_type": "way",
+          "osm_id": 345899243,
+          "source_url": "https://www.openstreetmap.org/way/345899243",
+          "raw_name": "Total Environment - Pursuit Of A Radical Rhapsody",
+          "display_name": "Total Environment - Pursuit Of A Radical Rhapsody, Basavanna Nagar, Kaveri Nagara, Bengaluru East City Corporation, Bengaluru, Bangalore East, Bengaluru Urban, Karnataka, 560066, India",
+          "category": "landuse",
+          "type": "construction",
+          "latitude": 12.9887336,
+          "longitude": 77.7204129,
+          "bounding_box": [
+            12.9861183,
+            12.9913834,
+            77.7184331,
+            77.7241535
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  77.7184331,
+                  12.986305
+                ],
+                [
+                  77.7185339,
+                  12.9861183
+                ],
+                [
+                  77.7192458,
+                  12.9861298
+                ],
+                [
+                  77.7196857,
+                  12.986271
+                ],
+                [
+                  77.7200595,
+                  12.9864598
+                ],
+                [
+                  77.7202173,
+                  12.9864699
+                ],
+                [
+                  77.7209649,
+                  12.9865179
+                ],
+                [
+                  77.7213192,
+                  12.9869375
+                ],
+                [
+                  77.7217215,
+                  12.9880979
+                ],
+                [
+                  77.7216732,
+                  12.9890283
+                ],
+                [
+                  77.7220407,
+                  12.9890022
+                ],
+                [
+                  77.7220541,
+                  12.9887748
+                ],
+                [
+                  77.7221775,
+                  12.9884194
+                ],
+                [
+                  77.7223384,
+                  12.9881528
+                ],
+                [
+                  77.7225181,
+                  12.9880848
+                ],
+                [
+                  77.7236339,
+                  12.9880718
+                ],
+                [
+                  77.7238458,
+                  12.9881815
+                ],
+                [
+                  77.7239938,
+                  12.9883539
+                ],
+                [
+                  77.7241535,
+                  12.988555
+                ],
+                [
+                  77.7232028,
+                  12.9886924
+                ],
+                [
+                  77.7232604,
+                  12.9888271
+                ],
+                [
+                  77.723389,
+                  12.9891376
+                ],
+                [
+                  77.7217183,
+                  12.9893082
+                ],
+                [
+                  77.7216848,
+                  12.9895996
+                ],
+                [
+                  77.7209173,
+                  12.9897521
+                ],
+                [
+                  77.7209961,
+                  12.9899861
+                ],
+                [
+                  77.7211113,
+                  12.9899692
+                ],
+                [
+                  77.7211167,
+                  12.9900568
+                ],
+                [
+                  77.7204642,
+                  12.9902688
+                ],
+                [
+                  77.7205038,
+                  12.9903219
+                ],
+                [
+                  77.7206438,
+                  12.990521
+                ],
+                [
+                  77.720753,
+                  12.9907276
+                ],
+                [
+                  77.7207927,
+                  12.9910269
+                ],
+                [
+                  77.7208192,
+                  12.9912138
+                ],
+                [
+                  77.7206199,
+                  12.9913834
+                ],
+                [
+                  77.7205487,
+                  12.9912013
+                ],
+                [
+                  77.7203303,
+                  12.9911832
+                ],
+                [
+                  77.7199281,
+                  12.9897502
+                ],
+                [
+                  77.7194311,
+                  12.9898514
+                ],
+                [
+                  77.719392,
+                  12.989708
+                ],
+                [
+                  77.7193028,
+                  12.9893055
+                ],
+                [
+                  77.7192579,
+                  12.9891028
+                ],
+                [
+                  77.7190704,
+                  12.988529
+                ],
+                [
+                  77.7186661,
+                  12.9885599
+                ],
+                [
+                  77.718505,
+                  12.9870542
+                ],
+                [
+                  77.7184579,
+                  12.9865635
+                ],
+                [
+                  77.7184331,
+                  12.986305
+                ]
+              ]
+            ]
+          },
+          "geometry_type": "Polygon",
+          "name_proximity_score": 0.7632,
+          "distance_from_existing_reference_m": null,
+          "osm_tags": {
+            "addr:city": "Bangalore",
+            "addr:housenumber": "Basavanna Nagar",
+            "addr:postcode": "560066",
+            "addr:street": "Whitefield Road",
+            "construction": "residential",
+            "landuse": "construction",
+            "name": "Total Environment - Pursuit Of A Radical Rhapsody",
+            "phone": "080 4245 3000",
+            "website": "total-environment.com"
+          },
+          "osm_version": 12,
+          "osm_timestamp": "2026-08-17T06:23:04Z",
+          "osm_changeset": 187568906
+        }
+      ]
+    }
+  ]
+}
