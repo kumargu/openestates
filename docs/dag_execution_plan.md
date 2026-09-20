@@ -282,7 +282,7 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 - [x] `dag_config` loaders for manifest, asset registry, crawl policies
 - [ ] `cargo test` asset registry tests pass from JSON loader only (no embedded fallback)
-- [ ] `openestates-catalog rebuild` follows the configured DAG plan
+- [ ] `openestates-catalog apply <request.json>` follows the configured DAG plan
 - [ ] Parquet output byte-identical for a fixed fixture run (or schema-compatible)
 
 **Storage check:** No new lake tables; manifest keys unchanged.
@@ -602,7 +602,7 @@ Full checklist: `app/config/coverage.json` → `graph_ui_readiness`.
 | Rust unit/integration | `cargo test` |
 | Search quality | `pipeline/eval_search.py` + `data/validation/search_quality_benchmark.json` |
 | Frontend types | `npx tsc --noEmit` |
-| Catalog rebuild | `openestates-catalog rebuild` |
+| Catalog rebuild | `openestates-catalog apply <request.json>` |
 | Parquet schema | serving `schema.json` format_version |
 
 ### 7.2 Per-run artifacts (lake)

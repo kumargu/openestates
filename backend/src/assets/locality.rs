@@ -148,7 +148,12 @@ pub fn osm_locality_boundary_facts_input(
     });
     let mut watermarks = input.source_watermarks.clone();
     watermarks.push(SourceWatermark {
-        source: "openstreetmap_locality_boundary_count".to_string(),
+        source: if input.boundaries.is_empty() {
+            "openstreetmap_locality_boundaries_empty"
+        } else {
+            "openstreetmap_locality_boundary_count"
+        }
+        .to_string(),
         high_watermark: input.boundaries.len().to_string(),
     });
     Ok(SkillFactsInput {

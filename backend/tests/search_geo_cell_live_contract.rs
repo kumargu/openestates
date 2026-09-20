@@ -22,7 +22,7 @@ async fn isolated_geo_cell_bundle_survives_parquet_runtime_and_api_projection() 
         .await
         .expect("isolated Issue 118 bundle exists");
     assert_eq!(bundle.manifest.format_version, 12);
-    let snapshot_identity = bundle.manifest.bundle_version.clone();
+    let snapshot_identity = bundle.manifest.proof_snapshot_identity().to_string();
 
     let internal_cells = bundle
         .entities

@@ -40,6 +40,9 @@ use crate::{
     knowledge::KnowledgeGraph,
 };
 
+mod apply;
+pub use apply::{CatalogApplyReport, CatalogApplyRequest, CatalogUpsert};
+
 pub const CATALOG_FORMAT_VERSION: u32 = 1;
 const CATALOG_MAX_SOURCE_STDOUT_BYTES: usize = 512 * 1024 * 1024;
 const GOLD_FORMAT_VERSION: u32 = 1;
@@ -62,6 +65,8 @@ pub struct CatalogTopologyEntry {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CatalogRoster {
+    #[serde(default)]
+    pub shared_assets: Vec<crate::assets::MaterializationRecord>,
     pub format_version: u32,
     pub roster_id: MaterializationId,
     pub created_at: DateTime<Utc>,
@@ -73,6 +78,7 @@ pub struct CatalogRoster {
 impl CatalogRoster {
     pub fn empty() -> Self {
         Self {
+            shared_assets: Vec::new(),
             format_version: CATALOG_FORMAT_VERSION,
             roster_id: MaterializationId::new(),
             created_at: Utc::now(),
@@ -135,6 +141,14 @@ pub struct CatalogOperationReport {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SocietyGoldSnapshotManifest {
+    #[serde(default)]
+    pub inputs: BTreeMap<String, crate::assets::ArtifactRef>,
+    #[serde(default)]
+    pub materializations: Vec<crate::assets::MaterializationRecord>,
+    #[serde(default)]
+    pub producer_hash: String,
+    #[serde(default)]
+    pub input_lineage: BTreeMap<String, apply::CatalogInputLineage>,
     pub format_version: u32,
     pub snapshot_id: MaterializationId,
     pub society_id: String,
@@ -460,6 +474,10 @@ impl CatalogStore {
             .await?,
         );
         let manifest = SocietyGoldSnapshotManifest {
+            inputs: BTreeMap::new(),
+            materializations: Vec::new(),
+            producer_hash: String::new(),
+            input_lineage: BTreeMap::new(),
             format_version: GOLD_FORMAT_VERSION,
             snapshot_id: snapshot_id.clone(),
             society_id: canonical_seed_id(&seed).to_string(),
@@ -541,14 +559,30 @@ impl CatalogStore {
         Ok((manifest, records))
     }
 
-    pub async fn assemble_and_promote(
+    #[cfg(test)]
+    async fn assemble_and_promote(
         &self,
         operation: impl Into<String>,
         roster: CatalogRoster,
         expected: Option<&CatalogPointer>,
     ) -> Result<CatalogOperationReport, CatalogError> {
-        let operation = operation.into();
+        let (generation, report) = self
+            .prepare_generation(operation.into(), roster, expected)
+            .await?;
+        self.publish_generation(generation, expected).await?;
+        Ok(report)
+    }
+
+    async fn prepare_generation(
+        &self,
+        operation: String,
+        roster: CatalogRoster,
+        expected: Option<&CatalogPointer>,
+    ) -> Result<(CatalogGeneration, CatalogOperationReport), CatalogError> {
         let roster = roster.normalized()?;
+        self.lake
+            .put_json(&roster_key(&roster.roster_id), &roster)
+            .await?;
         if roster.societies.is_empty() {
             return Err(CatalogError::Invalid(
                 "refusing to publish an empty serving catalog".to_string(),
@@ -570,7 +604,31 @@ impl CatalogStore {
             );
             snapshots.push(records);
         }
-        let merged = merge_catalog_records(snapshots)?;
+        apply::replace_shared_contributions(&self.lake, &roster.shared_assets, &mut snapshots)
+            .await?;
+        let mut merged = merge_catalog_records(snapshots)?;
+        // An authoritative place ID survives display-label variation. Preserve
+        // the active label and keep all observed variants in searchable text.
+        if let Some(pointer) = expected {
+            let previous = ServingBundleLoader::new(
+                self.lake.clone(),
+                std::env::temp_dir().join("openestates-catalog-labels"),
+            )
+            .load_search_bundle(&pointer.current.bundle_version)
+            .await?;
+            let labels = previous
+                .entities
+                .iter()
+                .map(|entity| (&entity.entity_id, &entity.name))
+                .collect::<BTreeMap<_, _>>();
+            for entity in &mut merged.entities {
+                if entity.entity_type == "place" {
+                    if let Some(label) = labels.get(&entity.entity_id) {
+                        entity.name = (*label).clone();
+                    }
+                }
+            }
+        }
         validate_catalog_records(&merged, &roster)?;
 
         let bundle_version = format!(
@@ -615,6 +673,21 @@ impl CatalogStore {
             roster_key: roster_key.to_string(),
             bundle_version: bundle_version.clone(),
         };
+        let report = CatalogOperationReport {
+            operation,
+            revision: expected.map_or(1, |pointer| pointer.revision + 1),
+            society_count: roster.societies.len(),
+            bundle_version,
+            warnings,
+        };
+        Ok((generation, report))
+    }
+
+    async fn publish_generation(
+        &self,
+        generation: CatalogGeneration,
+        expected: Option<&CatalogPointer>,
+    ) -> Result<(), CatalogError> {
         let pointer = CatalogPointer {
             format_version: CATALOG_FORMAT_VERSION,
             revision: expected.map_or(1, |pointer| pointer.revision + 1),
@@ -622,34 +695,22 @@ impl CatalogStore {
             previous: expected.map(|pointer| pointer.current.clone()),
             updated_at: Utc::now(),
         };
-        let promoted = self
+        if !self
             .lake
             .put_json_if(
                 &catalog_pointer_key(),
                 &pointer,
-                |current: Option<&CatalogPointer>| {
-                    current.map(|value| value.revision) == expected.map(|value| value.revision)
-                        && current.map(|value| &value.current)
-                            == expected.map(|value| &value.current)
-                },
+                |current: Option<&CatalogPointer>| current == expected,
             )
-            .await?;
-        if !promoted {
+            .await?
+        {
             return Err(CatalogError::CasConflict);
         }
-        if let Err(error) = self.gc(&pointer).await {
-            warnings.push(format!("catalog cleanup deferred: {error}"));
-        }
-        Ok(CatalogOperationReport {
-            operation,
-            revision: pointer.revision,
-            society_count: roster.societies.len(),
-            bundle_version,
-            warnings,
-        })
+        Ok(())
     }
 
-    pub async fn upsert_snapshot(
+    #[cfg(test)]
+    async fn upsert_snapshot(
         &self,
         seed: SourceEntitySeed,
         records: &CatalogRecords,
@@ -675,7 +736,8 @@ impl CatalogStore {
             .await
     }
 
-    pub async fn remove(&self, society_id: &str) -> Result<CatalogOperationReport, CatalogError> {
+    #[cfg(test)]
+    async fn remove(&self, society_id: &str) -> Result<CatalogOperationReport, CatalogError> {
         let expected = self
             .pointer()
             .await?
@@ -828,6 +890,21 @@ impl CatalogStore {
     }
 
     async fn gc(&self, pointer: &CatalogPointer) -> Result<(), CatalogError> {
+        if !apply::enrichment_config()?.cleanup_enabled {
+            return Ok(());
+        }
+        // In-flight operations hold immutable inputs and candidate generations.
+        // Deferring collection while any operation is unfinished protects the entire closure.
+        for key in self
+            .lake
+            .list_keys(&LakePrefix::new("manifests/catalog/operations")?)
+            .await?
+        {
+            let operation: serde_json::Value = self.lake.get_json(&key).await?;
+            if operation.get("completed").and_then(|value| value.as_bool()) != Some(true) {
+                return Ok(());
+            }
+        }
         let generations = [Some(&pointer.current), pointer.previous.as_ref()]
             .into_iter()
             .flatten()
@@ -939,53 +1016,31 @@ impl CatalogStore {
 /// gold output into catalog rows. No temporary serving bundle is built, so the
 /// expensive source collection is isolated to the requested society and
 /// runtime state is not touched.
-pub async fn collect_society_from_dag(
+async fn materialize_society(
     store: &CatalogStore,
-    project_root: &Path,
     seed: &SourceEntitySeed,
-) -> Result<(CatalogRecords, Vec<String>), CatalogError> {
+    source_inputs: AssetSourceInputs,
+    pins: Vec<crate::assets::MaterializationRecord>,
+    forced_assets: Vec<AssetId>,
+    run_id: MaterializationId,
+) -> Result<
+    (
+        CatalogRecords,
+        Vec<String>,
+        Vec<crate::assets::MaterializationRecord>,
+    ),
+    CatalogError,
+> {
     validate_seed(seed)?;
     let planned_at = Utc::now();
-    let source_assets = AssetSourceInputs::supported_asset_ids();
-    let request = SourceInputRequest {
-        project_root: project_root.to_path_buf(),
-        partition: AssetPartition::new([("society", safe_segment(canonical_seed_id(seed)))]),
-        planned_at,
-        requested_assets: source_assets.clone(),
-        force_refresh_assets: source_assets.clone(),
-        source_entities: vec![seed.clone()],
-    };
-    let python = catalog_source_python(std::env::var("OPENESTATES_SOURCE_PYTHON").ok());
-    let provider = CommandSourceInputProvider::new(python)
-        .with_args([
-            OsString::from("-m"),
-            OsString::from("pipeline.collect_asset_sources"),
-        ])
-        .with_max_stdout_bytes(CATALOG_MAX_SOURCE_STDOUT_BYTES);
-    let mut source_inputs = provider
-        .load(&request, store.lake())
-        .await
-        .map_err(|error| CatalogError::Invalid(format!("society collection failed: {error}")))?
-        .ok_or_else(|| CatalogError::Invalid("society collector returned no inputs".into()))?;
-    source_inputs.source_entities = vec![seed.clone()];
-    let mut warnings = source_inputs
-        .source_failures
-        .iter()
-        .map(|(source, message)| format!("{source}: {message}"))
-        .collect::<Vec<_>>();
-
+    let mut warnings = Vec::new();
     let registry = openestates_registry();
-    let forced_assets = registry
-        .definitions()
-        .iter()
-        .map(|definition| definition.id.clone())
-        .collect();
     let version = format!(
         "society-{}-{}",
         safe_segment(canonical_seed_id(seed)),
         MaterializationId::new()
     );
-    let options = AssetDagExecutionOptions::new(
+    let mut options = AssetDagExecutionOptions::new(
         AssetPartition::new([("society", safe_segment(canonical_seed_id(seed)))]),
         planned_at,
     )
@@ -998,10 +1053,47 @@ pub async fn collect_society_from_dag(
     .with_required_assets(vec![
         AssetId::new(SOCIETY_GOLD_SNAPSHOT_ASSET_ID).expect("static asset id")
     ]);
-    let report = AssetDagExecutor::new(registry, store.lake().clone())
-        .execute(&KnowledgeGraph::new(), options)
+    options.pinned_materializations = Some(pins.clone());
+    options.initial_run_id = Some(run_id.clone());
+    let executor = AssetDagExecutor::new(registry, store.lake().clone());
+    let run_key =
+        crate::assets::AssetPathBuilder::dag_run_manifest_key(&options.partition, &run_id);
+    let report = if store
+        .lake()
+        .get_json::<crate::assets::AssetDagRunManifest>(&run_key)
         .await
-        .map_err(|error| CatalogError::Invalid(format!("society DAG failed: {error}")))?;
+        .map(|_| true)
+        .or_else(|error| {
+            if error.is_not_found() {
+                Ok(false)
+            } else {
+                Err(error)
+            }
+        })? {
+        options.force_assets.clear();
+        options.only_forced_assets = false;
+        executor
+            .resume(&KnowledgeGraph::new(), options, run_id)
+            .await
+    } else {
+        executor.execute(&KnowledgeGraph::new(), options).await
+    }
+    .map_err(|error| CatalogError::Invalid(format!("society DAG failed: {error}")))?;
+    let materialization_store = AssetMaterializationStore::new(store.lake().clone());
+    let mut pinned = pins
+        .into_iter()
+        .map(|record| (record.asset_id.to_string(), record))
+        .collect::<BTreeMap<_, _>>();
+    for step in &report.manifest.steps {
+        if step.status == AssetRunStepStatus::Succeeded {
+            if let Some(id) = &step.materialization_id {
+                let record = materialization_store
+                    .record(&step.asset_id, &step.partition, id)
+                    .await?;
+                pinned.insert(step.asset_id.to_string(), record);
+            }
+        }
+    }
     warnings.extend(report.manifest.steps.iter().filter_map(|step| {
         (step.status != AssetRunStepStatus::Succeeded)
             .then(|| {
@@ -1011,11 +1103,19 @@ pub async fn collect_society_from_dag(
             })
             .flatten()
     }));
-    let gold_step = report
-        .manifest
-        .steps
-        .iter()
-        .find(|step| step.asset_id.as_str() == SOCIETY_GOLD_SNAPSHOT_ASSET_ID)
+    let records = records_from_materializations(store, seed, &pinned).await?;
+    warnings.sort();
+    warnings.dedup();
+    Ok((records, warnings, pinned.into_values().collect()))
+}
+
+async fn records_from_materializations(
+    store: &CatalogStore,
+    seed: &SourceEntitySeed,
+    pinned: &BTreeMap<String, crate::assets::MaterializationRecord>,
+) -> Result<CatalogRecords, CatalogError> {
+    let gold_step = pinned
+        .get(SOCIETY_GOLD_SNAPSHOT_ASSET_ID)
         .ok_or_else(|| CatalogError::Invalid("society DAG produced no gold snapshot".into()))?;
     let gold_manifest_key = gold_step
         .artifacts
@@ -1028,27 +1128,14 @@ pub async fn collect_society_from_dag(
     let gold = load_society_gold_records(store.lake(), &gold_manifest)
         .await
         .map_err(|error| CatalogError::Invalid(format!("society gold is corrupt: {error}")))?;
-    let materializations = AssetMaterializationStore::new(store.lake().clone());
     let mut rera_records = BTreeMap::new();
     for asset_name in [
         RERA_RECEIPTS_ASSET_ID,
         RERA_SOURCE_RECORDS_ASSET_ID,
         RERA_CLAIMS_ASSET_ID,
     ] {
-        let asset_id = AssetId::new(asset_name).expect("static asset id");
-        let record = report
-            .manifest
-            .steps
-            .iter()
-            .find(|step| step.asset_id == asset_id)
-            .and_then(|step| step.materialization_id.as_ref());
-        if let Some(materialization_id) = record {
-            if let Some(record) = materializations
-                .record_by_id_for_asset(&asset_id, materialization_id)
-                .await?
-            {
-                rera_records.insert(asset_name, record);
-            }
+        if let Some(record) = pinned.get(asset_name) {
+            rera_records.insert(asset_name, record.clone());
         }
     }
     let rera_evidence = if rera_records.len() == 3 {
@@ -1075,13 +1162,9 @@ pub async fn collect_society_from_dag(
         project_rera_evidence(&sources, &claims, &receipts)
             .map_err(|error| CatalogError::Invalid(format!("RERA evidence is invalid: {error}")))?
     } else {
-        warnings.push("RERA evidence was unavailable for this collection".to_string());
         Vec::new()
     };
-    let records = CatalogRecords::from_society_gold(&gold, rera_evidence)?.for_society(seed)?;
-    warnings.sort();
-    warnings.dedup();
-    Ok((records, warnings))
+    CatalogRecords::from_society_gold(&gold, rera_evidence)?.for_society(seed)
 }
 
 fn catalog_source_python(configured: Option<String>) -> String {
@@ -1168,10 +1251,19 @@ fn merge_entity_record(
         return Ok(());
     };
     if existing.entity_type != entity.entity_type
-        || existing.name != entity.name
         || existing.root_source != entity.root_source
         || existing.visibility != entity.visibility
     {
+        return Err(CatalogError::Invalid(format!(
+            "contradictory entity identity rows for {}",
+            entity.entity_id
+        )));
+    }
+    let names_differ = existing.name != entity.name;
+    let mutable_google_place_name = existing.entity_type == "place"
+        && existing.entity_id.starts_with("place:google:")
+        && existing.root_source.as_deref() == Some("google");
+    if names_differ && !mutable_google_place_name {
         return Err(CatalogError::Invalid(format!(
             "contradictory entity identity rows for {}",
             entity.entity_id
@@ -1181,6 +1273,8 @@ fn merge_entity_record(
         .searchable_text
         .split_whitespace()
         .chain(entity.searchable_text.split_whitespace())
+        .chain(existing.name.split_whitespace())
+        .chain(entity.name.split_whitespace())
         .collect::<BTreeSet<_>>();
     existing.searchable_text = terms.into_iter().collect::<Vec<_>>().join(" ");
     Ok(())
@@ -1467,6 +1561,7 @@ mod tests {
     use super::*;
     use crate::knowledge::FactValue;
     use crate::serving::ServingEntityVisibility;
+    use std::sync::{Arc, Mutex};
     use tempfile::tempdir;
 
     #[test]
@@ -1608,13 +1703,14 @@ mod tests {
             .into_iter()
             .filter(|key| key.as_str().ends_with("/manifest.json"))
             .count();
-        assert_eq!(retained_bundle_manifests, 2);
+        // Migration deliberately defers destructive cleanup.
+        assert_eq!(retained_bundle_manifests, 4);
         assert_eq!(
             lake.list_keys(&LakePrefix::new("manifests/catalog/rosters").unwrap())
                 .await
                 .unwrap()
                 .len(),
-            2
+            4
         );
     }
 
@@ -1698,6 +1794,419 @@ mod tests {
 
         assert!(store.undo().await.is_err());
         assert_eq!(store.pointer().await.unwrap().unwrap(), stable);
+    }
+
+    struct NoCollection;
+    impl SourceInputProvider for NoCollection {
+        fn load<'a>(
+            &'a self,
+            _: &'a SourceInputRequest,
+            _: &'a LakeStore,
+        ) -> futures_util::future::BoxFuture<
+            'a,
+            Result<Option<AssetSourceInputs>, crate::assets::SourceInputProviderError>,
+        > {
+            Box::pin(async { panic!("offline catalog operation called a collector") })
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct MetroCollection {
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl SourceInputProvider for MetroCollection {
+        fn load<'a>(
+            &'a self,
+            request: &'a SourceInputRequest,
+            _: &'a LakeStore,
+        ) -> futures_util::future::BoxFuture<
+            'a,
+            Result<Option<AssetSourceInputs>, crate::assets::SourceInputProviderError>,
+        > {
+            let asset = request.requested_assets[0].to_string();
+            self.calls.lock().unwrap().push(asset);
+            Box::pin(async {
+                Ok(Some(AssetSourceInputs {
+                    bengaluru_metro_stations: Some(crate::assets::BengaluruMetroStationsInput {
+                        snapshot_date: "fixture".to_string(),
+                        source_url: "https://www.openstreetmap.org".to_string(),
+                        stations: vec![crate::assets::BengaluruMetroStationInput {
+                            station_id: "node/fixture-metro".to_string(),
+                            name: "Fixture Metro".to_string(),
+                            latitude: 12.97,
+                            longitude: 77.75,
+                            lines: vec!["Purple Line".to_string()],
+                            network: Some("Namma Metro".to_string()),
+                            operator: Some("BMRCL".to_string()),
+                            operational_status: Some("operational".to_string()),
+                            source_url: Some(
+                                "https://www.openstreetmap.org/node/fixture-metro".to_string(),
+                            ),
+                            source_tags: BTreeMap::new(),
+                        }],
+                        source_watermarks: Vec::new(),
+                    }),
+                    ..AssetSourceInputs::default()
+                }))
+            })
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct EmptyMetroCollection {
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl SourceInputProvider for EmptyMetroCollection {
+        fn load<'a>(
+            &'a self,
+            request: &'a SourceInputRequest,
+            _: &'a LakeStore,
+        ) -> futures_util::future::BoxFuture<
+            'a,
+            Result<Option<AssetSourceInputs>, crate::assets::SourceInputProviderError>,
+        > {
+            let asset = request.requested_assets[0].to_string();
+            self.calls.lock().unwrap().push(asset);
+            Box::pin(async {
+                Ok(Some(AssetSourceInputs {
+                    bengaluru_metro_stations: Some(crate::assets::BengaluruMetroStationsInput {
+                        snapshot_date: "fixture-empty".to_string(),
+                        source_url: "https://www.openstreetmap.org".to_string(),
+                        stations: Vec::new(),
+                        source_watermarks: Vec::new(),
+                    }),
+                    ..AssetSourceInputs::default()
+                }))
+            })
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct FailedCollection {
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl SourceInputProvider for FailedCollection {
+        fn load<'a>(
+            &'a self,
+            request: &'a SourceInputRequest,
+            _: &'a LakeStore,
+        ) -> futures_util::future::BoxFuture<
+            'a,
+            Result<Option<AssetSourceInputs>, crate::assets::SourceInputProviderError>,
+        > {
+            let asset = request.requested_assets[0].to_string();
+            self.calls.lock().unwrap().push(asset.clone());
+            Box::pin(async move {
+                Ok(Some(AssetSourceInputs {
+                    source_failures: BTreeMap::from([(asset, "fixture timeout".to_string())]),
+                    ..AssetSourceInputs::default()
+                }))
+            })
+        }
+    }
+
+    fn apply_request(id: &str) -> CatalogApplyRequest {
+        CatalogApplyRequest {
+            operation_id: id.into(),
+            upserts: Vec::new(),
+            removals: Vec::new(),
+            shared_refresh_modules: Vec::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn apply_rebuild_resume_conflicts_and_removal_share_one_contract() {
+        let root = tempdir().unwrap();
+        let lake = LakeStore::local(root.path()).unwrap();
+        let store = CatalogStore::new(lake.clone());
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        store
+            .upsert_snapshot(seed("alpha"), &records("alpha", "Alpha", 900.0), Vec::new())
+            .await
+            .unwrap();
+        store
+            .upsert_snapshot(seed("beta"), &records("beta", "Beta", 1000.0), Vec::new())
+            .await
+            .unwrap();
+        let prior = store.current_roster().await.unwrap();
+        let mut request = apply_request("reuse");
+        request.upserts.push(CatalogUpsert {
+            seed: seed("alpha"),
+            refresh_modules: Vec::new(),
+        });
+        let first = store
+            .apply_with_provider(request.clone(), project, &NoCollection)
+            .await
+            .unwrap();
+        assert!(first.updated.is_empty());
+        assert_eq!(first.retained.len(), 2);
+        assert!(first.collected_assets.is_empty());
+        assert_eq!(
+            store.current_roster().await.unwrap().societies,
+            prior.societies
+        );
+        assert_eq!(
+            store
+                .apply_with_provider(request.clone(), project, &NoCollection)
+                .await
+                .unwrap(),
+            first
+        );
+        request.removals.push("society:beta".into());
+        assert!(store
+            .apply_with_provider(request, project, &NoCollection)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("different request"));
+
+        let mut duplicate = apply_request("duplicate");
+        duplicate.upserts = vec![
+            CatalogUpsert {
+                seed: seed("alpha"),
+                refresh_modules: Vec::new()
+            };
+            2
+        ];
+        assert!(store
+            .apply_with_provider(duplicate, project, &NoCollection)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("conflicting"));
+        let mut conflict = apply_request("conflicting-removal");
+        conflict.upserts.push(CatalogUpsert {
+            seed: seed("alpha"),
+            refresh_modules: Vec::new(),
+        });
+        conflict.removals.push("soc-alpha".into());
+        assert!(store
+            .apply_with_provider(conflict, project, &NoCollection)
+            .await
+            .is_err());
+
+        // Fail after candidate persistence, repair the exact bytes, then resume.
+        let (snapshot, _) = store.read_snapshot(&prior.societies[0]).await.unwrap();
+        let artifact = &snapshot.artifacts[0];
+        let artifact_key = LakeKey::new(artifact.key.clone()).unwrap();
+        let original = lake.get_bytes(&artifact_key).await.unwrap();
+        lake.put_text(&artifact_key, "corrupt").await.unwrap();
+        let resume = apply_request("resume-assembly");
+        assert!(store
+            .apply_with_provider(resume.clone(), project, &NoCollection)
+            .await
+            .is_err());
+        lake.put_bytes(&artifact_key, original.clone())
+            .await
+            .unwrap();
+        let resumed = store
+            .apply_with_provider(resume.clone(), project, &NoCollection)
+            .await
+            .unwrap();
+        assert!(resumed.collected_assets.is_empty());
+        assert_eq!(
+            store
+                .apply_with_provider(resume, project, &NoCollection)
+                .await
+                .unwrap(),
+            resumed
+        );
+
+        lake.put_text(&artifact_key, "corrupt again").await.unwrap();
+        let stale = apply_request("stale");
+        assert!(store
+            .apply_with_provider(stale.clone(), project, &NoCollection)
+            .await
+            .is_err());
+        lake.put_bytes(&artifact_key, original).await.unwrap();
+        store
+            .apply_with_provider(apply_request("winner"), project, &NoCollection)
+            .await
+            .unwrap();
+        assert!(matches!(
+            store
+                .apply_with_provider(stale, project, &NoCollection)
+                .await
+                .unwrap_err(),
+            CatalogError::CasConflict
+        ));
+        let mut remove = apply_request("remove-beta");
+        remove.removals.push("society:beta".into());
+        let removed = store
+            .apply_with_provider(remove, project, &NoCollection)
+            .await
+            .unwrap();
+        assert_eq!(removed.publication.society_count, 1);
+        let bundle = ServingBundleLoader::new(lake, root.path().join("apply-cache"))
+            .load_search_bundle(&removed.publication.bundle_version)
+            .await
+            .unwrap();
+        assert!(bundle
+            .entities
+            .iter()
+            .all(|entity| !entity.entity_id.contains("beta")));
+    }
+
+    #[tokio::test]
+    async fn shared_refresh_collects_once_and_survives_society_removal() {
+        let root = tempdir().unwrap();
+        let lake = LakeStore::local(root.path()).unwrap();
+        let store = CatalogStore::new(lake.clone());
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        store
+            .upsert_snapshot(seed("alpha"), &records("alpha", "Alpha", 900.0), Vec::new())
+            .await
+            .unwrap();
+        store
+            .upsert_snapshot(seed("beta"), &records("beta", "Beta", 1000.0), Vec::new())
+            .await
+            .unwrap();
+
+        let provider = MetroCollection::default();
+        let mut refresh = apply_request("shared-metro");
+        refresh.shared_refresh_modules.push("metro".to_string());
+        let report = store
+            .apply_with_provider(refresh, project, &provider)
+            .await
+            .unwrap();
+        assert_eq!(
+            *provider.calls.lock().unwrap(),
+            vec!["bengaluru_metro_station_facts"]
+        );
+        assert_eq!(
+            report.collected_assets,
+            vec!["shared/bengaluru_metro_station_facts"]
+        );
+        let roster = store.current_roster().await.unwrap();
+        assert_eq!(roster.shared_assets.len(), 1);
+        assert_eq!(
+            roster.shared_assets[0].asset_id.as_str(),
+            "bengaluru_metro_station_facts"
+        );
+        for entry in &roster.societies {
+            let (manifest, _) = store.read_snapshot(entry).await.unwrap();
+            assert!(manifest
+                .materializations
+                .iter()
+                .all(|record| record.asset_id.as_str() != "bengaluru_metro_station_facts"));
+        }
+        let bundle = ServingBundleLoader::new(lake.clone(), root.path().join("shared-cache"))
+            .load_search_bundle(&report.publication.bundle_version)
+            .await
+            .unwrap();
+        assert_eq!(
+            bundle
+                .entities
+                .iter()
+                .filter(|entity| entity.entity_id == "place:metro:fixture-metro")
+                .count(),
+            1
+        );
+
+        let mut remove = apply_request("remove-alpha-after-shared");
+        remove.removals.push("society:alpha".to_string());
+        let removed = store
+            .apply_with_provider(remove, project, &NoCollection)
+            .await
+            .unwrap();
+        assert_eq!(removed.publication.society_count, 1);
+        let roster = store.current_roster().await.unwrap();
+        assert_eq!(roster.shared_assets.len(), 1);
+        let bundle = ServingBundleLoader::new(lake, root.path().join("removed-cache"))
+            .load_search_bundle(&removed.publication.bundle_version)
+            .await
+            .unwrap();
+        assert!(bundle
+            .entities
+            .iter()
+            .any(|entity| entity.entity_id == "place:metro:fixture-metro"));
+    }
+
+    #[tokio::test]
+    async fn failed_refresh_preserves_the_compatible_prior_snapshot() {
+        let root = tempdir().unwrap();
+        let lake = LakeStore::local(root.path()).unwrap();
+        let store = CatalogStore::new(lake);
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        store
+            .upsert_snapshot(seed("alpha"), &records("alpha", "Alpha", 900.0), Vec::new())
+            .await
+            .unwrap();
+        let before = store.current_roster().await.unwrap().societies[0].clone();
+        let provider = FailedCollection::default();
+        let mut refresh = apply_request("failed-location");
+        refresh.upserts.push(CatalogUpsert {
+            seed: seed("alpha"),
+            refresh_modules: vec!["location".to_string()],
+        });
+
+        let report = store
+            .apply_with_provider(refresh, project, &provider)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            *provider.calls.lock().unwrap(),
+            vec!["google_places_weekly"]
+        );
+        assert!(report.updated.is_empty());
+        assert!(report
+            .failed_assets
+            .contains_key("society:alpha/google_places_weekly"));
+        assert!(report
+            .failed_assets
+            .contains_key("society:alpha/osm_society_access_facts"));
+        assert_eq!(store.current_roster().await.unwrap().societies[0], before);
+    }
+
+    #[tokio::test]
+    async fn successful_empty_shared_refresh_removes_the_old_owned_rows() {
+        let root = tempdir().unwrap();
+        let lake = LakeStore::local(root.path()).unwrap();
+        let store = CatalogStore::new(lake.clone());
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        store
+            .upsert_snapshot(seed("alpha"), &records("alpha", "Alpha", 900.0), Vec::new())
+            .await
+            .unwrap();
+        let mut first = apply_request("metro-with-station");
+        first.shared_refresh_modules.push("metro".to_string());
+        store
+            .apply_with_provider(first, project, &MetroCollection::default())
+            .await
+            .unwrap();
+        let old_materialization = store.current_roster().await.unwrap().shared_assets[0]
+            .materialization_id
+            .clone();
+
+        let empty_provider = EmptyMetroCollection::default();
+        let mut empty = apply_request("metro-empty");
+        empty.shared_refresh_modules.push("metro".to_string());
+        let report = store
+            .apply_with_provider(empty, project, &empty_provider)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            *empty_provider.calls.lock().unwrap(),
+            vec!["bengaluru_metro_station_facts"]
+        );
+        let roster = store.current_roster().await.unwrap();
+        assert_ne!(
+            roster.shared_assets[0].materialization_id,
+            old_materialization
+        );
+        let bundle = ServingBundleLoader::new(lake, root.path().join("empty-shared-cache"))
+            .load_search_bundle(&report.publication.bundle_version)
+            .await
+            .unwrap();
+        assert!(bundle
+            .entities
+            .iter()
+            .all(|entity| entity.entity_id != "place:metro:fixture-metro"));
     }
 
     #[test]
@@ -1928,5 +2437,28 @@ mod tests {
             merged.entities[0].searchable_text,
             "100 101 Park Shared google_review_count park place.category"
         );
+    }
+
+    #[test]
+    fn catalog_merge_accepts_google_display_name_changes_for_the_same_place_id() {
+        let mut first = CatalogRecords::default();
+        first.entities.push(ServingEntityRecord {
+            entity_id: "place:google:shared".to_string(),
+            entity_type: "place".to_string(),
+            name: "Abhayahasta Hospital (Balagere Road)".to_string(),
+            root_source: Some("google".to_string()),
+            visibility: ServingEntityVisibility::Searchable,
+            searchable_text: "Abhayahasta Hospital Balagere".to_string(),
+        });
+        let mut second = first.clone();
+        second.entities[0].name = "Abhayahasta Hospital (Balagere Road VARTHUR)".to_string();
+        second.entities[0].searchable_text =
+            "Abhayahasta Hospital Balagere Road VARTHUR".to_string();
+
+        let merged = merge_catalog_records(vec![first, second]).unwrap();
+
+        assert_eq!(merged.entities.len(), 1);
+        assert!(merged.entities[0].searchable_text.contains("VARTHUR"));
+        assert!(merged.entities[0].searchable_text.contains("Balagere"));
     }
 }

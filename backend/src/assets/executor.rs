@@ -41,6 +41,10 @@ const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetDagExecutionOptions {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned_materializations: Option<Vec<MaterializationRecord>>,
+    #[serde(default)]
+    pub initial_run_id: Option<MaterializationId>,
     pub partition: AssetPartition,
     pub planned_at: DateTime<Utc>,
     pub version: String,
@@ -87,6 +91,8 @@ impl Default for AssetRetryPolicy {
 impl AssetDagExecutionOptions {
     pub fn new(partition: AssetPartition, planned_at: DateTime<Utc>) -> Self {
         Self {
+            pinned_materializations: None,
+            initial_run_id: None,
             partition,
             planned_at,
             version: default_asset_version(planned_at),
@@ -259,6 +265,9 @@ impl AssetDagExecutor {
             .await?;
         let mut manifest =
             AssetDagRunManifest::from_plan_with_version(&plan, options.version.clone());
+        if let Some(run_id) = &options.initial_run_id {
+            manifest.run_id = run_id.clone();
+        }
         manifest.promote_current = options.promote_current;
         manifest.source_scope = options.source_scope;
         let mut options = options;
@@ -277,7 +286,71 @@ impl AssetDagExecutor {
             });
         }
 
-        let dependency_snapshot = if options.source_scope == SourceEntityResolutionScope::Scoped {
+        let dependency_snapshot = if let Some(pins) = &options.pinned_materializations {
+            let mut snapshot = HashMap::new();
+            for record in pins {
+                let expected_partition =
+                    self.asset_partition(&record.asset_id, &options.partition)?;
+                if record.partition != expected_partition {
+                    return Err(AssetDagExecutorError::AssetPartitionMismatch {
+                        asset_id: record.asset_id.clone(),
+                        expected: expected_partition,
+                        actual: record.partition.clone(),
+                    });
+                }
+                let stored = self
+                    .materializations
+                    .record(
+                        &record.asset_id,
+                        &record.partition,
+                        &record.materialization_id,
+                    )
+                    .await?;
+                if &stored != record {
+                    return Err(LakeError::InvalidMetadata(
+                        "pinned materialization differs from its immutable record".into(),
+                    )
+                    .into());
+                }
+                self.validate_restored_artifacts(&record.asset_id, record)
+                    .await?;
+                if record.status != super::MaterializationStatus::Succeeded {
+                    return Err(
+                        LakeError::InvalidMetadata("failed pinned materialization".into()).into(),
+                    );
+                }
+                if snapshot.contains_key(&record.asset_id) {
+                    return Err(LakeError::InvalidMetadata("duplicate pinned asset".into()).into());
+                }
+                insert_snapshot_record(&mut snapshot, record.clone());
+            }
+            for step in &mut manifest.steps {
+                step.current_materialization_id = snapshot
+                    .get(&step.asset_id)
+                    .and_then(|records| records.first())
+                    .map(|record| record.materialization_id.clone());
+                step.parent_materializations = snapshot
+                    .get(&step.asset_id)
+                    .and_then(|records| records.first())
+                    .map(|record| record.parent_materializations.clone())
+                    .unwrap_or_default();
+                step.dependency_snapshot = step
+                    .dependencies
+                    .iter()
+                    .flat_map(|dependency| {
+                        snapshot
+                            .get(dependency)
+                            .into_iter()
+                            .flatten()
+                            .map(|record| record.materialization_id.clone())
+                    })
+                    .collect();
+                if !options.force_assets.contains(&step.asset_id) {
+                    step.status = super::AssetRunStepStatus::Skipped;
+                }
+            }
+            snapshot
+        } else if options.source_scope == SourceEntityResolutionScope::Scoped {
             HashMap::new()
         } else {
             self.load_dependency_snapshot(&manifest).await?
@@ -333,12 +406,7 @@ impl AssetDagExecutor {
         let lease_partition = manifest.partition.clone();
         let lease_run_id = manifest.run_id.clone();
         let result = async {
-            let dependency_snapshot =
-                if manifest.source_scope == SourceEntityResolutionScope::Scoped {
-                    HashMap::new()
-                } else {
-                    self.load_dependency_snapshot(&manifest).await?
-                };
+            let dependency_snapshot = self.load_dependency_snapshot(&manifest).await?;
             let records_by_asset = self.restore_succeeded_records(&manifest).await?;
             if self
                 .recover_interrupted_materialization(

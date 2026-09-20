@@ -200,7 +200,7 @@ def collect_asset_sources(
     if unsupported:
         raise ValueError("unsupported source assets: {}".format(", ".join(unsupported)))
 
-    output = {}  # type: Dict[str, Any]
+    output = dict(request.get("dependency_inputs") or {})
     source_failures = {}  # type: Dict[str, str]
     planned_at = normalized_planned_at(request)
     partition = partition_values(request)
@@ -231,8 +231,6 @@ def collect_asset_sources(
     )
     if google_requested:
         google_address_input = output.get(RERA_REGISTRY_MONTHLY)
-        if not google_address_input:
-            google_address_input = rera_address_input_for_request(request)
     if GOOGLE_PLACES_WEEKLY in requested:
         try:
             google_inputs = google_society_inputs(request, google_address_input)
@@ -1563,19 +1561,13 @@ def collect_google_nearby_places(
     fetch = nearby_fetch or fetch_google_places_nearby_text
     records = []  # type: List[Dict[str, Any]]
     categories = google_nearby_collection_categories()
-
     for slug, input_data in sorted(inputs.items()):
         for category in categories:
             query = nearby_query(input_data, category)
             try:
                 nearby_places = fetch(input_data, category)
-            except ValueError as exc:
-                if str(exc) == "Google nearby collection requires an accepted origin coordinate pair":
-                    logger.warning(
-                        "Skipping Google nearby collection for %s: missing accepted origin coordinates",
-                        slug,
-                    )
-                    break
+            except ValueError:
+                # Incomplete coverage cannot replace an accepted prior observation.
                 raise
             for place in nearby_places:
                 name = optional_string(place.get("place_name") or place.get("name"))
@@ -1704,26 +1696,8 @@ def google_society_inputs(
     "Godrej Air". RERA project address is used only as resolver evidence; RERA
     coordinates are intentionally not copied into Google inputs.
     """
-    address_input = rera_input or rera_address_input_for_request(request)
+    address_input = rera_input or (request.get("dependency_inputs") or {}).get(RERA_REGISTRY_MONTHLY)
     return source_society_inputs(request, address_input)
-
-
-def rera_address_input_for_request(request: Dict[str, Any]) -> Dict[str, Any]:
-    """Hydrate RERA address facts for Google-only scoped source collection."""
-    if not needs_rera_address_hydration(request):
-        return {}
-    detail_facts, _annotations, _watermark = collect_rera_project_details(request)
-    if not detail_facts:
-        return {}
-    return {"detail_facts": detail_facts}
-
-
-def needs_rera_address_hydration(request: Dict[str, Any]) -> bool:
-    """Return true when scoped Google inputs lack address evidence."""
-    return any(
-        isinstance(seed, dict) and not optional_string(seed.get("address"))
-        for seed in request.get("source_entities", [])
-    )
 
 
 def reddit_society_inputs(
@@ -1914,7 +1888,18 @@ def collect_rera_registry(
     rera_fetch: Callable[[], Any] = None,
     detail_skill: Any = None,
 ) -> Dict[str, Any]:
-    entries, observed_at = (rera_fetch or fetch_rera_listing_snapshot)()
+    pinned = (request.get("dependency_inputs") or {}).get(RERA_RECEIPTS)
+    if pinned:
+        from pipeline.skills.fetch_rera import ReraListingEntry
+        listing = next(row for row in pinned["receipts"] if row["kind"] == "registry_listing")
+        raw = bytes.fromhex(listing["body_hex"]).decode("utf-8", errors="replace")
+        arrays = [re.findall(r"applicationNameList{}\s*\.push\('([^']*)'\)".format(suffix), raw) for suffix in ("", "2", "3", "4")]
+        if not arrays[0] or len({len(values) for values in arrays}) != 1:
+            raise ValueError("pinned RERA listing arrays are incomplete")
+        entries = [ReraListingEntry(*values) for values in zip(*arrays)]
+        observed_at = listing["captured_at"]
+    else:
+        entries, observed_at = (rera_fetch or fetch_rera_listing_snapshot)()
     entries = list(entries)
     selected_keys, selected_names = rera_project_selectors(request)
     projects = []  # type: List[Dict[str, Any]]
@@ -2043,14 +2028,21 @@ def collect_rera_project_details(
         )
         facts.extend(profile_facts)
         annotations.extend(profile_annotations)
-        try:
+        pinned = (request.get("dependency_inputs") or {}).get(RERA_RECEIPTS)
+        if pinned:
+            from pipeline.skills.fetch_rera import ReraSearchResult, parse_rera_detail, rera_detail_to_facts
+            from pipeline.skills.base import SkillResult
+            registration = normalized_registration_number(input_data.get("project_key") or "")
+            receipt = next((row for row in pinned["receipts"] if row["kind"] == "project_detail" and normalized_registration_number(row.get("registration_number") or "") == registration), None)
+            search_result = pinned.get("search_results", {}).get(registration)
+            if receipt is None or search_result is None:
+                raise ValueError("pinned RERA detail/search evidence missing for {}".format(registration))
+            detail = parse_rera_detail(bytes.fromhex(receipt["body_hex"]).decode("utf-8", errors="replace"), ReraSearchResult(**search_result))
+            result = SkillResult(facts=rera_detail_to_facts(detail), confidence=1.0)
+        else:
             result = skill.run(input_data, force=force_refresh)
-        except Exception as error:
-            logger.error("RERA detail collection failed for %s: %s", project_name, error)
-            continue
         if not result.facts:
-            logger.warning("RERA detail collection returned no facts for %s", project_name)
-            continue
+            raise ValueError("RERA detail collection returned no evidence for {}".format(project_name))
 
         result_facts, result_annotations = skill_result_rows(
             entity_id,
@@ -2247,6 +2239,8 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
     else:
         try:
             detail_snapshots = load_scoped_rera_detail_receipts(request)
+            if (request.get("dependency_inputs") or {}).get("catalog_options") is not None and any(not row.get("search_result") for row in detail_snapshots):
+                raise ValueError("saved detail capture lacks search evidence required by this producer")
         except ValueError:
             detail_snapshots = capture_scoped_rera_detail_receipts(
                 request, listing_receipt_id
@@ -2265,7 +2259,9 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
     try:
-        if force_refresh and scoped_rera_entities(request):
+        if (request.get("dependency_inputs") or {}).get("catalog_options", {}).get("regulatory", True) is False:
+            regulatory_payloads = []
+        elif force_refresh and scoped_rera_entities(request):
             regulatory_payloads = capture_scoped_rera_regulatory_payloads(request)
         else:
             regulatory_payloads = load_scoped_rera_regulatory_payloads(request)
@@ -2290,6 +2286,7 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
             regulatory_receipt_keys.add(key)
             receipts.append(receipt)
     return {
+        "search_results": {snapshot["registration_number"]: snapshot["search_result"] for snapshot in detail_snapshots if snapshot.get("search_result")},
         "snapshot_date": observed_at[:10],
         "receipts": receipts,
         "source_watermarks": [
@@ -2312,21 +2309,27 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
 
 def collect_rera_source_records(request: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize L0 listing and scoped project-detail receipts into L1 rows."""
-    if not LISTING_RAW_CACHE_PATH.exists():
-        scrape_rera_listing(force=True)
-    if not LISTING_RAW_CACHE_PATH.exists():
-        raise ValueError("K-RERA listing raw receipt was not captured")
+    pinned = (request.get("dependency_inputs") or {}).get(RERA_RECEIPTS)
+    if pinned:
+        listing = next(row for row in pinned["receipts"] if row["kind"] == "registry_listing")
+        body = bytes.fromhex(listing["body_hex"])
+        observed_at = listing["captured_at"]
+    else:
+        if not LISTING_RAW_CACHE_PATH.exists():
+            scrape_rera_listing(force=True)
+        if not LISTING_RAW_CACHE_PATH.exists():
+            raise ValueError("K-RERA listing raw receipt was not captured")
 
-    observed_at = datetime.now(timezone.utc).isoformat()
-    if LISTING_CACHE_PATH.exists():
-        try:
-            cached = json.loads(LISTING_CACHE_PATH.read_text())
-            observed_at = str(cached.get("cached_at") or observed_at)
-        except (OSError, ValueError, TypeError):
-            logger.warning("Could not read K-RERA listing source-record timestamp")
-    body = LISTING_RAW_CACHE_PATH.read_bytes()
-    if not body:
-        raise ValueError("K-RERA listing raw receipt is empty")
+        observed_at = datetime.now(timezone.utc).isoformat()
+        if LISTING_CACHE_PATH.exists():
+            try:
+                cached = json.loads(LISTING_CACHE_PATH.read_text())
+                observed_at = str(cached.get("cached_at") or observed_at)
+            except (OSError, ValueError, TypeError):
+                logger.warning("Could not read K-RERA listing source-record timestamp")
+        body = LISTING_RAW_CACHE_PATH.read_bytes()
+        if not body:
+            raise ValueError("K-RERA listing raw receipt is empty")
 
     receipt_id = "rera_receipt:sha256:{}".format(hashlib.sha256(body).hexdigest())
     capture_id = rera_capture_id(receipt_id, LISTING_URL)
@@ -2409,10 +2412,10 @@ def collect_rera_source_records(request: Dict[str, Any]) -> Dict[str, Any]:
                     ", ".join(missing_registrations)
                 )
             )
-    detail_snapshots = load_scoped_rera_detail_receipts(request)
+    detail_snapshots = [row for row in pinned["receipts"] if row["kind"] == "project_detail"] if pinned else load_scoped_rera_detail_receipts(request)
     for snapshot in detail_snapshots:
         records.extend(rera_project_detail_source_records(snapshot))
-    regulatory_payloads = load_scoped_rera_regulatory_payloads(request)
+    regulatory_payloads = [] if pinned else load_scoped_rera_regulatory_payloads(request)
     for payload in regulatory_payloads:
         records.extend(payload["records"])
     return {
@@ -3019,7 +3022,9 @@ def capture_scoped_rera_detail_receipts(
             )
         captured_at = datetime.now(timezone.utc).isoformat()
         source_url = "{}?action={}".format(DETAIL_URL, search_result.numeric_id)
+        from dataclasses import asdict
         snapshot = {
+            "search_result": asdict(search_result),
             "registration_number": entity["registration_number"],
             "source_url": source_url,
             "captured_at": captured_at,

@@ -49,7 +49,7 @@ async fn scoped_dag_skips_failed_optional_source_branches_without_losing_gold() 
         .map(|asset_id| ((*asset_id).to_string(), "upstream unavailable".to_string()))
         .collect::<BTreeMap<_, _>>();
     let source_inputs = AssetSourceInputs {
-        source_entities: vec![seed],
+        source_entities: vec![seed.clone()],
         source_failures,
         rera_registry_monthly: Some(ReraRegistryMonthlyInput {
             snapshot_date: "2026-09-10".to_string(),
@@ -82,7 +82,7 @@ async fn scoped_dag_skips_failed_optional_source_branches_without_losing_gold() 
         .map(|definition| definition.id.clone())
         .collect();
 
-    let report = AssetDagExecutor::new(registry, lake)
+    let report = AssetDagExecutor::new(registry.clone(), lake.clone())
         .execute(
             &KnowledgeGraph::new(),
             AssetDagExecutionOptions::new(
@@ -128,6 +128,74 @@ async fn scoped_dag_skips_failed_optional_source_branches_without_losing_gold() 
             .status,
         AssetRunStepStatus::Succeeded
     );
+    // The same scenario now refreshes only OSM using immutable pins. No legal,
+    // media or inventory source input is supplied to the incremental execution.
+    let materializations = AssetMaterializationStore::new(lake.clone());
+    let mut pins = Vec::new();
+    for step in &report.manifest.steps {
+        if let Some(id) = &step.materialization_id {
+            pins.push(
+                materializations
+                    .record(&step.asset_id, &step.partition, id)
+                    .await
+                    .unwrap(),
+            );
+        }
+    }
+    let canonical = pins
+        .iter()
+        .find(|record| record.asset_id.as_str() == "canonical_society_nodes")
+        .unwrap()
+        .materialization_id
+        .clone();
+    let mut options = AssetDagExecutionOptions::new(report.manifest.partition.clone(), now)
+        .with_source_scope(SourceEntityResolutionScope::Scoped)
+        .with_source_inputs(AssetSourceInputs {
+            source_entities: vec![seed],
+            osm_society_access: Some(backend::assets::OsmSocietyAccessInput {
+                snapshot_date: "2026-09-10".into(),
+                records: Vec::new(),
+                source_watermarks: vec![SourceWatermark {
+                    source: "openstreetmap_society_access_empty".into(),
+                    high_watermark: "query:complete-empty".into(),
+                }],
+            }),
+            ..AssetSourceInputs::default()
+        })
+        .with_skip_missing_source_inputs(true)
+        .with_only_forced_assets(true)
+        .with_forced_assets(
+            [
+                "osm_society_access_facts",
+                "society_fact_snapshot",
+                "society_gold_snapshot",
+            ]
+            .into_iter()
+            .map(|id| AssetId::new(id).unwrap())
+            .collect(),
+        )
+        .with_required_assets(vec![AssetId::new("society_gold_snapshot").unwrap()]);
+    options.pinned_materializations = Some(pins);
+    let increment = AssetDagExecutor::new(registry, lake.clone())
+        .execute(&KnowledgeGraph::new(), options)
+        .await
+        .unwrap();
+    assert_eq!(increment.executed_assets.len(), 3);
+    assert!(increment
+        .manifest
+        .steps
+        .iter()
+        .any(|step| step.asset_id.as_str() == "canonical_society_nodes"
+            && step.current_materialization_id.as_ref() == Some(&canonical)));
+    let osm = increment
+        .manifest
+        .steps
+        .iter()
+        .find(|step| step.asset_id.as_str() == "osm_society_access_facts")
+        .unwrap();
+    assert_eq!(osm.status, AssetRunStepStatus::Succeeded);
+    assert_eq!(osm.row_count, Some(0));
+    assert!(osm.parent_materializations.contains(&canonical));
 }
 
 #[tokio::test]
@@ -201,6 +269,7 @@ printf '%s' '{"reddit_threads_daily":{"snapshot_date":"2026-07-14","subreddit":"
         .with_arg(collector_path.as_os_str().to_owned())
         .with_arg(request_path.as_os_str().to_owned());
     let request = SourceInputRequest {
+        dependency_inputs: serde_json::Value::Null,
         project_root: project_root.clone(),
         partition: AssetPartition::new([
             ("dt", "2026-07-14"),
@@ -339,6 +408,7 @@ async fn command_provider_rejects_oversized_or_malformed_output() {
 
 fn request(project_root: &std::path::Path) -> SourceInputRequest {
     SourceInputRequest {
+        dependency_inputs: serde_json::Value::Null,
         project_root: project_root.to_path_buf(),
         partition: AssetPartition::global(),
         planned_at: Utc.with_ymd_and_hms(2026, 7, 14, 9, 30, 0).unwrap(),
@@ -471,6 +541,7 @@ printf '%s' '{"rera_registry_monthly":{"snapshot_date":"2026-07","projects":[{"a
 
     let now = Utc.with_ymd_and_hms(2026, 7, 14, 9, 30, 0).unwrap();
     let source_request = SourceInputRequest {
+        dependency_inputs: serde_json::Value::Null,
         project_root,
         partition: AssetPartition::global(),
         planned_at: now,

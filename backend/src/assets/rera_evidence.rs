@@ -201,6 +201,8 @@ pub struct ReraReceiptsInput {
 /// or relying on a second serialization dependency.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReraReceiptsSourceInput {
+    #[serde(default)]
+    pub search_results: std::collections::BTreeMap<String, serde_json::Value>,
     pub snapshot_date: String,
     #[serde(default)]
     pub receipts: Vec<ReraReceiptSourceRecord>,
@@ -721,6 +723,7 @@ mod tests {
     #[test]
     fn source_input_decodes_binary_receipts_without_text_coercion() {
         let input = ReraReceiptsSourceInput {
+            search_results: Default::default(),
             snapshot_date: "2026-08-09".to_string(),
             receipts: vec![ReraReceiptSourceRecord {
                 kind: ReraReceiptKind::Document,

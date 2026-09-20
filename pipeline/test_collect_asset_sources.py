@@ -1437,7 +1437,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
             inputs["society:rera-canonical"]["society_name"], "Canonical Green"
         )
 
-    def test_google_inputs_hydrate_rera_address_when_rera_input_missing(self):
+    def test_google_inputs_reuse_explicit_rera_address_without_collection(self):
         with patch(
             "pipeline.collect_asset_sources.collect_rera_project_details",
             return_value=(
@@ -1459,6 +1459,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
         ) as collect_details:
             inputs = google_society_inputs(
                 {
+                    "dependency_inputs": {"rera_registry_monthly": {"detail_facts": collect_details.return_value[0]}},
                     "source_entities": [
                         {
                             "entity_id": "society:rera-godrej-air",
@@ -1472,13 +1473,13 @@ class CollectAssetSourcesTest(unittest.TestCase):
                 }
             )
 
-        collect_details.assert_called_once()
+        collect_details.assert_not_called()
         self.assertEqual(
             inputs["society:rera-godrej-air"]["address"],
             "Khatha No. 365, Hoodi Village, K.R. Puram Hobli",
         )
 
-    def test_google_source_collection_shares_rera_address_hydration(self):
+    def test_google_source_collection_shares_pinned_rera_address(self):
         captured_inputs = []
 
         def capture_places(_request, society_inputs=None):
@@ -1522,7 +1523,8 @@ class CollectAssetSourcesTest(unittest.TestCase):
                                 "google_places_weekly",
                                 "google_nearby_places_weekly",
                             ],
-                            "source_entities": [
+                            "dependency_inputs": {"rera_registry_monthly": {"detail_facts": collect_details.return_value[0]}},
+                    "source_entities": [
                                 {
                                     "entity_id": "society:rera-godrej-air",
                                     "name": "Godrej Air",
@@ -1534,7 +1536,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
                         }
                     )
 
-        collect_details.assert_called_once()
+        collect_details.assert_not_called()
         self.assertEqual(len(captured_inputs), 2)
         for inputs in captured_inputs:
             self.assertEqual(
@@ -2982,56 +2984,29 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(school["place_types"], ["school"])
         self.assertEqual(school["fetch_source"], "fixture_nearby")
 
-    def test_google_nearby_collection_skips_societies_without_coordinates(self):
-        calls = []
+    def test_google_nearby_missing_origin_is_failure_not_empty_coverage(self):
+        with self.assertRaisesRegex(ValueError, "accepted origin coordinate pair"):
+            collect_google_nearby_places(
+                {"planned_at": "2026-07-14T09:30:00Z"},
+                society_inputs={"missing": {"entity_id": "society:missing", "society_name": "Missing Coordinates"}},
+                nearby_fetch=lambda *_: (_ for _ in ()).throw(ValueError("Google nearby collection requires an accepted origin coordinate pair")),
+            )
 
-        def fake_nearby_fetch(input_data, category):
-            calls.append((input_data["society_name"], category))
-            if input_data["society_name"] == "Missing Coordinates":
-                raise ValueError(
-                    "Google nearby collection requires an accepted origin coordinate pair"
-                )
-            return [
-                {
-                    "place_name": "Example {}".format(category),
-                    "place_url": "https://maps.google.com/{}".format(category),
-                }
-            ]
-
-        output = collect_google_nearby_places(
-            {
-                "partition": {"parts": [["dt", "2026-07-14"]]},
-                "planned_at": "2026-07-14T09:30:00Z",
-            },
-            society_inputs={
-                "missing": {
-                    "entity_id": "society:rera-missing",
-                    "society_name": "Missing Coordinates",
-                    "area": "Whitefield",
-                    "city": "Bengaluru",
-                },
-                "valid": {
-                    "entity_id": "society:rera-valid",
-                    "society_name": "Valid Coordinates",
-                    "area": "Whitefield",
-                    "city": "Bengaluru",
-                },
-            },
-            nearby_fetch=fake_nearby_fetch,
-        )
-
-        self.assertEqual(len(output["records"]), len(google_nearby_collection_categories()))
-        self.assertEqual(
-            calls,
-            [("Missing Coordinates", "school")]
-            + [
-                ("Valid Coordinates", category)
-                for category in google_nearby_collection_categories()
-            ],
-        )
-        self.assertTrue(
-            all(record["entity_id"] == "society:rera-valid" for record in output["records"])
-        )
+    def test_osm_only_collection_reuses_explicit_google_input(self):
+        google = {"records": [{"entity_id": "society:fixture", "latitude": 12.9, "longitude": 77.7}]}
+        request = {
+            "planned_at": "2026-09-20T00:00:00Z",
+            "requested_assets": ["osm_society_access_facts"],
+            "source_entities": [{"entity_id": "society:fixture", "name": "Fixture"}],
+            "dependency_inputs": {"google_places_weekly": google},
+        }
+        with patch("pipeline.collect_asset_sources.collect_osm_society_access", return_value={"records": [], "collection_status": "complete_empty"}) as osm, patch("pipeline.collect_asset_sources.collect_google_places") as google_call, patch("pipeline.collect_asset_sources.collect_rera_registry") as rera, patch("pipeline.collect_asset_sources.collect_rera_project_details") as details:
+            output = collect_asset_sources(request)
+        osm.assert_called_once_with(request, None, google)
+        google_call.assert_not_called()
+        rera.assert_not_called()
+        details.assert_not_called()
+        self.assertEqual(output["osm_society_access"]["collection_status"], "complete_empty")
 
     def test_google_nearby_collection_uses_places_api_by_default(self):
         requests = []
