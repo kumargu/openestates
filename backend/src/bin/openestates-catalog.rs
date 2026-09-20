@@ -9,6 +9,7 @@ use serde::Deserialize;
 #[derive(Debug)]
 enum Command {
     Add(PathBuf),
+    AddMany(PathBuf),
     Remove(String),
     Rebuild,
     Undo,
@@ -41,6 +42,53 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let (records, warnings) =
                 collect_society_from_dag(&store, &project_root, &seed).await?;
             store.upsert_snapshot(seed, &records, warnings).await?
+        }
+        Command::AddMany(directory) => {
+            let expected = store.pointer().await?.ok_or(
+                "catalog is not initialized; run rebuild to cut over the bootstrap roster",
+            )?;
+            let mut roster = store.read_roster(&expected.current).await?;
+            let mut paths = std::fs::read_dir(&directory)?
+                .map(|entry| entry.map(|entry| entry.path()))
+                .collect::<Result<Vec<_>, _>>()?;
+            paths.retain(|path| path.extension().is_some_and(|extension| extension == "json"));
+            paths.sort();
+            if paths.is_empty() {
+                return Err(format!("{} contains no JSON seed files", directory.display()).into());
+            }
+            for (index, path) in paths.iter().enumerate() {
+                let seed: SourceEntitySeed =
+                    serde_json::from_slice(&tokio::fs::read(path).await?)?;
+                eprintln!(
+                    "Collecting society {}/{}: {}",
+                    index + 1,
+                    paths.len(),
+                    seed.name
+                );
+                let (records, warnings) =
+                    collect_society_from_dag(&store, &project_root, &seed).await?;
+                let snapshot = store
+                    .write_snapshot(seed.clone(), &records, warnings)
+                    .await?;
+                let canonical_id = seed
+                    .alias_entity_id
+                    .as_deref()
+                    .unwrap_or(seed.entity_id.as_str());
+                let Some(entry) = roster.societies.iter_mut().find(|entry| {
+                    entry
+                        .seed
+                        .alias_entity_id
+                        .as_deref()
+                        .unwrap_or(entry.seed.entity_id.as_str())
+                        == canonical_id
+                }) else {
+                    return Err(format!("{} is not in the active catalog", seed.name).into());
+                };
+                *entry = snapshot.roster_entry();
+            }
+            store
+                .assemble_and_promote("add_many", roster, Some(&expected))
+                .await?
         }
         Command::Remove(society_id) => store.remove(&society_id).await?,
         Command::Rebuild => {
@@ -107,6 +155,10 @@ fn parse_command() -> Result<Command, String> {
             args.next()
                 .ok_or_else(|| "add requires <society-seed.json>".to_string())?,
         )),
+        "add-many" => Command::AddMany(PathBuf::from(
+            args.next()
+                .ok_or_else(|| "add-many requires <seed-directory>".to_string())?,
+        )),
         "remove" => Command::Remove(
             args.next()
                 .ok_or_else(|| "remove requires <society-id>".to_string())?,
@@ -128,6 +180,7 @@ fn usage() -> String {
         "",
         "Usage:",
         "  openestates-catalog add <society-seed.json>",
+        "  openestates-catalog add-many <seed-directory>",
         "  openestates-catalog remove <society-id>",
         "  openestates-catalog rebuild",
         "  openestates-catalog undo",
@@ -172,8 +225,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn cli_surface_is_only_the_four_catalog_operations() {
+    fn cli_surface_lists_atomic_batch_replacement() {
         assert!(usage().contains("add <society-seed.json>"));
+        assert!(usage().contains("add-many <seed-directory>"));
         assert!(usage().contains("remove <society-id>"));
         assert!(usage().contains("rebuild"));
         assert!(usage().contains("undo"));
